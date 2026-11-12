@@ -159,6 +159,10 @@ pub struct SessionReport {
     pub stderr: String,
     pub diagnostics: Vec<String>,
     pub notes: Vec<String>,
+    /// R3: the run tree kept for a guest-raised crash, when retention kept it.
+    /// Absent otherwise (host-sent signals never keep a tree).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kept_run_dir: Option<String>,
     /// W48: the `dalvik.vm.heap*` values this session served (the
     /// `ACOS_ART_HEAP*` seam resolved and validated).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -904,12 +908,41 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
         let _ = fs::remove_file(p);
     }
     // Scratch is scratch (H1's leak finding, S4): the per-run tree goes away on
-    // every exit path, including a crashed guest — the artefacts the caller
-    // asked for are copied to `--out` above, and the janitor is only for a
-    // SIGKILLed launcher. `ACOS_ART_KEEP_SESSION=1` keeps it for diagnosis.
-    if std::env::var_os("ACOS_ART_KEEP_SESSION").is_some() {
-        run.keep();
+    // every exit path — the artefacts the caller asked for are copied to `--out`
+    // above, and the janitor is only for a SIGKILLed launcher.
+    //
+    // R3 keeps one tree: a crash the *guest* raised itself *and* whose crash
+    // record was parsed, under a retention cap (`ACOS_ART_KEEP_CRASH_MAX`), so a
+    // debugger can still read the extracted native libs and the loaders. A
+    // SIGKILL/SIGTERM/SIGHUP/SIGINT — ACOS's own bounded destroy, a watchdog, a
+    // timeout — is a teardown decision, never crash evidence: keeping those would
+    // leak one full run tree (native libs included) per normal teardown.
+    // `ACOS_ART_KEEP_SESSION=1` still keeps everything, exempt from the cap.
+    let guest_signal = status.and_then(|st| std::os::unix::process::ExitStatusExt::signal(&st));
+    let native_crash = guest_signal.and_then(|_| crate::crash::analyze(&stdout, &stderr, &[]));
+    if let Some(crash) = &native_crash {
+        diagnostics.push(format!("native crash: {}", crash.summary()));
     }
+    let kept_run_dir = if crate::keeps_run_tree_for_crash(guest_signal, native_crash.is_some()) {
+        let detail = serde_json::json!({
+            "utc_ms": std::time::SystemTime::now()
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+            "route": "session",
+            "code": code,
+            "guest_signal": guest_signal,
+            "native_crash": native_crash.as_ref().map(crate::crash::NativeCrash::summary),
+        });
+        crate::keep_run_for_guest_crash(run, detail)
+    } else if std::env::var_os("ACOS_ART_KEEP_SESSION").is_some() {
+        // Explicit opt-in keeps any outcome, capped by nothing (unchanged).
+        let path = run.path().to_path_buf();
+        run.keep();
+        Some(path)
+    } else {
+        None
+    };
 
     Ok(SessionReport {
         outcome,
@@ -933,6 +966,7 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
         stderr,
         diagnostics,
         notes,
+        kept_run_dir: kept_run_dir.map(|p| p.display().to_string()),
         heap: Some(crate::props::effective_heap_json()),
     })
 }

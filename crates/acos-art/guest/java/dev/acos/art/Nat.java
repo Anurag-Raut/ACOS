@@ -23,4 +23,25 @@ public final class Nat {
 
     /** Driver state (transport, object tables, queue) for failure diagnosis. */
     public static native String state();
+
+    /**
+     * R3: install the guest's native-crash handler.
+     *
+     * <p>Registered *last* in ART's own signal chain (libsigchain, after the
+     * runtime's fault handlers), so it only runs on a fault ART declined — a
+     * null deref outside generated code, a bad native pointer in app code, a
+     * SIGABRT from a native CHECK. It prints one `ACOSCRASH {json}` line (fault
+     * address, signal code, tid, thread name) and then asks the runtime for its
+     * own crash dump (`Fatal signal` / regs / `Backtrace` with mapped library
+     * paths). The handler never claims the signal: the process still dies of it.
+     *
+     * <p>Lives in the freestanding preload shim (`shim/artshim.c`), which is in
+     * the process before libart is, so no APK or framework code is involved.
+     *
+     * @return 1 installed, 0 disabled (`ACOSART_CRASH_DUMP=0`), &lt;0 failed
+     */
+    public static native int installCrashHandler();
+
+    /** R3 test seam: 0 = SIGSEGV on an unmapped page, 1 = SIGABRT. */
+    public static native int crashTest(int mode);
 }

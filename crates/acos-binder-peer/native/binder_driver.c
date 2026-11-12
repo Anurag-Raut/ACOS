@@ -58,6 +58,7 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <signal.h>
+#include <sys/prctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -1756,4 +1757,161 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_Nat_startBinderLooper(JNIEnv* env, jcla
 
 JNIEXPORT jstring JNICALL Java_dev_acos_art_Nat_state(JNIEnv* env, jclass klass) {
     return Java_dev_acos_e3g_Nat_state(env, klass);
+}
+
+// ---------------------------------------------------------------- R3 crash dump
+//
+// Native-crash evidence for a guest that dies of a signal. bionic only installs
+// a crash handler when the *linker* is built with `libdebuggerd_handler_fallback`
+// (this image's `ld-android.so` links the stub: bionic/linker/Android.bp
+// `liblinker_debuggerd_stub`), libc installs none, and ART only turns a fault
+// into a Java exception for the faults it understands (null deref in generated
+// code, stack overflow). Every other fault left ART's `FaultManager`, chained
+// through libsigchain to SIG_DFL, and the process vanished with `signal 11` and
+// an empty stderr — `results/render/R2.md` §2 lost a Gaten launch that way.
+//
+// `installCrashHandler()` appends one handler to ART's *own* signal chain
+// (libsigchain, `AddSpecialSignalHandlerFn`), called after the runtime is up so
+// ART's fault handlers are already in front of it: it runs only when ART
+// declined the fault, so a managed NPE or a stack-overflow probe never reaches
+// it. It prints one `ACOSCRASH {json}` line (signal, si_code, fault address,
+// pid/tid, thread name) and then asks the runtime for the crash dump a device
+// gets from debuggerd — `art::HandleUnexpectedSignalCommon(..., dump_on_stderr)`
+// prints `*** *** ***`, `Fatal signal … fault addr …`, `Thread: <tid> "<name>"`,
+// the registers and a `Backtrace:` of `#NN pc <hex>  <mapped library>`. Then it
+// returns false: the chain continues to the previous handler and the process
+// still dies of its own signal (the launcher's `GUEST_KILLED_BY_SIGNAL`).
+//
+// Everything here is async-signal-safe: raw `write(2)`, `gettid`, `prctl` and a
+// fixed stack buffer. `ACOSART_CRASH_DUMP=0` disables the install (A/B seam).
+
+typedef struct {
+    void (*sc_sigaction)(int, siginfo_t*, void*);
+    sigset_t sc_mask;
+    unsigned long sc_flags;
+} AcosSigchainAction;
+
+typedef int (*AcosSigchainAddFn)(int, AcosSigchainAction*);
+// void art::HandleUnexpectedSignalCommon(int, siginfo_t*, void*, bool, bool)
+
+
+static volatile sig_atomic_t g_crash_installed;
+static volatile sig_atomic_t g_crash_in_handler;
+static char g_crash_altstack[SIGSTKSZ * 8] __attribute__((aligned(16)));
+
+static void acos_crash_write(const char* text, size_t len) {
+    ssize_t ignored = write(STDERR_FILENO, text, len);
+    (void)ignored;
+}
+
+// The handler ART/sigchain calls for a fault ART did not claim. Returns 0
+// ("not handled") so the chain continues: the process must still die of its own
+// signal, and the launcher's taxonomy must not change.
+static int acos_crash_handler(int sig, siginfo_t* info, void* context) {
+    if (g_crash_in_handler) return 0;  // re-entered (a fault inside the dump)
+    g_crash_in_handler = 1;
+
+    char thread_name[32] = {0};
+#ifdef PR_GET_NAME
+    (void)prctl(PR_GET_NAME, thread_name, 0, 0, 0);
+#else
+    {
+        // <sys/prctl.h> is not pulled in by this translation unit; the request
+        // code is part of the kernel ABI, and bionic's prctl() is the syscall.
+        (void)prctl(16 /* PR_GET_NAME */, thread_name, 0, 0, 0);
+    }
+#endif
+    for (char* p = thread_name; *p; p++) {
+        // JSON-safe: a thread name is kernel-adjacent, never trusted verbatim.
+        if (*p == '"' || *p == '\\' || (unsigned char)*p < 0x20 ||
+            (unsigned char)*p >= 0x7f) {
+            *p = '?';
+        }
+    }
+    long code = info != NULL ? info->si_code : 0;
+    unsigned long addr = 0;
+    if (info != NULL && (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL ||
+                         sig == SIGFPE || sig == SIGTRAP)) {
+        addr = (unsigned long)info->si_addr;
+    }
+    char line[320];
+    int n = snprintf(line, sizeof(line),
+                     "ACOSCRASH {\"source\":\"acos-shim\",\"signal\":%d,\"code\":%ld,"
+                     "\"fault_addr\":\"0x%lx\",\"pid\":%ld,\"tid\":%ld,"
+                     "\"thread\":\"%s\"}\n",
+                     sig, code, addr, (long)getpid(), (long)gettid(), thread_name);
+    if (n > 0) {
+        acos_crash_write(line, (size_t)(n < (int)sizeof(line) ? n : (int)sizeof(line) - 1));
+    }
+
+    // ART's own crash dump: the `*** *** ***`/`Fatal signal`/`Registers`/
+    // `Backtrace` block a device gets from debuggerd, built by the runtime that
+    // owns the maps, the unwinder and the symbol tables.
+    // The runtime's own tombstone (`*** *** ***` / `Fatal signal … fault addr …`
+    // / `Thread: <tid> "<name>"` / registers / `Backtrace` with mapped library
+    // paths) is installed by ART itself, *before* its sigchain, and therefore
+    // runs right after this handler in the chain — see
+    // `crates/acos-art/src/lib.rs::android_root_for_guest` for the seam that
+    // turns it on. Deliberately not called from here: the runtime's dumper
+    // starts with `MutexLock mu(Thread::Current(), …)`, and a thread the runtime
+    // does not know (this handler also runs for faults on native-only threads)
+    // would take a second fault inside its own report.
+    g_crash_in_handler = 0;
+    return 0;
+}
+
+JNIEXPORT jint JNICALL Java_dev_acos_art_Nat_installCrashHandler(JNIEnv* env, jclass klass) {
+    (void)env;
+    (void)klass;
+    if (g_crash_installed) return 1;
+    const char* off = getenv("ACOSART_CRASH_DUMP");
+    if (off != NULL && strcmp(off, "0") == 0) return 0;
+
+    // One alternate signal stack for the whole process: a fault on a nearly
+    // exhausted thread stack must not re-fault inside the handler.
+    stack_t ss;
+    memset(&ss, 0, sizeof(ss));
+    ss.ss_sp = g_crash_altstack;
+    ss.ss_size = sizeof(g_crash_altstack);
+    ss.ss_flags = 0;
+    (void)sigaltstack(&ss, NULL);
+
+    void* sigchain = dlopen("libsigchain.so", RTLD_NOW);
+    if (sigchain == NULL) {
+        sigchain = dlopen("/apex/com.android.art/lib64/libsigchain.so", RTLD_NOW);
+    }
+    if (sigchain == NULL) return -2;
+    AcosSigchainAddFn add =
+        (AcosSigchainAddFn)dlsym(sigchain, "AddSpecialSignalHandlerFn");
+    if (add == NULL) return -3;
+    AcosSigchainAction action;
+    memset(&action, 0, sizeof(action));
+    action.sc_sigaction = (void (*)(int, siginfo_t*, void*))acos_crash_handler;
+    unsigned long flags = 0;
+    action.sc_flags = flags;
+    const int signals[] = {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT};
+    for (size_t i = 0; i < sizeof(signals) / sizeof(signals[0]); i++) {
+        if (!add(signals[i], &action)) return -4;
+    }
+    g_crash_installed = 1;
+    fprintf(stderr, "ACOSLAUNCH MARK crash-handler installed sigchain=%p\n", (void*)add);
+    fflush(stderr);
+    return 1;
+}
+
+// JNI: dev.acos.art.Nat.crashTest(int) — the deterministic fixture for the
+// crash-evidence path. Reachable only from the launch guest, and only when
+// `ACOSLAUNCH_CRASH_TEST` names a mode (0 = SIGSEGV on an unmapped page,
+// 1 = SIGABRT). Never reachable from an APK.
+JNIEXPORT jint JNICALL Java_dev_acos_art_Nat_crashTest(JNIEnv* env, jclass klass, jint mode) {
+    (void)env;
+    (void)klass;
+    if (mode == 1) {
+        raise(SIGABRT);
+        for (;;) {
+        }
+    }
+    volatile unsigned long* unmapped = (volatile unsigned long*)0;
+    *unmapped = 0xacc0deadUL;
+    return 0;
 }

@@ -309,6 +309,17 @@ public final class LaunchMain {
         int runtime = initAndroidRuntime(sPkg);
         if (runtime < 0) throw new IllegalStateException("initAndroidRuntime -> " + runtime);
         System.out.println("ACOSLAUNCH MARK android-runtime ready rc=" + runtime);
+        // R3: the runtime is up, so libsigchain exists with ART's own fault
+        // handlers already in the chain. Installing ours now appends it *after*
+        // them: it runs only on a fault ART declined, prints the fault address,
+        // signal code, thread and ART's own `Backtrace`, and never claims the
+        // signal (the guest still dies of it). `ACOSART_CRASH_DUMP=0` disables.
+        try {
+            int crash = Nat.installCrashHandler();
+            System.out.println("ACOSLAUNCH MARK crash-handler rc=" + crash);
+        } catch (Throwable t) {
+            System.out.println("ACOSLAUNCH WARN crash-handler unavailable " + t);
+        }
         // P12: install the session animation scale before any framework animator
         // can start (before Activity attach and the app's first traversal).
         applyAnimations(sAnimationsRequested, sAnimationsRequestSource);
@@ -2177,6 +2188,11 @@ public final class LaunchMain {
                 }
                 sActivityResumed = true;
                 writeResumeMarker(thread, activity, "resume_ready=first-traversal");
+                // R3 test seam: crash *after* the window is up (the shape of the
+                // Gaten 1/10 SIGSEGV), so the crash-evidence path is exercised by
+                // a deliberate fault instead of waiting for a race. Diagnostic
+                // only: the launcher forwards the variable, nothing else reads it.
+                crashTestIfRequested(thread, activity);
                 System.out.println("ACOSLAUNCH MARK activity-resumed activity="
                         + activity.getClass().getName() + " window=" + get(activity, "mWindow")
                         + " resume_ready=first-traversal");
@@ -3732,5 +3748,51 @@ public final class LaunchMain {
         } finally {
             out.close();
         }
+    }
+
+    /**
+     * R3: `ACOSLAUNCH_CRASH_TEST` — deliberately fault the guest once it is up.
+     *
+     * <p>`segv` = store to an unmapped page on the main thread (SIGSEGV), `abort`
+     * = SIGABRT, `thread` = the SIGSEGV on a secondary thread named
+     * `acos-crash-test` (proves the faulting thread name is captured, not the
+     * main thread's). Unset: nothing happens. Only the launch guest calls this.
+     */
+    static void crashTestIfRequested(Object thread, Object activity) {
+        String mode = System.getenv("ACOSLAUNCH_CRASH_TEST");
+        if (mode == null || mode.isEmpty()) return;
+        mode = mode.trim();
+        System.out.println("ACOSLAUNCH MARK crash-test mode=" + mode);
+        System.out.flush();
+        if (mode.equals("main")) {
+            // The fault on the framework's main thread (the thread a UI bug
+            // usually faults on), posted so the looper is the one running it.
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(new Runnable() {
+                public void run() {
+                    System.out.println("ACOSLAUNCH MARK crash-test-main tid="
+                            + android.os.Process.myTid());
+                    System.out.flush();
+                    Nat.crashTest(0);
+                }
+            });
+            return;
+        }
+        if (mode.equals("thread")) {
+            Thread t = new Thread(new Runnable() {
+                public void run() {
+                    System.out.println("ACOSLAUNCH MARK crash-test-thread tid="
+                            + android.os.Process.myTid());
+                    System.out.flush();
+                    Nat.crashTest(0);
+                }
+            }, "acos-crash-test");
+            t.start();
+            try {
+                t.join(5000);
+            } catch (InterruptedException ignored) {
+            }
+            return;
+        }
+        Nat.crashTest(mode.equals("abort") ? 1 : 0);
     }
 }

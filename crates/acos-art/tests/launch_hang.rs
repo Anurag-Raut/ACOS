@@ -336,6 +336,12 @@ fn guest_killed_by_signal_returns_signal_and_cleans_up() {
         &[("ACOS_ART_SECCOMP_AUDIT", "kill")],
         Duration::from_secs(20),
     );
+    // R3 retention: a tree is kept only for a crash the guest raised itself
+    // *and* whose crash record was parsed. This death is SIGSYS from the seccomp
+    // audit filter, which the guest's handler does not cover and for which it
+    // prints no `ACOSCRASH` line, so there is nothing to keep: S4's cleanup
+    // guarantee stands unchanged here (a host kill and a signal death without
+    // evidence both remove the tree).
     assert_clean_after(&run, &data);
     assert_eq!(run.status.and_then(|s| s.code()), Some(1));
     let j = result_json(&run);
