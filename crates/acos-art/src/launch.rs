@@ -1718,51 +1718,46 @@ fn capture_c1(
     };
     let t_encode = m5_now_us();
     m5_trace("art.capture_composite", t_capture, t_encode, "");
-    if p3_enabled() {
-        p3_trace(
-            "art",
-            "art.capture_composite",
-            t_capture,
-            t_encode,
-            &format!(
-                "w={} h={} stride={} rgba={}",
-                frame.width,
-                frame.height,
-                frame.stride,
-                frame.rgba.len()
-            ),
-        );
-    }
-    let png = encode_png_rgba(frame.width, frame.height, frame.stride, &frame.rgba);
-    let t_write = m5_now_us();
-    m5_trace("art.png_encode", t_encode, t_write, &format!("png_bytes={}", png.len()));
-    if p3_enabled() {
-        p3_trace(
-            "art",
-            "art.png_encode",
-            t_encode,
-            t_write,
-            &format!("png_bytes={}", png.len()),
-        );
-    }
     fs::create_dir_all(dir)?;
     *seq += 1;
     let path = dir.join(format!(
         "acos-c1-layer{}-frame-{}-g{}-c{}.png",
         frame.layer_id, frame.frame_number, frame.generation, *seq
     ));
-    fs::write(&path, &png)?;
-    let t_md5 = m5_now_us();
-    m5_trace("art.png_write", t_write, t_md5, "");
-    if p3_enabled() {
-        p3_trace("art", "art.png_write", t_write, t_md5, "");
-    }
-    let md5 = md5_hex_file(&path).unwrap_or_else(|| format!("{:016x}", frame.fnv1a));
+    // P2: the PNG is written once and hashed once, in the same pass, on the
+    // caller's thread while a second thread encodes it (the encode is ~7 ms and
+    // the write+MD5 over 9.5 MB is ~11 ms, so they overlap). `content_hash` is
+    // still the MD5 of exactly the bytes in this file.
+    let (bytes, md5, encode_us, write_us, hash_us) = encode_write_and_hash(
+        frame.width,
+        frame.height,
+        frame.stride,
+        &frame.rgba,
+        &path,
+    )?;
     let t_end = m5_now_us();
-    m5_trace("art.md5_file", t_md5, t_end, "");
+    m5_trace(
+        "art.png_encode",
+        t_encode,
+        t_encode + encode_us as u128,
+        &format!("png_bytes={bytes} pipelined=1"),
+    );
+    m5_trace("art.png_write", t_encode, t_encode + write_us as u128, "");
+    m5_trace(
+        "art.md5_file",
+        t_encode,
+        t_encode + hash_us as u128,
+        "in_process=1",
+    );
     m5_trace("art.capture_total", t_capture, t_end, "");
     if p3_enabled() {
-        p3_trace("art", "art.md5_file", t_md5, t_end, "");
+        p3_trace(
+            "art",
+            "art.md5_file",
+            t_encode,
+            t_encode + hash_us as u128,
+            "in_process=1",
+        );
         p3_trace("art", "art.capture_total", t_capture, t_end, "");
     }
     Ok(Some(Capture {
@@ -1779,8 +1774,85 @@ fn capture_c1(
         fnv1a: frame.fnv1a,
         non_zero_pixels: frame.non_zero_pixels,
         path,
-        bytes: png.len(),
+        bytes,
     }))
+}
+
+/// Encode one frame to `path` and return `(bytes, md5_hex, encode_us,
+/// write_us, hash_us)`.
+///
+/// The encoder runs on a second thread and hands over 1 MiB chunks; this thread
+/// writes each chunk to the file and folds it into the MD5, so every byte is
+/// traversed once by the hasher and once by the write, in cache-hot chunks, and
+/// the encode's own CPU overlaps both. The file is created (truncated) before
+/// encoding starts, so a failure leaves an incomplete artifact that the daemon's
+/// size+hash check refuses rather than a stale frame.
+fn encode_write_and_hash(
+    width: u32,
+    height: u32,
+    stride: u32,
+    rgba: &[u8],
+    path: &Path,
+) -> std::io::Result<(usize, String, u64, u64, u64)> {
+    use std::io::Write as _;
+    use std::sync::mpsc;
+    const CHUNK: usize = 1 << 20;
+    let mut file = fs::File::create(path)?;
+    let mut hasher = acos_render::md5::Md5::new();
+    let mut total = 0usize;
+    let mut write_us = 0u64;
+    let mut hash_us = 0u64;
+    let mut failure: Option<std::io::Error> = None;
+    // A bounded channel gives backpressure: at most a few 1 MiB chunks are in
+    // flight, so peak RSS does not grow with the frame size.
+    let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(4);
+    let t_encode = m5_now_us();
+    std::thread::scope(|scope| {
+        // The sender is *moved* into the encoder thread: the drain loop below
+        // ends when that thread returns and drops it.
+        let encoder = scope.spawn(move || {
+            let mut chunk: Vec<u8> = Vec::with_capacity(CHUNK);
+            encode_png_rgba_stream(width, height, stride, rgba, |bytes: &[u8]| {
+                let mut rest = bytes;
+                while !rest.is_empty() {
+                    let room = CHUNK - chunk.len();
+                    let take = room.min(rest.len());
+                    chunk.extend_from_slice(&rest[..take]);
+                    rest = &rest[take..];
+                    if chunk.len() == CHUNK {
+                        let full = std::mem::replace(&mut chunk, Vec::with_capacity(CHUNK));
+                        if tx.send(full).is_err() {
+                            return;
+                        }
+                    }
+                }
+            });
+            if !chunk.is_empty() {
+                let _ = tx.send(chunk);
+            }
+        });
+        for chunk in rx {
+            if failure.is_none() {
+                let t0 = m5_now_us();
+                if let Err(error) = file.write_all(&chunk) {
+                    failure = Some(error);
+                }
+                write_us += (m5_now_us() - t0) as u64;
+                let t1 = m5_now_us();
+                hasher.update(&chunk);
+                hash_us += (m5_now_us() - t1) as u64;
+                total += chunk.len();
+            }
+        }
+        encoder.join().expect("the PNG encoder thread panicked");
+    });
+    let encode_us = (m5_now_us() - t_encode) as u64;
+    if let Some(error) = failure {
+        return Err(error);
+    }
+    file.flush()?;
+    drop(file);
+    Ok((total, hasher.finish_hex(), encode_us, write_us, hash_us))
 }
 
 fn latest_generation(live: &acos_services::registry::LiveHandles) -> u64 {
@@ -1808,14 +1880,17 @@ fn m5_trace(event: &str, t0: u128, t1: u128, extra: &str) {
     static SINK: std::sync::OnceLock<Option<std::sync::Mutex<std::fs::File>>> =
         std::sync::OnceLock::new();
     let sink = SINK.get_or_init(|| {
-        std::env::var_os("DM5_TRACE").and_then(|path| {
-            std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(path)
-                .ok()
-        })
-        .map(std::sync::Mutex::new)
+        // P2_TRACE (this task) or DM5_TRACE (the D-M5 evidence harness).
+        std::env::var_os("P2_TRACE")
+            .or_else(|| std::env::var_os("DM5_TRACE"))
+            .and_then(|path| {
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)
+                    .ok()
+            })
+            .map(std::sync::Mutex::new)
     });
     if let Some(file) = sink {
         if let Ok(mut file) = file.lock() {
@@ -1885,17 +1960,6 @@ fn protocol_write(value: &serde_json::Value) {
     let mut out = std::io::stdout().lock();
     let _ = writeln!(out, "{value}");
     let _ = out.flush();
-}
-
-fn md5_hex_file(path: &Path) -> Option<String> {
-    // Same precedent as `app.rs::md5_file`: there is no md5 crate in this
-    // workspace, and the host `md5sum` is available.
-    let output = Command::new("md5sum").arg(path).output().ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let text = String::from_utf8_lossy(&output.stdout);
-    text.split_whitespace().next().map(|s| s.to_string())
 }
 
 struct SessionEnd {
@@ -2939,13 +3003,31 @@ fn interactive_serve(
 // minimal RGBA8 PNG writer lives here: filter type 0 per row, zlib "stored"
 // deflate blocks, real CRC32/Adler-32. Deterministic and byte-checkable.
 
+#[cfg(test)]
 fn encode_png_rgba(width: u32, height: u32, stride: u32, rgba: &[u8]) -> Vec<u8> {
     encode_png_rgba_with(width, height, stride, rgba, crc32, adler32)
 }
 
-/// The encoder body, parameterised by its two checksums so the `#[cfg(test)]`
+/// Encode the frame and hand its bytes to `sink` as they are produced.
+///
+/// The bytes are the same as [`encode_png_rgba`]'s; the only difference is that
+/// the caller sees the PNG in order, so it can write and hash it without a
+/// second pass over a finished 9.5 MB buffer (P2).
+fn encode_png_rgba_stream<S: FnMut(&[u8])>(
+    width: u32,
+    height: u32,
+    stride: u32,
+    rgba: &[u8],
+    mut sink: S,
+) {
+    encode_png_rgba_into(width, height, stride, rgba, crc32, adler32, &mut sink)
+}
+
+/// The buffered encoder: `#[cfg(test)]` only, kept as the reference the streamed
+/// encoder is compared against, and parameterised by its two checksums so the
 /// oracle (the original bit-serial CRC32 and the `%`-per-byte Adler-32) can
-/// produce the exact bytes this function is required to preserve.
+/// produce the exact bytes the encoder is required to preserve.
+#[cfg(test)]
 fn encode_png_rgba_with(
     width: u32,
     height: u32,
@@ -2954,6 +3036,27 @@ fn encode_png_rgba_with(
     crc32: fn(&[u8]) -> u32,
     adler32: fn(&[u8]) -> u32,
 ) -> Vec<u8> {
+    let mut out = Vec::with_capacity(
+        (width as usize)
+            .saturating_mul(height as usize)
+            .saturating_mul(4)
+            .saturating_add(1024),
+    );
+    encode_png_rgba_into(width, height, stride, rgba, crc32, adler32, &mut |bytes| {
+        out.extend_from_slice(bytes)
+    });
+    out
+}
+
+fn encode_png_rgba_into(
+    width: u32,
+    height: u32,
+    stride: u32,
+    rgba: &[u8],
+    crc32: fn(&[u8]) -> u32,
+    adler32: fn(&[u8]) -> u32,
+    sink: &mut dyn FnMut(&[u8]),
+) {
     let t0 = m5_now_us();
     let row = (width as usize).saturating_mul(4);
     let stride_bytes = (stride as usize).saturating_mul(4);
@@ -2970,48 +3073,83 @@ fn encode_png_rgba_with(
     }
     let t_filter = m5_now_us();
     m5_trace("art.encode_filter", t0, t_filter, "");
-    let mut out = Vec::with_capacity(filtered.len() + 1024);
-    out.extend_from_slice(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
+    sink(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
     let mut ihdr = Vec::with_capacity(13);
     ihdr.extend_from_slice(&width.to_be_bytes());
     ihdr.extend_from_slice(&height.to_be_bytes());
     ihdr.extend_from_slice(&[8, 6, 0, 0, 0]); // 8-bit RGBA, no interlace
-    png_chunk(&mut out, b"IHDR", &ihdr, crc32);
+    png_chunk(sink, b"IHDR", &ihdr, crc32);
 
-    let mut zlib = Vec::with_capacity(filtered.len() + 16);
-    zlib.extend_from_slice(&[0x78, 0x01]);
+    // The zlib stream is written straight to the sink in stored blocks: no
+    // intermediate 9.5 MB buffer exists to be copied again, and the IDAT CRC is
+    // accumulated over the same bytes as they are emitted (P2).
+    let block_count = filtered.len().div_ceil(65_535);
+    let idat_len = 2 + block_count * 5 + filtered.len() + 4;
+    sink(&(idat_len as u32).to_be_bytes());
+    sink(b"IDAT");
+    let mut crc = Crc32Stream::new();
+    crc.update(b"IDAT");
+    emit_checked(sink, &mut crc, &[0x78, 0x01]);
     let mut offset = 0usize;
     while offset < filtered.len() {
         let len = (filtered.len() - offset).min(65_535);
         let final_block = offset + len == filtered.len();
-        zlib.push(if final_block { 1 } else { 0 });
-        zlib.extend_from_slice(&(len as u16).to_le_bytes());
-        zlib.extend_from_slice(&(!(len as u16)).to_le_bytes());
-        zlib.extend_from_slice(&filtered[offset..offset + len]);
+        let mut header = [0u8; 5];
+        header[0] = if final_block { 1 } else { 0 };
+        header[1..3].copy_from_slice(&(len as u16).to_le_bytes());
+        header[3..5].copy_from_slice(&(!(len as u16)).to_le_bytes());
+        emit_checked(sink, &mut crc, &header);
+        emit_checked(sink, &mut crc, &filtered[offset..offset + len]);
         offset += len;
     }
     let t_stored = m5_now_us();
     m5_trace("art.encode_stored", t_filter, t_stored, "");
-    zlib.extend_from_slice(&adler32(&filtered).to_be_bytes());
+    let adler = adler32(&filtered);
     let t_adler = m5_now_us();
     m5_trace("art.encode_adler32", t_stored, t_adler, "");
-    png_chunk(&mut out, b"IDAT", &zlib, crc32);
+    emit_checked(sink, &mut crc, &adler.to_be_bytes());
+    let t_crc = m5_now_us();
+    let crc = crc.finish();
+    m5_trace(
+        "art.encode_crc32",
+        t_crc,
+        m5_now_us(),
+        &format!("chunk=IDAT body_bytes={idat_len}"),
+    );
+    sink(&crc.to_be_bytes());
     let t_idat = m5_now_us();
     m5_trace("art.encode_idat_chunk", t_adler, t_idat, "");
-    png_chunk(&mut out, b"IEND", &[], crc32);
+    png_chunk(sink, b"IEND", &[], crc32);
     m5_trace("art.encode_total", t0, m5_now_us(), "");
-    out
+    drop(filtered);
 }
 
-fn png_chunk(out: &mut Vec<u8>, kind: &[u8; 4], body: &[u8], crc32: fn(&[u8]) -> u32) {
-    out.extend_from_slice(&(body.len() as u32).to_be_bytes());
-    out.extend_from_slice(kind);
-    out.extend_from_slice(body);
-    let mut crc_input = Vec::with_capacity(4 + body.len());
-    crc_input.extend_from_slice(kind);
-    crc_input.extend_from_slice(body);
+/// Emit `bytes` and fold them into the chunk CRC in the same call.
+fn emit_checked(sink: &mut dyn FnMut(&[u8]), crc: &mut Crc32Stream, bytes: &[u8]) {
+    sink(bytes);
+    crc.update(bytes);
+}
+
+fn png_chunk(
+    sink: &mut dyn FnMut(&[u8]),
+    kind: &[u8; 4],
+    body: &[u8],
+    crc32: fn(&[u8]) -> u32,
+) {
+    sink(&(body.len() as u32).to_be_bytes());
+    sink(kind);
+    sink(body);
     let t_crc = m5_now_us();
-    let crc = crc32(&crc_input);
+    let crc = if body.is_empty() {
+        crc32(kind)
+    } else {
+        // CRC-32 is linear over the concatenation: run it over the kind and
+        // continue over the body, so the body is not copied into a third buffer.
+        let mut crc = Crc32Stream::new();
+        crc.update(kind);
+        crc.update(body);
+        crc.finish()
+    };
     let label = String::from_utf8_lossy(kind).to_string();
     m5_trace(
         "art.encode_crc32",
@@ -3019,13 +3157,51 @@ fn png_chunk(out: &mut Vec<u8>, kind: &[u8; 4], body: &[u8], crc32: fn(&[u8]) ->
         m5_now_us(),
         &format!("chunk={label} body_bytes={}", body.len()),
     );
-    out.extend_from_slice(&crc.to_be_bytes());
+    sink(&crc.to_be_bytes());
 }
 
-/// IEEE CRC-32 (the one PNG chunks use), slice-by-8. The eight 256-entry
-/// tables are built at compile time; the previous bit-serial loop cost 43 ms of
-/// one warm screenshot's 80 ms (`results/art-runtime/D-M5.md`).
+/// IEEE CRC-32 (the one PNG chunks use), slice-by-8 and streaming.
+///
+/// The eight 256-entry tables are built at compile time; the previous bit-serial
+/// loop cost 43 ms of one warm screenshot's 80 ms
+/// (`results/art-runtime/D-M5.md`). `Crc32Stream` lets the encoder fold each
+/// produced chunk in as it is emitted instead of copying the whole body into a
+/// second buffer first (P2).
 const CRC32_TABLES: [[u32; 256]; 8] = crc32_make_tables();
+
+struct Crc32Stream {
+    crc: u32,
+}
+
+impl Crc32Stream {
+    fn new() -> Self {
+        Crc32Stream { crc: 0xffff_ffff }
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        let mut crc = self.crc;
+        let mut chunks = data.chunks_exact(8);
+        for c in &mut chunks {
+            let low = u32::from_le_bytes([c[0], c[1], c[2], c[3]]) ^ crc;
+            crc = CRC32_TABLES[7][(low & 0xff) as usize]
+                ^ CRC32_TABLES[6][((low >> 8) & 0xff) as usize]
+                ^ CRC32_TABLES[5][((low >> 16) & 0xff) as usize]
+                ^ CRC32_TABLES[4][(low >> 24) as usize]
+                ^ CRC32_TABLES[3][c[4] as usize]
+                ^ CRC32_TABLES[2][c[5] as usize]
+                ^ CRC32_TABLES[1][c[6] as usize]
+                ^ CRC32_TABLES[0][c[7] as usize];
+        }
+        for &byte in chunks.remainder() {
+            crc = (crc >> 8) ^ CRC32_TABLES[0][((crc ^ u32::from(byte)) & 0xff) as usize];
+        }
+        self.crc = crc;
+    }
+
+    fn finish(self) -> u32 {
+        !self.crc
+    }
+}
 
 const fn crc32_make_tables() -> [[u32; 256]; 8] {
     let mut tables = [[0u32; 256]; 8];
@@ -3058,23 +3234,9 @@ const fn crc32_make_tables() -> [[u32; 256]; 8] {
 }
 
 fn crc32(data: &[u8]) -> u32 {
-    let mut crc = 0xffff_ffffu32;
-    let mut chunks = data.chunks_exact(8);
-    for c in &mut chunks {
-        let low = u32::from_le_bytes([c[0], c[1], c[2], c[3]]) ^ crc;
-        crc = CRC32_TABLES[7][(low & 0xff) as usize]
-            ^ CRC32_TABLES[6][((low >> 8) & 0xff) as usize]
-            ^ CRC32_TABLES[5][((low >> 16) & 0xff) as usize]
-            ^ CRC32_TABLES[4][(low >> 24) as usize]
-            ^ CRC32_TABLES[3][c[4] as usize]
-            ^ CRC32_TABLES[2][c[5] as usize]
-            ^ CRC32_TABLES[1][c[6] as usize]
-            ^ CRC32_TABLES[0][c[7] as usize];
-    }
-    for &byte in chunks.remainder() {
-        crc = (crc >> 8) ^ CRC32_TABLES[0][((crc ^ u32::from(byte)) & 0xff) as usize];
-    }
-    !crc
+    let mut stream = Crc32Stream::new();
+    stream.update(data);
+    stream.finish()
 }
 
 /// zlib's Adler-32 with the deferred modulo: `NMAX` bytes are summed in `u32`
@@ -3576,3 +3738,7 @@ mod probe_line_tests {
 #[cfg(test)]
 #[path = "png_checksum_tests.rs"]
 mod png_checksum_tests;
+
+#[cfg(test)]
+#[path = "md5_frame_tests.rs"]
+mod md5_frame_tests;

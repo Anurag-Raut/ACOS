@@ -143,6 +143,68 @@ fn unaligned_random_slices_match_the_oracle() {
 
 // --------------------------------------------------------------- the whole PNG
 
+/// The pre-P2 encoder, kept verbatim under `cfg(test)` as the oracle for the
+/// whole PNG file: the O1 checksums above *and* the chunk framing the streamed
+/// encoder now emits. (Found the hard way: a shared body proves nothing about
+/// the bytes it writes around the body.)
+fn encode_png_rgba_old(
+    width: u32,
+    height: u32,
+    stride: u32,
+    rgba: &[u8],
+    crc32: fn(&[u8]) -> u32,
+    adler32: fn(&[u8]) -> u32,
+) -> Vec<u8> {
+    let row = (width as usize).saturating_mul(4);
+    let stride_bytes = (stride as usize).saturating_mul(4);
+    let mut filtered = Vec::with_capacity((row + 1).saturating_mul(height as usize));
+    for y in 0..height as usize {
+        filtered.push(0u8);
+        let start = y * stride_bytes;
+        let end = start + row;
+        if end <= rgba.len() {
+            filtered.extend_from_slice(&rgba[start..end]);
+        } else {
+            filtered.resize(filtered.len() + row, 0);
+        }
+    }
+    let mut out = Vec::with_capacity(filtered.len() + 1024);
+    out.extend_from_slice(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
+    let mut ihdr = Vec::with_capacity(13);
+    ihdr.extend_from_slice(&width.to_be_bytes());
+    ihdr.extend_from_slice(&height.to_be_bytes());
+    ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
+    png_chunk_old(&mut out, b"IHDR", &ihdr, crc32);
+
+    let mut zlib = Vec::with_capacity(filtered.len() + 16);
+    zlib.extend_from_slice(&[0x78, 0x01]);
+    let mut offset = 0usize;
+    while offset < filtered.len() {
+        let len = (filtered.len() - offset).min(65_535);
+        let final_block = offset + len == filtered.len();
+        zlib.push(if final_block { 1 } else { 0 });
+        zlib.extend_from_slice(&(len as u16).to_le_bytes());
+        zlib.extend_from_slice(&(!(len as u16)).to_le_bytes());
+        zlib.extend_from_slice(&filtered[offset..offset + len]);
+        offset += len;
+    }
+    zlib.extend_from_slice(&adler32(&filtered).to_be_bytes());
+    png_chunk_old(&mut out, b"IDAT", &zlib, crc32);
+    png_chunk_old(&mut out, b"IEND", &[], crc32);
+    out
+}
+
+fn png_chunk_old(out: &mut Vec<u8>, kind: &[u8; 4], body: &[u8], crc32: fn(&[u8]) -> u32) {
+    out.extend_from_slice(&(body.len() as u32).to_be_bytes());
+    out.extend_from_slice(kind);
+    out.extend_from_slice(body);
+    let mut crc_input = Vec::with_capacity(4 + body.len());
+    crc_input.extend_from_slice(kind);
+    crc_input.extend_from_slice(body);
+    let crc = crc32(&crc_input);
+    out.extend_from_slice(&crc.to_be_bytes());
+}
+
 /// 1080x2209 is the D-M5 canvas. The old encoder is reproduced by handing the
 /// shared body the oracle checksums, so this asserts the PNG bytes — and thus
 /// `content_hash` — are unchanged, not just the individual checksums.
@@ -159,11 +221,31 @@ fn whole_png_bytes_are_identical_to_the_old_encoder() {
     }
 
     let new_png = encode_png_rgba(width, height, stride, &rgba);
-    let old_png = encode_png_rgba_with(width, height, stride, &rgba, crc32_oracle, adler32_oracle);
+    let old_png = encode_png_rgba_old(width, height, stride, &rgba, crc32_oracle, adler32_oracle);
 
     assert_eq!(new_png.len(), old_png.len(), "PNG length changed");
     assert_eq!(new_png, old_png, "PNG bytes changed");
     // 1080*4+1 filtered bytes per row, plus the zlib/PNG framing.
     assert!(new_png.len() > 9_000_000, "unexpectedly small canvas");
     assert_eq!(&new_png[..8], b"\x89PNG\r\n\x1a\n");
+}
+
+/// The streamed encoder (P2) writes the same file as the pre-P2 encoder, chunk
+/// for chunk, for the real canvas size.
+#[test]
+fn the_streamed_encoder_writes_the_same_file_as_the_pre_p2_encoder() {
+    let width = 1080u32;
+    let height = 2209u32;
+    let mut rng = Rng::new(0xAC05_0002_0000_0001);
+    let mut rgba = rng.fill((width as usize) * (height as usize) * 4);
+    for i in (3..rgba.len()).step_by(4) {
+        rgba[i] = 0xff;
+    }
+    let buffered = encode_png_rgba_old(width, height, width, &rgba, crc32, adler32);
+    let mut streamed = Vec::new();
+    encode_png_rgba_stream(width, height, width, &rgba, |bytes| {
+        streamed.extend_from_slice(bytes)
+    });
+    assert_eq!(streamed.len(), buffered.len(), "PNG length changed");
+    assert!(streamed == buffered, "the streamed PNG differs from the pre-P2 PNG");
 }

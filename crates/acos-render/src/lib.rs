@@ -46,6 +46,8 @@ pub mod handle;
 pub mod hash;
 pub mod image;
 pub mod matrix;
+/// P2: streaming MD5, for the published `content_hash` without a `md5sum` fork.
+pub mod md5;
 pub mod paint;
 pub mod path;
 pub mod region;

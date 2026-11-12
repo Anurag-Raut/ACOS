@@ -1116,7 +1116,10 @@ fn observe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError
         return Ok(result);
     }
     // A frame-only observe is a real, fresh host capture.
-    let frame = session.screenshot()?;
+    // P2: the daemon keeps the PNG where the launcher wrote it and copies that
+    // artifact to the caller's path with one kernel-side copy, instead of reading
+    // 9.5 MiB into the daemon only to write the same bytes back out.
+    let frame = session.capture_frame()?;
     let mut result = json!({
         "package": session.package(),
         "stage_reached": "first_frame",
@@ -1127,8 +1130,8 @@ fn observe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError
             "height": session.height(),
             "md5": frame.md5,
             "captured_at": frame.captured_at,
-            "meaningful": !frame.png.is_empty(),
-            "bytes": frame.png.len(),
+            "meaningful": frame.bytes > 0,
+            "bytes": frame.bytes,
         },
     });
     if let Some(path) = path {
@@ -1139,20 +1142,24 @@ fn observe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError
             })?;
         }
         let t_write = m5_now_us();
-        std::fs::write(&path, &frame.png).map_err(|error| BackendError::Error {
+        std::fs::copy(&frame.path, &path).map_err(|error| BackendError::Error {
             code: ErrorCode::RenderIo,
-            detail: format!("cannot write {}: {error}", path.display()),
+            detail: format!(
+                "cannot write {} from the frame artifact {}: {error}",
+                path.display(),
+                frame.path.display()
+            ),
         })?;
         let t_done = m5_now_us();
         m5_trace(
             "cli.serve_shot_write",
             t_write,
             t_done,
-            &format!("png_bytes={}", frame.png.len()),
+            &format!("png_bytes={}", frame.bytes),
         );
         result["screenshot"] = json!({
             "path": path.display().to_string(),
-            "bytes": frame.png.len(),
+            "bytes": frame.bytes,
             "frame_seq": frame.frame_seq,
         });
     }
