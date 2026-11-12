@@ -1,0 +1,102 @@
+{
+  "rep": 0,
+  "utc": "2026-11-12T07:17:39Z",
+  "samples": [
+    {
+      "i": 0,
+      "wall_ms": 706.425,
+      "server_total_ms": 706,
+      "ok": true,
+      "previous_frame_seq": 2,
+      "frame_seq": 3,
+      "tap_ok": true,
+      "after_tree_ms": 236.423,
+      "after_frame_seq": 4,
+      "t_unix_ms": 1794467861862
+    },
+    {
+      "i": 1,
+      "wall_ms": 713.456,
+      "server_total_ms": 713,
+      "ok": true,
+      "previous_frame_seq": 5,
+      "frame_seq": 6,
+      "tap_ok": true,
+      "after_tree_ms": 236.738,
+      "after_frame_seq": 7,
+      "t_unix_ms": 1794467863920
+    },
+    {
+      "i": 2,
+      "wall_ms": 653.341,
+      "server_total_ms": 653,
+      "ok": true,
+      "previous_frame_seq": 8,
+      "frame_seq": 9,
+      "tap_ok": true,
+      "after_tree_ms": 239.892,
+      "after_frame_seq": 10,
+      "t_unix_ms": 1794467865934
+    },
+    {
+      "i": 3,
+      "wall_ms": 805.787,
+      "server_total_ms": 805,
+      "ok": true,
+      "previous_frame_seq": 11,
+      "frame_seq": 12,
+      "tap_ok": true,
+      "after_tree_ms": 236.681,
+      "after_frame_seq": 13,
+      "t_unix_ms": 1794467868094
+    },
+    {
+      "i": 4,
+      "wall_ms": 813.408,
+      "server_total_ms": 813,
+      "ok": true,
+      "previous_frame_seq": 14,
+      "frame_seq": 15,
+      "tap_ok": true,
+      "after_tree_ms": 243.36,
+      "after_frame_seq": 16,
+      "t_unix_ms": 1794467870265
+    },
+    {
+      "i": 5,
+      "wall_ms": 657.797,
+      "server_total_ms": 657,
+      "ok": true,
+      "previous_frame_seq": 17,
+      "frame_seq": 18,
+      "tap_ok": true,
+      "after_tree_ms": 235.881,
+      "after_frame_seq": 19,
+      "t_unix_ms": 1794467872270
+    },
+    {
+      "i": 6,
+      "wall_ms": 653.244,
+      "server_total_ms": 653,
+      "ok": true,
+      "previous_frame_seq": 20,
+      "frame_seq": 21,
+      "tap_ok": true,
+      "after_tree_ms": 234.782,
+      "after_frame_seq": 22,
+      "t_unix_ms": 1794467874282
+    }
+  ],
+  "ok": true,
+  "host_before": {
+    "load1": "5.06",
+    "mem_available_gib": 42.228607177734375
+  },
+  "launch_ms": 596.2,
+  "samples_ok": 7,
+  "host_after": {
+    "load1": "4.60",
+    "mem_available_gib": 42.17869567871094
+  },
+  "utc_finished": "2026-11-12T07:17:54Z"
+}

@@ -1,0 +1,442 @@
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467874805015 dur_us=4 request_bytes=33
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467874805082 dur_us=67 request_bytes=33
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467874805090 dur_us=8 reply_bytes=284
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467874805197 dur_us=107 request_bytes=153
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467875165689 dur_us=7 cmd=tree bytes=14
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467875326991 dur_us=10106 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467875327643 dur_us=621 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467875327655 dur_us=1 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467875328203 dur_us=560 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467875343981 dur_us=15778 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467875388045 dur_us=42528 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467875388128 dur_us=44147 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467875388131 dur_us=1 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467875388132 dur_us=61110 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467875388279 dur_us=61288 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467875389378 dur_us=1099 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467875399512 dur_us=10134 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467875399512 dur_us=82627 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467875399750 dur_us=234061 cmd=tree
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467875399750 dur_us=234068 cmd=tree reply_bytes=4387
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467875401593 dur_us=596396 request_bytes=153
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467875401611 dur_us=18 reply_bytes=5200
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467875401848 dur_us=237 request_bytes=97
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467875401879 dur_us=2 cmd=tap bytes=29
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467876436865 dur_us=9760 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467876437237 dur_us=359 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467876437259 dur_us=1 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467876438070 dur_us=833 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467876453777 dur_us=15707 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467876497256 dur_us=42472 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467876497271 dur_us=43494 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467876497273 dur_us=1 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467876497274 dur_us=60396 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467876497276 dur_us=60411 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467876498312 dur_us=1036 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467876508190 dur_us=9878 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467876508190 dur_us=81085 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467876508613 dur_us=1106734 cmd=tap
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467876508613 dur_us=1106736 cmd=tap reply_bytes=4598
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467876510589 dur_us=1108741 request_bytes=97
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467876510602 dur_us=13 reply_bytes=1415
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467876510761 dur_us=159 request_bytes=88
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467876510783 dur_us=3 cmd=logs bytes=14
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467876510935 dur_us=152 cmd=logs
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467876510935 dur_us=155 cmd=logs reply_bytes=14464
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467876924851 dur_us=19 cmd=tree bytes=14
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467877088146 dur_us=11965 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467877089837 dur_us=1663 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467877089892 dur_us=1 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467877091816 dur_us=1979 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467877107790 dur_us=15974 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467877154207 dur_us=43130 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467877154480 dur_us=46690 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467877154483 dur_us=0 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467877154485 dur_us=66311 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467877154929 dur_us=66783 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467877156963 dur_us=2034 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467877166926 dur_us=9963 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467877166926 dur_us=90745 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467877168073 dur_us=243222 cmd=tree
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467877168073 dur_us=243241 cmd=tree reply_bytes=4387
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467877170423 dur_us=659662 request_bytes=88
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467877170438 dur_us=15 reply_bytes=1017
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467877170600 dur_us=162 request_bytes=112
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467877170628 dur_us=3 cmd=tree bytes=14
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467877334175 dur_us=12282 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467877334523 dur_us=338 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467877334533 dur_us=1 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467877335985 dur_us=1462 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467877351934 dur_us=15949 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467877397865 dur_us=43257 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467877397877 dur_us=45943 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467877397879 dur_us=0 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467877397881 dur_us=63696 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467877397882 dur_us=63707 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467877400046 dur_us=2164 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467877409994 dur_us=9948 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467877409994 dur_us=88101 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467877411232 dur_us=240604 cmd=tree
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467877411232 dur_us=240607 cmd=tree reply_bytes=4387
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467877412152 dur_us=241552 request_bytes=112
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467877412170 dur_us=18 reply_bytes=5030
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467877412355 dur_us=185 request_bytes=97
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467877412411 dur_us=4 cmd=tap bytes=29
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467878446469 dur_us=9763 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467878446816 dur_us=339 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467878446830 dur_us=1 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467878447791 dur_us=975 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467878463607 dur_us=15816 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467878507159 dur_us=42391 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467878507178 dur_us=43571 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467878507181 dur_us=1 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467878507183 dur_us=60706 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467878507185 dur_us=60716 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467878508274 dur_us=1089 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467878518003 dur_us=9729 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467878518003 dur_us=81297 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467878518443 dur_us=1106032 cmd=tap
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467878518443 dur_us=1106036 cmd=tap reply_bytes=4598
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467878519458 dur_us=1107103 request_bytes=97
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467878519473 dur_us=15 reply_bytes=1415
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467878519582 dur_us=109 request_bytes=88
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467878519604 dur_us=2 cmd=logs bytes=14
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467878519684 dur_us=80 cmd=logs
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467878519684 dur_us=82 cmd=logs reply_bytes=14464
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467878984065 dur_us=2 cmd=tree bytes=14
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467879146008 dur_us=10732 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467879146339 dur_us=315 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467879146344 dur_us=0 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467879146854 dur_us=515 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467879163959 dur_us=17105 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467879209320 dur_us=43853 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467879209386 dur_us=45427 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467879209388 dur_us=0 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467879209390 dur_us=63366 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467879209575 dur_us=63567 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467879211148 dur_us=1573 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467879221261 dur_us=10113 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467879221261 dur_us=85985 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467879221573 dur_us=237508 cmd=tree
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467879221573 dur_us=237510 cmd=tree reply_bytes=4387
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467879223143 dur_us=703561 request_bytes=88
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467879223153 dur_us=10 reply_bytes=1017
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467879223284 dur_us=131 request_bytes=112
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467879223306 dur_us=3 cmd=tree bytes=14
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467879384884 dur_us=10631 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467879385022 dur_us=134 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467879385028 dur_us=0 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467879385952 dur_us=930 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467879401925 dur_us=15973 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467879446967 dur_us=43998 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467879446972 dur_us=45047 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467879446974 dur_us=1 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467879446975 dur_us=62087 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467879446977 dur_us=62093 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467879448714 dur_us=1737 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467879458336 dur_us=9622 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467879458336 dur_us=84083 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467879458769 dur_us=235463 cmd=tree
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467879458769 dur_us=235466 cmd=tree reply_bytes=4387
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467879459548 dur_us=236264 request_bytes=112
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467879459575 dur_us=27 reply_bytes=5030
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467879459723 dur_us=148 request_bytes=97
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467879459754 dur_us=2 cmd=tap bytes=29
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467880494154 dur_us=9760 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467880494451 dur_us=277 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467880494470 dur_us=1 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467880495460 dur_us=1009 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467880511195 dur_us=15735 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467880555473 dur_us=43081 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467880555482 dur_us=44287 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467880555484 dur_us=0 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467880555486 dur_us=61312 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467880555488 dur_us=61334 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467880557168 dur_us=1680 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467880566828 dur_us=9660 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467880566828 dur_us=82434 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467880567247 dur_us=1107493 cmd=tap
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467880567247 dur_us=1107495 cmd=tap reply_bytes=4598
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467880568334 dur_us=1108611 request_bytes=97
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467880568349 dur_us=15 reply_bytes=1415
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467880568472 dur_us=123 request_bytes=89
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467880568496 dur_us=2 cmd=logs bytes=14
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467880568580 dur_us=84 cmd=logs
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467880568580 dur_us=86 cmd=logs reply_bytes=14464
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467881032116 dur_us=3 cmd=tree bytes=14
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467881193889 dur_us=10783 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467881194190 dur_us=289 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467881194195 dur_us=0 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467881194713 dur_us=523 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467881211096 dur_us=16383 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467881256202 dur_us=43624 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467881256282 dur_us=45186 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467881256284 dur_us=0 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467881256286 dur_us=62385 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467881256446 dur_us=62557 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467881258058 dur_us=1612 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467881267970 dur_us=9912 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467881267970 dur_us=84864 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467881268225 dur_us=236109 cmd=tree
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467881268225 dur_us=236112 cmd=tree reply_bytes=4386
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467881269380 dur_us=700908 request_bytes=89
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467881269389 dur_us=9 reply_bytes=1018
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467881269507 dur_us=118 request_bytes=113
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467881269533 dur_us=3 cmd=tree bytes=14
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467881431654 dur_us=11128 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467881431792 dur_us=132 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467881431850 dur_us=0 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467881432385 dur_us=593 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467881449099 dur_us=16714 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467881493607 dur_us=43364 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467881493612 dur_us=44513 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467881493614 dur_us=0 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467881493615 dur_us=61955 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467881493624 dur_us=61970 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467881495367 dur_us=1743 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467881505614 dur_us=10247 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467881505614 dur_us=85088 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467881505914 dur_us=236381 cmd=tree
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467881505914 dur_us=236384 cmd=tree reply_bytes=4387
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467881506704 dur_us=237197 request_bytes=113
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467881506720 dur_us=16 reply_bytes=5033
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467881506879 dur_us=159 request_bytes=98
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467881506910 dur_us=2 cmd=tap bytes=29
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467882555988 dur_us=10119 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467882556375 dur_us=376 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467882556447 dur_us=0 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467882557080 dur_us=705 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467882572920 dur_us=15840 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467882617258 dur_us=43050 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467882617276 dur_us=44356 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467882617280 dur_us=1 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467882617283 dur_us=61284 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467882617286 dur_us=61298 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467882619018 dur_us=1732 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467882629305 dur_us=10287 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467882629305 dur_us=83436 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467882629724 dur_us=1122814 cmd=tap
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467882629724 dur_us=1122816 cmd=tap reply_bytes=4599
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467882630336 dur_us=1123457 request_bytes=98
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467882630349 dur_us=13 reply_bytes=1420
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467882630473 dur_us=124 request_bytes=89
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467882630499 dur_us=2 cmd=logs bytes=14
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467882630590 dur_us=91 cmd=logs
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467882630590 dur_us=93 cmd=logs reply_bytes=14366
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467883084319 dur_us=3 cmd=tree bytes=14
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467883245902 dur_us=10540 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467883246212 dur_us=296 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467883246218 dur_us=0 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467883246735 dur_us=523 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467883263320 dur_us=16585 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467883308648 dur_us=44008 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467883308709 dur_us=45389 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467883308713 dur_us=0 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467883308716 dur_us=62800 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467883308833 dur_us=62931 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467883310478 dur_us=1645 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467883320030 dur_us=9552 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467883320030 dur_us=84668 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467883320302 dur_us=235983 cmd=tree
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467883320302 dur_us=235986 cmd=tree reply_bytes=4387
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467883321054 dur_us=690581 request_bytes=89
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467883321067 dur_us=13 reply_bytes=1022
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467883321217 dur_us=150 request_bytes=113
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467883321239 dur_us=3 cmd=tree bytes=14
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467883484091 dur_us=11602 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467883484697 dur_us=591 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467883484714 dur_us=1 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467883485764 dur_us=1067 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467883502362 dur_us=16598 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467883548666 dur_us=44853 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467883548676 dur_us=46314 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467883548678 dur_us=0 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467883548680 dur_us=64574 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467883548681 dur_us=64590 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467883550479 dur_us=1798 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467883560222 dur_us=9743 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467883560222 dur_us=87733 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467883560809 dur_us=239570 cmd=tree
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467883560809 dur_us=239573 cmd=tree reply_bytes=4387
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467883562052 dur_us=240835 request_bytes=113
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467883562071 dur_us=19 reply_bytes=5033
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467883562240 dur_us=169 request_bytes=98
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467883562275 dur_us=2 cmd=tap bytes=29
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467884595558 dur_us=10096 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467884595924 dur_us=344 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467884595948 dur_us=1 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467884596772 dur_us=848 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467884612295 dur_us=15523 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467884655669 dur_us=42162 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467884655680 dur_us=43385 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467884655682 dur_us=0 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467884655684 dur_us=60104 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467884655686 dur_us=60128 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467884657247 dur_us=1561 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467884666846 dur_us=9599 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467884666846 dur_us=81384 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467884667319 dur_us=1105044 cmd=tap
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467884667319 dur_us=1105046 cmd=tap reply_bytes=4598
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467884667851 dur_us=1105611 request_bytes=98
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467884667864 dur_us=13 reply_bytes=1420
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467884667977 dur_us=113 request_bytes=89
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467884668003 dur_us=3 cmd=logs bytes=14
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467884668072 dur_us=69 cmd=logs
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467884668072 dur_us=72 cmd=logs reply_bytes=14366
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467885132236 dur_us=8 cmd=tree bytes=14
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467885294073 dur_us=10851 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467885294386 dur_us=296 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467885294392 dur_us=0 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467885294913 dur_us=527 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467885311131 dur_us=16218 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467885355960 dur_us=43422 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467885356018 dur_us=44887 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467885356020 dur_us=0 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467885356022 dur_us=61932 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467885356138 dur_us=62065 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467885357944 dur_us=1806 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467885367715 dur_us=9771 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467885367715 dur_us=84493 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467885368048 dur_us=235812 cmd=tree
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467885368048 dur_us=235820 cmd=tree reply_bytes=4387
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467885369214 dur_us=701237 request_bytes=89
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467885369226 dur_us=12 reply_bytes=1022
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467885369347 dur_us=121 request_bytes=113
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467885369373 dur_us=3 cmd=tree bytes=14
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467885530776 dur_us=10182 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467885531102 dur_us=316 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467885531122 dur_us=1 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467885531710 dur_us=608 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467885547158 dur_us=15448 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467885590591 dur_us=41951 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467885590601 dur_us=43443 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467885590603 dur_us=1 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467885590604 dur_us=59818 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467885590606 dur_us=59830 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467885592207 dur_us=1601 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467885601748 dur_us=9541 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467885601748 dur_us=81154 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467885602178 dur_us=232805 cmd=tree
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467885602178 dur_us=232808 cmd=tree reply_bytes=4387
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467885602924 dur_us=233577 request_bytes=113
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467885602944 dur_us=20 reply_bytes=5033
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467885603100 dur_us=156 request_bytes=98
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467885603129 dur_us=3 cmd=tap bytes=29
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467886652118 dur_us=9456 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467886652424 dur_us=297 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467886652440 dur_us=1 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467886653090 dur_us=666 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467886668664 dur_us=15574 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467886712045 dur_us=41957 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467886712063 dur_us=43399 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467886712065 dur_us=0 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467886712067 dur_us=59940 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467886712070 dur_us=59952 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467886713696 dur_us=1626 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467886723256 dur_us=9560 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467886723256 dur_us=80594 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467886723743 dur_us=1120614 cmd=tap
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467886723743 dur_us=1120617 cmd=tap reply_bytes=4599
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467886724324 dur_us=1121224 request_bytes=98
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467886724338 dur_us=14 reply_bytes=1420
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467886724450 dur_us=112 request_bytes=89
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467886724474 dur_us=3 cmd=logs bytes=14
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467886724610 dur_us=136 cmd=logs
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467886724610 dur_us=139 cmd=logs reply_bytes=14464
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467887197679 dur_us=9 cmd=tree bytes=14
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467887359519 dur_us=10802 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467887360264 dur_us=715 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467887360279 dur_us=0 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467887361071 dur_us=807 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467887377034 dur_us=15963 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467887421214 dur_us=42587 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467887421398 dur_us=44364 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467887421401 dur_us=0 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467887421402 dur_us=61853 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467887421598 dur_us=62079 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467887423259 dur_us=1661 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467887434239 dur_us=10980 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467887434239 dur_us=85522 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467887434515 dur_us=236836 cmd=tree
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467887434515 dur_us=236845 cmd=tree reply_bytes=4387
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467887435562 dur_us=711112 request_bytes=89
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467887435573 dur_us=11 reply_bytes=1022
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467887435692 dur_us=119 request_bytes=113
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467887435714 dur_us=3 cmd=tree bytes=14
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467887597529 dur_us=10668 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467887597698 dur_us=161 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467887597710 dur_us=1 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467887598598 dur_us=900 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467887614985 dur_us=16387 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467887659761 dur_us=43668 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467887659779 dur_us=44794 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467887659781 dur_us=0 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467887659783 dur_us=62246 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467887659785 dur_us=62256 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467887661383 dur_us=1598 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467887671252 dur_us=9869 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467887671252 dur_us=84391 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467887671714 dur_us=236000 cmd=tree
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467887671714 dur_us=236003 cmd=tree reply_bytes=4386
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467887673072 dur_us=237380 request_bytes=113
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467887673089 dur_us=17 reply_bytes=5033
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467887673280 dur_us=191 request_bytes=98
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467887673308 dur_us=2 cmd=tap bytes=29
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467888728353 dur_us=10992 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467888728690 dur_us=321 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467888728706 dur_us=0 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467888730245 dur_us=1555 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467888747097 dur_us=16852 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467888796203 dur_us=45943 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467888796215 dur_us=49118 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467888796217 dur_us=0 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467888796218 dur_us=67849 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467888796221 dur_us=67868 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467888798793 dur_us=2572 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467888809369 dur_us=10576 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467888809369 dur_us=92008 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467888810803 dur_us=1137495 cmd=tap
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467888810803 dur_us=1137497 cmd=tap reply_bytes=4599
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467888811702 dur_us=1138422 request_bytes=98
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467888811730 dur_us=28 reply_bytes=1420
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467888811868 dur_us=138 request_bytes=89
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467888811908 dur_us=4 cmd=logs bytes=14
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467888812011 dur_us=103 cmd=logs
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467888812011 dur_us=107 cmd=logs reply_bytes=14464
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467889321989 dur_us=10 cmd=tree bytes=14
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467889493060 dur_us=18732 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467889496009 dur_us=2899 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467889496056 dur_us=1 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467889498668 dur_us=2659 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467889519497 dur_us=20829 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467889562915 dur_us=37902 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467889563283 dur_us=43786 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467889563294 dur_us=1 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467889563298 dur_us=70188 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467889564082 dur_us=71022 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467889568278 dur_us=4196 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467889590631 dur_us=22353 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467889590631 dur_us=116303 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467889591412 dur_us=269423 cmd=tree
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467889591412 dur_us=269433 cmd=tree reply_bytes=4387
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467889593306 dur_us=781438 request_bytes=89
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467889593332 dur_us=26 reply_bytes=1022
+DM5TRACE proc=cli ev=cli.serve_request_read t_us=1794467889593552 dur_us=220 request_bytes=113
+DM5TRACE proc=cli ev=cli.art_cmd_write t_us=1794467889593600 dur_us=7 cmd=tree bytes=14
+DM5TRACE proc=art ev=art.capture_composite t_us=1794467889777246 dur_us=31148 
+DM5TRACE proc=art ev=art.encode_filter t_us=1794467889778036 dur_us=767 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467889778072 dur_us=1 chunk=IHDR body_bytes=13
+DM5TRACE proc=art ev=art.encode_stored t_us=1794467889780169 dur_us=2133 
+DM5TRACE proc=art ev=art.encode_adler32 t_us=1794467889800342 dur_us=20173 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467889841699 dur_us=37195 chunk=IDAT body_bytes=9545825
+DM5TRACE proc=art ev=art.encode_idat_chunk t_us=1794467889841724 dur_us=41382 
+DM5TRACE proc=art ev=art.encode_crc32 t_us=1794467889841726 dur_us=0 chunk=IEND body_bytes=0
+DM5TRACE proc=art ev=art.encode_total t_us=1794467889841729 dur_us=64460 
+DM5TRACE proc=art ev=art.png_encode t_us=1794467889841732 dur_us=64486 png_bytes=9545882
+DM5TRACE proc=art ev=art.png_write t_us=1794467889844461 dur_us=2729 
+DM5TRACE proc=art ev=art.md5_file t_us=1794467889856489 dur_us=12028 
+DM5TRACE proc=art ev=art.capture_total t_us=1794467889856489 dur_us=110391 
+DM5TRACE proc=cli ev=cli.art_cmd_wait t_us=1794467889857984 dur_us=264384 cmd=tree
+DM5TRACE proc=cli ev=cli.art_cmd_roundtrip t_us=1794467889857984 dur_us=264391 cmd=tree reply_bytes=4387
+DM5TRACE proc=cli ev=cli.serve_dispatch t_us=1794467889859121 dur_us=265569 request_bytes=113
+DM5TRACE proc=cli ev=cli.serve_reply_write t_us=1794467889859163 dur_us=42 reply_bytes=5033

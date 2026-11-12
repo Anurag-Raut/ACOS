@@ -1,0 +1,42 @@
+{
+  "rep": 0,
+  "utc": "2026-11-12T07:15:11Z",
+  "samples": [
+    {
+      "i": 0,
+      "wall_ms": 663.501,
+      "server_total_ms": 663,
+      "ok": true,
+      "previous_frame_seq": 2,
+      "frame_seq": 3,
+      "tap_ok": true,
+      "after_tree_ms": 251.599,
+      "after_frame_seq": 4,
+      "t_unix_ms": 1794467714339
+    },
+    {
+      "i": 1,
+      "wall_ms": 704.499,
+      "server_total_ms": 704,
+      "ok": true,
+      "previous_frame_seq": 5,
+      "frame_seq": 6,
+      "tap_ok": true,
+      "after_tree_ms": 233.609,
+      "after_frame_seq": 7,
+      "t_unix_ms": 1794467716396
+    }
+  ],
+  "ok": true,
+  "host_before": {
+    "load1": "2.45",
+    "mem_available_gib": 43.38296127319336
+  },
+  "launch_ms": 584.5,
+  "samples_ok": 2,
+  "host_after": {
+    "load1": "2.25",
+    "mem_available_gib": 43.14103317260742
+  },
+  "utc_finished": "2026-11-12T07:15:16Z"
+}

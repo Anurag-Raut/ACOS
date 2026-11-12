@@ -1,0 +1,156 @@
+diff --git a/crates/acos-art/src/lib.rs b/crates/acos-art/src/lib.rs
+index 95a53e4..6b01a64 100644
+--- a/crates/acos-art/src/lib.rs
++++ b/crates/acos-art/src/lib.rs
+@@ -1268,7 +1268,33 @@ pub fn stage(name: &str) {
+     if std::env::var_os("ACOS_ART_STAGE_TIMING").is_none() {
+         return;
+     }
+-    eprintln!("acos-art: stage {name} exec={}ms", exec_elapsed_ms());
++    let exec_ms = exec_elapsed_ms();
++    eprintln!("acos-art: stage {name} exec={exec_ms}ms");
++    // D-M6 (trace-only, env-gated): the same marker in a file the caller can
++    // read. `acos serve` drains the launcher's stderr into an 8 KiB in-memory
++    // tail, so a stage table cannot be reconstructed from stderr; this sink
++    // records it verbatim with the host wall clock (so a stage can be aligned
++    // with the spawning process's own clock) and this process's pid (so
++    // several launches appending to one file stay separable). Inert unless
++    // `DM6_ART_STAGE_TRACE` names a file; no reply or control flow changes.
++    if let Some(path) = std::env::var_os("DM6_ART_STAGE_TRACE") {
++        use std::io::Write;
++        let unix_ms = std::time::SystemTime::now()
++            .duration_since(std::time::UNIX_EPOCH)
++            .map(|d| d.as_millis() as u64)
++            .unwrap_or(0);
++        if let Ok(mut file) = std::fs::OpenOptions::new()
++            .create(true)
++            .append(true)
++            .open(path)
++        {
++            let _ = writeln!(
++                file,
++                "DM6STAGE pid={} unix_ms={unix_ms} name={name} exec={exec_ms}ms",
++                std::process::id()
++            );
++        }
++    }
+ }
+ 
+ /// Milliseconds since this process started (`CLOCK_BOOTTIME` minus the process
+diff --git a/crates/acos-cli/src/engine/art.rs b/crates/acos-cli/src/engine/art.rs
+index e06224e..50cf456 100644
+--- a/crates/acos-cli/src/engine/art.rs
++++ b/crates/acos-cli/src/engine/art.rs
+@@ -505,6 +505,30 @@ fn rfc3339(unix_ms: u64) -> String {
+     acos_verify::clock::rfc3339_from_unix_ms(unix_ms as i64)
+ }
+ 
++/// D-M6 (trace-only, env-gated): append one JSON line describing a host-side
++/// reset phase. Off unless `DM6_RESET_TRACE` names a file. Never changes a
++/// reply, an error or a control-flow decision.
++fn reset_trace(event: serde_json::Value) {
++    if let Some(path) = std::env::var_os("DM6_RESET_TRACE") {
++        use std::io::Write;
++        if let Ok(mut file) = std::fs::OpenOptions::new()
++            .create(true)
++            .append(true)
++            .open(path)
++        {
++            let _ = writeln!(file, "{event}");
++        }
++    }
++}
++
++/// Host wall clock in Unix milliseconds (0 when the clock is unreadable).
++fn unix_ms_now() -> u64 {
++    std::time::SystemTime::now()
++        .duration_since(std::time::UNIX_EPOCH)
++        .map(|d| d.as_millis() as u64)
++        .unwrap_or(0)
++}
++
+ impl ArtSession {
+     /// Spawn `acos-art launch --apk <apk> --until activity-resumed` in its
+     /// interactive mode (`ACOSLAUNCH_INTERACTIVE=1`) and wait for its ready
+@@ -605,6 +629,7 @@ impl ArtSession {
+             });
+         }
+         let spawned_at = Instant::now();
++        let spawn_unix_ms = unix_ms_now();
+         let mut child = command.spawn().map_err(|error| BackendError::Unsupported {
+             capability: "engine.art".into(),
+             detail: format!(
+@@ -614,6 +639,13 @@ impl ArtSession {
+             ),
+         })?;
+         let _pid = child.id();
++        // D-M6 trace: the spawning clock and the child's pid, so the child's own
++        // `ACOS_ART_STAGE_TRACE` markers can be aligned on one host clock.
++        reset_trace(serde_json::json!({
++            "event": "spawn",
++            "pid": _pid,
++            "unix_ms": spawn_unix_ms,
++        }));
+         let stdin = child.stdin.take();
+         let stdout = child.stdout.take().expect("piped stdout");
+         let stderr = child.stderr.take().expect("piped stderr");
+@@ -779,6 +811,14 @@ impl ArtSession {
+         // `acos verify` starts the guest before its own step clock, so this is
+         // the boot cost the verdict never showed.
+         session.session_start_ms = spawned_at.elapsed().as_millis() as u64;
++        reset_trace(serde_json::json!({
++            "event": "ready",
++            "pid": _pid,
++            "unix_ms": unix_ms_now(),
++            "spawn_to_ready_ms": session.session_start_ms,
++            "buffer_generation": ready.get("buffer_generation").cloned(),
++            "probe_seq": ready.get("probe_seq").cloned(),
++        }));
+         Ok(session)
+     }
+ 
+@@ -1783,10 +1848,15 @@ impl SessionBackend for ArtSession {
+         // is a fresh process, a fresh Activity and cleared app state — not the
+         // app's own Reset control. The engine keeps its own frame sequence, so
+         // the frame after the reset is provably newer than the one before it.
++        // D-M6 trace: one line per reset with the host-side split. Inert unless
++        // `DM6_RESET_TRACE` names a file.
++        let reset_t0 = Instant::now();
++        let reset_t0_unix_ms = unix_ms_now();
+         let offset = self.seen_seq;
+         // Flush once so the absolute log ordinal of the old guest is exact
+         // before its sink dies with the process.
+         let _ = self.logs_since(0);
++        let log_flush_ms = reset_t0.elapsed().as_millis() as u64;
+         let log_offset = self.log_offset.saturating_add(self.logs_total_raw);
+         let apk = self.apk.clone();
+         let artifacts = self.artifacts.clone();
+@@ -1820,14 +1895,28 @@ impl SessionBackend for ArtSession {
+         fresh.session_start_ms = boot_ms.saturating_add(fresh.session_start_ms);
+         // Leave a live frame bound: the step after `reset` may be a pure
+         // assertion (`assert_text`), which reads the last completed frame.
++        let bind_t0 = Instant::now();
+         let bound = fresh
+             .command(serde_json::json!({"cmd":"tree"}))
+             .and_then(|reply| fresh.absorb(&reply));
++        let bind_ms = bind_t0.elapsed().as_millis() as u64;
+         if let Err(error) = bound {
+             let _ = fresh.close();
+             self.invalidate_frame();
+             return Err(error);
+         }
++        reset_trace(serde_json::json!({
++            "event": "reset",
++            "old_pid": self.process_group,
++            "new_pid": fresh_pid,
++            "handler_unix_ms": reset_t0_unix_ms,
++            "end_unix_ms": unix_ms_now(),
++            "log_flush_ms": log_flush_ms,
++            "stop_ms": stop_ms,
++            "start_ms": start_ms,
++            "bind_ms": bind_ms,
++            "engine_total_ms": reset_t0.elapsed().as_millis() as u64,
++        }));
+         fresh.last_input = None;
+         *self = fresh;
+         Ok(())

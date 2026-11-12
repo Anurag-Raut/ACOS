@@ -1,0 +1,202 @@
+{
+  "wall (client, reset->ready)": {
+    "n": 18,
+    "p50": 702.6,
+    "p95": 805.8,
+    "min": 639.7,
+    "max": 813.4,
+    "spread_pct": 23.6
+  },
+  "server total": {
+    "n": 18,
+    "p50": 702,
+    "p95": 805,
+    "min": 639,
+    "max": 813,
+    "spread_pct": 23.6
+  },
+  "engine total": {
+    "n": 18,
+    "p50": 702,
+    "p95": 805,
+    "min": 639,
+    "max": 813,
+    "spread_pct": 23.6
+  },
+  "  serve pre+post": {
+    "n": 18,
+    "p50": 0,
+    "p95": 1,
+    "min": 0,
+    "max": 1,
+    "spread_pct": 0
+  },
+  "  log flush": {
+    "n": 18,
+    "p50": 0,
+    "p95": 0,
+    "min": 0,
+    "max": 0,
+    "spread_pct": 0
+  },
+  "  guest stop": {
+    "n": 18,
+    "p50": 105,
+    "p95": 110,
+    "min": 55,
+    "max": 110,
+    "spread_pct": 52.4
+  },
+  "  launcher start (spawn->entry)": {
+    "n": 18,
+    "p50": 2,
+    "p95": 3,
+    "min": 1,
+    "max": 3,
+    "spread_pct": 100.0
+  },
+  "  sandbox prep (entry->exec)": {
+    "n": 18,
+    "p50": 10,
+    "p95": 10,
+    "min": 0,
+    "max": 10,
+    "spread_pct": 100.0
+  },
+  "  bwrap/dalvik spawn": {
+    "n": 18,
+    "p50": 20,
+    "p95": 30,
+    "min": 10,
+    "max": 30,
+    "spread_pct": 100.0
+  },
+  "  guest: spawn->java": {
+    "n": 18,
+    "p50": 79.5,
+    "p95": 114.9,
+    "min": 71.9,
+    "max": 122.8,
+    "spread_pct": 54.1
+  },
+  "  art init (java->android-runtime)": {
+    "n": 18,
+    "p50": 3.1,
+    "p95": 4.3,
+    "min": 2.9,
+    "max": 4.8,
+    "spread_pct": 45.2
+  },
+  "  fw: art->attach": {
+    "n": 18,
+    "p50": 8.0,
+    "p95": 10.2,
+    "min": 7.2,
+    "max": 11.9,
+    "spread_pct": 37.5
+  },
+  "  bind msg dispatch": {
+    "n": 18,
+    "p50": 91.6,
+    "p95": 132.4,
+    "min": 82.4,
+    "max": 138.0,
+    "spread_pct": 54.6
+  },
+  "  onCreate (BIND_APPLICATION msg)": {
+    "n": 18,
+    "p50": 41.1,
+    "p95": 76.4,
+    "min": 38.4,
+    "max": 76.7,
+    "spread_pct": 92.5
+  },
+  "  bind->app-created marker": {
+    "n": 18,
+    "p50": 2.4,
+    "p95": 5.0,
+    "min": 0.1,
+    "max": 5.1,
+    "spread_pct": 204.2
+  },
+  "  activity launch msg (159)": {
+    "n": 18,
+    "p50": 10.6,
+    "p95": 18.1,
+    "min": 8.1,
+    "max": 22.3,
+    "spread_pct": 94.3
+  },
+  "  post-resume fixed sleep": {
+    "n": 18,
+    "p50": 201.7,
+    "p95": 204.0,
+    "min": 199.8,
+    "max": 204.9,
+    "spread_pct": 2.1
+  },
+  "  activity launch total (txn->resumed)": {
+    "n": 18,
+    "p50": 210.5,
+    "p95": 223.0,
+    "min": 210.4,
+    "max": 225.9,
+    "spread_pct": 6.0
+  },
+  "  capture_total (bind)": {
+    "n": 18,
+    "p50": 82.0,
+    "p95": 110.4,
+    "min": 81.4,
+    "max": 110.4,
+    "spread_pct": 35.4
+  },
+  "    composite": {
+    "n": 18,
+    "p50": 10.4,
+    "p95": 31.1,
+    "min": 10.1,
+    "max": 31.1,
+    "spread_pct": 201.9
+  },
+  "    png encode": {
+    "n": 18,
+    "p50": 60.3,
+    "p95": 64.5,
+    "min": 60.1,
+    "max": 64.5,
+    "spread_pct": 7.3
+  },
+  "    png write+md5": {
+    "n": 18,
+    "p50": 1.6,
+    "p95": 2.7,
+    "min": 1.6,
+    "max": 2.7,
+    "spread_pct": 68.8
+  },
+  "  first traversal+probe": {
+    "n": 18,
+    "p50": 0.2,
+    "p95": 0.2,
+    "min": 0.0,
+    "max": 0.2,
+    "spread_pct": 100.0
+  },
+  "  ready (resumed->ready line)": {
+    "n": 18,
+    "p50": 13.7,
+    "p95": 17.8,
+    "min": 7.4,
+    "max": 18.1,
+    "spread_pct": 75.9
+  },
+  "  frame bind (tree cmd)": {
+    "n": 18,
+    "p50": 238,
+    "p95": 252,
+    "min": 233,
+    "max": 271,
+    "spread_pct": 8.0
+  }
+}
