@@ -533,13 +533,17 @@ Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
   timed-out settle step as `TIMEOUT` (agent observe still returns the latest
   tree); `p11-progress-timeout` is the non-pass negative control and
   `p12-progress-anim-off` passes 6/6.
-- **Finding (review rebase, `main` 1f21ea7):** with the shipped P11 default
-  (event pixel guard on), **4 of the 7 core gates pass**; `w54`, `w42` and
-  `form-validation` fail as `TIMEOUT` at a tap that changes no pixels (first
-  focus into an EditText with no IME/cursor change). This was latent before
-  because `verify` accepted a settle timeout as a pass. With the off-by-default
-  experiment `ACOS_STRICT_SETTLE_PIXEL_GUARD=off`, all 7 pass. The default is
-  unchanged; the relaxation is an owner-gated decision.
+- **Finding (review rebase, `main` 1f21ea7):** with P11's event pixel guard on,
+  only **4 of the 7 core gates pass**; `w54`, `w42` and `form-validation` fail
+  as `TIMEOUT` at a tap that changes no pixels (first focus into an EditText
+  with no IME/cursor change). This was latent because `verify` used to accept a
+  settle timeout as a pass. Owner decision (2026-11-12): **default the guard
+  off** — the four event conditions already prove the draw is after the action;
+  requiring different pixels only adds false timeouts. `ACOS_STRICT_SETTLE_PIXEL_GUARD=on`
+  restores P11 for experiments. Every strict input reply and verify step now
+  reports `pixels_changed:true|false`; a tap with no draw after the action still
+  times out. With the adopted default: **7/7 gates green, p12-progress-anim-off
+  pass, p11-progress-timeout non-pass TIMEOUT, P11 corpus 0/12 false passes.**
 - **Finding:** with animations off, a 150 ms background-thread UI post and a
   1000 ms `postDelayed` scheduled *after* the fast settle were not observed by
   subsequent `wait_for` polling (tree stayed at the pre-update text, no C1
@@ -550,10 +554,9 @@ Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
   `results/art-runtime/evidence/P12/{gates-off.txt,gates-and-ab.txt,ab.json}`.
 - **Regression / false pass:** 7 core gates both modes; assertions refuse
   `settled:false`; `T03-render-wrong` still fails. The P11 settle-lab false-pass
-  corpus was not re-run with animations off (follow-up: pass `animations:off`
-  through the P11 harness). Default gate result is 4/7 green, with the 3 red
-  gates and the guard-off experiment recorded in `results/art-runtime/P12.md`
-  §3.1.
+  corpus with animations off was not re-run (follow-up: pass `animations:off`
+  through the P11 harness). The animations-on corpus is 0/12 false passes under
+  the adopted default.
 - **Conclusion / next:** animations:off is the right default for functional
   checks (5.5× on a Button tap) and fixes the forever-animating screen;
   investigate idle main-looper timers, then re-run the P11 corpus with `off`.

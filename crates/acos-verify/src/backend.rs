@@ -365,6 +365,9 @@ pub struct InputDelivery {
     pub visual_change: bool,
     /// Guest acknowledgments, in delivery order.
     pub acks: Vec<InputAck>,
+    /// The settle block the action's reply carried (P12). Includes
+    /// `pixels_changed`; this is evidence, not a pass/fail rule.
+    pub settle: Option<serde_json::Value>,
 }
 
 /// The session state after an observation or an action.

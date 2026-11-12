@@ -791,6 +791,7 @@ fn delivery(reply: &serde_json::Value, visual_change: bool) -> InputDelivery {
         delivered: true,
         visual_change,
         acks: acks_from_reply(reply),
+        settle: reply.get("settle").cloned(),
     }
 }
 
@@ -1917,6 +1918,7 @@ impl ArtSession {
             delivered: true,
             visual_change,
             acks: acks_from_reply(reply),
+            settle: reply.get("settle").cloned(),
         });
         Ok(())
     }

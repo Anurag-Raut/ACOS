@@ -61,6 +61,9 @@ pub struct FakeSession {
     /// published (it is fresh; it just never settled) so the engine must
     /// refuse the step and keep the frame as evidence.
     settle_timed_out: bool,
+    /// P12b: settle evidence attached to input delivery (including
+    /// `pixels_changed:false` for a no-visual-change tap).
+    settle_json: Option<serde_json::Value>,
     /// The bound frame of the most recent completed command.
     cached: Option<ObservedFrame>,
 }
@@ -107,6 +110,22 @@ impl FakeSession {
         fake
     }
 
+    /// A live session whose tap settles after the action draw but whose pixels
+    /// are identical to the pre-action capture (`pixels_changed:false`).
+    pub fn settled_no_pixel_change() -> Self {
+        let mut fake = Self::with_mode(Mode::Live, Fault::None);
+        fake.settle_json = Some(serde_json::json!({
+            "mode": "strict",
+            "settled": true,
+            "bound": "strict-event",
+            "strict_rule": "event",
+            "pixels_changed": false,
+            "reason": null,
+            "animating": false
+        }));
+        fake
+    }
+
     fn with_mode(mode: Mode, fault: Fault) -> Self {
         FakeSession {
             mode,
@@ -117,6 +136,7 @@ impl FakeSession {
             calls: Arc::new(Mutex::new(Vec::new())),
             supports_type: false,
             settle_timed_out: false,
+            settle_json: None,
             cached: None,
         }
     }
@@ -445,14 +465,24 @@ impl SessionBackend for FakeSession {
         })
     }
 
+    fn last_input_delivery(&self) -> Option<acos_verify::backend::InputDelivery> {
+        self.settle_json.as_ref().map(|settle| acos_verify::backend::InputDelivery {
+            delivered: true,
+            visual_change: false,
+            acks: Vec::new(),
+            settle: Some(settle.clone()),
+        })
+    }
+
     fn input_settle_timeout(&self) -> Option<serde_json::Value> {
         self.settle_timed_out.then(|| {
             serde_json::json!({
                 "mode": "strict",
                 "settled": false,
                 "bound": "timeout",
-                "reason": "pending UI work: fake frame still changing",
-                "animating": true,
+                "reason": "no-draw-after-action",
+                "animating": false,
+                "pixels_changed": false,
                 "probe_seq": self.seq,
                 "tree_age_ms": 0
             })

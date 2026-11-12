@@ -1375,6 +1375,9 @@
           "minimum": 0.0,
           "type": "integer"
         },
+        "settle": {
+          "description": "Settle evidence for an input step (P12): `mode`, `settled`, `bound`, `pixels_changed`, `reason`, ... `None` for steps with no settle reply."
+        },
         "status": {
           "allOf": [
             {

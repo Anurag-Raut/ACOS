@@ -1635,11 +1635,9 @@ mod engine_tests {
         let details = &failure["error"]["details"];
         assert_eq!(details["settle"]["settled"], false);
         assert_eq!(details["settle"]["bound"], "timeout");
-        assert_eq!(
-            details["settle"]["reason"],
-            "pending UI work: fake frame still changing"
-        );
-        assert_eq!(details["animating"], true);
+        assert_eq!(details["settle"]["reason"], "no-draw-after-action");
+        assert_eq!(details["animating"], false);
+        assert_eq!(details["settle"]["pixels_changed"], false);
         assert!(
             details["frame_seq"].as_u64().unwrap_or(0) > 0,
             "the latest frame identity must be kept as evidence: {details}"
@@ -1653,6 +1651,31 @@ mod engine_tests {
             .expect("a timed-out step");
         assert_eq!(timed_out["step"], "tap");
         assert_eq!(timed_out["error"]["code"], "TIMEOUT");
+    }
+
+    #[test]
+    fn settled_tap_with_identical_pixels_reports_pixels_changed_false() {
+        let dir = artifacts("no-pixel-change");
+        let mut backend = EngineBackend::session(Box::new(FakeSession::settled_no_pixel_change()));
+        let req = request("scenarios/v2-art-counter.yaml", &dir);
+        let envelope = acos_verify::verify(&req, &mut backend);
+        assert!(
+            envelope.status().is_pass(),
+            "a post-action draw with identical pixels must settle, got {:?}: {:?}",
+            envelope.status(),
+            envelope.error()
+        );
+        let verdict = envelope.result().unwrap().get("verdict").unwrap();
+        let tap = verdict["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|step| step["step"] == "tap")
+            .expect("a tap step");
+        assert_eq!(tap["settle"]["pixels_changed"], false);
+        assert_eq!(tap["settle"]["settled"], true);
+        assert_eq!(tap["settle"]["bound"], "strict-event");
+        assert_eq!(tap["status"], "pass");
     }
 
     #[test]

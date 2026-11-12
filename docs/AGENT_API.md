@@ -466,10 +466,18 @@ optional `settle` argument:
   gesture publish and must stay on the same draw for
   `ACOS_STRICT_SETTLE_CONFIRM_MS` (default **24 ms**) so C1 commits that draw
   before the reply. Replies label `settle.bound:"strict-event"` and add
-  `strict_rule:"event"`. On timeout the reply is not settled and names the
-  guest's reason (`reason`, plus `animating:true` for frame/animator reasons)
-  under `bound:"timeout"` — but it still carries the latest tree and frame
-  identity, so the agent can use what is on screen (next bullet and
+  `strict_rule:"event"`. Every strict input reply also states
+  `settle.pixels_changed:true|false` against the pre-action capture (a
+  no-visual-change tap is reported, not failed; `acos verify` records it in the
+  step's `settle` evidence). Since the owner decision of 2026-11-12 the
+  pixel-unchanged guard is **off by default**: the four conditions above already
+  prove the draw is after the action, and requiring different pixels only
+  produced false timeouts. `ACOS_STRICT_SETTLE_PIXEL_GUARD=on` restores the P11
+  experiment. A tap with **no draw after the action** still times out
+  (`reason:"no-draw-after-action"`). On timeout the reply is not settled and
+  names the guest's reason (`reason`, plus `animating:true` for frame/animator
+  reasons) under `bound:"timeout"` — but it still carries the latest tree and
+  frame identity, so the agent can use what is on screen (next bullet and
   §8.6.4). `acos_assert`, `acos verify` assertions and the fast-rule rejection
   are unchanged: a timeout is never a pass. `acos wait`/`wait_for` remain the
   contract for updates scheduled beyond the horizon (for example a 1000 ms

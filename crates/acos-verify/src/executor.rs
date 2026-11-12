@@ -350,6 +350,13 @@ pub fn run_scenario(
         let mut step_result = StepResult::new(index, step.kind(), exec.status, duration_ms);
         step_result.assertions = exec.assertions.clone();
         step_result.error = exec.error.clone();
+        // P12: a tap/type/key reply's settle block (including pixels_changed)
+        // is step evidence. It is never the pass/fail rule by itself.
+        step_result.settle = exec
+            .observation
+            .as_ref()
+            .and_then(|observation| observation.input.as_ref())
+            .and_then(|delivery| delivery.settle.clone());
 
         // Write evidence and declare it.
         let step_artifact = acos_protocol::step_file_name(index, step.kind());
@@ -2228,6 +2235,7 @@ mod region_tests {
             delivered: true,
             visual_change: false,
             acks: Vec::new(),
+            settle: None,
         });
         let evaluated = eval_tap_change(Some(&previous), &current, Capabilities::default());
         assert!(evaluated.result.passed);

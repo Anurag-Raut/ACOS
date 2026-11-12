@@ -2788,6 +2788,11 @@ struct SettleTiming {
     rule: Option<&'static str>,
     /// P11: why the event rule timed out (e.g. `anim`, `queue`, `traversal`).
     reason: Option<String>,
+    /// P12b/guard: did the newest C1 capture differ from the pre-action one?
+    /// Always reported for a strict input; `None` for fast/tree where there is
+    /// no pre-action capture to compare with. Never a failure when the guard is
+    /// off (the default since the owner decision).
+    pixels_changed: Option<bool>,
 }
 
 impl SettleTiming {
@@ -2799,6 +2804,7 @@ impl SettleTiming {
             "first_change_ms": self.first_change_ms,
             "frame_ms": self.frame_ms,
             "state_changed": self.state_changed,
+            "pixels_changed": self.pixels_changed,
             "bound": self.bound,
             "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         });
@@ -2895,19 +2901,20 @@ fn wait_for_event_settled(
     publish_epoch_ms: u64,
 ) -> SettleEnd {
     let confirm = Duration::from_millis(env_u64("ACOS_STRICT_SETTLE_CONFIRM_MS", 24));
-    // P11's default: a strict input must change the pixels from the previous
-    // capture, so a tap that lands on the same final pixels times out instead
-    // of binding a stale-looking frame. P12 review measured that legitimate
-    // no-visual-change taps (focusing an EditText with no IME/cursor change)
-    // then time out too. The relaxation is opt-in only and is not a default:
-    // `ACOS_STRICT_SETTLE_PIXEL_GUARD=off` disables the guard for an experiment.
-    let pixel_guard = !std::env::var("ACOS_STRICT_SETTLE_PIXEL_GUARD")
-        .map(|value| value.eq_ignore_ascii_case("off"))
+    // Owner decision (2026-11-12): the pixel-unchanged guard is OFF by default.
+    // A strict settle already proves the frame is after the action: a probe
+    // newer than the action floor, no pending framework work, a draw at/after
+    // the action publish, and the 24 ms confirmation. Requiring the pixels to
+    // differ only produced false timeouts for taps that change focus without an
+    // IME/cursor. `ACOS_STRICT_SETTLE_PIXEL_GUARD=on` restores P11's guard for
+    // experiments; `pixels_changed` is still reported either way.
+    let pixel_guard = std::env::var("ACOS_STRICT_SETTLE_PIXEL_GUARD")
+        .map(|value| value.eq_ignore_ascii_case("on"))
         .unwrap_or(false);
-    if !pixel_guard {
+    if pixel_guard {
         trace_host(
             probe_state,
-            "settle: ACOS_STRICT_SETTLE_PIXEL_GUARD=off (experimental; P11 default is on)",
+            "settle: ACOS_STRICT_SETTLE_PIXEL_GUARD=on (P11 experiment; default is off)",
         );
     }
     // A tree request has no publish timestamp; it must not serve a sample that
@@ -2926,6 +2933,7 @@ fn wait_for_event_settled(
     let mut candidate_since = Instant::now();
     let mut first_change_ms: Option<u64> = None;
     let mut last_reason = String::from("no-probe");
+    let mut last_pixels_changed: Option<bool> = None;
     request_guest_probe(guest_stdin);
     loop {
         let (unsupported_seq, marker) = latest_unsupported(probe_state);
@@ -2967,21 +2975,21 @@ fn wait_for_event_settled(
             }
         }
         if let Some(sample) = valid {
-            let pixels_changed = if pixel_guard {
-                match previous_fnv {
-                    None => true,
-                    Some(previous) => {
-                        let current = {
-                            let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
-                            state.capture_latest().map(|c| c.fnv1a)
-                        };
-                        current != Some(previous) && current.is_some()
-                    }
+            let pixels_changed = match previous_fnv {
+                // No pre-action capture to compare with (e.g. tree request or
+                // the first action): report the conservative `true`; no pixel
+                // claim is made.
+                None => true,
+                Some(previous) => {
+                    let current = {
+                        let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+                        state.capture_latest().map(|c| c.fnv1a)
+                    };
+                    current != Some(previous) && current.is_some()
                 }
-            } else {
-                true
             };
-            if !pixels_changed {
+            last_pixels_changed = Some(pixels_changed);
+            if pixel_guard && !pixels_changed {
                 last_reason = "pixels-unchanged".to_string();
                 candidate = None;
             } else {
@@ -3017,6 +3025,7 @@ fn wait_for_event_settled(
                         bound: "strict-event",
                         rule: Some("event"),
                         reason: None,
+                        pixels_changed: last_pixels_changed,
                     };
                     trace_host(
                         probe_state,
@@ -3067,6 +3076,7 @@ fn wait_for_event_settled(
                     bound: "timeout",
                     rule: Some("event"),
                     reason: Some(last_reason),
+                    pixels_changed: last_pixels_changed,
                 },
             };
         }
@@ -3195,6 +3205,7 @@ fn wait_for_settled_observation(
                 bound: "state-commit",
                 rule: None,
                 reason: None,
+                pixels_changed: None,
             };
             trace_host(
                 probe_state,
@@ -3251,6 +3262,7 @@ fn wait_for_settled_observation(
                         bound: "quiet-fallback",
                         rule: None,
                         reason: None,
+                        pixels_changed: None,
                     };
                     trace_host(
                         probe_state,
@@ -3283,6 +3295,7 @@ fn wait_for_settled_observation(
                     bound: "timeout",
                     rule: None,
                     reason: None,
+                    pixels_changed: None,
                 },
             };
         }
