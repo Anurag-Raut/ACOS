@@ -1,0 +1,128 @@
+    74267us pid=2895105 GUEST ACOSLAUNCH MARK resume-budget ms=12000 ready_ms=2000
+    76791us pid=2895105 GUEST ACOSLAUNCH MARK natives registered
+    77025us pid=2895105 GUEST ACOSLAUNCH MARK android-runtime ready rc=1
+    77056us pid=2895105 GUEST ACOSLAUNCH MARK animations on=false scale=0.0 applied=true source=env:off
+    81556us pid=2895105 GUEST ACOSLAUNCH MARK overlays applied=1 base=1 total=2 idmaps=/data/overlay/PixelConfigOverlayCommon.idmap
+    82657us pid=2895105 GUEST ACOSLAUNCH MARK binder-looper started
+    82706us pid=2895105 GUEST ACOSLAUNCH MARK app-flags flags=0x10800046 source=manifest
+    82943us pid=2895105 GUEST ACOSLAUNCH MARK bind-request-marshalled appInfo=(dev.acos.fixtures.settletab sourceDir=/data/app/settle-lab.apk uid=1000) bytes=1364
+    83397us pid=2895105 GUEST ACOSLAUNCH MARK bind-request-pushed bytes=1364
+    83430us pid=2895105 GUEST ACOSLAUNCH MARK displayinfo-field refreshRate -> java.lang.NoSuchFieldException: refreshRate
+    83486us pid=2895105 GUEST ACOSLAUNCH MARK displayinfo-reply-pushed bytes=232
+    83489us pid=2895105 GUEST ACOSLAUNCH MARK app-flags flags=0x10800046 source=manifest
+    83532us pid=2895105 GUEST ACOSLAUNCH MARK applicationinfo-reply-pushed bytes=640
+    83580us pid=2895105 GUEST ACOSLAUNCH MARK instrumentationinfo-reply-pushed bytes=416
+    84563us pid=2895105 GUEST ACOSLAUNCH MARK attach-returned startSeq=1794518552877
+    84807us pid=2895105 GUEST ACOSLAUNCH MARK start-activity-guard installed call=android.app.IActivityTaskManager
+    84861us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {9e5b294} null: 138
+    84871us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {9e5b294} null
+    84873us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {9e5b294} null: 110
+   108290us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {9e5b294} null
+   108295us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {9e5b294} null: 164
+   108307us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {9e5b294} null
+   110331us pid=2895105 GUEST ACOSLAUNCH MARK application-created package=dev.acos.fixtures.settletab application=android.app.Application base=dev.acos.fixtures.settletab//data/app/settle-lab.apk instrumentation=android.app.Instrumentation
+   110342us pid=2895105 GUEST ACOSLAUNCH MARK app-flags flags=0x10800046 source=manifest
+   110504us pid=2895105 GUEST ACOSLAUNCH MARK obtain-shape LaunchActivityItem 0:Intent 1:int 2:ActivityInfo 3:Configuration 4:Configuration 5:int 6:String 7:IVoiceInteractor 8:int 9:Bundle 10:PersistableBundle 11:List 12:List 13:ActivityOptions 14:boolean 15:ProfilerInfo 16:IBinder 17:IActivityClientController 18:IBinder 19:boolean 20:IBinder
+   110524us pid=2895105 GUEST ACOSLAUNCH MARK transaction-items launch=android.app.servertransaction.LaunchActivityItem resume=android.app.servertransaction.ResumeActivityItem
+   110543us pid=2895105 GUEST ACOSLAUNCH MARK schedule-transaction-delivered activity=dev.acos.fixtures.settletab.MainActivity token=binder:19aa289 transport=local-iapplicationthread
+   110548us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {9e5b294} null: 159
+   124400us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {9e5b294} null
+   124418us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {51ba630} android.view.ViewRootImpl$7@28892a9: 0
+   124423us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {51ba630} android.view.ViewRootImpl$7@28892a9
+   127886us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {88c202e} android.view.Choreographer$FrameDisplayEventReceiver@70be7cf: 0
+   131236us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {88c202e} android.view.Choreographer$FrameDisplayEventReceiver@70be7cf
+   131246us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {51ba630} null: 8
+   131249us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {51ba630} null
+   131251us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {51ba630} null: 34
+   131269us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {51ba630} null
+   131271us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {51ba630} null: 6
+   131347us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {51ba630} null
+   131350us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {d3e6bdb} dev.acos.art.LaunchMain$11@ed2d678: 0
+   131381us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {d3e6bdb} dev.acos.art.LaunchMain$11@ed2d678
+   131384us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {51ba630} com.android.internal.policy.PhoneWindow$1@5ee1151: 0
+   131513us pid=2895105 GUEST ACOSLAUNCH MARK activity-resumed activity=dev.acos.fixtures.settletab.MainActivity window=com.android.internal.policy.PhoneWindow@54a3db6 resume_ready=first-traversal
+   131588us pid=2895105 GUEST ACOSLAUNCH MARK window-views count=1
+   131844us pid=2895105 GUEST ACOSLAUNCH MARK live-probe-started
+   132272us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {51ba630} com.android.internal.policy.PhoneWindow$1@5ee1151
+   144510us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {88c202e} android.view.Choreographer$FrameDisplayEventReceiver@70be7cf: 0
+   148095us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {88c202e} android.view.Choreographer$FrameDisplayEventReceiver@70be7cf
+   148101us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {9e5b294} null: 118
+   148115us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {9e5b294} null
+   148119us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {51ba630} null: 13
+   148124us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {51ba630} null
+   148128us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@78f4d8e: 0
+   149116us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@78f4d8e
+   149123us pid=2895105 GUEST ACOSLAUNCH EARLY_RELEASE start delay_ms=0 gc_count_before=3
+   149127us pid=2895105 GUEST ACOSLAUNCH EARLY_RELEASE done ms=0 gc_count_after=3
+   149816us pid=2895105 HOST settle event generation 0->1
+   161187us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {88c202e} android.view.Choreographer$FrameDisplayEventReceiver@70be7cf: 0
+   164824us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {88c202e} android.view.Choreographer$FrameDisplayEventReceiver@70be7cf
+   164829us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@415f6f9: 0
+   165610us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@415f6f9
+   170099us pid=2895105 HOST settle event generation 1->2
+   170270us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@c30363e: 0
+   170825us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@c30363e
+   190665us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@3022c9f: 0
+   191675us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@3022c9f
+   200790us pid=2895105 HOST settle event ready gen=2 probe_seq=4 draw_seq=2 draw_ms=1794518552955 confirm_ms=24
+   252587us pid=2895105 HOST settle event generation 0->2
+   252751us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@37fa1ec: 0
+   253549us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@37fa1ec
+   273113us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@93609b5: 0
+   274146us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@93609b5
+   293344us pid=2895105 HOST settle event ready gen=2 probe_seq=6 draw_seq=2 draw_ms=1794518552955 confirm_ms=24
+   293905us pid=2895105 HOST tap publish_begin x=218 y=690 ack_wait_ms=2500
+   298991us pid=2895105 HOST tap acks_returned total_ms=5 seqs=[3, 4] acks=[(3, true, Some(5071)), (4, true, Some(5070))]
+   311233us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {88c202e} android.view.Choreographer$FrameDisplayEventReceiver@70be7cf: 0
+   314601us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {88c202e} android.view.Choreographer$FrameDisplayEventReceiver@70be7cf
+   314606us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {51ba630} android.view.View$PerformClick@b66f3bb: 0
+   315009us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {51ba630} android.view.View$PerformClick@b66f3bb
+   315015us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {51ba630} android.view.View$UnsetPressedState@6baf0d8: 0
+   315048us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {51ba630} android.view.View$UnsetPressedState@6baf0d8
+   315053us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@41acf16: 0
+   315823us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@41acf16
+   319263us pid=2895105 HOST settle event generation 2->3
+   327871us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {88c202e} android.view.Choreographer$FrameDisplayEventReceiver@70be7cf: 0
+   329920us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {88c202e} android.view.Choreographer$FrameDisplayEventReceiver@70be7cf
+   329925us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@bcaba6d: 0
+   331144us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@bcaba6d
+   339522us pid=2895105 HOST settle event generation 3->4
+   344575us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {88c202e} android.view.Choreographer$FrameDisplayEventReceiver@70be7cf: 0
+   346478us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {88c202e} android.view.Choreographer$FrameDisplayEventReceiver@70be7cf
+   346486us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@57b02f0: 0
+   347310us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@57b02f0
+   349646us pid=2895105 HOST settle event generation 4->5
+   360089us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@5e59069: 0
+   360963us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@5e59069
+   380430us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@ef4aaee: 0
+   381225us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@ef4aaee
+   400473us pid=2895105 HOST settle event ready gen=5 probe_seq=11 draw_seq=5 draw_ms=1794518553138 confirm_ms=24
+   400602us pid=2895105 HOST tap settle_done after_ms=106 settled=true mode=strict
+   465215us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {c557b8f} dev.acos.fixtures.settletab.MainActivity$5$1$1@ba55e1c: 0
+   465333us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {c557b8f} dev.acos.fixtures.settletab.MainActivity$5$1$1@ba55e1c
+   477905us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {88c202e} android.view.Choreographer$FrameDisplayEventReceiver@70be7cf: 0
+   480396us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {88c202e} android.view.Choreographer$FrameDisplayEventReceiver@70be7cf
+   486057us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@dbdca25: 0
+   487308us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@dbdca25
+   736263us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@b0487fa: 0
+   737262us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@b0487fa
+   986394us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@7b841ab: 0
+   987731us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@7b841ab
+  1236550us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@2b84008: 0
+  1237866us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@2b84008
+  1486750us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@a25e3a1: 0
+  1487754us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@a25e3a1
+  1736838us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@d0329c6: 0
+  1738009us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@d0329c6
+  1986993us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@6374d87: 0
+  1988199us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@6374d87
+  2237111us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@c9554b4: 0
+  2237855us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@c9554b4
+  2487308us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@29c18dd: 0
+  2488638us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@29c18dd
+  2737422us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@3f81c52: 0
+  2738360us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@3f81c52
+  2987582us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@2b13b23: 0
+  2988293us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@2b13b23
+  3237754us pid=2895105 GUEST ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@58d0820: 0
+  3238918us pid=2895105 GUEST ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3d09989} dev.acos.art.LaunchMain$6$1@58d0820
