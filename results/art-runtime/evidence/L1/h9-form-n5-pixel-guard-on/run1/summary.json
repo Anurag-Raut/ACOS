@@ -1,0 +1,87 @@
+{
+ "schema": "z7-loop/1",
+ "arm": "a",
+ "mode": "normal",
+ "n": 5,
+ "app": "form-validation",
+ "verified_tasks": 5,
+ "false_passes": 0,
+ "tasks_per_min": 4.819,
+ "task_latency_ms": {
+  "max": 62041.4,
+  "mean": 43335.4,
+  "min": 30592.7,
+  "n": 5,
+  "p50": 31373.4,
+  "p95": 62041.4
+ },
+ "wall_s": 62.26,
+ "knobs": {},
+ "tasks": [
+  {
+   "tag": 0,
+   "round": 0,
+   "verified": true,
+   "tap_ms": 30028.29,
+   "type_ms": 98.06,
+   "tap_ok": true,
+   "type_ok": true,
+   "initial": "Name",
+   "after": "Ada",
+   "screenshot_ok": true,
+   "error": null
+  },
+  {
+   "tag": 1,
+   "round": 0,
+   "verified": true,
+   "tap_ms": 128.61,
+   "type_ms": 108.96,
+   "tap_ok": true,
+   "type_ok": true,
+   "initial": "Name",
+   "after": "Ada",
+   "screenshot_ok": true,
+   "error": null
+  },
+  {
+   "tag": 2,
+   "round": 0,
+   "verified": true,
+   "tap_ms": 99.92,
+   "type_ms": 99.97,
+   "tap_ok": true,
+   "type_ok": true,
+   "initial": "Name",
+   "after": "Ada",
+   "screenshot_ok": true,
+   "error": null
+  },
+  {
+   "tag": 3,
+   "round": 0,
+   "verified": true,
+   "tap_ms": 30047.99,
+   "type_ms": 89.07,
+   "tap_ok": true,
+   "type_ok": true,
+   "initial": "Name",
+   "after": "Ada",
+   "screenshot_ok": true,
+   "error": null
+  },
+  {
+   "tag": 4,
+   "round": 0,
+   "verified": true,
+   "tap_ms": 109.53,
+   "type_ms": 87.93,
+   "tap_ok": true,
+   "type_ok": true,
+   "initial": "Name",
+   "after": "Ada",
+   "screenshot_ok": true,
+   "error": null
+  }
+ ]
+}

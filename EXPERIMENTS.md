@@ -907,6 +907,56 @@ PASS (1 documented false pass -> 0; one live Gaten false pass re-measured as a r
   layout / a launch that never paints) remains the reason a green Gaten run is luck-dependent (1 of
   2 re-runs here hit the white-paint flake at step 1, as GR2 measured 2/6).
 
+## E2.11 — L1: animations-off delayed updates were a `wait_for` replay, and H9 is the pre-P12 pixel guard — MEASURED (fixed)
+
+- **Date / commit:** 2026-11-13; branch `fix-l1-looper-input` (off `main` `1013832`).
+- **Question / goal:** with `animations: off`, `p11-background` (150 ms background
+  thread post) and `p11-delay1000` (1000 ms `postDelayed`) never showed their
+  later update through `wait_for`, even though animations on masked it. Is the
+  guest main looper not dispatching, is the invalidate not drawing, or is the
+  probe/frame pipeline not waking? Separately, H9: at N=5, 3/5
+  `form-validation` `:id/name` taps hit the 30 s bound. Same cause?
+- **Method:** real ART, release binary, one host-wide ART lock. Guest-side
+  timestamps from `ACOS_ART_INPUT_TRACE` (`Looper.setMessageLogging` lines) plus
+  the guest's `ACOSPROBE` samples (`time`, `draw_seq`, `draw_ms`, `settle`).
+  `p11-background`/`p11-delay1000` run with `--animations off`; the P11/P12
+  gate suite in both modes; H9 protocol `z7/loop.py --arm a --n 5 --cycles 1
+  --app form-validation`, twice with the default rule and once with
+  `ACOS_STRICT_SETTLE_PIXEL_GUARD=on`.
+- **Result (a):** the guest is not idle. With animations off the background
+  Runnable dispatches at +171 ms after the tap publish (465.2 ms in the run),
+  draws (`draw_seq=6`, `draw_ms=…553271`) and emits probe
+  `seq=12 … bg_text="bg-done", settled=true`; probes continue every 250 ms.
+  The verifier made 9 `wait_for` polls over 3011 ms, reused `tree/3.json`,
+  `last_frame_seq=3`, and no `tree` command reached `acos-art` after the tap.
+  Cause: `TrustGuard` (wrapping every `acos verify` backend) forwarded
+  `observe` but not `Backend::refresh`; the trait default replays the last
+  completed frame, so `wait_for` never re-traversed. Fix: forward `refresh`
+  (and fail closed for untrusted runs). After the fix the same update stores
+  C1 generation 6 and `wait_for` returns in 179 ms with `bg-done`;
+  `p11-delay1000` returns in 967 ms.
+- **Result (b):** H9's failing guests show the tap dispatched (`View$PerformClick`
+  on `ViewRootImpl$ViewRootHandler`, `draw_seq` advances) but no pixel change
+  (focus into an already-focused empty `EditText`; in the H2 raw run some
+  sessions had no C1 buffer at all). The evidence was taken **before P12's
+  final review change**, when the pixel-unchanged guard was on by default, so
+  the settle waited the full `ACOSLAUNCH_FRAME_WAIT_SECS=30`. On this branch:
+  default (guard off) N=5 form **5/5 verified twice** (tap 110–176 ms);
+  restoring `ACOS_STRICT_SETTLE_PIXEL_GUARD=on` on the same binary reproduces
+  the 30 s bound (2/5 taps 30 028/30 048 ms). No input or looper bug.
+- **Gates:** all 7 positive gates pass in both animation modes;
+  `T03-render-wrong` fails as the expected control; all 12 `p11-*` pass in both
+  modes including `p11-background` 5/5 and `p11-delay1000` 5/5 with animations
+  off, 0 false passes; `p11-progress-timeout` stays a non-pass and
+  `p12-progress-anim-off` passes 6/6; `cargo test` green for
+  `acos-cli/-art/-services/-verify`. Evidence
+  `results/art-runtime/L1.md` §L1 follow-up and
+  `results/art-runtime/evidence/L1/`.
+- **Conclusion:** `animations: off` is no longer bounded by "already-queued
+  messages in the settle horizon"; a later update is visible to `wait_for`.
+  Do not weaken settle: a genuine settle timeout still returns
+  `settled:false` and `verify` still fails it as `TIMEOUT`.
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
@@ -951,7 +1001,7 @@ merged after that build; re-baseline on merged main.
 | H6 | Nightly metric regression bench | all | guard | high | done | low | **done**: `tools/bench/acos-bench.sh` + `BASELINE.json` |
 | H7 | Shrink per-session boot-image private memory | M2 | −10–25 MiB | medium | medium | medium | **folded into H13** (B3 is the measured first step) |
 | H8 | Faster PNG (SIMD deflate) / region screenshots | M5 | 24 → 10–15 ms | medium | medium | low | backlog (M5 is 2 % of the loop) |
-| H9 | Form-validation N=5 under host load: 3/5 `:id/name` taps hit the 30 s bound (2/5 verified) **with early GC off and on**, 2/2 runs each; Z7 saw the same in a/a′/c′ | loop correctness | remove a pre-existing input/queue stall | high (reproduced) | medium | low | backlog (evidence `results/art-runtime/H2.md` §5) |
+| H9 | Form-validation N=5 under host load: 3/5 `:id/name` taps hit the 30 s bound (2/5 verified) **with early GC off and on**, 2/2 runs each; Z7 saw the same in a/a′/c′ | loop correctness | remove a pre-existing input/queue stall | high (reproduced) | medium | low | **resolved 2026-11-13, E2.11/L1**: not input or the looper — the pre-P12 pixel-unchanged guard (on by default) timed out focus taps with no pixel change/no C1 buffer. P12 guard-off default + `TrustGuard::refresh`: N=5 form 5/5 ×2 at 110–176 ms, guard-on reproduces 30 s (2/5). Evidence `results/art-runtime/evidence/L1/` |
 | H3 | Warm exec pool | M3/M4 | −73 ms launch | — | — | +idle memory | **declined by owner 2026-11-12** (no spare processes) |
 | K3a | K2 next walls: AndroidKeyStore shim, GL/BLAST natives, WebView provider classification | compat first-frame | +3–5 apps | high (K1/K2 evidence) | medium | medium | queued |
 | K3b | K2 PMS error class (`NameNotFoundException`) and `checkService` null for unknown names | compat | +2 apps (vlc, fdroid) | high | low | low | queued |

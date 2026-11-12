@@ -300,6 +300,30 @@ impl Backend for TrustGuard {
         self.inner.observe()
     }
 
+    /// `wait_for` polls through [`Backend::refresh`] (`executor.rs`), whose trait
+    /// default replays the last observation. A wrapper that forwards `observe`
+    /// but not `refresh` therefore freezes every poll at the previous action's
+    /// frame: P12's animations-off `p11-background`/`p11-delay1000` updates were
+    /// dispatched and drawn by the guest, but the verifier never asked it to
+    /// look again (L1). Forward the re-traversal seam intact.
+    ///
+    /// Under `untrusted`, a fresh tree is guest-asserted exactly like
+    /// `observe`, so it fails closed with the same evidence error instead of
+    /// being the one tree path that bypasses the guard.
+    fn refresh(&mut self) -> Result<SessionObservation, BackendError> {
+        if self.trust == Trust::Untrusted {
+            return Err(BackendError::Failed {
+                code: ErrorCode::InsufficientHostEvidence,
+                detail: "UNTRUSTED_TREE_ASSERTION: this run is untrusted, so the UI tree is \
+                         guest-asserted and cannot justify a pass, including a `wait_for` poll. \
+                         Use a host-observed assertion (assert_region / assert_screenshot / \
+                         capture); the tree is still used to resolve tap targets for navigation."
+                    .to_string(),
+            });
+        }
+        self.inner.refresh()
+    }
+
     fn logs_since(&mut self, since: u64) -> Result<Vec<LogRecord>, BackendError> {
         if self.trust == Trust::Untrusted {
             // Logs are guest-asserted (the APK decides what it writes). On an
@@ -427,6 +451,45 @@ mod tests {
             .logs_since(0)
             .expect_err("the fake has no log command; the point is the code forwarded");
         assert_eq!(error.code(), ErrorCode::UnsupportedBackend);
+    }
+
+    /// L1: `wait_for` polls through `Backend::refresh`, whose trait default is
+    /// `observe()` (the last completed frame). A trust wrapper that forwards
+    /// `observe` but not `refresh` turns every poll into a replay: the P11
+    /// animations-off background/delay1000 updates were dispatched by the guest
+    /// but the verifier never re-traversed, so `wait_for` timed out on a screen
+    /// that had already advanced. The wrapper must forward the seam.
+    #[test]
+    fn refresh_re_traverses_under_the_trusted_wrapper() {
+        use crate::engine::fake::FakeSession;
+        use crate::engine::EngineBackend;
+
+        let inner = EngineBackend::session(Box::new(FakeSession::live()));
+        let mut trusted = TrustGuard::new(Box::new(inner), Trust::Trusted);
+        let first = trusted.refresh().expect("first refresh").frame.frame_seq;
+        let second = trusted.refresh().expect("second refresh").frame.frame_seq;
+        assert!(
+            second > first,
+            "refresh must ask the session for a new frame (got {first} then {second}); \
+             the trait default would replay {first}"
+        );
+    }
+
+    #[test]
+    fn untrusted_refresh_fails_closed_like_observe() {
+        use crate::engine::fake::FakeSession;
+        use crate::engine::EngineBackend;
+
+        let inner = EngineBackend::session(Box::new(FakeSession::live()));
+        let mut untrusted = TrustGuard::new(Box::new(inner), Trust::Untrusted);
+        let error = untrusted
+            .refresh()
+            .expect_err("a wait_for poll is a guest-asserted tree read");
+        assert_eq!(error.code(), ErrorCode::InsufficientHostEvidence);
+        assert!(
+            error.to_string().contains("UNTRUSTED_TREE_ASSERTION"),
+            "{error}"
+        );
     }
 
     #[test]
