@@ -160,6 +160,40 @@ pub struct UnsupportedCall {
     pub error: String,
 }
 
+/// B3: opt-in **shared** boot image (arm (b) of the Zygote comparison).
+///
+/// `ACOS_SHARED_BOOT_IMAGE=<dir>` points the launch at an *uncompressed* boot
+/// image built by `tools/art-runtime/b2/build-uncompressed.sh --out <dir>`
+/// (B2's recipe: `--image-format=uncompressed --base=0x70000000`). The launch
+/// then passes `-Ximage:/data/img/boot.art -Xnorelocate`: ART maps the image at
+/// its recorded base, the pages stay file-backed and are shared between
+/// sessions instead of being LZ4-decompressed into private anon memory (B2:
+/// 26.3 -> 12.7 MiB private + 25.7 MiB shared per session).
+///
+/// `-Xnorelocate` turns **image ASLR off** (fixed base 0x70000000), so this is
+/// a trusted-workloads-only experiment seam. It is OFF by default and unset
+/// means the argv is byte-for-byte what it was before (no image flag at all).
+pub const ENV_SHARED_BOOT_IMAGE: &str = "ACOS_SHARED_BOOT_IMAGE";
+
+/// Resolve the `ACOS_SHARED_BOOT_IMAGE` seam; `None` = default (LZ4, unchanged).
+///
+/// `Some(dir)` must hold `<dir>/x86_64/boot.art`: ART appends the instruction
+/// set to an `-Ximage` location (`image_space.cc:136`, `GetSystemImageFilename`).
+/// A set-but-unusable value is an error, never a silent fallback to the
+/// compressed image, so a typo cannot masquerade as a measurement.
+fn resolve_shared_boot_image(raw: Option<std::ffi::OsString>) -> Result<Option<PathBuf>> {
+    let Some(raw) = raw else { return Ok(None) };
+    let dir = PathBuf::from(raw);
+    if dir.join("x86_64/boot.art").is_file() {
+        Ok(Some(dir))
+    } else {
+        Err(Error::Layout(format!(
+            "{ENV_SHARED_BOOT_IMAGE}={}: no x86_64/boot.art (unset it for the default LZ4 image)",
+            dir.display()
+        )))
+    }
+}
+
 /// Run the real `ActivityThread.main`-style startup until `Application.onCreate`.
 pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     // W39 (flagged call-site edit in the W36-owned launch.rs): stage markers for
@@ -555,7 +589,24 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     // class path and sandbox are exactly what they were before this seam.
     // See results/art-runtime/Z3.md.
     let zygote_app: Option<PathBuf> = std::env::var_os("ACOS_ZYGOTE_APP").map(PathBuf::from);
-    let argv: Vec<String> = vec![
+    // B3: opt-in shared boot image, resolved before the sandbox is wired so a
+    // bad value fails the launch instead of silently running the LZ4 image.
+    let shared_boot_image = resolve_shared_boot_image(std::env::var_os(ENV_SHARED_BOOT_IMAGE))?;
+    let mut argv: Vec<String> = Vec::new();
+    if shared_boot_image.is_some() {
+        // Exactly B2's pair (`with_image` below ro-binds the dir to /data/img).
+        argv.push("-Ximage:/data/img/boot.art".into());
+        argv.push("-Xnorelocate".into());
+    }
+    if let Some(dir) = &shared_boot_image {
+        eprintln!(
+            "acos-art: launch: shared boot image {} (-Ximage:/data/img/boot.art -Xnorelocate; fixed base, no image ASLR)",
+            dir.display()
+        );
+    }
+    // Options before the `-cp <dex> <class>` triple (the Z3 seam keeps them).
+    let image_prefix = argv.len();
+    argv.extend(vec![
         "-cp".into(),
         "/data/app/launch-guest/classes.dex".into(),
         GUEST_CLASS.into(),
@@ -580,7 +631,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         // source label recorded in `application-created.marker`.
         app_flags.to_string(),
         app_flags_source.to_string(),
-    ];
+    ]);
     let argv: Vec<String> = match &zygote_app {
         None => argv,
         Some(dir) => {
@@ -588,21 +639,25 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
                 "acos-art: launch: Z3 zygote guest {} (app child forked from a pre-initialised ART)",
                 dir.display()
             );
-            let mut v: Vec<String> = vec![
+            let mut v: Vec<String> = argv[..image_prefix].to_vec();
+            v.extend(vec![
                 "-Xzygote".into(),
                 "-Xhidden-api-policy:disabled".into(),
                 "-cp".into(),
                 "/data/app/z3/classes.dex".into(),
                 "dev.acos.art.ZygoteApp".into(),
-            ];
+            ]);
             // Drop the production `-cp <dex> <class>` triple; the guest argv
             // (`apk package out until activity …`) is passed through verbatim.
-            v.extend(argv.iter().skip(3).cloned());
+            v.extend(argv.iter().skip(image_prefix + 3).cloned());
             v
         }
     };
     crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();
+    if let Some(dir) = &shared_boot_image {
+        sb.with_image(Some(dir.clone()));
+    }
     sb.run_root(run.path());
     sb.seccomp_guest(true);
     sb.with_shim(false);
@@ -1027,6 +1082,12 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         code = Some(HOST_MEMORY_LIMIT.to_string());
     }
     let mut unsupported_notes: Vec<String> = Vec::new();
+    if let Some(dir) = &shared_boot_image {
+        unsupported_notes.push(format!(
+            "shared-boot-image: {} (-Ximage:/data/img/boot.art -Xnorelocate; fixed base, no image ASLR)",
+            dir.display()
+        ));
+    }
     unsupported_notes.push(cgroup.summary());
     if cgroup.oom_kills() > 0 {
         unsupported_notes.push(format!(
@@ -3771,6 +3832,48 @@ mod probe_line_tests {
         assert!(read_capped_line(&mut cursor, 8).unwrap().is_none());
         let next = read_capped_line(&mut cursor, 8).unwrap().unwrap();
         assert_eq!(next, b"next\n");
+    }
+}
+
+#[cfg(test)]
+mod shared_boot_image_tests {
+    use super::*;
+
+    /// The default stays the default: unset means no image flag, no bind, no
+    /// behaviour change.
+    #[test]
+    fn unset_means_the_default_lz4_path() {
+        assert!(resolve_shared_boot_image(None).unwrap().is_none());
+    }
+
+    /// A directory with `<dir>/x86_64/boot.art` is accepted verbatim (it is what
+    /// `with_image` ro-binds to `/data/img`).
+    #[test]
+    fn a_directory_with_the_main_image_is_accepted() {
+        let dir = std::env::temp_dir().join(format!("acos-b3-shared-image-{}", std::process::id()));
+        let isa = dir.join("x86_64");
+        std::fs::create_dir_all(&isa).unwrap();
+        std::fs::write(isa.join("boot.art"), b"art").unwrap();
+        let got = resolve_shared_boot_image(Some(dir.clone().into_os_string())).unwrap();
+        assert_eq!(got.as_deref(), Some(dir.as_path()));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// A typo must fail the launch, not silently measure the compressed image.
+    #[test]
+    fn a_directory_without_the_main_image_is_an_error() {
+        let dir = std::env::temp_dir().join(format!(
+            "acos-b3-no-shared-image-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let err = resolve_shared_boot_image(Some(dir.clone().into_os_string()))
+            .expect_err("a missing x86_64/boot.art must be refused");
+        let text = err.to_string();
+        assert!(matches!(err, Error::Layout(_)), "got {text}");
+        assert!(text.contains("no x86_64/boot.art"), "got {text}");
+        assert!(text.contains(ENV_SHARED_BOOT_IMAGE), "got {text}");
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
 
