@@ -17,6 +17,7 @@ path = "src/main.rs"
 [dependencies]
 acos-sandbox = { path = "../acos-sandbox" }
 acos-binder-peer = { path = "../acos-binder-peer" }
+acos-render = { path = "../acos-render" }
 acos-services = { path = "../acos-services" }
 libc = "0.2"
 serde = { workspace = true }

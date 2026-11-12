@@ -314,6 +314,35 @@ impl SettleStats {
 /// pixels could not be proven" from "there is no frame yet".
 const FRAME_ARTIFACT_UNAVAILABLE: &str = "FRAME_ARTIFACT_UNAVAILABLE";
 
+/// The digest a launcher reports for the frame file it just wrote.
+///
+/// P2: the launcher hashes the PNG while writing it, so the engine no longer
+/// re-reads 9.5 MiB to hash it again. The claimed digest is only trusted when it
+/// is a well-formed MD5 and the file on disk has exactly the claimed size; the
+/// digest is proved again on load.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct FrameDigest {
+    md5: String,
+    size: u64,
+}
+
+impl FrameDigest {
+    /// Take the digest from a reply's `md5` + `png_bytes`, if both are usable.
+    fn from_reply(reply: &serde_json::Value, md5: &str) -> Option<Self> {
+        if md5.len() != 32 || !md5.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return None;
+        }
+        let size = reply.get("png_bytes").and_then(|v| v.as_u64())?;
+        if size == 0 || size > MAX_PNG_BYTES {
+            return None;
+        }
+        Some(FrameDigest {
+            md5: md5.to_ascii_lowercase(),
+            size,
+        })
+    }
+}
+
 fn frame_artifact_error(detail: String) -> BackendError {
     BackendError::Error {
         code: ErrorCode::RenderIo,
@@ -336,7 +365,10 @@ fn frame_artifact_error(detail: String) -> BackendError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct FrameArtifact {
     path: PathBuf,
-    sha256: String,
+    /// The content hash the launcher reported for exactly these bytes (the same
+    /// MD5 `content_hash` publishes), or, when the reply carried no trustworthy
+    /// digest, the one taken from the file here.
+    content_md5: String,
     size: u64,
     /// The engine frame sequence this artifact is bound to.
     frame_seq: u64,
@@ -361,42 +393,116 @@ impl FrameArtifact {
         display_height: u32,
         density: u32,
     ) -> Result<Self, BackendError> {
-        let file = std::fs::File::open(path).map_err(|error| {
+        let (size, content_md5) = Self::hash_file(path)?;
+        Self::described(
+            path,
+            frame_seq,
+            display_width,
+            display_height,
+            density,
+            content_md5,
+            size,
+        )
+    }
+
+    /// Bind an artifact whose digest the launcher already computed.
+    ///
+    /// P2: the launcher hashes the PNG while it writes it (one pass, in
+    /// process) and reports the digest for those exact bytes over the same
+    /// control channel that carries `frame_seq` and the frame file's path. That
+    /// channel is the session's own child process, which the engine already
+    /// trusts for pixel identity, so re-reading and re-hashing the 9.5 MiB file
+    /// here bought nothing but 5.3 ms. The claimed size is checked against the
+    /// file on disk now; the claimed digest is proved again on every load, so an
+    /// altered or truncated artifact still cannot be served as a frame.
+    fn bind_claimed(
+        path: &Path,
+        frame_seq: u64,
+        display_width: u32,
+        display_height: u32,
+        density: u32,
+        claimed: &FrameDigest,
+    ) -> Result<Self, BackendError> {
+        let meta = std::fs::metadata(path).map_err(|error| {
             frame_artifact_error(format!(
-                "cannot open the frame artifact {}: {error}",
+                "cannot stat the frame artifact {}: {error}",
                 path.display()
             ))
         })?;
-        let size = file
-            .metadata()
-            .map(|meta| meta.len())
-            .map_err(|error| {
-                frame_artifact_error(format!(
-                    "cannot stat the frame artifact {}: {error}",
-                    path.display()
-                ))
-            })?;
+        if meta.len() != claimed.size {
+            // The file is not the one the launcher described: fall back to
+            // proving it ourselves rather than trusting either side.
+            return Self::bind(path, frame_seq, display_width, display_height, density);
+        }
+        Self::described(
+            path,
+            frame_seq,
+            display_width,
+            display_height,
+            density,
+            claimed.md5.clone(),
+            claimed.size,
+        )
+    }
+
+    fn described(
+        path: &Path,
+        frame_seq: u64,
+        display_width: u32,
+        display_height: u32,
+        density: u32,
+        content_md5: String,
+        size: u64,
+    ) -> Result<Self, BackendError> {
         if size > MAX_PNG_BYTES {
             return Err(frame_artifact_error(format!(
                 "the frame artifact {} is {size} bytes, over the {MAX_PNG_BYTES} byte ceiling",
                 path.display()
             )));
         }
-        let sha256 = acos_render::hash::sha256_reader(file).map_err(|error| {
-            frame_artifact_error(format!(
-                "cannot hash the frame artifact {}: {error}",
-                path.display()
-            ))
-        })?;
         Ok(FrameArtifact {
             path: path.to_path_buf(),
-            sha256,
+            content_md5,
             size,
             frame_seq,
             display_width,
             display_height,
             density,
         })
+    }
+
+    /// `(size, md5)` of the file's bytes, streamed in 1 MiB chunks.
+    fn hash_file(path: &Path) -> Result<(u64, String), BackendError> {
+        use std::io::Read as _;
+        let mut file = std::fs::File::open(path).map_err(|error| {
+            frame_artifact_error(format!(
+                "cannot open the frame artifact {}: {error}",
+                path.display()
+            ))
+        })?;
+        let mut hasher = acos_render::md5::Md5::new();
+        let mut buffer = vec![0u8; 1 << 20];
+        let mut size = 0u64;
+        loop {
+            let read = file.read(&mut buffer).map_err(|error| {
+                frame_artifact_error(format!(
+                    "cannot hash the frame artifact {}: {error}",
+                    path.display()
+                ))
+            })?;
+            if read == 0 {
+                break;
+            }
+            size += read as u64;
+            if size > MAX_PNG_BYTES {
+                return Err(frame_artifact_error(format!(
+                    "the frame artifact {} is over the {MAX_PNG_BYTES} byte ceiling",
+                    path.display()
+                )));
+            }
+            hasher.update(&buffer[..read]);
+        }
+        Ok((size, hasher.finish_hex()))
     }
 
     /// Read the bytes now, after proving they are the bound artifact.
@@ -425,18 +531,33 @@ impl FrameArtifact {
                 self.size
             )));
         }
-        let sha256 = acos_render::hash::sha256_hex(&bytes);
-        if sha256 != self.sha256 {
+        let content_md5 = acos_render::md5::md5_hex(&bytes);
+        if content_md5 != self.content_md5 {
             return Err(frame_artifact_error(format!(
-                "the frame artifact {} hashes to {sha256} but was bound at {}; refusing to serve \
-                 altered pixels as frame {}",
+                "the frame artifact {} hashes to {content_md5} but was bound at {}; refusing to \
+                 serve altered pixels as frame {}",
                 self.path.display(),
-                self.sha256,
+                self.content_md5,
                 self.frame_seq
             )));
         }
         Ok(bytes)
     }
+}
+
+/// One fresh screenshot: its identity and the artifact file that holds it.
+///
+/// P2: the daemon answers a screenshot request with this instead of the bytes,
+/// so the caller's copy is one kernel-side file copy of the artifact rather than
+/// a 9.5 MiB read into the daemon and a 9.5 MiB write back out.
+pub(crate) struct CapturedFrame {
+    pub frame_seq: u64,
+    pub previous_seq: u64,
+    pub captured_at: String,
+    pub md5: String,
+    pub path: PathBuf,
+    /// Size of the artifact on disk, in bytes.
+    pub bytes: u64,
 }
 
 struct CachedFrame {
@@ -1504,8 +1625,8 @@ impl ArtSession {
     /// only advances `seen_seq`; the bound tree keeps the sequence it was
     /// captured with, so a tree can never be bound to newer pixels.
     ///
-    /// The PNG is recorded as an immutable artifact reference (path, SHA-256,
-    /// size, sequence, W58 display geometry), never as retained bytes: the
+    /// The PNG is recorded as an immutable artifact reference (path, content
+    /// hash, size, sequence, W58 display geometry), never as retained bytes: the
     /// daemon holds one bound frame per session, and a 1080x2209 PNG is ~9.5 MiB
     /// (D-M2/D-M6).
     fn absorb(&mut self, reply: &serde_json::Value) -> Result<(), BackendError> {
@@ -1521,14 +1642,25 @@ impl ArtSession {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
+        let digest = FrameDigest::from_reply(reply, &md5);
         let png = match reply.get("png").and_then(|v| v.as_str()) {
-            Some(path) => Some(FrameArtifact::bind(
-                Path::new(path),
-                seq,
-                self.width,
-                self.height,
-                self.density,
-            )?),
+            Some(path) => Some(match digest {
+                Some(claimed) => FrameArtifact::bind_claimed(
+                    Path::new(path),
+                    seq,
+                    self.width,
+                    self.height,
+                    self.density,
+                    &claimed,
+                ),
+                None => FrameArtifact::bind(
+                    Path::new(path),
+                    seq,
+                    self.width,
+                    self.height,
+                    self.density,
+                ),
+            }?),
             None => None,
         };
         self.seen_seq = self.seen_seq.max(seq);
@@ -1569,6 +1701,72 @@ impl ArtSession {
             captured_at: rfc3339(captured_at_ms),
         });
         Ok(())
+    }
+
+    /// Take a fresh screenshot and return its identity plus where its PNG
+    /// already is, without reading the bytes.
+    ///
+    /// P2: a caller that only needs the file (a daemon writing it to the
+    /// caller's path) can copy the artifact instead of reading 9.5 MiB into the
+    /// daemon and writing it out again. Freshness is unchanged: the frame's
+    /// `frame_seq` must advance, and the sequence is only advanced once the
+    /// reply's frame is fully described.
+    pub(crate) fn capture_frame(&mut self) -> Result<CapturedFrame, BackendError> {
+        // A pure capture command: no tree is returned, so the bound tree keeps
+        // its own sequence. Freshness is proven by the sequence advancing.
+        let previous = self.seen_seq;
+        let started = Instant::now();
+        let reply = self.command(serde_json::json!({"cmd":"screenshot"}))?;
+        let mut phase = PhaseTiming {
+            guest_ms: started.elapsed().as_millis() as u64,
+            absorb_ms: 0,
+        };
+        let raw_seq = reply
+            .get("frame_seq")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| {
+                live_frame_unavailable(
+                    "the ART screenshot reply carried no frame_seq; it cannot be tied to a frame",
+                )
+            })?;
+        let seq = raw_seq.saturating_add(self.seq_offset);
+        let md5 = reply
+            .get("md5")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let png_path = reply.get("png").and_then(|v| v.as_str()).ok_or_else(|| {
+            live_frame_unavailable("the ART screenshot reply carried no PNG path")
+        })?;
+        if seq <= previous {
+            return Err(stale_frame(previous, seq, "screenshot"));
+        }
+        let path = PathBuf::from(png_path);
+        let bytes = std::fs::metadata(&path)
+            .map_err(|error| {
+                live_frame_unavailable(format!(
+                    "the ART screenshot frame {} cannot be stat'ed: {error}",
+                    path.display()
+                ))
+            })?
+            .len();
+        if bytes == 0 {
+            return Err(live_frame_unavailable(
+                "the ART screenshot frame file is empty",
+            ));
+        }
+        phase.absorb_ms = started.elapsed().as_millis() as u64;
+        self.last_phase = Some(phase);
+        self.seen_seq = seq;
+        let captured_at_ms = now_unix_ms();
+        Ok(CapturedFrame {
+            frame_seq: seq,
+            previous_seq: previous,
+            captured_at: rfc3339(captured_at_ms),
+            md5,
+            path,
+            bytes,
+        })
     }
 
     /// Ask for the live tree. The `tree` command re-traverses, draws and
@@ -1944,60 +2142,30 @@ impl SessionBackend for ArtSession {
     }
 
     fn screenshot(&mut self) -> Result<FrameEvidence, BackendError> {
-        // A pure capture command: no tree is returned, so the bound tree keeps
-        // its own sequence. Freshness is proven by the sequence advancing.
-        let previous = self.seen_seq;
-        let started = Instant::now();
-        let reply = self.command(serde_json::json!({"cmd":"screenshot"}))?;
-        let mut phase = PhaseTiming {
-            guest_ms: started.elapsed().as_millis() as u64,
-            absorb_ms: 0,
-        };
-        let raw_seq = reply
-            .get("frame_seq")
-            .and_then(|v| v.as_u64())
-            .ok_or_else(|| {
-                live_frame_unavailable(
-                    "the ART screenshot reply carried no frame_seq; it cannot be tied to a frame",
-                )
-            })?;
-        let seq = raw_seq.saturating_add(self.seq_offset);
-        let md5 = reply
-            .get("md5")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let png_path = reply.get("png").and_then(|v| v.as_str()).ok_or_else(|| {
-            live_frame_unavailable("the ART screenshot reply carried no PNG path")
-        })?;
-        if seq <= previous {
-            return Err(stale_frame(previous, seq, "screenshot"));
-        }
+        let captured = self.capture_frame()?;
         let absorb_started = Instant::now();
         let t_read = m5_now_us();
-        let png = read_png(Path::new(png_path))?;
-        phase.absorb_ms = absorb_started.elapsed().as_millis() as u64;
-        let t_read_done = m5_now_us();
+        let png = read_png(&captured.path)?;
+        if let Some(phase) = self.last_phase.as_mut() {
+            phase.absorb_ms = absorb_started.elapsed().as_millis() as u64;
+        }
         m5_trace(
             "cli.png_read",
             t_read,
-            t_read_done,
+            m5_now_us(),
             &format!("png_bytes={}", png.len()),
         );
-        self.last_phase = Some(phase);
         if png.is_empty() {
             return Err(live_frame_unavailable(
                 "the ART screenshot frame file is empty",
             ));
         }
-        self.seen_seq = seq;
-        let captured_at_ms = now_unix_ms();
         Ok(FrameEvidence {
-            frame_seq: seq,
-            previous_seq: previous,
-            captured_at_ms,
-            captured_at: rfc3339(captured_at_ms),
-            md5,
+            frame_seq: captured.frame_seq,
+            previous_seq: captured.previous_seq,
+            captured_at_ms: now_unix_ms(),
+            captured_at: captured.captured_at,
+            md5: captured.md5,
             png,
         })
     }
@@ -2945,8 +3113,8 @@ mod tests {
         // What is retained: identity, not pixels.
         assert_eq!(artifact.size, super::super::fake::TINY_PNG.len() as u64);
         assert_eq!(
-            artifact.sha256,
-            acos_render::hash::sha256_hex(super::super::fake::TINY_PNG)
+            artifact.content_md5,
+            acos_render::md5::md5_hex(super::super::fake::TINY_PNG)
         );
         assert_eq!(artifact.frame_seq, 7);
         assert_eq!(
@@ -2979,6 +3147,49 @@ mod tests {
         let error = artifact.load().expect_err("truncated pixels must not load");
         assert_eq!(error.code(), ErrorCode::RenderIo, "{error}");
         assert!(format!("{error}").contains("bytes but was bound at"), "{error}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// P2: the launcher's own digest over a trusted channel is what gets bound,
+    /// and it is still proved against the bytes before any pixel is served.
+    #[test]
+    fn a_launcher_claimed_digest_is_bound_and_still_proved_on_load() {
+        let dir = o2_scratch_dir("artifact-claimed");
+        let png = dir.join("frame.png");
+        std::fs::write(&png, super::super::fake::TINY_PNG).unwrap();
+        let claimed = FrameDigest {
+            md5: acos_render::md5::md5_hex(super::super::fake::TINY_PNG),
+            size: super::super::fake::TINY_PNG.len() as u64,
+        };
+        let artifact = FrameArtifact::bind_claimed(&png, 9, 1080, 2400, 420, &claimed)
+            .expect("a matching claim binds");
+        // The bound descriptor carries the launcher's hash, and the bytes load.
+        assert_eq!(artifact.content_md5, claimed.md5);
+        assert_eq!(artifact.size, claimed.size);
+        assert_eq!(
+            artifact.load().expect("verified load"),
+            super::super::fake::TINY_PNG
+        );
+
+        // Same size, different bytes: the claim does not excuse altered pixels.
+        let mut altered = super::super::fake::TINY_PNG.to_vec();
+        altered[20] ^= 0xff;
+        std::fs::write(&png, &altered).unwrap();
+        let error = artifact.load().expect_err("altered pixels must not load");
+        assert_eq!(error.code(), ErrorCode::RenderIo, "{error}");
+        assert!(
+            format!("{error}").contains("FRAME_ARTIFACT_UNAVAILABLE"),
+            "{error}"
+        );
+
+        // A file whose size contradicts the reply is not trusted: the engine
+        // hashes it itself and binds what it can prove.
+        let short = &super::super::fake::TINY_PNG[..20];
+        std::fs::write(&png, short).unwrap();
+        let rebound = FrameArtifact::bind_claimed(&png, 9, 1080, 2400, 420, &claimed)
+            .expect("the engine re-binds what it can prove");
+        assert_eq!(rebound.size, short.len() as u64);
+        assert_eq!(rebound.content_md5, acos_render::md5::md5_hex(short));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
