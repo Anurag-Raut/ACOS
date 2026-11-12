@@ -229,6 +229,28 @@ fn rect_array(rect: Rect) -> [i32; 4] {
     [rect.left, rect.top, rect.right, rect.bottom]
 }
 
+/// C1 frame identity with no pixel payload (see
+/// [`SurfaceState::latest_frame_metadata`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FrameMetadata {
+    /// C1 layer id the buffer belongs to.
+    pub layer_id: i32,
+    /// C1 layer name when known.
+    pub layer_name: String,
+    /// Buffer width in pixels.
+    pub width: u32,
+    /// Buffer height in pixels.
+    pub height: u32,
+    /// `BufferData.frameNumber` (the producer's own frame number).
+    pub frame_number: u64,
+    /// `GraphicBuffer.id`.
+    pub buffer_id: u64,
+    /// `BufferData.producerId`.
+    pub producer_id: u32,
+    /// C1 store counter at the time this buffer became `latest`.
+    pub generation: u64,
+}
+
 /// One host-side copy of the newest C1 buffer, read from the guest's memfd.
 ///
 /// W10's live session uses this as its screenshot: it is labelled as an
@@ -898,6 +920,27 @@ impl SurfaceState {
     #[must_use]
     pub fn latest_generation(&self) -> u64 {
         self.buffer_generations
+    }
+
+    /// Identity of the newest stored buffer **without copying its pixels**.
+    ///
+    /// A tree-only observation needs to say which frame it is bound to
+    /// (`generation`, producer `frame_number`, buffer/layer ids) but never
+    /// returns pixels, so it must not clone the RGBA buffer or encode a PNG
+    /// (P3: capture was 34.5 ms of a 186 ms tree request). This is a pure
+    /// metadata read under the caller's compositor lock.
+    #[must_use]
+    pub fn latest_frame_metadata(&self) -> Option<FrameMetadata> {
+        self.newest_frame_layer().map(|(layer, buffer)| FrameMetadata {
+            layer_id: layer.layer_id,
+            layer_name: layer.name.clone(),
+            width: buffer.width,
+            height: buffer.height,
+            frame_number: buffer.frame_number,
+            buffer_id: buffer.buffer_id,
+            producer_id: buffer.producer_id,
+            generation: layer.latest_generation,
+        })
     }
 
     /// The layer whose newest stored buffer is the newest across all layers.

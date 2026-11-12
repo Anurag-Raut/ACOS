@@ -513,6 +513,54 @@ success: a fast reply with `ack_ms` is still only a delivered input; the
 state change is whatever `settle.state_changed` (fast) or the host pixel+tree
 comparison (strict) actually measured.
 
+### 8.6.2 Tree-only observations and `settle` on the tree verb (P3b)
+
+`acos_observe_tree` and `acos_observe` with `tree:true` or `text:true` are
+**tree-only**: they do not clone the C1 buffer, encode a PNG, write a PNG, or
+compute an md5, and the reply carries no `png`/`md5`. The tree stays bound to a
+frame identity through cheap C1 metadata (`buffer_generation`, `frame_number`,
+`buffer_id`, `layer_id`, `width`, `height`) plus the usual `frame` reference;
+a later screenshot can therefore be checked against the frame the tree was
+observed at. `acos_observe {png:true}` is still a real capture and is unchanged.
+
+Both tree verbs accept P1's `settle` argument:
+
+```json
+{"base": {"request_id": "req_9", "session_id": "s_views"},
+ "settle": "fast"}
+```
+
+* **`strict` (default, unchanged)** — the settled-frame rule: C1 advanced, a
+  probe sample was taken after the last store, and no new store landed for
+  150 ms. Use it whenever the tree is evidence.
+* **`fast`** — for inspection and navigation. It returns the newest probe sample
+  whose C1 frame generation is at least the generation current when the request
+  began, so a sample from before the request's last frame store is never served.
+  If the newest sample predates that store, the host asks the guest for an
+  immediate probe (out of its 50 ms cadence) and waits a bounded 750 ms. A fast
+  tree may be mid-animation and is never assertion evidence; if no fresh sample
+  arrives the reply is `NO_FRESH_TREE`, never the old tree.
+
+Both modes add a `settle` block to the result:
+
+```json
+"settle": {"mode": "fast", "settled": true, "probe_seq": 68,
+           "tree_age_ms": 2, "bound": "probe-fresh"}
+```
+
+| field | meaning |
+|---|---|
+| `mode` | `fast` or `strict` |
+| `settled` | `true` when the returned tree satisfied that mode's rule |
+| `probe_seq` | the guest probe sequence of the returned sample |
+| `tree_age_ms` | host receipt of the probe → reply |
+| `bound` | `probe-fresh` (fast), `strict-quiet`, or `timeout` (fast: no fresh sample) |
+
+`acos_assert` still rejects `settle:"fast"` with `INVALID_ARGUMENT`;
+`acos verify` assertions remain strict by construction. A fast tree can also be
+requested as `acos_observe`'s `settle`; the same labelling applies. The default
+for every tree verb remains `strict`, so existing callers see no change.
+
 ### 8.7 `assert`
 
 Evaluate one assertion.

@@ -1,0 +1,4 @@
+cargo test -p acos-cli -p acos-art -p acos-services --offline -- --test-threads=1
+rc=0
+64 test binaries reported "test result: ok"; 0 failed.
+Includes acos-art launch::probe_line_tests::fast_tree_rejects_a_probe_from_before_the_entry_generation.

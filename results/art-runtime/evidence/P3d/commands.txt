@@ -1,0 +1,37 @@
+# P3b/P3d evidence, worktree perf-p3b-tree, HEAD 6f70cf5 + local changes.
+# Build
+CARGO_TARGET_DIR=/home/Qui/Projects/acos/.cache/p3b-target CARGO_BUILD_JOBS=4 \
+  tools/guarded.sh --mem 8G --time 1200 -- \
+  cargo build --release --offline -p acos-cli -p acos-art
+# binaries
+22d17c5e14c738d000ccdb0947e44a50ca6cba36fe8e8da2997b8763c407ecff  release/acos
+80535fbd2c6aea2e56c8f58dda9ad0a7488e8ac09731965ac9563618191496f6  release/acos-art
+
+# M7 strict vs fast, n=30 each + 20 post-tap freshness reps (counter.apk)
+ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts \
+tools/art-runtime/run-exclusive.sh --task P3b -- \
+  tools/guarded.sh --mem 8G --time 900 -- \
+  python3 results/art-runtime/evidence/P3d/p3d_tree.py \
+    --acos /home/Qui/Projects/acos/.cache/p3b-target/release/acos \
+    --out results/art-runtime/evidence/P3d/tree-latency.json \
+    --scratch /home/Qui/Projects/acos/.cache/p3b-lat-scratch \
+    --samples 30 --warmup 2 --fresh-reps 20
+
+# Tests
+CARGO_TARGET_DIR=/home/Qui/Projects/acos/.cache/p3b-target CARGO_BUILD_JOBS=4 \
+tools/art-runtime/run-exclusive.sh --task P3b -- \
+  tools/guarded.sh --mem 8G --time 1800 -- \
+  cargo test --offline -p acos-cli -p acos-art -p acos-services -- --test-threads=1
+
+# Gate scenarios (verify --engine art --json), artifacts in
+# /home/Qui/Projects/acos/.cache/p3b-gates/<name>/
+#   v2-art-counter form-validation w54-dialog-pixels w15-dialog-menu
+#   w42-back-frame T03-render-good T03-render-wrong
+
+# Agent loop, fast settle
+CARGO_TARGET_DIR=/home/Qui/Projects/acos/.cache/p3b-target \
+tools/art-runtime/run-exclusive.sh --task P3b -- \
+  tools/guarded.sh --mem 8G --time 1200 -- \
+  tools/art-runtime/bench-agent-loop.sh --loops 6 --runs 1 --settle fast \
+    --out results/art-runtime/evidence/P3d/agent-loop-fast.json \
+    --markdown /home/Qui/Projects/acos/.cache/p3d-agent-loop.md

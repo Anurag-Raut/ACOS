@@ -102,8 +102,14 @@ pub struct ArtSession {
     width: u32,
     height: u32,
     density: u32,
-    /// The newest *bound* frame seen (tree and PNG of one traversal).
+    /// The newest *bound* frame seen (tree and, when the reply carried one,
+    /// PNG of one traversal). A tree-only reply updates the tree but never
+    /// invents pixels.
     cached: Option<CachedFrame>,
+    /// The newest observation that actually carried pixels. A tree-only
+    /// `acos_observe_tree` must not erase this (P3): `last_frame`/`bound_frame`
+    /// and `observe_session` keep describing the last completed pixel frame.
+    last_pixel: Option<CachedFrame>,
     /// The highest frame sequence any reply has reported.
     seen_seq: u64,
     /// Added to every reply's `frame_seq`. A `reset` starts a new guest whose
@@ -162,6 +168,10 @@ pub struct ArtSession {
     /// P1: `"fast"` or `"strict"` for the next input command. Serve sets it per
     /// verb; the default is strict.
     settle_mode: &'static str,
+    /// P3b: the guest's `settle` block for the most recent tree request
+    /// (`mode`, `settled`, `probe_seq`, `tree_age_ms`, `bound`). Copied into
+    /// the `acos_observe_tree` result; never synthesised.
+    last_tree_settle: Option<serde_json::Value>,
     closed: bool,
 }
 
@@ -567,8 +577,13 @@ pub(crate) struct CapturedFrame {
     pub bytes: u64,
 }
 
+#[derive(Clone)]
 struct CachedFrame {
     seq: u64,
+    /// C1 store counter the reply carried (tree-only metadata or capture).
+    buffer_generation: Option<u64>,
+    /// Producer frame number the reply carried.
+    frame_number: Option<u64>,
     md5: String,
     /// The PNG of this traversal as an artifact reference (never its bytes).
     png: Option<FrameArtifact>,
@@ -983,6 +998,7 @@ impl ArtSession {
             height: 2400,
             density: 420,
             cached: None,
+            last_pixel: None,
             seen_seq: 0,
             seq_offset: 0,
             log_offset: 0,
@@ -1002,6 +1018,7 @@ impl ArtSession {
             last_phase: None,
             last_input_settle: None,
             settle_mode: "strict",
+            last_tree_settle: None,
             closed: false,
         };
         // The ready line is the protocol's first reply. If the session dies
@@ -1099,6 +1116,14 @@ impl ArtSession {
             .map(|frame| (frame.seq, frame.md5.clone(), frame.captured_at.clone()))
     }
 
+    /// Cheap C1 frame identity carried by the newest observation (a tree-only
+    /// reply has no pixels but still says which stored buffer it belongs to).
+    pub fn frame_identity_meta(&self) -> Option<(u64, Option<u64>, Option<u64>)> {
+        self.cached
+            .as_ref()
+            .map(|frame| (frame.seq, frame.buffer_generation, frame.frame_number))
+    }
+
     /// The most recent completed frame, loading its PNG artifact on demand.
     ///
     /// Unlike the trait's `last_frame`, this reports a missing or altered
@@ -1111,7 +1136,7 @@ impl ArtSession {
         if self.closed {
             return Ok(None);
         }
-        let Some(cached) = self.cached.as_ref() else {
+        let Some(cached) = self.last_pixel.as_ref() else {
             return Ok(None);
         };
         let previous = self.seen_seq.min(cached.seq.saturating_sub(1));
@@ -1149,6 +1174,11 @@ impl ArtSession {
     /// Host-observed phase timings of the most recent input command.
     pub fn last_input_timing(&self) -> Option<&InputTiming> {
         self.last_input_timing.as_ref()
+    }
+
+    /// P3b: the guest's settle block for the most recent tree request.
+    pub fn last_tree_settle(&self) -> Option<&serde_json::Value> {
+        self.last_tree_settle.as_ref()
     }
 
     /// P1: set the settle mode for the next input command (`fast` navigation or
@@ -1206,6 +1236,7 @@ impl ArtSession {
     /// exactly the stale evidence the agent must never receive. The returned
     /// tuple is the discarded frame's identity, kept for the error details.
     pub fn invalidate_frame(&mut self) -> Option<(u64, String, String)> {
+        self.last_pixel = None;
         let cached = self.cached.take()?;
         Some((cached.seq, cached.md5, cached.captured_at))
     }
@@ -1722,6 +1753,8 @@ impl ArtSession {
             .unwrap_or("")
             .to_string();
         let digest = FrameDigest::from_reply(reply, &md5);
+        let buffer_generation = reply.get("buffer_generation").and_then(|v| v.as_u64());
+        let frame_number = reply.get("frame_number").and_then(|v| v.as_u64());
         let png = match reply.get("png").and_then(|v| v.as_str()) {
             Some(path) => Some(match digest {
                 Some(claimed) => FrameArtifact::bind_claimed(
@@ -1783,15 +1816,21 @@ impl ArtSession {
         };
         let signature = tree_signature(&tree);
         let captured_at_ms = now_unix_ms();
-        self.cached = Some(CachedFrame {
+        let frame = CachedFrame {
             seq,
+            buffer_generation,
+            frame_number,
             md5,
             png,
             tree,
             signature,
             captured_at_ms,
             captured_at: rfc3339(captured_at_ms),
-        });
+        };
+        if frame.png.is_some() {
+            self.last_pixel = Some(frame.clone());
+        }
+        self.cached = Some(frame);
         Ok(())
     }
 
@@ -1864,9 +1903,26 @@ impl ArtSession {
     /// Ask for the live tree. The `tree` command re-traverses, draws and
     /// publishes a new frame, so the reply's tree and PNG share one `frame_seq`.
     fn request_tree(&mut self) -> Result<(), BackendError> {
+        self.request_tree_with("strict", true)
+    }
+
+    /// P3b tree-only request: no pixel clone/encode/md5/write, and the reply is
+    /// not required to carry a PNG. `settle` is P1's vocabulary; `fast` returns
+    /// the newest probe bound to a frame at least as new as the store current
+    /// at request entry, `strict` keeps the 150 ms quiet window.
+    fn request_tree_only(&mut self, settle: &str) -> Result<(), BackendError> {
+        self.request_tree_with(settle, false)
+    }
+
+    fn request_tree_with(&mut self, settle: &str, pixels: bool) -> Result<(), BackendError> {
         let started = Instant::now();
         let t0 = m5_now_us();
-        let reply = self.command(serde_json::json!({"cmd":"tree"}))?;
+        let mut request = serde_json::json!({"cmd":"tree", "settle": settle});
+        if !pixels {
+            request["pixels"] = serde_json::json!(false);
+        }
+        let reply = self.command(request)?;
+        self.last_tree_settle = reply.get("settle").cloned();
         let t1 = m5_now_us();
         let mut timing = PhaseTiming {
             guest_ms: started.elapsed().as_millis() as u64,
@@ -2119,6 +2175,17 @@ impl ArtSession {
     }
 }
 
+impl ArtSession {
+    /// A tree-only traversal with an explicit P1 settle mode. `fast` is for
+    /// navigation/inspection and is labelled in the reply's `settle` block;
+    /// `strict` is the default evidence mode.
+    pub fn tree_with_settle(&mut self, settle: &'static str) -> Result<UiTree, BackendError> {
+        let settle = if settle == "fast" { "fast" } else { "strict" };
+        self.request_tree_only(settle)?;
+        self.require_cached_tree()
+    }
+}
+
 impl SessionBackend for ArtSession {
     fn engine(&self) -> Engine {
         Engine::Art
@@ -2190,8 +2257,7 @@ impl SessionBackend for ArtSession {
     }
 
     fn tree(&mut self) -> Result<UiTree, BackendError> {
-        self.request_tree()?;
-        self.require_cached_tree()
+        self.tree_with_settle("strict")
     }
 
     fn frame(&mut self) -> Result<ObservedFrame, BackendError> {

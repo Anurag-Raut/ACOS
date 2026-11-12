@@ -807,12 +807,24 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     let out_pipe = child.stdout.take().expect("piped stdout");
     let otx2 = otx.clone();
     let probe_for_out = Arc::clone(&probe_state);
+    let compositor_for_probe = Arc::clone(&live.compositor);
     let out_tee = std::env::var_os("ACOSLAUNCH_GUEST_STDOUT_FILE").map(PathBuf::from);
     let out_thread = std::thread::spawn(move || {
         let buf = if interactive {
             match out_tee {
-                Some(path) => drain_tee_lines(out_pipe, cap, &path, probe_for_out),
-                None => drain_stdout_lines(out_pipe, cap, probe_for_out),
+                Some(path) => drain_tee_lines(
+                    out_pipe,
+                    cap,
+                    &path,
+                    probe_for_out,
+                    Some(compositor_for_probe),
+                ),
+                None => drain_stdout_lines(
+                    out_pipe,
+                    cap,
+                    probe_for_out,
+                    Some(compositor_for_probe),
+                ),
             }
         } else {
             crate::capture::drain_to_tail(out_pipe, cap)
@@ -1236,7 +1248,12 @@ const CAPTURE_SOURCE: &str = "acos-c1-buffer";
 struct ProbeSample {
     seq: u64,
     tree: serde_json::Value,
+    /// Host wall clock when the line was parsed.
     at_ms: u64,
+    /// C1 store counter observed when the line was parsed. A probe is usable
+    /// for a fast tree only when this is at least the generation that was
+    /// current when the request started (P3b invalidation rule).
+    generation: u64,
 }
 
 #[derive(Default)]
@@ -1588,8 +1605,9 @@ fn drain_stdout_lines<R: std::io::Read>(
     reader: R,
     cap: usize,
     state: Arc<std::sync::Mutex<ProbeState>>,
+    compositor: Option<Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>>,
 ) -> TailBuffer {
-    drain_tee_lines(reader, cap, &PathBuf::new(), state)
+    drain_tee_lines(reader, cap, &PathBuf::new(), state, compositor)
 }
 
 /// Read one `\n`-terminated line, bounding the bytes held in memory.
@@ -1642,6 +1660,7 @@ fn drain_tee_lines<R: std::io::Read>(
     cap: usize,
     tee: &Path,
     state: Arc<std::sync::Mutex<ProbeState>>,
+    compositor: Option<Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>>,
 ) -> TailBuffer {
     use std::io::Write;
     let mut tee_file = if tee.as_os_str().is_empty() {
@@ -1728,6 +1747,15 @@ fn drain_tee_lines<R: std::io::Read>(
                             ),
                         );
                     }
+                    let generation = compositor
+                        .as_ref()
+                        .map(|compositor| {
+                            compositor
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .latest_generation()
+                        })
+                        .unwrap_or(0);
                     let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
                     let newer = state.latest.as_ref().map(|p| p.seq < seq).unwrap_or(true);
                     if newer {
@@ -1735,6 +1763,7 @@ fn drain_tee_lines<R: std::io::Read>(
                             seq,
                             tree,
                             at_ms: host_ms(),
+                            generation,
                         });
                     }
                 }
@@ -2393,6 +2422,102 @@ fn wait_for_settled_observation(
     }
 }
 
+/// Is this probe sample usable for a fast tree request that started when C1 was
+/// at `entry_generation` and after probe sequence `min_probe_seq`?
+///
+/// This is P3b's whole invalidation rule. A sample is fresh when the C1 store
+/// counter it was parsed at is at least the generation current when the request
+/// began (so no frame landed between the sample and the request) and its guest
+/// sequence is past the caller's floor. Nothing about a 150 ms quiet window is
+/// involved: that is the strict rule, unchanged.
+fn probe_usable_for_fast_tree(
+    probe: &ProbeSample,
+    entry_generation: u64,
+    min_probe_seq: u64,
+) -> bool {
+    probe.seq > min_probe_seq && probe.generation >= entry_generation
+}
+
+/// Ask the guest for one probe sample on its main looper, out of its 50 ms
+/// cadence. The guest reads `PROBE` lines from stdin (interactive sessions only)
+/// and wakes the probe thread immediately; this never changes the view tree.
+fn request_guest_probe(stdin: &mut Option<std::process::ChildStdin>) {
+    if let Some(writer) = stdin.as_mut() {
+        use std::io::Write;
+        let _ = writeln!(writer, "PROBE");
+        let _ = writer.flush();
+    }
+}
+
+enum FastTreeEnd {
+    Ready(ProbeSample),
+    Timeout { probe_seq: u64 },
+    GuestExited(std::process::ExitStatus),
+    Unsupported(serde_json::Value),
+}
+
+/// P3b fast tree: return a probe sample that is bound to a frame at least as
+/// new as the request's entry generation, triggering one immediate guest probe
+/// if the newest sample predates it. No quiet window is waited for.
+#[allow(clippy::too_many_arguments)]
+fn wait_for_fast_tree(
+    child: &mut std::process::Child,
+    cgroup: &mut crate::cgroup::RunCgroup,
+    live: &acos_services::registry::LiveHandles,
+    probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+    guest_stdin: &mut Option<std::process::ChildStdin>,
+    deadline: Instant,
+    min_probe_seq: u64,
+) -> FastTreeEnd {
+    let entry_generation = latest_generation(live);
+    let (unsupported_baseline, _) = latest_unsupported(probe_state);
+    let base_seq = latest_probe(probe_state).map(|p| p.seq).unwrap_or(0);
+    let mut requested = false;
+    loop {
+        let (unsupported_seq, marker) = latest_unsupported(probe_state);
+        if unsupported_seq > unsupported_baseline {
+            return FastTreeEnd::Unsupported(marker.unwrap_or(serde_json::Value::Null));
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => return FastTreeEnd::GuestExited(status),
+            _ => {}
+        }
+        let probe = latest_probe(probe_state);
+        if let Some(ref probe) = probe {
+            if probe_usable_for_fast_tree(probe, entry_generation, min_probe_seq)
+                && (!requested || probe.seq > base_seq)
+            {
+                trace_host(
+                    probe_state,
+                    &format!(
+                        "fast-tree ready probe_seq={} entry_gen={entry_generation} probe_gen={} \
+                         age_ms={} requested={requested}",
+                        probe.seq,
+                        probe.generation,
+                        host_ms().saturating_sub(probe.at_ms)
+                    ),
+                );
+                return FastTreeEnd::Ready(probe.clone());
+            }
+        }
+        if !requested {
+            requested = true;
+            request_guest_probe(guest_stdin);
+            trace_host(
+                probe_state,
+                "fast-tree requested an immediate guest probe",
+            );
+        }
+        if Instant::now() >= deadline {
+            return FastTreeEnd::Timeout {
+                probe_seq: probe.map(|p| p.seq).unwrap_or(0),
+            };
+        }
+        cgroup.sample();
+        std::thread::sleep(Duration::from_millis(2));
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn interactive_serve(
     child: &mut std::process::Child,
@@ -2411,6 +2536,11 @@ fn interactive_serve(
 ) -> std::io::Result<SessionEnd> {
     let mut evidence: Vec<serde_json::Value> = Vec::new();
     let mut captures = 0u64;
+    // P3b: the guest's stdin is the probe-request channel (`PROBE`), so a fast
+    // tree can wake the probe thread instead of waiting for its 50 ms tick.
+    // Interactive sessions are spawned with a piped stdin; non-interactive ones
+    // have none and the request is a no-op.
+    let mut guest_stdin = child.stdin.take();
     let startup_deadline = started + startup_budget;
     // Startup: the real Activity is resumed, the guest probe has produced a
     // sample, and C1 has stored at least one buffer. Ready means all three.
@@ -2609,110 +2739,272 @@ fn interactive_serve(
             "tree" => {
                 // P3: absolute phase marks across processes (epoch microseconds).
                 let p3_t_enter = p3_now_us();
-                // Bind the tree and the pixels to the same settled state: wait
-                // for a probe sample taken after the newest stored frame and for
-                // the frame stream to go quiet, then capture.
-                let settled = wait_for_settled_observation(
-                    child,
-                    cgroup,
-                    live,
-                    probe_state,
-                    Instant::now() + Duration::from_millis(1500),
-                    0,
-                    0,
-                    None,
-                    SettleMode::Strict,
-                    None,
-                    0,
-                );
-                let p3_t_settled = p3_now_us();
-                let probe = match settled {
-                    SettleEnd::Settled(settled) => settled.probe,
-                    SettleEnd::Timeout { .. } | SettleEnd::Unsupported(_) => {
-                        match latest_probe(probe_state) {
-                            Some(probe) => probe,
-                            None => {
-                                let reply = serde_json::json!({
-                                    "ok": false, "cmd": "tree", "code": "NO_TEXT",
-                                    "error": "the in-guest tree probe has produced no sample",
-                                });
-                                protocol_write(&reply);
-                                evidence.push(reply);
-                                continue;
-                            }
-                        }
-                    }
-                    SettleEnd::GuestExited(status) => {
-                        let reply = serde_json::json!({
-                            "ok": false, "cmd": "tree", "code": "GUEST_EXITED",
-                            "error": format!("the guest ended while binding the tree (status {status})"),
-                        });
-                        protocol_write(&reply);
-                        evidence.push(reply);
-                        write_session_evidence(out, &evidence);
-                        return Ok(SessionEnd {
-                            status: Some(status),
-                            clean: false,
-                        });
-                    }
-                };
-                match capture_c1(live, frames_dir, &mut captures) {
-                    Ok(Some(capture)) => {
-                        last_capture_fnv = Some(capture.fnv1a);
-                        let mut reply = capture.fields();
-                        let map = reply.as_object_mut().expect("capture fields are an object");
-                        map.insert("ok".into(), serde_json::json!(true));
-                        map.insert("cmd".into(), serde_json::json!("tree"));
-                        map.insert("tree".into(), probe.tree.clone());
-                        map.insert("probe_seq".into(), serde_json::json!(probe.seq));
-                        map.insert("probe_at_ms".into(), serde_json::json!(probe.at_ms));
-                        let p3_t_built = p3_now_us();
-                        protocol_write(&reply);
-                        let p3_t_reply = p3_now_us();
-                        if p3_enabled() {
-                            let tree_bytes = serde_json::to_vec(&probe.tree)
-                                .map(|value| value.len())
-                                .unwrap_or(0);
-                            p3_trace(
-                                "art",
-                                "art.tree",
-                                p3_t_enter,
-                                p3_t_reply,
-                                &format!(
-                                    "settle_us={} capture_us={} build_reply_us={} \
-                                     probe_seq={} probe_at_ms={} frame_seq={} tree_bytes={}",
-                                    p3_t_settled.saturating_sub(p3_t_enter),
-                                    p3_t_built.saturating_sub(p3_t_settled),
-                                    p3_t_reply.saturating_sub(p3_t_built),
-                                    probe.seq,
-                                    probe.at_ms,
-                                    capture.seq,
-                                    tree_bytes
-                                ),
-                            );
-                        }
-                        evidence.push(serde_json::json!({
-                            "cmd": "tree", "ok": true, "frame_seq": capture.seq,
-                            "buffer_generation": capture.generation,
-                            "frame_number": capture.frame_number,
-                            "probe_seq": probe.seq, "png": capture.path.display().to_string(),
-                        }));
-                    }
-                    Ok(None) => {
-                        let reply = serde_json::json!({
-                            "ok": false, "cmd": "tree", "code": "NO_FRESH_FRAME",
-                            "error": "C1 has stored no buffer yet",
-                        });
-                        protocol_write(&reply);
-                        evidence.push(reply);
-                    }
+                let mode = match SettleMode::from_request(&request) {
+                    Ok(mode) => mode,
                     Err(error) => {
                         let reply = serde_json::json!({
-                            "ok": false, "cmd": "tree", "code": "INTERNAL",
-                            "error": format!("cannot write the C1 capture: {error}"),
+                            "ok": false, "cmd": "tree", "code": "BAD_REQUEST",
+                            "error": error,
                         });
                         protocol_write(&reply);
                         evidence.push(reply);
+                        continue;
+                    }
+                };
+                // A tree-only request (`pixels:false`) is the default shape for
+                // `acos_observe_tree`/`acos_observe {tree}`: it returns the probe
+                // tree plus cheap C1 frame identity, never a PNG. `pixels:true`
+                // keeps the legacy capture reply for callers that need pixels.
+                let want_pixels = request
+                    .get("pixels")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(true);
+                if mode == SettleMode::Fast && want_pixels {
+                    let reply = serde_json::json!({
+                        "ok": false, "cmd": "tree", "code": "BAD_REQUEST",
+                        "error": "settle:fast is a tree-only mode; a fast frame may be mid-animation and cannot back a PNG capture",
+                    });
+                    protocol_write(&reply);
+                    evidence.push(reply);
+                    continue;
+                }
+                let probe = if mode == SettleMode::Fast {
+                    let deadline = Instant::now() + Duration::from_millis(750);
+                    match wait_for_fast_tree(
+                        child,
+                        cgroup,
+                        live,
+                        probe_state,
+                        &mut guest_stdin,
+                        deadline,
+                        0,
+                    ) {
+                        FastTreeEnd::Ready(probe) => probe,
+                        FastTreeEnd::Timeout { probe_seq } => {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": "tree", "code": "NO_FRESH_TREE",
+                                "error": format!(
+                                    "no guest probe sample newer than the frame store that was current at request entry arrived within 750 ms (last probe_seq {probe_seq}); a fast tree never serves the pre-request sample"
+                                ),
+                                "settle": {
+                                    "mode": "fast", "settled": false,
+                                    "probe_seq": probe_seq, "tree_age_ms": null,
+                                    "bound": "timeout",
+                                },
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                            continue;
+                        }
+                        FastTreeEnd::Unsupported(marker) => {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": "tree", "code": "UNSUPPORTED_ANDROID_API",
+                                "error": "the app called an Android API the launcher does not implement",
+                                "unsupported": marker,
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                            continue;
+                        }
+                        FastTreeEnd::GuestExited(status) => {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": "tree", "code": "GUEST_EXITED",
+                                "error": format!("the guest ended while binding the tree (status {status})"),
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                            write_session_evidence(out, &evidence);
+                            return Ok(SessionEnd {
+                                status: Some(status),
+                                clean: false,
+                            });
+                        }
+                    }
+                } else {
+                    // Strict (default) and unchanged: bind the tree and the pixels
+                    // to the same settled state.
+                    let settled = wait_for_settled_observation(
+                        child,
+                        cgroup,
+                        live,
+                        probe_state,
+                        Instant::now() + Duration::from_millis(1500),
+                        0,
+                        0,
+                        None,
+                        SettleMode::Strict,
+                        None,
+                        0,
+                    );
+                    match settled {
+                        SettleEnd::Settled(settled) => settled.probe,
+                        SettleEnd::Timeout { .. } | SettleEnd::Unsupported(_) => {
+                            match latest_probe(probe_state) {
+                                Some(probe) => probe,
+                                None => {
+                                    let reply = serde_json::json!({
+                                        "ok": false, "cmd": "tree", "code": "NO_TEXT",
+                                        "error": "the in-guest tree probe has produced no sample",
+                                    });
+                                    protocol_write(&reply);
+                                    evidence.push(reply);
+                                    continue;
+                                }
+                            }
+                        }
+                        SettleEnd::GuestExited(status) => {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": "tree", "code": "GUEST_EXITED",
+                                "error": format!("the guest ended while binding the tree (status {status})"),
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                            write_session_evidence(out, &evidence);
+                            return Ok(SessionEnd {
+                                status: Some(status),
+                                clean: false,
+                            });
+                        }
+                    }
+                };
+                let p3_t_settled = p3_now_us();
+                let tree_age_ms = host_ms().saturating_sub(probe.at_ms);
+                let settle_json = serde_json::json!({
+                    "mode": mode.as_str(),
+                    "settled": true,
+                    "probe_seq": probe.seq,
+                    "tree_age_ms": tree_age_ms,
+                    "bound": if mode == SettleMode::Fast { "probe-fresh" } else { "strict-quiet" },
+                    "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+                });
+                if !want_pixels {
+                    // Metadata-only frame identity: no buffer clone, no PNG
+                    // encode/write, no md5 (P3: that capture was 34.5 ms of the
+                    // request and the tree reply never used its pixels).
+                    let meta = {
+                        let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+                        state.latest_frame_metadata()
+                    };
+                    let mut reply = serde_json::json!({
+                        "ok": true,
+                        "cmd": "tree",
+                        "pixels": false,
+                        "capture_source": CAPTURE_SOURCE,
+                        "tree": probe.tree.clone(),
+                        "probe_seq": probe.seq,
+                        "probe_at_ms": probe.at_ms,
+                        "settle": settle_json,
+                        // The logical capture sequence stays monotonic even when
+                        // no pixels are written; frame identity below is the C1
+                        // metadata for the buffer this probe is bound to.
+                        "frame_seq": captures,
+                    });
+                    if let Some(meta) = meta {
+                        let map = reply.as_object_mut().expect("tree reply is an object");
+                        map.insert("buffer_generation".into(), serde_json::json!(meta.generation));
+                        map.insert("frame_number".into(), serde_json::json!(meta.frame_number));
+                        map.insert("buffer_id".into(), serde_json::json!(meta.buffer_id));
+                        map.insert("producer_id".into(), serde_json::json!(meta.producer_id));
+                        map.insert("layer_id".into(), serde_json::json!(meta.layer_id));
+                        map.insert("layer_name".into(), serde_json::json!(meta.layer_name));
+                        map.insert("width".into(), serde_json::json!(meta.width));
+                        map.insert("height".into(), serde_json::json!(meta.height));
+                        map.insert(
+                            "frame_identity".to_string(),
+                            serde_json::json!("C1 buffer metadata (no pixel copy)"),
+                        );
+                    }
+                    let p3_t_built = p3_now_us();
+                    protocol_write(&reply);
+                    let p3_t_reply = p3_now_us();
+                    if p3_enabled() {
+                        let tree_bytes = serde_json::to_vec(&probe.tree)
+                            .map(|value| value.len())
+                            .unwrap_or(0);
+                        p3_trace(
+                            "art",
+                            "art.tree",
+                            p3_t_enter,
+                            p3_t_reply,
+                            &format!(
+                                "settle_us={} capture_us=0 build_reply_us={} mode={} \
+                                 probe_seq={} probe_at_ms={} frame_seq={} tree_bytes={}",
+                                p3_t_settled.saturating_sub(p3_t_enter),
+                                p3_t_reply.saturating_sub(p3_t_built),
+                                mode.as_str(),
+                                probe.seq,
+                                probe.at_ms,
+                                captures,
+                                tree_bytes
+                            ),
+                        );
+                    }
+                    evidence.push(serde_json::json!({
+                        "cmd": "tree", "ok": true, "pixels": false,
+                        "frame_seq": captures,
+                        "probe_seq": probe.seq,
+                    }));
+                } else {
+                    match capture_c1(live, frames_dir, &mut captures) {
+                        Ok(Some(capture)) => {
+                            last_capture_fnv = Some(capture.fnv1a);
+                            let mut reply = capture.fields();
+                            let map = reply.as_object_mut().expect("capture fields are an object");
+                            map.insert("ok".into(), serde_json::json!(true));
+                            map.insert("cmd".into(), serde_json::json!("tree"));
+                            map.insert("pixels".into(), serde_json::json!(true));
+                            map.insert("tree".into(), probe.tree.clone());
+                            map.insert("probe_seq".into(), serde_json::json!(probe.seq));
+                            map.insert("probe_at_ms".into(), serde_json::json!(probe.at_ms));
+                            map.insert("settle".into(), settle_json);
+                            let p3_t_built = p3_now_us();
+                            protocol_write(&reply);
+                            let p3_t_reply = p3_now_us();
+                            if p3_enabled() {
+                                let tree_bytes = serde_json::to_vec(&probe.tree)
+                                    .map(|value| value.len())
+                                    .unwrap_or(0);
+                                p3_trace(
+                                    "art",
+                                    "art.tree",
+                                    p3_t_enter,
+                                    p3_t_reply,
+                                    &format!(
+                                        "settle_us={} capture_us={} build_reply_us={} \
+                                         probe_seq={} probe_at_ms={} frame_seq={} tree_bytes={}",
+                                        p3_t_settled.saturating_sub(p3_t_enter),
+                                        p3_t_built.saturating_sub(p3_t_settled),
+                                        p3_t_reply.saturating_sub(p3_t_built),
+                                        probe.seq,
+                                        probe.at_ms,
+                                        capture.seq,
+                                        tree_bytes
+                                    ),
+                                );
+                            }
+                            evidence.push(serde_json::json!({
+                                "cmd": "tree", "ok": true, "frame_seq": capture.seq,
+                                "buffer_generation": capture.generation,
+                                "frame_number": capture.frame_number,
+                                "probe_seq": probe.seq, "png": capture.path.display().to_string(),
+                            }));
+                        }
+                        Ok(None) => {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": "tree", "code": "NO_FRESH_FRAME",
+                                "error": "C1 has stored no buffer yet",
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                        }
+                        Err(error) => {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": "tree", "code": "INTERNAL",
+                                "error": format!("cannot write the C1 capture: {error}"),
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                        }
                     }
                 }
             }
@@ -3758,6 +4050,7 @@ mod probe_line_tests {
             std::io::Cursor::new(lines.as_bytes().to_vec()),
             4096,
             Arc::clone(&state),
+            None,
         );
         let out = state.lock().unwrap().clone_for_test();
         out
@@ -3822,6 +4115,36 @@ mod probe_line_tests {
         let state = drain("ACOSPROBE {\"seq\":1,\"tree\":{\"nodes\":[]}}{\"seq\":2}\n");
         assert!(state.latest.is_none());
         assert_eq!(state.bad_probe_lines, 1);
+    }
+
+    fn sample(seq: u64, generation: u64) -> ProbeSample {
+        ProbeSample {
+            seq,
+            tree: serde_json::json!({"nodes": []}),
+            at_ms: 1_000,
+            generation,
+        }
+    }
+
+    /// P3b's invalidation rule: a fast tree may only use a probe parsed at a C1
+    /// generation at least as new as the store current at request entry, and
+    /// with a sequence past the caller's floor. A probe from before a frame
+    /// store or an input settle is never served as current.
+    #[test]
+    fn fast_tree_rejects_a_probe_from_before_the_entry_generation() {
+        // Store advanced to 9 after this sample was parsed at 8.
+        assert!(!probe_usable_for_fast_tree(&sample(4, 8), 9, 0));
+        // Same generation: the sample is current for that store.
+        assert!(probe_usable_for_fast_tree(&sample(4, 9), 9, 0));
+        // A newer store than the sample is fine as long as the sample was
+        // already at/after the entry generation (stores during the walk do not
+        // invalidate a fast observation).
+        assert!(probe_usable_for_fast_tree(&sample(5, 9), 9, 0));
+        // The guest sequence floor is honoured independently.
+        assert!(!probe_usable_for_fast_tree(&sample(5, 9), 9, 5));
+        assert!(probe_usable_for_fast_tree(&sample(6, 9), 9, 5));
+        // No frame has ever landed: generation 0 is usable when none is needed.
+        assert!(probe_usable_for_fast_tree(&sample(1, 0), 0, 0));
     }
 
     /// Oversized input is drained whole and counted, so a following sample is

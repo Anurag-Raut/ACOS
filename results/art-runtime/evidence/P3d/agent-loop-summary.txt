@@ -1,0 +1,4 @@
+bench-agent-loop.sh --loops 6 --runs 1 --settle fast
+summary: passed=10 failed=0 false_pass=0 unclassified=0 total_runs=10 negative_runs=0
+verb-percentile gates report INSUFFICIENT at n=10 (needs >=20); runtime gates
+task_reaches_verdict PASS, tree_reached PASS, round_trips<=12 PASS.
