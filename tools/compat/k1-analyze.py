@@ -270,6 +270,10 @@ def main():
         rows.append({
             "package": pkg,
             "status": "ok" if rep.get("ok") else ("fail" if rep.get("stages", {}).get("first_frame", {}).get("ok") else "blocked"),
+            "apk": meta.get("name"),
+            "apk_sha256": meta.get("sha256"),
+            "source_url": meta.get("source_url"),
+            "apk_size_bytes": meta.get("size_bytes"),
             "version": meta["version"],
             "ui_toolkit": meta["ui_toolkit"],
             "target_sdk": meta["target_sdk"],
