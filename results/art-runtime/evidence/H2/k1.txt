@@ -1,0 +1,6 @@
+app,first_frame_ms,tree,shot,tap,ok
+com.beemdevelopment.aegis,513.1,True,True,True,True
+com.nononsenseapps.feeder,1006.1,True,True,False,False
+net.cozic.joplin,1135.9,False,False,False,False
+org.jellyfin.mobile,540.6,True,True,True,True
+org.secuso.privacyfriendlynotes,583.5,True,True,False,False
