@@ -159,6 +159,10 @@ pub struct SessionReport {
     pub stderr: String,
     pub diagnostics: Vec<String>,
     pub notes: Vec<String>,
+    /// W48: the `dalvik.vm.heap*` values this session served (the
+    /// `ACOS_ART_HEAP*` seam resolved and validated).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub heap: Option<serde_json::Value>,
 }
 
 impl SessionReport {
@@ -410,7 +414,9 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
         idmap_paths.push(format!("/data/session/{session_id}/overlay/{name}"));
     }
 
-    crate::Props::android34().write(&root.data.join(crate::props::PROPS_FILE))?;
+    // W48: the heap seam (`ACOS_ART_HEAP*`) is applied and validated here, so
+    // the properties ART reads below are the ones the session reports.
+    crate::Props::for_launch()?.write(&root.data.join(crate::props::PROPS_FILE))?;
 
     // Per-session /dev/socket: `Logd` unlinks and rebinds `logdw`, so sharing
     // the directory with another session would hijack its log sink.
@@ -927,6 +933,7 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
         stderr,
         diagnostics,
         notes,
+        heap: Some(crate::props::effective_heap_json()),
     })
 }
 

@@ -81,6 +81,11 @@ pub enum Error {
     /// Landlock owns filesystem confinement, the seccomp filter owns syscalls.
     #[error("LANDLOCK_UNAVAILABLE: {0}")]
     LandlockUnavailable(String),
+    /// An `ACOS_ART_HEAP*` seam refused its value. The message starts with
+    /// `INVALID_HEAP_CONFIG` so a caller can classify it without parsing prose;
+    /// there is no silent fallback to the stock heap values (W48).
+    #[error("INVALID_HEAP_CONFIG: {0}")]
+    InvalidHeapConfig(String),
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -207,7 +212,9 @@ impl ArtRoot {
             fs::create_dir_all(self.data.join(d))?;
         }
         self.write_apex_info_list()?;
-        Props::android34().write(&self.data.join(props::PROPS_FILE))?;
+        // W48: the heap seam lives here, so an invalid ACOS_ART_HEAP* value is
+        // a structured INVALID_HEAP_CONFIG before any guest exists.
+        Props::for_launch()?.write(&self.data.join(props::PROPS_FILE))?;
         // A launcher that was SIGKILLed cannot remove its own run dir; every
         // later invocation reaps the stale ones (S4).
         if let Ok(n) = self.sweep_stale_runs() {

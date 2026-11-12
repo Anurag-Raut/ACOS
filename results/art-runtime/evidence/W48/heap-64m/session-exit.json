@@ -1,0 +1,49 @@
+{
+  "activity_resumed": true,
+  "application_created": true,
+  "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=110MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p4192296-i8343239.scope)",
+  "code": null,
+  "disk_free_bytes": 173321195520,
+  "guest_crash": null,
+  "guest_exit": 0,
+  "guest_signal": null,
+  "heap": {
+    "bytes": {
+      "heapgrowthlimit": 67108864,
+      "heapmaxfree": 8388608,
+      "heapminfree": 524288,
+      "heapsize": 536870912,
+      "heapstartsize": 4194304
+    },
+    "heaptargetutilization": 0.75,
+    "mib": {
+      "heapgrowthlimit": 64.0,
+      "heapmaxfree": 8.0,
+      "heapminfree": 0.5,
+      "heapsize": 512.0,
+      "heapstartsize": 4.0
+    },
+    "overridden": [
+      "ACOS_ART_HEAPSTARTSIZE",
+      "ACOS_ART_HEAPGROWTHLIMIT"
+    ],
+    "prop": {
+      "dalvik.vm.heapgrowthlimit": "64m",
+      "dalvik.vm.heapmaxfree": "8m",
+      "dalvik.vm.heapminfree": "512k",
+      "dalvik.vm.heapsize": "512m",
+      "dalvik.vm.heapstartsize": "4m",
+      "dalvik.vm.heaptargetutilization": "0.75"
+    },
+    "source": "ACOS_ART_HEAP* overrides on the stock API-34 dalvik.vm.* table"
+  },
+  "logd": "logd: 193 entries",
+  "outcome": "ok",
+  "retryable": false,
+  "route": "launch",
+  "stage": "teardown-evidence",
+  "stderr_tail_last": "ACOSHWC[gralloc]: software gralloc shim loaded (1 fd / 9 ints)",
+  "stdout_tail_last": "ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {beac1d5} dev.acos.art.LaunchMain$1$1@6bd6235",
+  "utc_ms": 1794458114958,
+  "wall_ms": 7258
+}

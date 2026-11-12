@@ -345,10 +345,10 @@ fn real_main() -> Result<ExitCode> {
         "props" => {
             let what = program_args.first().map(String::as_str).unwrap_or("print");
             match what {
-                "print" => print!("{}", Props::android34().to_string()),
+                "print" => print!("{}", Props::for_launch()?.to_string()),
                 "write" => {
                     let p = root.data.join(acos_art::props::PROPS_FILE);
-                    Props::android34().write(&p)?;
+                    Props::for_launch()?.write(&p)?;
                     println!("{}", p.display());
                 }
                 "get" => {

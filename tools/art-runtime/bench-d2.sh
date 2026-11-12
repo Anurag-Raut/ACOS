@@ -34,12 +34,23 @@
 # `cold` = the legacy cold state category; `warm` = a session/pool already up.
 # Metric types are stated per row; a type/state mismatch is NOT_COMPARABLE
 # (never a win). See BENCHMARKS.md section 11 and tools/benchlib.py.
+#
+# Host disk (W48; on 2026-11-11/12 this script filled the disk and kept 36 GB of
+# per-rep artifacts):
+#   * PREFLIGHT: before the build and again before the first ART run, the free
+#     space on the output filesystem must be >= ACOS_BENCH_MIN_FREE_GB (default
+#     40). Too little space exits 6 with a `HOST_DISK_FULL:` message; a run that
+#     cannot write its artifacts must not start.
+#   * PRUNING: after each rep's row is recorded, that rep's bulky artifacts
+#     (frames/, tree/, logs/, live frames, PNGs) are deleted. verdict.json,
+#     resources.json, steps/, repro.*, summary.json, run.json and stdout stay.
+#     ACOS_BENCH_KEEP_ARTIFACTS=1 disables the pruning.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT" || exit 1
 
-usage() { sed -n '2,46p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,47p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 SAMPLES=20
 MEM_REPS=5
@@ -80,6 +91,28 @@ fi
 
 [ -n "$OUT" ] || OUT="$ROOT/.cache/bench-d2/$STAMP"
 mkdir -p "$OUT"
+
+# ---- W48: host disk preflight -------------------------------------------
+# The disk filled to 100% during the 11-12 benchmark window and a run with no
+# space left produces misleading verdicts. Free space is a host condition: check
+# it before anything is written and refuse clearly (never a silent partial run).
+ACOS_BENCH_MIN_FREE_GB="${ACOS_BENCH_MIN_FREE_GB:-40}"
+disk_preflight() {
+    local avail
+    avail="$(df -Pk "$OUT" 2>/dev/null | awk 'NR==2 {printf "%d", $4/1048576}')"
+    if [ -z "$avail" ]; then
+        echo "bench-d2: warning: free space on $OUT is unreadable; continuing" >&2
+        return 0
+    fi
+    if [ "$avail" -lt "$ACOS_BENCH_MIN_FREE_GB" ]; then
+        echo "HOST_DISK_FULL: bench-d2 refuses to run: ${avail} GiB free on the filesystem holding" >&2
+        echo "  $OUT, below ACOS_BENCH_MIN_FREE_GB=${ACOS_BENCH_MIN_FREE_GB} GiB." >&2
+        echo "  Free space (or lower ACOS_BENCH_MIN_FREE_GB deliberately) and retry." >&2
+        return 1
+    fi
+    echo "bench-d2: disk preflight ok: ${avail} GiB free on $OUT (>= ${ACOS_BENCH_MIN_FREE_GB} GiB)" >&2
+}
+disk_preflight || exit 6
 
 case "$TARGET_DIR" in
     /*) TARGET_ROOT="$TARGET_DIR" ;;
@@ -145,6 +178,7 @@ then
     exit 4
 fi
 
+disk_preflight || exit 6
 echo "bench-d2: samples=$SAMPLES mem-reps=$MEM_REPS cohorts='$COHORTS' suite=$SUITE_MAX" >&2
 
 # ---- the measurement driver (embedded; one ART run per lock acquisition) ----
@@ -154,6 +188,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -179,6 +214,79 @@ RESULT_MD = os.path.join(ROOT, "results/bench/d2-%s.md" % STAMP)
 ALLOWED = {"PASS", "TIE", "FAIL", "NOISY", "NOT_COMPARABLE", "NOT_MEASURED",
            "INSUFFICIENT"}
 
+# ---- W48: prune a rep's bulky artifacts once its row has been recorded ----
+# 36 GB of frames/tree/logs survived the 11-12 window and filled the disk. The
+# evidence that makes a row checkable (verdict.json, resources.json, steps/,
+# repro.*) stays; the pixels and dumps go as soon as the sample is parsed.
+KEEP_ARTIFACTS = os.environ.get("ACOS_BENCH_KEEP_ARTIFACTS", "0") == "1"
+BULKY_DIRS = {"frames", "tree", "logs", "art-frames", "live-frames",
+              "screenshots", "session", "session-root"}
+# These two are tiny and are the *record* of the run: session-exit.json carries
+# the exit/signal/stage facts and the effective heap configuration (W48), and
+# live-session.json carries the interactive session's own evidence. Keeping them
+# is what lets a pruned benchmark row still name its heap configuration.
+SESSION_RECORD_DIRS = {"art-frames", "live-frames"}
+SESSION_RECORDS = {"session-exit.json", "live-session.json"}
+
+
+def _prune_dir(target):
+    """Delete a bulky directory, keeping the session records when it holds them."""
+    if os.path.basename(target) in SESSION_RECORD_DIRS:
+        for name in os.listdir(target):
+            if name in SESSION_RECORDS:
+                continue
+            path = os.path.join(target, name)
+            if os.path.isdir(path):
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+    else:
+        shutil.rmtree(target, ignore_errors=True)
+
+
+def dir_bytes(path):
+    total = 0
+    for base, _dirs, files in os.walk(path):
+        for f in files:
+            try:
+                total += os.path.getsize(os.path.join(base, f))
+            except OSError:
+                pass
+    return total
+
+
+def prune_artifacts(path, tag):
+    """Delete the bulky per-rep artifacts after the row is in the run record.
+
+    Kept: verdict/resources/step/repro/events JSON, the two session records
+    (session-exit.json, live-session.json) and the host record (run.json,
+    stdout.raw). Deleted: every frames/, tree/, logs/ directory, the live frame
+    buffers and every PNG, at any depth (cohort reps nest their per-session
+    artifacts dirs). ACOS_BENCH_KEEP_ARTIFACTS=1 disables this.
+    """
+    if KEEP_ARTIFACTS or not os.path.isdir(path):
+        return
+    before = dir_bytes(path)
+    for base, dirs, files in os.walk(path, topdown=True):
+        for d in list(dirs):
+            if d in BULKY_DIRS:
+                _prune_dir(os.path.join(base, d))
+                dirs.remove(d)
+        for f in files:
+            drop = f.endswith(".png") or (f.startswith("tree-") and f.endswith(".json"))
+            if drop:
+                try:
+                    os.remove(os.path.join(base, f))
+                except OSError:
+                    pass
+    freed = before - dir_bytes(path)
+    print("bench-d2: pruned %s: %.1f MiB freed (frames/tree/logs/live frames/PNGs "
+          "removed; verdict/resources/steps/repro/session-exit kept; "
+          "ACOS_BENCH_KEEP_ARTIFACTS=1 disables)" % (tag, freed / MiB), file=sys.stderr)
+
 
 def utc():
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
@@ -200,7 +308,8 @@ def art_run(cmd, tag):
     adir = os.path.join(ARTI, tag)
     os.makedirs(adir, exist_ok=True)
     before = host_now()
-    argv = [RUNEX, "--task", "W33", "--", GUARD, "--mem", "8G", "--time", "900", "--"] + cmd
+    task = os.environ.get("ACOS_BENCH_TASK", "W33")
+    argv = [RUNEX, "--task", task, "--", GUARD, "--mem", "8G", "--time", "900", "--"] + cmd
     env = dict(os.environ, ACOS_BENCH_PROFILE="release")
     t0 = time.time()
     try:
@@ -522,6 +631,9 @@ def row(mid, name, unit, mtype, state, legacy_value, legacy_unit, legacy_type,
 # ---------------------------------------------------------------- measurements
 def main():
     started = utc()
+    if KEEP_ARTIFACTS:
+        print("bench-d2: ACOS_BENCH_KEEP_ARTIFACTS=1: per-rep frames/tree/logs are kept "
+              "(disk use grows with every rep)", file=sys.stderr)
     prov = benchlib.provenance(
         ROOT, [ACOS, ACOS_ART], profile="release", engine="art",
         gate=benchlib.host_gate(ROOT, check_lock=False),
@@ -547,6 +659,7 @@ def main():
               % (i + 1, SAMPLES, s.get("ok"), s.get("first_frame_ms"),
                  s["run"]["host_before"].get("loadavg1")), file=sys.stderr)
         lat.append(s)
+        prune_artifacts(os.path.join(ARTI, s["tag"]), s["tag"])
     run["samples"]["latency"] = lat
     good = [s for s in lat if s.get("parse_ok") and s.get("ok") and not s["run"]["contaminated"]]
     contaminated = len([s for s in lat if s["run"]["contaminated"]])
@@ -692,6 +805,8 @@ def main():
             print("bench-d2: cohort N=%d rep=%d (MemAvailable %.1f GiB, load1 %.2f)"
                   % (n, k, h["mem_available_gib"], h["loadavg1"]), file=sys.stderr)
             reps.append(cohort_rep(n, k))
+            prune_artifacts(os.path.join(OUT, "cohort-N%d-rep%d" % (n, k)),
+                            "cohort-N%d-rep%d" % (n, k))
         coh[n] = reps
         run["samples"]["cohorts"][str(n)] = reps
 
@@ -829,6 +944,7 @@ def main():
         print("bench-d2: suite %s pass=%s wall=%s ms load1=%s"
               % (t["id"], passed, wall_ms, rec["host_before"].get("loadavg1")),
               file=sys.stderr)
+        prune_artifacts(os.path.join(ARTI, "suite-%s" % t["id"]), "suite-%s" % t["id"])
     run["samples"]["suite"] = suite
     walls = [s["wall_ms"] for s in suite if s.get("wall_ms") is not None]
     sst = stat_of(walls)

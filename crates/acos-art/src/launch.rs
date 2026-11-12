@@ -134,6 +134,11 @@ pub struct LaunchResult {
     /// and any fail-closed reason (a dead guest is still a structured result,
     /// never a hang).
     pub notes: Vec<String>,
+    /// W48: the `dalvik.vm.heap*` values this launch actually served (the
+    /// `ACOS_ART_HEAP*` seam resolved and validated), so a benchmark row names
+    /// the heap configuration that produced it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub heap: Option<serde_json::Value>,
     pub marker: Option<String>,
 }
 
@@ -311,7 +316,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     }
     install_session_panic_hook(&out);
 
-    crate::Props::android34().write(&root.data.join(crate::props::PROPS_FILE))?;
+    crate::Props::for_launch()?.write(&root.data.join(crate::props::PROPS_FILE))?;
     // W43: sockets live in a short runtime dir, never under the caller's data
     // path (a long `--data`/task name must not turn into a bind() failure).
     let sockets = ShortSocketDir::new().map_err(Error::Io)?;
@@ -1051,6 +1056,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         logs,
         notes: unsupported_notes,
         marker,
+        heap: Some(crate::props::effective_heap_json()),
     };
     eprintln!(
         "acos-art: launch wall={wall_ms}ms until={} application_created={} activity_resumed={} \
@@ -1229,6 +1235,9 @@ fn write_session_exit(out: &Path, result: &LaunchResult, guest_crash: Option<&st
         "stage": last_stage(),
         "guest_crash": guest_crash,
         "disk_free_bytes": disk_free_bytes(out),
+        // W48: which heap configuration this session ran with (the
+        // `ACOS_ART_HEAP*` seam, resolved and validated before the guest).
+        "heap": crate::props::effective_heap_json(),
         "cgroup": result.notes.iter().find(|n| n.starts_with("cgroup:")),
         "logd": result.notes.iter().find(|n| n.starts_with("logd:")),
         "stdout_tail_last": result.stdout.lines().rev().find(|l| !l.trim().is_empty()),
@@ -1354,6 +1363,7 @@ fn disk_full_result(opts: &LaunchOpts, package: &str, free: u64, min: u64) -> La
         stdout: String::new(),
         stderr: String::new(),
         logs: Vec::new(),
+        heap: Some(crate::props::effective_heap_json()),
         notes: vec![format!(
             "HOST_DISK_FULL: {free} bytes free on the scratch filesystem, below \
              ACOS_ART_MIN_DISK_MB={} MiB; refusing to start a guest whose frames cannot be \
@@ -1694,6 +1704,8 @@ fn write_session_evidence(out: &Path, evidence: &[serde_json::Value]) {
         "capture_source": CAPTURE_SOURCE,
         "capture_label": "screenshots are ACOS C1 buffer captures (compositor-client stored buffers), not device captures",
         "protocol": "acos-art launch --interactive (ACOSLAUNCH_INTERACTIVE=1)",
+        // W48: the heap configuration, recorded with the session's own evidence.
+        "heap": crate::props::effective_heap_json(),
         "steps": evidence,
     });
     let _ = fs::create_dir_all(out);

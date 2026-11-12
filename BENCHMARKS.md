@@ -1832,6 +1832,41 @@ On 2026-11-12T01:07:23Z the pipeline ran end to end on a release build of the wo
 not a performance result**; one run per row, no repetitions, no legacy comparison. Detail:
 `results/art-runtime/W29.md`.
 
+### 11.9 Run configuration and host disk (W48)
+
+**ART heap configuration is a recorded variable, not a constant.** The six
+`dalvik.vm.heap*` values ART's `AndroidRuntime` turns into `-Xms`/`-Xmx`/
+`-XX:HeapGrowthLimit=`/`-XX:HeapMinFree=`/`-XX:HeapMaxFree=`/
+`-XX:HeapTargetUtilization=` can be overridden at launch with
+`ACOS_ART_HEAPSTARTSIZE`, `ACOS_ART_HEAPGROWTHLIMIT`, `ACOS_ART_HEAPSIZE`,
+`ACOS_ART_HEAPMINFREE`, `ACOS_ART_HEAPMAXFREE`, `ACOS_ART_HEAPTARGETUTILIZATION`
+(`<int>[kmg]`; the utilization a decimal in `(0,1)`), validated for format and for
+`start ≤ growthlimit ≤ heapsize`. An invalid value is a structured
+`INVALID_HEAP_CONFIG` before any guest starts — never a silent default — and the
+resolved values are written into the session's records
+(`<artifacts>/art-frames/session-exit.json` and `live-session.json` under `heap`,
+plus `launch --json`/`session --json`), so every row can name the heap
+configuration that produced it. Unset variables reproduce the stock table
+exactly. A one-rep comparison of two configurations is **not** a memory result:
+`resources.json`'s peak is the harness process's RSS (W41 §1.1: the guest is in a
+sibling cgroup), so only an N=10 suite with per-job `memory.current` integrals can
+attribute a memory effect to the heap. Detail: `results/art-runtime/W48.md` §1.
+
+**The harnesses cannot fill the host disk.** On 2026-11-11/12 `bench-d2` kept
+36 GB of per-rep artifacts and the filesystem reached 100 %. Both
+`tools/art-runtime/bench-d2.sh` and `tools/art-runtime/bench-n.sh` now (a) refuse
+to start when the output filesystem has less than `ACOS_BENCH_MIN_FREE_GB`
+(default 40) free, exiting non-zero with a `HOST_DISK_FULL:` message, and (b) after
+each rep's row is recorded, delete that rep's bulky artifacts (frames, live
+frames, tree dumps, logs, PNGs, the seeded per-agent `/data`) while keeping the
+row's evidence — `verdict.json`, `resources.json`, `steps/`, `repro.*`,
+`summary.json`, the host record, and the two session records in `art-frames/`
+(`session-exit.json`, which carries the heap configuration of §11.9, and
+`live-session.json`). `ACOS_BENCH_KEEP_ARTIFACTS=1` disables the
+pruning for diagnosis. Measured on a tiny run: `bench-d2 --quick` 950 MB kept vs
+**1.4 MB pruned**; `bench-n art 1 --reps 1` 1.1 MB vs **208 KB**. Detail:
+`results/art-runtime/W48.md` §2.
+
 
 ---
 

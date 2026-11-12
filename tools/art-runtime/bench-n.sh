@@ -39,6 +39,13 @@
 #   rep-<k>/samples.jsonl           sampler output (t, pss_kb, rss_kb, n)
 #   summary.json                    all reps + medians
 #
+# Host disk (W48): before the cohorts the free space on the output filesystem
+# must be >= ACOS_BENCH_MIN_FREE_GB (default 40); otherwise the script exits 6
+# with a `HOST_DISK_FULL:` message. After each rep's summary.json is written its
+# bulky per-agent artifacts (out/ frames+trees, the seeded data/, session roots,
+# PNGs) are deleted; summary.json, samples.jsonl, compare.json and the per-agent
+# stdout/stderr/rc/wall stay. ACOS_BENCH_KEEP_ARTIFACTS=1 disables the pruning.
+#
 # Scratch lives under .cache/ (never /tmp).
 
 set -uo pipefail
@@ -74,6 +81,55 @@ done
 STAMP="$(date +%Y%m%d-%H%M%S)"
 [ -n "$OUT" ] || OUT="$ROOT/.cache/art-bench/${ENGINE}-N${N}-${STAMP}"
 mkdir -p "$OUT"
+
+# ---- W48: host disk preflight + per-rep pruning --------------------------
+ACOS_BENCH_MIN_FREE_GB="${ACOS_BENCH_MIN_FREE_GB:-40}"
+ACOS_BENCH_KEEP_ARTIFACTS="${ACOS_BENCH_KEEP_ARTIFACTS:-0}"
+
+disk_preflight() {
+    local avail
+    avail="$(df -Pk "$OUT" 2>/dev/null | awk 'NR==2 {printf "%d", $4/1048576}')"
+    if [ -z "$avail" ]; then
+        echo "bench-n: warning: free space on $OUT is unreadable; continuing" >&2
+        return 0
+    fi
+    if [ "$avail" -lt "$ACOS_BENCH_MIN_FREE_GB" ]; then
+        echo "HOST_DISK_FULL: bench-n refuses to run: ${avail} GiB free on the filesystem holding" >&2
+        echo "  $OUT, below ACOS_BENCH_MIN_FREE_GB=${ACOS_BENCH_MIN_FREE_GB} GiB." >&2
+        echo "  Free space (or lower ACOS_BENCH_MIN_FREE_GB deliberately) and retry." >&2
+        return 1
+    fi
+    echo "bench-n: disk preflight ok: ${avail} GiB free on $OUT (>= ${ACOS_BENCH_MIN_FREE_GB} GiB)"
+}
+
+dir_kib() { du -sk "$1" 2>/dev/null | awk '{print $1}'; }
+
+# Runs after a rep's summary.json exists: the per-agent pixels/trees/dumps are
+# the bulky part (frames + seeded /data), the JSON row is the evidence.
+prune_rep() {
+    local dir="$1" before after
+    if [ "${ACOS_BENCH_KEEP_ARTIFACTS}" = "1" ]; then
+        echo "bench-n: keeping artifacts in $dir (ACOS_BENCH_KEEP_ARTIFACTS=1)"
+        return 0
+    fi
+    [ -d "$dir" ] || return 0
+    before="$(dir_kib "$dir")"
+    rm -rf "$dir"/agent-*/out "$dir"/agent-*/data "$dir"/agent-*/session-root
+    find "$dir" -type f -name '*.png' -delete 2>/dev/null || true
+    # `art-frames/` is deliberately not removed wholesale: it holds
+    # session-exit.json, the run's own record (exit/signal facts + the effective
+    # heap configuration). Only its pixels are deleted, by the PNG pass above.
+    find "$dir" -type d \( -name frames -o -name tree -o -name logs \) \
+        -prune -exec rm -rf {} + 2>/dev/null || true
+    after="$(dir_kib "$dir")"
+    local freed_kib=$(( before - after )) freed
+    if [ "$freed_kib" -ge 1024 ]; then
+        freed="$(( freed_kib / 1024 )) MiB"
+    else
+        freed="${freed_kib} KiB"
+    fi
+    echo "bench-n: pruned $dir: ${freed} freed (kept summary/verdict JSON; ACOS_BENCH_KEEP_ARTIFACTS=1 disables)"
+}
 
 ART_BIN="$ROOT/target/release/acos-art"
 VM_BIN="$ROOT/target/release/acos"
@@ -304,11 +360,13 @@ print(json.dumps(summary))
 PY
 }
 
+disk_preflight || exit 6
 reps_json=()
 for k in $(seq 1 "$REPS"); do
     echo "bench-n: engine=$ENGINE N=$N rep=$k/$REPS"
     run_cohort "$OUT/rep-$k" || { echo "bench-n: cohort rep-$k aborted" >&2; break; }
     reps_json+=("$OUT/rep-$k/summary.json")
+    prune_rep "$OUT/rep-$k"
 done
 
 python3 -I - "$OUT" "$ROOT" "${reps_json[@]}" <<'PY'

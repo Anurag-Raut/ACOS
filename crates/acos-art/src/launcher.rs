@@ -141,7 +141,7 @@ pub fn run(root: &ArtRoot, opts: &RunOpts) -> Result<RunResult> {
     // Property table: present or absent is the switch the shim sees.
     let props_path = root.data.join(crate::props::PROPS_FILE);
     if opts.props {
-        crate::Props::android34().write(&props_path)?;
+        crate::Props::for_launch()?.write(&props_path)?;
     } else if props_path.exists() {
         std::fs::remove_file(&props_path)?;
     }

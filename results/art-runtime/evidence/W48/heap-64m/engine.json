@@ -1,0 +1,136 @@
+{
+  "engine": {
+    "commands": {
+      "missing": [
+        "environment"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "type_text",
+        "key",
+        "reset",
+        "close",
+        "logs",
+        "crash_reports"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "/home/Qui/Projects/acos/.cache/w48/heap-64m",
+      "engine_report": "/home/Qui/Projects/acos/.cache/w48/heap-64m/engine.json",
+      "verdict": "/home/Qui/Projects/acos/.cache/w48/heap-64m/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": true,
+    "mode": "live",
+    "session_exit": {
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=110MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p4192296-i8343239.scope)",
+      "code": null,
+      "disk_free_bytes": 173321195520,
+      "guest_crash": null,
+      "guest_exit": 0,
+      "guest_signal": null,
+      "outcome": "ok",
+      "panic": null,
+      "path": "/home/Qui/Projects/acos/.cache/w48/heap-64m/art-frames/session-exit.json",
+      "retryable": false,
+      "stage": "teardown-evidence"
+    },
+    "timing": {
+      "attributed_ms": 6898,
+      "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
+      "session_start_ms": 352,
+      "steps": [
+        {
+          "index": 0,
+          "status": "pass",
+          "step": "launch",
+          "wall_ms": 504
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 2
+        },
+        {
+          "index": 2,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 2
+        },
+        {
+          "index": 3,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 2
+        },
+        {
+          "index": 4,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 1966
+        },
+        {
+          "index": 5,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 1
+        },
+        {
+          "index": 6,
+          "status": "pass",
+          "step": "capture",
+          "wall_ms": 499
+        },
+        {
+          "index": 7,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 1962
+        },
+        {
+          "index": 8,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 1
+        },
+        {
+          "index": 9,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 1958
+        },
+        {
+          "index": 10,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 1
+        }
+      ],
+      "unattributed_ms": 24,
+      "unit": "ms",
+      "verdict_wall_ms": 6922
+    },
+    "trust": "trusted",
+    "unsupported_steps": []
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "request_id": "req_3ff81e_18e7322437d14c38",
+  "verdict_status": "pass"
+}

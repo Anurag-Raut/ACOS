@@ -312,7 +312,7 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
 
     // Property table (the art shim serves it) — Build.<clinit> needs the ABI
     // list, ResourcesImpl.updateConfiguration needs ro.build.version.sdk.
-    crate::Props::android34().write(&root.data.join(crate::props::PROPS_FILE))?;
+    crate::Props::for_launch()?.write(&root.data.join(crate::props::PROPS_FILE))?;
 
     let logd = Logd::start(&run.dir("socket")).map_err(Error::Io)?;
     crate::seccomp::enable(root)?;

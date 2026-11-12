@@ -28,6 +28,7 @@
 //! Device path: `/data/acos.properties`.
 
 use crate::{Error, Result};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
@@ -37,6 +38,361 @@ pub const PROPS_FILE: &str = "acos.properties";
 
 /// bionic `PROP_VALUE_MAX`.
 pub const PROP_VALUE_MAX: usize = 92;
+
+// ---------------------------------------------------------------- heap seam
+//
+// ART's managed-heap limits are not a compile-time constant: `AndroidRuntime`
+// reads six `dalvik.vm.heap*` properties and turns them into runtime flags
+// (`.cache/aosp/base/core/jni/AndroidRuntime.cpp`):
+//
+// ```text
+// parseRuntimeOption("dalvik.vm.heapstartsize",       buf, "-Xms", "4m");
+// parseRuntimeOption("dalvik.vm.heapsize",            buf, "-Xmx", "16m");
+// parseRuntimeOption("dalvik.vm.heapgrowthlimit",     buf, "-XX:HeapGrowthLimit=");
+// parseRuntimeOption("dalvik.vm.heapminfree",         buf, "-XX:HeapMinFree=");
+// parseRuntimeOption("dalvik.vm.heapmaxfree",         buf, "-XX:HeapMaxFree=");
+// parseRuntimeOption("dalvik.vm.heaptargetutilization", buf, "-XX:HeapTargetUtilization=");
+// ```
+//
+// On a device those come from `build.prop`/`default.prop`. ACOS serves its own
+// table (this module), so the heap configuration was a constant in the source.
+// The `ACOS_ART_HEAP*` env seam below makes it an experiment parameter **without
+// ever falling back silently**: a malformed or inconsistent value is a
+// structured `INVALID_HEAP_CONFIG` at launch, and the values that were actually
+// written are recorded in the session's own metadata (`session-exit.json`,
+// `live-session.json`, `launch --json`, the session report) so a benchmark row
+// names the heap configuration that produced it.
+
+/// `dalvik.vm.heapstartsize` (`-Xms`).
+pub const ENV_HEAPSTARTSIZE: &str = "ACOS_ART_HEAPSTARTSIZE";
+/// `dalvik.vm.heapgrowthlimit` (`-XX:HeapGrowthLimit=`).
+pub const ENV_HEAPGROWTHLIMIT: &str = "ACOS_ART_HEAPGROWTHLIMIT";
+/// `dalvik.vm.heapsize` (`-Xmx`).
+pub const ENV_HEAPSIZE: &str = "ACOS_ART_HEAPSIZE";
+/// `dalvik.vm.heapminfree` (`-XX:HeapMinFree=`).
+pub const ENV_HEAPMINFREE: &str = "ACOS_ART_HEAPMINFREE";
+/// `dalvik.vm.heapmaxfree` (`-XX:HeapMaxFree=`).
+pub const ENV_HEAPMAXFREE: &str = "ACOS_ART_HEAPMAXFREE";
+/// `dalvik.vm.heaptargetutilization` (`-XX:HeapTargetUtilization=`).
+pub const ENV_HEAPTARGETUTILIZATION: &str = "ACOS_ART_HEAPTARGETUTILIZATION";
+
+/// The stock API-34 `userdebug` heap values ACOS boots with (unchanged defaults).
+pub const DEFAULT_HEAPSTARTSIZE: &str = "8m";
+pub const DEFAULT_HEAPGROWTHLIMIT: &str = "192m";
+pub const DEFAULT_HEAPSIZE: &str = "512m";
+pub const DEFAULT_HEAPMINFREE: &str = "512k";
+pub const DEFAULT_HEAPMAXFREE: &str = "8m";
+pub const DEFAULT_HEAPTARGETUTILIZATION: &str = "0.75";
+
+/// A refused heap-configuration value. `Display` states the variable, the value
+/// and the expectation; there is no default to fall back to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeapConfigError {
+    /// The environment variable (or property) at fault.
+    pub var: &'static str,
+    /// The value that was refused, verbatim.
+    pub value: String,
+    /// What was expected instead.
+    pub problem: String,
+}
+
+impl std::fmt::Display for HeapConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}={:?}: {}", self.var, self.value, self.problem)
+    }
+}
+
+impl std::error::Error for HeapConfigError {}
+
+impl HeapConfigError {
+    fn new(var: &'static str, value: &str, problem: impl Into<String>) -> Self {
+        Self { var, value: value.to_string(), problem: problem.into() }
+    }
+}
+
+/// One `<int>[kmg]` size, as ART's own `-Xms`/`-XX:HeapGrowthLimit=` parsers see
+/// it: decimal digits with an optional binary multiplier (`k`=2^10, `m`=2^20,
+/// `g`=2^30), no bare whitespace, no uppercase, no fractional part.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HeapSize {
+    /// The property text ART reads (`"8m"`, `"512k"`).
+    pub text: String,
+    /// The byte value that text denotes.
+    pub bytes: u64,
+}
+
+impl HeapSize {
+    /// Parse `<int>[kmg]`.
+    pub fn parse(var: &'static str, text: &str) -> std::result::Result<Self, HeapConfigError> {
+        let expected = "expected <int>[kmg]: decimal digits with an optional lowercase \
+                        multiplier (k=1024, m=1024^2, g=1024^3), e.g. 512k, 8m, 2g";
+        let (digits, mult) = match text.chars().last() {
+            Some('k') => (&text[..text.len() - 1], 1u64 << 10),
+            Some('m') => (&text[..text.len() - 1], 1u64 << 20),
+            Some('g') => (&text[..text.len() - 1], 1u64 << 30),
+            _ => (text, 1),
+        };
+        if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(HeapConfigError::new(var, text, expected));
+        }
+        let n: u64 = digits
+            .parse()
+            .map_err(|_| HeapConfigError::new(var, text, expected))?;
+        let bytes = n
+            .checked_mul(mult)
+            .ok_or_else(|| HeapConfigError::new(var, text, "size does not fit in 64 bits"))?;
+        Ok(Self { text: text.to_string(), bytes })
+    }
+
+    /// MiB, for the metadata record.
+    pub fn mib(&self) -> f64 {
+        self.bytes as f64 / (1024.0 * 1024.0)
+    }
+}
+
+/// `dalvik.vm.heaptargetutilization`: a plain decimal strictly between 0 and 1.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HeapUtilization {
+    /// The property text ART reads (`"0.75"`).
+    pub text: String,
+    /// The parsed fraction.
+    pub value: f64,
+}
+
+impl HeapUtilization {
+    /// Parse a decimal in (0,1).
+    pub fn parse(
+        var: &'static str,
+        text: &str,
+    ) -> std::result::Result<Self, HeapConfigError> {
+        let expected = "expected a decimal strictly between 0 and 1, e.g. 0.75";
+        if text.is_empty()
+            || !text.bytes().all(|b| b.is_ascii_digit() || b == b'.')
+            || text.matches('.').count() > 1
+            || text.starts_with('.')
+            || text.ends_with('.')
+        {
+            return Err(HeapConfigError::new(var, text, expected));
+        }
+        let value: f64 = text
+            .parse()
+            .map_err(|_| HeapConfigError::new(var, text, expected))?;
+        if !(value > 0.0 && value < 1.0) {
+            return Err(HeapConfigError::new(
+                var,
+                text,
+                format!("{expected}; {value} is outside (0,1)"),
+            ));
+        }
+        Ok(Self { text: text.to_string(), value })
+    }
+}
+
+/// The six `dalvik.vm.heap*` values a launch will serve, after the
+/// `ACOS_ART_HEAP*` overrides and validation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HeapConfig {
+    pub heapstartsize: HeapSize,
+    pub heapgrowthlimit: HeapSize,
+    pub heapsize: HeapSize,
+    pub heapminfree: HeapSize,
+    pub heapmaxfree: HeapSize,
+    pub heaptargetutilization: HeapUtilization,
+    /// Which `ACOS_ART_HEAP*` variables came from the environment (empty when
+    /// the stock defaults are in force).
+    pub overrides: Vec<String>,
+}
+
+impl HeapConfig {
+    /// The stock API-34 values — exactly what [`Props::android34`] ships.
+    pub fn defaults() -> Self {
+        Self {
+            heapstartsize: HeapSize::parse(ENV_HEAPSTARTSIZE, DEFAULT_HEAPSTARTSIZE)
+                .expect("stock default"),
+            heapgrowthlimit: HeapSize::parse(ENV_HEAPGROWTHLIMIT, DEFAULT_HEAPGROWTHLIMIT)
+                .expect("stock default"),
+            heapsize: HeapSize::parse(ENV_HEAPSIZE, DEFAULT_HEAPSIZE)
+                .expect("stock default"),
+            heapminfree: HeapSize::parse(ENV_HEAPMINFREE, DEFAULT_HEAPMINFREE)
+                .expect("stock default"),
+            heapmaxfree: HeapSize::parse(ENV_HEAPMAXFREE, DEFAULT_HEAPMAXFREE)
+                .expect("stock default"),
+            heaptargetutilization: HeapUtilization::parse(
+                ENV_HEAPTARGETUTILIZATION,
+                DEFAULT_HEAPTARGETUTILIZATION,
+            )
+            .expect("stock default"),
+            overrides: Vec::new(),
+        }
+    }
+
+    /// Resolve the `ACOS_ART_HEAP*` environment over the stock defaults and
+    /// validate. Returns the *first* bad value as a structured error; a present
+    /// but empty/non-UTF-8 variable is an error, never `unset`.
+    pub fn from_env() -> std::result::Result<Self, HeapConfigError> {
+        fn pick(
+            var: &'static str,
+            default: &str,
+            overrides: &mut Vec<String>,
+        ) -> std::result::Result<String, HeapConfigError> {
+            match std::env::var(var) {
+                Ok(v) => {
+                    overrides.push(var.to_string());
+                    Ok(v)
+                }
+                Err(std::env::VarError::NotPresent) => Ok(default.to_string()),
+                Err(std::env::VarError::NotUnicode(_)) => Err(HeapConfigError::new(
+                    var,
+                    "<non-UTF-8>",
+                    "expected UTF-8 text; unset the variable to use the default",
+                )),
+            }
+        }
+        let mut overrides = Vec::new();
+        let cfg = Self {
+            heapstartsize: HeapSize::parse(
+                ENV_HEAPSTARTSIZE,
+                &pick(ENV_HEAPSTARTSIZE, DEFAULT_HEAPSTARTSIZE, &mut overrides)?,
+            )?,
+            heapgrowthlimit: HeapSize::parse(
+                ENV_HEAPGROWTHLIMIT,
+                &pick(ENV_HEAPGROWTHLIMIT, DEFAULT_HEAPGROWTHLIMIT, &mut overrides)?,
+            )?,
+            heapsize: HeapSize::parse(
+                ENV_HEAPSIZE,
+                &pick(ENV_HEAPSIZE, DEFAULT_HEAPSIZE, &mut overrides)?,
+            )?,
+            heapminfree: HeapSize::parse(
+                ENV_HEAPMINFREE,
+                &pick(ENV_HEAPMINFREE, DEFAULT_HEAPMINFREE, &mut overrides)?,
+            )?,
+            heapmaxfree: HeapSize::parse(
+                ENV_HEAPMAXFREE,
+                &pick(ENV_HEAPMAXFREE, DEFAULT_HEAPMAXFREE, &mut overrides)?,
+            )?,
+            heaptargetutilization: HeapUtilization::parse(
+                ENV_HEAPTARGETUTILIZATION,
+                &pick(
+                    ENV_HEAPTARGETUTILIZATION,
+                    DEFAULT_HEAPTARGETUTILIZATION,
+                    &mut overrides,
+                )?,
+            )?,
+            overrides,
+        };
+        cfg.validate()?;
+        Ok(cfg)
+    }
+
+    /// `heapstartsize <= heapgrowthlimit <= heapsize`. ART sized the growth cap
+    /// from the growth limit and the hard cap from `-Xmx`; an inverted pair is a
+    /// configuration bug, not something to quietly reorder.
+    pub fn validate(&self) -> std::result::Result<(), HeapConfigError> {
+        let (s, g, m) = (
+            self.heapstartsize.bytes,
+            self.heapgrowthlimit.bytes,
+            self.heapsize.bytes,
+        );
+        let overridden = |var: &str| self.overrides.iter().any(|o| o == var);
+        if s > g {
+            // Name the variable the caller actually set; the other side may be a
+            // stock default, and blaming it would send the reader to the wrong
+            // place.
+            let (var, value) = if overridden(ENV_HEAPSTARTSIZE) {
+                (ENV_HEAPSTARTSIZE, &self.heapstartsize.text)
+            } else {
+                (ENV_HEAPGROWTHLIMIT, &self.heapgrowthlimit.text)
+            };
+            return Err(HeapConfigError::new(
+                var,
+                value,
+                format!(
+                    "heapstartsize {} must be <= heapgrowthlimit {}; the configured pair is \
+                     inconsistent",
+                    self.heapstartsize.text, self.heapgrowthlimit.text
+                ),
+            ));
+        }
+        if g > m {
+            let (var, value) = if overridden(ENV_HEAPGROWTHLIMIT) {
+                (ENV_HEAPGROWTHLIMIT, &self.heapgrowthlimit.text)
+            } else {
+                (ENV_HEAPSIZE, &self.heapsize.text)
+            };
+            return Err(HeapConfigError::new(
+                var,
+                value,
+                format!(
+                    "heapgrowthlimit {} must be <= heapsize {}; the configured pair is \
+                     inconsistent",
+                    self.heapgrowthlimit.text, self.heapsize.text
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    /// The `dalvik.vm.*` properties as ART's parser reads them.
+    pub fn properties(&self) -> [(&'static str, &str); 6] {
+        [
+            ("dalvik.vm.heapstartsize", &self.heapstartsize.text),
+            ("dalvik.vm.heapgrowthlimit", &self.heapgrowthlimit.text),
+            ("dalvik.vm.heapsize", &self.heapsize.text),
+            ("dalvik.vm.heapminfree", &self.heapminfree.text),
+            ("dalvik.vm.heapmaxfree", &self.heapmaxfree.text),
+            ("dalvik.vm.heaptargetutilization", &self.heaptargetutilization.text),
+        ]
+    }
+
+    /// Write the six properties into a table.
+    pub fn apply(&self, props: &mut Props) {
+        for (k, v) in self.properties() {
+            props.set(k, v);
+        }
+    }
+
+    /// JSON for the session's own records: the effective property text, the
+    /// byte values, and which variables were overridden.
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "prop": {
+                "dalvik.vm.heapstartsize": self.heapstartsize.text,
+                "dalvik.vm.heapgrowthlimit": self.heapgrowthlimit.text,
+                "dalvik.vm.heapsize": self.heapsize.text,
+                "dalvik.vm.heapminfree": self.heapminfree.text,
+                "dalvik.vm.heapmaxfree": self.heapmaxfree.text,
+                "dalvik.vm.heaptargetutilization": self.heaptargetutilization.text,
+            },
+            "bytes": {
+                "heapstartsize": self.heapstartsize.bytes,
+                "heapgrowthlimit": self.heapgrowthlimit.bytes,
+                "heapsize": self.heapsize.bytes,
+                "heapminfree": self.heapminfree.bytes,
+                "heapmaxfree": self.heapmaxfree.bytes,
+            },
+            "mib": {
+                "heapstartsize": self.heapstartsize.mib(),
+                "heapgrowthlimit": self.heapgrowthlimit.mib(),
+                "heapsize": self.heapsize.mib(),
+                "heapminfree": self.heapminfree.mib(),
+                "heapmaxfree": self.heapmaxfree.mib(),
+            },
+            "heaptargetutilization": self.heaptargetutilization.value,
+            "overridden": self.overrides,
+            "source": "ACOS_ART_HEAP* overrides on the stock API-34 dalvik.vm.* table",
+        })
+    }
+}
+
+/// The heap configuration a run actually used, for session metadata. A run that
+/// reached its metadata already validated the seam; an invalid value is still
+/// reported as an error object rather than silently as the defaults.
+pub fn effective_heap_json() -> serde_json::Value {
+    match HeapConfig::from_env() {
+        Ok(cfg) => cfg.to_json(),
+        Err(e) => serde_json::json!({ "error": e.to_string() }),
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct Props {
@@ -91,12 +447,12 @@ impl Props {
             ("persist.device_config.runtime_native_boot.enable_uffd_gc", "false"),
             ("dalvik.vm.isa.x86_64.variant", "x86_64"),
             ("dalvik.vm.isa.x86_64.features", "default"),
-            ("dalvik.vm.heaptargetutilization", "0.75"),
-            ("dalvik.vm.heapstartsize", "8m"),
-            ("dalvik.vm.heapgrowthlimit", "192m"),
-            ("dalvik.vm.heapsize", "512m"),
-            ("dalvik.vm.heapminfree", "512k"),
-            ("dalvik.vm.heapmaxfree", "8m"),
+            ("dalvik.vm.heaptargetutilization", DEFAULT_HEAPTARGETUTILIZATION),
+            ("dalvik.vm.heapstartsize", DEFAULT_HEAPSTARTSIZE),
+            ("dalvik.vm.heapgrowthlimit", DEFAULT_HEAPGROWTHLIMIT),
+            ("dalvik.vm.heapsize", DEFAULT_HEAPSIZE),
+            ("dalvik.vm.heapminfree", DEFAULT_HEAPMINFREE),
+            ("dalvik.vm.heapmaxfree", DEFAULT_HEAPMAXFREE),
             ("dalvik.vm.dex2oat-filter", "verify"),
             ("dalvik.vm.dex2oat-image-filter", "verify"),
             ("dalvik.vm.usejit", "true"),
@@ -113,6 +469,16 @@ impl Props {
             p.entries.insert(k.to_string(), v.to_string());
         }
         p
+    }
+
+    /// The table a **launch** serves: the stock table with the validated
+    /// `ACOS_ART_HEAP*` overrides applied. An invalid value is
+    /// `INVALID_HEAP_CONFIG`, never a silent default.
+    pub fn for_launch() -> Result<Self> {
+        let heap = HeapConfig::from_env().map_err(|e| Error::InvalidHeapConfig(e.to_string()))?;
+        let mut p = Self::android34();
+        heap.apply(&mut p);
+        Ok(p)
     }
 
     pub fn set(&mut self, key: &str, value: &str) -> &mut Self {
@@ -180,6 +546,40 @@ impl Props {
 mod tests {
     use super::*;
 
+    /// Every `ACOS_ART_HEAP*` variable, so a test can clear all six and know the
+    /// defaults it observes are really the stock table.
+    const ALL_HEAP_ENV: [&str; 6] = [
+        ENV_HEAPSTARTSIZE,
+        ENV_HEAPGROWTHLIMIT,
+        ENV_HEAPSIZE,
+        ENV_HEAPMINFREE,
+        ENV_HEAPMAXFREE,
+        ENV_HEAPTARGETUTILIZATION,
+    ];
+
+    /// The process environment is global; the heap tests mutate it, so they take
+    /// this lock and run one at a time (and restore what they found).
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn with_env(vars: &[(&'static str, &str)], f: impl FnOnce()) {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let saved: Vec<(&str, Option<String>)> =
+            ALL_HEAP_ENV.iter().map(|k| (*k, std::env::var(k).ok())).collect();
+        for k in ALL_HEAP_ENV {
+            std::env::remove_var(k);
+        }
+        for (k, v) in vars {
+            std::env::set_var(k, v);
+        }
+        f();
+        for (k, v) in saved {
+            match v {
+                Some(v) => std::env::set_var(k, v),
+                None => std::env::remove_var(k),
+            }
+        }
+    }
+
     #[test]
     fn defaults_are_servable() {
         let p = Props::android34();
@@ -197,5 +597,170 @@ mod tests {
         p.set("k", &"x".repeat(200));
         let text = p.to_string();
         assert_eq!(text.lines().last().unwrap().len(), 2 + PROP_VALUE_MAX - 1);
+    }
+
+    // ---- heap configuration seam ------------------------------------------
+
+    /// Defaults stay exactly as they are today: with no `ACOS_ART_HEAP*` set,
+    /// the table is byte-identical to the stock one and no override is claimed.
+    #[test]
+    fn heap_defaults_unchanged() {
+        with_env(&[], || {
+            let cfg = HeapConfig::from_env().expect("defaults must validate");
+            assert_eq!(cfg, HeapConfig::defaults());
+            assert!(cfg.overrides.is_empty());
+            assert_eq!(cfg.heapstartsize.text, "8m");
+            assert_eq!(cfg.heapgrowthlimit.text, "192m");
+            assert_eq!(cfg.heapsize.text, "512m");
+            assert_eq!(cfg.heapminfree.text, "512k");
+            assert_eq!(cfg.heapmaxfree.text, "8m");
+            assert_eq!(cfg.heaptargetutilization.text, "0.75");
+            assert_eq!(cfg.heapstartsize.bytes, 8 << 20);
+            assert_eq!(cfg.heapgrowthlimit.bytes, 192 << 20);
+            assert_eq!(cfg.heapsize.bytes, 512 << 20);
+
+            // The launch table is the stock table, property for property.
+            let launch = Props::for_launch().expect("defaults are valid");
+            assert_eq!(launch.to_string(), Props::android34().to_string());
+            for (k, v) in cfg.properties() {
+                assert_eq!(launch.get(k), Some(v));
+            }
+        });
+    }
+
+    /// Each override moves exactly its own property and is recorded as an
+    /// override.
+    #[test]
+    fn heap_each_override_applied() {
+        let cases: [(&'static str, &str, &str); 6] = [
+            (ENV_HEAPSTARTSIZE, "4m", "dalvik.vm.heapstartsize"),
+            (ENV_HEAPGROWTHLIMIT, "64m", "dalvik.vm.heapgrowthlimit"),
+            (ENV_HEAPSIZE, "256m", "dalvik.vm.heapsize"),
+            (ENV_HEAPMINFREE, "1m", "dalvik.vm.heapminfree"),
+            (ENV_HEAPMAXFREE, "16m", "dalvik.vm.heapmaxfree"),
+            (ENV_HEAPTARGETUTILIZATION, "0.5", "dalvik.vm.heaptargetutilization"),
+        ];
+        for (var, value, prop) in cases {
+            with_env(&[(var, value)], || {
+                let props = Props::for_launch().expect("a single override must validate");
+                assert_eq!(props.get(prop), Some(value), "{var} did not reach {prop}");
+                let cfg = HeapConfig::from_env().expect("valid");
+                assert_eq!(cfg.overrides, vec![var.to_string()]);
+                // Everything else is still the stock value.
+                for (k, v) in HeapConfig::defaults().properties() {
+                    if k != prop {
+                        assert_eq!(props.get(k), Some(v), "{var} changed {k}");
+                    }
+                }
+            });
+        }
+    }
+
+    /// Both overrides of the guarded W48 run, together, reach the table.
+    #[test]
+    fn heap_start_and_growth_override_together() {
+        with_env(
+            &[(ENV_HEAPSTARTSIZE, "4m"), (ENV_HEAPGROWTHLIMIT, "64m")],
+            || {
+                let cfg = HeapConfig::from_env().expect("4m <= 64m <= 512m");
+                assert_eq!(cfg.heapstartsize.bytes, 4 << 20);
+                assert_eq!(cfg.heapgrowthlimit.bytes, 64 << 20);
+                assert_eq!(cfg.heapsize.bytes, 512 << 20);
+                assert_eq!(cfg.overrides.len(), 2);
+                let json = cfg.to_json();
+                assert_eq!(json["prop"]["dalvik.vm.heapgrowthlimit"], "64m");
+                assert_eq!(json["bytes"]["heapgrowthlimit"], 64u64 << 20);
+                let props = Props::for_launch().expect("valid");
+                assert_eq!(props.get("dalvik.vm.heapstartsize"), Some("4m"));
+                assert_eq!(props.get("dalvik.vm.heapgrowthlimit"), Some("64m"));
+            },
+        );
+    }
+
+    /// A malformed value is refused, never replaced by the default. Both the
+    /// typed error and the launch path carry `INVALID_HEAP_CONFIG`.
+    #[test]
+    fn heap_invalid_format_rejected() {
+        let bad = [
+            "8x", "8M", "8 m", "", "m", "8.5m", "-8m", "+8m", "0x10m",
+            "99999999999999999999m", "8mm", "8g ",
+        ];
+        for value in bad {
+            let err = HeapSize::parse(ENV_HEAPSIZE, value)
+                .expect_err(&format!("{value:?} must be refused"));
+            assert_eq!(err.var, ENV_HEAPSIZE);
+            assert_eq!(err.value, value);
+            with_env(&[(ENV_HEAPSIZE, value)], || {
+                let launch = Props::for_launch().expect_err("invalid must not launch");
+                let msg = launch.to_string();
+                assert!(
+                    msg.starts_with("INVALID_HEAP_CONFIG:"),
+                    "unexpected error: {msg}"
+                );
+                assert!(msg.contains(ENV_HEAPSIZE), "error must name the variable: {msg}");
+            });
+        }
+        for value in ["0", "1", "1.5", ".5", "0.0", "abc", "0.75.1", ""] {
+            HeapUtilization::parse(ENV_HEAPTARGETUTILIZATION, value)
+                .expect_err(&format!("utilization {value:?} must be refused"));
+        }
+        for ok in ["0.75", "0.5", "0.999"] {
+            HeapUtilization::parse(ENV_HEAPTARGETUTILIZATION, ok).expect("valid utilization");
+        }
+        for ok in ["512k", "8m", "2g", "4096"] {
+            HeapSize::parse(ENV_HEAPSIZE, ok).expect("valid size");
+        }
+    }
+
+    /// `heapstartsize <= heapgrowthlimit <= heapsize`; an inverted pair is a
+    /// structured error, not a silent reorder.
+    #[test]
+    fn heap_inconsistent_ordering_rejected() {
+        with_env(&[(ENV_HEAPSTARTSIZE, "256m")], || {
+            let err = HeapConfig::from_env().expect_err("256m start > 192m growth limit");
+            assert_eq!(err.var, ENV_HEAPSTARTSIZE);
+            assert!(err.to_string().contains("heapgrowthlimit"), "{err}");
+            let msg = Props::for_launch().expect_err("must not launch").to_string();
+            assert!(msg.starts_with("INVALID_HEAP_CONFIG:"), "{msg}");
+        });
+        with_env(&[(ENV_HEAPGROWTHLIMIT, "1g")], || {
+            let err = HeapConfig::from_env().expect_err("growth limit > heap size");
+            assert_eq!(err.var, ENV_HEAPGROWTHLIMIT);
+            let msg = Props::for_launch().expect_err("must not launch").to_string();
+            assert!(msg.starts_with("INVALID_HEAP_CONFIG:"), "{msg}");
+        });
+        with_env(
+            &[(ENV_HEAPSIZE, "16m"), (ENV_HEAPGROWTHLIMIT, "32m")],
+            || {
+                HeapConfig::from_env().expect_err("32m growth limit > 16m heap");
+            },
+        );
+        // Equal is allowed (start == growthlimit == heapsize).
+        with_env(
+            &[
+                (ENV_HEAPSTARTSIZE, "64m"),
+                (ENV_HEAPGROWTHLIMIT, "64m"),
+                (ENV_HEAPSIZE, "64m"),
+            ],
+            || {
+                HeapConfig::from_env().expect("equal values are consistent");
+            },
+        );
+    }
+
+    /// The session metadata records the effective values, not the defaults.
+    #[test]
+    fn heap_metadata_reports_effective_values() {
+        with_env(&[(ENV_HEAPGROWTHLIMIT, "64m")], || {
+            let doc = effective_heap_json();
+            assert_eq!(doc["prop"]["dalvik.vm.heapgrowthlimit"], "64m");
+            assert_eq!(doc["prop"]["dalvik.vm.heapstartsize"], "8m");
+            assert_eq!(doc["overridden"][0], ENV_HEAPGROWTHLIMIT);
+            assert_eq!(doc["bytes"]["heapgrowthlimit"], 64u64 << 20);
+        });
+        with_env(&[(ENV_HEAPSTARTSIZE, "nope")], || {
+            let doc = effective_heap_json();
+            assert!(doc["error"].as_str().unwrap().contains(ENV_HEAPSTARTSIZE));
+        });
     }
 }
