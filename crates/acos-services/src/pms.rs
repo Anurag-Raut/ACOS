@@ -1174,17 +1174,14 @@ fn launch_mode_code(mode: Option<&str>) -> i32 {
 /// `IPackageManager` handler.
 pub struct PmsService {
     state: Arc<Mutex<PmsState>>,
-    _wiring: crate::host::Wiring,
+    wiring: crate::host::Wiring,
 }
 
 impl PmsService {
     /// Wrap shared PMS state.
     #[must_use]
     pub fn new(state: Arc<Mutex<PmsState>>, wiring: crate::host::Wiring) -> Self {
-        Self {
-            state,
-            _wiring: wiring,
-        }
+        Self { state, wiring }
     }
 
     /// Replace the installed package with the APK being launched.
@@ -1421,6 +1418,28 @@ impl ServiceObject for PmsService {
                     method: method.name.clone(),
                 })
             }
+            // K2/R3: read-only package queries. The permission controller is
+            // the AOSP module package (a device with the module has it); an
+            // install-source info for a locally installed APK has a null
+            // installer chain and package source, not an invented one.
+            "getPermissionControllerPackageName" => vec![Value::Str(Some(
+                "com.android.permissioncontroller".into(),
+            ))],
+            "getInstallSourceInfo" => vec![Value::TypedObject(crate::value::Parcelable::ordered(
+                "android.content.pm.InstallSourceInfo",
+                vec![
+                    Value::Str(None),
+                    Value::NamedParcelable(crate::value::Parcelable::Null),
+                    Value::Str(None),
+                    Value::Str(None),
+                    Value::Str8(None),
+                    Value::Int(0),
+                ],
+            ))],
+            "queryIntentContentProviders" => vec![Value::TypedObject(
+                parcelable::parceled_list_of(Vec::new()),
+            )],
+            "getPackageInstaller" => vec![Value::Binder(Some(self.wiring.package_installer))],
             _ => {
                 return Err(ServiceError::UnsupportedAndroidApi {
                     interface: interface.to_string(),

@@ -1255,6 +1255,22 @@ impl ServiceObject for AtmsService {
                 Vec::new()
             }
             (AtmsInterface::ClientController, "activityRelaunched") => Vec::new(),
+            // K2/R3: read-only activity queries. ACOS runs one activity in one
+            // task; a token that names it has task id 1 (AOSP returns the task
+            // id, or -1 when the token is unknown). The requested orientation
+            // is whatever the manifest asked for, defaulting to
+            // `SCREEN_ORIENTATION_UNSPECIFIED` (-1) like a real ActivityRecord.
+            (AtmsInterface::ClientController, "getTaskForActivity") => {
+                let token = binder_u64(args.first());
+                let known = state.activities.iter().any(|a| a.token == token);
+                vec![Value::Int(if known { 1 } else { -1 })]
+            }
+            (AtmsInterface::ClientController, "getRequestedOrientation") => {
+                vec![Value::Int(-1)]
+            }
+            (AtmsInterface::ClientController, "willActivityBeVisible") => {
+                vec![Value::Bool(true)]
+            }
             _ => {
                 let Some(result) = crate::ams::dispatch(&mut state.ams, interface, method, args)?
                 else {

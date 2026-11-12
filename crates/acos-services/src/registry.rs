@@ -187,6 +187,7 @@ pub fn install_with_handles(host: &mut ServiceHost) -> LiveHandles {
     // Auxiliary binders returned by other services.
     let controller = host.register_aux("android.app.IActivityClientController");
     let provider = host.register_aux("android.content.IContentProvider");
+    host.register_aux("android.content.pm.IPackageInstaller");
 
     // WMS state machine (T-29); the runtime transport owns the wire codecs.
     let wms_state = crate::wms::install(host);

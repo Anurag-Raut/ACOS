@@ -137,6 +137,9 @@ pub struct Wiring {
     pub controller: BinderId,
     /// The `IContentProvider` binder for `settings`.
     pub content_provider: BinderId,
+    /// The `IPackageInstaller` binder (`IPackageManager.getPackageInstaller`).
+    /// It is an aux node: a package query names it, but ACOS never installs.
+    pub package_installer: BinderId,
 }
 
 impl Default for Wiring {
@@ -145,6 +148,7 @@ impl Default for Wiring {
             self_binder: BinderId(0),
             controller: BinderId(0),
             content_provider: BinderId(0),
+            package_installer: BinderId(0),
         }
     }
 }
@@ -506,6 +510,11 @@ impl ServiceHost {
                 content_provider: self
                     .aux
                     .get("android.content.IContentProvider")
+                    .copied()
+                    .unwrap_or(BinderId(0)),
+                package_installer: self
+                    .aux
+                    .get("android.content.pm.IPackageInstaller")
                     .copied()
                     .unwrap_or(BinderId(0)),
             };

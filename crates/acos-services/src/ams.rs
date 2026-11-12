@@ -1436,6 +1436,18 @@ pub fn dispatch(
             }
             Vec::new()
         }
+        // K2/R3: read-only queries. The guest's real memory state is the
+        // host's `/proc/meminfo` (the guest runs in the host's memory cgroup);
+        // an empty running-process list is the honest answer for a single
+        // guest, and no other process belongs to this user in ACOS.
+        "getMemoryInfo" => {
+            let info = memory_info_parcelable();
+            vec![Value::Cond {
+                present: true,
+                values: vec![Value::Parcelable(info)],
+            }]
+        }
+        "getRunningAppProcesses" => vec![Value::List(Some(Vec::new()))],
         _ => return Ok(None),
     };
 
@@ -1443,6 +1455,43 @@ pub fn dispatch(
         reply,
         deliveries: Vec::new(),
     }))
+}
+
+/// `android.app.ActivityManager$MemoryInfo` from the host's real memory state.
+fn memory_info_parcelable() -> crate::value::Parcelable {
+    let mut total_kb = 0u64;
+    let mut avail_kb = 0u64;
+    if let Ok(text) = std::fs::read_to_string("/proc/meminfo") {
+        for line in text.lines() {
+            let mut fields = line.split_whitespace();
+            match fields.next() {
+                Some("MemTotal:") => {
+                    total_kb = fields.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+                }
+                Some("MemAvailable:") => {
+                    avail_kb = fields.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+                }
+                _ => {}
+            }
+        }
+    }
+    let total = total_kb.saturating_mul(1024);
+    let avail = avail_kb.saturating_mul(1024);
+    let threshold = total / 10;
+    crate::value::Parcelable::ordered(
+        "android.app.ActivityManager$MemoryInfo",
+        vec![
+            Value::Long(i64::try_from(avail).unwrap_or(0)),
+            Value::Long(i64::try_from(total).unwrap_or(0)),
+            Value::Long(i64::try_from(threshold).unwrap_or(0)),
+            Value::Long(i64::try_from(total).unwrap_or(0)),
+            Value::Int(i32::from(avail < threshold)),
+            Value::Long(i64::try_from(total / 8).unwrap_or(0)),
+            Value::Long(i64::try_from(total / 6).unwrap_or(0)),
+            Value::Long(i64::try_from(total / 4).unwrap_or(0)),
+            Value::Long(i64::try_from(total / 3).unwrap_or(0)),
+        ],
+    )
 }
 
 fn intent_from_bundle(bundle: &Bundle) -> IntentFacts {

@@ -1106,6 +1106,13 @@ impl ServiceObject for ConnectivityService {
                 vec![Value::TypedObject(crate::value::Parcelable::Null)]
             }
             "getActiveNetwork" => vec![Value::TypedObject(crate::value::Parcelable::Null)],
+            // Offline semantics: no network has capabilities. AOSP answers
+            // `null` for a null/unknown `Network`, and ACOS has no default
+            // network to describe, so both the network test and the capability
+            // query are the honest empty answer.
+            "getNetworkCapabilities" | "getNetworkCapabilitiesForPackage" => {
+                vec![Value::TypedObject(crate::value::Parcelable::Null)]
+            }
             "getActiveNetworkInfo" => {
                 vec![Value::TypedObject(crate::value::Parcelable::Null)]
             }

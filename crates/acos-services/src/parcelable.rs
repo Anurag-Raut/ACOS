@@ -1433,6 +1433,44 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Full,
     },
+    // ---- K2/R3: read-only query replies -------------------------------------
+    ParcelableSpec {
+        class: "android.app.ActivityManager$MemoryInfo",
+        fields: &[
+            FieldOp::Long, // availMem
+            FieldOp::Long, // totalMem
+            FieldOp::Long, // threshold
+            FieldOp::Long, // advertisedMem
+            FieldOp::Int,  // lowMemory
+            FieldOp::Long, // hiddenAppThreshold
+            FieldOp::Long, // secondaryServerThreshold
+            FieldOp::Long, // visibleAppThreshold
+            FieldOp::Long, // foregroundAppThreshold
+        ],
+        verification: Verification::Full,
+    },
+    ParcelableSpec {
+        class: "android.content.pm.InstallSourceInfo",
+        fields: &[
+            FieldOp::Str16, // initiatingPackageName
+            FieldOp::Named("android.content.pm.SigningInfo"),
+            FieldOp::Str16, // originatingPackageName
+            FieldOp::Str16, // localPackageName
+            FieldOp::Str8,  // packageSource
+            FieldOp::Int,   // initiatingPackageSigningInfo
+        ],
+        verification: Verification::Prefix,
+    },
+    ParcelableSpec {
+        class: "android.net.Network",
+        fields: &[FieldOp::Int],
+        verification: Verification::Full,
+    },
+    ParcelableSpec {
+        class: "android.os.Messenger",
+        fields: &[FieldOp::Binder],
+        verification: Verification::Full,
+    },
     // ---- K2/R2: notification channel + group (API-34 image layout) ----------
     //
     // Transcribed from the image's `NotificationChannel(Parcel)` constructor
