@@ -44,7 +44,7 @@ use serde_json::{json, Value};
 
 use crate::trust::Trust;
 
-use super::art::{m5_now_us, m5_trace, ArtSession, GuestExit};
+use super::art::{m5_now_us, m5_trace, p3_enabled, p3_trace, ArtSession, GuestExit};
 use super::{Engine, SessionBackend};
 
 /// The engine label every ART reply carries.
@@ -635,6 +635,7 @@ impl ServeEngine {
         // a verb whose *own* preconditions need the tree (tap by selector) is
         // still allowed: navigation only, never a pass.
         let started = std::time::Instant::now();
+        let p3_t_call = m5_now_us();
         let outcome = match tool {
             "acos_observe_tree" => observe_tree(&mut session, args),
             "acos_observe" => observe(&mut session, args),
@@ -663,6 +664,7 @@ impl ServeEngine {
         };
         match outcome {
             Ok(result) => {
+                let p3_t_outcome = m5_now_us();
                 let mut result = result;
                 result["session_id"] = json!(id);
                 label_meta(&mut result, ENGINE_ART, trust, evidence_for(tool));
@@ -676,7 +678,17 @@ impl ServeEngine {
                 )
                 .with_session_id(id.to_string())
                 .with_value_result(result);
-                envelope.with_capabilities(capabilities_for(tool))
+                let envelope = envelope.with_capabilities(capabilities_for(tool));
+                if p3_enabled() {
+                    p3_trace(
+                        "serve",
+                        "serve.call_art",
+                        p3_t_call,
+                        m5_now_us(),
+                        &format!("tool={tool} outcome_us={}", p3_t_outcome.saturating_sub(p3_t_call)),
+                    );
+                }
+                envelope
             }
             Err(error) => art_error(request_id, Some(id), trust, &error),
         }
@@ -1012,8 +1024,26 @@ fn observe_tree(session: &mut ArtSession, args: &Value) -> Result<Value, Backend
         .get("max_nodes")
         .and_then(Value::as_u64)
         .unwrap_or(2000) as usize;
+    let t_begin = m5_now_us();
     let tree = session.tree()?;
+    let t_tree = m5_now_us();
     let (max_nodes, node_count, truncated, tree_value) = tree_json(&tree, max_nodes);
+    let t_end = m5_now_us();
+    if p3_enabled() {
+        p3_trace(
+            "serve",
+            "serve.observe_tree",
+            t_begin,
+            t_end,
+            &format!(
+                "engine_us={} tree_json_us={} nodes={} tree_bytes={}",
+                t_tree.saturating_sub(t_begin),
+                t_end.saturating_sub(t_tree),
+                node_count,
+                serde_json::to_vec(&tree_value).map(|v| v.len()).unwrap_or(0)
+            ),
+        );
+    }
     Ok(json!({
         "package": session.package(),
         "stage_reached": "first_frame",

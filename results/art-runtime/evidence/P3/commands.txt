@@ -1,0 +1,17 @@
+# P3 (M7 UI tree) measurement, 2026-11-12, /home/Qui/Projects/acos @ HEAD ecf7fa2 + P3_TRACE hunks
+# Build (release, from HEAD):
+CARGO_TARGET_DIR=.cache/p3-target cargo build --release -p acos-cli -p acos-art --offline
+# Measurement (one acquisition; the harness holds one `acos serve` ART session):
+P3_TRACE=$PWD/.cache/p3/trace2.log tools/art-runtime/run-exclusive.sh --task P3 -- \
+  tools/guarded.sh --mem 8G --time 900 -- \
+  python3 -I tools/art-runtime/d2_warm.py --acos .cache/p3-target/release/acos \
+  --phase latency --rep 2 --samples 32 --resets 0 --warmup 2 --settle-short 3 \
+  --outdir .cache/p3/run2
+# Replication run (rep 1, 24 samples + 2 resets; same binary modulo the single-write trace fix):
+P3_TRACE=$PWD/.cache/p3/trace.log tools/art-runtime/run-exclusive.sh --task P3 -- \
+  tools/guarded.sh --mem 8G --time 900 -- \
+  python3 -I tools/art-runtime/d2_warm.py --acos .cache/p3-target/release/acos \
+  --phase latency --rep 1 --samples 24 --resets 2 --warmup 2 --settle-short 3 \
+  --outdir .cache/p3/run1
+# Tests (required green before commit):
+CARGO_TARGET_DIR=.cache/p3-target cargo test -p acos-art -p acos-cli --offline -- --test-threads=1

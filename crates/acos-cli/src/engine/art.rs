@@ -1015,6 +1015,9 @@ impl ArtSession {
         let line = request.to_string();
         let cmd = request.get("cmd").and_then(|v| v.as_str()).unwrap_or("?").to_string();
         let t_write = m5_now_us();
+        if p3_enabled() && cmd == "tree" {
+            p3_mark("cli", "cli.cmd_request", &format!("bytes={}", line.len()));
+        }
         if let Err(error) = writeln!(stdin, "{line}").and_then(|_| stdin.flush()) {
             if crate::failure::is_disk_full(&error) {
                 return Err(acos_protocol::ProtocolError::new(
@@ -1038,6 +1041,15 @@ impl ArtSession {
             t_written,
             &format!("cmd={cmd} bytes={}", line.len()),
         );
+        if p3_enabled() && cmd == "tree" {
+            p3_trace(
+                "cli",
+                "cli.cmd_write",
+                t_write,
+                t_written,
+                &format!("bytes={}", line.len()),
+            );
+        }
         let timeout = self.timeout;
         let reply = self
             .read_line(timeout, "command")
@@ -1050,6 +1062,15 @@ impl ArtSession {
             t_reply,
             &format!("cmd={cmd} reply_bytes={}", reply.len()),
         );
+        if cmd == "tree" && p3_enabled() {
+            p3_trace(
+                "cli",
+                "cli.cmd_wait",
+                t_written,
+                t_reply,
+                &format!("reply_bytes={}", reply.len()),
+            );
+        }
         let reply: serde_json::Value = serde_json::from_str(&reply).map_err(|error| {
             acos_protocol::ProtocolError::new(
                 ErrorCode::Internal,
@@ -1060,6 +1081,16 @@ impl ArtSession {
                  Capture the session's stderr tail and report the harness bug.",
             )
         })?;
+        let t_parsed = m5_now_us();
+        if cmd == "tree" && p3_enabled() {
+            p3_trace(
+                "cli",
+                "cli.reply_json_parse",
+                t_reply,
+                t_parsed,
+                &format!("reply_bytes={}", reply.to_string().len()),
+            );
+        }
         if reply.get("ok").and_then(|v| v.as_bool()) != Some(true) {
             let code = reply
                 .get("code")
@@ -1337,7 +1368,20 @@ impl ArtSession {
             .unwrap_or("")
             .to_string();
         let png = match reply.get("png").and_then(|v| v.as_str()) {
-            Some(path) => read_png(Path::new(path))?,
+            Some(path) => {
+                let t_png = m5_now_us();
+                let bytes = read_png(Path::new(path))?;
+                if p3_enabled() {
+                    p3_trace(
+                        "cli",
+                        "cli.png_read",
+                        t_png,
+                        m5_now_us(),
+                        &format!("png_bytes={}", bytes.len()),
+                    );
+                }
+                bytes
+            }
             None => Vec::new(),
         };
         self.seen_seq = self.seen_seq.max(seq);
@@ -1363,7 +1407,20 @@ impl ArtSession {
             }
             self.window_offsets = offsets;
         }
-        let tree = ui_tree_from_json(&self.package, self.frame_meta(seq, &md5), tree_value)?;
+        let tree = {
+            let t_tree = m5_now_us();
+            let tree = ui_tree_from_json(&self.package, self.frame_meta(seq, &md5), tree_value)?;
+            if p3_enabled() {
+                p3_trace(
+                    "cli",
+                    "cli.tree_parse",
+                    t_tree,
+                    m5_now_us(),
+                    &format!("frame_seq={seq}"),
+                );
+            }
+            tree
+        };
         let signature = tree_signature(&tree);
         let captured_at_ms = now_unix_ms();
         self.cached = Some(CachedFrame {
@@ -1382,7 +1439,9 @@ impl ArtSession {
     /// publishes a new frame, so the reply's tree and PNG share one `frame_seq`.
     fn request_tree(&mut self) -> Result<(), BackendError> {
         let started = Instant::now();
+        let t0 = m5_now_us();
         let reply = self.command(serde_json::json!({"cmd":"tree"}))?;
+        let t1 = m5_now_us();
         let mut timing = PhaseTiming {
             guest_ms: started.elapsed().as_millis() as u64,
             absorb_ms: 0,
@@ -1390,6 +1449,15 @@ impl ArtSession {
         let absorb_started = Instant::now();
         let result = self.absorb(&reply);
         timing.absorb_ms = absorb_started.elapsed().as_millis() as u64;
+        if p3_enabled() {
+            p3_trace(
+                "cli",
+                "cli.request_tree",
+                t0,
+                m5_now_us(),
+                &format!("reply_us={}", t1.saturating_sub(t0)),
+            );
+        }
         self.last_phase = Some(timing);
         result
     }
@@ -2016,6 +2084,48 @@ pub(crate) fn m5_trace(event: &str, t0: u128, t1: u128, extra: &str) {
             let _ = file.flush();
         }
     }
+}
+
+/// P3: is the tree-diagnosis trace on? Cached once.
+pub(crate) fn p3_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var_os("P3_TRACE").is_some())
+}
+
+/// P3: env-gated phase trace for one fresh tree request. `P3_TRACE=<path>`
+/// appends one line per phase; unset means no work at all. Trace only.
+pub(crate) fn p3_trace(proc_name: &str, event: &str, t0: u128, t1: u128, extra: &str) {
+    use std::io::Write;
+    static SINK: std::sync::OnceLock<Option<std::sync::Mutex<std::fs::File>>> =
+        std::sync::OnceLock::new();
+    let sink = SINK.get_or_init(|| {
+        std::env::var_os("P3_TRACE").and_then(|path| {
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .ok()
+        })
+        .map(std::sync::Mutex::new)
+    });
+    if let Some(file) = sink {
+        if let Ok(mut file) = file.lock() {
+            // One write per line: several host processes append to the same
+            // file, so a fragmented `write!` would interleave two lines.
+            let line = format!(
+                "P3TRACE proc={proc_name} ev={event} t_us={t1} dur_us={} {extra}\n",
+                t1.saturating_sub(t0)
+            );
+            let _ = file.write_all(line.as_bytes());
+            let _ = file.flush();
+        }
+    }
+}
+
+/// P3: a single timestamped marker (duration 0).
+pub(crate) fn p3_mark(proc_name: &str, event: &str, extra: &str) {
+    let t = m5_now_us();
+    p3_trace(proc_name, event, t, t, extra);
 }
 
 fn resolve_binary() -> Result<PathBuf, BackendError> {

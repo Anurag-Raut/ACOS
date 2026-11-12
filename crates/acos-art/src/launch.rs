@@ -1610,6 +1610,24 @@ fn drain_tee_lines<R: std::io::Read>(
                             object.insert("windows".into(), windows.clone());
                         }
                     }
+                    if p3_enabled() {
+                        // Guest traversal + tree JSON build (`emit_us`), guest
+                        // stamp at JSON build (`time`), and host receipt after
+                        // the pipe write and the host's own JSON parse.
+                        let emit_us = value.get("emit_us").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let guest_ms = value.get("time").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let now_us = p3_now_us();
+                        let lag_us = now_us.saturating_sub(guest_ms as u128 * 1000);
+                        p3_mark(
+                            "art",
+                            "art.probe_parse",
+                            &format!(
+                                "seq={seq} emit_us={emit_us} guest_ms={guest_ms} \
+                                 probe_lag_us={lag_us} line_bytes={}",
+                                json.len()
+                            ),
+                        );
+                    }
                     let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
                     let newer = state.latest.as_ref().map(|p| p.seq < seq).unwrap_or(true);
                     if newer {
@@ -1700,9 +1718,33 @@ fn capture_c1(
     };
     let t_encode = m5_now_us();
     m5_trace("art.capture_composite", t_capture, t_encode, "");
+    if p3_enabled() {
+        p3_trace(
+            "art",
+            "art.capture_composite",
+            t_capture,
+            t_encode,
+            &format!(
+                "w={} h={} stride={} rgba={}",
+                frame.width,
+                frame.height,
+                frame.stride,
+                frame.rgba.len()
+            ),
+        );
+    }
     let png = encode_png_rgba(frame.width, frame.height, frame.stride, &frame.rgba);
     let t_write = m5_now_us();
     m5_trace("art.png_encode", t_encode, t_write, &format!("png_bytes={}", png.len()));
+    if p3_enabled() {
+        p3_trace(
+            "art",
+            "art.png_encode",
+            t_encode,
+            t_write,
+            &format!("png_bytes={}", png.len()),
+        );
+    }
     fs::create_dir_all(dir)?;
     *seq += 1;
     let path = dir.join(format!(
@@ -1712,10 +1754,17 @@ fn capture_c1(
     fs::write(&path, &png)?;
     let t_md5 = m5_now_us();
     m5_trace("art.png_write", t_write, t_md5, "");
+    if p3_enabled() {
+        p3_trace("art", "art.png_write", t_write, t_md5, "");
+    }
     let md5 = md5_hex_file(&path).unwrap_or_else(|| format!("{:016x}", frame.fnv1a));
     let t_end = m5_now_us();
     m5_trace("art.md5_file", t_md5, t_end, "");
     m5_trace("art.capture_total", t_capture, t_end, "");
+    if p3_enabled() {
+        p3_trace("art", "art.md5_file", t_md5, t_end, "");
+        p3_trace("art", "art.capture_total", t_capture, t_end, "");
+    }
     Ok(Some(Capture {
         seq: *seq,
         generation: frame.generation,
@@ -1778,6 +1827,57 @@ fn m5_trace(event: &str, t0: u128, t1: u128, extra: &str) {
             let _ = file.flush();
         }
     }
+}
+
+/// P3: microseconds since the Unix epoch (realtime), same clock as `m5_now_us`
+/// and the serve-side trace so one request's phases line up across processes.
+fn p3_now_us() -> u128 {
+    m5_now_us()
+}
+
+/// P3: is the tree-diagnosis trace on? Cached once; unset means every `p3_*`
+/// call is a no-op and no extra work is done.
+fn p3_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var_os("P3_TRACE").is_some())
+}
+
+/// P3: env-gated per-phase trace for one fresh tree request.
+///
+/// `P3_TRACE=<path>` appends one line per phase (append-only, opened once);
+/// unset means no work at all. Trace only: no behaviour change.
+fn p3_trace(proc_name: &str, event: &str, t0: u128, t1: u128, extra: &str) {
+    use std::io::Write;
+    static SINK: std::sync::OnceLock<Option<std::sync::Mutex<std::fs::File>>> =
+        std::sync::OnceLock::new();
+    let sink = SINK.get_or_init(|| {
+        std::env::var_os("P3_TRACE").and_then(|path| {
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .ok()
+        })
+        .map(std::sync::Mutex::new)
+    });
+    if let Some(file) = sink {
+        if let Ok(mut file) = file.lock() {
+            // One write per line: several host processes append to the same
+            // file, so a fragmented `write!` would interleave two lines.
+            let line = format!(
+                "P3TRACE proc={proc_name} ev={event} t_us={t1} dur_us={} {extra}\n",
+                t1.saturating_sub(t0)
+            );
+            let _ = file.write_all(line.as_bytes());
+            let _ = file.flush();
+        }
+    }
+}
+
+/// P3: a single timestamped marker (duration 0).
+fn p3_mark(proc_name: &str, event: &str, extra: &str) {
+    let t = p3_now_us();
+    p3_trace(proc_name, event, t, t, extra);
 }
 
 fn protocol_write(value: &serde_json::Value) {
@@ -2165,6 +2265,8 @@ fn interactive_serve(
         let cmd = request.get("cmd").and_then(|v| v.as_str()).unwrap_or("");
         match cmd {
             "tree" => {
+                // P3: absolute phase marks across processes (epoch microseconds).
+                let p3_t_enter = p3_now_us();
                 // Bind the tree and the pixels to the same settled state: wait
                 // for a probe sample taken after the newest stored frame and for
                 // the frame stream to go quiet, then capture.
@@ -2178,6 +2280,7 @@ fn interactive_serve(
                     0,
                     None,
                 );
+                let p3_t_settled = p3_now_us();
                 let probe = match settled {
                     SettleEnd::Settled(settled) => settled.probe,
                     SettleEnd::Timeout { .. } | SettleEnd::Unsupported(_) => {
@@ -2218,7 +2321,31 @@ fn interactive_serve(
                         map.insert("tree".into(), probe.tree.clone());
                         map.insert("probe_seq".into(), serde_json::json!(probe.seq));
                         map.insert("probe_at_ms".into(), serde_json::json!(probe.at_ms));
+                        let p3_t_built = p3_now_us();
                         protocol_write(&reply);
+                        let p3_t_reply = p3_now_us();
+                        if p3_enabled() {
+                            let tree_bytes = serde_json::to_vec(&probe.tree)
+                                .map(|value| value.len())
+                                .unwrap_or(0);
+                            p3_trace(
+                                "art",
+                                "art.tree",
+                                p3_t_enter,
+                                p3_t_reply,
+                                &format!(
+                                    "settle_us={} capture_us={} build_reply_us={} \
+                                     probe_seq={} probe_at_ms={} frame_seq={} tree_bytes={}",
+                                    p3_t_settled.saturating_sub(p3_t_enter),
+                                    p3_t_built.saturating_sub(p3_t_settled),
+                                    p3_t_reply.saturating_sub(p3_t_built),
+                                    probe.seq,
+                                    probe.at_ms,
+                                    capture.seq,
+                                    tree_bytes
+                                ),
+                            );
+                        }
                         evidence.push(serde_json::json!({
                             "cmd": "tree", "ok": true, "frame_seq": capture.seq,
                             "buffer_generation": capture.generation,

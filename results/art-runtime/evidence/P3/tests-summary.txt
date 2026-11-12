@@ -1,0 +1,9 @@
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.98s
+test result: ok. 3 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.06s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo test rc=0
+P3 tests: 28 suites, all "test result: ok"; rc=0; binaries (release):
+a345c9b029d75e2d8d1be48039262e66068372aeec7b08141a0940e264463b95  .cache/p3-target/release/acos
+ef866738281b2660a12bea7c978d62c206aa1860a9a8bf02a0599688cc8ac676  .cache/p3-target/release/acos-art

@@ -1,0 +1,1116 @@
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050125041 dur_us=0 seq=1 emit_us=0 guest_ms=1794475050124 probe_lag_us=1039 line_bytes=3837
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475050125951 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475050125962 dur_us=16 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050158616 dur_us=0 seq=2 emit_us=0 guest_ms=1794475050158 probe_lag_us=614 line_bytes=3836
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050208700 dur_us=0 seq=3 emit_us=0 guest_ms=1794475050208 probe_lag_us=700 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050258891 dur_us=0 seq=4 emit_us=0 guest_ms=1794475050258 probe_lag_us=889 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050308925 dur_us=0 seq=5 emit_us=0 guest_ms=1794475050308 probe_lag_us=923 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050359053 dur_us=0 seq=6 emit_us=0 guest_ms=1794475050358 probe_lag_us=1051 line_bytes=3837
+P3TRACE proc=art ev=art.capture_composite t_us=1794475050395223 dur_us=12521 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475050404681 dur_us=9458 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475050405777 dur_us=1096 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050408923 dur_us=0 seq=7 emit_us=0 guest_ms=1794475050408 probe_lag_us=922 line_bytes=3836
+P3TRACE proc=art ev=art.md5_file t_us=1794475050417406 dur_us=11629 
+P3TRACE proc=art ev=art.capture_total t_us=1794475050417406 dur_us=34704 
+P3TRACE proc=art ev=art.tree t_us=1794475050417847 dur_us=291871 settle_us=256726 capture_us=35085 build_reply_us=60 probe_seq=6 probe_at_ms=1794475050359 frame_seq=1 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475050417874 dur_us=291912 reply_bytes=4400
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475050417926 dur_us=52 reply_bytes=4400
+P3TRACE proc=cli ev=cli.png_read t_us=1794475050419655 dur_us=1707 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475050419689 dur_us=21 frame_seq=1
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475050419698 dur_us=293755 reply_us=292004
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050459140 dur_us=0 seq=8 emit_us=0 guest_ms=1794475050459 probe_lag_us=138 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050509067 dur_us=0 seq=9 emit_us=0 guest_ms=1794475050508 probe_lag_us=1066 line_bytes=3836
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050559184 dur_us=0 seq=10 emit_us=0 guest_ms=1794475050559 probe_lag_us=182 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050609343 dur_us=0 seq=11 emit_us=0 guest_ms=1794475050609 probe_lag_us=340 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050659226 dur_us=0 seq=12 emit_us=0 guest_ms=1794475050659 probe_lag_us=224 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050709360 dur_us=0 seq=13 emit_us=0 guest_ms=1794475050709 probe_lag_us=358 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050759425 dur_us=0 seq=14 emit_us=0 guest_ms=1794475050759 probe_lag_us=424 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050809601 dur_us=0 seq=15 emit_us=0 guest_ms=1794475050809 probe_lag_us=599 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050859679 dur_us=0 seq=16 emit_us=0 guest_ms=1794475050859 probe_lag_us=677 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050909725 dur_us=0 seq=17 emit_us=0 guest_ms=1794475050909 probe_lag_us=723 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475050959802 dur_us=0 seq=18 emit_us=0 guest_ms=1794475050959 probe_lag_us=801 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051009933 dur_us=0 seq=19 emit_us=0 guest_ms=1794475051009 probe_lag_us=932 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051059934 dur_us=0 seq=20 emit_us=0 guest_ms=1794475051059 probe_lag_us=932 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051109934 dur_us=0 seq=21 emit_us=0 guest_ms=1794475051109 probe_lag_us=932 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051160004 dur_us=0 seq=22 emit_us=0 guest_ms=1794475051159 probe_lag_us=1003 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051210072 dur_us=0 seq=23 emit_us=0 guest_ms=1794475051209 probe_lag_us=1071 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051260182 dur_us=0 seq=24 emit_us=0 guest_ms=1794475051260 probe_lag_us=180 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051310240 dur_us=0 seq=25 emit_us=0 guest_ms=1794475051310 probe_lag_us=238 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051360296 dur_us=0 seq=26 emit_us=0 guest_ms=1794475051360 probe_lag_us=295 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051410371 dur_us=0 seq=27 emit_us=0 guest_ms=1794475051410 probe_lag_us=369 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051460434 dur_us=0 seq=28 emit_us=0 guest_ms=1794475051460 probe_lag_us=432 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051510509 dur_us=0 seq=29 emit_us=0 guest_ms=1794475051510 probe_lag_us=507 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051560674 dur_us=0 seq=30 emit_us=0 guest_ms=1794475051560 probe_lag_us=672 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051610675 dur_us=0 seq=31 emit_us=0 guest_ms=1794475051610 probe_lag_us=673 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051660858 dur_us=0 seq=32 emit_us=0 guest_ms=1794475051660 probe_lag_us=856 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051710848 dur_us=0 seq=33 emit_us=0 guest_ms=1794475051710 probe_lag_us=847 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051760971 dur_us=0 seq=34 emit_us=0 guest_ms=1794475051760 probe_lag_us=969 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051811106 dur_us=0 seq=35 emit_us=0 guest_ms=1794475051811 probe_lag_us=104 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051861114 dur_us=0 seq=36 emit_us=0 guest_ms=1794475051861 probe_lag_us=112 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051911177 dur_us=0 seq=37 emit_us=0 guest_ms=1794475051911 probe_lag_us=176 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475051961258 dur_us=0 seq=38 emit_us=0 guest_ms=1794475051961 probe_lag_us=257 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052011337 dur_us=0 seq=39 emit_us=0 guest_ms=1794475052011 probe_lag_us=335 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052061347 dur_us=0 seq=40 emit_us=0 guest_ms=1794475052061 probe_lag_us=346 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052111368 dur_us=0 seq=41 emit_us=0 guest_ms=1794475052111 probe_lag_us=367 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052161486 dur_us=0 seq=42 emit_us=0 guest_ms=1794475052161 probe_lag_us=485 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052211497 dur_us=0 seq=43 emit_us=0 guest_ms=1794475052211 probe_lag_us=496 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052261590 dur_us=0 seq=44 emit_us=0 guest_ms=1794475052261 probe_lag_us=589 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052311639 dur_us=0 seq=45 emit_us=0 guest_ms=1794475052311 probe_lag_us=637 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052361747 dur_us=0 seq=46 emit_us=0 guest_ms=1794475052361 probe_lag_us=746 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052411863 dur_us=0 seq=47 emit_us=0 guest_ms=1794475052411 probe_lag_us=861 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052461832 dur_us=0 seq=48 emit_us=0 guest_ms=1794475052461 probe_lag_us=831 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052511977 dur_us=0 seq=49 emit_us=0 guest_ms=1794475052511 probe_lag_us=976 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052562004 dur_us=0 seq=50 emit_us=0 guest_ms=1794475052561 probe_lag_us=1003 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052612059 dur_us=0 seq=51 emit_us=0 guest_ms=1794475052611 probe_lag_us=1058 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052662141 dur_us=0 seq=52 emit_us=0 guest_ms=1794475052662 probe_lag_us=140 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052712164 dur_us=0 seq=53 emit_us=0 guest_ms=1794475052712 probe_lag_us=163 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052762351 dur_us=0 seq=54 emit_us=0 guest_ms=1794475052762 probe_lag_us=350 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052812357 dur_us=0 seq=55 emit_us=0 guest_ms=1794475052812 probe_lag_us=356 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052862421 dur_us=0 seq=56 emit_us=0 guest_ms=1794475052862 probe_lag_us=419 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052912484 dur_us=0 seq=57 emit_us=0 guest_ms=1794475052912 probe_lag_us=482 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475052962645 dur_us=0 seq=58 emit_us=0 guest_ms=1794475052962 probe_lag_us=644 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053012630 dur_us=0 seq=59 emit_us=0 guest_ms=1794475053012 probe_lag_us=629 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053062738 dur_us=0 seq=60 emit_us=0 guest_ms=1794475053062 probe_lag_us=737 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053112868 dur_us=0 seq=61 emit_us=0 guest_ms=1794475053112 probe_lag_us=866 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053162901 dur_us=0 seq=62 emit_us=0 guest_ms=1794475053162 probe_lag_us=899 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053213002 dur_us=0 seq=63 emit_us=0 guest_ms=1794475053212 probe_lag_us=1000 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053263068 dur_us=0 seq=64 emit_us=0 guest_ms=1794475053262 probe_lag_us=1066 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053313182 dur_us=0 seq=65 emit_us=0 guest_ms=1794475053313 probe_lag_us=180 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053363271 dur_us=0 seq=66 emit_us=0 guest_ms=1794475053363 probe_lag_us=270 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053413279 dur_us=0 seq=67 emit_us=0 guest_ms=1794475053413 probe_lag_us=279 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053432782 dur_us=12402 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475053441197 dur_us=8415 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475053442315 dur_us=1118 
+P3TRACE proc=art ev=art.md5_file t_us=1794475053454471 dur_us=12156 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053454471 dur_us=34091 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053457987 dur_us=37661 tool=acos_observe outcome_us=37654
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053463369 dur_us=0 seq=68 emit_us=0 guest_ms=1794475053463 probe_lag_us=368 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053471524 dur_us=12920 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475053479876 dur_us=8352 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475053481006 dur_us=1130 
+P3TRACE proc=art ev=art.md5_file t_us=1794475053492790 dur_us=11784 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053492790 dur_us=34186 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053496190 dur_us=37610 tool=acos_observe outcome_us=37604
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053509419 dur_us=12504 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053513572 dur_us=0 seq=69 emit_us=0 guest_ms=1794475053513 probe_lag_us=570 line_bytes=3838
+P3TRACE proc=art ev=art.png_encode t_us=1794475053517869 dur_us=8450 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475053519011 dur_us=1142 
+P3TRACE proc=art ev=art.md5_file t_us=1794475053530487 dur_us=11476 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053530487 dur_us=33572 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053532831 dur_us=35950 tool=acos_observe outcome_us=35945
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053545651 dur_us=12161 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475053554128 dur_us=8477 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475053555421 dur_us=1293 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053563554 dur_us=0 seq=70 emit_us=0 guest_ms=1794475053563 probe_lag_us=553 line_bytes=3838
+P3TRACE proc=art ev=art.md5_file t_us=1794475053567337 dur_us=11916 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053567337 dur_us=33847 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053569370 dur_us=35921 tool=acos_observe outcome_us=35916
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053582489 dur_us=12563 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475053591184 dur_us=8695 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475053592321 dur_us=1137 
+P3TRACE proc=art ev=art.md5_file t_us=1794475053604305 dur_us=11984 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053604305 dur_us=34379 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053606624 dur_us=36734 tool=acos_observe outcome_us=36729
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053613617 dur_us=0 seq=71 emit_us=0 guest_ms=1794475053613 probe_lag_us=616 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053619304 dur_us=12020 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475053627617 dur_us=8313 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475053628753 dur_us=1136 
+P3TRACE proc=art ev=art.md5_file t_us=1794475053640486 dur_us=11733 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053640486 dur_us=33202 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053642371 dur_us=35111 tool=acos_observe outcome_us=35106
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053654923 dur_us=11990 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475053663269 dur_us=8346 png_bytes=9545882
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053663865 dur_us=0 seq=72 emit_us=0 guest_ms=1794475053663 probe_lag_us=863 line_bytes=3838
+P3TRACE proc=art ev=art.png_write t_us=1794475053664521 dur_us=1252 
+P3TRACE proc=art ev=art.md5_file t_us=1794475053675992 dur_us=11471 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053675992 dur_us=33059 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053678343 dur_us=35442 tool=acos_observe outcome_us=35436
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053691656 dur_us=12674 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475053700497 dur_us=8841 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475053701634 dur_us=1137 
+P3TRACE proc=art ev=art.md5_file t_us=1794475053712864 dur_us=11230 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053712864 dur_us=33882 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053713696 dur_us=0 seq=73 emit_us=0 guest_ms=1794475053713 probe_lag_us=695 line_bytes=3837
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053715279 dur_us=36344 tool=acos_observe outcome_us=36338
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053727794 dur_us=11769 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475053735580 dur_us=7786 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475053736689 dur_us=1109 
+P3TRACE proc=art ev=art.md5_file t_us=1794475053746550 dur_us=9861 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053746550 dur_us=30525 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053748394 dur_us=32420 tool=acos_observe outcome_us=32416
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053758505 dur_us=9598 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053763828 dur_us=0 seq=74 emit_us=0 guest_ms=1794475053763 probe_lag_us=826 line_bytes=3838
+P3TRACE proc=art ev=art.png_encode t_us=1794475053765085 dur_us=6580 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475053766210 dur_us=1125 
+P3TRACE proc=art ev=art.md5_file t_us=1794475053775661 dur_us=9451 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053775661 dur_us=26754 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053777702 dur_us=28826 tool=acos_observe outcome_us=28821
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053788453 dur_us=10399 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475053795547 dur_us=7094 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475053796582 dur_us=1035 
+P3TRACE proc=art ev=art.md5_file t_us=1794475053805478 dur_us=8896 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053805478 dur_us=27424 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053807214 dur_us=29189 tool=acos_observe outcome_us=29184
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053813850 dur_us=0 seq=75 emit_us=0 guest_ms=1794475053813 probe_lag_us=850 line_bytes=3837
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053817662 dur_us=9876 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475053824673 dur_us=7011 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475053825776 dur_us=1103 
+P3TRACE proc=art ev=art.md5_file t_us=1794475053835078 dur_us=9302 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053835078 dur_us=27292 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053837189 dur_us=29433 tool=acos_observe outcome_us=29430
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053847583 dur_us=10042 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475053856250 dur_us=8667 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475053857280 dur_us=1030 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053864006 dur_us=0 seq=76 emit_us=0 guest_ms=1794475053863 probe_lag_us=1005 line_bytes=3838
+P3TRACE proc=art ev=art.md5_file t_us=1794475053866312 dur_us=9032 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053866312 dur_us=28771 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053868228 dur_us=30710 tool=acos_observe outcome_us=30704
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053878656 dur_us=10036 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475053885480 dur_us=6824 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475053886625 dur_us=1145 
+P3TRACE proc=art ev=art.md5_file t_us=1794475053895944 dur_us=9319 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053895944 dur_us=27324 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053897757 dur_us=29167 tool=acos_observe outcome_us=29163
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053907625 dur_us=9520 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053914067 dur_us=0 seq=77 emit_us=0 guest_ms=1794475053914 probe_lag_us=66 line_bytes=3838
+P3TRACE proc=art ev=art.png_encode t_us=1794475053914277 dur_us=6652 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475053915411 dur_us=1134 
+P3TRACE proc=art ev=art.md5_file t_us=1794475053924506 dur_us=9095 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053924506 dur_us=26401 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053926047 dur_us=27969 tool=acos_observe outcome_us=27965
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053935903 dur_us=9536 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475053942865 dur_us=6962 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475053943971 dur_us=1106 
+P3TRACE proc=art ev=art.md5_file t_us=1794475053953623 dur_us=9652 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053953623 dur_us=27256 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053955119 dur_us=28778 tool=acos_observe outcome_us=28774
+P3TRACE proc=art ev=art.probe_parse t_us=1794475053964142 dur_us=0 seq=78 emit_us=0 guest_ms=1794475053964 probe_lag_us=141 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053965145 dur_us=9688 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475053972015 dur_us=6870 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475053973284 dur_us=1269 
+P3TRACE proc=art ev=art.md5_file t_us=1794475053982803 dur_us=9519 
+P3TRACE proc=art ev=art.capture_total t_us=1794475053982803 dur_us=27346 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475053984997 dur_us=29570 tool=acos_observe outcome_us=29566
+P3TRACE proc=art ev=art.capture_composite t_us=1794475053996307 dur_us=10982 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475054003626 dur_us=7319 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054004766 dur_us=1140 
+P3TRACE proc=art ev=art.md5_file t_us=1794475054014023 dur_us=9257 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054014023 dur_us=28698 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054014542 dur_us=0 seq=79 emit_us=0 guest_ms=1794475054014 probe_lag_us=541 line_bytes=3838
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054015900 dur_us=30615 tool=acos_observe outcome_us=30610
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054027176 dur_us=10895 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475054034266 dur_us=7090 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054035312 dur_us=1046 
+P3TRACE proc=art ev=art.md5_file t_us=1794475054044284 dur_us=8972 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054044284 dur_us=28003 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054046218 dur_us=29978 tool=acos_observe outcome_us=29971
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054056870 dur_us=10234 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475054063698 dur_us=6828 png_bytes=9545882
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054064383 dur_us=0 seq=80 emit_us=0 guest_ms=1794475054064 probe_lag_us=382 line_bytes=3838
+P3TRACE proc=art ev=art.png_write t_us=1794475054064758 dur_us=1060 
+P3TRACE proc=art ev=art.md5_file t_us=1794475054074246 dur_us=9488 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054074246 dur_us=27610 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054076301 dur_us=29707 tool=acos_observe outcome_us=29702
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054086728 dur_us=10060 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475054094098 dur_us=7370 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054095145 dur_us=1047 
+P3TRACE proc=art ev=art.md5_file t_us=1794475054104171 dur_us=9026 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054104171 dur_us=27503 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054106262 dur_us=29625 tool=acos_observe outcome_us=29619
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054114378 dur_us=0 seq=81 emit_us=0 guest_ms=1794475054114 probe_lag_us=376 line_bytes=3837
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054116944 dur_us=10210 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475054123750 dur_us=6806 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054124784 dur_us=1034 
+P3TRACE proc=art ev=art.md5_file t_us=1794475054134194 dur_us=9410 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054134194 dur_us=27460 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054136473 dur_us=29782 tool=acos_observe outcome_us=29777
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054146595 dur_us=9787 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475054153357 dur_us=6762 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054154461 dur_us=1104 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054164577 dur_us=0 seq=82 emit_us=0 guest_ms=1794475054164 probe_lag_us=576 line_bytes=3838
+P3TRACE proc=art ev=art.md5_file t_us=1794475054164789 dur_us=10328 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054164789 dur_us=27981 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054166700 dur_us=29917 tool=acos_observe outcome_us=29912
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054176779 dur_us=9749 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475054183670 dur_us=6891 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054184711 dur_us=1041 
+P3TRACE proc=art ev=art.md5_file t_us=1794475054194706 dur_us=9995 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054194706 dur_us=27676 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054196863 dur_us=29860 tool=acos_observe outcome_us=29855
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054207401 dur_us=10176 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054214657 dur_us=0 seq=83 emit_us=0 guest_ms=1794475054214 probe_lag_us=655 line_bytes=3838
+P3TRACE proc=art ev=art.png_encode t_us=1794475054214788 dur_us=7387 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054215839 dur_us=1051 
+P3TRACE proc=art ev=art.md5_file t_us=1794475054225459 dur_us=9620 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054225459 dur_us=28234 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054227241 dur_us=30050 tool=acos_observe outcome_us=30044
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054237652 dur_us=9945 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475054244555 dur_us=6903 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054245704 dur_us=1149 
+P3TRACE proc=art ev=art.md5_file t_us=1794475054255918 dur_us=10214 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054255918 dur_us=28211 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054258402 dur_us=30723 tool=acos_observe outcome_us=30716
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054264763 dur_us=0 seq=84 emit_us=0 guest_ms=1794475054264 probe_lag_us=762 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054269579 dur_us=10448 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475054276786 dur_us=7207 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054277849 dur_us=1063 
+P3TRACE proc=art ev=art.md5_file t_us=1794475054286873 dur_us=9024 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054286873 dur_us=27742 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054288708 dur_us=29627 tool=acos_observe outcome_us=29620
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054299196 dur_us=10042 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475054306208 dur_us=7012 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054307237 dur_us=1029 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054314859 dur_us=0 seq=85 emit_us=0 guest_ms=1794475054314 probe_lag_us=858 line_bytes=3838
+P3TRACE proc=art ev=art.md5_file t_us=1794475054317638 dur_us=10401 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054317638 dur_us=28484 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054319587 dur_us=30454 tool=acos_observe outcome_us=30448
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054330373 dur_us=10376 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475054337408 dur_us=7035 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054338549 dur_us=1141 
+P3TRACE proc=art ev=art.md5_file t_us=1794475054347600 dur_us=9051 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054347600 dur_us=27603 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054349172 dur_us=29191 tool=acos_observe outcome_us=29187
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054359680 dur_us=10220 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054364948 dur_us=0 seq=86 emit_us=0 guest_ms=1794475054364 probe_lag_us=947 line_bytes=3838
+P3TRACE proc=art ev=art.png_encode t_us=1794475054366756 dur_us=7076 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054367839 dur_us=1083 
+P3TRACE proc=art ev=art.md5_file t_us=1794475054377024 dur_us=9185 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054377024 dur_us=27564 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054378770 dur_us=29330 tool=acos_observe outcome_us=29324
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054388963 dur_us=9811 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475054395727 dur_us=6764 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054396765 dur_us=1038 
+P3TRACE proc=art ev=art.md5_file t_us=1794475054406254 dur_us=9489 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054406254 dur_us=27102 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054408213 dur_us=29079 tool=acos_observe outcome_us=29074
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054415011 dur_us=0 seq=87 emit_us=0 guest_ms=1794475054414 probe_lag_us=1010 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054418759 dur_us=10188 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475054426192 dur_us=7433 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054427267 dur_us=1075 
+P3TRACE proc=art ev=art.md5_file t_us=1794475054436276 dur_us=9009 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054436276 dur_us=27705 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054438318 dur_us=29771 tool=acos_observe outcome_us=29766
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054448720 dur_us=10067 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475054455725 dur_us=7005 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054456725 dur_us=1000 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054465138 dur_us=0 seq=88 emit_us=0 guest_ms=1794475054465 probe_lag_us=137 line_bytes=3838
+P3TRACE proc=art ev=art.md5_file t_us=1794475054466434 dur_us=9709 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054466434 dur_us=27781 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054468309 dur_us=29674 tool=acos_observe outcome_us=29669
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054478766 dur_us=10080 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475054485784 dur_us=7018 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054486818 dur_us=1034 
+P3TRACE proc=art ev=art.md5_file t_us=1794475054495970 dur_us=9152 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054495970 dur_us=27284 
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054497768 dur_us=29111 tool=acos_observe outcome_us=29106
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475054498076 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475054498078 dur_us=2 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054515094 dur_us=0 seq=89 emit_us=0 guest_ms=1794475054515 probe_lag_us=93 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054565128 dur_us=0 seq=90 emit_us=0 guest_ms=1794475054565 probe_lag_us=127 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054615272 dur_us=0 seq=91 emit_us=0 guest_ms=1794475054615 probe_lag_us=271 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054659607 dur_us=10450 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054665451 dur_us=0 seq=92 emit_us=0 guest_ms=1794475054665 probe_lag_us=448 line_bytes=3838
+P3TRACE proc=art ev=art.png_encode t_us=1794475054666280 dur_us=6673 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054667286 dur_us=1006 
+P3TRACE proc=art ev=art.md5_file t_us=1794475054676496 dur_us=9210 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054676496 dur_us=27339 
+P3TRACE proc=art ev=art.tree t_us=1794475054677104 dur_us=179002 settle_us=151055 capture_us=27926 build_reply_us=21 probe_seq=91 probe_at_ms=1794475054615 frame_seq=36 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475054677132 dur_us=179054 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475054677165 dur_us=33 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475054677573 dur_us=393 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475054677596 dur_us=11 frame_seq=36
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475054677788 dur_us=179713 reply_us=179104
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475054677874 dur_us=179799 engine_us=179722 tree_json_us=77 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054677904 dur_us=179830 tool=acos_observe_tree outcome_us=179825
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475054678148 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475054678151 dur_us=3 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054715371 dur_us=0 seq=93 emit_us=0 guest_ms=1794475054715 probe_lag_us=370 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054765501 dur_us=0 seq=94 emit_us=0 guest_ms=1794475054765 probe_lag_us=500 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054815550 dur_us=0 seq=95 emit_us=0 guest_ms=1794475054815 probe_lag_us=549 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475054839185 dur_us=9922 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475054846670 dur_us=7485 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475054847720 dur_us=1050 
+P3TRACE proc=art ev=art.md5_file t_us=1794475054856908 dur_us=9188 
+P3TRACE proc=art ev=art.capture_total t_us=1794475054856908 dur_us=27645 
+P3TRACE proc=art ev=art.tree t_us=1794475054857375 dur_us=179213 settle_us=151101 capture_us=28091 build_reply_us=21 probe_seq=95 probe_at_ms=1794475054815 frame_seq=37 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475054857390 dur_us=179239 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475054857425 dur_us=35 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475054857996 dur_us=556 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475054858019 dur_us=12 frame_seq=37
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475054858028 dur_us=179881 reply_us=179293
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475054858108 dur_us=179961 engine_us=179890 tree_json_us=71 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475054858135 dur_us=179989 tool=acos_observe_tree outcome_us=179985
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475054858366 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475054858368 dur_us=2 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054865662 dur_us=0 seq=96 emit_us=0 guest_ms=1794475054865 probe_lag_us=661 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054915731 dur_us=0 seq=97 emit_us=0 guest_ms=1794475054915 probe_lag_us=730 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475054965820 dur_us=0 seq=98 emit_us=0 guest_ms=1794475054965 probe_lag_us=819 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055015944 dur_us=0 seq=99 emit_us=0 guest_ms=1794475055015 probe_lag_us=942 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475055020032 dur_us=10540 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475055027535 dur_us=7503 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475055028528 dur_us=993 
+P3TRACE proc=art ev=art.md5_file t_us=1794475055037566 dur_us=9038 
+P3TRACE proc=art ev=art.capture_total t_us=1794475055037566 dur_us=28074 
+P3TRACE proc=art ev=art.tree t_us=1794475055038052 dur_us=179672 settle_us=151111 capture_us=28540 build_reply_us=21 probe_seq=98 probe_at_ms=1794475054965 frame_seq=38 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475055038063 dur_us=179695 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475055038103 dur_us=40 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475055039248 dur_us=1129 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475055039273 dur_us=13 frame_seq=38
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475055039282 dur_us=180917 reply_us=179753
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475055039365 dur_us=181000 engine_us=180926 tree_json_us=74 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475055039402 dur_us=181037 tool=acos_observe_tree outcome_us=181033
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475055039638 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475055039641 dur_us=3 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055065955 dur_us=0 seq=100 emit_us=0 guest_ms=1794475055065 probe_lag_us=953 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055116048 dur_us=0 seq=101 emit_us=0 guest_ms=1794475055115 probe_lag_us=1046 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055166110 dur_us=0 seq=102 emit_us=0 guest_ms=1794475055166 probe_lag_us=109 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475055203451 dur_us=12843 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475055211891 dur_us=8440 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475055212994 dur_us=1103 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055216253 dur_us=0 seq=103 emit_us=0 guest_ms=1794475055216 probe_lag_us=252 line_bytes=3839
+P3TRACE proc=art ev=art.md5_file t_us=1794475055224500 dur_us=11506 
+P3TRACE proc=art ev=art.capture_total t_us=1794475055224500 dur_us=33892 
+P3TRACE proc=art ev=art.tree t_us=1794475055225036 dur_us=185379 settle_us=150951 capture_us=34403 build_reply_us=25 probe_seq=102 probe_at_ms=1794475055166 frame_seq=39 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475055225075 dur_us=185434 reply_bytes=4404
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475055225139 dur_us=64 reply_bytes=4404
+P3TRACE proc=cli ev=cli.png_read t_us=1794475055225630 dur_us=455 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475055225673 dur_us=26 frame_seq=39
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475055225692 dur_us=186056 reply_us=185538
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475055225853 dur_us=186217 engine_us=186075 tree_json_us=142 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475055225890 dur_us=186254 tool=acos_observe_tree outcome_us=186248
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475055226159 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475055226162 dur_us=3 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055266311 dur_us=0 seq=104 emit_us=0 guest_ms=1794475055266 probe_lag_us=309 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055316337 dur_us=0 seq=105 emit_us=0 guest_ms=1794475055316 probe_lag_us=336 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055366431 dur_us=0 seq=106 emit_us=0 guest_ms=1794475055366 probe_lag_us=431 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475055389770 dur_us=12548 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475055398514 dur_us=8744 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475055399694 dur_us=1180 
+P3TRACE proc=art ev=art.md5_file t_us=1794475055411121 dur_us=11427 
+P3TRACE proc=art ev=art.capture_total t_us=1794475055411121 dur_us=33899 
+P3TRACE proc=art ev=art.tree t_us=1794475055411802 dur_us=185603 settle_us=151023 capture_us=34534 build_reply_us=46 probe_seq=106 probe_at_ms=1794475055366 frame_seq=40 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475055411834 dur_us=185672 reply_bytes=4404
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475055411916 dur_us=82 reply_bytes=4404
+P3TRACE proc=cli ev=cli.png_read t_us=1794475055412393 dur_us=442 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475055412419 dur_us=15 frame_seq=40
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475055412429 dur_us=186272 reply_us=185793
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475055412532 dur_us=186375 engine_us=186283 tree_json_us=92 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475055412567 dur_us=186410 tool=acos_observe_tree outcome_us=186404
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475055412860 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475055412865 dur_us=5 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055416497 dur_us=0 seq=107 emit_us=0 guest_ms=1794475055416 probe_lag_us=496 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055466635 dur_us=0 seq=108 emit_us=0 guest_ms=1794475055466 probe_lag_us=633 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055516673 dur_us=0 seq=109 emit_us=0 guest_ms=1794475055516 probe_lag_us=671 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055566809 dur_us=0 seq=110 emit_us=0 guest_ms=1794475055566 probe_lag_us=807 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475055576839 dur_us=12808 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475055585153 dur_us=8314 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475055586320 dur_us=1167 
+P3TRACE proc=art ev=art.md5_file t_us=1794475055598435 dur_us=12115 
+P3TRACE proc=art ev=art.capture_total t_us=1794475055598435 dur_us=34404 
+P3TRACE proc=art ev=art.tree t_us=1794475055599110 dur_us=186228 settle_us=151149 capture_us=35032 build_reply_us=47 probe_seq=109 probe_at_ms=1794475055516 frame_seq=41 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475055599127 dur_us=186262 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475055599168 dur_us=41 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475055599616 dur_us=429 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475055599641 dur_us=15 frame_seq=41
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475055599653 dur_us=186794 reply_us=186328
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475055599756 dur_us=186897 engine_us=186805 tree_json_us=92 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475055599791 dur_us=186933 tool=acos_observe_tree outcome_us=186927
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475055600189 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475055600193 dur_us=4 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055616933 dur_us=0 seq=111 emit_us=0 guest_ms=1794475055616 probe_lag_us=931 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055666953 dur_us=0 seq=112 emit_us=0 guest_ms=1794475055666 probe_lag_us=951 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055717000 dur_us=0 seq=113 emit_us=0 guest_ms=1794475055716 probe_lag_us=998 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475055763952 dur_us=12525 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055767195 dur_us=0 seq=114 emit_us=0 guest_ms=1794475055767 probe_lag_us=193 line_bytes=3839
+P3TRACE proc=art ev=art.png_encode t_us=1794475055772479 dur_us=8527 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475055773633 dur_us=1154 
+P3TRACE proc=art ev=art.md5_file t_us=1794475055785034 dur_us=11401 
+P3TRACE proc=art ev=art.capture_total t_us=1794475055785034 dur_us=33607 
+P3TRACE proc=art ev=art.tree t_us=1794475055785443 dur_us=185216 settle_us=151199 capture_us=33992 build_reply_us=25 probe_seq=113 probe_at_ms=1794475055717 frame_seq=42 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475055785476 dur_us=185283 reply_bytes=4404
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475055785542 dur_us=66 reply_bytes=4404
+P3TRACE proc=cli ev=cli.png_read t_us=1794475055786003 dur_us=425 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475055786030 dur_us=14 frame_seq=42
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475055786041 dur_us=185854 reply_us=185389
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475055786145 dur_us=185958 engine_us=185864 tree_json_us=94 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475055786177 dur_us=185990 tool=acos_observe_tree outcome_us=185985
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475055786581 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475055786585 dur_us=4 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055817294 dur_us=0 seq=115 emit_us=0 guest_ms=1794475055817 probe_lag_us=291 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055867252 dur_us=0 seq=116 emit_us=0 guest_ms=1794475055867 probe_lag_us=250 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055917239 dur_us=0 seq=117 emit_us=0 guest_ms=1794475055917 probe_lag_us=238 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475055950235 dur_us=12496 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475055958773 dur_us=8538 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475055959923 dur_us=1150 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475055967463 dur_us=0 seq=118 emit_us=0 guest_ms=1794475055967 probe_lag_us=461 line_bytes=3839
+P3TRACE proc=art ev=art.md5_file t_us=1794475055971567 dur_us=11644 
+P3TRACE proc=art ev=art.capture_total t_us=1794475055971567 dur_us=33828 
+P3TRACE proc=art ev=art.tree t_us=1794475055972148 dur_us=185522 settle_us=151113 capture_us=34383 build_reply_us=26 probe_seq=117 probe_at_ms=1794475055917 frame_seq=43 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475055972167 dur_us=185582 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475055972237 dur_us=70 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475055972990 dur_us=717 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475055973025 dur_us=16 frame_seq=43
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475055973036 dur_us=186457 reply_us=185692
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475055973143 dur_us=186564 engine_us=186469 tree_json_us=95 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475055973177 dur_us=186598 tool=acos_observe_tree outcome_us=186593
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475055973453 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475055973456 dur_us=3 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056017600 dur_us=0 seq=119 emit_us=0 guest_ms=1794475056017 probe_lag_us=598 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056067615 dur_us=0 seq=120 emit_us=0 guest_ms=1794475056067 probe_lag_us=613 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056117695 dur_us=0 seq=121 emit_us=0 guest_ms=1794475056117 probe_lag_us=694 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475056136906 dur_us=12389 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475056145235 dur_us=8329 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475056146409 dur_us=1174 
+P3TRACE proc=art ev=art.md5_file t_us=1794475056158183 dur_us=11774 
+P3TRACE proc=art ev=art.capture_total t_us=1794475056158183 dur_us=33666 
+P3TRACE proc=art ev=art.tree t_us=1794475056158600 dur_us=185113 settle_us=151029 capture_us=34059 build_reply_us=25 probe_seq=121 probe_at_ms=1794475056117 frame_seq=44 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475056158629 dur_us=185173 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475056158688 dur_us=59 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475056159128 dur_us=406 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475056159158 dur_us=15 frame_seq=44
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475056159169 dur_us=185718 reply_us=185270
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475056159271 dur_us=185820 engine_us=185728 tree_json_us=92 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475056159305 dur_us=185854 tool=acos_observe_tree outcome_us=185849
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475056159564 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475056159566 dur_us=3 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056167933 dur_us=0 seq=122 emit_us=0 guest_ms=1794475056167 probe_lag_us=933 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056217869 dur_us=0 seq=123 emit_us=0 guest_ms=1794475056217 probe_lag_us=867 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056267856 dur_us=0 seq=124 emit_us=0 guest_ms=1794475056267 probe_lag_us=854 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056318077 dur_us=0 seq=125 emit_us=0 guest_ms=1794475056317 probe_lag_us=1075 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475056323117 dur_us=12461 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475056331625 dur_us=8508 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475056332788 dur_us=1163 
+P3TRACE proc=art ev=art.md5_file t_us=1794475056344278 dur_us=11490 
+P3TRACE proc=art ev=art.capture_total t_us=1794475056344278 dur_us=33622 
+P3TRACE proc=art ev=art.tree t_us=1794475056344619 dur_us=185035 settle_us=151071 capture_us=33939 build_reply_us=25 probe_seq=124 probe_at_ms=1794475056267 frame_seq=45 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475056344634 dur_us=185068 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475056344675 dur_us=41 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475056345126 dur_us=431 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475056345156 dur_us=15 frame_seq=45
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475056345167 dur_us=185605 reply_us=185132
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475056345271 dur_us=185709 engine_us=185617 tree_json_us=92 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475056345305 dur_us=185743 tool=acos_observe_tree outcome_us=185737
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475056345700 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475056345703 dur_us=4 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056368188 dur_us=0 seq=126 emit_us=0 guest_ms=1794475056368 probe_lag_us=186 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056418188 dur_us=0 seq=127 emit_us=0 guest_ms=1794475056418 probe_lag_us=186 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056468250 dur_us=0 seq=128 emit_us=0 guest_ms=1794475056468 probe_lag_us=249 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475056510022 dur_us=12793 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475056518408 dur_us=8386 png_bytes=9545882
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056518447 dur_us=0 seq=129 emit_us=0 guest_ms=1794475056518 probe_lag_us=445 line_bytes=3839
+P3TRACE proc=art ev=art.png_write t_us=1794475056519588 dur_us=1180 
+P3TRACE proc=art ev=art.md5_file t_us=1794475056531265 dur_us=11677 
+P3TRACE proc=art ev=art.capture_total t_us=1794475056531265 dur_us=34036 
+P3TRACE proc=art ev=art.tree t_us=1794475056531935 dur_us=186196 settle_us=151490 capture_us=34657 build_reply_us=49 probe_seq=128 probe_at_ms=1794475056468 frame_seq=46 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475056531948 dur_us=186245 reply_bytes=4404
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475056531991 dur_us=43 reply_bytes=4404
+P3TRACE proc=cli ev=cli.png_read t_us=1794475056532683 dur_us=673 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475056532712 dur_us=17 frame_seq=46
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475056532723 dur_us=187025 reply_us=186312
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475056532843 dur_us=187145 engine_us=187036 tree_json_us=109 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475056532892 dur_us=187194 tool=acos_observe_tree outcome_us=187188
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475056533172 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475056533175 dur_us=3 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056568535 dur_us=0 seq=130 emit_us=0 guest_ms=1794475056568 probe_lag_us=533 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056618497 dur_us=0 seq=131 emit_us=0 guest_ms=1794475056618 probe_lag_us=496 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056668488 dur_us=0 seq=132 emit_us=0 guest_ms=1794475056668 probe_lag_us=487 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475056697635 dur_us=13361 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475056705938 dur_us=8303 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475056707081 dur_us=1143 
+P3TRACE proc=art ev=art.md5_file t_us=1794475056718661 dur_us=11580 
+P3TRACE proc=art ev=art.capture_total t_us=1794475056718661 dur_us=34387 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056718802 dur_us=0 seq=133 emit_us=0 guest_ms=1794475056718 probe_lag_us=800 line_bytes=3839
+P3TRACE proc=art ev=art.tree t_us=1794475056719185 dur_us=185997 settle_us=151085 capture_us=34886 build_reply_us=26 probe_seq=132 probe_at_ms=1794475056668 frame_seq=47 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475056719218 dur_us=186043 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475056719284 dur_us=66 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475056719814 dur_us=494 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475056719851 dur_us=25 frame_seq=47
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475056719865 dur_us=186695 reply_us=186149
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475056719970 dur_us=186800 engine_us=186706 tree_json_us=94 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475056720004 dur_us=186834 tool=acos_observe_tree outcome_us=186829
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475056720284 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475056720288 dur_us=4 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056768727 dur_us=0 seq=134 emit_us=0 guest_ms=1794475056768 probe_lag_us=725 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056818747 dur_us=0 seq=135 emit_us=0 guest_ms=1794475056818 probe_lag_us=746 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056868978 dur_us=0 seq=136 emit_us=0 guest_ms=1794475056868 probe_lag_us=976 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475056883687 dur_us=12247 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475056892332 dur_us=8645 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475056893469 dur_us=1137 
+P3TRACE proc=art ev=art.md5_file t_us=1794475056905502 dur_us=12033 
+P3TRACE proc=art ev=art.capture_total t_us=1794475056905502 dur_us=34062 
+P3TRACE proc=art ev=art.tree t_us=1794475056906106 dur_us=185797 settle_us=151131 capture_us=34641 build_reply_us=25 probe_seq=136 probe_at_ms=1794475056868 frame_seq=48 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475056906128 dur_us=185840 reply_bytes=4404
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475056906168 dur_us=40 reply_bytes=4404
+P3TRACE proc=cli ev=cli.png_read t_us=1794475056906617 dur_us=430 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475056906643 dur_us=15 frame_seq=48
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475056906654 dur_us=186372 reply_us=185904
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475056906756 dur_us=186474 engine_us=186382 tree_json_us=92 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475056906789 dur_us=186507 tool=acos_observe_tree outcome_us=186503
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475056907070 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475056907075 dur_us=5 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056919049 dur_us=0 seq=137 emit_us=0 guest_ms=1794475056918 probe_lag_us=1048 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475056969044 dur_us=0 seq=138 emit_us=0 guest_ms=1794475056968 probe_lag_us=1042 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057019080 dur_us=0 seq=139 emit_us=0 guest_ms=1794475057018 probe_lag_us=1078 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057069259 dur_us=0 seq=140 emit_us=0 guest_ms=1794475057069 probe_lag_us=257 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475057070911 dur_us=12578 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475057079613 dur_us=8702 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475057080758 dur_us=1145 
+P3TRACE proc=art ev=art.md5_file t_us=1794475057092701 dur_us=11943 
+P3TRACE proc=art ev=art.capture_total t_us=1794475057092701 dur_us=34368 
+P3TRACE proc=art ev=art.tree t_us=1794475057093414 dur_us=186312 settle_us=151230 capture_us=35036 build_reply_us=46 probe_seq=139 probe_at_ms=1794475057019 frame_seq=49 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475057093426 dur_us=186351 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475057093467 dur_us=41 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475057093911 dur_us=425 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475057093938 dur_us=15 frame_seq=49
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475057093948 dur_us=186880 reply_us=186417
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475057094054 dur_us=186986 engine_us=186891 tree_json_us=95 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475057094088 dur_us=187020 tool=acos_observe_tree outcome_us=187015
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475057094366 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475057094369 dur_us=3 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057119378 dur_us=0 seq=141 emit_us=0 guest_ms=1794475057119 probe_lag_us=377 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057169481 dur_us=0 seq=142 emit_us=0 guest_ms=1794475057169 probe_lag_us=479 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057219508 dur_us=0 seq=143 emit_us=0 guest_ms=1794475057219 probe_lag_us=507 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475057258190 dur_us=12609 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475057266436 dur_us=8246 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475057267594 dur_us=1158 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057269648 dur_us=0 seq=144 emit_us=0 guest_ms=1794475057269 probe_lag_us=646 line_bytes=3839
+P3TRACE proc=art ev=art.md5_file t_us=1794475057279023 dur_us=11429 
+P3TRACE proc=art ev=art.capture_total t_us=1794475057279023 dur_us=33442 
+P3TRACE proc=art ev=art.tree t_us=1794475057279686 dur_us=185290 settle_us=151185 capture_us=34054 build_reply_us=51 probe_seq=143 probe_at_ms=1794475057219 frame_seq=50 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475057279705 dur_us=185336 reply_bytes=4404
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475057279747 dur_us=42 reply_bytes=4404
+P3TRACE proc=cli ev=cli.png_read t_us=1794475057280158 dur_us=391 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475057280185 dur_us=14 frame_seq=50
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475057280196 dur_us=185832 reply_us=185402
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475057280299 dur_us=185935 engine_us=185842 tree_json_us=93 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475057280333 dur_us=185969 tool=acos_observe_tree outcome_us=185964
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475057280615 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475057280618 dur_us=3 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057319728 dur_us=0 seq=145 emit_us=0 guest_ms=1794475057319 probe_lag_us=726 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057369814 dur_us=0 seq=146 emit_us=0 guest_ms=1794475057369 probe_lag_us=812 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057419811 dur_us=0 seq=147 emit_us=0 guest_ms=1794475057419 probe_lag_us=809 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475057444736 dur_us=13161 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475057453129 dur_us=8393 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475057454313 dur_us=1184 
+P3TRACE proc=art ev=art.md5_file t_us=1794475057465751 dur_us=11438 
+P3TRACE proc=art ev=art.capture_total t_us=1794475057465751 dur_us=34176 
+P3TRACE proc=art ev=art.tree t_us=1794475057466339 dur_us=185690 settle_us=150925 capture_us=34739 build_reply_us=26 probe_seq=147 probe_at_ms=1794475057419 frame_seq=51 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475057466352 dur_us=185734 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475057466409 dur_us=57 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475057467253 dur_us=810 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475057467305 dur_us=27 frame_seq=51
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475057467326 dur_us=186713 reply_us=185829
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475057467530 dur_us=186917 engine_us=186732 tree_json_us=185 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475057467596 dur_us=186983 tool=acos_observe_tree outcome_us=186973
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475057467960 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475057467967 dur_us=8 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057469898 dur_us=0 seq=148 emit_us=0 guest_ms=1794475057469 probe_lag_us=897 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057520053 dur_us=0 seq=149 emit_us=0 guest_ms=1794475057519 probe_lag_us=1051 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057570129 dur_us=0 seq=150 emit_us=0 guest_ms=1794475057570 probe_lag_us=127 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057620218 dur_us=0 seq=151 emit_us=0 guest_ms=1794475057620 probe_lag_us=217 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475057632066 dur_us=12969 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475057640703 dur_us=8637 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475057642103 dur_us=1400 
+P3TRACE proc=art ev=art.md5_file t_us=1794475057653727 dur_us=11624 
+P3TRACE proc=art ev=art.capture_total t_us=1794475057653727 dur_us=34630 
+P3TRACE proc=art ev=art.tree t_us=1794475057654383 dur_us=186387 settle_us=151101 capture_us=35237 build_reply_us=49 probe_seq=150 probe_at_ms=1794475057570 frame_seq=52 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475057654409 dur_us=186442 reply_bytes=4404
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475057654477 dur_us=68 reply_bytes=4404
+P3TRACE proc=cli ev=cli.png_read t_us=1794475057655010 dur_us=496 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475057655056 dur_us=26 frame_seq=52
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475057655075 dur_us=187118 reply_us=186555
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475057655285 dur_us=187329 engine_us=187145 tree_json_us=184 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475057655352 dur_us=187396 tool=acos_observe_tree outcome_us=187386
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475057655673 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475057655676 dur_us=3 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057670284 dur_us=0 seq=152 emit_us=0 guest_ms=1794475057670 probe_lag_us=283 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057720402 dur_us=0 seq=153 emit_us=0 guest_ms=1794475057720 probe_lag_us=400 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057770467 dur_us=0 seq=154 emit_us=0 guest_ms=1794475057770 probe_lag_us=466 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475057819527 dur_us=12483 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057820583 dur_us=0 seq=155 emit_us=0 guest_ms=1794475057820 probe_lag_us=581 line_bytes=3839
+P3TRACE proc=art ev=art.png_encode t_us=1794475057828159 dur_us=8632 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475057829309 dur_us=1150 
+P3TRACE proc=art ev=art.md5_file t_us=1794475057840830 dur_us=11521 
+P3TRACE proc=art ev=art.capture_total t_us=1794475057840830 dur_us=33786 
+P3TRACE proc=art ev=art.tree t_us=1794475057841270 dur_us=185558 settle_us=151331 capture_us=34201 build_reply_us=26 probe_seq=154 probe_at_ms=1794475057770 frame_seq=53 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475057841297 dur_us=185621 reply_bytes=4404
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475057841361 dur_us=64 reply_bytes=4404
+P3TRACE proc=cli ev=cli.png_read t_us=1794475057841824 dur_us=428 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475057841870 dur_us=19 frame_seq=53
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475057841884 dur_us=186213 reply_us=185724
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475057841989 dur_us=186318 engine_us=186224 tree_json_us=94 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475057842024 dur_us=186353 tool=acos_observe_tree outcome_us=186347
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475057842320 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475057842324 dur_us=4 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057870610 dur_us=0 seq=156 emit_us=0 guest_ms=1794475057870 probe_lag_us=609 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057920740 dur_us=0 seq=157 emit_us=0 guest_ms=1794475057920 probe_lag_us=738 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475057970673 dur_us=0 seq=158 emit_us=0 guest_ms=1794475057970 probe_lag_us=671 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475058005726 dur_us=12256 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475058014014 dur_us=8288 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475058015179 dur_us=1165 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058020925 dur_us=0 seq=159 emit_us=0 guest_ms=1794475058020 probe_lag_us=923 line_bytes=3839
+P3TRACE proc=art ev=art.md5_file t_us=1794475058026586 dur_us=11407 
+P3TRACE proc=art ev=art.capture_total t_us=1794475058026586 dur_us=33116 
+P3TRACE proc=art ev=art.tree t_us=1794475058027195 dur_us=184851 settle_us=151125 capture_us=33700 build_reply_us=26 probe_seq=158 probe_at_ms=1794475057970 frame_seq=54 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475058027235 dur_us=184911 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475058027303 dur_us=68 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475058028112 dur_us=773 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475058028163 dur_us=27 frame_seq=54
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475058028183 dur_us=185865 reply_us=185020
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475058028304 dur_us=185986 engine_us=185885 tree_json_us=101 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475058028338 dur_us=186020 tool=acos_observe_tree outcome_us=186015
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475058028641 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475058028645 dur_us=5 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058070887 dur_us=0 seq=160 emit_us=0 guest_ms=1794475058070 probe_lag_us=886 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058120981 dur_us=0 seq=161 emit_us=0 guest_ms=1794475058120 probe_lag_us=980 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058171127 dur_us=0 seq=162 emit_us=0 guest_ms=1794475058171 probe_lag_us=125 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475058191955 dur_us=12337 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475058200348 dur_us=8393 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475058201513 dur_us=1165 
+P3TRACE proc=art ev=art.md5_file t_us=1794475058213117 dur_us=11604 
+P3TRACE proc=art ev=art.capture_total t_us=1794475058213117 dur_us=33499 
+P3TRACE proc=art ev=art.tree t_us=1794475058213767 dur_us=185107 settle_us=150957 capture_us=34124 build_reply_us=26 probe_seq=162 probe_at_ms=1794475058171 frame_seq=55 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475058213796 dur_us=185151 reply_bytes=4404
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475058213875 dur_us=79 reply_bytes=4404
+P3TRACE proc=cli ev=cli.png_read t_us=1794475058214252 dur_us=346 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475058214274 dur_us=14 frame_seq=55
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475058214284 dur_us=185645 reply_us=185267
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475058214385 dur_us=185746 engine_us=185654 tree_json_us=92 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475058214419 dur_us=185780 tool=acos_observe_tree outcome_us=185775
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475058214681 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475058214684 dur_us=3 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058221098 dur_us=0 seq=163 emit_us=0 guest_ms=1794475058221 probe_lag_us=97 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058271207 dur_us=0 seq=164 emit_us=0 guest_ms=1794475058271 probe_lag_us=206 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058321253 dur_us=0 seq=165 emit_us=0 guest_ms=1794475058321 probe_lag_us=252 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058371395 dur_us=0 seq=166 emit_us=0 guest_ms=1794475058371 probe_lag_us=392 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475058378871 dur_us=12980 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475058387620 dur_us=8749 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475058388853 dur_us=1233 
+P3TRACE proc=art ev=art.md5_file t_us=1794475058400290 dur_us=11437 
+P3TRACE proc=art ev=art.capture_total t_us=1794475058400290 dur_us=34399 
+P3TRACE proc=art ev=art.tree t_us=1794475058400987 dur_us=186287 settle_us=151190 capture_us=35049 build_reply_us=48 probe_seq=165 probe_at_ms=1794475058321 frame_seq=56 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475058401001 dur_us=186317 reply_bytes=4404
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475058401047 dur_us=46 reply_bytes=4404
+P3TRACE proc=cli ev=cli.png_read t_us=1794475058401450 dur_us=383 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475058401473 dur_us=13 frame_seq=56
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475058401484 dur_us=186805 reply_us=186387
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475058401588 dur_us=186909 engine_us=186816 tree_json_us=93 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475058401623 dur_us=186944 tool=acos_observe_tree outcome_us=186938
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475058401924 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475058401932 dur_us=8 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058421488 dur_us=0 seq=167 emit_us=0 guest_ms=1794475058421 probe_lag_us=486 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058471494 dur_us=0 seq=168 emit_us=0 guest_ms=1794475058471 probe_lag_us=492 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058521500 dur_us=0 seq=169 emit_us=0 guest_ms=1794475058521 probe_lag_us=499 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475058565280 dur_us=12323 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058571743 dur_us=0 seq=170 emit_us=0 guest_ms=1794475058571 probe_lag_us=741 line_bytes=3839
+P3TRACE proc=art ev=art.png_encode t_us=1794475058573715 dur_us=8435 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475058574856 dur_us=1141 
+P3TRACE proc=art ev=art.md5_file t_us=1794475058586489 dur_us=11633 
+P3TRACE proc=art ev=art.capture_total t_us=1794475058586489 dur_us=33532 
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475058587271 dur_us=185339 reply_bytes=4403
+P3TRACE proc=art ev=art.tree t_us=1794475058587256 dur_us=185275 settle_us=150976 capture_us=34221 build_reply_us=78 probe_seq=169 probe_at_ms=1794475058521 frame_seq=57 tree_bytes=3798
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475058587315 dur_us=44 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475058587770 dur_us=435 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475058587807 dur_us=19 frame_seq=57
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475058587820 dur_us=185897 reply_us=185411
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475058587986 dur_us=186063 engine_us=185912 tree_json_us=151 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475058588028 dur_us=186106 tool=acos_observe_tree outcome_us=186100
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475058588312 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475058588315 dur_us=3 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058621759 dur_us=0 seq=171 emit_us=0 guest_ms=1794475058621 probe_lag_us=758 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058671753 dur_us=0 seq=172 emit_us=0 guest_ms=1794475058671 probe_lag_us=752 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058721810 dur_us=0 seq=173 emit_us=0 guest_ms=1794475058721 probe_lag_us=810 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475058752246 dur_us=12540 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475058760734 dur_us=8488 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475058761885 dur_us=1151 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058771985 dur_us=0 seq=174 emit_us=0 guest_ms=1794475058771 probe_lag_us=984 line_bytes=3839
+P3TRACE proc=art ev=art.md5_file t_us=1794475058773353 dur_us=11468 
+P3TRACE proc=art ev=art.capture_total t_us=1794475058773353 dur_us=33647 
+P3TRACE proc=art ev=art.tree t_us=1794475058773800 dur_us=185465 settle_us=151371 capture_us=34067 build_reply_us=27 probe_seq=173 probe_at_ms=1794475058721 frame_seq=58 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475058773813 dur_us=185498 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475058773864 dur_us=51 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475058774287 dur_us=403 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475058774313 dur_us=15 frame_seq=58
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475058774324 dur_us=186014 reply_us=185573
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475058774429 dur_us=186119 engine_us=186026 tree_json_us=93 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475058774464 dur_us=186155 tool=acos_observe_tree outcome_us=186149
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475058774736 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475058774739 dur_us=3 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058822060 dur_us=0 seq=175 emit_us=0 guest_ms=1794475058821 probe_lag_us=1059 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058872018 dur_us=0 seq=176 emit_us=0 guest_ms=1794475058871 probe_lag_us=1018 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058922067 dur_us=0 seq=177 emit_us=0 guest_ms=1794475058922 probe_lag_us=66 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475058938712 dur_us=12532 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475058947051 dur_us=8339 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475058948225 dur_us=1174 
+P3TRACE proc=art ev=art.md5_file t_us=1794475058959666 dur_us=11441 
+P3TRACE proc=art ev=art.capture_total t_us=1794475058959666 dur_us=33486 
+P3TRACE proc=art ev=art.tree t_us=1794475058960146 dur_us=185364 settle_us=151398 capture_us=33940 build_reply_us=26 probe_seq=177 probe_at_ms=1794475058922 frame_seq=59 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475058960170 dur_us=185431 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475058960212 dur_us=42 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475058960661 dur_us=428 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475058960688 dur_us=15 frame_seq=59
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475058960698 dur_us=185964 reply_us=185498
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475058960803 dur_us=186069 engine_us=185975 tree_json_us=94 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475058960853 dur_us=186119 tool=acos_observe_tree outcome_us=186113
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475058961127 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475058961131 dur_us=4 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475058972224 dur_us=0 seq=178 emit_us=0 guest_ms=1794475058972 probe_lag_us=223 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059022196 dur_us=0 seq=179 emit_us=0 guest_ms=1794475059022 probe_lag_us=195 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059072271 dur_us=0 seq=180 emit_us=0 guest_ms=1794475059072 probe_lag_us=270 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059122364 dur_us=0 seq=181 emit_us=0 guest_ms=1794475059122 probe_lag_us=363 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475059125108 dur_us=12489 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475059133404 dur_us=8296 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475059134561 dur_us=1157 
+P3TRACE proc=art ev=art.md5_file t_us=1794475059145908 dur_us=11347 
+P3TRACE proc=art ev=art.capture_total t_us=1794475059145908 dur_us=33289 
+P3TRACE proc=art ev=art.tree t_us=1794475059146445 dur_us=185269 settle_us=151443 capture_us=33801 build_reply_us=25 probe_seq=180 probe_at_ms=1794475059072 frame_seq=60 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475059146472 dur_us=185341 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475059146514 dur_us=42 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475059146959 dur_us=425 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475059146987 dur_us=15 frame_seq=60
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475059146998 dur_us=185873 reply_us=185408
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475059147105 dur_us=185980 engine_us=185884 tree_json_us=96 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475059147139 dur_us=186014 tool=acos_observe_tree outcome_us=186009
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475059147410 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475059147413 dur_us=4 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059172550 dur_us=0 seq=182 emit_us=0 guest_ms=1794475059172 probe_lag_us=549 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059222539 dur_us=0 seq=183 emit_us=0 guest_ms=1794475059222 probe_lag_us=539 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059272576 dur_us=0 seq=184 emit_us=0 guest_ms=1794475059272 probe_lag_us=575 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475059311491 dur_us=12803 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475059320449 dur_us=8958 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475059321734 dur_us=1285 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059322640 dur_us=0 seq=185 emit_us=0 guest_ms=1794475059322 probe_lag_us=639 line_bytes=3838
+P3TRACE proc=art ev=art.md5_file t_us=1794475059333437 dur_us=11703 
+P3TRACE proc=art ev=art.capture_total t_us=1794475059333437 dur_us=34749 
+P3TRACE proc=art ev=art.tree t_us=1794475059333945 dur_us=186514 settle_us=151257 capture_us=35233 build_reply_us=24 probe_seq=184 probe_at_ms=1794475059272 frame_seq=61 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475059333969 dur_us=186556 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475059334008 dur_us=39 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475059334662 dur_us=635 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475059334690 dur_us=16 frame_seq=61
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475059334701 dur_us=187293 reply_us=186619
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475059334809 dur_us=187401 engine_us=187305 tree_json_us=96 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475059334859 dur_us=187451 tool=acos_observe_tree outcome_us=187445
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475059335135 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475059335138 dur_us=4 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059372703 dur_us=0 seq=186 emit_us=0 guest_ms=1794475059372 probe_lag_us=702 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059422758 dur_us=0 seq=187 emit_us=0 guest_ms=1794475059422 probe_lag_us=757 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059472828 dur_us=0 seq=188 emit_us=0 guest_ms=1794475059472 probe_lag_us=827 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475059499530 dur_us=13235 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475059508414 dur_us=8884 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475059509584 dur_us=1170 
+P3TRACE proc=art ev=art.md5_file t_us=1794475059520924 dur_us=11340 
+P3TRACE proc=art ev=art.capture_total t_us=1794475059520924 dur_us=34629 
+P3TRACE proc=art ev=art.tree t_us=1794475059521375 dur_us=186206 settle_us=151125 capture_us=35057 build_reply_us=24 probe_seq=188 probe_at_ms=1794475059472 frame_seq=62 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475059521401 dur_us=186263 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475059521442 dur_us=41 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475059521822 dur_us=360 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475059521858 dur_us=26 frame_seq=62
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475059521871 dur_us=186738 reply_us=186328
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475059521977 dur_us=186844 engine_us=186749 tree_json_us=95 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475059522012 dur_us=186879 tool=acos_observe_tree outcome_us=186874
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475059522284 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475059522288 dur_us=4 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059523032 dur_us=0 seq=189 emit_us=0 guest_ms=1794475059522 probe_lag_us=1031 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059573046 dur_us=0 seq=190 emit_us=0 guest_ms=1794475059572 probe_lag_us=1045 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059623055 dur_us=0 seq=191 emit_us=0 guest_ms=1794475059623 probe_lag_us=55 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059673118 dur_us=0 seq=192 emit_us=0 guest_ms=1794475059673 probe_lag_us=117 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475059685847 dur_us=12653 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475059694794 dur_us=8947 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475059695952 dur_us=1158 
+P3TRACE proc=art ev=art.md5_file t_us=1794475059707360 dur_us=11408 
+P3TRACE proc=art ev=art.capture_total t_us=1794475059707360 dur_us=34166 
+P3TRACE proc=art ev=art.tree t_us=1794475059707945 dur_us=185645 settle_us=150894 capture_us=34702 build_reply_us=49 probe_seq=192 probe_at_ms=1794475059673 frame_seq=63 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475059707971 dur_us=185683 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475059708044 dur_us=73 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475059708505 dur_us=426 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475059708532 dur_us=15 frame_seq=63
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475059708543 dur_us=186261 reply_us=185796
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475059708648 dur_us=186366 engine_us=186272 tree_json_us=94 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475059708681 dur_us=186399 tool=acos_observe_tree outcome_us=186394
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475059708962 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475059708967 dur_us=5 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059723372 dur_us=0 seq=193 emit_us=0 guest_ms=1794475059723 probe_lag_us=371 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059773358 dur_us=0 seq=194 emit_us=0 guest_ms=1794475059773 probe_lag_us=357 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059823441 dur_us=0 seq=195 emit_us=0 guest_ms=1794475059823 probe_lag_us=440 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475059872652 dur_us=12728 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059873643 dur_us=0 seq=196 emit_us=0 guest_ms=1794475059873 probe_lag_us=642 line_bytes=3839
+P3TRACE proc=art ev=art.png_encode t_us=1794475059881040 dur_us=8388 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475059882183 dur_us=1143 
+P3TRACE proc=art ev=art.md5_file t_us=1794475059893515 dur_us=11332 
+P3TRACE proc=art ev=art.capture_total t_us=1794475059893515 dur_us=33591 
+P3TRACE proc=art ev=art.tree t_us=1794475059894011 dur_us=185028 settle_us=150940 capture_us=34063 build_reply_us=25 probe_seq=195 probe_at_ms=1794475059823 frame_seq=64 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475059894040 dur_us=185073 reply_bytes=4404
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475059894084 dur_us=44 reply_bytes=4404
+P3TRACE proc=cli ev=cli.png_read t_us=1794475059894793 dur_us=689 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475059894825 dur_us=16 frame_seq=64
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475059894839 dur_us=185879 reply_us=185143
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475059894960 dur_us=186000 engine_us=185904 tree_json_us=96 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475059894995 dur_us=186035 tool=acos_observe_tree outcome_us=186030
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475059895275 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475059895279 dur_us=4 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059923682 dur_us=0 seq=197 emit_us=0 guest_ms=1794475059923 probe_lag_us=680 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475059973700 dur_us=0 seq=198 emit_us=0 guest_ms=1794475059973 probe_lag_us=698 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060023633 dur_us=0 seq=199 emit_us=0 guest_ms=1794475060023 probe_lag_us=632 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475060058701 dur_us=12304 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475060067199 dur_us=8498 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475060068368 dur_us=1169 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060073798 dur_us=0 seq=200 emit_us=0 guest_ms=1794475060073 probe_lag_us=796 line_bytes=3839
+P3TRACE proc=art ev=art.md5_file t_us=1794475060079973 dur_us=11605 
+P3TRACE proc=art ev=art.capture_total t_us=1794475060079973 dur_us=33576 
+P3TRACE proc=art ev=art.tree t_us=1794475060080515 dur_us=185222 settle_us=151104 capture_us=34091 build_reply_us=27 probe_seq=199 probe_at_ms=1794475060023 frame_seq=65 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475060080531 dur_us=185252 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475060080577 dur_us=46 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475060081072 dur_us=474 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475060081102 dur_us=15 frame_seq=65
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475060081113 dur_us=185840 reply_us=185324
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475060081220 dur_us=185947 engine_us=185851 tree_json_us=96 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475060081255 dur_us=185982 tool=acos_observe_tree outcome_us=185976
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475060081536 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475060081540 dur_us=4 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060123956 dur_us=0 seq=201 emit_us=0 guest_ms=1794475060123 probe_lag_us=954 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060174033 dur_us=0 seq=202 emit_us=0 guest_ms=1794475060173 probe_lag_us=1032 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060223894 dur_us=0 seq=203 emit_us=0 guest_ms=1794475060223 probe_lag_us=893 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475060245773 dur_us=13122 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475060254184 dur_us=8411 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475060255408 dur_us=1224 
+P3TRACE proc=art ev=art.md5_file t_us=1794475060266801 dur_us=11393 
+P3TRACE proc=art ev=art.capture_total t_us=1794475060266801 dur_us=34150 
+P3TRACE proc=art ev=art.tree t_us=1794475060267441 dur_us=185886 settle_us=151096 capture_us=34743 build_reply_us=47 probe_seq=203 probe_at_ms=1794475060223 frame_seq=66 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475060267457 dur_us=185917 reply_bytes=4403
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475060267501 dur_us=44 reply_bytes=4403
+P3TRACE proc=cli ev=cli.png_read t_us=1794475060267910 dur_us=389 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475060267937 dur_us=14 frame_seq=66
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475060267947 dur_us=186412 reply_us=185985
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475060268051 dur_us=186517 engine_us=186423 tree_json_us=94 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475060268085 dur_us=186551 tool=acos_observe_tree outcome_us=186546
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475060268359 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475060268363 dur_us=4 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060274160 dur_us=0 seq=204 emit_us=0 guest_ms=1794475060274 probe_lag_us=159 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060324113 dur_us=0 seq=205 emit_us=0 guest_ms=1794475060324 probe_lag_us=112 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060374249 dur_us=0 seq=206 emit_us=0 guest_ms=1794475060374 probe_lag_us=248 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060424301 dur_us=0 seq=207 emit_us=0 guest_ms=1794475060424 probe_lag_us=300 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475060432106 dur_us=12586 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475060440464 dur_us=8358 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475060441617 dur_us=1153 
+P3TRACE proc=art ev=art.md5_file t_us=1794475060452902 dur_us=11285 
+P3TRACE proc=art ev=art.capture_total t_us=1794475060452902 dur_us=33382 
+P3TRACE proc=art ev=art.tree t_us=1794475060453431 dur_us=185028 settle_us=151117 capture_us=33885 build_reply_us=26 probe_seq=206 probe_at_ms=1794475060374 frame_seq=67 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475060453446 dur_us=185083 reply_bytes=4404
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475060453481 dur_us=35 reply_bytes=4404
+P3TRACE proc=cli ev=cli.png_read t_us=1794475060453954 dur_us=455 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475060453981 dur_us=15 frame_seq=67
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475060453992 dur_us=185634 reply_us=185140
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475060454098 dur_us=185740 engine_us=185645 tree_json_us=95 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475060454133 dur_us=185775 tool=acos_observe_tree outcome_us=185769
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475060454430 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475060454436 dur_us=6 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060474308 dur_us=0 seq=208 emit_us=0 guest_ms=1794475060474 probe_lag_us=307 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060524304 dur_us=0 seq=209 emit_us=0 guest_ms=1794475060524 probe_lag_us=304 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060574468 dur_us=0 seq=210 emit_us=0 guest_ms=1794475060574 probe_lag_us=467 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475060617688 dur_us=12406 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060624629 dur_us=0 seq=211 emit_us=0 guest_ms=1794475060624 probe_lag_us=627 line_bytes=3839
+P3TRACE proc=art ev=art.png_encode t_us=1794475060626800 dur_us=9112 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475060627999 dur_us=1199 
+P3TRACE proc=art ev=art.md5_file t_us=1794475060639567 dur_us=11568 
+P3TRACE proc=art ev=art.capture_total t_us=1794475060639567 dur_us=34285 
+P3TRACE proc=art ev=art.tree t_us=1794475060640104 dur_us=185655 settle_us=150833 capture_us=34797 build_reply_us=25 probe_seq=210 probe_at_ms=1794475060574 frame_seq=68 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475060640115 dur_us=185679 reply_bytes=4404
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475060640155 dur_us=40 reply_bytes=4404
+P3TRACE proc=cli ev=cli.png_read t_us=1794475060640563 dur_us=389 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475060640588 dur_us=15 frame_seq=68
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475060640599 dur_us=186171 reply_us=185746
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475060640703 dur_us=186275 engine_us=186181 tree_json_us=94 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475060640737 dur_us=186309 tool=acos_observe_tree outcome_us=186304
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475060641022 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475060641028 dur_us=6 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060674593 dur_us=0 seq=212 emit_us=0 guest_ms=1794475060674 probe_lag_us=592 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060724575 dur_us=0 seq=213 emit_us=0 guest_ms=1794475060724 probe_lag_us=574 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060774706 dur_us=0 seq=214 emit_us=0 guest_ms=1794475060774 probe_lag_us=705 line_bytes=3839
+P3TRACE proc=art ev=art.capture_composite t_us=1794475060804806 dur_us=12885 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475060813149 dur_us=8343 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475060814303 dur_us=1154 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060824784 dur_us=0 seq=215 emit_us=0 guest_ms=1794475060824 probe_lag_us=783 line_bytes=3839
+P3TRACE proc=art ev=art.md5_file t_us=1794475060826600 dur_us=12297 
+P3TRACE proc=art ev=art.capture_total t_us=1794475060826600 dur_us=34679 
+P3TRACE proc=art ev=art.tree t_us=1794475060827350 dur_us=186309 settle_us=150880 capture_us=35383 build_reply_us=46 probe_seq=214 probe_at_ms=1794475060774 frame_seq=69 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475060827373 dur_us=186345 reply_bytes=4404
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475060827417 dur_us=44 reply_bytes=4404
+P3TRACE proc=cli ev=cli.png_read t_us=1794475060827854 dur_us=417 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475060827882 dur_us=15 frame_seq=69
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475060827893 dur_us=186873 reply_us=186416
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475060827998 dur_us=186978 engine_us=186884 tree_json_us=94 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475060828033 dur_us=187013 tool=acos_observe_tree outcome_us=187007
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060874817 dur_us=0 seq=216 emit_us=0 guest_ms=1794475060874 probe_lag_us=816 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060924864 dur_us=0 seq=217 emit_us=0 guest_ms=1794475060924 probe_lag_us=863 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475060974915 dur_us=0 seq=218 emit_us=0 guest_ms=1794475060974 probe_lag_us=913 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061024991 dur_us=0 seq=219 emit_us=0 guest_ms=1794475061024 probe_lag_us=990 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061075028 dur_us=0 seq=220 emit_us=0 guest_ms=1794475061074 probe_lag_us=1026 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061125085 dur_us=0 seq=221 emit_us=0 guest_ms=1794475061125 probe_lag_us=85 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061175184 dur_us=0 seq=222 emit_us=0 guest_ms=1794475061175 probe_lag_us=183 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061225230 dur_us=0 seq=223 emit_us=0 guest_ms=1794475061225 probe_lag_us=229 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061275325 dur_us=0 seq=224 emit_us=0 guest_ms=1794475061275 probe_lag_us=323 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061325382 dur_us=0 seq=225 emit_us=0 guest_ms=1794475061325 probe_lag_us=382 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061375483 dur_us=0 seq=226 emit_us=0 guest_ms=1794475061375 probe_lag_us=481 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061425538 dur_us=0 seq=227 emit_us=0 guest_ms=1794475061425 probe_lag_us=537 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061475616 dur_us=0 seq=228 emit_us=0 guest_ms=1794475061475 probe_lag_us=615 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061525670 dur_us=0 seq=229 emit_us=0 guest_ms=1794475061525 probe_lag_us=670 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061575868 dur_us=0 seq=230 emit_us=0 guest_ms=1794475061575 probe_lag_us=867 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061625828 dur_us=0 seq=231 emit_us=0 guest_ms=1794475061625 probe_lag_us=828 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061675978 dur_us=0 seq=232 emit_us=0 guest_ms=1794475061675 probe_lag_us=976 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061726148 dur_us=0 seq=233 emit_us=0 guest_ms=1794475061726 probe_lag_us=148 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061776108 dur_us=0 seq=234 emit_us=0 guest_ms=1794475061775 probe_lag_us=1106 line_bytes=3839
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061826066 dur_us=0 seq=235 emit_us=0 guest_ms=1794475061825 probe_lag_us=1065 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061876156 dur_us=0 seq=236 emit_us=0 guest_ms=1794475061876 probe_lag_us=154 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475061879546 dur_us=11423 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475061888029 dur_us=8483 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475061889207 dur_us=1178 
+P3TRACE proc=art ev=art.md5_file t_us=1794475061900727 dur_us=11520 
+P3TRACE proc=art ev=art.capture_total t_us=1794475061900727 dur_us=32604 
+P3TRACE proc=cli ev=cli.png_read t_us=1794475061901619 dur_us=391 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475061901650 dur_us=16 frame_seq=70
+P3TRACE proc=serve ev=serve.call_art t_us=1794475061901684 dur_us=1073357 tool=acos_tap outcome_us=1073350
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475061901865 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475061901870 dur_us=5 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061926226 dur_us=0 seq=237 emit_us=0 guest_ms=1794475061926 probe_lag_us=225 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475061976385 dur_us=0 seq=238 emit_us=0 guest_ms=1794475061976 probe_lag_us=383 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475062026461 dur_us=0 seq=239 emit_us=0 guest_ms=1794475062026 probe_lag_us=459 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475062065675 dur_us=12609 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475062074607 dur_us=8932 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475062075802 dur_us=1195 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475062076577 dur_us=0 seq=240 emit_us=0 guest_ms=1794475062076 probe_lag_us=575 line_bytes=3839
+P3TRACE proc=art ev=art.md5_file t_us=1794475062088157 dur_us=12355 
+P3TRACE proc=art ev=art.capture_total t_us=1794475062088157 dur_us=35091 
+P3TRACE proc=art ev=art.tree t_us=1794475062088826 dur_us=186942 settle_us=151181 capture_us=35712 build_reply_us=49 probe_seq=239 probe_at_ms=1794475062026 frame_seq=71 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475062088862 dur_us=186992 reply_bytes=4407
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475062088906 dur_us=44 reply_bytes=4407
+P3TRACE proc=cli ev=cli.png_read t_us=1794475062089340 dur_us=413 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475062089365 dur_us=14 frame_seq=71
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475062089377 dur_us=187533 reply_us=187082
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475062089481 dur_us=187637 engine_us=187544 tree_json_us=93 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475062089515 dur_us=187672 tool=acos_observe_tree outcome_us=187667
+P3TRACE proc=art ev=art.probe_parse t_us=1794475062391158 dur_us=0 seq=1 emit_us=0 guest_ms=1794475062391 probe_lag_us=156 line_bytes=3837
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475062396453 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475062396463 dur_us=11 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475062424324 dur_us=0 seq=2 emit_us=0 guest_ms=1794475062424 probe_lag_us=323 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475062474389 dur_us=0 seq=3 emit_us=0 guest_ms=1794475062474 probe_lag_us=387 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475062524349 dur_us=0 seq=4 emit_us=0 guest_ms=1794475062524 probe_lag_us=349 line_bytes=3836
+P3TRACE proc=art ev=art.probe_parse t_us=1794475062574433 dur_us=0 seq=5 emit_us=0 guest_ms=1794475062574 probe_lag_us=432 line_bytes=3836
+P3TRACE proc=art ev=art.probe_parse t_us=1794475062624448 dur_us=0 seq=6 emit_us=0 guest_ms=1794475062624 probe_lag_us=448 line_bytes=3836
+P3TRACE proc=art ev=art.capture_composite t_us=1794475062665660 dur_us=12496 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475062674467 dur_us=8807 png_bytes=9545882
+P3TRACE proc=art ev=art.probe_parse t_us=1794475062674553 dur_us=0 seq=7 emit_us=0 guest_ms=1794475062674 probe_lag_us=553 line_bytes=3836
+P3TRACE proc=art ev=art.png_write t_us=1794475062679041 dur_us=4574 
+P3TRACE proc=art ev=art.md5_file t_us=1794475062690892 dur_us=11851 
+P3TRACE proc=art ev=art.capture_total t_us=1794475062690892 dur_us=37728 
+P3TRACE proc=art ev=art.tree t_us=1794475062691157 dur_us=294618 settle_us=256625 capture_us=37964 build_reply_us=29 probe_seq=6 probe_at_ms=1794475062624 frame_seq=1 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475062691180 dur_us=294717 reply_bytes=4399
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475062691225 dur_us=45 reply_bytes=4399
+P3TRACE proc=cli ev=cli.png_read t_us=1794475062691791 dur_us=546 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475062691817 dur_us=15 frame_seq=72
+P3TRACE proc=serve ev=serve.call_art t_us=1794475062691907 dur_us=602171 tool=acos_reset outcome_us=602165
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475062692069 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475062692072 dur_us=3 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475062724597 dur_us=0 seq=8 emit_us=0 guest_ms=1794475062724 probe_lag_us=597 line_bytes=3836
+P3TRACE proc=art ev=art.probe_parse t_us=1794475062774706 dur_us=0 seq=9 emit_us=0 guest_ms=1794475062774 probe_lag_us=705 line_bytes=3836
+P3TRACE proc=art ev=art.probe_parse t_us=1794475062824746 dur_us=0 seq=10 emit_us=0 guest_ms=1794475062824 probe_lag_us=745 line_bytes=3837
+P3TRACE proc=art ev=art.capture_composite t_us=1794475062855979 dur_us=12702 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475062864327 dur_us=8348 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475062868789 dur_us=4462 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475062874862 dur_us=0 seq=11 emit_us=0 guest_ms=1794475062874 probe_lag_us=862 line_bytes=3838
+P3TRACE proc=art ev=art.md5_file t_us=1794475062881283 dur_us=12494 
+P3TRACE proc=art ev=art.capture_total t_us=1794475062881283 dur_us=38006 
+P3TRACE proc=art ev=art.tree t_us=1794475062881631 dur_us=189541 settle_us=151186 capture_us=38330 build_reply_us=25 probe_seq=10 probe_at_ms=1794475062824 frame_seq=2 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475062881664 dur_us=189592 reply_bytes=4400
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475062881707 dur_us=43 reply_bytes=4400
+P3TRACE proc=cli ev=cli.png_read t_us=1794475062882801 dur_us=1071 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475062882830 dur_us=14 frame_seq=73
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475062882847 dur_us=190779 reply_us=189661
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475062882957 dur_us=190890 engine_us=190794 tree_json_us=96 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475062882992 dur_us=190925 tool=acos_observe_tree outcome_us=190919
+P3TRACE proc=art ev=art.probe_parse t_us=1794475062924955 dur_us=0 seq=12 emit_us=0 guest_ms=1794475062924 probe_lag_us=954 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475062974984 dur_us=0 seq=13 emit_us=0 guest_ms=1794475062974 probe_lag_us=982 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063025032 dur_us=0 seq=14 emit_us=0 guest_ms=1794475063024 probe_lag_us=1030 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063075081 dur_us=0 seq=15 emit_us=0 guest_ms=1794475063074 probe_lag_us=1080 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063125230 dur_us=0 seq=16 emit_us=0 guest_ms=1794475063125 probe_lag_us=229 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063175187 dur_us=0 seq=17 emit_us=0 guest_ms=1794475063175 probe_lag_us=185 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063225302 dur_us=0 seq=18 emit_us=0 guest_ms=1794475063225 probe_lag_us=301 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063275324 dur_us=0 seq=19 emit_us=0 guest_ms=1794475063275 probe_lag_us=322 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063325378 dur_us=0 seq=20 emit_us=0 guest_ms=1794475063325 probe_lag_us=376 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063375399 dur_us=0 seq=21 emit_us=0 guest_ms=1794475063375 probe_lag_us=398 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063425501 dur_us=0 seq=22 emit_us=0 guest_ms=1794475063425 probe_lag_us=499 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063475535 dur_us=0 seq=23 emit_us=0 guest_ms=1794475063475 probe_lag_us=534 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063525603 dur_us=0 seq=24 emit_us=0 guest_ms=1794475063525 probe_lag_us=602 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063575669 dur_us=0 seq=25 emit_us=0 guest_ms=1794475063575 probe_lag_us=668 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063625741 dur_us=0 seq=26 emit_us=0 guest_ms=1794475063625 probe_lag_us=740 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063675811 dur_us=0 seq=27 emit_us=0 guest_ms=1794475063675 probe_lag_us=810 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063725874 dur_us=0 seq=28 emit_us=0 guest_ms=1794475063725 probe_lag_us=874 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063776112 dur_us=0 seq=29 emit_us=0 guest_ms=1794475063776 probe_lag_us=111 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063826029 dur_us=0 seq=30 emit_us=0 guest_ms=1794475063825 probe_lag_us=1029 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063876194 dur_us=0 seq=31 emit_us=0 guest_ms=1794475063876 probe_lag_us=193 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475063918677 dur_us=11421 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063926288 dur_us=0 seq=32 emit_us=0 guest_ms=1794475063926 probe_lag_us=286 line_bytes=3838
+P3TRACE proc=art ev=art.png_encode t_us=1794475063927166 dur_us=8489 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475063928288 dur_us=1122 
+P3TRACE proc=art ev=art.md5_file t_us=1794475063940155 dur_us=11867 
+P3TRACE proc=art ev=art.capture_total t_us=1794475063940155 dur_us=32899 
+P3TRACE proc=cli ev=cli.png_read t_us=1794475063941251 dur_us=401 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475063941284 dur_us=15 frame_seq=74
+P3TRACE proc=serve ev=serve.call_art t_us=1794475063941320 dur_us=1058008 tool=acos_tap outcome_us=1058001
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475063941543 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475063941547 dur_us=4 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475063976332 dur_us=0 seq=33 emit_us=0 guest_ms=1794475063976 probe_lag_us=330 line_bytes=3838
+P3TRACE proc=art ev=art.probe_parse t_us=1794475064026364 dur_us=0 seq=34 emit_us=0 guest_ms=1794475064026 probe_lag_us=362 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475064076390 dur_us=0 seq=35 emit_us=0 guest_ms=1794475064076 probe_lag_us=389 line_bytes=3837
+P3TRACE proc=art ev=art.capture_composite t_us=1794475064105424 dur_us=12842 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475064113805 dur_us=8381 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475064115028 dur_us=1223 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475064126712 dur_us=0 seq=36 emit_us=0 guest_ms=1794475064126 probe_lag_us=710 line_bytes=3838
+P3TRACE proc=art ev=art.md5_file t_us=1794475064126747 dur_us=11719 
+P3TRACE proc=art ev=art.capture_total t_us=1794475064126747 dur_us=34165 
+P3TRACE proc=art ev=art.tree t_us=1794475064127317 dur_us=185744 settle_us=151008 capture_us=34710 build_reply_us=26 probe_seq=35 probe_at_ms=1794475064076 frame_seq=4 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475064127327 dur_us=185780 reply_bytes=4404
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475064127359 dur_us=32 reply_bytes=4404
+P3TRACE proc=cli ev=cli.png_read t_us=1794475064127799 dur_us=420 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475064127823 dur_us=14 frame_seq=75
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475064127842 dur_us=186301 reply_us=185837
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475064127949 dur_us=186408 engine_us=186315 tree_json_us=93 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475064127983 dur_us=186442 tool=acos_observe_tree outcome_us=186437
+P3TRACE proc=art ev=art.probe_parse t_us=1794475064424478 dur_us=0 seq=1 emit_us=0 guest_ms=1794475064424 probe_lag_us=477 line_bytes=3837
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475064428324 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475064428334 dur_us=12 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475064457314 dur_us=0 seq=2 emit_us=0 guest_ms=1794475064457 probe_lag_us=312 line_bytes=3836
+P3TRACE proc=art ev=art.probe_parse t_us=1794475064507343 dur_us=0 seq=3 emit_us=0 guest_ms=1794475064507 probe_lag_us=342 line_bytes=3836
+P3TRACE proc=art ev=art.probe_parse t_us=1794475064557443 dur_us=0 seq=4 emit_us=0 guest_ms=1794475064557 probe_lag_us=442 line_bytes=3836
+P3TRACE proc=art ev=art.probe_parse t_us=1794475064607448 dur_us=0 seq=5 emit_us=0 guest_ms=1794475064607 probe_lag_us=447 line_bytes=3836
+P3TRACE proc=art ev=art.probe_parse t_us=1794475064657506 dur_us=0 seq=6 emit_us=0 guest_ms=1794475064657 probe_lag_us=505 line_bytes=3836
+P3TRACE proc=art ev=art.capture_composite t_us=1794475064697721 dur_us=12753 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475064706500 dur_us=8779 png_bytes=9545882
+P3TRACE proc=art ev=art.probe_parse t_us=1794475064707703 dur_us=0 seq=7 emit_us=0 guest_ms=1794475064707 probe_lag_us=701 line_bytes=3837
+P3TRACE proc=art ev=art.png_write t_us=1794475064711013 dur_us=4513 
+P3TRACE proc=art ev=art.md5_file t_us=1794475064722955 dur_us=11942 
+P3TRACE proc=art ev=art.capture_total t_us=1794475064722955 dur_us=37987 
+P3TRACE proc=art ev=art.tree t_us=1794475064723397 dur_us=295013 settle_us=256583 capture_us=38405 build_reply_us=25 probe_seq=6 probe_at_ms=1794475064657 frame_seq=1 tree_bytes=3798
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475064723442 dur_us=295108 reply_bytes=4399
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475064723493 dur_us=51 reply_bytes=4399
+P3TRACE proc=cli ev=cli.png_read t_us=1794475064724111 dur_us=597 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475064724141 dur_us=16 frame_seq=76
+P3TRACE proc=serve ev=serve.call_art t_us=1794475064724226 dur_us=596032 tool=acos_reset outcome_us=596026
+P3TRACE proc=cli ev=cli.cmd_request t_us=1794475064724391 dur_us=0 bytes=14
+P3TRACE proc=cli ev=cli.cmd_write t_us=1794475064724395 dur_us=4 bytes=14
+P3TRACE proc=art ev=art.probe_parse t_us=1794475064757730 dur_us=0 seq=8 emit_us=0 guest_ms=1794475064757 probe_lag_us=729 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475064807736 dur_us=0 seq=9 emit_us=0 guest_ms=1794475064807 probe_lag_us=735 line_bytes=3837
+P3TRACE proc=art ev=art.probe_parse t_us=1794475064857930 dur_us=0 seq=10 emit_us=0 guest_ms=1794475064857 probe_lag_us=929 line_bytes=3838
+P3TRACE proc=art ev=art.capture_composite t_us=1794475064887958 dur_us=12594 w=1080 h=2209 stride=1080 rgba=9542880
+P3TRACE proc=art ev=art.png_encode t_us=1794475064896375 dur_us=8417 png_bytes=9545882
+P3TRACE proc=art ev=art.png_write t_us=1794475064898345 dur_us=1970 
+P3TRACE proc=art ev=art.probe_parse t_us=1794475064907888 dur_us=0 seq=11 emit_us=0 guest_ms=1794475064907 probe_lag_us=886 line_bytes=3837
+P3TRACE proc=art ev=art.md5_file t_us=1794475064910468 dur_us=12123 
+P3TRACE proc=art ev=art.capture_total t_us=1794475064910468 dur_us=35104 
+P3TRACE proc=art ev=art.tree t_us=1794475064910862 dur_us=186445 settle_us=150946 capture_us=35466 build_reply_us=33 probe_seq=10 probe_at_ms=1794475064857 frame_seq=2 tree_bytes=3799
+P3TRACE proc=cli ev=cli.cmd_wait t_us=1794475064910877 dur_us=186482 reply_bytes=4401
+P3TRACE proc=cli ev=cli.reply_json_parse t_us=1794475064910911 dur_us=34 reply_bytes=4401
+P3TRACE proc=cli ev=cli.png_read t_us=1794475064912013 dur_us=1083 png_bytes=9545882
+P3TRACE proc=cli ev=cli.tree_parse t_us=1794475064912038 dur_us=14 frame_seq=77
+P3TRACE proc=cli ev=cli.request_tree t_us=1794475064912048 dur_us=187659 reply_us=186540
+P3TRACE proc=serve ev=serve.observe_tree t_us=1794475064912151 dur_us=187762 engine_us=187669 tree_json_us=93 nodes=12 tree_bytes=4101
+P3TRACE proc=serve ev=serve.call_art t_us=1794475064912185 dur_us=187797 tool=acos_observe_tree outcome_us=187792
