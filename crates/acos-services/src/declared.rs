@@ -561,6 +561,31 @@ impl ServiceObject for UiModeService {
 // INotificationManager
 // ---------------------------------------------------------------------------
 
+/// One notification channel the app created (R2).
+#[derive(Debug, Clone, PartialEq)]
+pub struct StoredNotificationChannel {
+    /// Owning package.
+    pub package: String,
+    /// Channel id (`NotificationChannel.getId()`).
+    pub id: String,
+    /// Group id, when the channel names one.
+    pub group: Option<String>,
+    /// The channel payload in the exact `NotificationChannel.writeToParcel`
+    /// field order, so reading it back is byte-faithful.
+    pub payload: crate::value::Parcelable,
+}
+
+/// One notification channel group the app created (R2).
+#[derive(Debug, Clone, PartialEq)]
+pub struct StoredNotificationChannelGroup {
+    /// Owning package.
+    pub package: String,
+    /// Group id (`NotificationChannelGroup.getId()`).
+    pub id: String,
+    /// The group payload in `NotificationChannelGroup.writeToParcel` order.
+    pub payload: crate::value::Parcelable,
+}
+
 /// `INotificationManager` state: recording only, nothing is ever posted.
 #[derive(Debug, Default)]
 pub struct NotificationState {
@@ -568,8 +593,10 @@ pub struct NotificationState {
     pub posted: Vec<(String, i32)>,
     /// Toasts that Android would have shown (`(package, text)`).
     pub toasts: Vec<String>,
-    /// Channels created (recorded).
-    pub channels: Vec<String>,
+    /// Channels the app created, per package (R2).
+    pub channels: Vec<StoredNotificationChannel>,
+    /// Channel groups the app created, per package (R2).
+    pub channel_groups: Vec<StoredNotificationChannelGroup>,
     /// Every toast the framework asked the (in-process) system service to show,
     /// in order. This is the real `Toast.show()` -> `INotificationManager`
     /// request, with the text the framework serialised.
@@ -615,6 +642,32 @@ impl NotificationState {
     }
 }
 
+/// The channels/groups carried by a decoded `ParceledListSlice` argument.
+fn parceled_channels(args: &[Value], index: usize) -> Vec<crate::value::Parcelable> {
+    args.get(index)
+        .and_then(Value::as_parcelable)
+        .and_then(crate::parcelable::parceled_list_items)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_parcelable)
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A nullable string field in a `NotificationChannel`/Group payload.
+fn byte_string_field(payload: &crate::value::Parcelable, index: usize) -> Option<String> {
+    match payload.field(index) {
+        Some(Value::Cond {
+            present: true,
+            values,
+        }) => values.first().and_then(Value::as_str).map(str::to_string),
+        _ => None,
+    }
+}
+
 /// `INotificationManager` handler.
 pub struct NotificationService {
     state: Arc<Mutex<NotificationState>>,
@@ -640,9 +693,6 @@ impl ServiceObject for NotificationService {
             "getPackageImportance" => vec![Value::Int(0)],
             "getActiveNotifications" | "getActiveNotificationsWithAttribution" => {
                 vec![Value::List(Some(Vec::new()))]
-            }
-            "getNotificationChannels" | "getNotificationChannelsForPackage" => {
-                vec![Value::TypedObject(crate::value::Parcelable::Null)]
             }
             "getHintsFromListenerNoToken" => vec![Value::Int(0)],
             "getZenMode" => vec![Value::Int(0)],
@@ -691,11 +741,246 @@ impl ServiceObject for NotificationService {
                 self.state.lock().unwrap().cancelled_toasts.push(package);
                 vec![]
             }
-            "createNotificationChannels" | "createNotificationChannelsForPackage" => {
+            "createNotificationChannelGroups" => {
                 let package = str_arg(args, 0);
-                self.state.lock().unwrap().channels.push(package);
-                return Err(unsupported(interface, method))
+                let groups = parceled_channels(args, 1);
+                let mut st = self.state.lock().unwrap();
+                for payload in groups {
+                    let Some(id) = byte_string_field(&payload, 0) else {
+                        continue;
+                    };
+                    st.channel_groups
+                        .retain(|g| g.package != package || g.id != id);
+                    st.channel_groups.push(StoredNotificationChannelGroup {
+                        package: package.clone(),
+                        id,
+                        payload,
+                    });
+                }
+                Vec::new()
             }
+            "createNotificationChannels" | "createNotificationChannelsForPackage" => {
+                // `createNotificationChannels(pkg, slice)` /
+                // `createNotificationChannelsForPackage(pkg, uid, slice)`.
+                let package = str_arg(args, 0);
+                let slice_index = if method.name == "createNotificationChannels" {
+                    1
+                } else {
+                    2
+                };
+                let channels = parceled_channels(args, slice_index);
+                let mut st = self.state.lock().unwrap();
+                for payload in channels {
+                    let Some(id) = byte_string_field(&payload, 0) else {
+                        continue;
+                    };
+                    let group = byte_string_field(&payload, 14);
+                    st.channels.retain(|c| c.package != package || c.id != id);
+                    st.channels.push(StoredNotificationChannel {
+                        package: package.clone(),
+                        id,
+                        group,
+                        payload,
+                    });
+                }
+                Vec::new()
+            }
+            "updateNotificationChannelForPackage" => {
+                let package = str_arg(args, 0);
+                let payload = args.get(2).and_then(Value::as_parcelable).cloned();
+                if let Some(payload) = payload {
+                    if let Some(id) = byte_string_field(&payload, 0) {
+                        let group = byte_string_field(&payload, 14);
+                        let mut st = self.state.lock().unwrap();
+                        st.channels.retain(|c| c.package != package || c.id != id);
+                        st.channels.push(StoredNotificationChannel {
+                            package,
+                            id,
+                            group,
+                            payload,
+                        });
+                    }
+                }
+                Vec::new()
+            }
+            "updateNotificationChannelGroupForPackage" => {
+                let package = str_arg(args, 0);
+                let payload = args.get(2).and_then(Value::as_parcelable).cloned();
+                if let Some(payload) = payload {
+                    if let Some(id) = byte_string_field(&payload, 0) {
+                        let mut st = self.state.lock().unwrap();
+                        st.channel_groups
+                            .retain(|g| g.package != package || g.id != id);
+                        st.channel_groups.push(StoredNotificationChannelGroup {
+                            package,
+                            id,
+                            payload,
+                        });
+                    }
+                }
+                Vec::new()
+            }
+            "getNotificationChannels" | "getNotificationChannelsForPackage" => {
+                let package = str_arg(args, 0);
+                let st = self.state.lock().unwrap();
+                let items: Vec<Value> = st
+                    .channels
+                    .iter()
+                    .filter(|c| c.package == package)
+                    .map(|c| Value::Parcelable(c.payload.clone()))
+                    .collect();
+                vec![Value::TypedObject(crate::parcelable::parceled_list_of(
+                    items,
+                ))]
+            }
+            "getNotificationChannelsBypassingDnd" | "getNotificationChannelGroupsForPackage"
+            | "getNotificationChannelGroups" => {
+                // Groups and DND-bypassing channels are derived from stored
+                // state. A group is returned only when the app created it; no
+                // channels bypass DND on a device with no policy.
+                let package = str_arg(args, 0);
+                let st = self.state.lock().unwrap();
+                let items: Vec<Value> = if method.name == "getNotificationChannelGroupsForPackage"
+                    || method.name == "getNotificationChannelGroups"
+                {
+                    st.channel_groups
+                        .iter()
+                        .filter(|g| g.package == package)
+                        .map(|g| Value::Parcelable(g.payload.clone()))
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                vec![Value::TypedObject(crate::parcelable::parceled_list_of(
+                    items,
+                ))]
+            }
+            "getNotificationChannel" | "getNotificationChannelForPackage" => {
+                // Args: package, uid, channelId, (featureId, includeDeleted).
+                let package = str_arg(args, 0);
+                let id = str_arg(args, 2);
+                let st = self.state.lock().unwrap();
+                let found = st
+                    .channels
+                    .iter()
+                    .find(|c| c.package == package && c.id == id)
+                    .map(|c| c.payload.clone());
+                vec![Value::TypedObject(
+                    found.unwrap_or(crate::value::Parcelable::Null),
+                )]
+            }
+            "getConversationNotificationChannel" => {
+                let package = str_arg(args, 0);
+                let id = str_arg(args, 2);
+                let st = self.state.lock().unwrap();
+                let found = st
+                    .channels
+                    .iter()
+                    .find(|c| c.package == package && c.id == id)
+                    .map(|c| c.payload.clone());
+                vec![Value::TypedObject(
+                    found.unwrap_or(crate::value::Parcelable::Null),
+                )]
+            }
+            "createConversationNotificationChannelForPackage" => {
+                let package = str_arg(args, 0);
+                let payload = args.get(2).and_then(Value::as_parcelable).cloned();
+                if let Some(payload) = payload {
+                    if let Some(id) = byte_string_field(&payload, 0) {
+                        let group = byte_string_field(&payload, 14);
+                        let mut st = self.state.lock().unwrap();
+                        st.channels.retain(|c| c.package != package || c.id != id);
+                        st.channels.push(StoredNotificationChannel {
+                            package,
+                            id,
+                            group,
+                            payload,
+                        });
+                    }
+                }
+                Vec::new()
+            }
+            "getNotificationChannelGroup" | "getNotificationChannelGroupForPackage"
+            | "getPopulatedNotificationChannelGroupForPackage" => {
+                let package = str_arg(args, 0);
+                let id = if method.name == "getNotificationChannelGroup" {
+                    str_arg(args, 1)
+                } else if method.name == "getPopulatedNotificationChannelGroupForPackage" {
+                    str_arg(args, 2)
+                } else {
+                    str_arg(args, 1)
+                };
+                let st = self.state.lock().unwrap();
+                let found = st
+                    .channel_groups
+                    .iter()
+                    .find(|g| g.package == package && g.id == id)
+                    .map(|g| g.payload.clone());
+                vec![Value::TypedObject(
+                    found.unwrap_or(crate::value::Parcelable::Null),
+                )]
+            }
+            "deleteNotificationChannel" => {
+                let package = str_arg(args, 0);
+                let id = str_arg(args, 1);
+                self.state
+                    .lock()
+                    .unwrap()
+                    .channels
+                    .retain(|c| c.package != package || c.id != id);
+                Vec::new()
+            }
+            "deleteNotificationChannelGroup" => {
+                let package = str_arg(args, 0);
+                let id = str_arg(args, 1);
+                self.state
+                    .lock()
+                    .unwrap()
+                    .channel_groups
+                    .retain(|g| g.package != package || g.id != id);
+                Vec::new()
+            }
+            "getNumNotificationChannelsForPackage" => {
+                let package = str_arg(args, 0);
+                let n = self
+                    .state
+                    .lock()
+                    .unwrap()
+                    .channels
+                    .iter()
+                    .filter(|c| c.package == package)
+                    .count();
+                vec![Value::Int(i32::try_from(n).unwrap_or(i32::MAX))]
+            }
+            "getBlockedChannelCount" | "getDeletedChannelCount" => vec![Value::Int(0)],
+            "onlyHasDefaultChannel" => {
+                let package = str_arg(args, 0);
+                let st = self.state.lock().unwrap();
+                let channels: Vec<_> = st
+                    .channels
+                    .iter()
+                    .filter(|c| c.package == package)
+                    .collect();
+                vec![Value::Bool(
+                    channels.is_empty() || (channels.len() == 1 && channels[0].id == "miscellaneous"),
+                )]
+            }
+            "areChannelsBypassingDnd" => vec![Value::Bool(false)],
+            "getNotificationChannelGroupsFromPrivilegedListener"
+            | "getNotificationChannelsFromPrivilegedListener"
+            | "getAppActiveNotifications"
+            | "getActiveNotificationsFromListener"
+            | "getSnoozedNotificationsFromListener" => vec![Value::TypedObject(
+                crate::parcelable::parceled_list_of(Vec::new()),
+            )],
+            "getConsolidatedNotificationPolicy" | "getZenModeConfig" | "getNotificationHistory"
+            | "getAutomaticZenRule" | "getEffectsSuppressor" => {
+                vec![Value::TypedObject(crate::value::Parcelable::Null)]
+            }
+            "getZenRules" => vec![Value::List(Some(Vec::new()))],
+            "setInterruptionFilter" | "setNotificationDelegate" | "setToastRateLimitingEnabled"
+            | "setPrivateNotificationsAllowed" | "clearRequestedListenerHints"
+            | "requestHintsFromListener" | "silenceNotificationSound" => Vec::new(),
             _ => return Err(unsupported(interface, method)),
         };
         Ok(CallResult {
