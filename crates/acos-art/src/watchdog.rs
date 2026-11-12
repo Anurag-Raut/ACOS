@@ -26,6 +26,7 @@
 //! bounded here, and Scudo reserves ~8.6 TB of virtual address space at startup.
 
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -103,6 +104,10 @@ pub struct MemoryWatchdog {
     trip: Arc<Mutex<Option<Trip>>>,
     rss_now: Arc<Mutex<u64>>,
     stop: Arc<AtomicBool>,
+    /// Wakes the sampler the moment it is dropped instead of letting it finish
+    /// its `POLL_INTERVAL` sleep (P4: that sleep delayed every launcher exit, and
+    /// so every `reset` stop, by up to 50 ms).
+    wake: Option<Sender<()>>,
     handle: Option<JoinHandle<()>>,
 }
 
@@ -117,6 +122,7 @@ impl MemoryWatchdog {
         let trip: Arc<Mutex<Option<Trip>>> = Arc::new(Mutex::new(None));
         let rss_now = Arc::new(Mutex::new(0u64));
         let stop = Arc::new(AtomicBool::new(false));
+        let (wake_tx, wake_rx): (Sender<()>, Receiver<()>) = mpsc::channel();
         let (t, tr, rn, s) = (
             Arc::clone(&target),
             Arc::clone(&trip),
@@ -158,10 +164,23 @@ impl MemoryWatchdog {
                         }
                     }
                 }
-                thread::sleep(POLL_INTERVAL);
+                // Sleep until the next sample, or return at once when the
+                // watchdog is dropped (`recv_timeout` wakes on the closed
+                // channel) or when a trip armed a kill ended the loop.
+                if matches!(wake_rx.recv_timeout(POLL_INTERVAL), Err(RecvTimeoutError::Disconnected)) {
+                    break;
+                }
             }
         });
-        Some(Self { limit_bytes, target, trip, rss_now, stop, handle: Some(handle) })
+        Some(Self {
+            limit_bytes,
+            target,
+            trip,
+            rss_now,
+            stop,
+            wake: Some(wake_tx),
+            handle: Some(handle),
+        })
     }
 
     /// Start from `ACOS_ART_RSS_MAX` (the normal path).
@@ -212,6 +231,10 @@ impl MemoryWatchdog {
 impl Drop for MemoryWatchdog {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
+        // Closing the channel wakes the sampler immediately; without it the join
+        // waited out the rest of the 50 ms interval, which was the launcher's
+        // exit delay on every reset (P4).
+        self.wake.take();
         if let Some(h) = self.handle.take() {
             let _ = h.join();
         }

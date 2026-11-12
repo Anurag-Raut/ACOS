@@ -1714,11 +1714,18 @@ impl ArtSession {
         // wait hit its deadline the waiter thread still owns the child and reaps
         // it once the kernel delivers the signal below.
         //
-        // One `/proc` scan decides both whether SIGKILL is needed and, when the
-        // group is already empty, that it is gone: the walk costs more than the
-        // guest's own exit (thousands of `/proc/<pid>/stat` reads), so the stop
-        // must not walk it twice.
-        let survivors = self.group_survivors();
+        // D-M6/P4: the kernel answers "is the group empty?" directly with
+        // `kill(-pgid, 0)` (ESRCH = no member, zombies included), which is both
+        // atomic and free compared with reading `/proc/<pid>/stat` for every
+        // process on the host. That walk cost more than the guest's own exit
+        // (~65 ms of every stop). The `/proc` scan is kept, but only when the
+        // kernel says a member still exists: then it names the survivors for
+        // the teardown report and for the SIGKILL/grace path below.
+        let survivors = if self.group_is_empty() {
+            Vec::new()
+        } else {
+            self.group_survivors()
+        };
         if !survivors.is_empty() {
             self.sigkill_group();
         }
@@ -1768,9 +1775,23 @@ impl ArtSession {
             "exit_ms": exit_ms,
             "stop_ms": started.elapsed().as_millis() as u64,
             "reaped_before_deadline": exited,
+            "unix_ms": now_unix_ms(),
         }));
         self.write_timing(started.elapsed().as_millis() as u64);
         Ok(())
+    }
+
+    /// Whether no process is left in the session's process group, asked of the
+    /// kernel instead of walking `/proc` (D-M6 candidate 3, P4).
+    ///
+    /// `kill(-group, 0)` runs the same existence and permission checks as a
+    /// real signal without delivering one: `ESRCH` proves the group is empty
+    /// (a zombie is still a member, so it is not hidden), `EPERM`/success means
+    /// a member exists. Anything else falls back to the `/proc` scan, which is
+    /// then the proof and the survivor list. No group recorded (`None`) keeps
+    /// the old unverified-report behaviour.
+    fn group_is_empty(&self) -> bool {
+        self.process_group.map(group_is_empty).unwrap_or(true)
     }
 
     /// Wait for the child to exit, without polling, up to `deadline`.
@@ -2147,10 +2168,13 @@ impl SessionBackend for ArtSession {
         // left a closed-but-held session whose cached tree `acos_launch` served
         // for the rest of the daemon's life (W50 §7 item 3).
         self.closed = true;
+        let phase_started = Instant::now();
         if let Err(error) = self.shutdown() {
             self.invalidate_frame();
             return Err(error);
         }
+        let stop_ms = phase_started.elapsed().as_millis() as u64;
+        let relaunch_started = Instant::now();
         let mut fresh = match ArtSession::start(&apk, &artifacts) {
             Ok(fresh) => fresh,
             Err(error) => {
@@ -2158,6 +2182,7 @@ impl SessionBackend for ArtSession {
                 return Err(error);
             }
         };
+        let start_ms = relaunch_started.elapsed().as_millis() as u64;
         fresh.seq_offset = offset;
         fresh.log_offset = log_offset;
         // Session-level cost accounting spans the relaunch.
@@ -2165,6 +2190,7 @@ impl SessionBackend for ArtSession {
         fresh.session_start_ms = boot_ms.saturating_add(fresh.session_start_ms);
         // Leave a live frame bound: the step after `reset` may be a pure
         // assertion (`assert_text`), which reads the last completed frame.
+        let bind_started = Instant::now();
         let bound = fresh
             .command(serde_json::json!({"cmd":"tree"}))
             .and_then(|reply| fresh.absorb(&reply));
@@ -2173,8 +2199,20 @@ impl SessionBackend for ArtSession {
             self.invalidate_frame();
             return Err(error);
         }
+        let bind_ms = bind_started.elapsed().as_millis() as u64;
         fresh.last_input = None;
         *self = fresh;
+        // P4 (trace-only, env-gated): reset's phase split on the host clock.
+        // Inert unless `DM6_RESET_TRACE` names a file; no reply or control
+        // flow changes.
+        dm6_trace(serde_json::json!({
+            "event": "reset",
+            "stop_ms": stop_ms,
+            "relaunch_ms": start_ms,
+            "bind_ms": bind_ms,
+            "engine_total_ms": phase_started.elapsed().as_millis() as u64,
+            "unix_ms": now_unix_ms(),
+        }));
         Ok(())
     }
 
@@ -2418,6 +2456,26 @@ fn read_png(path: &Path) -> Result<Vec<u8>, BackendError> {
             detail: format!("cannot read frame {}: {error}", path.display()),
         })?;
     Ok(bytes)
+}
+
+/// Whether process group `group` has no member left, asked of the kernel.
+///
+/// `kill(-group, 0)` runs the same existence and permission checks as a real
+/// signal without delivering one: `ESRCH` proves the group is empty (a zombie
+/// is still a member, so one cannot hide here), `EPERM`/success means a member
+/// exists. Any other errno answers `false`, so the caller falls back to the
+/// `/proc` scan and never claims a proof it did not get.
+pub(crate) fn group_is_empty(group: i32) -> bool {
+    // SAFETY: `group` is the caller's own child's process group
+    // (`process_group(0)` at spawn); signal 0 performs only the check.
+    let rc = unsafe { libc::kill(-group, 0) };
+    if rc == 0 {
+        return false;
+    }
+    std::io::Error::last_os_error()
+        .raw_os_error()
+        .map(|errno| errno == libc::ESRCH)
+        .unwrap_or(false)
 }
 
 /// Pids currently in process group `group`.
@@ -2903,6 +2961,50 @@ mod tests {
             processes_in_group(group),
             Vec::<u32>::new(),
             "a killed process group must leave no survivors"
+        );
+    }
+
+    /// P4: the kernel's own group check must say "live" for a live group and
+    /// "empty" once the group is gone, without reading `/proc`. This is the
+    /// proof `shutdown` now uses on the clean path; the `/proc` scan remains
+    /// only for naming survivors when the check says a member exists.
+    #[test]
+    fn kernel_group_check_agrees_with_the_scan() {
+        let mut child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("sleep 30 & sleep 30")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .process_group(0)
+            .spawn()
+            .expect("spawn a process group");
+        let group = child.id() as i32;
+        assert!(
+            !group_is_empty(group),
+            "a live process group must not read as empty"
+        );
+        assert!(
+            !processes_in_group(group).is_empty(),
+            "the scan agrees the group is live"
+        );
+        // SAFETY: the child leads this group; `-group` names it and nothing else.
+        unsafe {
+            libc::kill(-group, libc::SIGKILL);
+        }
+        let _ = child.wait();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < deadline && !group_is_empty(group) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            group_is_empty(group),
+            "a killed and reaped process group must read as empty"
+        );
+        assert_eq!(
+            processes_in_group(group),
+            Vec::<u32>::new(),
+            "the scan agrees the group is gone"
         );
     }
 
