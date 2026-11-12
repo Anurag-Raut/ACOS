@@ -323,3 +323,37 @@ real execution artifact (the E2.1 C1 gate), not a plan.*
   with no non-determinism (`results/oracle/dexprogs-nondeterminism.txt`).
 - **Conclusion / next:** `physical-device` still not captured; bind the renderer
   to the framework graphics natives (M3).
+
+## E2.7 — GL1: session lifetime vs. `PR_SET_PDEATHSIG`, and bounded destruction — MEASURED
+
+- **Date / commit:** 2026-11-12; branch `gaten-gl1-lifetime` off `main` `bf70bb7`.
+- **Question / goal:** (a) must a kept ART session survive the client connection that launched it, without
+  losing the "no orphan when the daemon is SIGKILLed" guarantee? (b) can explicit destruction be
+  deterministic and fast for an app whose threads never exit (RN/Hermes), instead of waiting on them?
+- **Method:** `acos serve --engine art`; `acos launch --keep` in process A (disconnects), then
+  `acos session status/observe --tree/tap/observe --screenshot` in process B; `session destroy` timed;
+  `kill -9` on the daemon with a live session. Two binaries from the same tree, one line apart
+  (`command.spawn()` on the calling thread vs. `spawner::spawn(command)`), same fixture, same commands.
+  Fixtures: `counter`, and a new `thread-heavy` (12 non-daemon threads that never exit), added to
+  `tools/build-apps.sh`. All runs through `tools/art-runtime/run-exclusive.sh --task GL1 --
+  tools/guarded.sh --mem 8G --time N`.
+- **Result:** before, every client-B call answered `GUEST_EXITED … exited: signal 9` (the PDEATHSIG fired
+  when the launch connection's *thread* ended); after, status/tree/tap/screenshot all pass, `0` → `1`
+  with a 9.5 MB PNG, and `destroy` leaves no `acos-art`. Daemon `kill -9`: guests gone in **1 ms**.
+  Destroy wall p50/p95: `counter` 18/19 ms, `thread-heavy` 20/20 ms; the forced-kill path
+  (`ACOS_ART_TEARDOWN_GRACE_MS=0`) reports `lifecycle: "killed"` in 12 ms, still clean.
+- **Finding:** `PR_SET_PDEATHSIG` is per parent **thread**; a per-connection thread is the wrong parent
+  for a session owner. Spawning from one process-lifetime thread keeps the guarantee exact (process death
+  → guest death) and costs nothing. Destruction never needed to join app threads: Android kills, and the
+  10 s flat deadline was replaced by a 300 ms lifecycle grace (≈15× the measured 20 ms cost) followed by
+  the same group kill.
+- **Fidelity / evidence:** `art-reference`; `results/art-runtime/GL1.md`,
+  `crates/acos-cli/tests/gl1_kept_session.rs` (4 ignored real-ART tests),
+  `engine::art::tests::a_child_spawned_through_the_spawner_survives_the_asking_thread` (unit,
+  with the direct-spawn negative control).
+- **Regression / false pass:** the SIGKILL test asserts the orphan guarantee still holds; the destroy
+  test asserts `survivors == []`, `session_leftovers == []`, `verified == true` and the id is unlisted for
+  both fixtures; the forced-kill test proves the bound does not depend on the guest cooperating.
+- **Conclusion / next:** session ownership is now process-scoped, not connection-scoped. Next: deliver
+  the activity's own `onDestroy` before the kill (guest-side, `crates/acos-art/guest`), so the
+  `lifecycle` label can mean "onDestroy returned" rather than "the launcher ended by itself".
