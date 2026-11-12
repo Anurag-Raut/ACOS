@@ -1,0 +1,173 @@
+{
+  "request_id": "req_323fa6_18e726107c58544d",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "session_id": "s_art_gaten-x86_64-debug-launcherpatch-aligned",
+  "isolation": "process",
+  "capabilities_used": [
+    "lifecycle",
+    "screenshot",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": "results/art-runtime/evidence/W28-artifacts/gaten-debug",
+    "verdict": {
+      "app": {
+        "package": "com.gaten",
+        "path": ".cache/gaten/gaten-x86_64-debug-launcherpatch-aligned.apk",
+        "sha256": "4f0c192a763e1b8d5ab9bd01caa004867bea4dc0cb00bc6b7d0b53baf8999150"
+      },
+      "backend": "acos-native",
+      "engine": "art",
+      "evidence": {
+        "artifacts": "results/art-runtime/evidence/W28-artifacts/gaten-debug",
+        "engine_report": "results/art-runtime/evidence/W28-artifacts/gaten-debug/engine.json",
+        "verdict": "results/art-runtime/evidence/W28-artifacts/gaten-debug/verdict.json"
+      },
+      "evidence_provenance": {
+        "binder_transactions": "host-observed",
+        "crash_reports": "guest-asserted",
+        "frames": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "logs": "guest-asserted",
+        "static_manifest": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-12T00:54:13.858Z",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [],
+      "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+      "reproducer": {
+        "acos_version": "0.1.0",
+        "apk_path": ".cache/gaten/gaten-x86_64-debug-launcherpatch-aligned.apk",
+        "apk_sha256": "4f0c192a763e1b8d5ab9bd01caa004867bea4dc0cb00bc6b7d0b53baf8999150",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 420,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": "scenarios/w28-gaten-debug-launch.yaml",
+        "scenario_sha256": "0c7738972d302d6e5bf9a62f1e47a92993c760cedb686ecd322cd09a2fe6a76c"
+      },
+      "request_id": "req_323fa6_18e726107c58544d",
+      "resources": {
+        "events": 204,
+        "frames_captured": 3,
+        "memory_mib": 503,
+        "peak_rss_bytes": 527998976,
+        "sessions": 1,
+        "steps": 3,
+        "wall_ms": 1074
+      },
+      "scenario": {
+        "name": "w28-gaten-debug-launch",
+        "path": "scenarios/w28-gaten-debug-launch.yaml",
+        "sha256": "0c7738972d302d6e5bf9a62f1e47a92993c760cedb686ecd322cd09a2fe6a76c"
+      },
+      "schema_version": 1,
+      "session_id": "s_art_gaten-x86_64-debug-launcherpatch-aligned",
+      "started_at": "2026-11-12T00:54:12.784Z",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 529,
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "provenance": {
+            "frame": "host-observed",
+            "launch_markers": "guest-asserted",
+            "lifecycle_markers": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "launch"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 2,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/1.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/1.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/01-wait_for.json"
+            }
+          ],
+          "frame_seq": 1,
+          "index": 1,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "wait_for"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 528,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/2.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/2.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/02-capture.json"
+            }
+          ],
+          "frame_seq": 2,
+          "index": 2,
+          "provenance": {
+            "frame": "host-observed"
+          },
+          "status": "pass",
+          "step": "capture"
+        }
+      ],
+      "trust": "trusted",
+      "unsupported_steps": [],
+      "verdict": "pass"
+    },
+    "verdict_path": "results/art-runtime/evidence/W28-artifacts/gaten-debug/verdict.json"
+  },
+  "metrics": {
+    "wall_ms": 1074,
+    "peak_rss_bytes": 527998976
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  }
+}

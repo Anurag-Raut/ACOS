@@ -1,0 +1,55 @@
+# W28: the Gaten **debug** APK launch row, on the W26 service fixes + the W28
+# `android.content.IntentFilter` codec / AMS registerReceiverWithFeature fake.
+#
+# Derived from `scenarios/w26-gaten-debug-launch.yaml` (same APK, same steps)
+# with one change: the launch target is the fully-qualified activity name
+# `com.gaten.app.MainActivity` rather than the `.MainActivity` shorthand. The
+# static manifest assertion in the verify path compares the unresolved
+# `package/.Class` string against the parsed manifest's `package/Class` list and
+# reports ASSERTION_FAILED for the shorthand even though the activity exists
+# (W28 evidence `W28-gaten-debug-verify.json`). The launch path itself resolves
+# both forms (`acos-art launch --until activity-resumed` with the shorthand
+# reaches `lifecycle=onCreate,onStart,onResume`).
+#
+# `.cache/gaten/gaten-x86_64-debug-launcherpatch-aligned.apk` is W25's
+# diagnostic APK: the original file's launcher entry is an `<activity-alias>`;
+# exactly one binary-XML edit turns the enabled alias into a plain
+# `<activity android:name="com.gaten.app.MainActivity">`, plus `zipalign`.
+# The original artifact is untouched (owner repo ~/Projects/gaten is read-only).
+version: 1
+name: w28-gaten-debug-launch
+description: >-
+  Launch Gaten (com.gaten, RN 0.86 + Hermes + Compose + ML Kit, debug x86_64)
+  from the manifest-patched diagnostic APK on real ART, with the W26
+  sensorservice/notifyDexLoad/handleApplicationWtf fixes and the W28
+  IntentFilter codec + receiver registration in the service layer.
+app: .cache/gaten/gaten-x86_64-debug-launcherpatch-aligned.apk
+engine: native-preferred
+fallback: report-only
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 2048
+  wall_ms: 300000
+steps:
+  - launch:
+      activity: com.gaten.app.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {class: android.widget.FrameLayout}
+      timeout_ms: 90000
+
+  - capture:
+      name: gaten-first-frame
+      format: png
+      fresh: true

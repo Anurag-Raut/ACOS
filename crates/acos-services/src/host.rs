@@ -553,6 +553,21 @@ impl ServiceHost {
         Ok(())
     }
 
+    /// The dynamic receiver registrations `IActivityManager`
+    /// (`registerReceiver[WithFeature]`) has recorded, with the decoded
+    /// `IntentFilter` facts (W28). Oldest first.
+    #[must_use]
+    pub fn receiver_registrations(&mut self) -> Vec<crate::atms::ReceiverRegistration> {
+        let Ok(object) = self.ensure("android.app.IActivityManager") else {
+            return Vec::new();
+        };
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .map(crate::atms::AtmsService::receiver_registrations)
+            .unwrap_or_default()
+    }
+
     /// Re-point the in-process package manager at `apk_path`.
     ///
     /// `ServiceHost::standard()` seeds the PMS with the `hello-views` fixture;

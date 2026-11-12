@@ -49,6 +49,11 @@ pub enum FieldOp {
     Str8,
     /// `writeStringArray`.
     StringArray,
+    /// `writeStringList`: an `int` count (`-1` for null) followed by each
+    /// string. Wire-identical to [`FieldOp::StringArray`]; separate so the
+    /// decoded value is a [`Value::StringList`], which is what the Java reader
+    /// builds (`Parcel.readStringList(ArrayList)`).
+    StringList,
     /// `writeIntArray`.
     IntArray,
     /// `writeLongArray`.
@@ -1348,6 +1353,81 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Curated,
     },
+    // W28: `android.content.IntentFilter` — the argument of
+    // `IActivityManager.registerReceiver[WithFeature]` (codes 18/19). Read from
+    // the **image's** `classes.dex`,
+    // `Landroid/content/IntentFilter;->writeToParcel(Landroid/os/Parcel;I)V`
+    // (and mirrored by `-><init>(Landroid/os/Parcel;)V`, which reads it back
+    // with `readStringList`/`readInt`/`PatternMatcher(Parcel)`):
+    //
+    //   writeStringArray(mActions.toArray())                // count + String16s
+    //   if (mCategories != null) { writeInt(1); writeStringList(mCategories); }
+    //   else                                writeInt(0);
+    //   ... the same presence+list pair for mDataSchemes, mStaticDataTypes,
+    //       mDataTypes and mMimeGroups (this build has both type lists and
+    //       mime groups; the r75 tag does not)
+    //   if (mDataSchemeSpecificParts != null) writeInt(1), count, each
+    //       PatternMatcher.writeToParcel(dest, flags); else writeInt(0)
+    //   if (mDataAuthorities != null)         writeInt(1), count, each
+    //       IntentFilter$AuthorityEntry.writeToParcel(dest); else writeInt(0)
+    //   if (mDataPaths != null)               writeInt(1), count, each
+    //       PatternMatcher.writeToParcel(dest, flags); else writeInt(0)
+    //   writeInt(mPriority)
+    //   writeInt(mHasStaticPartialTypes)        // boolean written as int
+    //   writeInt(mHasDynamicPartialTypes)
+    //   writeInt(getAutoVerify())
+    //   writeInt(mInstantAppVisibility)
+    //   writeInt(mOrder)
+    //   if (mExtras != null) { writeInt(1); mExtras.writeToParcel(dest, flags); }
+    //   else                 writeInt(0);
+    //
+    // There is no required permission, title or group id on this wire (the tag
+    // has them; the image does not). `writeStringArray` and `writeStringList`
+    // share one wire shape, so the action array and the optional lists are the
+    // same `int count` + `String16` sequence.
+    ParcelableSpec {
+        class: "android.os.PatternMatcher",
+        fields: &[
+            FieldOp::Str16,    // mPattern (writeString)
+            FieldOp::Int,      // mType
+            FieldOp::IntArray, // mParsedPattern
+        ],
+        verification: Verification::Full,
+    },
+    ParcelableSpec {
+        class: "android.content.IntentFilter$AuthorityEntry",
+        fields: &[
+            FieldOp::Str16, // mOrigHost (writeString)
+            FieldOp::Str16, // mHost (writeString)
+            FieldOp::Int,   // mWild (boolean as int)
+            FieldOp::Int,   // mPort
+        ],
+        verification: Verification::Full,
+    },
+    ParcelableSpec {
+        class: "android.content.IntentFilter",
+        fields: &[
+            FieldOp::StringArray,                              // mActions
+            FieldOp::Cond(&[FieldOp::StringList]),             // mCategories
+            FieldOp::Cond(&[FieldOp::StringList]),             // mDataSchemes
+            FieldOp::Cond(&[FieldOp::StringList]),             // mStaticDataTypes
+            FieldOp::Cond(&[FieldOp::StringList]),             // mDataTypes
+            FieldOp::Cond(&[FieldOp::StringList]),             // mMimeGroups
+            FieldOp::Cond(&[FieldOp::CountedNested("android.os.PatternMatcher")]),
+            FieldOp::Cond(&[FieldOp::CountedNested(
+                "android.content.IntentFilter$AuthorityEntry",
+            )]),
+            FieldOp::Cond(&[FieldOp::CountedNested("android.os.PatternMatcher")]),
+            FieldOp::Int,                            // mPriority
+            FieldOp::Int,                            // mHasStaticPartialTypes
+            FieldOp::Int,                            // mHasDynamicPartialTypes
+            FieldOp::Int,                            // getAutoVerify()
+            FieldOp::Int,                            // mInstantAppVisibility
+            FieldOp::Int,                            // mOrder
+            FieldOp::Cond(&[FieldOp::PersistableBundle]), // mExtras
+        ],
+        verification: Verification::Full,
+    },
 ];
 
 /// Look up a spec by dotted class name.
@@ -1436,6 +1516,7 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
         }
         FieldOp::Str8 => Value::Str8(parcel.read_string8()?),
         FieldOp::StringArray => Value::StringArray(parcel.read_string16_array()?),
+        FieldOp::StringList => Value::StringList(parcel.read_string16_array()?),
         FieldOp::IntArray => Value::IntArray(parcel.read_int32_array()?),
         FieldOp::LongArray => Value::LongArray(parcel.read_int64_array()?),
         FieldOp::FloatArray => Value::FloatArray(parcel.read_float_array()?),
@@ -1712,6 +1793,12 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
             let refs: Option<Vec<&str>> = arr.map(|v| v.iter().map(|s| s.as_deref().unwrap_or("")).collect());
             parcel.write_string16_array(refs.as_deref())?;
         }
+        FieldOp::StringList => {
+            let items = expect_string_list(value)?;
+            let refs: Option<Vec<&str>> =
+                items.map(|v| v.iter().map(|s| s.as_deref().unwrap_or("")).collect());
+            parcel.write_string16_array(refs.as_deref())?;
+        }
         FieldOp::IntArray => parcel.write_int32_array(expect_int_array(value)?)?,
         FieldOp::LongArray => parcel.write_int64_array(expect_long_array(value)?)?,
         FieldOp::FloatArray => parcel.write_float_array(expect_float_array(value)?)?,
@@ -1943,6 +2030,12 @@ fn expect_string_array(v: &Value) -> Result<Option<&Vec<Option<String>>>> {
     match v {
         Value::StringArray(a) => Ok(a.as_ref()),
         _ => Err(bad(format!("expected string array, got {v:?}"))),
+    }
+}
+fn expect_string_list(v: &Value) -> Result<Option<&Vec<Option<String>>>> {
+    match v {
+        Value::StringList(a) => Ok(a.as_ref()),
+        _ => Err(bad(format!("expected string list, got {v:?}"))),
     }
 }
 fn expect_int_array(v: &Value) -> Result<Option<&[i32]>> {
@@ -2602,6 +2695,9 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         FieldOp::CharSequence => call == "writeString",
         FieldOp::Str8 => call == "writeString8",
         FieldOp::StringArray => call == "writeString8Array" || call == "writeStringArray",
+        // `Parcel.writeStringList` is a distinct call in a DEX scan, but the
+        // bytes it writes are the `writeStringArray` shape (count + String16s).
+        FieldOp::StringList => call == "writeStringList" || call == "writeStringArray",
         FieldOp::IntArray => call == "writeIntArray",
         FieldOp::LongArray => call == "writeLongArray",
         FieldOp::FloatArray => call == "writeFloatArray",
@@ -2616,7 +2712,12 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         FieldOp::Nested(_) => call == "writeParcelable",
         FieldOp::ParcelableList(_) => call == "writeParcelableList",
         FieldOp::Dynamic => call == "writeValue",
-        FieldOp::PersistableBundle => call == "writePersistableBundle",
+        FieldOp::PersistableBundle => {
+            // `Parcel.writePersistableBundle`, or a direct nested
+            // `PersistableBundle.writeToParcel` call (which the scanner records
+            // as `writeParcelable`, e.g. `IntentFilter.mExtras`).
+            call == "writePersistableBundle" || call == "writeParcelable"
+        }
         FieldOp::TypedList(_) => call == "writeTypedList",
         FieldOp::Interface => call == "writeStrongInterface",
         // The presence marker is a `writeInt`; the branch body is invisible to a

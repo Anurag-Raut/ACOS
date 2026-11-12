@@ -281,6 +281,79 @@ pub struct ProcessRecord {
     pub render_thread_tid: Option<i32>,
 }
 
+/// One `PatternMatcher` element of an `IntentFilter` (scheme-specific part or
+/// data path), reduced from the decoded parcelable.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct PatternFacts {
+    /// The pattern text (`mPattern`).
+    pub pattern: Option<String>,
+    /// `PatternMatcher.mType` (`PATTERN_LITERAL` = 0, `PATTERN_PREFIX` = 1,
+    /// `PATTERN_SIMPLE_GLOB` = 2, `PATTERN_ADVANCED_GLOB` = 3).
+    pub kind: i32,
+}
+
+/// One `IntentFilter$AuthorityEntry` element, reduced from the decoded
+/// parcelable.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct AuthorityFacts {
+    /// The host the entry was written for (`mOrigHost`).
+    pub host: Option<String>,
+    /// `mPort`, `-1` when the entry accepts any port.
+    pub port: i32,
+    /// `mWild` (`*.example.com`).
+    pub wild: bool,
+}
+
+/// A dynamic receiver registration: `registerReceiver` /
+/// `registerReceiverWithFeature` recorded exactly as the guest sent it.
+///
+/// The filter is reduced to its facts (the same order as
+/// [`crate::parcelable`]'s `android.content.IntentFilter` spec) so the record
+/// outlives the decoded parcel and can be inspected from tests and the event
+/// stream. The receiver binder is kept as the numeric peer id, which is what
+/// `unregisterReceiver` matches on.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ReceiverRegistration {
+    /// The `IIntentReceiver` binder the guest registered.
+    pub receiver: u64,
+    /// `callerPackage` (arg 1 of both forms).
+    pub package: String,
+    /// `receiverId` (arg 3) on the WithFeature form; empty otherwise.
+    pub receiver_id: String,
+    /// `registerReceiver…` flags (arg 8 / arg 6): `RECEIVER_EXPORTED` etc.
+    pub flags: i32,
+    /// `IntentFilter.actions`.
+    pub actions: Vec<String>,
+    /// `IntentFilter.categories`.
+    pub categories: Vec<String>,
+    /// `IntentFilter.dataSchemes`.
+    pub schemes: Vec<String>,
+    /// `IntentFilter.mStaticDataTypes`.
+    pub static_data_types: Vec<String>,
+    /// `IntentFilter.mDataTypes`.
+    pub data_types: Vec<String>,
+    /// `IntentFilter.mMimeGroups`.
+    pub mime_groups: Vec<String>,
+    /// `IntentFilter.dataSchemeSpecificParts`.
+    pub scheme_specific_parts: Vec<PatternFacts>,
+    /// `IntentFilter.dataAuthorities`.
+    pub authorities: Vec<AuthorityFacts>,
+    /// `IntentFilter.dataPaths`.
+    pub paths: Vec<PatternFacts>,
+    /// `IntentFilter.priority`.
+    pub priority: i32,
+    /// `IntentFilter.hasStaticPartialTypes`.
+    pub has_static_partial_types: bool,
+    /// `IntentFilter.hasDynamicPartialTypes`.
+    pub has_dynamic_partial_types: bool,
+    /// `IntentFilter.autoVerify`.
+    pub auto_verify: bool,
+    /// `IntentFilter.mInstantAppVisibility`.
+    pub instant_app_visibility: i32,
+    /// `IntentFilter.mOrder`.
+    pub order: i32,
+}
+
 /// The mini-ATMS state machine.
 #[derive(Debug)]
 pub struct AtmsState {
@@ -308,6 +381,9 @@ pub struct AtmsState {
     pub provider_binder: u64,
     /// Guest-initiated activity/service/broadcast/provider state (W50-A).
     pub ams: crate::ams::AmsState,
+    /// Dynamic receiver registrations (`registerReceiver[WithFeature]`), with
+    /// the full decoded `IntentFilter` facts (W28).
+    pub receiver_registrations: Vec<ReceiverRegistration>,
     /// The authorities backed by Rust providers (`settings`, …), with the
     /// reference counts `getContentProvider` maintains.
     pub provider_registry: crate::provider::ProviderRegistry,
@@ -330,6 +406,7 @@ impl AtmsState {
             controller_binder: 0,
             provider_binder: 0,
             ams: crate::ams::AmsState::new(),
+            receiver_registrations: Vec::new(),
             provider_registry: crate::provider::ProviderRegistry::new(),
         }
     }
@@ -361,6 +438,53 @@ impl AtmsState {
         self.clock_ms += 1;
         self.protocol_events
             .push(Event::log(seq, ts, tag.to_string(), level, message));
+    }
+
+    /// Record a dynamic receiver registration.
+    ///
+    /// Stock `ActivityManagerService.registerReceiverWithFeature` looks the
+    /// filter up against the sticky-broadcast store and answers the matching
+    /// `Intent` (or `null`). ACOS keeps no sticky broadcasts, so the reply is
+    /// `null` — the same thing a device with no matching sticky broadcast
+    /// answers — and the registration is recorded here. Re-registering the same
+    /// `IIntentReceiver` replaces the previous record, exactly like
+    /// `AMS.unregisterReceiver` + register would.
+    pub fn register_receiver(&mut self, registration: ReceiverRegistration) {
+        let receiver = registration.receiver;
+        let detail = describe_receiver(&registration);
+        self.ams.register_receiver(
+            receiver,
+            &registration.package,
+            registration.actions.clone(),
+            registration.categories.clone(),
+            registration.flags,
+        );
+        self.receiver_registrations.retain(|r| r.receiver != receiver);
+        self.receiver_registrations.push(registration);
+        self.log_event(
+            "ActivityManagerReceiver",
+            acos_protocol::LogLevel::Debug,
+            detail,
+        );
+    }
+
+    /// Drop a dynamic receiver registration (`unregisterReceiver`). Returns
+    /// whether a record existed; stock throws `IllegalArgumentException` for an
+    /// unknown receiver, ACOS answers the void call either way (the guest's own
+    /// `LoadedApk` bookkeeping is the authority on what it registered).
+    pub fn unregister_receiver(&mut self, receiver: u64) -> bool {
+        let before = self.receiver_registrations.len();
+        self.receiver_registrations.retain(|r| r.receiver != receiver);
+        self.ams.unregister_receiver(receiver);
+        let removed = self.receiver_registrations.len() != before;
+        if removed {
+            self.log_event(
+                "ActivityManagerReceiver",
+                acos_protocol::LogLevel::Debug,
+                format!("unregisterReceiver receiver={receiver:#x}"),
+            );
+        }
+        removed
     }
 
     /// Record an attach and emit `process_started`.
@@ -787,6 +911,16 @@ impl AtmsService {
             s.attach_application(app_thread, seq, package);
         }
     }
+
+    /// The dynamic receiver registrations recorded so far, oldest first, with
+    /// the decoded `IntentFilter` facts (W28).
+    #[must_use]
+    pub fn receiver_registrations(&mut self) -> Vec<ReceiverRegistration> {
+        self.state
+            .lock()
+            .map(|state| state.receiver_registrations.clone())
+            .unwrap_or_default()
+    }
 }
 
 impl ServiceObject for AtmsService {
@@ -851,6 +985,57 @@ impl ServiceObject for AtmsService {
                     format!("{tag}: {detail}"),
                 );
                 vec![Value::Bool(false)]
+            }
+            (AtmsInterface::ActivityManager, "registerReceiver")
+            | (AtmsInterface::ActivityManager, "registerReceiverWithFeature") => {
+                // `registerReceiver(IApplicationThread caller, String
+                // callerPackage, IIntentReceiver receiver, IntentFilter filter,
+                // String permission, int userId, int flags)` (code 18) and
+                // `registerReceiverWithFeature(caller, callerPackage,
+                // callerFeatureId, receiverId, receiver, filter, permission,
+                // userId, flags)` (code 19). Arg order read from the image's
+                // `IActivityManager$Stub$Proxy` in `classes.dex`.
+                //
+                // ACOS keeps no sticky-broadcast store, so the answer is the
+                // typed `null` `Intent` — what stock answers when no sticky
+                // broadcast matches the filter. The receiver and every decoded
+                // `IntentFilter` fact are recorded (W28); nothing is delivered
+                // to the guest's `IIntentReceiver`, so no delivery is claimed.
+                let with_feature = method.name == "registerReceiverWithFeature";
+                let package = args.get(1).and_then(Value::as_str).unwrap_or_default();
+                let (receiver_index, filter_index, flags_index, receiver_id) = if with_feature {
+                    (
+                        4,
+                        5,
+                        8,
+                        args.get(3).and_then(Value::as_str).unwrap_or_default(),
+                    )
+                } else {
+                    (2, 3, 6, "")
+                };
+                let receiver = args
+                    .get(receiver_index)
+                    .and_then(Value::as_binder)
+                    .map(|b| b.0)
+                    .unwrap_or(0);
+                let filter = args.get(filter_index).and_then(Value::as_parcelable);
+                let flags = args.get(flags_index).and_then(Value::as_int).unwrap_or(0);
+                state.register_receiver(receiver_registration(
+                    receiver,
+                    package,
+                    receiver_id.to_string(),
+                    flags,
+                    filter,
+                ));
+                vec![Value::TypedObject(Parcelable::Null)]
+            }
+            (AtmsInterface::ActivityManager, "unregisterReceiver") => {
+                // `unregisterReceiver(IIntentReceiver receiver)`: void. Drop the
+                // registration (and the `ams` matching record) so a later
+                // broadcast cannot match a receiver that the guest removed.
+                let receiver = binder_u64(args.first());
+                state.unregister_receiver(receiver);
+                Vec::new()
             }
             (AtmsInterface::ActivityManager, "finishAttachApplication") => {
                 let seq = args.first().and_then(Value::as_long).unwrap_or(0);
@@ -998,16 +1183,32 @@ impl ServiceObject for AtmsService {
             }
             (AtmsInterface::ClientController, "activityRelaunched") => Vec::new(),
             _ => {
-                if let Some(result) =
-                    crate::ams::dispatch(&mut state.ams, interface, method, args)?
-                {
-                    return Ok(result);
+                let Some(result) = crate::ams::dispatch(&mut state.ams, interface, method, args)?
+                else {
+                    return Err(ServiceError::UnsupportedAndroidApi {
+                        interface: interface.to_string(),
+                        code: method.code,
+                        method: method.name.clone(),
+                    });
+                };
+                // `broadcastIntent` is accepted (it returns the stock match
+                // count) but the ART host has no scheduler that can call the
+                // guest's `IIntentReceiver` binder, so the queued matches are
+                // dropped explicitly rather than left behind or fabricated as
+                // a delivery. `unregisterReceiver`/`broadcastIntent` remain
+                // side-effect free with respect to the guest (W28).
+                let undelivered = state.ams.take_pending_receivers();
+                if !undelivered.is_empty() {
+                    state.log_event(
+                        "ActivityManagerBroadcast",
+                        acos_protocol::LogLevel::Debug,
+                        format!(
+                            "{} matching receiver(s) not delivered: the ART host has no receiver scheduler",
+                            undelivered.len()
+                        ),
+                    );
                 }
-                return Err(ServiceError::UnsupportedAndroidApi {
-                    interface: interface.to_string(),
-                    code: method.code,
-                    method: method.name.clone(),
-                });
+                return Ok(result);
             }
         };
 
@@ -1087,6 +1288,159 @@ fn describe_crash_info(crash: Option<&Parcelable>) -> String {
     if !head.is_empty() {
         out.push_str(" | ");
         out.push_str(&head.join(" | "));
+    }
+    out.chars().take(600).collect()
+}
+
+/// Reduce a decoded `android.content.IntentFilter` parcelable to the facts in
+/// [`ReceiverRegistration`]. Field indices follow `parcelable::SPECS` (which
+/// follows the image's `IntentFilter.writeToParcel`); a null filter is an empty
+/// record, not an error.
+fn receiver_registration(
+    receiver: u64,
+    package: &str,
+    receiver_id: String,
+    flags: i32,
+    filter: Option<&Parcelable>,
+) -> ReceiverRegistration {
+    let mut record = ReceiverRegistration {
+        receiver,
+        package: package.to_string(),
+        receiver_id,
+        flags,
+        ..ReceiverRegistration::default()
+    };
+    let Some(filter) = filter else {
+        return record;
+    };
+    record.actions = strings(filter.field(0));
+    record.categories = cond_strings(filter.field(1));
+    record.schemes = cond_strings(filter.field(2));
+    record.static_data_types = cond_strings(filter.field(3));
+    record.data_types = cond_strings(filter.field(4));
+    record.mime_groups = cond_strings(filter.field(5));
+    record.scheme_specific_parts = patterns(filter.field(6));
+    record.authorities = authorities(filter.field(7));
+    record.paths = patterns(filter.field(8));
+    record.priority = filter.field(9).and_then(Value::as_int).unwrap_or(0);
+    record.has_static_partial_types =
+        filter.field(10).and_then(Value::as_int).unwrap_or(0) != 0;
+    record.has_dynamic_partial_types =
+        filter.field(11).and_then(Value::as_int).unwrap_or(0) != 0;
+    record.auto_verify = filter.field(12).and_then(Value::as_int).unwrap_or(0) != 0;
+    record.instant_app_visibility = filter.field(13).and_then(Value::as_int).unwrap_or(0);
+    record.order = filter.field(14).and_then(Value::as_int).unwrap_or(0);
+    // Field 15 is the optional `PersistableBundle`; ACOS records its presence
+    // but does not model the bundle body here (it is not filter matching state).
+    record
+}
+
+fn strings(value: Option<&Value>) -> Vec<String> {
+    match value {
+        Some(Value::StringArray(Some(items))) | Some(Value::StringList(Some(items))) => {
+            items.iter().flatten().cloned().collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// `Value::Cond { present, values: [StringList] }` -> its strings.
+fn cond_strings(value: Option<&Value>) -> Vec<String> {
+    match value {
+        Some(Value::Cond {
+            present: true,
+            values,
+        }) => values.first().map_or_else(Vec::new, |v| strings(Some(v))),
+        _ => Vec::new(),
+    }
+}
+
+/// `Value::Cond { present, values: [List] }` -> its elements.
+fn cond_list(value: Option<&Value>) -> Vec<&Value> {
+    match value {
+        Some(Value::Cond {
+            present: true,
+            values,
+        }) => match values.first() {
+            Some(Value::List(Some(items))) => items.iter().collect(),
+            _ => Vec::new(),
+        },
+        _ => Vec::new(),
+    }
+}
+
+fn patterns(value: Option<&Value>) -> Vec<PatternFacts> {
+    cond_list(value)
+        .into_iter()
+        .map(|item| {
+            let p = item.as_parcelable();
+            PatternFacts {
+                pattern: p
+                    .and_then(|p| p.field(0))
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                kind: p.and_then(|p| p.field(1)).and_then(Value::as_int).unwrap_or(0),
+            }
+        })
+        .collect()
+}
+
+fn authorities(value: Option<&Value>) -> Vec<AuthorityFacts> {
+    cond_list(value)
+        .into_iter()
+        .map(|item| {
+            let p = item.as_parcelable();
+            AuthorityFacts {
+                host: p
+                    .and_then(|p| p.field(0))
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+                wild: p.and_then(|p| p.field(2)).and_then(Value::as_int).unwrap_or(0) != 0,
+                port: p.and_then(|p| p.field(3)).and_then(Value::as_int).unwrap_or(0),
+            }
+        })
+        .collect()
+}
+
+/// One-line receiver/filter summary for the guest log (no secret material: an
+/// `IntentFilter` carries only action/category/data matching rules).
+fn describe_receiver(r: &ReceiverRegistration) -> String {
+    let mut out = format!(
+        "registerReceiver receiver={:#x} package={} flags={:#x} actions={:?} categories={:?}",
+        r.receiver, r.package, r.flags, r.actions, r.categories
+    );
+    if !r.schemes.is_empty() {
+        out.push_str(&format!(" schemes={:?}", r.schemes));
+    }
+    if !r.data_types.is_empty() {
+        out.push_str(&format!(" types={:?}", r.data_types));
+    }
+    if !r.static_data_types.is_empty() {
+        out.push_str(&format!(" static_types={:?}", r.static_data_types));
+    }
+    if !r.mime_groups.is_empty() {
+        out.push_str(&format!(" mime_groups={:?}", r.mime_groups));
+    }
+    if !r.authorities.is_empty() {
+        out.push_str(&format!(" authorities={:?}", r.authorities));
+    }
+    if !r.paths.is_empty() {
+        out.push_str(&format!(" paths={:?}", r.paths));
+    }
+    if !r.scheme_specific_parts.is_empty() {
+        out.push_str(&format!(" scheme_parts={:?}", r.scheme_specific_parts));
+    }
+    if r.priority != 0 {
+        out.push_str(&format!(" priority={}", r.priority));
+    }
+    if r.auto_verify {
+        out.push_str(" autoVerify");
+    }
+    if r.has_static_partial_types || r.has_dynamic_partial_types {
+        out.push_str(&format!(
+            " partial_types=({},{})",
+            r.has_static_partial_types, r.has_dynamic_partial_types
+        ));
     }
     out.chars().take(600).collect()
 }
