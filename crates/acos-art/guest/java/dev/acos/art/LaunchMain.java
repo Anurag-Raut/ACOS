@@ -11,6 +11,7 @@ import android.os.Looper;
 import android.os.Parcel;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.widget.TextView;
 
 import java.io.File;
@@ -45,7 +46,9 @@ import java.util.ArrayList;
  *       {@code ResumeActivityItem}) with the framework's own
  *       {@code writeToParcel}, pushes it to the peer, and the peer delivers it
  *       as {@code IApplicationThread.scheduleTransaction} — the real AMS step.
- *       {@code ActivityThread} then runs {@code Activity.onCreate/onResume}.</li>
+ *       {@code ActivityThread} then runs {@code Activity.onCreate/onResume};
+ *       the watcher publishes {@code activity-resumed} only after the resume
+ *       message and the first window traversal have both completed.</li>
  * </ol>
  *
  * argv: apk guestPackage outDir [until] [launcherActivity]
@@ -79,6 +82,14 @@ public final class LaunchMain {
     static String sTargetActivity = "";
     /** W27: effective `Activity.mResumed` wait (`ACOSLAUNCH_RESUME_MS`). */
     static long sResumeMs = 12000L;
+    /**
+     * O3: hard upper bound on the post-resume readiness wait
+     * (`ACOSLAUNCH_RESUME_READY_MS`): `Activity.mResumed` observed → the first
+     * `ViewRootImpl.performTraversals` draw completed. Exceeding it is a hard
+     * failure (structured marker + {@code POST_RESUME_NOT_READY}), never a
+     * silent "ready".
+     */
+    static long sResumeReadyMs = 2000L;
     /**
      * W31: `ApplicationInfo.flags` as `PackageParser` derived them from the
      * APK's manifest, plus the package manager's post-install
@@ -155,9 +166,16 @@ public final class LaunchMain {
                 long ms = Long.parseLong(resume.trim());
                 if (ms >= 1000L && ms <= 600000L) sResumeMs = ms;
             }
+            String ready = System.getenv("ACOSLAUNCH_RESUME_READY_MS");
+            if (ready != null && ready.trim().length() > 0) {
+                long ms = Long.parseLong(ready.trim());
+                // A readiness bound of zero or "infinite" is not a bound.
+                if (ms >= 100L && ms <= 60000L) sResumeReadyMs = ms;
+            }
         } catch (Throwable ignored) {
         }
-        System.out.println("ACOSLAUNCH MARK resume-budget ms=" + sResumeMs);
+        System.out.println("ACOSLAUNCH MARK resume-budget ms=" + sResumeMs
+                + " ready_ms=" + sResumeReadyMs);
         System.out.flush();
         try {
             run(t0);
@@ -1174,7 +1192,8 @@ public final class LaunchMain {
      * {@code mInstrumentation.callApplicationOnCreate(app)}), records the
      * `application-created` marker, and then — for `until=activity-resumed` —
      * pushes the one {@code ClientTransaction} that AMS sends to launch the
-     * activity, and waits for the real {@code Activity.mResumed}.
+     * activity, and waits for the real {@code Activity.mResumed} *and* the first
+     * traversal of its window (see {@link #awaitFirstTraversal}).
      */
     static void startWatcher(final Object thread, final Class<?> at, final IBinder appThread) {
         Thread t = new Thread(new Runnable() {
@@ -1272,12 +1291,34 @@ public final class LaunchMain {
         while (System.currentTimeMillis() < adeadline) {
             Object activity = resumedActivity(thread);
             if (activity != null) {
-                // Let the fixture's own onResume() body finish and log.
-                Thread.sleep(200);
+                // O3: `mResumed` is set by Instrumentation *before* the
+                // fixture's onResume() body runs, so observing it is not
+                // readiness. Wait for the real resume message and the first
+                // traversal instead of sleeping 200 ms.
+                long readyDeadline = Math.min(
+                        System.currentTimeMillis() + sResumeReadyMs, adeadline);
+                if (!awaitFirstTraversal(activity, readyDeadline)) {
+                    System.out.println("ACOSLAUNCH MARK activity-not-ready"
+                            + " reason=first-traversal-timeout deadline_ms=" + sResumeReadyMs);
+                    System.out.println("ACOSLAUNCH {\"outcome\":\"crash\","
+                            + "\"code\":\"POST_RESUME_NOT_READY\",\"activity_resumed\":true,"
+                            + "\"reason\":\"first-traversal-timeout\",\"deadline_ms\":"
+                            + sResumeReadyMs + "}");
+                    System.out.flush();
+                    write(new File(sOut, "activity-not-resumed.marker"),
+                            "package=" + sPkg + "\nactivity=" + sActivity
+                                    + "\nreason=POST_RESUME_READY_TIMEOUT"
+                                    + "\ntimeout_ms=" + sResumeReadyMs
+                                    + "\nresume_timeout_ms=" + sResumeMs + "\n");
+                    dumpActivityState(thread, at);
+                    quit();
+                    return;
+                }
                 sActivityResumed = true;
-                writeResumeMarker(thread, activity, null);
+                writeResumeMarker(thread, activity, "resume_ready=first-traversal");
                 System.out.println("ACOSLAUNCH MARK activity-resumed activity="
-                        + activity.getClass().getName() + " window=" + get(activity, "mWindow"));
+                        + activity.getClass().getName() + " window=" + get(activity, "mWindow")
+                        + " resume_ready=first-traversal");
                 // W10 interactive session: instead of a one-shot hold + quit,
                 // keep the real main looper alive and publish a read-only view
                 // tree sample every ~50 ms. The host's line-JSON session reads
@@ -1325,6 +1366,109 @@ public final class LaunchMain {
         write(new File(sOut, "activity-not-resumed.marker"),
                 "package=" + sPkg + "\nactivity=" + sActivity + "\ntimeout_ms=" + sResumeMs + "\n");
         quit();
+    }
+
+    /**
+     * O3: wait for the *completed* resume, not just `mResumed`.
+     *
+     * <p>{@code Instrumentation.callActivityOnResume} sets {@code mResumed}
+     * before it calls the fixture's {@code onResume()}
+     * ({@code base/core/java/android/app/Instrumentation.java:1721}), so a
+     * watcher that publishes readiness on {@code mResumed} races the app's own
+     * resume work — that race is what the removed 200 ms sleep papered over.
+     * A post to the main looper runs behind the whole resume message: the
+     * {@code LAUNCH_ACTIVITY} transaction on the main thread, in
+     * {@code ActivityThread.handleResumeActivity}
+     * ({@code base/core/java/android/app/ActivityThread.java:5268}), which is
+     * where {@code performResumeActivity} (onResume), {@code addView} and
+     * {@code makeVisible} complete. The posted check then installs an
+     * {@code OnDrawListener} on the decor view; {@code ViewRootImpl.performDraw}
+     * dispatches it ({@code base/core/java/android/view/ViewRootImpl.java:5227})
+     * during the first {@code performTraversals} ({@code ...:3159}), which the
+     * {@code Choreographer} runs as its own main-thread callback. The listener
+     * signals through one more post, so readiness is announced only after that
+     * traversal callback (layout + draw + commit) has returned.
+     *
+     * <p>No timer stands in for the condition: the only time value is the hard
+     * deadline. If it expires the caller publishes a structured
+     * {@code POST_RESUME_NOT_READY} failure rather than reporting "ready".
+     *
+     * @return true when the first traversal completed, false on the deadline.
+     */
+    static boolean awaitFirstTraversal(final Object activity, long deadlineMs) {
+        final java.util.concurrent.CountDownLatch latch =
+                new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.atomic.AtomicBoolean ready =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        try {
+            android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
+            main.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        Object window = activity.getClass().getMethod("getWindow").invoke(activity);
+                        if (window == null) return;
+                        Object decorObj = window.getClass().getMethod("getDecorView").invoke(window);
+                        if (!(decorObj instanceof View)) return;
+                        final View decor = (View) decorObj;
+                        // A window path that already traversed synchronously
+                        // (not the normal Choreographer path) has no pending
+                        // draw to observe; report the state we actually see.
+                        if (firstTraversalDone(decor)) {
+                            ready.set(true);
+                            latch.countDown();
+                            return;
+                        }
+                        final ViewTreeObserver observer = decor.getViewTreeObserver();
+                        final ViewTreeObserver.OnDrawListener[] self =
+                                new ViewTreeObserver.OnDrawListener[1];
+                        self[0] = new ViewTreeObserver.OnDrawListener() {
+                            @Override
+                            public void onDraw() {
+                                // An OnDrawListener cannot be removed from
+                                // inside onDraw (ViewTreeObserver.java:794).
+                                // The post also puts the signal behind the
+                                // rest of performTraversals.
+                                new android.os.Handler(Looper.getMainLooper()).post(
+                                        new Runnable() {
+                                            @Override
+                                            public void run() {
+                                                try {
+                                                    observer.removeOnDrawListener(self[0]);
+                                                } catch (Throwable ignored) {
+                                                }
+                                                ready.set(true);
+                                                latch.countDown();
+                                            }
+                                        });
+                            }
+                        };
+                        observer.addOnDrawListener(self[0]);
+                    } catch (Throwable x) {
+                        System.out.println("ACOSLAUNCH MARK first-traversal-error " + x);
+                    }
+                }
+            });
+            long remaining = deadlineMs - System.currentTimeMillis();
+            if (remaining <= 0) return false;
+            return latch.await(remaining, java.util.concurrent.TimeUnit.MILLISECONDS)
+                    && ready.get();
+        } catch (Throwable x) {
+            System.out.println("ACOSLAUNCH MARK first-traversal-error " + x);
+            return false;
+        }
+    }
+
+    /** Whether the decor's `ViewRootImpl` has already completed a traversal. */
+    static boolean firstTraversalDone(View decor) {
+        try {
+            Object root = Class.forName("android.view.View")
+                    .getMethod("getViewRootImpl").invoke(decor);
+            if (root == null) return false;
+            return Boolean.FALSE.equals(get(root, "mFirst"));
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     /**
