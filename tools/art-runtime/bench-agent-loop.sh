@@ -37,6 +37,7 @@
 #   --markdown FILE table (default results/art-runtime/W49.md)
 #   --build         force a release build
 #   --host-gate-wait S  wait up to S s for a clean host (default 600)
+#   --settle MODE   P1 settle mode for tap/type/key: strict (default) or fast
 #   --strict        exit 1 when any gate fails (default: report only)
 #   --keep-scratch  keep PNGs/runtime dir (default: pruned after the JSON)
 #
@@ -61,6 +62,7 @@ BUILD=0
 STRICT=0
 HOST_WAIT=600
 KEEP=0
+SETTLE=strict
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -72,6 +74,7 @@ while [ $# -gt 0 ]; do
         --markdown) MARKDOWN="$2"; shift 2 ;;
         --build) BUILD=1; shift ;;
         --host-gate-wait) HOST_WAIT="$2"; shift 2 ;;
+        --settle) SETTLE="$2"; shift 2 ;;
         --strict) STRICT=1; shift ;;
         --keep-scratch) KEEP=1; shift ;;
         -h|--help) sed -n '2,45p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -179,7 +182,7 @@ PY
 echo "bench-agent-loop: loops=$LOOPS runs=$RUNS apps=$APPS -> $OUT"
 ACOS_BENCH_BINARY="$BINARY" python3 -I "$ROOT/tools/art-runtime/agent_loop.py" \
     --socket "$SOCKET" --out "$OUT" --markdown "$MARKDOWN" \
-    --scratch "$SCRATCH" --apps "$APPS" --loops "$LOOPS" --runs "$RUNS" \
+    --scratch "$SCRATCH" --apps "$APPS" --loops "$LOOPS" --runs "$RUNS" --settle "$SETTLE" \
     $([ "$STRICT" -eq 1 ] && echo --strict) \
     $([ "${ALLOW_DIRTY:-0}" = "1" ] && echo --allow-dirty)
 RC=$?

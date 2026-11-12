@@ -828,6 +828,11 @@ _CLASS_BY_CODE = {
     "NO_FRESH_FRAME": "harness",
     "SESSION_NOT_FOUND": "harness",
     "SESSION_BUSY": "harness",
+    # W55: the guest process ended (launcher death / reset failure). The
+    # protocol's own `ErrorCode::GuestExited.class()` is `Harness`; without this
+    # entry benchlib counted the same row as `unknown` and failed the matrix
+    # gate, which is a taxonomy gap, not an app verdict.
+    "GUEST_EXITED": "harness",
     "ISOLATION_UNAVAILABLE": "harness",
     "ISOLATION_UNSATISFIED": "harness",
     "UNTRUSTED_APK_NOT_CERTIFIED": "harness",

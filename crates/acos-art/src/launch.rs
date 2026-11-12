@@ -1832,10 +1832,82 @@ fn write_session_evidence(out: &Path, evidence: &[serde_json::Value]) {
     );
 }
 
+/// P1: how an input observation is settled.
+///
+/// `strict` is the unchanged quiet-window rule and stays the default for
+/// assertions and pixel checks. `fast` is the navigation mode approved by the
+/// owner: bind the first probe tree that differs from the pre-action baseline,
+/// then the first C1 store after that probe sample. A fast frame may therefore
+/// be mid-animation; its reply says so (`mode`, `bound`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SettleMode {
+    Fast,
+    Strict,
+}
+
+impl SettleMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Fast => "fast",
+            Self::Strict => "strict",
+        }
+    }
+
+    fn from_request(request: &serde_json::Value) -> std::result::Result<Self, String> {
+        match request.get("settle").and_then(|v| v.as_str()) {
+            None | Some("strict") => Ok(Self::Strict),
+            Some("fast") => Ok(Self::Fast),
+            Some(other) => Err(format!(
+                "settle must be \"fast\" or \"strict\" (got {other:?})"
+            )),
+        }
+    }
+}
+
+/// Measured settle phases, all relative to the publish of the gesture.
+///
+/// `state_changed` is `Some(true)` only when fast mode bound a probe sample that
+/// differs from the pre-action baseline; it is `Some(false)` for a fast
+/// fallback (the strict quiet rule ran but no change was proven) and `None` in
+/// strict mode, where the engine's host-side pixel+tree comparison decides.
+struct SettleTiming {
+    mode: SettleMode,
+    first_change_ms: Option<u64>,
+    frame_ms: Option<u64>,
+    state_changed: Option<bool>,
+    bound: &'static str,
+}
+
+impl SettleTiming {
+    fn strict() -> Self {
+        Self {
+            mode: SettleMode::Strict,
+            first_change_ms: None,
+            frame_ms: None,
+            state_changed: None,
+            bound: "strict-quiet",
+        }
+    }
+
+    fn to_json(&self, settled: bool, ack_ms: u64) -> serde_json::Value {
+        serde_json::json!({
+            "mode": self.mode.as_str(),
+            "settled": settled,
+            "ack_ms": ack_ms,
+            "first_change_ms": self.first_change_ms,
+            "frame_ms": self.frame_ms,
+            "state_changed": self.state_changed,
+            "bound": self.bound,
+            "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        })
+    }
+}
+
 /// The newest probe sample plus the C1 generation it is bound to.
 struct Settled {
     probe: ProbeSample,
     generation: u64,
+    timing: SettleTiming,
 }
 
 enum SettleEnd {
@@ -1843,6 +1915,7 @@ enum SettleEnd {
     Timeout {
         generation: u64,
         probe_seq: u64,
+        timing: SettleTiming,
     },
     GuestExited(std::process::ExitStatus),
     /// The guest's `startActivity` guard fired during this gesture (W27).
@@ -1855,15 +1928,22 @@ enum SettleEnd {
 /// A frame can land *before* the app's click has run (touch feedback), and the
 /// tree probe can see the post-click state before the post-click frame is
 /// stored. Binding those two blindly produced a reply whose tree said `0` and
-/// whose pixels said `1` (W10 negative evidence). This is the binding rule the
-/// session uses instead:
+/// whose pixels said `1` (W10 negative evidence).
 ///
-/// * the C1 generation advanced past `min_generation`;
-/// * the probe produced a sample **after** the last store (`probe.at_ms >
-///   last store time`), so the tree saw the state the stored frame belongs to;
-/// * no new store for `quiet` (150 ms), so the frame is not mid-animation;
-/// * optionally, the pixels differ from the caller's previous capture
-///   (`previous_fnv`), so a tap that changed nothing cannot return a frame.
+/// **`strict`** (default, unchanged): the C1 generation advanced past
+/// `min_generation`; the probe produced a sample **after** the last store; no
+/// new store for `quiet` (150 ms); optionally the pixels differ from the
+/// caller's previous capture. This is the settled-frame rule assertions and
+/// pixel checks use.
+///
+/// **`fast`** (P1 navigation mode, approved by the owner): the baseline tree is
+/// snapshotted *before* the input is published. The first probe sample whose
+/// tree differs from it is the commit sample; the first C1 store after that
+/// sample is the bound frame. A ripple that keeps storing frames afterwards no
+/// longer gates the reply (W59). If no tree change is seen within a bounded
+/// window (`ACOSLAUNCH_FAST_WINDOW_MS`, default 100 ms = two probe periods), the strict quiet rule
+/// takes over and the reply reports `state_changed:false`: a fast observation
+/// never claims a change it did not see.
 #[allow(clippy::too_many_arguments)]
 fn wait_for_settled_observation(
     child: &mut std::process::Child,
@@ -1874,11 +1954,18 @@ fn wait_for_settled_observation(
     min_generation: u64,
     min_probe_seq: u64,
     previous_fnv: Option<u64>,
+    mode: SettleMode,
+    baseline_probe: Option<ProbeSample>,
+    publish_epoch_ms: u64,
 ) -> SettleEnd {
     let quiet = Duration::from_millis(150);
+    let fast_window = Duration::from_millis(env_u64("ACOSLAUNCH_FAST_WINDOW_MS", 100));
+    let fast_deadline = Instant::now() + fast_window;
+    let mut fast_fell_back = false;
     let mut last_generation = min_generation;
     let mut last_change = Instant::now();
     let mut last_change_ms = host_ms();
+    let mut first_change_probe: Option<ProbeSample> = None;
     let (unsupported_baseline, _) = latest_unsupported(probe_state);
     loop {
         // A structured guest marker is more informative than the generic
@@ -1907,43 +1994,134 @@ fn wait_for_settled_observation(
             .as_ref()
             .map(|p| p.at_ms >= last_change_ms)
             .unwrap_or(false);
-        if generation > min_generation
-            && probe
+        // Fast mode binds the guest's own post-input tree sample. The baseline
+        // was taken before the gesture was published, so this can only be a
+        // change the input caused.
+        let tree_changed = match (&baseline_probe, &probe) {
+            (Some(baseline), Some(sample)) => sample.tree != baseline.tree,
+            _ => false,
+        };
+        if tree_changed && first_change_probe.is_none() {
+            first_change_probe = probe.clone();
+        }
+        let first_change_ms = first_change_probe
+            .as_ref()
+            .map(|sample| sample.at_ms.saturating_sub(publish_epoch_ms));
+        let frame_ms = |store_ms: u64| store_ms.checked_sub(publish_epoch_ms);
+        let committed_store = first_change_probe
+            .as_ref()
+            .map(|commit| last_change_ms > commit.at_ms)
+            .unwrap_or(false);
+        let committed_now = mode == SettleMode::Fast
+            && committed_store
+            && first_change_probe
                 .as_ref()
-                .map(|p| p.seq > min_probe_seq)
+                .map(|commit| commit.seq > min_probe_seq)
                 .unwrap_or(false)
-            && last_change.elapsed() >= quiet
-            && probe_after
-        {
-            let pixels_changed = match previous_fnv {
-                None => true,
-                Some(previous) => {
-                    let current = {
-                        let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
-                        state.capture_latest().map(|c| c.fnv1a)
-                    };
-                    current != Some(previous) && current.is_some()
-                }
+            && generation > min_generation;
+        if committed_now {
+            let commit = first_change_probe.expect("committed without a probe");
+            let timing = SettleTiming {
+                mode,
+                first_change_ms,
+                frame_ms: frame_ms(last_change_ms),
+                state_changed: Some(true),
+                bound: "state-commit",
             };
-            if pixels_changed {
+            trace_host(
+                probe_state,
+                &format!(
+                    "settle fast ready gen={generation} probe_seq={} first_change_ms={} frame_ms={}",
+                    commit.seq,
+                    first_change_ms.unwrap_or(0),
+                    timing.frame_ms.unwrap_or(0)
+                ),
+            );
+            return SettleEnd::Settled(Settled {
+                probe: commit,
+                generation,
+                timing,
+            });
+        }
+        let in_fast_window = mode == SettleMode::Fast
+            && !fast_fell_back
+            && Instant::now() < fast_deadline;
+        if !in_fast_window {
+            if mode == SettleMode::Fast && !fast_fell_back {
+                fast_fell_back = true;
                 trace_host(
                     probe_state,
                     &format!(
-                        "settle ready gen={generation} probe_seq={} quiet_ms={}",
-                        probe.as_ref().map(|p| p.seq).unwrap_or(0),
-                        last_change.elapsed().as_millis()
+                        "settle fast window expired after_ms={} (falling back to strict quiet; no change claimed)",
+                        fast_window.as_millis()
                     ),
                 );
-                return SettleEnd::Settled(Settled {
-                    probe: probe.expect("probe checked above"),
-                    generation,
-                });
+            }
+            if generation > min_generation
+                && probe
+                    .as_ref()
+                    .map(|p| p.seq > min_probe_seq)
+                    .unwrap_or(false)
+                && last_change.elapsed() >= quiet
+                && probe_after
+            {
+                let pixels_changed = match previous_fnv {
+                    None => true,
+                    Some(previous) => {
+                        let current = {
+                            let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+                            state.capture_latest().map(|c| c.fnv1a)
+                        };
+                        current != Some(previous) && current.is_some()
+                    }
+                };
+                if pixels_changed {
+                    let (state_changed, bound) = if mode == SettleMode::Fast {
+                        (Some(false), "quiet-fallback")
+                    } else {
+                        (None, "strict-quiet")
+                    };
+                    let timing = SettleTiming {
+                        mode,
+                        first_change_ms,
+                        frame_ms: frame_ms(last_change_ms),
+                        state_changed,
+                        bound,
+                    };
+                    trace_host(
+                        probe_state,
+                        &format!(
+                            "settle ready mode={} gen={generation} probe_seq={} quiet_ms={} first_change_ms={} frame_ms={}",
+                            mode.as_str(),
+                            probe.as_ref().map(|p| p.seq).unwrap_or(0),
+                            last_change.elapsed().as_millis(),
+                            first_change_ms.unwrap_or(0),
+                            timing.frame_ms.unwrap_or(0)
+                        ),
+                    );
+                    return SettleEnd::Settled(Settled {
+                        probe: probe.expect("probe checked above"),
+                        generation,
+                        timing,
+                    });
+                }
             }
         }
         if Instant::now() >= deadline {
             return SettleEnd::Timeout {
                 generation,
                 probe_seq: probe.as_ref().map(|p| p.seq).unwrap_or(0),
+                timing: SettleTiming {
+                    mode,
+                    first_change_ms,
+                    frame_ms: None,
+                    state_changed: if mode == SettleMode::Fast {
+                        Some(false)
+                    } else {
+                        None
+                    },
+                    bound: "timeout",
+                },
             };
         }
         cgroup.sample();
@@ -2177,6 +2355,9 @@ fn interactive_serve(
                     0,
                     0,
                     None,
+                    SettleMode::Strict,
+                    None,
+                    0,
                 );
                 let probe = match settled {
                     SettleEnd::Settled(settled) => settled.probe,
@@ -2325,7 +2506,25 @@ fn interactive_serve(
                         }
                     }
                 };
-                let p0 = latest_probe(probe_state).map(|p| p.seq).unwrap_or(0);
+                // P1: the fast baseline is the tree *before* the input is
+                // published, so a sample that differs from it can only be the
+                // input's own state change. The publish timestamp is the zero
+                // for ack_ms / first_change_ms / frame_ms.
+                let mode = match SettleMode::from_request(&request) {
+                    Ok(mode) => mode,
+                    Err(error) => {
+                        let reply = serde_json::json!({
+                            "ok": false, "cmd": cmd, "code": "BAD_REQUEST",
+                            "error": error,
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                        continue;
+                    }
+                };
+                let baseline_probe = latest_probe(probe_state);
+                let publish_epoch_ms = host_ms();
+                let p0 = baseline_probe.as_ref().map(|p| p.seq).unwrap_or(0);
                 let g0 = latest_generation(live);
                 // W59: the guest's ack is the end of the host-visible input
                 // phase; the looper lines the guest printed in between are the
@@ -2373,6 +2572,16 @@ fn interactive_serve(
                         continue;
                     }
                 };
+                // P1: the gesture's own FINISHED latency (stale acks are
+                // filtered out in InputHost::collect, so this is publish ->
+                // matching FINISHED, not the window-attach time).
+                let ack_ms = injected
+                    .acks
+                    .iter()
+                    .filter_map(|ack| ack.latency_us)
+                    .map(|us| us / 1000)
+                    .max()
+                    .unwrap_or(0);
                 let (u_baseline, _) = latest_unsupported(probe_state);
                 let settled = wait_for_settled_observation(
                     child,
@@ -2383,17 +2592,22 @@ fn interactive_serve(
                     g0,
                     p0,
                     last_capture_fnv,
+                    mode,
+                    baseline_probe,
+                    publish_epoch_ms,
                 );
-                let (settled_probe, g1, p1) = match settled {
+                let (settled_probe, g1, p1, settle_timing) = match settled {
                     SettleEnd::Settled(settled) => (
                         Some(settled.probe.clone()),
                         settled.generation,
                         settled.probe.seq,
+                        settled.timing,
                     ),
                     SettleEnd::Timeout {
                         generation,
                         probe_seq,
-                    } => (None, generation, probe_seq),
+                        timing,
+                    } => (None, generation, probe_seq, timing),
                     SettleEnd::Unsupported(marker) => {
                         let reply = serde_json::json!({
                             "ok": false, "cmd": cmd, "code": "UNSUPPORTED_ANDROID_API",
@@ -2446,9 +2660,10 @@ fn interactive_serve(
                 trace_host(
                     probe_state,
                     &format!(
-                        "{cmd} settle_done after_ms={} settled={}",
+                        "{cmd} settle_done after_ms={} settled={} mode={}",
                         injection_started.elapsed().as_millis(),
-                        settled_probe.is_some()
+                        settled_probe.is_some(),
+                        settle_timing.mode.as_str()
                     ),
                 );
                 if settled_probe.is_none() {
@@ -2467,6 +2682,7 @@ fn interactive_serve(
                             })).collect::<Vec<_>>(),
                             "token": format!("{:#x}", injected.token.0),
                         },
+                        "settle": settle_timing.to_json(false, ack_ms),
                     });
                     protocol_write(&reply);
                     evidence.push(reply);
@@ -2519,6 +2735,7 @@ fn interactive_serve(
                         "new_probe_seq": p1,
                     }),
                 );
+                map.insert("settle".into(), settle_timing.to_json(true, ack_ms));
                 protocol_write(&reply);
                 evidence.push(serde_json::json!({
                     "cmd": cmd, "ok": true, "frame_seq": capture.seq,
