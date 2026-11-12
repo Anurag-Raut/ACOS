@@ -30,6 +30,7 @@ pub mod app;
 pub mod build_cache;
 pub mod capture;
 pub mod cgroup;
+pub mod host_zygote;
 pub mod launch;
 pub mod session;
 pub mod landlock;
