@@ -1,0 +1,1715 @@
+{
+ "task": "P6 stock Android emulator baseline",
+ "generated_utc": "2026-11-12T09:21:50Z",
+ "host": {
+  "cpu_model": "AMD Ryzen 9 9950X 16-Core Processor",
+  "threads": 32,
+  "kernel": "7.2.11-arch1-1",
+  "loadavg1": 4.02490234375,
+  "mem_total_mib": 61908,
+  "mem_available_mib": 48229,
+  "swap_total_mib": 20479,
+  "swap_free_mib": 4786
+ },
+ "config": {
+  "avd": {
+   "config_ini": "/home/Qui/Projects/acos/.cache/avd/acos-oracle-34.avd/config.ini",
+   "hw.ramSize": "2048",
+   "hw.cpu.ncore": "4",
+   "hw.gpu.mode": "swiftshader_indirect",
+   "image.sysdir.1": "system-images/android-34/google_apis/x86_64/",
+   "abi.type": "x86_64",
+   "tag.id": "google_apis",
+   "hw.lcd.width": "1080",
+   "hw.lcd.height": "2400",
+   "hw.lcd.density": "420"
+  },
+  "apk": "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk",
+  "apk_sha256": "e037aee210471283479f04339235e783c1d344aa560f82a22ae1b53ee6610366",
+  "apk_bytes": 12756,
+  "adb": "Android Debug Bridge version 1.0.41",
+  "emulator_binary": "/home/Qui/Android/Sdk/emulator/emulator",
+  "emulator_cmd": null,
+  "launch_flags": [
+   "-no-window",
+   "-no-audio",
+   "-no-boot-anim",
+   "-no-snapshot-save",
+   "-no-snapshot-load",
+   "-gpu swiftshader_indirect",
+   "-memory 2048",
+   "-cores 4",
+   "-no-metrics"
+  ],
+  "guest_settings": [
+   "svc power stayon true",
+   "screen_off_timeout=2147483647",
+   "policy_control immersive.full=* (no effect on API 34: status/nav bars stay visible)"
+  ],
+  "pixel_compare_region": {
+   "top_crop_px": 130,
+   "bottom_crop_px": 60,
+   "pixels": 2386800,
+   "tolerance_frac": 0.0005
+  },
+  "serial": "emulator-5554",
+  "setup_boot_s": 13.725844030006556
+ },
+ "M1": {
+  "settle_samples": [
+   {
+    "t_s": 5.03,
+    "anon_shmem_mib": 3411.015625,
+    "rss_mib": 3461.73046875,
+    "pss_mib": 3456.6611328125,
+    "anon_mib": 3411.015625,
+    "shmem_mib": 0.0,
+    "vmrss_mib": 3461.73046875,
+    "cpu_ticks": 8209
+   },
+   {
+    "t_s": 10.06,
+    "anon_shmem_mib": 3410.828125,
+    "rss_mib": 3461.54296875,
+    "pss_mib": 3456.474609375,
+    "anon_mib": 3410.828125,
+    "shmem_mib": 0.0,
+    "vmrss_mib": 3461.54296875,
+    "cpu_ticks": 8444
+   },
+   {
+    "t_s": 15.09,
+    "anon_shmem_mib": 3410.640625,
+    "rss_mib": 3461.35546875,
+    "pss_mib": 3456.287109375,
+    "anon_mib": 3410.640625,
+    "shmem_mib": 0.0,
+    "vmrss_mib": 3461.35546875,
+    "cpu_ticks": 8579
+   },
+   {
+    "t_s": 20.12,
+    "anon_shmem_mib": 3410.640625,
+    "rss_mib": 3461.35546875,
+    "pss_mib": 3456.287109375,
+    "anon_mib": 3410.640625,
+    "shmem_mib": 0.0,
+    "vmrss_mib": 3461.35546875,
+    "cpu_ticks": 8718
+   },
+   {
+    "t_s": 25.16,
+    "anon_shmem_mib": 3410.640625,
+    "rss_mib": 3461.35546875,
+    "pss_mib": 3456.287109375,
+    "anon_mib": 3410.640625,
+    "shmem_mib": 0.0,
+    "vmrss_mib": 3461.35546875,
+    "cpu_ticks": 8822
+   },
+   {
+    "t_s": 30.19,
+    "anon_shmem_mib": 3410.703125,
+    "rss_mib": 3461.41796875,
+    "pss_mib": 3456.349609375,
+    "anon_mib": 3410.703125,
+    "shmem_mib": 0.0,
+    "vmrss_mib": 3461.41796875,
+    "cpu_ticks": 8911
+   },
+   {
+    "t_s": 35.22,
+    "anon_shmem_mib": 3410.703125,
+    "rss_mib": 3461.41796875,
+    "pss_mib": 3456.3486328125,
+    "anon_mib": 3410.703125,
+    "shmem_mib": 0.0,
+    "vmrss_mib": 3461.41796875,
+    "cpu_ticks": 9027
+   },
+   {
+    "t_s": 40.25,
+    "anon_shmem_mib": 3410.703125,
+    "rss_mib": 3461.41796875,
+    "pss_mib": 3456.3486328125,
+    "anon_mib": 3410.703125,
+    "shmem_mib": 0.0,
+    "vmrss_mib": 3461.41796875,
+    "cpu_ticks": 9125
+   },
+   {
+    "t_s": 45.29,
+    "anon_shmem_mib": 3410.703125,
+    "rss_mib": 3461.41796875,
+    "pss_mib": 3456.349609375,
+    "anon_mib": 3410.703125,
+    "shmem_mib": 0.0,
+    "vmrss_mib": 3461.41796875,
+    "cpu_ticks": 9190
+   },
+   {
+    "t_s": 50.32,
+    "anon_shmem_mib": 3410.703125,
+    "rss_mib": 3461.41796875,
+    "pss_mib": 3456.349609375,
+    "anon_mib": 3410.703125,
+    "shmem_mib": 0.0,
+    "vmrss_mib": 3461.41796875,
+    "cpu_ticks": 9256
+   },
+   {
+    "t_s": 55.35,
+    "anon_shmem_mib": 3410.703125,
+    "rss_mib": 3461.41796875,
+    "pss_mib": 3456.349609375,
+    "anon_mib": 3410.703125,
+    "shmem_mib": 0.0,
+    "vmrss_mib": 3461.41796875,
+    "cpu_ticks": 9352
+   },
+   {
+    "t_s": 60.38,
+    "anon_shmem_mib": 3410.703125,
+    "rss_mib": 3461.41796875,
+    "pss_mib": 3456.349609375,
+    "anon_mib": 3410.703125,
+    "shmem_mib": 0.0,
+    "vmrss_mib": 3461.41796875,
+    "cpu_ticks": 9443
+   }
+  ],
+  "anon_shmem_mib": {
+   "n": 12,
+   "p50": 3410.703125,
+   "p95": 3410.9125,
+   "p5": 3410.640625,
+   "min": 3410.640625,
+   "max": 3411.015625,
+   "ci95_of_p50": [
+    3410.671875,
+    3410.703125
+   ],
+   "spread_pct": 0.007971230272347701
+  },
+  "rss_mib": {
+   "n": 12,
+   "p50": 3461.41796875,
+   "p95": 3461.62734375,
+   "p5": 3461.35546875,
+   "min": 3461.35546875,
+   "max": 3461.73046875,
+   "ci95_of_p50": [
+    3461.38671875,
+    3461.41796875
+   ],
+   "spread_pct": 0.007854440072086688
+  },
+  "pss_mib": {
+   "n": 12,
+   "p50": 3456.349609375,
+   "p95": 3456.558544921875,
+   "p5": 3456.287109375,
+   "min": 3456.287109375,
+   "max": 3456.6611328125,
+   "ci95_of_p50": [
+    3456.31787109375,
+    3456.349609375
+   ],
+   "spread_pct": 0.007853243379632092
+  },
+  "anon_mib": {
+   "n": 12,
+   "p50": 3410.703125,
+   "p95": 3410.9125,
+   "p5": 3410.640625,
+   "min": 3410.640625,
+   "max": 3411.015625,
+   "ci95_of_p50": [
+    3410.671875,
+    3410.703125
+   ],
+   "spread_pct": 0.007971230272347701
+  },
+  "shmem_mib": {
+   "n": 12,
+   "p50": 0.0,
+   "p95": 0.0,
+   "p5": 0.0,
+   "min": 0.0,
+   "max": 0.0,
+   "ci95_of_p50": [
+    0.0,
+    0.0
+   ],
+   "spread_pct": null
+  },
+  "guest_dumpsys": {
+   "total_ram_kib": 2021096,
+   "free_ram_kib": 1227562,
+   "used_ram_kib": 1137165,
+   "lost_ram_kib": 48138,
+   "app_total_pss_kib": 23677,
+   "app_java_heap_kib": 372,
+   "app_native_heap_kib": 1139
+  },
+  "live_tree_count": "0",
+  "method": "host: /proc/<pid>/status RssAnon+RssShmem summed over the emulator process tree (qemu-system-x86_64 for this AVD); RSS/PSS from /proc/<pid>/smaps_rollup; 5 s samples over 60 s after launch; guest: dumpsys meminfo totals; type HOST_ANON_SHMEM (whole emulator host process tree, not one guest app)"
+ },
+ "M2": {
+  "n": 1,
+  "measured": "N=1 only (a second emulator is forbidden by ADR-0015)",
+  "per_session_mib": {
+   "n": 12,
+   "p50": 3410.703125,
+   "p95": 3410.9125,
+   "p5": 3410.640625,
+   "min": 3410.640625,
+   "max": 3411.015625,
+   "ci95_of_p50": [
+    3410.671875,
+    3410.703125
+   ],
+   "spread_pct": 0.007971230272347701
+  },
+  "formula": "isolation in the emulator means one emulator per session, so the per-extra-session cost equals one more whole emulator: M2 = M1 (full idle emulator host anon+shmem). N=1 is the only point measured; N>1 is not measured and not estimated."
+ },
+ "M3": {
+  "reps": [
+   {
+    "boot_s": 13.163237316999584,
+    "am_start_total_ms": 1102,
+    "am_start_wall_ms": 1142.601450002985,
+    "launch_to_first_app_frame_ms": 1615.0173089990858,
+    "launch_to_first_correct_frame_ms": 4674.768814991694,
+    "cold_start_total_s": 17.83800613199128,
+    "tree_count": "0",
+    "ok": true,
+    "poll_samples": [
+     {
+      "t_ms": 1615.0173089990858,
+      "cmp_frac_vs_ref0": 1.0,
+      "full_diff_vs_ref0": 1.0
+     },
+     {
+      "t_ms": 2254.7531119780615,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9588144290123457
+     },
+     {
+      "t_ms": 2639.755342999706,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9586280864197531
+     },
+     {
+      "t_ms": 3013.2762669818476,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9586280864197531
+     },
+     {
+      "t_ms": 3370.6597609852906,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9586280864197531
+     },
+     {
+      "t_ms": 3683.1590719812084,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9586280864197531
+     },
+     {
+      "t_ms": 3984.6736659819726,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9586280864197531
+     },
+     {
+      "t_ms": 4292.809404985746,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9586280864197531
+     }
+    ]
+   },
+   {
+    "boot_s": 13.170093353983248,
+    "am_start_total_ms": 1389,
+    "am_start_wall_ms": 1465.633092011558,
+    "launch_to_first_app_frame_ms": 1931.8176950037014,
+    "launch_to_first_correct_frame_ms": 4616.9941120024305,
+    "cold_start_total_s": 17.787087465985678,
+    "tree_count": "0",
+    "ok": true,
+    "poll_samples": [
+     {
+      "t_ms": 1931.8176950037014,
+      "cmp_frac_vs_ref0": 0.9999974861739568,
+      "full_diff_vs_ref0": 0.9994486882716049
+     },
+     {
+      "t_ms": 2257.909356005257,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9586114969135803
+     },
+     {
+      "t_ms": 2948.363057017559,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9586114969135803
+     },
+     {
+      "t_ms": 3247.946685005445,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9586114969135803
+     },
+     {
+      "t_ms": 3577.1176739945076,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9586114969135803
+     },
+     {
+      "t_ms": 3941.986313002417,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9586114969135803
+     },
+     {
+      "t_ms": 4274.78074200917,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9587978395061728
+     },
+     {
+      "t_ms": 4616.9941120024305,
+      "cmp_frac_vs_ref0": 0.0,
+      "full_diff_vs_ref0": 0.0011454475308641976
+     }
+    ]
+   },
+   {
+    "boot_s": 12.914220459002536,
+    "am_start_total_ms": 1398,
+    "am_start_wall_ms": 1510.9971709898673,
+    "launch_to_first_app_frame_ms": 1924.8306640074588,
+    "launch_to_first_correct_frame_ms": 5032.834176992765,
+    "cold_start_total_s": 17.9470546359953,
+    "tree_count": "0",
+    "ok": true,
+    "poll_samples": [
+     {
+      "t_ms": 1924.8306640074588,
+      "cmp_frac_vs_ref0": 1.0,
+      "full_diff_vs_ref0": 0.9999996141975309
+     },
+     {
+      "t_ms": 2571.1558029870503,
+      "cmp_frac_vs_ref0": 1.0,
+      "full_diff_vs_ref0": 0.9994641203703704
+     },
+     {
+      "t_ms": 2846.474385005422,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9598287037037037
+     },
+     {
+      "t_ms": 3181.690958008403,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9598287037037037
+     },
+     {
+      "t_ms": 3502.278206986375,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9598287037037037
+     },
+     {
+      "t_ms": 3785.593295993749,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9598287037037037
+     },
+     {
+      "t_ms": 4246.059987985063,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9598287037037037
+     },
+     {
+      "t_ms": 4579.66117298929,
+      "cmp_frac_vs_ref0": 0.9828230266465561,
+      "full_diff_vs_ref0": 0.9598287037037037
+     }
+    ]
+   }
+  ],
+  "boot_s": {
+   "n": 3,
+   "p50": 13.163237316999584,
+   "p95": 13.169407750284881,
+   "p5": 12.93912214480224,
+   "min": 12.914220459002536,
+   "max": 13.170093353983248,
+   "ci95_of_p50": [
+    12.914220459002536,
+    13.170093353983248
+   ],
+   "spread_pct": 1.7494602576619913
+  },
+  "launch_to_correct_frame_ms": {
+   "n": 3,
+   "p50": 4674.768814991694,
+   "p95": 4997.027640792658,
+   "p5": 4622.771582301357,
+   "min": 4616.9941120024305,
+   "max": 5032.834176992765,
+   "ci95_of_p50": [
+    4616.9941120024305,
+    5032.834176992765
+   ],
+   "spread_pct": 8.005873088121167
+  },
+  "cold_start_total_s": {
+   "n": 3,
+   "p50": 17.83800613199128,
+   "p95": 17.9361497855949,
+   "p5": 17.792179332586237,
+   "min": 17.787087465985678,
+   "max": 17.9470546359953,
+   "ci95_of_p50": [
+    17.787087465985678,
+    17.9470546359953
+   ],
+   "spread_pct": 0.8070994703295987
+  },
+  "method": "cold boot (emulator start -> sys.boot_completed=1, `-no-snapshot-load`), then `am start -W` and raw screencap polling until the frame is pixel-identical to the verified count-0 reference; total = boot + launch->correct frame"
+ },
+ "M4": {
+  "n_ok": 12,
+  "n_total": 12,
+  "main": {
+   "n": 12,
+   "p50": 1241.9381719955709,
+   "p95": 1304.6838776339428,
+   "p5": 1202.8659715462709,
+   "min": 1192.1836730034556,
+   "max": 1348.7233439809643,
+   "ci95_of_p50": [
+    1230.2443499938818,
+    1261.6229784907773
+   ],
+   "spread_pct": 8.198307160820159
+  },
+  "am_start_total_ms": {
+   "n": 12,
+   "p50": 422.5,
+   "p95": 450.65,
+   "p5": 411.0,
+   "min": 411.0,
+   "max": 460.0,
+   "ci95_of_p50": [
+    414.5,
+    426.0
+   ],
+   "spread_pct": 9.38461538461538
+  },
+  "to_first_app_frame_ms": {
+   "n": 12,
+   "p50": 728.4494165069191,
+   "p95": 772.7407345038955,
+   "p5": 700.1350586899207,
+   "min": 699.1817799862474,
+   "max": 785.8574590063654,
+   "ci95_of_p50": [
+    716.2978659907822,
+    750.5955175001873
+   ],
+   "spread_pct": 9.967154090415168
+  },
+  "am_start_wall_ms": {
+   "n": 12,
+   "p50": 464.7094094980275,
+   "p95": 509.45726774370996,
+   "p5": 453.41026114765555,
+   "min": 452.66494899988174,
+   "max": 515.7816270075273,
+   "ci95_of_p50": [
+    460.12909548881,
+    475.91134648246225
+   ],
+   "spread_pct": 12.060656713750555
+  },
+  "failed": []
+ },
+ "M5": {
+  "png": {
+   "n_ok": 20,
+   "n_total": 20,
+   "main": {
+    "n": 20,
+    "p50": 200.9518530103378,
+    "p95": 207.56820703390986,
+    "p5": 195.52216474403394,
+    "min": 179.00276198633946,
+    "max": 207.6150809880346,
+    "ci95_of_p50": [
+     199.51716100331396,
+     204.8326609947253
+    ],
+    "spread_pct": 5.994491769755522
+   },
+   "failed": []
+  },
+  "raw": {
+   "n_ok": 20,
+   "n_total": 20,
+   "main": {
+    "n": 20,
+    "p50": 205.35269101674203,
+    "p95": 213.23573583504185,
+    "p5": 196.42886806395836,
+    "min": 194.37278399709612,
+    "max": 215.32134400331415,
+    "ci95_of_p50": [
+     201.40790699224453,
+     207.8574790066341
+    ],
+    "spread_pct": 8.184391296685396
+   },
+   "failed": []
+  },
+  "png_samples": [
+   {
+    "rep": 0,
+    "ms": 179.00276198633946,
+    "bytes": 38835,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 1,
+    "ms": 207.56573998369277,
+    "bytes": 38835,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 2,
+    "ms": 203.33121001021937,
+    "bytes": 38835,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 3,
+    "ms": 199.41728899721056,
+    "bytes": 38835,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 4,
+    "ms": 199.3265470082406,
+    "bytes": 38835,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 5,
+    "ms": 205.9431969828438,
+    "bytes": 38835,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 6,
+    "ms": 200.30573999974877,
+    "bytes": 38835,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 7,
+    "ms": 206.0724410112016,
+    "bytes": 38835,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 8,
+    "ms": 207.6150809880346,
+    "bytes": 38835,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 9,
+    "ms": 200.86810499196872,
+    "bytes": 38835,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 10,
+    "ms": 203.95413899677806,
+    "bytes": 38835,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 11,
+    "ms": 205.30820201383904,
+    "bytes": 38769,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 12,
+    "ms": 200.17782700597309,
+    "bytes": 38769,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 13,
+    "ms": 199.59444299456663,
+    "bytes": 38769,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 14,
+    "ms": 201.03560102870688,
+    "bytes": 38769,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 15,
+    "ms": 205.19008798873983,
+    "bytes": 38769,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 16,
+    "ms": 204.47523400071077,
+    "bytes": 38769,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 17,
+    "ms": 199.43987901206128,
+    "bytes": 38769,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 18,
+    "ms": 196.39160699443892,
+    "bytes": 38769,
+    "ok": true,
+    "why": "ok"
+   },
+   {
+    "rep": 19,
+    "ms": 198.29035201109946,
+    "bytes": 38769,
+    "ok": true,
+    "why": "ok"
+   }
+  ],
+  "raw_samples": [
+   {
+    "rep": 0,
+    "ms": 209.5290279830806,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.0001574074074074074
+   },
+   {
+    "rep": 1,
+    "ms": 205.5636279983446,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.0001574074074074074
+   },
+   {
+    "rep": 2,
+    "ms": 205.1525700080674,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.0001574074074074074
+   },
+   {
+    "rep": 3,
+    "ms": 200.31739299884066,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.0001574074074074074
+   },
+   {
+    "rep": 4,
+    "ms": 213.12596698408015,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.0001574074074074074
+   },
+   {
+    "rep": 5,
+    "ms": 210.6751659885049,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.0001574074074074074
+   },
+   {
+    "rep": 6,
+    "ms": 204.13366900174879,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.0001574074074074074
+   },
+   {
+    "rep": 7,
+    "ms": 215.32134400331415,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.0001574074074074074
+   },
+   {
+    "rep": 8,
+    "ms": 201.45064798998646,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.0001574074074074074
+   },
+   {
+    "rep": 9,
+    "ms": 205.19478802452795,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.0001574074074074074
+   },
+   {
+    "rep": 10,
+    "ms": 208.39798299130052,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.00020486111111111112
+   },
+   {
+    "rep": 11,
+    "ms": 201.3651659945026,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.00020486111111111112
+   },
+   {
+    "rep": 12,
+    "ms": 196.53708301484585,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.00020486111111111112
+   },
+   {
+    "rep": 13,
+    "ms": 200.29028999852017,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.00020486111111111112
+   },
+   {
+    "rep": 14,
+    "ms": 194.37278399709612,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.00020486111111111112
+   },
+   {
+    "rep": 15,
+    "ms": 207.31697502196766,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.00020486111111111112
+   },
+   {
+    "rep": 16,
+    "ms": 199.50399998924695,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.00020486111111111112
+   },
+   {
+    "rep": 17,
+    "ms": 208.53882899973541,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.00020486111111111112
+   },
+   {
+    "rep": 18,
+    "ms": 205.90291600092314,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.00020486111111111112
+   },
+   {
+    "rep": 19,
+    "ms": 205.5105940089561,
+    "bytes": 10368016,
+    "ok": true,
+    "cmp_frac_vs_ref0": 0.0,
+    "full_diff_vs_ref0": 0.00020486111111111112
+   }
+  ],
+  "method": "`adb -s <emu> exec-out screencap -p > file` wall clock incl. adb client spawn and PNG write; raw = same without -p (raw RGBA8888), checked 1080x2400 and pixel-identical to the verified count-0 reference"
+ },
+ "M6": {
+  "n_ok": 10,
+  "n_total": 10,
+  "main": {
+   "n": 10,
+   "p50": 1281.1091854964616,
+   "p95": 1324.5284501463175,
+   "p5": 1204.7579546953784,
+   "min": 1163.3472419925965,
+   "max": 1330.686273984611,
+   "ci95_of_p50": [
+    1264.846652498818,
+    1307.8122469887603
+   ],
+   "spread_pct": 9.348968597436526
+  },
+  "cmd_chain_ms": {
+   "n": 10,
+   "p50": 498.1347780121723,
+   "p95": 540.7416300964542,
+   "p5": 470.8157504457631,
+   "min": 466.62850899156183,
+   "max": 553.556253988063,
+   "ci95_of_p50": [
+    484.6890449989587,
+    522.1742369758431
+   ],
+   "spread_pct": 14.037542194852005
+  },
+  "failed": [],
+  "samples": [
+   {
+    "rep": 0,
+    "count_before_reset": "22",
+    "cmd_chain_ms": 525.0793120067101,
+    "reset_to_correct_screen_ms": 1285.6142949895002,
+    "tree_count": "0",
+    "ok": true
+   },
+   {
+    "rep": 1,
+    "count_before_reset": "2",
+    "cmd_chain_ms": 466.62850899156183,
+    "reset_to_correct_screen_ms": 1274.3222569988575,
+    "tree_count": "0",
+    "ok": true
+   },
+   {
+    "rep": 2,
+    "count_before_reset": "2",
+    "cmd_chain_ms": 522.1742369758431,
+    "reset_to_correct_screen_ms": 1163.3472419925965,
+    "tree_count": "0",
+    "ok": true
+   },
+   {
+    "rep": 3,
+    "count_before_reset": "2",
+    "cmd_chain_ms": 553.556253988063,
+    "reset_to_correct_screen_ms": 1330.686273984611,
+    "tree_count": "0",
+    "ok": true
+   },
+   {
+    "rep": 4,
+    "count_before_reset": "2",
+    "cmd_chain_ms": 493.8719190249685,
+    "reset_to_correct_screen_ms": 1290.9641020232812,
+    "tree_count": "0",
+    "ok": true
+   },
+   {
+    "rep": 5,
+    "count_before_reset": "2",
+    "cmd_chain_ms": 475.933490000898,
+    "reset_to_correct_screen_ms": 1276.604076003423,
+    "tree_count": "0",
+    "ok": true
+   },
+   {
+    "rep": 6,
+    "count_before_reset": "2",
+    "cmd_chain_ms": 488.51232798187993,
+    "reset_to_correct_screen_ms": 1273.3021779858973,
+    "tree_count": "0",
+    "ok": true
+   },
+   {
+    "rep": 7,
+    "count_before_reset": "2",
+    "cmd_chain_ms": 493.4445999970194,
+    "reset_to_correct_screen_ms": 1307.8122469887603,
+    "tree_count": "0",
+    "ok": true
+   },
+   {
+    "rep": 8,
+    "count_before_reset": "2",
+    "cmd_chain_ms": 502.68926500575617,
+    "reset_to_correct_screen_ms": 1255.3710479987785,
+    "tree_count": "0",
+    "ok": true
+   },
+   {
+    "rep": 9,
+    "count_before_reset": "2",
+    "cmd_chain_ms": 502.3976369993761,
+    "reset_to_correct_screen_ms": 1317.0022210106254,
+    "tree_count": "0",
+    "ok": true
+   }
+  ],
+  "method": "`am force-stop` + `pm clear` + `am start -W`, timed from the first command to the first raw screencap pixel-identical to the verified count-0 reference; the live tree must also read 0"
+ },
+ "M7": {
+  "n_ok": 20,
+  "n_total": 20,
+  "main": {
+   "n": 20,
+   "p50": 1908.2654569792794,
+   "p95": 1920.8488411895814,
+   "p5": 1906.1933839460835,
+   "min": 1905.2475440257695,
+   "max": 2052.8620420082007,
+   "ci95_of_p50": [
+    1906.8652935093269,
+    1909.8327815008815
+   ],
+   "spread_pct": 0.7679988750987009
+  },
+  "failed": [],
+  "samples": [
+   {
+    "rep": 0,
+    "ms": 2052.8620420082007,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 1,
+    "ms": 1912.8430240089074,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 2,
+    "ms": 1913.9007779886015,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 3,
+    "ms": 1906.770397996297,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 4,
+    "ms": 1909.9163869977929,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 5,
+    "ms": 1912.9244549840223,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 6,
+    "ms": 1911.4832770137582,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 7,
+    "ms": 1908.1612689769827,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 8,
+    "ms": 1908.3696449815761,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 9,
+    "ms": 1906.6842750180513,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 10,
+    "ms": 1906.4673160028178,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 11,
+    "ms": 1908.5395020083524,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 12,
+    "ms": 1908.001133997459,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 13,
+    "ms": 1909.7491760039702,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 14,
+    "ms": 1908.0644370114896,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 15,
+    "ms": 1906.9601890223566,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 16,
+    "ms": 1908.738166996045,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 17,
+    "ms": 1906.243164994521,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 18,
+    "ms": 1906.7387859977316,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   },
+   {
+    "rep": 19,
+    "ms": 1905.2475440257695,
+    "route": "exec-out uiautomator dump /dev/tty",
+    "bytes": 4347,
+    "nodes": 12,
+    "text_nodes": 4,
+    "count_text": "0",
+    "ok": true
+   }
+  ],
+  "example_xml": "<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><hierarchy rotation=\"0\"><node index=\"0\" text=\"\" resource-id=\"\" class=\"android.widget.FrameLayout\" package=\"dev.acos.fixtures.counter\" content-desc=\"\" checkable=\"false\" checked=\"false\" clickable=\"false\" enabled=\"true\" focusable=\"false\" focused=\"false\" scrollable=\"false\" long-clickable=\"false\" password=\"false\" selected=\"false\" bounds=\"[0,0][1080,2400]\"><node index=\"0\" text=\"\" resource-id=\"android:id/decor_content_parent\" class=\"android.view.ViewGroup\" package=\"dev.acos.fixtures.counter\" content-desc=\"\" checkable=\"false\" checked=\"false\" clickable=\"false\" enabled=\"true\" focusable=\"false\" focused=\"false\" scrollable=\"false\" long-clickable=\"false\" password=\"false\" selected=\"false\" bounds=\"[0,0][1080,2337]\"><node index=\"0\" text=\"\" resource-id=\"android:id/action_bar_container\" class=\"android.widget.FrameLayout\" package=\"dev.acos.fixtures.counter\" content-desc=\"\" checkable=\"false\" checked=\"false\" clickable=\"false\" enabled=\"true\" focusable=\"false\" focused=\"false\" scrollable=\"false\" long-clickable=\"false\" password=\"false\" selected=\"false\" bounds=\"[0,128][1080,275]\"><node index=\"0\" text=\"\" resource-id=\"android:id/action_bar\" class=\"android.view.ViewGroup\" package=\"dev.acos.fixtures.counter\" content-desc=\"\" checkable=\"false\" checked=\"false\" clickable=\"false\" enabled=\"true\" focusable=\"false\" focused=\"false\" scrollable=\"false\" long-clickable=\"false\" password=\"false\" selected=\"false\" bounds=\"[0,128][1080,275]\"><node index=\"0\" text=\"Counter\" resource-id=\"\" class=\"android.widget.TextView\" package=\"dev.acos.fixtures.counter\" content-desc=\"\" checkable=\"false\" checked=\"false\" clickable=\"false\" enabled=\"true\" focusable=\"false\" focused=\"false\" scrollable=\"false\" long-clickable=\"false\" password=\"false\" selected=\"false\" bounds=\"[42,166][231,237]\" /></node></node><node index=\"1\" text=\"\" resource-id=\"android:id/content\" class=\"android.widget.FrameLayout\" package=\"dev.acos.fixtures.counter\" content-desc=\"\" checkable=\"false\" checked=\"false\" clickable=\"false\" enabled=\"true\" focusable=\"false\" focused=\"false\" scrollable=\"false\" long-clickable=\"false\" password=\"false\" selected=\"false\" bounds=\"[0,275][1080,2337]\"><node index=\"0\" text=\"\" resource-id=\"\" class=\"android.widget.LinearLayout\" package=\"dev.acos.fixtures.counter\" content-desc=\"\" checkable=\"false\" checked=\"false\" clickable=\"false\" enabled=\"true\" focusable=\"false\" focused=\"false\" scrollable=\"false\" long-clickable=\"false\" password=\"false\" selected=\"false\" bounds=\"[0,275][1080,2337]\"><node index=\"0\" text=\"0\" resource-id=\"dev.acos.fixtures.counter:id/count\" class=\"android.widget.TextView\" package=\"dev.acos.fixtures.counter\" content-desc=\"\" checkable=\"false\" checked=\"false\" clickable=\"false\" enabled=\"true\" focusable=\"false\" focused=\"false\" scrollable=\"false\" long-clickable=\"false\" password=\"false\" selected=\"false\" bounds=\"[42,317][63,368]\" /><node index=\"1\" text=\"Increment\" resource-id=\"dev.acos.fixtures.counter:id/inc\" class=\"android.widget.Button\" package=\"dev.acos.fixtures.counter\" content-desc=\"\" checkable=\"false\" checked=\"false\" clickable=\"true\" enabled=\"true\" focusable=\"true\" focused=\"false\" scrollable=\"false\" long-clickable=\"false\" password=\"false\" selected=\"false\" bounds=\"[42,368][273,494]\" /><node index=\"2\" text=\"Reset\" resource-id=\"dev.acos.fixtures.counter:id/reset\" class=\"android.widget.Button\" package=\"dev.acos.fixtures.counter\" content-desc=\"\" checkable=\"false\" checked=\"false\" clickable=\"true\" enabled=\"true\" focusable=\"true\" focused=\"false\" scrollable=\"false\" long-clickable=\"false\" password=\"false\" selected=\"false\" bounds=\"[42,494][273,620]\" /></node></node></node><node index=\"1\" text=\"\" resource-id=\"android:id/statusBarBackground\" class=\"android.view.View\" package=\"dev.acos.fixtures.counter\" content-desc=\"\" checkable=\"false\" checked=\"false\" clickable=\"false\" enabled=\"true\" focusable=\"false\" focused=\"false\" scrollable=\"false\" long-clickable=\"false\" password=\"false\" selected=\"false\" bounds=\"[0,0][1080,128]\" /><node index=\"2\" text=\"\" resourc",
+  "method": "`adb exec-out uiautomator dump /dev/tty` (the standard Android tool) wall clock incl. adb spawn; every sample must contain the live tree with text"
+ },
+ "M8": {
+  "n_ok": 20,
+  "n_total": 20,
+  "main": {
+   "n": 20,
+   "p50": 2332.927297495189,
+   "p95": 2361.5793068966013,
+   "p5": 2317.890038137557,
+   "min": 2311.3207150017843,
+   "max": 2556.330330990022,
+   "ci95_of_p50": [
+    2328.945591507363,
+    2339.14958499372
+   ],
+   "spread_pct": 1.87272311511604
+  },
+  "tap_cmd_ms": {
+   "n": 20,
+   "p50": 39.6989040018525,
+   "p95": 48.663186194607995,
+   "p5": 37.53930228704121,
+   "min": 36.862243025097996,
+   "max": 54.025293997256085,
+   "ci95_of_p50": [
+    38.221205497393385,
+    41.5817749890266
+   ],
+   "spread_pct": 28.02063227500614
+  },
+  "tap_to_first_changed_frame_ms": {
+   "n": 20,
+   "p50": 256.8179709924152,
+   "p95": 292.5086168834242,
+   "p5": 246.32943537872052,
+   "min": 244.1188310040161,
+   "max": 480.9219249873422,
+   "ci95_of_p50": [
+    252.89939499634784,
+    259.7562410082901
+   ],
+   "spread_pct": 17.98128897532157
+  },
+  "failed": [],
+  "samples": [
+   {
+    "rep": 0,
+    "tap_cmd_ms": 48.380969994468614,
+    "count_before": 0,
+    "tap_to_first_changed_frame_ms": 480.9219249873422,
+    "tap_to_tree_confirmed_ms": 2556.330330990022,
+    "count_bounds": [
+     42,
+     317,
+     63,
+     368
+    ],
+    "count_after": 1,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 1,
+    "tap_cmd_ms": 38.42204200918786,
+    "count_before": 1,
+    "tap_to_first_changed_frame_ms": 251.2928599899169,
+    "tap_to_tree_confirmed_ms": 2321.760921011446,
+    "count_bounds": [
+     42,
+     317,
+     63,
+     368
+    ],
+    "count_after": 2,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 2,
+    "tap_cmd_ms": 37.57493698503822,
+    "count_before": 2,
+    "tap_to_first_changed_frame_ms": 248.08039498748258,
+    "tap_to_tree_confirmed_ms": 2331.3741519814357,
+    "count_bounds": [
+     42,
+     317,
+     63,
+     368
+    ],
+    "count_after": 3,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 3,
+    "tap_cmd_ms": 38.75872801290825,
+    "count_before": 3,
+    "tap_to_first_changed_frame_ms": 266.39991998672485,
+    "tap_to_tree_confirmed_ms": 2331.99212999898,
+    "count_bounds": [
+     42,
+     317,
+     63,
+     368
+    ],
+    "count_after": 4,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 4,
+    "tap_cmd_ms": 46.44661498605274,
+    "count_before": 4,
+    "tap_to_first_changed_frame_ms": 282.5921269832179,
+    "tap_to_tree_confirmed_ms": 2351.3292529969476,
+    "count_bounds": [
+     42,
+     317,
+     63,
+     368
+    ],
+    "count_after": 5,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 5,
+    "tap_cmd_ms": 46.68703000061214,
+    "count_before": 5,
+    "tap_to_first_changed_frame_ms": 276.784597983351,
+    "tap_to_tree_confirmed_ms": 2351.1800989799667,
+    "count_bounds": [
+     42,
+     317,
+     63,
+     368
+    ],
+    "count_after": 6,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 6,
+    "tap_cmd_ms": 54.025293997256085,
+    "count_before": 6,
+    "tap_to_first_changed_frame_ms": 272.05203397898003,
+    "tap_to_tree_confirmed_ms": 2348.073464992922,
+    "count_bounds": [
+     42,
+     317,
+     63,
+     368
+    ],
+    "count_after": 7,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 7,
+    "tap_cmd_ms": 38.02036898559891,
+    "count_before": 7,
+    "tap_to_first_changed_frame_ms": 251.89410499297082,
+    "tap_to_tree_confirmed_ms": 2336.433844990097,
+    "count_bounds": [
+     42,
+     317,
+     63,
+     368
+    ],
+    "count_after": 8,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 8,
+    "tap_cmd_ms": 39.03480002190918,
+    "count_before": 8,
+    "tap_to_first_changed_frame_ms": 244.1188310040161,
+    "tap_to_tree_confirmed_ms": 2311.3207150017843,
+    "count_bounds": [
+     42,
+     317,
+     63,
+     368
+    ],
+    "count_after": 9,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 9,
+    "tap_cmd_ms": 37.90260502137244,
+    "count_before": 9,
+    "tap_to_first_changed_frame_ms": 256.729084008839,
+    "tap_to_tree_confirmed_ms": 2334.7350970143452,
+    "count_bounds": [
+     42,
+     317,
+     63,
+     368
+    ],
+    "count_after": 10,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 10,
+    "tap_cmd_ms": 38.01452700281516,
+    "count_before": 10,
+    "tap_to_first_changed_frame_ms": 253.90468499972485,
+    "tap_to_tree_confirmed_ms": 2321.6722439974546,
+    "count_bounds": [
+     42,
+     317,
+     84,
+     368
+    ],
+    "count_after": 11,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 11,
+    "tap_cmd_ms": 40.59581400360912,
+    "count_before": 11,
+    "tap_to_first_changed_frame_ms": 259.685608005384,
+    "tap_to_tree_confirmed_ms": 2339.9122289847583,
+    "count_bounds": [
+     42,
+     317,
+     84,
+     368
+    ],
+    "count_after": 12,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 12,
+    "tap_cmd_ms": 41.557174001354724,
+    "count_before": 12,
+    "tap_to_first_changed_frame_ms": 259.8268740111962,
+    "tap_to_tree_confirmed_ms": 2327.7045550057665,
+    "count_bounds": [
+     42,
+     317,
+     84,
+     368
+    ],
+    "count_after": 13,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 13,
+    "tap_cmd_ms": 41.99027401045896,
+    "count_before": 13,
+    "tap_to_first_changed_frame_ms": 257.5323470227886,
+    "tap_to_tree_confirmed_ms": 2338.386941002682,
+    "count_bounds": [
+     42,
+     317,
+     84,
+     368
+    ],
+    "count_after": 14,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 14,
+    "tap_cmd_ms": 39.09163500065915,
+    "count_before": 14,
+    "tap_to_first_changed_frame_ms": 255.73497198638506,
+    "tap_to_tree_confirmed_ms": 2333.862464991398,
+    "count_bounds": [
+     42,
+     317,
+     84,
+     368
+    ],
+    "count_after": 15,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 15,
+    "tap_cmd_ms": 41.60637597669847,
+    "count_before": 15,
+    "tap_to_first_changed_frame_ms": 256.90685797599144,
+    "tap_to_tree_confirmed_ms": 2329.2124909930862,
+    "count_bounds": [
+     42,
+     317,
+     84,
+     368
+    ],
+    "count_after": 16,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 16,
+    "tap_cmd_ms": 37.6360280206427,
+    "count_before": 16,
+    "tap_to_first_changed_frame_ms": 251.81597701157443,
+    "tap_to_tree_confirmed_ms": 2328.916090016719,
+    "count_bounds": [
+     42,
+     317,
+     84,
+     368
+    ],
+    "count_after": 17,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 17,
+    "tap_cmd_ms": 36.862243025097996,
+    "count_before": 17,
+    "tap_to_first_changed_frame_ms": 258.5340549994726,
+    "tap_to_tree_confirmed_ms": 2345.0158740160987,
+    "count_bounds": [
+     42,
+     317,
+     84,
+     368
+    ],
+    "count_after": 18,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 18,
+    "tap_cmd_ms": 40.30617300304584,
+    "count_before": 18,
+    "tap_to_first_changed_frame_ms": 255.21678099175915,
+    "tap_to_tree_confirmed_ms": 2328.9750929980073,
+    "count_bounds": [
+     42,
+     317,
+     84,
+     368
+    ],
+    "count_after": 19,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   },
+   {
+    "rep": 19,
+    "tap_cmd_ms": 40.54233999340795,
+    "count_before": 19,
+    "tap_to_first_changed_frame_ms": 246.44578297738917,
+    "tap_to_tree_confirmed_ms": 2318.235791986808,
+    "count_bounds": [
+     42,
+     317,
+     84,
+     368
+    ],
+    "count_after": 20,
+    "ok": true,
+    "xy": [
+     157,
+     431
+    ]
+   }
+  ],
+  "method": "`adb shell input tap <centre of id/inc>`; tap_cmd_ms = adb round-trip of the tap command; tap_to_first_changed_frame = next raw screencap whose pixels inside the count TextView's bounds differ from the pre-tap frame (button ripple excluded); tap_to_tree_confirmed = uiautomator tree first reporting the incremented count (the only accepted success signal)"
+ },
+ "cpu": {
+  "idle_settle_m1": {
+   "wall_s": 60.40682790300343,
+   "cpu_pct_of_one_core": 52.29541278135769,
+   "cpu_pct_of_host": 1.6342316494174278,
+   "pids": [
+    1252045
+   ],
+   "cmdlines": {
+    "1252045": "/home/Qui/Android/Sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64-headless -avd acos-oracle-34 -port 5554 -no-window -no-audio -no-boot-anim -no-snapshot-save -no-snapshot-load -gpu swiftshader_indi"
+   }
+  },
+  "during_m4_warm_launch": {
+   "wall_s": 46.63937115899171,
+   "cpu_pct_of_one_core": 393.74458839502523,
+   "cpu_pct_of_host": 12.304518387344539
+  },
+  "during_m5_screenshot": {
+   "wall_s": 9.48268390900921,
+   "cpu_pct_of_one_core": 152.48847413612503,
+   "cpu_pct_of_host": 4.765264816753907
+  },
+  "during_m7_tree": {
+   "wall_s": 38.32753793799202,
+   "cpu_pct_of_one_core": 34.51826209500876,
+   "cpu_pct_of_host": 1.0786956904690237
+  },
+  "during_m8_tap": {
+   "wall_s": 90.50131785299163,
+   "cpu_pct_of_one_core": 131.76603703573366,
+   "cpu_pct_of_host": 4.117688657366677
+  },
+  "during_m6_reset": {
+   "wall_s": 80.67643161298474,
+   "cpu_pct_of_one_core": 236.6986196365994,
+   "cpu_pct_of_host": 7.396831863643731
+  }
+ },
+ "errors": [],
+ "notes": [],
+ "device": {
+  "ro.build.fingerprint": "google/sdk_gphone64_x86_64/emu64xa:14/UE1A.230829.050/12077443:userdebug/dev-keys",
+  "ro.build.version.sdk": "34",
+  "ro.build.version.release": "14",
+  "ro.product.cpu.abi": "x86_64",
+  "ro.product.model": "sdk_gphone64_x86_64",
+  "ro.build.type": "userdebug",
+  "ro.product.name": "sdk_gphone64_x86_64",
+  "ro.build.id": "UE1A.230829.050",
+  "sys.boot_completed": "1"
+ },
+ "reference": {
+  "count0_shot_ms": 213.88651200686581,
+  "count1_shot_ms": 206.5189839922823,
+  "cmp_frac_between_references": 0.00015250544662309367,
+  "full_diff_between_references": 0.0001404320987654321
+ },
+ "shutdown": {
+  "serial_present_after": true,
+  "qemu_left": [],
+  "shutdown_wall_s": 1.5342021849937737
+ },
+ "host_after": {
+  "cpu_model": "AMD Ryzen 9 9950X 16-Core Processor",
+  "threads": 32,
+  "kernel": "7.2.11-arch1-1",
+  "loadavg1": 4.095703125,
+  "mem_total_mib": 61908,
+  "mem_available_mib": 48468,
+  "swap_total_mib": 20479,
+  "swap_free_mib": 4786
+ },
+ "host_delta": {
+  "mem_available_mib_after": 48468
+ },
+ "qemu_left_after_shutdown": []
+}
