@@ -10,9 +10,27 @@
 #                                 [--target-dir .cache/w33-target] [--no-build]
 #                                 [--bin-dir DIR] [--out DIR] [--quick] [--analyze DIR]
 #
+#   tools/art-runtime/bench-d2.sh --mode warm [--warm-reps 5] [--warm-settle 60]
+#                                 [--warm-samples 20] [--warm-resets 10]
+#                                 [--host-gate-wait 600] [--analyze-warm DIR]
+#
+# MODES
+#   cold (default)  the original one-shot rows: `acos verify --engine art` once per
+#                   task. M1/M2/M4/M6/M7 cannot be measured here (cold process) and
+#                   are reported NOT_MEASURED / NOT_COMPARABLE.
+#   warm (W57)      M1, M2, M5, M6 and M7 on a HELD `acos serve` ART session, the
+#                   same state legacy measured: one `acos serve` daemon per rep,
+#                   cgroup anon+shmem (job + guest cgroups) 60 s after the first
+#                   frame, warm screenshot/tree/reset requests over the real
+#                   socket (`tools/art-runtime/d2_warm.py`, which imports
+#                   `agent_loop.py`'s Daemon). One rep = one run-exclusive.sh
+#                   acquisition. `--analyze-warm DIR` re-derives the result table
+#                   from an existing directory without running ART.
+#
 # Output (default results/bench/):
 #   d2-<UTCstamp>.json   every row, sample, statistic, provenance, host load
 #   d2-<UTCstamp>.md     the Markdown table
+#   d2-warm-<UTCstamp>.json/.md   the warm-mode rows (W57)
 #
 # Rules enforced here
 #   * RELEASE ONLY: a debug (or unknown-profile) binary is refused before any
@@ -50,7 +68,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT" || exit 1
 
-usage() { sed -n '2,47p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { awk 'NR > 1 && /^set -uo/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }
 
 SAMPLES=20
 MEM_REPS=5
@@ -62,6 +80,14 @@ OUT=""
 NO_BUILD=0
 QUICK=0
 ANALYZE=""
+MODE="cold"
+WARM_REPS=5
+WARM_SETTLE=60
+WARM_SAMPLES=20
+WARM_RESETS=10
+WARM_LATENCY=1
+HOST_WAIT=600
+ANALYZE_WARM=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -74,11 +100,24 @@ while [ $# -gt 0 ]; do
         --out)        OUT="$2"; shift 2 ;;
         --no-build)   NO_BUILD=1; shift ;;
         --analyze)    ANALYZE="$2"; shift 2 ;;
+        --mode)       MODE="$2"; shift 2 ;;
+        --warm-reps)  WARM_REPS="$2"; shift 2 ;;
+        --warm-settle) WARM_SETTLE="$2"; shift 2 ;;
+        --warm-samples) WARM_SAMPLES="$2"; shift 2 ;;
+        --warm-resets) WARM_RESETS="$2"; shift 2 ;;
+        --host-gate-wait) HOST_WAIT="$2"; shift 2 ;;
+        --analyze-warm) ANALYZE_WARM="$2"; shift 2 ;;
+        --no-warm-latency) WARM_LATENCY=0; shift ;;
         --quick)      QUICK=1; SAMPLES=2; MEM_REPS=1; COHORTS="1 5"; SUITE_MAX=2; shift ;;
         -h|--help)    usage; exit 0 ;;
         *) echo "bench-d2: unknown argument: $1" >&2; exit 2 ;;
     esac
 done
+
+case "$MODE" in
+    cold|warm) ;;
+    *) echo "bench-d2: unknown --mode $MODE (cold|warm)" >&2; exit 2 ;;
+esac
 
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$ROOT/results/bench"
@@ -91,6 +130,16 @@ fi
 
 [ -n "$OUT" ] || OUT="$ROOT/.cache/bench-d2/$STAMP"
 mkdir -p "$OUT"
+
+# ---- warm mode re-derive (W57): no ART, no build, no host gate ----
+# Aggregating an existing warm outdir only re-runs the statistics/verdict code, so
+# it must work on a host that is busy and without a release binary present.
+if [ "$MODE" = "warm" ] && [ -n "$ANALYZE_WARM" ]; then
+    set -- python3 -I "$ROOT/tools/art-runtime/d2_warm.py" --analyze "$ANALYZE_WARM"
+    [ -n "${WARM_ANALYZE_OUT:-}" ] && set -- "$@" --out "$WARM_ANALYZE_OUT"
+    [ -n "${WARM_ANALYZE_MD:-}" ] && set -- "$@" --markdown "$WARM_ANALYZE_MD"
+    exec "$@"
+fi
 
 # ---- W48: host disk preflight -------------------------------------------
 # The disk filled to 100% during the 11-12 benchmark window and a run with no
@@ -179,7 +228,77 @@ then
 fi
 
 disk_preflight || exit 6
-echo "bench-d2: samples=$SAMPLES mem-reps=$MEM_REPS cohorts='$COHORTS' suite=$SUITE_MAX" >&2
+echo "bench-d2: mode=$MODE samples=$SAMPLES mem-reps=$MEM_REPS cohorts='$COHORTS' suite=$SUITE_MAX" >&2
+
+# ---- warm mode (W57): M1/M2/M5/M6/M7 on a held `acos serve` ART session ----
+# The cold driver below measures one-shot `acos verify` runs, which cannot reach a
+# 60 s settle or a warm request. Warm mode instead runs the W57 harness
+# (tools/art-runtime/d2_warm.py) once per rep inside its own
+# run-exclusive.sh + guarded.sh acquisition, so the host-wide ART lock is never
+# held across reps, and then aggregates every rep with benchlib's verdict rule.
+if [ "$MODE" = "warm" ]; then
+    WARM_DRIVER="$ROOT/tools/art-runtime/d2_warm.py"
+    WARM_OUT="$OUT/warm"
+    mkdir -p "$WARM_OUT"
+    WARM_TASK="${ACOS_BENCH_TASK:-W57}"
+    echo "bench-d2: warm mode: reps=$WARM_REPS settle=${WARM_SETTLE}s samples=$WARM_SAMPLES resets=$WARM_RESETS" >&2
+    echo "bench-d2: warm reps -> $WARM_OUT (one run-exclusive.sh acquisition per rep)" >&2
+
+    # Wait for a clean host window instead of recording a contaminated run: the
+    # gate itself is not relaxed (loadavg1 <= 4, MemAvailable >= 30 GiB).
+    HOST_DEADLINE=$(( $(date +%s) + HOST_WAIT ))
+    while :; do
+        if python3 -I - "$ROOT" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/tools")
+import benchlib
+g = benchlib.host_gate(sys.argv[1], check_lock=False)
+print("bench-d2: warm host gate ok=%s loadavg1=%s mem_available=%s GiB"
+      % (g.get("ok"), g.get("loadavg1"), g.get("mem_available_gib")), file=sys.stderr)
+if not g.get("ok"):
+    for r in g.get("reasons") or []:
+        print("bench-d2:   " + r, file=sys.stderr)
+sys.exit(0 if g.get("ok") else 1)
+PY
+        then break; fi
+        if [ "$(date +%s)" -ge "$HOST_DEADLINE" ]; then
+            echo "bench-d2: warm host gate refused after ${HOST_WAIT}s wait" >&2
+            exit 4
+        fi
+        echo "bench-d2: host busy; waiting 15s (UTC $(date -u +%FT%TZ))" >&2
+        sleep 15
+    done
+
+    warm_rep() { # warm_rep N REP [EXTRA...]
+        local n="$1" rep="$2"; shift 2
+        echo "bench-d2: warm rep N=$n rep=$rep (UTC $(date -u +%FT%TZ))" >&2
+        "$ROOT/tools/art-runtime/run-exclusive.sh" --task "$WARM_TASK" -- \
+            "$ROOT/tools/guarded.sh" --mem 16G --time 1500 -- \
+            python3 -I "$WARM_DRIVER" --acos "$ACOS" --phase mem --n "$n" --rep "$rep" \
+                --outdir "$WARM_OUT" --settle "$WARM_SETTLE" \
+                --samples "$WARM_SAMPLES" --resets "$WARM_RESETS" "$@"
+        return $?
+    }
+
+    WARM_RC=0
+    for rep in $(seq 1 "$WARM_REPS"); do
+        if [ "$rep" -eq 1 ] && [ "$WARM_LATENCY" -eq 1 ]; then
+            warm_rep 1 "$rep" --with-latency || WARM_RC=1
+        else
+            warm_rep 1 "$rep" || WARM_RC=1
+        fi
+    done
+    if [ "$WARM_LATENCY" -eq 1 ] && [ "$WARM_REPS" -lt 2 ]; then
+        warm_rep 1 0 --with-latency || WARM_RC=1
+    fi
+    for rep in $(seq 1 "$WARM_REPS"); do
+        warm_rep 5 "$rep" || WARM_RC=1
+    done
+    echo "bench-d2: aggregating warm reps (UTC $(date -u +%FT%TZ))" >&2
+    python3 -I "$WARM_DRIVER" --analyze "$WARM_OUT" || exit 1
+    echo "bench-d2: warm mode finished rc=$WARM_RC (UTC $(date -u +%FT%TZ))" >&2
+    exit "$WARM_RC"
+fi
 
 # ---- the measurement driver (embedded; one ART run per lock acquisition) ----
 cat >"$OUT/driver.py" <<'PY'

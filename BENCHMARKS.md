@@ -121,6 +121,14 @@ direction means this engine is frozen.
 | Host renderer R1 | 6.27 s p50, 1.26 GiB RSS | wall/RSS | warm, host-only | ITERATIONS R1 |
 | Chrome reference | core 340 MiB PSS; tab 18–24 MiB; shot 61 ms; AX 18 ms | PSS | warm | `EXPERIMENTS.md` §13 |
 
+Note on the two core rows (added W57, 2026-11-12): the legacy "workset" column is
+defined by the cited source as **the core cgroup's anon + shmem**
+(`docs/reference/ACVM_INVENTORY.md` §2, `cgroup_mem`), so it is the same
+`CGROUP_ANON_SHMEM` type this document's ACOS rows measure; the anon-only and
+`memory.current` components of the same W1/v9 runs are 203.4 / 285.7 MiB and
+301.1 / 409.9 MiB. §12.1 relies on this when it rejects the mixed-type M11 bar for
+its other two inputs, not for the 206.0 MiB core.
+
 ### 3.1 Legacy research targets (aspirations, never promises)
 
 From `docs/handoff/04`: fixed idle core 100–150 MiB or lower; light task
@@ -1892,6 +1900,15 @@ anon+shmem job+guest; an independent host-level union integral agrees within noi
 (4.495 %). The 24.4 bar is **not derivable from anon+shmem/warm legacy inputs**
 (§12.1), so the row is **NOT_COMPARABLE**, not a D2 PASS. W45's N=1 row is 67.81.
 
+**W57 update (M1, M2, M5, M6, M7 measured WARM on a held `acos serve` session).**
+Those five rows were NOT_MEASURED/NOT_COMPARABLE in the table below only because
+ACOS measured a cold-process one-shot `acos verify` while legacy measured a warm
+held session. `acos serve` now holds a real ART session (W50), so they are
+measured in the same state and type: **M1 PASS, M2 FAIL, M5 FAIL, M6 TIE, M7 PASS**
+(§12.2, `results/bench/d2-warm-20261112T061838Z.json`). The cold-process cells for
+M1, M2, M5, M6 and M7 in the table below are kept as history and are
+**superseded** by §12.2.
+
 **Method record**
 
 ```yaml
@@ -1931,7 +1948,8 @@ rules: spread=(p95-p5)/p50; >15% => NOISY, never PASS; noise=max(spread,5%); TIE
 | M10 | End-to-end verify wall | 2253.0 ms | 3 | 389.00..4537.00 | 165.7% | cold-process / WALL_MS | 19000.00 ms | WALL_MS / warm | no | **NOT_COMPARABLE** | state mismatch: cold-process vs warm NOT COMPARABLE on scope/state: ACOS value is `acos verify --engine art` on prebuilt fixture APKs (no build/install stage) inside a cold process; legacy ~19 s is the U2 dev loop build->install->launch->assert->evidence->reset->cleanup (install-bound, warm). Suite: 3/3 good tasks pass; a wall on a failing task is still a cost sample, never a pass. 3 sample(s) recorded a failed host gate (loadavg1 > 4 or MemAvailable < 30 GiB) and are excluded from the verdict measured spread 165.7% > 15%: this row is noisy and cannot PASS |
 | M11 | Verified tasks / GiB-minute (north star) | **62.84** (N=10; N=1 67.81) | 66 runs / 3 rounds | 45.45..98.60 | 13.46 % | cold-process / CGROUP_ANON_SHMEM per-task integral | **24.4** | mixed: workset core + `memory.current` marginal + warm install wall | **no** | **NOT_COMPARABLE** | ACOS row measured: `results/bench/suite-W52-r4.json`, release, N=10 x 3 rounds, 66 distinct fresh scopes, false_pass 0; primary = anon+shmem of job+every guest cgroup, 100 ms + closing sample, sampler's same-type charge subtracted; host-level union integral agrees 4.495 %. CI low 45.45 > 25.62, so the numeric rule would pass, but the legacy bar's own inputs are NOT anon+shmem warm: 206.0 MiB W1 bare core is **workset** (203.4 anon / 285.7 current), 112.1 MiB marginal is **`memory.current`** (paired ws 99.3), and 19 s is the **install-bound portion** (74–81 %) of a warm dev loop. A mixed-type/state bar cannot gate this row => NOT_COMPARABLE, never PASS. Detail and flake list: `results/art-runtime/W52.md`; N=1 (W45) 67.81 CI 47.91–110.28. |
 
-**Verdict counts: 0 PASS, 1 NOISY (M3), 5 NOT_COMPARABLE (M2, M5, M7, M10, M11), 5
+**Verdict counts (this cold-process run, kept as history): 0 PASS, 1 NOISY (M3), 5
+NOT_COMPARABLE (M2, M5, M7, M10, M11), 5
 NOT_MEASURED (M1, M4, M6, M8, M9), 0 TIE/FAIL, false passes 0.** The JSON validates
 (`bench-d2: validation ok`). No NOT_COMPARABLE or NOT_MEASURED row is a win. **This run
 has no PASS at all**: M3 (cold start -> first correct frame) measured 265.5 ms
@@ -2038,3 +2056,105 @@ the first-frame component, not the composite; (2) the 26 s session-exit window a
 undiagnosed and needs a follow-up that captures the session's exit path; (3) no warm
 pool/held session, so M1/M2/M4/M6/M7 remain cross-state; (4) M9/M11 need the scalar
 legacy workset and the N=10 suite runner (W30-owned).
+
+---
+
+### 12.2 Warm D2 rows on a held `acos serve` ART session (W57, 2026-11-12)
+
+**Status:** the five D2 rows that were only NOT_MEASURED or NOT_COMPARABLE because of
+**state** (legacy measured a warm, held session; ACOS measured a cold-process one-shot
+`verify`) are now measured in the legacy state: a held `acos serve` ART session
+(W50), cgroup anon+shmem 60 s after the first frame, and warm screenshot / tree /
+reset requests over the daemon's real Unix socket. Raw record:
+`results/bench/d2-warm-20261112T061838Z.json` (+ `.md`, every sample and rep, per-rep
+host load and contamination); harness `tools/art-runtime/d2_warm.py`, driven by
+`tools/art-runtime/bench-d2.sh --mode warm`; tests `tools/tests/test-d2-warm.sh`
+(15/15, no ART). Every verdict below is `benchlib.verdict()` (§11.2) — spread gate,
+tie is not a pass, same type AND state or NOT_COMPARABLE.
+
+**Method record**
+
+```yaml
+date: 2026-11-12T05:58:10Z -> 2026-11-12T06:18:34Z (M1 5 reps, M2 9 attempts / 7 clean-ish,
+      M5 n=20, M6 n=10, M7 n=20, each rep its own run-exclusive.sh acquisition)
+engine: art                       # held `acos serve --engine art` session, one ART guest per session
+profile: release                  # a non-release binary path is refused (exit 2) before any guest
+git_head: bab06c6 (detached worktree .cache/w57-wt at build time;
+          the shared tree's HEAD advanced to fc47593 during the run)
+binaries: {acos: c0ea1e7536515388e6d2efd381318341a646a75429afdda6d560f617d69bd5cb,
+           acos-art: 74ac8711a6ba59d7e560059c2fefd11d5e01f98b40daeb48b80174903e35f8aa}
+build: CARGO_TARGET_DIR=.cache/w57-target, release, from a clean detached worktree of
+       the commit above (the shared tree was dirty with W54/W55/W56 work; the dirty
+       fingerprint in the JSON therefore does NOT describe the measured binary)
+apk: fixtures/build/apps/counter.apk sha256 e037aee210471283479f04339235e783c1d344aa560f82a22ae1b53ee6610366
+rustc: rustc 1.90.0 (1159e78c4 2025-09-14)
+settle: 60 s after the LAST first frame of the rep, 100 ms cgroup samples, value =
+        last sample; sampler's own RssAnon+RssShmem subtracted (W45/W52 rule)
+lock: one ART run per run-exclusive.sh acquisition (11 acquisitions + 2 acquired for
+      the two failed N=5 attempts, see below); the lock was never held across reps
+host: loadavg1 0.96-4.87, MemAvailable 40.6-41.8 GiB during the run; two N=5 reps
+      (rep2, rep3) touched loadavg1 4.87 and are recorded contaminated + excluded
+rules: spread=(p95-p5)/p50; >15% => NOISY, never PASS; noise=max(spread,5%); TIE is not a
+       PASS; a type/state/settle mismatch is NOT_COMPARABLE; nothing is estimated
+```
+
+| # | Metric | ACOS-ART warm value | n | 95% CI (p50) | spread | state / type | Legacy ACVM | Same type+state | Verdict | Reason |
+|---|---|---|---|---|---|---|---|---|---|---|
+| M1 | Fixed idle core memory (held ART session, no interaction, 60 s settle) | **117.50 MiB** | 5 | 114.08..118.66 | 3.4% | warm / CGROUP_ANON_SHMEM | 206.00 MiB | yes (settle 60 s both) | **PASS** | ACOS row is `acos serve` + one launched, untouched counter session (the ACOS analogue of an idle core: the framework only exists inside a session), 60 s after its first frame, reads only. Legacy 206.0 MiB is a bare core with **no** app session, so this row charges ACOS for a session legacy's number does not carry (daemon alone p50 **1.36 MiB**; guest process tree p50 **87.82 MiB**). Type checked, not assumed: the inventory defines legacy "workset" as the core cgroup's anon+shmem (`docs/reference/ACVM_INVENTORY.md` §2), the same column measured here. p50 117.50 <= 206.0 x 0.95 = 195.7. |
+| M2 | Per-session memory at N=5 (incremental and marginal) | **107.50 MiB/session** | 5 | 105.72..113.61 | 7.0% | warm / CGROUP_ANON_SHMEM | 78.70 MiB | yes (settle 60 s both) | **FAIL** | 5 held sessions, settled 60 s after the last first frame; incremental = (total − daemon-only)/5 per rep (the legacy `(loaded−bare)/5` formula; the "bare" baseline here is the `acos serve` daemon alone because ACOS has no booted framework without a session — stated, not hidden). Marginal (N=5 − N=1)/4 = **107.67 MiB/session** agrees, so the result is not an artefact of the baseline. p50 107.50 > 78.7 x 1.070 = 84.18: ACOS costs 1.37x the legacy v9 per-session anon+shmem. Two of nine N=5 attempts were excluded: rep2/rep3 failed the host gate (loadavg1 4.87) and are recorded, not dropped silently. |
+| M5 | Fresh screenshot retrieval (warm, held session) | **80.08 ms** | 20 | 79.74..80.71 | 6.6% | warm / WALL_MS | 66.50 ms | yes | **FAIL** | One `acos_observe {png:true, screenshot:path}` on the already-held session, request write -> reply: host capture + PNG write of a 9,545,882-byte 1080x2400 frame. Freshness is part of every sample (frame_seq > previous_seq, PNG magic, non-zero bytes): 20/20 ok. p50 80.08 > 66.5 x 1.0657 = 70.87. The legacy row is retrieval latency of a request-sequenced fresh frame; the PNG write is inside the shipped verb, so this is not a like-for-like removal candidate — it is a real 1.20x regression on a warm retrieval. |
+| M6 | Reset -> ready (warm, held session) | **681.79 ms** | 10 | 658.44..714.38 | 14.1% | warm / WALL_MS | 748.10 ms | yes | **TIE** | serve's `acos_reset` (stop the guest, relaunch the same APK with empty app-data, bind a fresh frame) timed request-write to reply; the reply is only sent once the fresh frame is bound, so the value IS reset -> ready. Readiness and correctness bound in every sample: frame_seq > previous_frame_seq, the app was tapped to a non-zero count first, and the post-reset tree reads 0 — 10/10 ok. p50 681.79 sits inside the noise band (642.40..785.50): a TIE is **not** a pass. Legacy's command-only value (110.3 ms) is never substituted for the ->frame value. Spread 14.1% is inside the 15% gate but close to it. |
+| M7 | UI tree with text (warm, held session) | **251.93 ms** | 20 | 251.14..252.41 | 8.8% | warm / WALL_MS | 538.00 ms | yes | **PASS** | One `acos_observe_tree` on the already-held session (guest traversal + serialization, text in every node, 12 nodes / 4 text nodes / 4,101 B, never truncated): 20/20 ok. The legacy comparable row is the **shipped** one-shot `ui --text` tree (538 ms p50, warm); the 4.1 ms persistent-observe number is research, not a shipped route, so it is not the bar. p50 251.93 <= 538 x 0.912 = 490.57 (2.14x faster). |
+
+**Verdict counts (warm set): 2 PASS (M1, M7), 2 FAIL (M2, M5), 1 TIE (M6), 0 NOISY,
+0 NOT_COMPARABLE, 0 NOT_MEASURED, 0 false passes.** Both memory rows also carry a
+`benchlib.compare_memory()` record (`COMPARABLE`, ratios 0.570 for M1 and 1.366 for M2),
+so type + state + 60 s settle are machine-checked, not asserted. Combined with §12's cold-process
+table: the D2 rows measured on real ART are now M1 PASS, M2 FAIL, M3 NOISY, M4
+NOT_MEASURED, M5 FAIL, M6 TIE, M7 PASS, M8 NOT_MEASURED (W55 owns the tap-latency
+change; not re-measured here), M9 NOT_MEASURED, M10 NOT_COMPARABLE, M11 NOT_COMPARABLE.
+A TIE, NOT_COMPARABLE or NOT_MEASURED row is not a win.
+
+**What changed vs the cold-process rows (and what did not)**
+
+* The state objection is gone: M1/M2/M5/M6/M7 are now warm, held-session rows with the
+  legacy settle (60 s) and the legacy type (cgroup anon+shmem / wall ms). M5 and M7 moved
+  from NOT_COMPARABLE to a real comparison, and the comparison says one improvement
+  (tree 2.14x faster) and one regression (screenshot 1.20x slower).
+* M2 is a real **regression**, not a state artefact: both the incremental
+  (107.50 MiB/session) and the marginal (107.67) are ~1.37x the legacy 78.7 MiB, whose
+  workset type is also the core cgroup's anon+shmem. The legacy per-session number is a
+  whole Android container session; ACOS's is one `acos-art` + `dalvikvm64` guest tree
+  (~88 MiB of it is the guest processes), so the gap is real and named.
+* M1's scope caveat is recorded in the row: legacy's 206.0 MiB core has no app session,
+  ACOS's 117.5 MiB includes one. The derived legacy core+one-session figure (206.0 +
+  130.3 = 336.3 MiB, never a published row) is information only and is **not** a
+  verdict input.
+* **Two N=5 reps died on `GUEST_EXITED`** during launch (rep1: 2/5 sessions, rep6: 4/5;
+  each ~14 s in, one guest at a time, no exit record, loadavg1 1.4-3.6, no host-gate
+  violation, no OOM kill recorded by our scope). Both attempts are kept in the raw JSON
+  as failed reps and are excluded from the rows — a failure is never re-labelled as app
+  behaviour. This is the same undiagnosed guest death W50 §7.3 and W39 §7 recorded;
+  §12's residual (2) still stands.
+
+**Reproduce**
+
+```sh
+CARGO_TARGET_DIR=.cache/w57-target cargo build --release -p acos-cli -p acos-art   # clean worktree of the commit above
+tools/art-runtime/bench-d2.sh --mode warm --target-dir .cache/w57-target --no-build \
+    --warm-reps 5 --warm-settle 60 --warm-samples 20 --warm-resets 10 --out .cache/bench-d2-warm/run1
+tools/art-runtime/bench-d2.sh --mode warm --analyze-warm .cache/bench-d2-warm/run1/warm \
+    --out .cache/bench-d2-warm/run1          # re-derive the table, no ART, no build
+tools/tests/test-d2-warm.sh                  # the harness's own tests (no ART)
+```
+
+**Residuals (W57).** (1) M4 (worker create -> frame) still has no warm pool to time: a
+held serve session returns a bound live frame (0.2 ms) instead of creating a worker, so
+the row stays NOT_MEASURED — a warm pool is a capability, not a measurement gap.
+(2) The `GUEST_EXITED` launch death above is undiagnosed; smallest next action is to
+capture the launcher's exit path/session-exit record when it recurs (an engine-owner
+change, `acos-art`/`serve.rs` are not W57's to edit). (3) M2's bare baseline is the
+daemon (1.36 MiB), not a booted framework, because ACOS has no session-less booted
+framework; the marginal column exists so the reader can see the row without that
+baseline. (4) M6's spread (14.1%) is close to the 15% gate under a shared host; a
+quieter window would tighten the CI but cannot turn a TIE into a PASS.
