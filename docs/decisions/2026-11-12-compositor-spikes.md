@@ -74,3 +74,22 @@ escalated with evidence.
 the custom code that remains, memory and startup cost, compatibility and
 correctness, effort and dependencies, and scaling to N=10 and N=20
 independently isolated sessions. The recommendation must rest on evidence.
+
+## Decision 2026-11-12 ~06:10 UTC: B1 approved
+
+The owner chose **B1**: keep C1, and compile the stock AOSP geometry kernel into it,
+replacing C1's hand-written placement. Spike B §8 gives the details.
+
+- **Kernel:** `libui` `Rect`/`Transform`, plus the `RequestedLayerState` and `LayerSnapshotBuilder`
+  bounds/transform bodies. These are vendored verbatim, with provenance `android-14.0.0_r75`.
+- **Policy change:** this moves AOSP use from "read only" to "subset compiled in" (rung 4) for
+  these files only.
+- **Not in B1:** A1, the stock SurfaceFlinger experiment, is not started. C1 is not replaced.
+- **`ui/RegionHelper.h`** was not approved for fetch. B1 ships without `transparentRegion`,
+  which is empty for every app layer seen so far. Region ops stay out until the owner approves
+  the single-file fetch.
+- **B1a:** a new crate `acos-sfgeom` (vendored C++, C ABI via `cc`, Rust API, W54 arithmetic
+  tests). It makes no C1 changes.
+- **B1b:** wire it into C1's `surface_client.rs` placement and delete the hand-written placement.
+  Pixel parity must hold on the existing visual and dialog gates.
+- Each task is 60 minutes or less.
