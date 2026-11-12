@@ -1,53 +1,132 @@
 {
  "corpus": {
   "manifest_apps": 42,
-  "ran": 4,
-  "not_run": 38,
+  "ran": 42,
+  "not_run": 0,
   "fetch_failures": [],
   "index_sha256": "a504cce496d4b288a1f18a39a376014ae1e9cd539309457189712b9aeaac0b72",
   "framework_api": 34
  },
  "funnel": {
-  "inspect": 4,
-  "process_start": 4,
-  "oncreate_entered": 4,
-  "oncreate_completed": 1,
-  "first_frame": 1,
-  "tree": 1,
-  "screenshot": 1,
-  "tap": 1
+  "inspect": 42,
+  "process_start": 42,
+  "oncreate_entered": 41,
+  "oncreate_completed": 7,
+  "first_frame": 5,
+  "tree": 4,
+  "screenshot": 4,
+  "tap": 2
  },
  "funnel_at_least": {
-  "inspect": 4,
-  "process_start": 4,
-  "oncreate_entered": 4,
-  "oncreate_completed": 1,
-  "first_frame": 1,
-  "tree": 1,
-  "screenshot": 1,
-  "tap": 1
+  "inspect": 42,
+  "process_start": 42,
+  "oncreate_entered": 41,
+  "oncreate_completed": 7,
+  "first_frame": 5,
+  "tree": 4,
+  "screenshot": 4,
+  "tap": 2
  },
  "rates": {
   "inspect": 1.0,
   "process_start": 1.0,
-  "oncreate_entered": 1.0,
-  "oncreate_completed": 0.25,
-  "first_frame": 0.25,
-  "tree": 0.25,
-  "screenshot": 0.25,
-  "tap": 0.25
+  "oncreate_entered": 0.976,
+  "oncreate_completed": 0.167,
+  "first_frame": 0.119,
+  "tree": 0.095,
+  "screenshot": 0.095,
+  "tap": 0.048
  },
  "time_to_first_frame_ms": {
-  "n": 1,
-  "p50": 539.7,
-  "p90": 539.7,
-  "max": 539.7
+  "n": 5,
+  "p50": 698.5,
+  "p90": 1003.3,
+  "max": 1003.3
  },
  "peak_rss_mib": {
-  "p50": 439.0,
-  "max": 609.0
+  "p50": 280.7,
+  "max": 606.7
  },
  "walls": {
+  "null return: java.lang.Object.getClass": {
+   "apps": [
+    "com.dot.gallery",
+    "com.nextcloud.client",
+    "de.westnordost.streetcomplete",
+    "org.breezyweather",
+    "org.fdroid.basic"
+   ],
+   "count": 5,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "guest process died",
+   "fix": "crates/acos-cli/src/failure.rs + the guest log"
+  },
+  "null return: android.os.storage.IStorageManager.getVolumeList": {
+   "apps": [
+    "com.ismartcoding.plain",
+    "de.danoeh.antennapod",
+    "io.github.muntashirakon.AppManager",
+    "net.gsantner.markor",
+    "org.billthefarmer.editor"
+   ],
+   "count": 5,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "guest process died",
+   "fix": "crates/acos-cli/src/failure.rs + the guest log"
+  },
+  "android.app.INotificationManager.createNotificationChannels (parcel rejected)": {
+   "apps": [
+    "com.github.gotify",
+    "com.ichi2.anki",
+    "com.tailscale.ipn",
+    "org.kde.kdeconnect_tp"
+   ],
+   "count": 4,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "guest process died",
+   "fix": "crates/acos-cli/src/failure.rs + the guest log"
+  },
+  "GUEST_EXITED": {
+   "apps": [
+    "io.element.android.x",
+    "org.fdroid.fdroid",
+    "org.secuso.privacyfriendlynotes"
+   ],
+   "count": 3,
+   "message": "acos-art: GUEST_EXITED: the guest ended after the gesture without a settled frame (status exit status: N)",
+   "component": "guest process died",
+   "fix": "crates/acos-cli/src/failure.rs + the guest log"
+  },
+  "DI graph failed during onCreate (root cause hidden)": {
+   "apps": [
+    "com.fsck.k9",
+    "net.mullvad.mullvadvpn"
+   ],
+   "count": 2,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "guest process died",
+   "fix": "crates/acos-cli/src/failure.rs + the guest log"
+  },
+  "WebView rejected: process reported as privileged": {
+   "apps": [
+    "com.libreweatherrn",
+    "de.tutao.calendar"
+   ],
+   "count": 2,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "WebView provider",
+   "fix": "crates/acos-services (webview peer)"
+  },
+  "JNI native missing: com.google.android.gles_jni.EGLImpl._nativeClassInit": {
+   "apps": [
+    "com.shatteredpixel.shatteredpixeldungeon",
+    "io.anuke.mindustry"
+   ],
+   "count": 2,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "JNI/native symbol surface",
+   "fix": "crates/acos-jni + crates/acos-native-loader"
+  },
   "android.app.IActivityManager.getMemoryInfo (code 77)": {
    "apps": [
     "chat.fluffy.fluffychat"
@@ -66,14 +145,140 @@
    "component": "framework shim missing an API",
    "fix": "crates/acos-services (framework peer)"
   },
-  "GUEST_EXITED: java.lang.RuntimeException: Unable to create application com.dot.gallery.GalleryApp: java.lang.NullPointerException: Att": {
+  "null return: android.content.pm.ShortcutManager.isRequestPinShortcutSupported": {
    "apps": [
-    "com.dot.gallery"
+    "com.github.muellerma.coffee"
    ],
    "count": 1,
    "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
    "component": "guest process died",
    "fix": "crates/acos-cli/src/failure.rs + the guest log"
+  },
+  "null return: android.app.job.JobScheduler.forNamespace": {
+   "apps": [
+    "com.keylesspalace.tusky"
+   ],
+   "count": 1,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "guest process died",
+   "fix": "crates/acos-cli/src/failure.rs + the guest log"
+  },
+  "android.content.pm.IPackageManager.getPermissionControllerPackageName (code 140)": {
+   "apps": [
+    "com.money.manager.ex"
+   ],
+   "count": 1,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "framework shim missing an API",
+   "fix": "crates/acos-services (framework peer)"
+  },
+  "unknown": {
+   "apps": [
+    "com.nononsenseapps.feeder"
+   ],
+   "count": 1,
+   "message": "",
+   "component": null,
+   "fix": null
+  },
+  "app build-config/sentry DSN is empty": {
+   "apps": [
+    "com.perflyst.twire"
+   ],
+   "count": 1,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "guest process died",
+   "fix": "crates/acos-cli/src/failure.rs + the guest log"
+  },
+  "null return: java.lang.Boolean.booleanValue": {
+   "apps": [
+    "com.sadellie.unitto"
+   ],
+   "count": 1,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "guest process died",
+   "fix": "crates/acos-cli/src/failure.rs + the guest log"
+  },
+  "android.app.IActivityManager.getRunningAppProcesses (code 86)": {
+   "apps": [
+    "com.termux"
+   ],
+   "count": 1,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "framework shim missing an API",
+   "fix": "crates/acos-services (framework peer)"
+  },
+  "android.app.IActivityClientController.getRequestedOrientation (code 30)": {
+   "apps": [
+    "com.unciv.app"
+   ],
+   "count": 1,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "framework shim missing an API",
+   "fix": "crates/acos-services (framework peer)"
+  },
+  "android.app.IActivityClientController.getTaskForActivity (code 22)": {
+   "apps": [
+    "it.niedermann.owncloud.notes"
+   ],
+   "count": 1,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "framework shim missing an API",
+   "fix": "crates/acos-services (framework peer)"
+  },
+  "static initializer failed (cause hidden)": {
+   "apps": [
+    "me.zhanghai.android.files"
+   ],
+   "count": 1,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "guest process died",
+   "fix": "crates/acos-cli/src/failure.rs + the guest log"
+  },
+  "android.net.IConnectivityManager.getNetworkCapabilities (code 16)": {
+   "apps": [
+    "net.cozic.joplin"
+   ],
+   "count": 1,
+   "message": "acos-art: GUEST_EXITED: the guest ended while binding the tree (status exit status: N)",
+   "component": "framework shim missing an API",
+   "fix": "crates/acos-services (framework peer)"
+  },
+  "conscrypt X.509 certificate parsing": {
+   "apps": [
+    "org.quantumbadger.redreader"
+   ],
+   "count": 1,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "guest process died",
+   "fix": "crates/acos-cli/src/failure.rs + the guest log"
+  },
+  "JNI native missing: android.graphics.BLASTBufferQueue.nativeCreate": {
+   "apps": [
+    "org.supertuxkart.stk"
+   ],
+   "count": 1,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "guest process died",
+   "fix": "crates/acos-cli/src/failure.rs + the guest log"
+  },
+  "android.app.INotificationManager.getNotificationChannel (code 42)": {
+   "apps": [
+    "org.videolan.vlc"
+   ],
+   "count": 1,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "framework shim missing an API",
+   "fix": "crates/acos-services (framework peer)"
+  },
+  "android.app.INotificationManager.getNotificationChannelGroup (code 53)": {
+   "apps": [
+    "org.wikipedia"
+   ],
+   "count": 1,
+   "message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "component": "framework shim missing an API",
+   "fix": "crates/acos-services (framework peer)"
   }
  },
  "apps": [
@@ -96,7 +301,7 @@
    "tree_nodes": null,
    "tap": null,
    "screenshot_bytes": null,
-   "peak_rss_mib": 609.0,
+   "peak_rss_mib": 599.4,
    "crash_class": "guest-exit",
    "error_code": "GUEST_EXITED",
    "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
@@ -121,7 +326,10 @@
    "wall_component": "framework shim missing an API",
    "wall_fix": "crates/acos-services (framework peer)",
    "engine_stage": null,
-   "markers_present": [],
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
    "stages": {
     "inspect": true,
     "process_start": true,
@@ -152,12 +360,12 @@
    "tree_nodes": null,
    "tap": null,
    "screenshot_bytes": null,
-   "peak_rss_mib": 217.1,
+   "peak_rss_mib": 253.3,
    "crash_class": "guest-exit",
    "error_code": "GUEST_EXITED",
    "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
    "unsupported_api": "android.content.pm.IPackageManager.getPackageInstaller (code 133)",
-   "crash_message": "java.lang.RuntimeException: Unable to create application com.aurora.store.AuroraApp: java.lang.UnsupportedOperationException: unsupported Android API: android.content.pm.IPackageMa",
+   "crash_message": "java.lang.RuntimeException: Unable to create application com.aurora.store.AuroraApp: java.lang.UnsupportedOperationException: unsupported Android API: android.content.pm.IPackageManager code N (getPackageInstaller)",
    "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application com.aurora.store.AuroraApp: java.lang.UnsupportedOperationException: unsupported Android API: android.content.pm.IPackageManager code 133 (getPackageInstaller)\"}",
    "application_created": true,
    "activity_resumed": false,
@@ -177,7 +385,10 @@
    "wall_component": "framework shim missing an API",
    "wall_fix": "crates/acos-services (framework peer)",
    "engine_stage": null,
-   "markers_present": [],
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
    "stages": {
     "inspect": true,
     "process_start": true,
@@ -204,7 +415,7 @@
    ],
    "stage": "tap",
    "stage_reached": "first_frame",
-   "time_to_first_frame_ms": 539.7,
+   "time_to_first_frame_ms": 517.5,
    "tree_nodes": 78,
    "tap": {
     "x": 941,
@@ -218,8 +429,8 @@
     "settle": {
      "ack_ms": 5,
      "bound": "strict-event",
-     "first_change_ms": 132,
-     "frame_ms": 935,
+     "first_change_ms": 152,
+     "frame_ms": 933,
      "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
      "mode": "strict",
      "settled": true,
@@ -228,7 +439,7 @@
     }
    },
    "screenshot_bytes": 9545882,
-   "peak_rss_mib": 277.6,
+   "peak_rss_mib": 274.9,
    "crash_class": null,
    "error_code": null,
    "error_message": "",
@@ -281,12 +492,12 @@
    "tree_nodes": null,
    "tap": null,
    "screenshot_bytes": null,
-   "peak_rss_mib": 439.0,
+   "peak_rss_mib": 444.9,
    "crash_class": "guest-exit",
    "error_code": "GUEST_EXITED",
    "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
    "unsupported_api": null,
-   "crash_message": "java.lang.RuntimeException: Unable to create application com.dot.gallery.GalleryApp: java.lang.NullPointerException: Attempt to invoke virtual method 'java.lang.Class java.lang.Obj",
+   "crash_message": "java.lang.RuntimeException: Unable to create application com.dot.gallery.GalleryApp: java.lang.NullPointerException: Attempt to invoke virtual method 'java.lang.Class java.lang.Object.getClass()' on a null object reference",
    "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application com.dot.gallery.GalleryApp: java.lang.NullPointerException: Attempt to invoke virtual method 'java.lang.Class java.lang.Object.getClass()' on a null object reference\"}",
    "application_created": true,
    "activity_resumed": false,
@@ -297,7 +508,10 @@
    "wall_component": "guest process died",
    "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
    "engine_stage": null,
-   "markers_present": [],
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
    "stages": {
     "inspect": true,
     "process_start": true,
@@ -311,7 +525,7 @@
   },
   {
    "package": "com.fsck.k9",
-   "status": "not-run",
+   "status": "blocked",
    "version": "24.0",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 36,
@@ -321,51 +535,257 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 268.2,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application app.kNmail.KNApp: org.koin.core.error.InstanceCreationException: Could not create instance for '[Singleton: 'com.fsck.kN.controller.MessagingController',binds:app.kNmail.legacy.message.controller.MessagingControllerRegistry]'",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application app.k9mail.K9App: org.koin.core.error.InstanceCreationException: Could not create instance for '[Singleton: 'com.fsck.k9.controller.MessagingController',binds:app.k9mail.legacy.message.controller.MessagingControllerRegistry]'\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "com.github.gotify",
-   "status": "not-run",
+   "status": "blocked",
    "version": "2.10.1",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 36,
    "has_native": false,
-   "abis": []
+   "abis": [],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 254.4,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application com.github.gotify.GotifyApplication: java.lang.IllegalArgumentException: bad request for android.app.INotificationManager::createNotificationChannels: arg N (TypedObject(android.content.pm.ParceledListSlice, nullable=true)): no parcelable codec for android.content.pm.ParceledListSlice",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application com.github.gotify.GotifyApplication: java.lang.IllegalArgumentException: bad request for android.app.INotificationManager::createNotificationChannels: arg 1 (TypedObject(android.content.pm.ParceledListSlice, nullable=true)): no parcelable codec for android.content.pm.ParceledListSlice\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 31,
+     "descriptor": "android.app.INotificationManager",
+     "error": "SERVICE_BAD_REQUEST",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "bad request for android.app.INotificationManager::createNotificationChannels: arg 1 (TypedObject(android.content.pm.ParceledListSlice, nullable=true)): no parcelable codec for android.content.pm.ParceledListSlice",
+     "method": "createNotificationChannels"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "com.github.muellerma.coffee",
-   "status": "not-run",
+   "status": "blocked",
    "version": "2.27",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 34,
    "has_native": false,
-   "abis": []
+   "abis": [],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 205.7,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to start activity ComponentInfo{com.github.muellerma.coffee/com.github.muellerma.coffee.activities.MainActivity}: java.lang.NullPointerException: Attempt to invoke virtual method 'boolean android.content.pm.ShortcutManager.isRequestPinShortcutSupported()' on a null object reference",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to start activity ComponentInfo{com.github.muellerma.coffee/com.github.muellerma.coffee.activities.MainActivity}: java.lang.NullPointerException: Attempt to invoke virtual method 'boolean android.content.pm.ShortcutManager.isRequestPinShortcutSupported()' on a null object reference\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "com.ichi2.anki",
-   "status": "not-run",
+   "status": "blocked",
    "version": "2.25.3",
    "ui_toolkit": "webview-native",
    "target_sdk": 36,
    "has_native": true,
    "abis": [
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 299.2,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application com.ichiN.anki.AnkiDroidApp: java.lang.IllegalArgumentException: bad request for android.app.INotificationManager::createNotificationChannels: arg N (TypedObject(android.content.pm.ParceledListSlice, nullable=true)): no parcelable codec for android.content.pm.ParceledListSlice",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application com.ichi2.anki.AnkiDroidApp: java.lang.IllegalArgumentException: bad request for android.app.INotificationManager::createNotificationChannels: arg 1 (TypedObject(android.content.pm.ParceledListSlice, nullable=true)): no parcelable codec for android.content.pm.ParceledListSlice\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 103,
+     "descriptor": "android.app.IActivityManager",
+     "error": "UNSUPPORTED_ANDROID_API",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "unsupported Android API: android.app.IActivityManager code 103 (isUserAMonkey)",
+     "method": "isUserAMonkey"
+    },
+    {
+     "code": 31,
+     "descriptor": "android.app.INotificationManager",
+     "error": "SERVICE_BAD_REQUEST",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "bad request for android.app.INotificationManager::createNotificationChannels: arg 1 (TypedObject(android.content.pm.ParceledListSlice, nullable=true)): no parcelable codec for android.content.pm.ParceledListSlice",
+     "method": "createNotificationChannels"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "com.ismartcoding.plain",
-   "status": "not-run",
+   "status": "blocked",
    "version": "3.3.25",
    "ui_toolkit": "compose",
    "target_sdk": 36,
    "has_native": true,
    "abis": [
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 339.0,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application com.ismartcoding.plain.MainApp: java.lang.NullPointerException: Attempt to invoke interface method 'android.os.storage.StorageVolume[] android.os.storage.IStorageManager.getVolumeList(int, java.lang.String, int)' on a null object reference",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application com.ismartcoding.plain.MainApp: java.lang.NullPointerException: Attempt to invoke interface method 'android.os.storage.StorageVolume[] android.os.storage.IStorageManager.getVolumeList(int, java.lang.String, int)' on a null object reference\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "com.keylesspalace.tusky",
-   "status": "not-run",
+   "status": "blocked",
    "version": "33.1",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 36,
@@ -375,11 +795,47 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 280.7,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application com.keylesspalace.tusky.TuskyApplication: java.lang.NullPointerException: Attempt to invoke virtual method 'android.app.job.JobScheduler android.app.job.JobScheduler.forNamespace(java.lang.String)' on a null object reference",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application com.keylesspalace.tusky.TuskyApplication: java.lang.NullPointerException: Attempt to invoke virtual method 'android.app.job.JobScheduler android.app.job.JobScheduler.forNamespace(java.lang.String)' on a null object reference\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "com.libreweatherrn",
-   "status": "not-run",
+   "status": "blocked",
    "version": "v1.0.3",
    "ui_toolkit": "react-native",
    "target_sdk": 30,
@@ -389,11 +845,48 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_completed",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 318.4,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended while binding the tree (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.UnsupportedOperationException: For security reasons, WebView is not allowed in privileged processes",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":true,\"message\":\"java.lang.UnsupportedOperationException: For security reasons, WebView is not allowed in privileged processes\"}",
+   "application_created": true,
+   "activity_resumed": true,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "WebView provider",
+   "wall_fix": "crates/acos-services (webview peer)",
+   "engine_stage": null,
+   "markers_present": [
+    "activity-resumed.marker",
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": true,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "com.money.manager.ex",
-   "status": "not-run",
+   "status": "blocked",
    "version": "5.5.15-release",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 36,
@@ -403,11 +896,56 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 225.8,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": "android.content.pm.IPackageManager.getPermissionControllerPackageName (code 140)",
+   "crash_message": "java.lang.RuntimeException: Unable to start activity ComponentInfo{com.money.manager.ex/com.money.manager.ex.home.MainActivity}: java.lang.UnsupportedOperationException: unsupported Android API: android.content.pm.IPackageManager code N (getPermissionControllerPackageName)",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to start activity ComponentInfo{com.money.manager.ex/com.money.manager.ex.home.MainActivity}: java.lang.UnsupportedOperationException: unsupported Android API: android.content.pm.IPackageManager code 140 (getPermissionControllerPackageName)\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 140,
+     "descriptor": "android.content.pm.IPackageManager",
+     "error": "UNSUPPORTED_ANDROID_API",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "unsupported Android API: android.content.pm.IPackageManager code 140 (getPermissionControllerPackageName)",
+     "method": "getPermissionControllerPackageName"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "framework shim missing an API",
+   "wall_fix": "crates/acos-services (framework peer)",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "com.nextcloud.client",
-   "status": "not-run",
+   "status": "blocked",
    "version": "35.1.0 RC1",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 36,
@@ -417,11 +955,46 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "process_start",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 324.6,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to instantiate application com.owncloud.android.MainApp package com.nextcloud.client: java.lang.NullPointerException: Attempt to invoke virtual method 'java.lang.Class java.lang.Object.getClass()' on a null object reference",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to instantiate application com.owncloud.android.MainApp package com.nextcloud.client: java.lang.NullPointerException: Attempt to invoke virtual method 'java.lang.Class java.lang.Object.getClass()' on a null object reference\"}",
+   "application_created": false,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": false,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "com.nononsenseapps.feeder",
-   "status": "not-run",
+   "status": "fail",
    "version": "2.25.0",
    "ui_toolkit": "compose",
    "target_sdk": 37,
@@ -431,11 +1004,44 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "screenshot",
+   "stage_reached": "first_frame",
+   "time_to_first_frame_ms": 840.5,
+   "tree_nodes": 7,
+   "tap": null,
+   "screenshot_bytes": 9545882,
+   "peak_rss_mib": 390.5,
+   "crash_class": null,
+   "error_code": null,
+   "error_message": "",
+   "unsupported_api": null,
+   "crash_message": "",
+   "crash_raw": null,
+   "application_created": true,
+   "activity_resumed": true,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": null,
+   "wall_fix": null,
+   "engine_stage": null,
+   "markers_present": null,
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": true,
+    "first_frame": true,
+    "tree": true,
+    "screenshot": true,
+    "tap": false
+   }
   },
   {
    "package": "com.perflyst.twire",
-   "status": "not-run",
+   "status": "blocked",
    "version": "2.12.3",
    "ui_toolkit": "material-webview",
    "target_sdk": 35,
@@ -445,11 +1051,56 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 177.8,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application com.perflyst.twire.TwireApplication: java.lang.IllegalArgumentException: DSN is required. Use empty string or set enabled to false in SentryOptions to disable SDK.",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application com.perflyst.twire.TwireApplication: java.lang.IllegalArgumentException: DSN is required. Use empty string or set enabled to false in SentryOptions to disable SDK.\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 131,
+     "descriptor": "android.app.IActivityManager",
+     "error": "UNSUPPORTED_ANDROID_API",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "unsupported Android API: android.app.IActivityManager code 131 (getMyMemoryState)",
+     "method": "getMyMemoryState"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "com.sadellie.unitto",
-   "status": "not-run",
+   "status": "blocked",
    "version": "Titanium yellow",
    "ui_toolkit": "compose",
    "target_sdk": 36,
@@ -459,11 +1110,47 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 101.5,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to start activity ComponentInfo{com.sadellie.unitto/com.sadellie.unitto.MainActivity}: java.lang.NullPointerException: Attempt to invoke virtual method 'boolean java.lang.Boolean.booleanValue()' on a null object reference",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to start activity ComponentInfo{com.sadellie.unitto/com.sadellie.unitto.MainActivity}: java.lang.NullPointerException: Attempt to invoke virtual method 'boolean java.lang.Boolean.booleanValue()' on a null object reference\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "com.shatteredpixel.shatteredpixeldungeon",
-   "status": "not-run",
+   "status": "blocked",
    "version": "4.0.2",
    "ui_toolkit": "game-canvas",
    "target_sdk": 36,
@@ -473,11 +1160,56 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 241.0,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.UnsatisfiedLinkError: No implementation found for void com.google.android.gles_jni.EGLImpl._nativeClassInit() (tried Java_com_google_android_gles_Njni_EGLImpl__NnativeClassInit and Java_com_google_android_gles_Njni_EGLImpl__NnativeClassInit__) - is the library loaded, e.g. System.loadLibrary?",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.UnsatisfiedLinkError: No implementation found for void com.google.android.gles_jni.EGLImpl._nativeClassInit() (tried Java_com_google_android_gles_1jni_EGLImpl__1nativeClassInit and Java_com_google_android_gles_1jni_EGLImpl__1nativeClassInit__) - is the library loaded, e.g. System.loadLibrary?\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 54,
+     "descriptor": "android.content.pm.IPackageManager",
+     "error": "UNSUPPORTED_ANDROID_API",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "unsupported Android API: android.content.pm.IPackageManager code 54 (getInstallSourceInfo)",
+     "method": "getInstallSourceInfo"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "JNI/native symbol surface",
+   "wall_fix": "crates/acos-jni + crates/acos-native-loader",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "com.tailscale.ipn",
-   "status": "not-run",
+   "status": "blocked",
    "version": "1.104.5-t788384763-gd8673104f",
    "ui_toolkit": "native-vpn",
    "target_sdk": 36,
@@ -487,11 +1219,56 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 301.3,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application com.tailscale.ipn.App: java.lang.IllegalArgumentException: bad request for android.app.INotificationManager::createNotificationChannels: arg N (TypedObject(android.content.pm.ParceledListSlice, nullable=true)): no parcelable codec for android.content.pm.ParceledListSlice",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application com.tailscale.ipn.App: java.lang.IllegalArgumentException: bad request for android.app.INotificationManager::createNotificationChannels: arg 1 (TypedObject(android.content.pm.ParceledListSlice, nullable=true)): no parcelable codec for android.content.pm.ParceledListSlice\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 31,
+     "descriptor": "android.app.INotificationManager",
+     "error": "SERVICE_BAD_REQUEST",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "bad request for android.app.INotificationManager::createNotificationChannels: arg 1 (TypedObject(android.content.pm.ParceledListSlice, nullable=true)): no parcelable codec for android.content.pm.ParceledListSlice",
+     "method": "createNotificationChannels"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "com.termux",
-   "status": "not-run",
+   "status": "blocked",
    "version": "0.119.0-beta.3",
    "ui_toolkit": "native-terminal",
    "target_sdk": 28,
@@ -501,11 +1278,56 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 368.3,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": "android.app.IActivityManager.getRunningAppProcesses (code 86)",
+   "crash_message": "java.lang.RuntimeException: Unable to create application com.termux.app.TermuxApplication: java.lang.UnsupportedOperationException: unsupported Android API: android.app.IActivityManager code N (getRunningAppProcesses)",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application com.termux.app.TermuxApplication: java.lang.UnsupportedOperationException: unsupported Android API: android.app.IActivityManager code 86 (getRunningAppProcesses)\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 86,
+     "descriptor": "android.app.IActivityManager",
+     "error": "UNSUPPORTED_ANDROID_API",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "unsupported Android API: android.app.IActivityManager code 86 (getRunningAppProcesses)",
+     "method": "getRunningAppProcesses"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "framework shim missing an API",
+   "wall_fix": "crates/acos-services (framework peer)",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "com.unciv.app",
-   "status": "not-run",
+   "status": "blocked",
    "version": "4.22.18-patch1",
    "ui_toolkit": "game-gles",
    "target_sdk": 36,
@@ -515,11 +1337,56 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 287.9,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": "android.app.IActivityClientController.getRequestedOrientation (code 30)",
+   "crash_message": "java.lang.RuntimeException: Unable to start activity ComponentInfo{com.unciv.app/com.unciv.app.AndroidLauncher}: java.lang.UnsupportedOperationException: unsupported Android API: android.app.IActivityClientController code N (getRequestedOrientation)",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to start activity ComponentInfo{com.unciv.app/com.unciv.app.AndroidLauncher}: java.lang.UnsupportedOperationException: unsupported Android API: android.app.IActivityClientController code 30 (getRequestedOrientation)\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 30,
+     "descriptor": "android.app.IActivityClientController",
+     "error": "UNSUPPORTED_ANDROID_API",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "unsupported Android API: android.app.IActivityClientController code 30 (getRequestedOrientation)",
+     "method": "getRequestedOrientation"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "framework shim missing an API",
+   "wall_fix": "crates/acos-services (framework peer)",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "de.danoeh.antennapod",
-   "status": "not-run",
+   "status": "blocked",
    "version": "3.12.3",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 36,
@@ -529,11 +1396,47 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 245.8,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application de.danoeh.antennapod.PodcastApp: java.lang.NullPointerException: Attempt to invoke interface method 'android.os.storage.StorageVolume[] android.os.storage.IStorageManager.getVolumeList(int, java.lang.String, int)' on a null object reference",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application de.danoeh.antennapod.PodcastApp: java.lang.NullPointerException: Attempt to invoke interface method 'android.os.storage.StorageVolume[] android.os.storage.IStorageManager.getVolumeList(int, java.lang.String, int)' on a null object reference\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "de.tutao.calendar",
-   "status": "not-run",
+   "status": "blocked",
    "version": "366.261105.0",
    "ui_toolkit": "react-native",
    "target_sdk": 36,
@@ -546,11 +1449,47 @@
     "mips64",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 289.0,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to start activity ComponentInfo{de.tutao.calendar/de.tutao.calendar.MainActivity}: java.lang.UnsupportedOperationException: For security reasons, WebView is not allowed in privileged processes",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to start activity ComponentInfo{de.tutao.calendar/de.tutao.calendar.MainActivity}: java.lang.UnsupportedOperationException: For security reasons, WebView is not allowed in privileged processes\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "WebView provider",
+   "wall_fix": "crates/acos-services (webview peer)",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "de.westnordost.streetcomplete",
-   "status": "not-run",
+   "status": "blocked",
    "version": "64.1",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 37,
@@ -559,11 +1498,47 @@
     "arm64-v8a",
     "armeabi-v7a",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 400.9,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application de.westnordost.streetcomplete.StreetCompleteApplication: java.lang.NullPointerException: Attempt to invoke virtual method 'java.lang.Class java.lang.Object.getClass()' on a null object reference",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application de.westnordost.streetcomplete.StreetCompleteApplication: java.lang.NullPointerException: Attempt to invoke virtual method 'java.lang.Class java.lang.Object.getClass()' on a null object reference\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "io.anuke.mindustry",
-   "status": "not-run",
+   "status": "blocked",
    "version": "8-fdroid-160.7",
    "ui_toolkit": "game-gles",
    "target_sdk": 36,
@@ -573,22 +1548,94 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 316.2,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.UnsatisfiedLinkError: No implementation found for void com.google.android.gles_jni.EGLImpl._nativeClassInit() (tried Java_com_google_android_gles_Njni_EGLImpl__NnativeClassInit and Java_com_google_android_gles_Njni_EGLImpl__NnativeClassInit__) - is the library loaded, e.g. System.loadLibrary?",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.UnsatisfiedLinkError: No implementation found for void com.google.android.gles_jni.EGLImpl._nativeClassInit() (tried Java_com_google_android_gles_1jni_EGLImpl__1nativeClassInit and Java_com_google_android_gles_1jni_EGLImpl__1nativeClassInit__) - is the library loaded, e.g. System.loadLibrary?\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "JNI/native symbol surface",
+   "wall_fix": "crates/acos-jni + crates/acos-native-loader",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "io.element.android.x",
-   "status": "not-run",
+   "status": "blocked",
    "version": "26.09.1",
    "ui_toolkit": "compose",
    "target_sdk": 37,
    "has_native": true,
    "abis": [
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 542.8,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application io.element.android.x.ElementXApplication: androidx.startup.StartupException: androidx.startup.StartupException: androidx.startup.StartupException: java.lan",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application io.element.android.x.ElementXApplication: androidx.startup.StartupException: androidx.startup.StartupException: androidx.startup.StartupException: java.lang.IllegalStateException: ProcessLifecycleInitializer cannot be initialized lazily.",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "io.github.muntashirakon.AppManager",
-   "status": "not-run",
+   "status": "blocked",
    "version": "4.1.1",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 36,
@@ -598,11 +1645,47 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 324.2,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application io.github.muntashirakon.AppManager.AppManager: java.lang.NullPointerException: Attempt to invoke interface method 'android.os.storage.StorageVolume[] android.os.storage.IStorageManager.getVolumeList(int, java.lang.String, int)' on a null object reference",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application io.github.muntashirakon.AppManager.AppManager: java.lang.NullPointerException: Attempt to invoke interface method 'android.os.storage.StorageVolume[] android.os.storage.IStorageManager.getVolumeList(int, java.lang.String, int)' on a null object reference\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "it.niedermann.owncloud.notes",
-   "status": "not-run",
+   "status": "blocked",
    "version": "35.0.0",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 36,
@@ -612,11 +1695,56 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 462.8,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": "android.app.IActivityClientController.getTaskForActivity (code 22)",
+   "crash_message": "java.lang.RuntimeException: Unable to start activity ComponentInfo{it.niedermann.owncloud.notes/it.niedermann.owncloud.notes.main.MainActivity}: java.lang.UnsupportedOperationException: unsupported Android API: android.app.IActivityClientController code N (getTaskForActivity)",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to start activity ComponentInfo{it.niedermann.owncloud.notes/it.niedermann.owncloud.notes.main.MainActivity}: java.lang.UnsupportedOperationException: unsupported Android API: android.app.IActivityClientController code 22 (getTaskForActivity)\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 22,
+     "descriptor": "android.app.IActivityClientController",
+     "error": "UNSUPPORTED_ANDROID_API",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "unsupported Android API: android.app.IActivityClientController code 22 (getTaskForActivity)",
+     "method": "getTaskForActivity"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "framework shim missing an API",
+   "wall_fix": "crates/acos-services (framework peer)",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "me.zhanghai.android.files",
-   "status": "not-run",
+   "status": "blocked",
    "version": "1.7.4",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 34,
@@ -626,11 +1754,47 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 219.7,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.ExceptionInInitializerError",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.ExceptionInInitializerError\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "net.cozic.joplin",
-   "status": "not-run",
+   "status": "fail",
    "version": "3.7.8",
    "ui_toolkit": "react-native",
    "target_sdk": 36,
@@ -640,20 +1804,106 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "first_frame",
+   "stage_reached": "first_frame",
+   "time_to_first_frame_ms": 1003.3,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 606.7,
+   "crash_class": null,
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended while binding the tree (status exit status: N)",
+   "unsupported_api": "android.net.IConnectivityManager.getNetworkCapabilities (code 16)",
+   "crash_message": "java.lang.UnsupportedOperationException: unsupported Android API: android.net.IConnectivityManager code N (getNetworkCapabilities)",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":true,\"message\":\"java.lang.UnsupportedOperationException: unsupported Android API: android.net.IConnectivityManager code 16 (getNetworkCapabilities)\"}",
+   "application_created": true,
+   "activity_resumed": true,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 16,
+     "descriptor": "android.net.IConnectivityManager",
+     "error": "UNSUPPORTED_ANDROID_API",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "unsupported Android API: android.net.IConnectivityManager code 16 (getNetworkCapabilities)",
+     "method": "getNetworkCapabilities"
+    },
+    {
+     "code": 42,
+     "descriptor": "android.net.IConnectivityManager",
+     "error": "SERVICE_BAD_REQUEST",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "bad request for android.net.IConnectivityManager::requestNetwork: arg 3 (TypedObject(android.os.Messenger, nullable=true)): no parcelable codec for android.os.Messenger",
+     "method": "requestNetwork"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "framework shim missing an API",
+   "wall_fix": "crates/acos-services (framework peer)",
+   "engine_stage": null,
+   "markers_present": null,
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": true,
+    "first_frame": true,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "net.gsantner.markor",
-   "status": "not-run",
+   "status": "blocked",
    "version": "2026.10.0",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 35,
    "has_native": false,
-   "abis": []
+   "abis": [],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 262.8,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to start activity ComponentInfo{net.gsantner.markor/net.gsantner.markor.activity.MainActivity}: java.lang.NullPointerException: Attempt to invoke interface method 'android.os.storage.StorageVolume[] android.os.storage.IStorageManager.getVolumeList(int, java.lang.String, int)' on a null object reference",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to start activity ComponentInfo{net.gsantner.markor/net.gsantner.markor.activity.MainActivity}: java.lang.NullPointerException: Attempt to invoke interface method 'android.os.storage.StorageVolume[] android.os.storage.IStorageManager.getVolumeList(int, java.lang.String, int)' on a null object reference\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "net.mullvad.mullvadvpn",
-   "status": "not-run",
+   "status": "blocked",
    "version": "2026.12",
    "ui_toolkit": "compose-native",
    "target_sdk": 37,
@@ -663,20 +1913,101 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 239.9,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application net.mullvad.mullvadvpn.app.MullvadApplication: nN: Could not create instance for '[Singleton: 'tN']'",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application net.mullvad.mullvadvpn.app.MullvadApplication: n11: Could not create instance for '[Singleton: 't24']'\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 31,
+     "descriptor": "android.app.INotificationManager",
+     "error": "SERVICE_BAD_REQUEST",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "bad request for android.app.INotificationManager::createNotificationChannels: arg 1 (TypedObject(android.content.pm.ParceledListSlice, nullable=true)): no parcelable codec for android.content.pm.ParceledListSlice",
+     "method": "createNotificationChannels"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "org.billthefarmer.editor",
-   "status": "not-run",
+   "status": "blocked",
    "version": "1.96",
    "ui_toolkit": "views-plain",
    "target_sdk": 28,
    "has_native": false,
-   "abis": []
+   "abis": [],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 150.7,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to start activity ComponentInfo{org.billthefarmer.editor/org.billthefarmer.editor.Editor}: java.lang.NullPointerException: Attempt to invoke interface method 'android.os.storage.StorageVolume[] android.os.storage.IStorageManager.getVolumeList(int, java.lang.String, int)' on a null object reference",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to start activity ComponentInfo{org.billthefarmer.editor/org.billthefarmer.editor.Editor}: java.lang.NullPointerException: Attempt to invoke interface method 'android.os.storage.StorageVolume[] android.os.storage.IStorageManager.getVolumeList(int, java.lang.String, int)' on a null object reference\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "org.breezyweather",
-   "status": "not-run",
+   "status": "blocked",
    "version": "6.2.2_freenet",
    "ui_toolkit": "compose",
    "target_sdk": 36,
@@ -686,11 +2017,56 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 277.3,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application org.breezyweather.BreezyWeather: java.lang.NullPointerException: Attempt to invoke virtual method 'java.lang.Class java.lang.Object.getClass()' on a null object reference",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application org.breezyweather.BreezyWeather: java.lang.NullPointerException: Attempt to invoke virtual method 'java.lang.Class java.lang.Object.getClass()' on a null object reference\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 46,
+     "descriptor": "android.app.INotificationManager",
+     "error": "UNSUPPORTED_ANDROID_API",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "unsupported Android API: android.app.INotificationManager code 46 (deleteNotificationChannel)",
+     "method": "deleteNotificationChannel"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "org.fdroid.basic",
-   "status": "not-run",
+   "status": "blocked",
    "version": "2.0.3",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 37,
@@ -700,11 +2076,47 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 271.0,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application org.fdroid.App: java.lang.NullPointerException: Attempt to invoke virtual method 'java.lang.Class java.lang.Object.getClass()' on a null object reference",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application org.fdroid.App: java.lang.NullPointerException: Attempt to invoke virtual method 'java.lang.Class java.lang.Object.getClass()' on a null object reference\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "org.fdroid.fdroid",
-   "status": "not-run",
+   "status": "blocked",
    "version": "1.23.2",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 30,
@@ -714,11 +2126,56 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 250.7,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application org.fdroid.fdroid.FDroidApp: java.lang.IllegalArgumentException: unknown service name \\\"org.fdroid.fdroid.privileged\\\"",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application org.fdroid.fdroid.FDroidApp: java.lang.IllegalArgumentException: unknown service name \\\"org.fdroid.fdroid.privileged\\\"\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 3,
+     "descriptor": "android.content.pm.IPackageManager",
+     "error": "SERVICE_UNKNOWN_NAME",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "unknown service name \"org.fdroid.fdroid.privileged\"",
+     "method": "getPackageInfo"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "missing system service",
+   "wall_fix": "crates/acos-services",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "org.jellyfin.mobile",
-   "status": "not-run",
+   "status": "ok",
    "version": "2.7.3",
    "ui_toolkit": "react-native",
    "target_sdk": 36,
@@ -728,11 +2185,75 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "tap",
+   "stage_reached": "first_frame",
+   "time_to_first_frame_ms": 532.9,
+   "tree_nodes": 35,
+   "tap": {
+    "x": 850,
+    "y": 1400,
+    "bounds": "[723,1329][978,1471]",
+    "class": "ph",
+    "resource_id": "android:id/button2",
+    "text": "Close app",
+    "accepted": true,
+    "state_changed": false,
+    "settle": {
+     "ack_ms": 5,
+     "animating": false,
+     "bound": "timeout",
+     "first_change_ms": null,
+     "frame_ms": null,
+     "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+     "mode": "strict",
+     "reason": "pixels-unchanged",
+     "settled": false,
+     "state_changed": null,
+     "strict_rule": "event"
+    }
+   },
+   "screenshot_bytes": 9545882,
+   "peak_rss_mib": 259.2,
+   "crash_class": null,
+   "error_code": null,
+   "error_message": "",
+   "unsupported_api": null,
+   "crash_message": "",
+   "crash_raw": null,
+   "application_created": true,
+   "activity_resumed": true,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 10,
+     "descriptor": "android.app.IActivityClientController",
+     "error": "SERVICE_BAD_REQUEST",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "bad request for android.app.IActivityClientController::reportSizeConfigurations: arg 1 (TypedObject(android.window.SizeConfigurationBuckets, nullable=true)): parcel underflow: need 4 byte(s) at 152, have 0",
+     "method": "reportSizeConfigurations"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": null,
+   "wall_fix": null,
+   "engine_stage": null,
+   "markers_present": null,
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": true,
+    "first_frame": true,
+    "tree": true,
+    "screenshot": true,
+    "tap": true
+   }
   },
   {
    "package": "org.kde.kdeconnect_tp",
-   "status": "not-run",
+   "status": "blocked",
    "version": "1.37.2",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 37,
@@ -742,11 +2263,56 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 205.8,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application org.kde.kdeconnect.KdeConnect: java.lang.IllegalArgumentException: bad request for android.app.INotificationManager::createNotificationChannels: arg N (TypedObject(android.content.pm.ParceledListSlice, nullable=true)): no parcelable codec for android.content.pm.ParceledListSlice",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application org.kde.kdeconnect.KdeConnect: java.lang.IllegalArgumentException: bad request for android.app.INotificationManager::createNotificationChannels: arg 1 (TypedObject(android.content.pm.ParceledListSlice, nullable=true)): no parcelable codec for android.content.pm.ParceledListSlice\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 31,
+     "descriptor": "android.app.INotificationManager",
+     "error": "SERVICE_BAD_REQUEST",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "bad request for android.app.INotificationManager::createNotificationChannels: arg 1 (TypedObject(android.content.pm.ParceledListSlice, nullable=true)): no parcelable codec for android.content.pm.ParceledListSlice",
+     "method": "createNotificationChannels"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "org.quantumbadger.redreader",
-   "status": "not-run",
+   "status": "blocked",
    "version": "1.27",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 36,
@@ -756,20 +2322,108 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 258.0,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to create application org.quantumbadger.redreader.RedReader: java.security.cert.CertificateException: com.android.org.conscrypt.OpenSSLXNCertificateFactory$ParsingException: com.android.org.conscrypt.OpenSSLXNCertificateFactory$ParsingException: java.lang.RuntimeException: error:NcNd:ASN.N encoding routines:OPENSSL_internal:DECODE_ERROR",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application org.quantumbadger.redreader.RedReader: java.security.cert.CertificateException: com.android.org.conscrypt.OpenSSLX509CertificateFactory$ParsingException: com.android.org.conscrypt.OpenSSLX509CertificateFactory$ParsingException: java.lang.RuntimeException: error:0c00006d:ASN.1 encoding routines:OPENSSL_internal:DECODE_ERROR\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "org.secuso.privacyfriendlynotes",
-   "status": "not-run",
+   "status": "fail",
    "version": "2.2.2",
    "ui_toolkit": "views-appcompat",
    "target_sdk": 34,
    "has_native": false,
-   "abis": []
+   "abis": [],
+   "stage": "screenshot",
+   "stage_reached": "first_frame",
+   "time_to_first_frame_ms": 698.5,
+   "tree_nodes": 30,
+   "tap": {
+    "x": 136,
+    "y": 2274,
+    "bounds": "[21,2211][252,2337]",
+    "class": "com.google.android.material.button.MaterialButton",
+    "resource_id": "org.secuso.privacyfriendlynotes:id/btn_skip",
+    "text": "Skip",
+    "accepted": null,
+    "state_changed": null,
+    "settle": null
+   },
+   "screenshot_bytes": 9545882,
+   "peak_rss_mib": 294.5,
+   "crash_class": null,
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended after the gesture without a settled frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.RuntimeException: Unable to start activity ComponentInfo{org.secuso.privacyfriendlynotes/org.secuso.privacyfriendlynotes.ui.main.MainActivity}: java.lang.IllegalStateException: This Activity already has an action bar supplied by the window decor. Do not request Window.FEATURE_SUPPORT_ACTION_BAR and set windowActionBar to false in your theme to use a Toolbar instead.",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to start activity ComponentInfo{org.secuso.privacyfriendlynotes/org.secuso.privacyfriendlynotes.ui.main.MainActivity}: java.lang.IllegalStateException: This Activity already has an action bar supplied by the window decor. Do not request Window.FEATURE_SUPPORT_ACTION_BAR and set windowActionBar to false in your theme to use a Toolbar instead.\"}",
+   "application_created": true,
+   "activity_resumed": true,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 6,
+     "descriptor": "android.app.IActivityClientController",
+     "error": "SERVICE_ILLEGAL_STATE",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "illegal state in atms: illegal transition Stop from Uncreated",
+     "method": "activityStopped"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": null,
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": true,
+    "first_frame": true,
+    "tree": true,
+    "screenshot": true,
+    "tap": false
+   }
   },
   {
    "package": "org.supertuxkart.stk",
-   "status": "not-run",
+   "status": "blocked",
    "version": "1.4",
    "ui_toolkit": "game-gles",
    "target_sdk": 30,
@@ -779,22 +2433,121 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_completed",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 539.0,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": null,
+   "crash_message": "java.lang.UnsatisfiedLinkError: No implementation found for long android.graphics.BLASTBufferQueue.nativeCreate(java.lang.String, boolean) (tried Java_android_graphics_BLASTBufferQueue_nativeCreate and Java_android_graphics_BLASTBufferQueue_nativeCreate__Ljava_lang_String_NZ) - is the library loaded, e.g. System.loadLibrary?",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":true,\"message\":\"java.lang.UnsatisfiedLinkError: No implementation found for long android.graphics.BLASTBufferQueue.nativeCreate(java.lang.String, boolean) (tried Java_android_graphics_BLASTBufferQueue_nativeCreate and Java_android_graphics_BLASTBufferQueue_nativeCreate__Ljava_lang_String_2Z) - is the library loaded, e.g. System.loadLibrary?\"}",
+   "application_created": true,
+   "activity_resumed": true,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 10,
+     "descriptor": "android.app.IActivityClientController",
+     "error": "SERVICE_BAD_REQUEST",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "bad request for android.app.IActivityClientController::reportSizeConfigurations: arg 1 (TypedObject(android.window.SizeConfigurationBuckets, nullable=true)): parcel underflow: need 4 byte(s) at 124, have 0",
+     "method": "reportSizeConfigurations"
+    },
+    {
+     "code": 32,
+     "descriptor": "android.view.IWindowSession",
+     "error": "SERVICE_INTERNAL",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "internal service error: android.view.IWindowSession: unknown window 4294967306",
+     "method": "updateRequestedVisibleTypes"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "guest process died",
+   "wall_fix": "crates/acos-cli/src/failure.rs + the guest log",
+   "engine_stage": null,
+   "markers_present": [
+    "activity-resumed.marker",
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": true,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "org.videolan.vlc",
-   "status": "not-run",
+   "status": "blocked",
    "version": "3.7.2",
    "ui_toolkit": "native-media",
    "target_sdk": 36,
    "has_native": true,
    "abis": [
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 374.6,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": "android.app.INotificationManager.getNotificationChannel (code 42)",
+   "crash_message": "java.lang.RuntimeException: Unable to create application org.videolan.mobile.app.VLCApplication: java.lang.UnsupportedOperationException: unsupported Android API: android.app.INotificationManager code N (getNotificationChannel)",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application org.videolan.mobile.app.VLCApplication: java.lang.UnsupportedOperationException: unsupported Android API: android.app.INotificationManager code 42 (getNotificationChannel)\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 42,
+     "descriptor": "android.app.INotificationManager",
+     "error": "UNSUPPORTED_ANDROID_API",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "unsupported Android API: android.app.INotificationManager code 42 (getNotificationChannel)",
+     "method": "getNotificationChannel"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "framework shim missing an API",
+   "wall_fix": "crates/acos-services (framework peer)",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   },
   {
    "package": "org.wikipedia",
-   "status": "not-run",
+   "status": "blocked",
    "version": "r/50616-r-2026-11-03",
    "ui_toolkit": "webview",
    "target_sdk": 37,
@@ -804,7 +2557,76 @@
     "armeabi-v7a",
     "x86",
     "x86_64"
-   ]
+   ],
+   "stage": "oncreate_entered",
+   "stage_reached": null,
+   "time_to_first_frame_ms": null,
+   "tree_nodes": null,
+   "tap": null,
+   "screenshot_bytes": null,
+   "peak_rss_mib": 409.3,
+   "crash_class": "guest-exit",
+   "error_code": "GUEST_EXITED",
+   "error_message": "acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: N)",
+   "unsupported_api": "android.app.INotificationManager.getNotificationChannelGroup (code 53)",
+   "crash_message": "java.lang.RuntimeException: Unable to create application org.wikipedia.WikipediaApp: java.lang.UnsupportedOperationException: unsupported Android API: android.app.INotificationManager code N (getNotificationChannelGroup)",
+   "crash_raw": "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\",\"activity_resumed\":false,\"message\":\"java.lang.RuntimeException: Unable to create application org.wikipedia.WikipediaApp: java.lang.UnsupportedOperationException: unsupported Android API: android.app.INotificationManager code 53 (getNotificationChannelGroup)\"}",
+   "application_created": true,
+   "activity_resumed": false,
+   "guest_signal": null,
+   "engine_stage_exit": "teardown-evidence",
+   "unsupported_calls": [
+    {
+     "code": 42,
+     "descriptor": "android.net.IConnectivityManager",
+     "error": "SERVICE_BAD_REQUEST",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "bad request for android.net.IConnectivityManager::requestNetwork: arg 3 (TypedObject(android.os.Messenger, nullable=true)): no parcelable codec for android.os.Messenger",
+     "method": "requestNetwork"
+    },
+    {
+     "code": 16,
+     "descriptor": "android.net.IConnectivityManager",
+     "error": "UNSUPPORTED_ANDROID_API",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "unsupported Android API: android.net.IConnectivityManager code 16 (getNetworkCapabilities)",
+     "method": "getNetworkCapabilities"
+    },
+    {
+     "code": 16,
+     "descriptor": "android.net.IConnectivityManager",
+     "error": "UNSUPPORTED_ANDROID_API",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "unsupported Android API: android.net.IConnectivityManager code 16 (getNetworkCapabilities)",
+     "method": "getNetworkCapabilities"
+    },
+    {
+     "code": 53,
+     "descriptor": "android.app.INotificationManager",
+     "error": "UNSUPPORTED_ANDROID_API",
+     "kind": "UNSUPPORTED_ANDROID_API",
+     "message": "unsupported Android API: android.app.INotificationManager code 53 (getNotificationChannelGroup)",
+     "method": "getNotificationChannelGroup"
+    }
+   ],
+   "error_stage": null,
+   "wall_component": "framework shim missing an API",
+   "wall_fix": "crates/acos-services (framework peer)",
+   "engine_stage": null,
+   "markers_present": [
+    "application-created.marker",
+    "unsupported.jsonl"
+   ],
+   "stages": {
+    "inspect": true,
+    "process_start": true,
+    "oncreate_entered": true,
+    "oncreate_completed": false,
+    "first_frame": false,
+    "tree": false,
+    "screenshot": false,
+    "tap": false
+   }
   }
  ]
 }

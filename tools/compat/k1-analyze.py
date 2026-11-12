@@ -74,7 +74,7 @@ def norm_msg(msg):
         return ""
     m = re.sub(r"0x[0-9a-fA-F]+", "0x…", msg)
     m = re.sub(r"\d+", "N", m)
-    return m.strip()[:180]
+    return m.strip()[:400]
 
 
 def classify(code, message):
@@ -131,6 +131,49 @@ def crash_summary(rec):
     cm = CRASH_MSG_RE.search(raw)
     msg = cm.group(1) if cm else (raw[:300] or None)
     return api, msg, raw[:600] or None
+
+
+NULL_CALL_RE = re.compile(
+    r"Attempt to invoke (?:virtual|interface) method '([^']+)")
+
+
+def wall_key(api, msg, code):
+    """Collapse app-specific crash text to the framework call that failed."""
+    if api:
+        return api
+    if not msg:
+        return code or "unknown"
+    m = re.search(r"unsupported Android API: ([\w.$]+) code (\d+) \(([\w$<>]+)\)", msg)
+    if m:
+        return f"{m.group(1)}.{m.group(3)} (code {m.group(2)})"
+    # A `bad request for <iface>::<method>` is the peer rejecting the parcel.
+    m = re.search(r"bad request for ([\w.$]+)::([\w$]+)", msg)
+    if m:
+        return f"{m.group(1)}.{m.group(2)} (parcel rejected)"
+    # A null where the platform never returns null: name the missing return.
+    m = NULL_CALL_RE.search(msg)
+    if m:
+        sig = m.group(1)
+        mm = re.search(r"([\w.$]+)\.([\w$]+)\([^)]*\)$", sig)
+        if mm:
+            return f"null return: {mm.group(1)}.{mm.group(2)}"
+        return f"null return: {sig}"
+    if "For security reasons, WebView is not allowed" in msg:
+        return "WebView rejected: process reported as privileged"
+    if "No implementation found for" in msg:
+        m = re.search(r"No implementation found for (?:[\w.$\[\]]+ )?([\w.$]+)\.([\w$]+)\(", msg)
+        if m:
+            return f"JNI native missing: {m.group(1)}.{m.group(2)}"
+        return "JNI native missing"
+    if "Could not create instance for" in msg or "InstanceCreationException" in msg:
+        return "DI graph failed during onCreate (root cause hidden)"
+    if "CertificateException" in msg or "conscrypt" in msg:
+        return "conscrypt X.509 certificate parsing"
+    if "dsn is required" in msg.lower():
+        return "app build-config/sentry DSN is empty"
+    if "java.lang.ExceptionInInitializerError" in msg:
+        return "static initializer failed (cause hidden)"
+    return code or msg[:120]
 
 
 def load(run_root, manifest):
@@ -276,12 +319,7 @@ def main():
             continue
         key = r["error_code"] or "unknown"
         msg = r["error_message"] or ""
-        if r.get("unsupported_api"):
-            key = r["unsupported_api"]
-        elif r.get("crash_message"):
-            key = f"{r.get('error_code')}: {r['crash_message'][:120]}"
-        elif r["error_code"] in ("UNSUPPORTED_JAVA_API", "UNSUPPORTED_ANDROID_API") and msg:
-            key = f"{r['error_code']}: {msg}"
+        key = wall_key(r.get("unsupported_api"), r.get("crash_message"), r["error_code"])
         w = walls[key]
         w["apps"].append(r["package"])
         w["codes"][r["error_code"]] += 1
