@@ -324,6 +324,63 @@ impl WmsState {
         Ok(())
     }
 
+    /// Destroy the compositor layer subtree bound to `window` (**W42**).
+    ///
+    /// Stock: `WindowManagerService.removeWindow` destroys the window's
+    /// `SurfaceControl`, and `SurfaceFlinger` drops the layer together with its
+    /// children (including the BLAST child that holds the pixels). Without this
+    /// the composite kept drawing a destroyed Activity's stored buffer (W38
+    /// residual §5.3). The registry is keyed by the window's `acos-wm` surface
+    /// handle ([`acos_wm::wms::WindowRecord::surface_handle`]), so this must run
+    /// **before** `IWindowSession.remove` drops the window record. Returns the
+    /// number of layers dropped; `None` when the window never bound a layer
+    /// (nothing to destroy — never a fabricated count).
+    pub fn destroy_surface_layer(
+        &mut self,
+        window: WindowId,
+        compositor: &Arc<Mutex<crate::surface_client::SurfaceState>>,
+    ) -> Option<usize> {
+        let surface_handle = self.wm.windows.get(&window)?.surface_handle?;
+        let binding = self.surface_layers.remove(&surface_handle)?;
+        let mut state = compositor
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let dropped = state.destroy_layer_tree(binding.handle);
+        if std::env::var_os("ACOS_WMS_TRACE").is_some() {
+            eprintln!(
+                "ACOSWMS destroy-layer window={:#x} surface={surface_handle:#x} layer={:#x} dropped={dropped}",
+                window, binding.handle.0
+            );
+        }
+        Some(dropped)
+    }
+
+    /// Hide or show a window's layer (`eLayerHidden`), for a `relayout` whose
+    /// `viewVisibility` is `GONE`/`VISIBLE` (**W42**). `false` when the window
+    /// has no bound layer.
+    pub fn set_surface_visible(
+        &self,
+        window: WindowId,
+        visible: bool,
+        compositor: &Arc<Mutex<crate::surface_client::SurfaceState>>,
+    ) -> bool {
+        let Some(surface_handle) = self
+            .wm
+            .windows
+            .get(&window)
+            .and_then(|record| record.surface_handle)
+        else {
+            return false;
+        };
+        let Some(binding) = self.surface_layers.get(&surface_handle) else {
+            return false;
+        };
+        let mut state = compositor
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.set_layer_hidden(binding.handle, !visible)
+    }
+
     /// `IWindowSession.finishDrawing`: records the drawing callback. It does
     /// **not** publish a frame; only a real compositor buffer submission does
     /// (see `acos-runtime`'s `WmSurfaceBackend`).

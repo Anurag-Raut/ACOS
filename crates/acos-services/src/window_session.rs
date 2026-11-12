@@ -688,6 +688,21 @@ impl ServiceObject for WindowSessionService {
             }
             codes::REMOVE => {
                 if let Some(binder) = read_window(data)? {
+                    // W42: the window's compositor layer (and the BLAST child
+                    // that holds its pixels) goes with it. A destroyed
+                    // Activity's surface must not stay in the composite: the
+                    // frame after Back has to be the Activity below it. This
+                    // runs first because the registry is keyed by the window's
+                    // `acos-wm` surface handle.
+                    if let Some(compositor) = self.compositor.clone() {
+                        let dropped = state.destroy_surface_layer(binder.0, &compositor);
+                        if trace {
+                            eprintln!(
+                                "ACOSWMS remove-layer window={:#x} dropped={dropped:?}",
+                                binder.0
+                            );
+                        }
+                    }
                     state.remove(binder.0).map_err(werr)?;
                     if let Some(input) = &self.input {
                         let mut dispatch = input
@@ -708,7 +723,7 @@ impl ServiceObject for WindowSessionService {
                 let params = read_layout_params(data)?;
                 let requested_width = data.read_int32().map_err(perr)?;
                 let requested_height = data.read_int32().map_err(perr)?;
-                let _view_visibility = data.read_int32().map_err(perr)?;
+                let view_visibility = data.read_int32().map_err(perr)?;
                 let _flags = data.read_int32().map_err(perr)?;
                 let seq = data.read_int32().map_err(perr)?;
                 let _last_sync_seq_id = data.read_int32().map_err(perr)?;
@@ -766,7 +781,22 @@ impl ServiceObject for WindowSessionService {
                         // from here (every relayout, so a moved/resized window
                         // moves in the next frame).
                         Some(binding) => {
-                            state.publish_layer_placement(binding, window.0, &compositor);
+                            let drawn = state.publish_layer_placement(binding, window.0, &compositor);
+                            // W42: `relayout` carries the client root's
+                            // `View.getVisibility()`. A `GONE` window surface is
+                            // hidden in the same transaction, a `VISIBLE` one is
+                            // shown again (stock `WMS.relayoutWindow` keeps
+                            // `mWinAnimator`'s visibility in step).
+                            let visibility = match view_visibility {
+                                0 => Some(true),
+                                8 => Some(false),
+                                _ => None,
+                            };
+                            if drawn {
+                                if let Some(visible) = visibility {
+                                    state.set_surface_visible(window.0, visible, &compositor);
+                                }
+                            }
                         }
                     }
                 }
@@ -793,7 +823,7 @@ impl ServiceObject for WindowSessionService {
                 let params = read_layout_params(data)?;
                 let requested_width = data.read_int32().map_err(perr)?;
                 let requested_height = data.read_int32().map_err(perr)?;
-                let _ = data.read_int32().map_err(perr)?;
+                let view_visibility = data.read_int32().map_err(perr)?;
                 let _ = data.read_int32().map_err(perr)?;
                 let seq = data.read_int32().map_err(perr)?;
                 let _ = data.read_int32().map_err(perr)?;
@@ -806,6 +836,14 @@ impl ServiceObject for WindowSessionService {
                         seq,
                     )
                     .map_err(werr)?;
+                }
+                // W42: the async form carries the same `viewVisibility`; honour
+                // a `GONE`/`VISIBLE` toggle on an already-bound window layer.
+                if let (Some(compositor), true) = (
+                    self.compositor.clone(),
+                    view_visibility == 0 || view_visibility == 8,
+                ) {
+                    state.set_surface_visible(window.0, view_visibility == 0, &compositor);
                 }
             }
             codes::OUT_OF_MEMORY => {

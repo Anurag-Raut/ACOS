@@ -168,11 +168,26 @@ pub mod what {
     pub const LAYER: u64 = 0x0000_0002;
     /// `eAlphaChanged`.
     pub const ALPHA: u64 = 0x0000_0008;
+    /// `eFlagsChanged` (carries `flags`/`mask`, incl. [`super::LAYER_HIDDEN`]).
+    pub const FLAGS: u64 = 0x0000_0040;
+    /// `eReparent` (`parentSurfaceControlForChild` on the wire).
+    ///
+    /// `Transaction::reparent(sc, nullptr)` is what `SurfaceControl::destroy()`
+    /// in the image does first: the layer is detached from its parent and the
+    /// client drops the handle. ACOS has no binder-death signal for a layer
+    /// handle, so a reparent-to-null of a **window surface** layer (one the
+    /// window manager created) is the observable half of that destroy.
+    pub const REPARENT: u64 = 0x0000_8000;
     /// `eBufferChanged`.
     pub const BUFFER: u64 = 0x0020_0000;
     /// `eDataspaceChanged`.
     pub const DATASPACE: u64 = 0x0080_0000;
 }
+
+/// `layer_state_t::eLayerHidden` (the bit in `flags` when `eFlagsChanged` is
+/// set). `SurfaceControl.Transaction.hide()`/`setVisibility(..., false)` and a
+/// stopped Activity's window surface both arrive this way.
+pub const LAYER_HIDDEN: u32 = 0x0000_0001;
 
 /// A rectangle as `ui::Rect` flattens (four `int32`s).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -453,6 +468,14 @@ pub struct LayerRecord {
     pub alpha: f32,
     /// The window manager's placement, when this layer is a window surface.
     pub placement: Option<LayerPlacement>,
+    /// `layer_state_t.flags & eLayerHidden`: the client hid the layer.
+    ///
+    /// A hidden layer is not drawn at all (stock: `Layer::setFlags` → not in
+    /// the visible set), but its stored buffer stays until it is replaced or
+    /// the layer is destroyed. `W42` made this a first-class state so a
+    /// stopped Activity's surface stops appearing in the composite before its
+    /// window is removed.
+    pub hidden: bool,
 }
 
 /// A `GraphicBuffer` the client sent inline, kept so a later `client_cache_t`
@@ -530,6 +553,16 @@ pub struct SurfaceState {
     buffer_cache: HashMap<u64, CachedBuffer>,
     /// Insertion order for [`SurfaceState::buffer_cache`] (drop-oldest).
     buffer_cache_order: Vec<u64>,
+    /// Layer-handle binder ids that were destroyed (W42). A transaction that
+    /// still names one must not resurrect the record: the auto-insert in
+    /// [`apply_layer_state`] is how a destroyed layer would otherwise come back
+    /// with no placement and its old pixels. Entries are removed when the
+    /// handle is handed out again ([`SurfaceState::create_layer`]).
+    destroyed: std::collections::HashSet<u64>,
+    /// Layers dropped by [`SurfaceState::destroy_layer_tree`] (evidence).
+    destroyed_layers: u64,
+    /// Stored buffers dropped with their layer (evidence: memfds released).
+    released_buffers: u64,
 }
 
 impl SurfaceState {
@@ -550,6 +583,109 @@ impl SurfaceState {
             buffer_generations: 0,
             buffer_cache: HashMap::new(),
             buffer_cache_order: Vec::new(),
+            destroyed: std::collections::HashSet::new(),
+            destroyed_layers: 0,
+            released_buffers: 0,
+        }
+    }
+
+    /// Layers dropped by [`SurfaceState::destroy_layer_tree`] so far.
+    #[must_use]
+    pub fn destroyed_layers(&self) -> u64 {
+        self.destroyed_layers
+    }
+
+    /// Stored buffers whose memfd was released with their layer.
+    #[must_use]
+    pub fn released_buffers(&self) -> u64 {
+        self.released_buffers
+    }
+
+    /// Layers that currently retain a buffer (each holds one memfd).
+    #[must_use]
+    pub fn retained_buffers(&self) -> usize {
+        self.layers.values().filter(|l| l.latest.is_some()).count()
+    }
+
+    /// Every memfd the compositor-client registry keeps alive: one per stored
+    /// layer buffer plus one per `BufferCache` entry. A destroy must lower
+    /// this; a leak shows up as a count that only grows.
+    #[must_use]
+    pub fn open_buffer_fds(&self) -> usize {
+        self.retained_buffers()
+            + self.buffer_cache.values().filter(|c| c.fd.is_some()).count()
+    }
+
+    /// Destroy a layer and every layer below it, dropping their retained
+    /// buffers (memfds) and their frame stats.
+    ///
+    /// This is the stock `Layer` teardown ACOS can observe: the window manager
+    /// destroys the window's `SurfaceControl` (`IWindowSession.remove`) or the
+    /// client reparents the window surface to null, and SurfaceFlinger removes
+    /// the layer **and its children** — including the BLAST child that holds the
+    /// pixels. Returns the number of layers dropped; each was added to the
+    /// tombstone set so a late transaction cannot resurrect it.
+    pub fn destroy_layer_tree(&mut self, root: BinderId) -> usize {
+        let mut doomed = vec![root.0];
+        let mut index = 0;
+        while index < doomed.len() {
+            let current = doomed[index];
+            let children: Vec<u64> = self
+                .layers
+                .iter()
+                .filter(|(handle, layer)| {
+                    layer.parent == Some(BinderId(current)) && !doomed.contains(handle)
+                })
+                .map(|(handle, _)| *handle)
+                .collect();
+            doomed.extend(children);
+            index += 1;
+        }
+        let mut dropped = 0usize;
+        let mut released = 0u64;
+        for handle in doomed {
+            let Some(layer) = self.layers.remove(&handle) else {
+                continue;
+            };
+            dropped += 1;
+            if let Some(buffer) = layer.latest.as_ref() {
+                released += 1;
+                // The client's `BufferCache` holds a second dup of the same
+                // `GraphicBuffer` id (see `cache_buffer`). Nothing can reference
+                // it once the layer is gone, so drop that entry too: the
+                // destroyed window's memfd must not stay open through the cache.
+                if self.buffer_cache.remove(&buffer.buffer_id).is_some() {
+                    self.buffer_cache_order.retain(|id| *id != buffer.buffer_id);
+                }
+            }
+            // Dropping `layer.latest` closes this process's memfd dup.
+            self.stats.remove(&handle);
+            self.destroyed.insert(handle);
+        }
+        self.destroyed_layers += dropped as u64;
+        self.released_buffers += released;
+        if std::env::var_os("ACOSC1_TRACE").is_some() {
+            eprintln!(
+                "ACOSC1 destroy handle={:#x} layers={} buffers={} retained={} fds={}",
+                root.0,
+                dropped,
+                released,
+                self.retained_buffers(),
+                self.open_buffer_fds()
+            );
+        }
+        dropped
+    }
+
+    /// Set a layer's `eLayerHidden` state. `false` when the handle is not a
+    /// live layer (destroyed or never created).
+    pub fn set_layer_hidden(&mut self, handle: BinderId, hidden: bool) -> bool {
+        match self.layers.get_mut(&handle.0) {
+            Some(layer) => {
+                layer.hidden = hidden;
+                true
+            }
+            None => false,
         }
     }
 
@@ -706,6 +842,11 @@ impl SurfaceState {
             .layers
             .values()
             .filter_map(|layer| {
+                // A hidden layer is not in the visible set (stock
+                // `Layer::setFlags`), so it contributes no pixels.
+                if layer.hidden {
+                    return None;
+                }
                 let buffer = layer.latest.as_ref()?;
                 let placement = self.placement_of(layer);
                 (placement.alpha > 0.0).then_some((layer, buffer, placement))
@@ -967,6 +1108,8 @@ impl SurfaceState {
         parent: Option<BinderId>,
     ) -> Option<(BinderId, i32)> {
         let handle = self.take_handle()?;
+        // A recycled handle is a *new* layer: it must not stay tombstoned.
+        self.destroyed.remove(&handle.0);
         let layer_id = self.next_layer_id;
         self.next_layer_id += 1;
         let record = LayerRecord {
@@ -986,6 +1129,7 @@ impl SurfaceState {
             geometry: LayerGeometry::default(),
             alpha: 1.0,
             placement: None,
+            hidden: false,
         };
         self.layers.insert(handle.0, record);
         self.stats.entry(handle.0).or_default();
@@ -1347,6 +1491,10 @@ pub struct LayerState {
     /// `gui::WindowInfo`, when the transaction carried one (`null` for a plain
     /// BLAST child layer).
     pub window_info: Option<WindowInfo>,
+    /// `layer_state_t.parentSurfaceControlForChild` when `eReparent` was set:
+    /// `Some(layer handle)` for a new parent, `None` for a reparent **to null**
+    /// (what `SurfaceControl::destroy()` applies before dropping the handle).
+    pub reparent: Option<Option<BinderId>>,
 }
 
 /// The fields of `gui::WindowInfo` this compositor uses.
@@ -1455,6 +1603,35 @@ fn apply_layer_state(
     let Some(handle) = layer.surface.filter(|h| !h.is_null()) else {
         return;
     };
+    // A destroyed layer must stay destroyed: a late transaction that still
+    // names its handle is dropped (never resurrected with the auto-insert
+    // below, which would draw stale pixels at the origin).
+    if state.destroyed.contains(&handle.0) {
+        if std::env::var_os("ACOSC1_TRACE").is_some() {
+            eprintln!(
+                "ACOSC1 ignored-transaction handle={:#x} layer={} what={:#x}",
+                handle.0, layer.layer_id, layer.what
+            );
+        }
+        return;
+    }
+    if std::env::var_os("ACOSC1_TRACE").is_some() {
+        eprintln!(
+            "ACOSC1 txn-layer handle={:#x} layer={} what={:#x} flags={:#x} mask={:#x} \
+             buffer={} reparent={:?}",
+            handle.0,
+            layer.layer_id,
+            layer.what,
+            layer.flags,
+            layer.mask,
+            if layer.buffer.is_some() {
+                "present"
+            } else {
+                "none"
+            },
+            layer.reparent
+        );
+    }
     state.layers.entry(handle.0).or_insert_with(|| LayerRecord {
         handle,
         layer_id: layer.layer_id,
@@ -1472,7 +1649,38 @@ fn apply_layer_state(
         geometry: LayerGeometry::default(),
         alpha: 1.0,
         placement: None,
+        hidden: false,
     });
+
+    // `eFlagsChanged`: the client's own visibility bit. A stopped Activity's
+    // ViewRootImpl hides its surface (`setVisibility(false)`) before the window
+    // is removed, and a dialog's dim/close toggles it too.
+    if layer.what & what::FLAGS != 0 {
+        if let Some(record) = state.layers.get_mut(&handle.0) {
+            record.hidden = layer.flags & LAYER_HIDDEN != 0;
+        }
+    }
+
+    // `eReparent`: a *window surface* layer (one the window manager created and
+    // placed) reparented to null is being destroyed — that is exactly what the
+    // image's `SurfaceControl::destroy()` applies (`reparent(sc, nullptr)`) when
+    // `ViewRootImpl` releases a destroyed Activity's surface. ACOS cannot see the
+    // layer-handle binder die, so this is the observable destroy signal; the
+    // layer's pixels and memfd must go with it. A client layer with no placement
+    // is just detached (stock moves it to the display's root layer).
+    if let Some(parent) = layer.reparent {
+        let is_window_surface = state
+            .layers
+            .get(&handle.0)
+            .is_some_and(|record| record.placement.is_some());
+        if parent.is_none() && is_window_surface {
+            state.destroy_layer_tree(handle);
+            return;
+        }
+        if let Some(record) = state.layers.get_mut(&handle.0) {
+            record.parent = parent;
+        }
+    }
 
     // The client's own geometry (W35): `Transaction.setPosition`/`setLayer`
     // land in `layer_state_t.x/y/z`. They are the honest fallback when no window
@@ -2228,11 +2436,14 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
     ];
     let crop = read_rect(data)?;
 
-    // `SurfaceControl::readNullableFromParcel` twice: bool then
-    // (client binder, handle binder, int32 layerId, String name, uint32
-    // transformHint, uint32 width, uint32 height, uint32 format).
-    read_nullable_surface_control(data)?;
-    read_nullable_surface_control(data)?;
+    // `SurfaceControl::readNullableFromParcel` twice: first
+    // `relativeLayerSurfaceControl`, then `parentSurfaceControlForChild` (the
+    // eReparent target). Both carry (client binder, handle binder, int32
+    // layerId, String name, uint32 transformHint, uint32 width, uint32 height,
+    // uint32 format).
+    let _relative_parent = read_nullable_surface_control(data)?;
+    let parent_handle = read_nullable_surface_control(data)?;
+    let reparent = (what & what::REPARENT != 0).then_some(parent_handle);
     let dbg = std::env::var_os("ACOS_W5_LS").is_some();
     if dbg { eprintln!("ACOSDBG ls nsc at {}", data.data_position()); }
 
@@ -2407,6 +2618,7 @@ fn read_layer_state(data: &mut Parcel) -> SResult<LayerState> {
         buffer,
         listeners,
         window_info,
+        reparent,
     })
 }
 
@@ -2682,19 +2894,19 @@ fn read_fence(data: &mut Parcel) -> SResult<()> {
     Ok(())
 }
 
-fn read_nullable_surface_control(data: &mut Parcel) -> SResult<()> {
+fn read_nullable_surface_control(data: &mut Parcel) -> SResult<Option<BinderId>> {
     if !data.read_bool().map_err(perr)? {
-        return Ok(());
+        return Ok(None);
     }
     let _client = data.read_strong_binder().map_err(perr)?;
-    let _handle = data.read_strong_binder().map_err(perr)?;
+    let handle = data.read_strong_binder().map_err(perr)?;
     let _layer_id = data.read_int32().map_err(perr)?;
     let _name = data.read_string16().map_err(perr)?;
     let _transform_hint = data.read_uint32().map_err(perr)?;
     let _width = data.read_uint32().map_err(perr)?;
     let _height = data.read_uint32().map_err(perr)?;
     let _format = data.read_uint32().map_err(perr)?;
-    Ok(())
+    Ok(handle)
 }
 
 /// The image's `gui::WindowInfo` (older than r75: no `contentSize`, no

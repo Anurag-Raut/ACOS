@@ -1,0 +1,131 @@
+# w42-back-frame: after the second Activity finishes, the frame is the **first**
+# Activity again.
+#
+# W38 §5.3: the tree after Back had one window (`main`), but the C1 frame was
+# byte-identical to the second Activity's (`frames/8.png` == `frames/11.png`),
+# i.e. C1 kept drawing the destroyed window's stored buffer. A screenshot that
+# disagrees with the live tree is a verdict-evidence bug, so this scenario pins
+# the pixels: the same two regions are hashed while the second Activity is up
+# and after Back returns to the first one. The region hashes are the exact
+# RGBA8 bytes of a fresh host-observed C1 capture (not a guest claim); a frame
+# that still shows the destroyed Activity cannot match the post-Back hashes.
+#
+# `fixtures/build/apps/multi-activity.apk`: MainActivity has an EditText
+# (`message`) and a "Send" button; SecondActivity shows "Received: Hello" in a
+# TextView (`received`) and a "Finish" button at the same layout position, so
+# both regions change with the Activity that is actually drawn.
+version: 1
+name: w42-back-frame
+description: >-
+  Launch multi-activity, send "Hello" to SecondActivity, hash the frame regions
+  that show its received text and Finish button, finish it, then require the
+  frame regions to be the first Activity's again (destroyed layer gone).
+app: fixtures/build/apps/multi-activity.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+  - screenshot
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.multiactivity/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: message}
+      timeout_ms: 5000
+
+  - tap:
+      selector: {id: message}
+  - type:
+      selector: {id: message}
+      text: Hello
+  - tap:
+      selector: {id: send}
+
+  - assert_log:
+      tag: AcosMulti
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^Second.onCreate$'
+        - '^Second.received=Hello$'
+
+  - assert_text:
+      selector: {id: received}
+      text: {exact: "Received: Hello"}
+
+  # The second Activity's own frame: the two regions below are its pixels.
+  - capture:
+      name: second-activity
+      format: png
+      fresh: true
+
+  # Right half of the "Received: Hello" row: a TextView line in Second, the
+  # EditText's frame in Main. (The left half carries Main's caret, whose blink
+  # is not part of this check; that is why the region starts at x=600.)
+  - assert_region:
+      x: 600
+      y: 189
+      w: 438
+      h: 118
+      hash: "4e9ed0765cee77c3ae8963c53ef255613d30f714d5f651478a061da6c388eb8b"
+  # The button row: Second's "Finish" button, Main's "Send" button.
+  - assert_region:
+      x: 42
+      y: 307
+      w: 996
+      h: 126
+      hash: "2f288179593157a94778e9dc2c8dc7d6db2ae99fd51ec6d0ca96f86c0d90f6b0"
+
+  # ---- Back: the second Activity is destroyed, the first one resumes --------
+  - tap:
+      selector: {id: finish}
+
+  - assert_log:
+      tag: AcosMulti
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^Second.finish$'
+        - '^Second.onDestroy$'
+        - '^Main.onResume$'
+
+  - assert_text:
+      selector: {id: message}
+      text: {exact: Hello}
+
+  # The composite must be the first Activity's frame, not the destroyed
+  # window's stored buffer: the same two regions now hash as Main's pixels.
+  - capture:
+      name: back-to-main
+      format: png
+      fresh: true
+  - assert_region:
+      x: 600
+      y: 189
+      w: 438
+      h: 118
+      hash: "dee05db89a0d3856d6bb88f91fa271ef36f7429c496a3a48dc69c2ffb7d0746d"
+  - assert_region:
+      x: 42
+      y: 307
+      w: 996
+      h: 126
+      hash: "100233523a597dadab7041ce381fbbf6e5fa5f39b238169cc4198f2fc7237326"
+
+  - assert_no_crash: {}

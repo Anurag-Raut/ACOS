@@ -154,12 +154,15 @@ tasks:
     mapping: >-
       fragments-nav.apk: Show Beta replaces the fragment screen, the framework
       Back path pops the back stack and updates the header (popped=true). Wrong
-      twin: assert the pre-back screen state after Back.
-    unsupported:
-      - "two-activity.apk (tap Go -> DetailActivity -> back) is not expressible:
-         the tap surfaces UNSUPPORTED_ANDROID_API because
-         IActivityTaskManager.startActivity has no multi-Activity path in the
-         launcher. Verified by a probe run, not assumed."
+      twin: assert the pre-back screen state after Back. The earlier gap —
+      two-activity.apk (tap Go -> DetailActivity -> back) "not expressible:
+      the tap surfaces UNSUPPORTED_ANDROID_API because
+      IActivityTaskManager.startActivity has no multi-Activity path" — is
+      closed by W38: the launcher delivers the stock Pause/Launch/Resume/Stop/
+      Destroy items for a real activity token, `w38-multi-activity` passes
+      14/14 and W42's `w42-back-frame` pins the post-Back frame, so this task
+      has no UNSUPPORTED variant any more.
+    unsupported: []
 
   - id: T07
     title: type, submit, validated result

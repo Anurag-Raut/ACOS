@@ -1,0 +1,25 @@
+# W42 live trace: IWindowSession.remove on Activity destroy -> C1 layer destroy
+# Run: .cache/w42/d3 (driver, fixed binary .cache/w42-target/debug/acos-art)
+ACOSWMS exit code=39
+ACOSWMS enter code=4 (remove) avail=24
+ACOSWMS lock-wait code=4
+ACOSWMS locked code=4
+ACOSC1 destroy handle=0x11 layers=3 buffers=1 retained=1 fds=5
+ACOSWMS destroy-layer window=0x100000019 surface=0x1005 layer=0x11 dropped=3
+ACOSWMS remove-layer window=0x100000019 dropped=Some(3)
+ACOSWMS exit code=4
+acos-binder-peer: UNSUPPORTED_ANDROID_API {"code":7,"descriptor":"android.app.IActivityClientController","error":"SERVICE_ILLEGAL_STATE","kind":"UNSUPPORTED_ANDROID_API","message":"illegal state in atms: illegal transition Destroy from Uncreated","method":"activityDestroyed"}
+
+# layer_state_t transactions the client sends around the destroy (what/flags/mask)
+ACOSC1 txn-layer handle=0x1001002 layer=4098 what=0x48 flags=0x1 mask=0x1 buffer=none reparent=None
+ACOSC1 txn-layer handle=0x1001004 layer=4100 what=0x48 flags=0x0 mask=0x1 buffer=none reparent=None
+ACOSC1 txn-layer handle=0x1001003 layer=4099 what=0x48 flags=0x0 mask=0x1 buffer=none reparent=None
+ACOSC1 txn-layer handle=0x14 layer=1 what=0x40 flags=0x2 mask=0x2 buffer=none reparent=None
+ACOSC1 txn-layer handle=0x1001006 layer=4102 what=0x48 flags=0x1 mask=0x1 buffer=none reparent=None
+ACOSC1 txn-layer handle=0x1001008 layer=4104 what=0x48 flags=0x0 mask=0x1 buffer=none reparent=None
+ACOSC1 txn-layer handle=0x1001007 layer=4103 what=0x48 flags=0x0 mask=0x1 buffer=none reparent=None
+ACOSC1 txn-layer handle=0x11 layer=4 what=0x40 flags=0x2 mask=0x2 buffer=none reparent=None
+
+# the composite before and after the destroy (the destroyed layer 6 is gone)
+ACOSC1 composite 1080x2209 origin=(0,128) of layer3(1080x2209 z=1 at 0,128 parent=Some(20)) + layer6(1080x2209 z=2 at 0,128 parent=Some(17))
+ACOSC1 composite 1080x2209 origin=(0,128) of layer3(1080x2209 z=1 at 0,128 parent=Some(20)) + layer8(1080x2209 z=1 at 0,128 parent=Some(20))
