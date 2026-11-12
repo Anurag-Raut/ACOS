@@ -477,10 +477,7 @@ pub fn run_scenario(
     // Say, in the verdict itself, which space every coordinate in this run is
     // in and where the PNG starts. Without this an agent that reads a tree bound
     // and crops the PNG is off by the status-bar inset (128 px) silently.
-    if let Some(frame) = produced_frames
-        .iter()
-        .find(|frame| frame.display_origin.is_some())
-    {
+    if let Some(frame) = produced_frames.iter().find(|frame| frame.display_origin.is_some()) {
         let origin = frame.display_origin_px();
         let display = frame
             .display_size
@@ -771,11 +768,8 @@ fn execute_step(
                 }
                 let elapsed = started.elapsed();
                 if elapsed >= timeout {
-                    let mut exec = StepExec::failed(assertions::element_missing(
-                        "wait_for",
-                        &wait.selector,
-                        last.as_ref(),
-                    ));
+                    let mut exec =
+                        StepExec::failed(assertions::element_missing("wait_for", &wait.selector, last.as_ref()));
                     exec.status = Status::Timeout;
                     exec.error = Some(
                         ProtocolError::new(
@@ -1096,7 +1090,8 @@ fn execute_step(
                     // fails closed as usual.
                     let mut exec = StepExec::pass();
                     if let Ok(observation) = backend.observe() {
-                        if let Some(failure) = observation_binding_error(backend.id(), &observation)
+                        if let Some(failure) =
+                            observation_binding_error(backend.id(), &observation)
                         {
                             return failure;
                         }
@@ -2109,11 +2104,7 @@ mod region_tests {
 
     /// W58: a frame of the ART application area: the PNG is 8x16 but the
     /// display is 8x20 and the frame starts at display y=4 (a status bar).
-    fn app_area_observation(
-        pixels: &[[u8; 4]],
-        width: u32,
-        frame_height: u32,
-    ) -> SessionObservation {
+    fn app_area_observation(pixels: &[[u8; 4]], width: u32, frame_height: u32) -> SessionObservation {
         let frame = FrameMeta::new(
             7,
             "2026-11-11T21:00:00.000Z",
@@ -2194,11 +2185,7 @@ mod region_tests {
             max_distinct_colors: None,
             text_ocr: None,
         };
-        let evaluated = eval_region(
-            &old_interpretation,
-            &block_frame(),
-            Path::new("unused.yaml"),
-        );
+        let evaluated = eval_region(&old_interpretation, &block_frame(), Path::new("unused.yaml"));
         assert!(
             !evaluated.result.passed,
             "frame-space y must not be accepted as display-space y"

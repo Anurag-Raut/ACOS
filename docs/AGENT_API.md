@@ -504,7 +504,7 @@ Every input reply carries a `settle` object (also copied into
 | field | meaning |
 |---|---|
 | `mode` | `fast` or `strict`; the mode this observation was taken with |
-| `settled` | `true` only when a settled observation was returned; `false` on a settle timeout (the tree/frame are still present; see §8.6.4) or the documented no-fresh-frame failure |
+| `settled` | `true` only when a settled observation was returned; `false` on a settle timeout (the tree/frame are still present for inspection; `acos verify` fails the step as `TIMEOUT`; see §8.6.4) or the documented no-fresh-frame failure |
 | `ack_ms` | publish → this gesture's own `FINISHED` acknowledgment. Focus/touch-mode acks queued at window attach are drained and discarded, never counted |
 | `first_change_ms` | publish → the first tree-probe sample that differs from the pre-action baseline (`null` when no change was seen / no baseline) |
 | `frame_ms` | publish → the C1 store the reply's frame is bound to (`null` when none) |
@@ -676,8 +676,14 @@ independent ways out, cheapest first:
    `settle.settled:false`, `settle.bound:"timeout"`, `settle.reason` (the
    guest's own reason, e.g. `anim`, `frame`, `queue`) and
    `settle.animating:true` for animation/frame reasons, plus a `warning` that
-   says it is not evidence. `acos_assert` and `acos verify` assertions refuse
-   such an observation (they stay strict, so a timeout can never pass).
+   says it is not evidence. **The verifier is stricter than the agent API:** a
+   scenario step (`tap`/`type`/`key`/`launch`/`reset`) whose strict settle times
+   out fails as `TIMEOUT` (the latest tree/frame and `settle.reason` stay in
+   the step evidence), and `verify` assertions never run on an unsettled tree.
+   `settle_timeout_ms` moves the deadline; it never converts a transient,
+   still-changing screen into a pass. `acos_assert` also refuses unsettled
+   trees, while `acos_observe`/`acos_observe_tree` and the frame-only observe
+   still return the latest tree/frame for inspection.
 
 ```json
 {"base": {"request_id": "req_7", "session_id": "s_progress"},

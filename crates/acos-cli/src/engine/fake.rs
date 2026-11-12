@@ -57,6 +57,10 @@ pub struct FakeSession {
     calls: Calls,
     /// When false, `type_text` reports the same gap the real ART protocol has.
     supports_type: bool,
+    /// P12b: the last tap's strict settle timed out. The frame is still
+    /// published (it is fresh; it just never settled) so the engine must
+    /// refuse the step and keep the frame as evidence.
+    settle_timed_out: bool,
     /// The bound frame of the most recent completed command.
     cached: Option<ObservedFrame>,
 }
@@ -95,6 +99,14 @@ impl FakeSession {
         Self::with_mode(Mode::Live, Fault::NoLiveFrame)
     }
 
+    /// A live session whose next tap publishes a fresh frame but reports a
+    /// strict settle timeout (the P12b timeout shape).
+    pub fn timed_out_tap() -> Self {
+        let mut fake = Self::with_mode(Mode::Live, Fault::None);
+        fake.settle_timed_out = true;
+        fake
+    }
+
     fn with_mode(mode: Mode, fault: Fault) -> Self {
         FakeSession {
             mode,
@@ -104,6 +116,7 @@ impl FakeSession {
             launched: false,
             calls: Arc::new(Mutex::new(Vec::new())),
             supports_type: false,
+            settle_timed_out: false,
             cached: None,
         }
     }
@@ -362,6 +375,8 @@ impl SessionBackend for FakeSession {
             Some(id) if id.ends_with(":id/inc") => {
                 self.count += 1;
                 self.publish(previous);
+                // The tap's next frame is published either way; the flag only
+                // changes what the settle block says.
                 Ok(())
             }
             Some(id) if id.ends_with(":id/reset") => {
@@ -409,6 +424,7 @@ impl SessionBackend for FakeSession {
     fn reset(&mut self) -> Result<(), BackendError> {
         self.record("reset");
         self.count = 0;
+        self.settle_timed_out = false;
         let previous = self.seq;
         self.publish(previous);
         Ok(())
@@ -426,6 +442,20 @@ impl SessionBackend for FakeSession {
             process_group: None,
             survivors: Vec::new(),
             verified: true,
+        })
+    }
+
+    fn input_settle_timeout(&self) -> Option<serde_json::Value> {
+        self.settle_timed_out.then(|| {
+            serde_json::json!({
+                "mode": "strict",
+                "settled": false,
+                "bound": "timeout",
+                "reason": "pending UI work: fake frame still changing",
+                "animating": true,
+                "probe_seq": self.seq,
+                "tree_age_ms": 0
+            })
         })
     }
 }

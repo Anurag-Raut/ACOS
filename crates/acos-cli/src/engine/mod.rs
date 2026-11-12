@@ -363,6 +363,22 @@ pub trait SessionBackend {
     /// default has no settle rule and ignores it.
     fn set_settle_timeout(&mut self, _timeout_ms: Option<u64>) {}
 
+    /// P12b: the settle block of the most recent input when its strict settle
+    /// timed out (`settled:false`, `bound:"timeout"`), or `None`.
+    ///
+    /// `verify` maps this to a `TIMEOUT` step failure: `settle_timeout_ms` moves
+    /// the deadline, it never turns a transient, still-changing screen into a
+    /// pass. The agent-facing session/MCP reply keeps the latest tree; only the
+    /// verifier refuses to assert on it.
+    fn input_settle_timeout(&self) -> Option<serde_json::Value> {
+        None
+    }
+
+    /// P12b: the same for the most recent tree/launch/reset observation.
+    fn tree_settle_timeout(&self) -> Option<serde_json::Value> {
+        None
+    }
+
     /// The highest completed frame sequence this session has seen (0 when none).
     ///
     /// A tree-less reply (a pure screenshot) can advance the sequence past the
@@ -624,6 +640,15 @@ impl EngineBackend {
                 ))
             })?,
         };
+        if let EngineBackend::Session { session, .. } = self {
+            if let Some(settle) = session.input_settle_timeout() {
+                return Err(settle_timeout_error(
+                    settle,
+                    context,
+                    observed.frame_seq(),
+                ));
+            }
+        }
         if observed.frame_seq() <= previous || !observed.frame.is_fresh() {
             return Err(stale_frame(previous, observed.frame_seq(), context));
         }
@@ -748,6 +773,13 @@ impl Backend for EngineBackend {
             } => {
                 *cause_id = request.cause_id.clone();
                 let outcome = session.launch(&request.apk)?;
+                if let Some(settle) = session.tree_settle_timeout() {
+                    return Err(settle_timeout_error(
+                        settle,
+                        "launch",
+                        session.last_frame_seq(),
+                    ));
+                }
                 if !outcome.package.is_empty() {
                     *package = Some(outcome.package.clone());
                 }
@@ -768,6 +800,13 @@ impl Backend for EngineBackend {
                 // and PNG of that completed traversal; a pure `observe()` would
                 // only replay the previous frame and can never start waiting.
                 let observed = session.frame()?;
+                if let Some(settle) = session.tree_settle_timeout() {
+                    return Err(settle_timeout_error(
+                        settle,
+                        "observe",
+                        session.last_frame_seq(),
+                    ));
+                }
                 self.bind_observation(observed)
             }
         }
@@ -927,7 +966,15 @@ impl Backend for EngineBackend {
                 if !session.capabilities().reset {
                     return Err(BackendError::unsupported("reset", "no reset command"));
                 }
-                session.reset()
+                session.reset()?;
+                if let Some(settle) = session.tree_settle_timeout() {
+                    return Err(settle_timeout_error(
+                        settle,
+                        "reset",
+                        session.last_frame_seq(),
+                    ));
+                }
+                Ok(())
             }
         }
     }
@@ -964,6 +1011,15 @@ impl Backend for EngineBackend {
                     EngineBackend::Session { session, .. } => session.capture()?,
                     EngineBackend::Native(_) => unreachable!(),
                 };
+                if let EngineBackend::Session { session, .. } = self {
+                    if let Some(settle) = session.tree_settle_timeout() {
+                        return Err(settle_timeout_error(
+                            settle,
+                            "capture",
+                            observed.frame_seq(),
+                        ));
+                    }
+                }
                 if observed.frame_seq() <= previous || !observed.frame.is_fresh() {
                     return Err(stale_frame(previous, observed.frame_seq(), "capture"));
                 }
@@ -977,6 +1033,47 @@ impl Backend for EngineBackend {
             EngineBackend::Native(_) => {}
             EngineBackend::Session { session, .. } => session.set_settle_timeout(timeout_ms),
         }
+    }
+}
+
+/// P12b: a strict settle deadline elapsed during a verifier step.
+///
+/// The MCP/session path answers a timeout with the latest tree and
+/// `settled:false` so an agent can still see the screen; `verify` must not
+/// assert on that transient state. Keep the guest's settle reason, the
+/// animating flag and the latest frame sequence in the step evidence.
+fn settle_timeout_error(
+    settle: serde_json::Value,
+    context: &str,
+    frame_seq: u64,
+) -> BackendError {
+    let reason = settle
+        .get("reason")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("the guest reported pending UI work");
+    let animating = settle
+        .get("animating")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    BackendError::Protocol {
+        code: ErrorCode::Timeout,
+        detail: format!(
+            "{context}: strict settle timed out ({reason}); the step is a non-pass because the \
+             screen was still changing when the deadline elapsed"
+        ),
+        hint: Some(
+            "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a \
+             TIMEOUT failure; use wait_for for a later event, or `animations:off` for a \
+             functional check. The latest tree/frame is kept in the step evidence."
+                .to_string(),
+        ),
+        details: Some(serde_json::json!({
+            "settle": settle,
+            "reason": reason,
+            "animating": animating,
+            "frame_seq": frame_seq,
+            "context": context,
+        })),
     }
 }
 
@@ -1521,6 +1618,41 @@ mod engine_tests {
         );
         assert!(dir.join("verdict.json").is_file());
         assert!(dir.join("engine.json").is_file());
+    }
+
+    #[test]
+    fn timed_out_settle_step_is_a_timeout_never_a_pass() {
+        let dir = artifacts("settle-timeout");
+        let mut backend = EngineBackend::session(Box::new(FakeSession::timed_out_tap()));
+        let req = request("scenarios/v2-art-counter.yaml", &dir);
+        let envelope = acos_verify::verify(&req, &mut backend);
+        assert!(!envelope.status().is_pass(), "a timed-out settle must not pass");
+        assert_eq!(envelope.status(), Status::Timeout);
+        let verdict = envelope.result().unwrap().get("verdict").unwrap();
+        assert_eq!(verdict["verdict"], "timeout");
+        let failure = &verdict["failure"];
+        assert_eq!(failure["error"]["code"], "TIMEOUT");
+        let details = &failure["error"]["details"];
+        assert_eq!(details["settle"]["settled"], false);
+        assert_eq!(details["settle"]["bound"], "timeout");
+        assert_eq!(
+            details["settle"]["reason"],
+            "pending UI work: fake frame still changing"
+        );
+        assert_eq!(details["animating"], true);
+        assert!(
+            details["frame_seq"].as_u64().unwrap_or(0) > 0,
+            "the latest frame identity must be kept as evidence: {details}"
+        );
+        // The failing step is the tap, not a later assertion.
+        let timed_out = verdict["steps"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|step| step["status"] == "timeout")
+            .expect("a timed-out step");
+        assert_eq!(timed_out["step"], "tap");
+        assert_eq!(timed_out["error"]["code"], "TIMEOUT");
     }
 
     #[test]

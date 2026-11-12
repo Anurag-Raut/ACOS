@@ -2803,7 +2803,30 @@ impl SessionBackend for ArtSession {
         self.close()?;
         Ok(self.teardown_report())
     }
+
+    fn input_settle_timeout(&self) -> Option<serde_json::Value> {
+        timed_out_settle(self.last_input_settle.as_ref())
+    }
+
+    fn tree_settle_timeout(&self) -> Option<serde_json::Value> {
+        timed_out_settle(self.last_tree_settle.as_ref())
+    }
 }
+/// P12b: did this reply's settle block time out?
+///
+/// Only the structured timeout shape counts (`settled:false` with
+/// `bound:"timeout"`); an old or absent block is not a timeout.
+fn timed_out_settle(settle: Option<&serde_json::Value>) -> Option<serde_json::Value> {
+    let settle = settle?;
+    if settle.get("settled").and_then(serde_json::Value::as_bool) == Some(false)
+        && settle.get("bound").and_then(serde_json::Value::as_str) == Some("timeout")
+    {
+        Some(settle.clone())
+    } else {
+        None
+    }
+}
+
 impl Drop for ArtSession {
     fn drop(&mut self) {
         let _ = self.close();

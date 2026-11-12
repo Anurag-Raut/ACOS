@@ -370,10 +370,7 @@ mod tests {
         let refusal = untrusted_gate(Trust::Untrusted, Certification::NotCertified)
             .expect("a downgraded certification must refuse an untrusted run");
         assert_eq!(refusal.code, ErrorCode::UntrustedApkNotCertified);
-        assert_eq!(
-            refusal.details.as_ref().unwrap()["certification"],
-            "not-certified"
-        );
+        assert_eq!(refusal.details.as_ref().unwrap()["certification"], "not-certified");
         assert_eq!(
             refusal.details.as_ref().unwrap()["override_required"],
             false
