@@ -169,8 +169,12 @@ def wall_key(api, msg, code):
         return "DI graph failed during onCreate (root cause hidden)"
     if "CertificateException" in msg or "conscrypt" in msg:
         return "conscrypt X.509 certificate parsing"
+    if "AndroidKeyStore not found" in msg or "KeyStoreException" in msg:
+        return "AndroidKeyStore provider (no keystore backend)"
     if "dsn is required" in msg.lower():
-        return "app build-config/sentry DSN is empty"
+        # K3c: the DSN is a `<meta-data>` value; the provider runs (so the
+        # framework path is right) and then reads metadata PMS never sent.
+        return "app <meta-data> not delivered (PMS Bundle)"
     if "java.lang.ExceptionInInitializerError" in msg:
         return "static initializer failed (cause hidden)"
     return code or msg[:120]
