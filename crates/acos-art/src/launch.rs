@@ -1095,12 +1095,35 @@ pub(crate) fn launch_session(
             .collect::<Vec<_>>()
             .join("\n")
     });
+    // Measured but OFF by default (K3 results/compat/K3.md §2): the framework
+    // path itself is correct and verified — with this on,
+    // `io.element.android.x`'s `InitializationProvider` runs and
+    // `de.westnordost.streetcomplete` gains its first frame — but two gaps
+    // downstream of the delivery make it a net *regression* on the corpus
+    // today, so the shipping default keeps K2's behaviour:
+    //   1. manifest `<meta-data>` is not parsed, so `FileProvider`'s
+    //      `android.support.FILE_PROVIDER_PATHS` (editor, libreweatherrn) and
+    //      Sentry's DSN (element) are missing;
+    //   2. an app-published `IContentProvider` binder inside
+    //      `publishContentProviders` fails to marshal for joplin
+    //      (`BinderProxy.transactNative` → "Unknown error").
+    // `ACOS_ART_APP_PROVIDERS=on` turns delivery on for the follow-up work.
+    let app_providers_on = std::env::var("ACOS_ART_APP_PROVIDERS")
+        .map(|v| matches!(v.trim(), "1" | "on" | "true" | "yes"))
+        .unwrap_or(false);
     if !provider_spec.is_empty() {
-        eprintln!(
-            "acos-art: launch: app providers {} (bind ProviderInfoList; framework installContentProviders)",
-            provider_spec.lines().count()
-        );
-        sb.env("ACOSLAUNCH_PROVIDERS", &provider_spec);
+        if app_providers_on {
+            eprintln!(
+                "acos-art: launch: app providers {} (bind ProviderInfoList; framework installContentProviders)",
+                provider_spec.lines().count()
+            );
+            sb.env("ACOSLAUNCH_PROVIDERS", &provider_spec);
+        } else {
+            eprintln!(
+                "acos-art: launch: app providers {} NOT delivered (ACOS_ART_APP_PROVIDERS is off; K3 §2)",
+                provider_spec.lines().count()
+            );
+        }
     }
     if std::env::var_os("ACOSLAUNCH_PROBE").is_some() {
         sb.env("ACOSLAUNCH_PROBE", "1");
