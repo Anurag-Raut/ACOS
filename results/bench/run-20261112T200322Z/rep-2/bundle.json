@@ -1,0 +1,95 @@
+{
+  "host_after": {
+    "loadavg1": 0.72,
+    "loadavg15": 1.19,
+    "loadavg5": 0.97,
+    "mem_available_gib": 47.18,
+    "mem_available_mib": 48310.0,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
+        "comm": "bash",
+        "pid": 2790018
+      }
+    ],
+    "runnable": "2/2665",
+    "used_mib": 13598.8,
+    "used_pct": 21.97,
+    "utc": "2026-11-12T21:03:19+00:00"
+  },
+  "host_before": {
+    "loadavg1": 1.8,
+    "loadavg15": 1.32,
+    "loadavg5": 1.21,
+    "mem_available_gib": 46.54,
+    "mem_available_mib": 47652.6,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
+        "comm": "bash",
+        "pid": 2790016
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
+        "comm": "bash",
+        "pid": 2790018
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 16G --time 1800 -- cargo build --release -p acos-cli -p acos-art --offline",
+        "comm": "bash",
+        "pid": 2790023
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 1800 cargo build --release -p acos-cli -p acos-art --offline",
+        "comm": "timeout",
+        "pid": 2790032
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release -p acos-cli -p acos-art --offline",
+        "comm": "cargo",
+        "pid": 2790033
+      }
+    ],
+    "runnable": "2/2655",
+    "used_mib": 14256.1,
+    "used_pct": 23.03,
+    "utc": "2026-11-12T20:59:40+00:00"
+  },
+  "ok": true,
+  "phases": {
+    "memory": {
+      "errors": [],
+      "ok": true,
+      "wall_s": 219.246
+    }
+  },
+  "schema": "acos-bench-bundle/1",
+  "utc": "2026-11-12T20:59:40+00:00",
+  "wall_s": 219.246
+}

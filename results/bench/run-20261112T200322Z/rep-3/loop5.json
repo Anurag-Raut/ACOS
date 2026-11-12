@@ -1,0 +1,458 @@
+{
+  "acos": "/home/Qui/Projects/acos/.cache/h6/target/release/acos",
+  "binary_sha256": "5d42c4f09ab14f37ab7b2eda89e241a1bf9a00f26c881d42e8658c329463d9fb",
+  "bundle_wall_s": 9.743,
+  "errors": [],
+  "failures": [],
+  "host_after": {
+    "loadavg1": 7.45,
+    "loadavg15": 1.93,
+    "loadavg5": 3.14,
+    "mem_available_gib": 45.99,
+    "mem_available_mib": 47092.8,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
+        "comm": "bash",
+        "pid": 2790018
+      },
+      {
+        "cmd": "/bin/bash -c mkdir -p /home/Qui/Projects/acos/.cache/r2 && cd /home/Qui/.paseo/worktrees/3oxa6xao/r2 && nohup cargo build --release --offline -p acos-cli -p aco",
+        "comm": "bash",
+        "pid": 2811298
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release --offline -p acos-cli -p acos-art",
+        "comm": "cargo",
+        "pid": 2811301
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && cat > results/art-runtime/evidence/P12/p12_p11_corpus.sh <<'EOF'\n#!/usr/bin/env bash\n# P11 settle-lab",
+        "comm": "bash",
+        "pid": 2819001
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 2400 -- bash -c \nA=/home/Qui/Projects/acos/.cache/p12-target/release/acos",
+        "comm": "bash",
+        "pid": 2819006
+      }
+    ],
+    "runnable": "3/2704",
+    "used_mib": 14815.9,
+    "used_pct": 23.93,
+    "utc": "2026-11-12T21:06:46+00:00"
+  },
+  "host_before": {
+    "loadavg1": 7.45,
+    "loadavg15": 1.93,
+    "loadavg5": 3.14,
+    "mem_available_gib": 45.99,
+    "mem_available_mib": 47092.8,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
+        "comm": "bash",
+        "pid": 2790018
+      },
+      {
+        "cmd": "/bin/bash -c mkdir -p /home/Qui/Projects/acos/.cache/r2 && cd /home/Qui/.paseo/worktrees/3oxa6xao/r2 && nohup cargo build --release --offline -p acos-cli -p aco",
+        "comm": "bash",
+        "pid": 2811298
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release --offline -p acos-cli -p acos-art",
+        "comm": "cargo",
+        "pid": 2811301
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && cat > results/art-runtime/evidence/P12/p12_p11_corpus.sh <<'EOF'\n#!/usr/bin/env bash\n# P11 settle-lab",
+        "comm": "bash",
+        "pid": 2819001
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 2400 -- bash -c \nA=/home/Qui/Projects/acos/.cache/p12-target/release/acos",
+        "comm": "bash",
+        "pid": 2819006
+      }
+    ],
+    "runnable": "3/2704",
+    "used_mib": 14815.9,
+    "used_pct": 23.93,
+    "utc": "2026-11-12T21:06:46+00:00"
+  },
+  "ok": true,
+  "p5": {
+    "failed_tasks": [],
+    "false_pass": 0,
+    "loop": {
+      "assert": {
+        "ci95_high": 41.082,
+        "ci95_low": 40.928,
+        "cv": 0.0037851646209455113,
+        "max": 41.41,
+        "mean": 41.033199999999994,
+        "median": 41.014,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 40.832,
+        "n": 25,
+        "p5": 40.845800000000004,
+        "p50": 41.014,
+        "p95": 41.332,
+        "resamples": 2000,
+        "spread": 0.011854488711171712,
+        "spread_pct": 1.1854488711171711,
+        "stdev": 0.15531741692418133
+      },
+      "inspect": {
+        "ci95_high": 41.223,
+        "ci95_low": 41.047,
+        "cv": 0.003461812713435525,
+        "max": 41.441,
+        "mean": 41.14008,
+        "median": 41.165,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 40.861,
+        "n": 25,
+        "p5": 40.8762,
+        "p50": 41.165,
+        "p95": 41.295199999999994,
+        "resamples": 2000,
+        "spread": 0.01017854973885575,
+        "spread_pct": 1.0178549738855749,
+        "stdev": 0.14241925197575456
+      },
+      "launch": {
+        "ci95_high": 0.386,
+        "ci95_low": 0.252,
+        "cv": 0.2775846134273118,
+        "max": 0.552,
+        "mean": 0.34704,
+        "median": 0.375,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.22,
+        "n": 25,
+        "p5": 0.228,
+        "p50": 0.375,
+        "p95": 0.5069999999999999,
+        "resamples": 2000,
+        "spread": 0.7439999999999998,
+        "spread_pct": 74.39999999999998,
+        "stdev": 0.09633296424381428
+      },
+      "observe_png": {
+        "ci95_high": 27.254,
+        "ci95_low": 26.66,
+        "cv": 0.02267548441840815,
+        "max": 28.149,
+        "mean": 26.95256,
+        "median": 27.149,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 25.778,
+        "n": 25,
+        "p5": 25.7938,
+        "p50": 27.149,
+        "p95": 27.7446,
+        "resamples": 2000,
+        "spread": 0.07185531695458386,
+        "spread_pct": 7.185531695458386,
+        "stdev": 0.6111623543162108
+      },
+      "observe_tree": {
+        "ci95_high": 41.081,
+        "ci95_low": 40.985,
+        "cv": 0.003217898808707783,
+        "max": 41.366,
+        "mean": 41.02796,
+        "median": 41.046,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 40.793,
+        "n": 25,
+        "p5": 40.8436,
+        "p50": 41.046,
+        "p95": 41.202,
+        "resamples": 2000,
+        "spread": 0.00873166691029567,
+        "spread_pct": 0.8731666910295669,
+        "stdev": 0.13202382360771056
+      },
+      "reset": {
+        "ci95_high": 349.831,
+        "ci95_low": 335.318,
+        "cv": 0.03698018652603989,
+        "max": 365.699,
+        "mean": 343.29456,
+        "median": 342.775,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 318.746,
+        "n": 25,
+        "p5": 327.3012,
+        "p50": 342.775,
+        "p95": 362.7346,
+        "resamples": 2000,
+        "spread": 0.10337218291882433,
+        "spread_pct": 10.337218291882433,
+        "stdev": 12.695096862174791
+      },
+      "tap": {
+        "ci95_high": 941.227,
+        "ci95_low": 939.677,
+        "cv": 0.008247901395936806,
+        "max": 945.428,
+        "mean": 937.91972,
+        "median": 940.531,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 918.846,
+        "n": 25,
+        "p5": 920.6113999999999,
+        "p50": 940.531,
+        "p95": 944.2348,
+        "resamples": 2000,
+        "spread": 0.025117088112991556,
+        "spread_pct": 2.5117088112991555,
+        "stdev": 7.735869367864659
+      }
+    },
+    "loop_total": {
+      "ci95_high": 1440.189,
+      "ci95_low": 1426.889225,
+      "cv": 0.010848739936407614,
+      "max": 1456.488,
+      "mean": 1431.7151199999998,
+      "median": 1431.533,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 1397.967,
+      "n": 25,
+      "p5": 1406.9858000000002,
+      "p50": 1431.533,
+      "p95": 1452.5278,
+      "resamples": 2000,
+      "spread": 0.03181344754190083,
+      "spread_pct": 3.181344754190083,
+      "stdev": 15.53230499990262
+    },
+    "loop_wall_total": {
+      "ci95_high": 1460.039,
+      "ci95_low": 1442.104,
+      "cv": 0.01348195755450921,
+      "max": 1480.045,
+      "mean": 1448.70416,
+      "median": 1447.081,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 1405.586,
+      "n": 25,
+      "p5": 1418.9365999999998,
+      "p50": 1447.081,
+      "p95": 1478.504,
+      "resamples": 2000,
+      "spread": 0.041163832570533465,
+      "spread_pct": 4.1163832570533465,
+      "stdev": 19.53136799416092
+    },
+    "measured_tasks": 25,
+    "memory": {
+      "cgroup_gib_min": 0.037651355504417255,
+      "cgroup_memory_current_peak_mib": 421.883,
+      "interval_s": 0.1,
+      "last": {
+        "extra_cgroups": {
+          "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2819100-i11256119.scope": 90.449,
+          "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2819135-i11164507.scope": 90.863,
+          "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2819147-i11208771.scope": 90.668
+        },
+        "job_anon_shmem_mib": 36.559,
+        "job_memory_current_mib": 421.883,
+        "net_anon_shmem_mib": 287.805,
+        "sampler_mib": 20.734,
+        "t": 1794517605.9851863,
+        "utc": "2026-11-12T21:06:45+00:00"
+      },
+      "net_anon_shmem_gib_min": 0.04121573097895598,
+      "net_anon_shmem_peak_mib": 509.954,
+      "samples": 94
+    },
+    "throughput": {
+      "cohort_wall_s": 9.339,
+      "verified_tasks": 25,
+      "verified_tasks_per_gib_min": 663.9867,
+      "verified_tasks_per_gib_min_net": 606.5645,
+      "verified_tasks_per_s": 2.677
+    },
+    "verified": 25
+  },
+  "phase": "loop5",
+  "samples": {
+    "loop_n5_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "false_pass": 0,
+          "measured": 25,
+          "n": 25,
+          "p95": 1452.5278,
+          "verified": 25
+        }
+      ],
+      "median": 1431.533,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 1431.533,
+        "mean": 1431.533,
+        "median": 1431.533,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 1431.533,
+        "n": 1,
+        "p5": 1431.533,
+        "p50": 1431.533,
+        "p95": 1431.533,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "ms/task",
+      "values": [
+        1431.533
+      ]
+    },
+    "loop_n5_tasks_per_gib_min": {
+      "bad": 0,
+      "extra": [
+        {
+          "cohort_wall_s": 9.339,
+          "verified_tasks": 25,
+          "verified_tasks_per_gib_min": 663.9867,
+          "verified_tasks_per_gib_min_net": 606.5645,
+          "verified_tasks_per_s": 2.677
+        }
+      ],
+      "median": 663.987,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 663.987,
+        "mean": 663.987,
+        "median": 663.987,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 663.987,
+        "n": 1,
+        "p5": 663.987,
+        "p50": 663.987,
+        "p95": 663.987,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "tasks/GiB-min",
+      "values": [
+        663.987
+      ]
+    },
+    "loop_n5_tasks_per_s": {
+      "bad": 0,
+      "extra": [
+        {
+          "cohort_wall_s": 9.339,
+          "verified_tasks": 25,
+          "verified_tasks_per_gib_min": 663.9867,
+          "verified_tasks_per_gib_min_net": 606.5645,
+          "verified_tasks_per_s": 2.677
+        }
+      ],
+      "median": 2.677,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 2.677,
+        "mean": 2.677,
+        "median": 2.677,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 2.677,
+        "n": 1,
+        "p5": 2.677,
+        "p50": 2.677,
+        "p95": 2.677,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "tasks/s",
+      "values": [
+        2.677
+      ]
+    },
+    "loop_n5_verified_rate": {
+      "bad": 0,
+      "extra": [
+        {
+          "measured": 25,
+          "verified": 25
+        }
+      ],
+      "median": 1.0,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 1.0,
+        "mean": 1.0,
+        "median": 1.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 1.0,
+        "n": 1,
+        "p5": 1.0,
+        "p50": 1.0,
+        "p95": 1.0,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "fraction",
+      "values": [
+        1.0
+      ]
+    }
+  },
+  "schema": "acos-bench-phase/2",
+  "utc": "2026-11-12T21:06:46+00:00"
+}

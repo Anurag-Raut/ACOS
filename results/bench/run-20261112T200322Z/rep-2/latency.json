@@ -1,0 +1,2706 @@
+{
+  "acos": "/home/Qui/Projects/acos/.cache/h6/target/release/acos",
+  "binary_sha256": "5d42c4f09ab14f37ab7b2eda89e241a1bf9a00f26c881d42e8658c329463d9fb",
+  "bundle_wall_s": 143.209,
+  "checks": {
+    "m4_fast": 20,
+    "m4_strict": 20,
+    "m5_good": 20,
+    "m7_fast_good": 20,
+    "m7_strict_good": 20,
+    "m8_counter_expected_count": "42",
+    "m8_counter_final_count": "42",
+    "m8_form_error_text": "Name is required",
+    "reference_md5": "39d1e4e3633d98d76b992edb4b250a78",
+    "teardown_lifecycles": [
+      "lifecycle"
+    ],
+    "teardown_verified": 44
+  },
+  "env": {
+    "ACOS_STRICT_SETTLE": "default"
+  },
+  "errors": [],
+  "host_after": {
+    "loadavg1": 0.68,
+    "loadavg15": 1.3,
+    "loadavg5": 1.06,
+    "mem_available_gib": 47.25,
+    "mem_available_mib": 48379.8,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(dat",
+        "comm": "bash",
+        "pid": 2678455
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task H2-validation -- tools/guarded.sh --mem 8G --time 600 -- bash -c validation () \n{ \n    local dir=$OUT/validation;",
+        "comm": "bash",
+        "pid": 2690893
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k2 && rm -rf /home/Qui/Projects/acos/.cache/k2/runs-gotify && mkdir -p /home/Qui/Projects/acos/.cache/k2/run",
+        "comm": "bash",
+        "pid": 2691769
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && cat > results/art-runtime/evidence/P12/p12_gates_on.sh <<'EOF'\n#!/usr/bin/env bash\n# P12 final gates ",
+        "comm": "bash",
+        "pid": 2694950
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 1800 -- bash -c \nA=/home/Qui/Projects/acos/.cache/p12-target/release/acos",
+        "comm": "bash",
+        "pid": 2694955
+      }
+    ],
+    "runnable": "1/2708",
+    "used_mib": 13528.9,
+    "used_pct": 21.85,
+    "utc": "2026-11-12T20:25:05+00:00"
+  },
+  "host_before": {
+    "loadavg1": 0.68,
+    "loadavg15": 1.3,
+    "loadavg5": 1.06,
+    "mem_available_gib": 47.25,
+    "mem_available_mib": 48380.0,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(dat",
+        "comm": "bash",
+        "pid": 2678455
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task H2-validation -- tools/guarded.sh --mem 8G --time 600 -- bash -c validation () \n{ \n    local dir=$OUT/validation;",
+        "comm": "bash",
+        "pid": 2690893
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k2 && rm -rf /home/Qui/Projects/acos/.cache/k2/runs-gotify && mkdir -p /home/Qui/Projects/acos/.cache/k2/run",
+        "comm": "bash",
+        "pid": 2691769
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && cat > results/art-runtime/evidence/P12/p12_gates_on.sh <<'EOF'\n#!/usr/bin/env bash\n# P12 final gates ",
+        "comm": "bash",
+        "pid": 2694950
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 1800 -- bash -c \nA=/home/Qui/Projects/acos/.cache/p12-target/release/acos",
+        "comm": "bash",
+        "pid": 2694955
+      }
+    ],
+    "runnable": "1/2708",
+    "used_mib": 13528.7,
+    "used_pct": 21.85,
+    "utc": "2026-11-12T20:25:05+00:00"
+  },
+  "ok": true,
+  "phase": "latency",
+  "samples": {
+    "cpu_active_tap_strict_pct": {
+      "bad": 0,
+      "extra": [
+        {
+          "cpu_pct": 45.777,
+          "cpu_s": 9.23,
+          "pids": 5,
+          "seconds": 20.163,
+          "wake_pids": 5,
+          "wakeups": 3823,
+          "wakeups_per_s": 189.604
+        }
+      ],
+      "median": 45.777,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 45.777,
+        "mean": 45.777,
+        "median": 45.777,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 45.777,
+        "n": 1,
+        "p5": 45.777,
+        "p50": 45.777,
+        "p95": 45.777,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "% of one core",
+      "values": [
+        45.777
+      ]
+    },
+    "m4_launch_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        }
+      ],
+      "median": 173.512,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 174.563,
+        "ci95_low": 161.3375,
+        "cv": 0.05693329036268774,
+        "max": 189.795,
+        "mean": 170.39775,
+        "median": 173.512,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 158.251,
+        "n": 20,
+        "p5": 158.31465,
+        "p50": 173.512,
+        "p95": 189.6905,
+        "resamples": 2000,
+        "spread": 0.18082812716123373,
+        "spread_pct": 18.08281271612337,
+        "stdev": 9.701304577898675
+      },
+      "unit": "ms",
+      "values": [
+        166.172,
+        174.39,
+        160.334,
+        174.028,
+        189.685,
+        178.398,
+        173.601,
+        174.736,
+        173.423,
+        189.795,
+        160.644,
+        158.318,
+        173.875,
+        158.99,
+        172.923,
+        158.251,
+        175.088,
+        158.514,
+        174.759,
+        162.031
+      ]
+    },
+    "m4_launch_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        }
+      ],
+      "median": 308.18050000000005,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 309.735,
+        "ci95_low": 306.20000000000005,
+        "cv": 0.015188477237573793,
+        "max": 312.968,
+        "mean": 307.37765,
+        "median": 308.18050000000005,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 292.664,
+        "n": 20,
+        "p5": 300.2697,
+        "p50": 308.18050000000005,
+        "p95": 312.69155,
+        "resamples": 2000,
+        "spread": 0.04030706031043497,
+        "spread_pct": 4.030706031043497,
+        "stdev": 4.668598440363924
+      },
+      "unit": "ms",
+      "values": [
+        300.67,
+        303.573,
+        312.677,
+        305.438,
+        312.968,
+        309.986,
+        307.517,
+        308.076,
+        308.766,
+        307.704,
+        309.484,
+        308.285,
+        309.316,
+        292.664,
+        304.696,
+        310.861,
+        310.442,
+        304.657,
+        311.886,
+        307.887
+      ]
+    },
+    "m5_screenshot_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        }
+      ],
+      "median": 24.075,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 24.4405,
+        "ci95_low": 23.7905,
+        "cv": 0.02128791652128853,
+        "max": 25.403,
+        "mean": 24.16525,
+        "median": 24.075,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 23.373,
+        "n": 20,
+        "p5": 23.56205,
+        "p50": 24.075,
+        "p95": 24.929900000000004,
+        "resamples": 2000,
+        "spread": 0.05681619937694722,
+        "spread_pct": 5.681619937694722,
+        "stdev": 0.5144278247160676
+      },
+      "unit": "ms",
+      "values": [
+        24.533,
+        25.403,
+        24.398,
+        24.905,
+        24.736,
+        23.754,
+        23.747,
+        23.954,
+        23.572,
+        23.373,
+        24.153,
+        23.707,
+        23.622,
+        24.119,
+        24.483,
+        24.031,
+        23.827,
+        24.318,
+        23.986,
+        24.684
+      ]
+    },
+    "m6_reset_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        }
+      ],
+      "median": 211.3145,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 211.6525,
+        "ci95_low": 210.16899999999998,
+        "cv": 0.03647478487007082,
+        "max": 227.541,
+        "mean": 210.92849999999999,
+        "median": 211.3145,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 193.978,
+        "n": 20,
+        "p5": 194.1547,
+        "p50": 211.3145,
+        "p95": 227.1154,
+        "resamples": 2000,
+        "spread": 0.15597935778188435,
+        "spread_pct": 15.597935778188434,
+        "stdev": 7.693571660466732
+      },
+      "unit": "ms",
+      "values": [
+        227.541,
+        211.865,
+        210.451,
+        212.877,
+        209.187,
+        211.319,
+        212.132,
+        227.093,
+        211.632,
+        194.164,
+        211.63,
+        209.674,
+        211.23,
+        193.978,
+        211.437,
+        210.736,
+        208.754,
+        211.31,
+        209.887,
+        211.673
+      ]
+    },
+    "m6_reset_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        }
+      ],
+      "median": 341.5195,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 348.40143749999993,
+        "ci95_low": 338.6555,
+        "cv": 0.03289080001475766,
+        "max": 360.284,
+        "mean": 341.90875,
+        "median": 341.5195,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 320.774,
+        "n": 20,
+        "p5": 321.74395000000004,
+        "p50": 341.5195,
+        "p95": 358.81245,
+        "resamples": 2000,
+        "spread": 0.10853992231775923,
+        "spread_pct": 10.853992231775923,
+        "stdev": 11.245652319545773
+      },
+      "unit": "ms",
+      "values": [
+        340.475,
+        337.466,
+        341.533,
+        341.302,
+        339.845,
+        353.279,
+        341.506,
+        360.284,
+        321.795,
+        348.438,
+        353.218,
+        358.735,
+        342.647,
+        341.792,
+        354.941,
+        320.774,
+        328.294,
+        332.074,
+        331.414,
+        348.363
+      ]
+    },
+    "m7_tree_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        }
+      ],
+      "median": 0.4555,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 0.523,
+        "ci95_low": 0.4295,
+        "cv": 0.15647498457869893,
+        "max": 0.659,
+        "mean": 0.48390000000000005,
+        "median": 0.4555,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.388,
+        "n": 20,
+        "p5": 0.40225,
+        "p50": 0.4555,
+        "p95": 0.5972500000000001,
+        "resamples": 2000,
+        "spread": 0.4281009879253569,
+        "spread_pct": 42.81009879253569,
+        "stdev": 0.07571824503763243
+      },
+      "unit": "ms",
+      "values": [
+        0.426,
+        0.421,
+        0.403,
+        0.43,
+        0.523,
+        0.496,
+        0.659,
+        0.442,
+        0.469,
+        0.388,
+        0.428,
+        0.554,
+        0.594,
+        0.594,
+        0.439,
+        0.574,
+        0.501,
+        0.478,
+        0.43,
+        0.429
+      ]
+    },
+    "m7_tree_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        }
+      ],
+      "median": 41.168,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 41.2555,
+        "ci95_low": 41.1325,
+        "cv": 0.005346766651790519,
+        "max": 41.93,
+        "mean": 41.22345,
+        "median": 41.168,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 40.949,
+        "n": 20,
+        "p5": 40.95755,
+        "p50": 41.168,
+        "p95": 41.4892,
+        "resamples": 2000,
+        "spread": 0.012914156626506001,
+        "spread_pct": 1.2914156626506001,
+        "stdev": 0.22041216773175387
+      },
+      "unit": "ms",
+      "values": [
+        41.93,
+        41.14,
+        41.14,
+        41.466,
+        41.414,
+        41.068,
+        41.125,
+        41.459,
+        41.146,
+        41.169,
+        41.233,
+        40.958,
+        41.268,
+        41.013,
+        40.949,
+        41.167,
+        41.101,
+        41.243,
+        41.189,
+        41.291
+      ]
+    },
+    "m8_tap_counter_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 12,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 27,
+          "frame_ms": 36
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 18,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 24,
+          "frame_ms": 36
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 23,
+          "frame_ms": 35
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 15,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 21,
+          "frame_ms": 35
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 12,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 18,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 25,
+          "frame_ms": 36
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 15,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 22,
+          "frame_ms": 35
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 13,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 19,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 26,
+          "frame_ms": 35
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 18,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 25,
+          "frame_ms": 35
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        }
+      ],
+      "median": 43.790499999999994,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 58.177499999999995,
+        "ci95_low": 43.32,
+        "cv": 0.1548664579238597,
+        "max": 59.181,
+        "mean": 49.43435,
+        "median": 43.790499999999994,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 42.871,
+        "n": 20,
+        "p5": 42.9356,
+        "p50": 43.790499999999994,
+        "p95": 59.0632,
+        "resamples": 2000,
+        "spread": 0.3682899258971695,
+        "spread_pct": 36.828992589716954,
+        "stdev": 7.655722684268354
+      },
+      "unit": "ms",
+      "values": [
+        42.871,
+        42.939,
+        58.18,
+        43.415,
+        58.667,
+        42.94,
+        58.175,
+        43.754,
+        59.057,
+        43.827,
+        43.225,
+        58.03,
+        43.865,
+        59.181,
+        43.392,
+        43.3,
+        58.366,
+        42.979,
+        58.837,
+        43.687
+      ]
+    },
+    "m8_tap_counter_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 68,
+          "frame_ms": 938
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 68,
+          "frame_ms": 939
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 67,
+          "frame_ms": 934
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 58,
+          "frame_ms": 929
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 68,
+          "frame_ms": 937
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 69,
+          "frame_ms": 945
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 933
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 65,
+          "frame_ms": 933
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 56,
+          "frame_ms": 933
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 67,
+          "frame_ms": 948
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 57,
+          "frame_ms": 927
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 938
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 67,
+          "frame_ms": 927
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 59,
+          "frame_ms": 938
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 57,
+          "frame_ms": 940
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 67,
+          "frame_ms": 930
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 58,
+          "frame_ms": 929
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 934
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 913
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 918
+        }
+      ],
+      "median": 960.018,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 963.144,
+        "ci95_low": 955.7155,
+        "cv": 0.010069810185883809,
+        "max": 978.646,
+        "mean": 959.0441000000001,
+        "median": 960.018,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 936.326,
+        "n": 20,
+        "p5": 941.9139,
+        "p50": 960.018,
+        "p95": 974.3596000000001,
+        "resamples": 2000,
+        "spread": 0.0337969704734704,
+        "spread_pct": 3.37969704734704,
+        "stdev": 9.65739204689177
+      },
+      "unit": "ms",
+      "values": [
+        964.128,
+        962.142,
+        962.643,
+        957.017,
+        963.728,
+        967.383,
+        955.75,
+        956.478,
+        955.681,
+        974.134,
+        949.947,
+        963.068,
+        955.54,
+        962.617,
+        963.22,
+        957.894,
+        952.332,
+        978.646,
+        936.326,
+        942.208
+      ]
+    },
+    "m8_tap_form_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        }
+      ],
+      "median": 44.5835,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 44.9395,
+        "ci95_low": 44.1455,
+        "cv": 0.021380036136704927,
+        "max": 47.602,
+        "mean": 44.7417,
+        "median": 44.5835,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 43.564,
+        "n": 20,
+        "p5": 43.697,
+        "p50": 44.5835,
+        "p95": 46.143750000000004,
+        "resamples": 2000,
+        "spread": 0.05488016867226668,
+        "spread_pct": 5.488016867226668,
+        "stdev": 0.9565791628176109
+      },
+      "unit": "ms",
+      "values": [
+        44.459,
+        44.537,
+        47.602,
+        44.63,
+        43.564,
+        46.067,
+        43.802,
+        45.011,
+        43.888,
+        43.961,
+        45.627,
+        43.704,
+        44.816,
+        44.33,
+        44.726,
+        44.058,
+        45.553,
+        44.868,
+        44.344,
+        45.287
+      ]
+    },
+    "m8_tap_form_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 915
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 915
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 917
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 915
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 917
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 915
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 915
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 915
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 917
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 915
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 76,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 915
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 917
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 917
+        }
+      ],
+      "median": 948.1065000000001,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 948.289,
+        "ci95_low": 947.1665,
+        "cv": 0.008112447283423191,
+        "max": 981.683,
+        "mean": 949.34815,
+        "median": 948.1065000000001,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 945.667,
+        "n": 20,
+        "p5": 945.7221000000001,
+        "p50": 948.1065000000001,
+        "p95": 951.1652,
+        "resamples": 2000,
+        "spread": 0.005741021710113745,
+        "spread_pct": 0.5741021710113745,
+        "stdev": 7.7015368204903325
+      },
+      "unit": "ms",
+      "values": [
+        948.124,
+        948.31,
+        949.559,
+        981.683,
+        948.172,
+        948.485,
+        948.089,
+        948.976,
+        948.268,
+        948.157,
+        947.748,
+        949.393,
+        947.882,
+        945.667,
+        946.622,
+        945.725,
+        945.863,
+        945.907,
+        947.288,
+        947.045
+      ]
+    },
+    "tap_ack_ms": {
+      "bad": 0,
+      "median": 5.0,
+      "n": 80,
+      "ok": 80,
+      "stats": {
+        "ci95_high": 5.0,
+        "ci95_low": 5.0,
+        "cv": 0.0,
+        "max": 5.0,
+        "mean": 5.0,
+        "median": 5.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 5.0,
+        "n": 80,
+        "p5": 5.0,
+        "p50": 5.0,
+        "p95": 5.0,
+        "resamples": 2000,
+        "spread": 0.0,
+        "spread_pct": 0.0,
+        "stdev": 0.0
+      },
+      "unit": "ms",
+      "values": [
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0
+      ]
+    },
+    "teardown_ms": {
+      "bad": 0,
+      "median": 12.0,
+      "n": 44,
+      "ok": 44,
+      "stats": {
+        "ci95_high": 12.0,
+        "ci95_low": 11.0,
+        "cv": 0.08947339815335098,
+        "max": 17.0,
+        "mean": 11.704545454545455,
+        "median": 12.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 10.0,
+        "n": 44,
+        "p5": 11.0,
+        "p50": 12.0,
+        "p95": 12.850000000000001,
+        "resamples": 2000,
+        "spread": 0.15416666666666679,
+        "spread_pct": 15.416666666666679,
+        "stdev": 1.04724545565854
+      },
+      "unit": "ms",
+      "values": [
+        12.0,
+        12.0,
+        11.0,
+        11.0,
+        11.0,
+        12.0,
+        12.0,
+        12.0,
+        12.0,
+        12.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        13.0,
+        11.0,
+        12.0,
+        12.0,
+        12.0,
+        12.0,
+        11.0,
+        12.0,
+        12.0,
+        12.0,
+        12.0,
+        11.0,
+        11.0,
+        11.0,
+        12.0,
+        12.0,
+        11.0,
+        12.0,
+        10.0,
+        13.0,
+        12.0,
+        10.0,
+        11.0,
+        11.0,
+        11.0,
+        12.0,
+        12.0,
+        12.0,
+        17.0,
+        12.0
+      ]
+    },
+    "teardown_wall_ms": {
+      "bad": 0,
+      "median": 16.9535,
+      "n": 44,
+      "ok": 44,
+      "stats": {
+        "ci95_high": 17.2025,
+        "ci95_low": 16.512999999999998,
+        "cv": 0.07467589120281007,
+        "max": 23.314,
+        "mean": 16.940272727272728,
+        "median": 16.9535,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 15.2,
+        "n": 44,
+        "p5": 15.436300000000001,
+        "p50": 16.9535,
+        "p95": 18.21145,
+        "resamples": 2000,
+        "spread": 0.16369186303713087,
+        "spread_pct": 16.369186303713086,
+        "stdev": 1.2650299631277488
+      },
+      "unit": "ms",
+      "values": [
+        17.279,
+        16.808,
+        16.114,
+        15.91,
+        16.012,
+        17.285,
+        17.371,
+        17.174,
+        17.13,
+        16.647,
+        16.168,
+        16.031,
+        15.936,
+        16.186,
+        17.63,
+        15.361,
+        17.462,
+        17.0,
+        16.771,
+        17.566,
+        16.562,
+        17.099,
+        17.231,
+        17.445,
+        17.384,
+        16.495,
+        16.193,
+        16.935,
+        17.515,
+        17.752,
+        16.205,
+        16.979,
+        15.2,
+        18.256,
+        16.531,
+        15.253,
+        15.863,
+        15.863,
+        16.037,
+        16.972,
+        18.05,
+        18.217,
+        23.314,
+        18.18
+      ]
+    }
+  },
+  "schema": "acos-bench-phase/2",
+  "survivors": [],
+  "teardowns": [
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.279
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.808
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.114
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.91
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.012
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.285
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.371
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.174
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.13
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.647
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.168
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.031
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.936
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.186
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 13,
+      "verified": true,
+      "wall_ms": 17.63
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.361
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.462
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.0
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.771
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.566
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.562
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.099
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.231
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.445
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.384
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.495
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.193
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.935
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.515
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.752
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.205
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.979
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 10,
+      "verified": true,
+      "wall_ms": 15.2
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 13,
+      "verified": true,
+      "wall_ms": 18.256
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.531
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 10,
+      "verified": true,
+      "wall_ms": 15.253
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.863
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.863
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.037
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.972
+    },
+    {
+      "code": null,
+      "label": "m6-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 18.05
+    },
+    {
+      "code": null,
+      "label": "m6-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 18.217
+    },
+    {
+      "code": null,
+      "label": "m8-counter",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 17,
+      "verified": true,
+      "wall_ms": 23.314
+    },
+    {
+      "code": null,
+      "label": "m8-form",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 18.18
+    }
+  ],
+  "utc": "2026-11-12T20:25:05+00:00"
+}

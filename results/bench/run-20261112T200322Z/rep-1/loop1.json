@@ -1,0 +1,409 @@
+{
+  "acos": "/home/Qui/Projects/acos/.cache/h6/target/release/acos",
+  "binary_sha256": "5d42c4f09ab14f37ab7b2eda89e241a1bf9a00f26c881d42e8658c329463d9fb",
+  "bundle_wall_s": 32.192,
+  "errors": [],
+  "host_after": {
+    "loadavg1": 1.6,
+    "loadavg15": 1.61,
+    "loadavg5": 1.38,
+    "mem_available_gib": 46.69,
+    "mem_available_mib": 47810.2,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && python3 - <<'EOF'\np='results/art-runtime/evidence/P12/p12_gates_on.sh'\ns=open(p).read()\ns=s.replace('",
+        "comm": "bash",
+        "pid": 2664324
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 1800 -- results/art-runtime/evidence/P12/p12_gates_on.sh /home/Qui/Projec",
+        "comm": "bash",
+        "pid": 2664337
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k2 && export CARGO_TARGET_DIR=/home/Qui/Projects/acos/.cache/k2-target CARGO_BUILD_JOBS=8 && cargo test --re",
+        "comm": "bash",
+        "pid": 2664565
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --release -p acos-cli -p acos-art -p acos-services --offline",
+        "comm": "cargo",
+        "pid": 2664566
+      }
+    ],
+    "runnable": "2/2674",
+    "used_mib": 14098.5,
+    "used_pct": 22.77,
+    "utc": "2026-11-12T20:10:48+00:00"
+  },
+  "host_before": {
+    "loadavg1": 1.6,
+    "loadavg15": 1.61,
+    "loadavg5": 1.38,
+    "mem_available_gib": 46.69,
+    "mem_available_mib": 47810.2,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && python3 - <<'EOF'\np='results/art-runtime/evidence/P12/p12_gates_on.sh'\ns=open(p).read()\ns=s.replace('",
+        "comm": "bash",
+        "pid": 2664324
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 1800 -- results/art-runtime/evidence/P12/p12_gates_on.sh /home/Qui/Projec",
+        "comm": "bash",
+        "pid": 2664337
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/k2 && export CARGO_TARGET_DIR=/home/Qui/Projects/acos/.cache/k2-target CARGO_BUILD_JOBS=8 && cargo test --re",
+        "comm": "bash",
+        "pid": 2664565
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --release -p acos-cli -p acos-art -p acos-services --offline",
+        "comm": "cargo",
+        "pid": 2664566
+      }
+    ],
+    "runnable": "2/2674",
+    "used_mib": 14098.5,
+    "used_pct": 22.77,
+    "utc": "2026-11-12T20:10:48+00:00"
+  },
+  "ok": true,
+  "p5": {
+    "failed_tasks": [],
+    "false_pass": 0,
+    "loop": {
+      "assert": {
+        "ci95_high": 41.135,
+        "ci95_low": 41.039,
+        "cv": 0.0031907513866364654,
+        "max": 41.445,
+        "mean": 41.086333333333336,
+        "median": 41.058,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 40.817,
+        "n": 21,
+        "p5": 40.923,
+        "p50": 41.058,
+        "p95": 41.239,
+        "resamples": 2000,
+        "spread": 0.0076964294412780795,
+        "spread_pct": 0.769642944127808,
+        "stdev": 0.13109627505514138
+      },
+      "inspect": {
+        "ci95_high": 41.332,
+        "ci95_low": 41.108,
+        "cv": 0.005692786252115871,
+        "max": 41.966,
+        "mean": 41.24638095238095,
+        "median": 41.238,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 40.965,
+        "n": 21,
+        "p5": 40.978,
+        "p50": 41.238,
+        "p95": 41.568,
+        "resamples": 2000,
+        "spread": 0.01430719239536341,
+        "spread_pct": 1.430719239536341,
+        "stdev": 0.23480683043524822
+      },
+      "launch": {
+        "ci95_high": 0.425,
+        "ci95_low": 0.33399999999999996,
+        "cv": 0.21626655608811157,
+        "max": 0.525,
+        "mean": 0.364,
+        "median": 0.376,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.213,
+        "n": 21,
+        "p5": 0.24,
+        "p50": 0.376,
+        "p95": 0.448,
+        "resamples": 2000,
+        "spread": 0.5531914893617021,
+        "spread_pct": 55.319148936170215,
+        "stdev": 0.0787210264160726
+      },
+      "observe_png": {
+        "ci95_high": 30.944,
+        "ci95_low": 26.474,
+        "cv": 0.0816480656750266,
+        "max": 32.369,
+        "mean": 29.071428571428573,
+        "median": 30.083,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 25.552,
+        "n": 21,
+        "p5": 25.751,
+        "p50": 30.083,
+        "p95": 31.529,
+        "resamples": 2000,
+        "spread": 0.1920686101785061,
+        "spread_pct": 19.20686101785061,
+        "stdev": 2.3736259092668446
+      },
+      "observe_tree": {
+        "ci95_high": 41.224,
+        "ci95_low": 41.052,
+        "cv": 0.0037847885976838194,
+        "max": 41.428,
+        "mean": 41.15657142857143,
+        "median": 41.165,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 40.818,
+        "n": 21,
+        "p5": 40.97,
+        "p50": 41.165,
+        "p95": 41.387,
+        "resamples": 2000,
+        "spread": 0.010129964775901897,
+        "spread_pct": 1.0129964775901896,
+        "stdev": 0.15576892226261682
+      },
+      "reset": {
+        "ci95_high": 343.88,
+        "ci95_low": 335.027,
+        "cv": 0.031802577470232345,
+        "max": 358.397,
+        "mean": 339.6622857142857,
+        "median": 337.932,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 314.954,
+        "n": 21,
+        "p5": 325.496,
+        "p50": 337.932,
+        "p95": 356.848,
+        "resamples": 2000,
+        "spread": 0.09277606145615103,
+        "spread_pct": 9.277606145615103,
+        "stdev": 10.802136155144764
+      },
+      "tap": {
+        "ci95_high": 939.997,
+        "ci95_low": 923.877,
+        "cv": 0.010217255850138223,
+        "max": 946.812,
+        "mean": 930.5472380952381,
+        "median": 925.995,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 919.742,
+        "n": 21,
+        "p5": 920.806,
+        "p50": 925.995,
+        "p95": 945.012,
+        "resamples": 2000,
+        "spread": 0.026140529916468126,
+        "spread_pct": 2.6140529916468127,
+        "stdev": 9.507639212258537
+      }
+    },
+    "loop_total": {
+      "ci95_high": 1437.799,
+      "ci95_low": 1418.932,
+      "cv": 0.010443855459399343,
+      "max": 1441.937,
+      "mean": 1423.134238095238,
+      "median": 1424.356,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 1385.545,
+      "n": 21,
+      "p5": 1403.645,
+      "p50": 1424.356,
+      "p95": 1438.72,
+      "resamples": 2000,
+      "spread": 0.0246251639337357,
+      "spread_pct": 2.4625163933735696,
+      "stdev": 14.863008281989076
+    },
+    "loop_wall_total": {
+      "ci95_high": 1441.831,
+      "ci95_low": 1424.058,
+      "cv": 0.010445293957890638,
+      "max": 1446.876,
+      "mean": 1427.7181428571428,
+      "median": 1429.282,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 1389.691,
+      "n": 21,
+      "p5": 1408.585,
+      "p50": 1429.282,
+      "p95": 1443.714,
+      "resamples": 2000,
+      "spread": 0.024578074865561805,
+      "spread_pct": 2.4578074865561805,
+      "stdev": 14.912935691156555
+    },
+    "measured_tasks": 21,
+    "memory": {
+      "cgroup_gib_min": 0.07390271427857803,
+      "cgroup_memory_current_peak_mib": 250.781,
+      "interval_s": 0.1,
+      "last": {
+        "extra_cgroups": {},
+        "job_anon_shmem_mib": 19.18,
+        "job_memory_current_mib": 249.969,
+        "net_anon_shmem_mib": 3.164,
+        "sampler_mib": 16.016,
+        "t": 1794514248.679288,
+        "utc": "2026-11-12T20:10:48+00:00"
+      },
+      "net_anon_shmem_gib_min": 0.03274970817044186,
+      "net_anon_shmem_peak_mib": 110.707,
+      "samples": 319
+    },
+    "throughput": {
+      "cohort_wall_s": 31.866,
+      "verified_tasks": 21,
+      "verified_tasks_per_gib_min": 284.1574,
+      "verified_tasks_per_gib_min_net": 641.2271,
+      "verified_tasks_per_s": 0.659
+    },
+    "verified": 21
+  },
+  "phase": "loop1",
+  "samples": {
+    "loop_n1_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "false_pass": 0,
+          "measured": 21,
+          "n": 21,
+          "p95": 1438.72,
+          "verified": 21
+        }
+      ],
+      "median": 1424.356,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 1424.356,
+        "mean": 1424.356,
+        "median": 1424.356,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 1424.356,
+        "n": 1,
+        "p5": 1424.356,
+        "p50": 1424.356,
+        "p95": 1424.356,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "ms/task",
+      "values": [
+        1424.356
+      ]
+    },
+    "loop_n1_tasks_per_gib_min": {
+      "bad": 0,
+      "extra": [
+        {
+          "cohort_wall_s": 31.866,
+          "verified_tasks": 21,
+          "verified_tasks_per_gib_min": 284.1574,
+          "verified_tasks_per_gib_min_net": 641.2271,
+          "verified_tasks_per_s": 0.659
+        }
+      ],
+      "median": 284.157,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 284.157,
+        "mean": 284.157,
+        "median": 284.157,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 284.157,
+        "n": 1,
+        "p5": 284.157,
+        "p50": 284.157,
+        "p95": 284.157,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "tasks/GiB-min",
+      "values": [
+        284.157
+      ]
+    },
+    "loop_n1_tasks_per_s": {
+      "bad": 0,
+      "extra": [
+        {
+          "cohort_wall_s": 31.866,
+          "verified_tasks": 21,
+          "verified_tasks_per_gib_min": 284.1574,
+          "verified_tasks_per_gib_min_net": 641.2271,
+          "verified_tasks_per_s": 0.659
+        }
+      ],
+      "median": 0.659,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 0.659,
+        "mean": 0.659,
+        "median": 0.659,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.659,
+        "n": 1,
+        "p5": 0.659,
+        "p50": 0.659,
+        "p95": 0.659,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "tasks/s",
+      "values": [
+        0.659
+      ]
+    }
+  },
+  "schema": "acos-bench-phase/2",
+  "utc": "2026-11-12T20:10:48+00:00"
+}

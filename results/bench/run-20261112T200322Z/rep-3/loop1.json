@@ -1,0 +1,444 @@
+{
+  "acos": "/home/Qui/Projects/acos/.cache/h6/target/release/acos",
+  "binary_sha256": "5d42c4f09ab14f37ab7b2eda89e241a1bf9a00f26c881d42e8658c329463d9fb",
+  "bundle_wall_s": 33.759,
+  "errors": [],
+  "failures": [],
+  "host_after": {
+    "loadavg1": 8.17,
+    "loadavg15": 1.91,
+    "loadavg5": 3.13,
+    "mem_available_gib": 45.53,
+    "mem_available_mib": 46621.5,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
+        "comm": "bash",
+        "pid": 2790018
+      },
+      {
+        "cmd": "/bin/bash -c mkdir -p /home/Qui/Projects/acos/.cache/r2 && cd /home/Qui/.paseo/worktrees/3oxa6xao/r2 && nohup cargo build --release --offline -p acos-cli -p aco",
+        "comm": "bash",
+        "pid": 2811298
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release --offline -p acos-cli -p acos-art",
+        "comm": "cargo",
+        "pid": 2811301
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc --crate-name acos_art --edition=2021 crates/acos-art/src/lib.rs --error-format=json --jso",
+        "comm": "rustc",
+        "pid": 2817460
+      }
+    ],
+    "runnable": "4/2700",
+    "used_mib": 15287.2,
+    "used_pct": 24.69,
+    "utc": "2026-11-12T21:06:36+00:00"
+  },
+  "host_before": {
+    "loadavg1": 8.17,
+    "loadavg15": 1.91,
+    "loadavg5": 3.13,
+    "mem_available_gib": 45.53,
+    "mem_available_mib": 46625.5,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
+        "comm": "bash",
+        "pid": 2790018
+      },
+      {
+        "cmd": "/bin/bash -c mkdir -p /home/Qui/Projects/acos/.cache/r2 && cd /home/Qui/.paseo/worktrees/3oxa6xao/r2 && nohup cargo build --release --offline -p acos-cli -p aco",
+        "comm": "bash",
+        "pid": 2811298
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release --offline -p acos-cli -p acos-art",
+        "comm": "cargo",
+        "pid": 2811301
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc --crate-name acos_art --edition=2021 crates/acos-art/src/lib.rs --error-format=json --jso",
+        "comm": "rustc",
+        "pid": 2817460
+      }
+    ],
+    "runnable": "4/2700",
+    "used_mib": 15283.2,
+    "used_pct": 24.69,
+    "utc": "2026-11-12T21:06:36+00:00"
+  },
+  "ok": true,
+  "p5": {
+    "failed_tasks": [],
+    "false_pass": 0,
+    "loop": {
+      "assert": {
+        "ci95_high": 41.316,
+        "ci95_low": 41.171,
+        "cv": 0.02299889061894635,
+        "max": 44.729,
+        "mean": 41.58866666666667,
+        "median": 41.275,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 40.892,
+        "n": 21,
+        "p5": 41.002,
+        "p50": 41.275,
+        "p95": 43.698,
+        "resamples": 2000,
+        "spread": 0.06531798909751661,
+        "spread_pct": 6.531798909751661,
+        "stdev": 0.9564931956544869
+      },
+      "inspect": {
+        "ci95_high": 41.501,
+        "ci95_low": 41.279,
+        "cv": 0.05039347995128772,
+        "max": 44.778,
+        "mean": 41.24180952380952,
+        "median": 41.313,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 33.238,
+        "n": 21,
+        "p5": 41.035,
+        "p50": 41.313,
+        "p95": 44.285,
+        "resamples": 2000,
+        "spread": 0.0786677317067267,
+        "spread_pct": 7.866773170672669,
+        "stdev": 2.078318301392922
+      },
+      "launch": {
+        "ci95_high": 0.418,
+        "ci95_low": 0.312,
+        "cv": 1.204303729598306,
+        "max": 2.912,
+        "mean": 0.46919047619047616,
+        "median": 0.365,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.194,
+        "n": 21,
+        "p5": 0.222,
+        "p50": 0.365,
+        "p95": 0.46,
+        "resamples": 2000,
+        "spread": 0.652054794520548,
+        "spread_pct": 65.2054794520548,
+        "stdev": 0.5650478403681956
+      },
+      "observe_png": {
+        "ci95_high": 30.811,
+        "ci95_low": 28.894,
+        "cv": 0.26201104354064014,
+        "max": 59.275,
+        "mean": 33.42847619047619,
+        "median": 30.092,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 27.175,
+        "n": 21,
+        "p5": 27.264,
+        "p50": 30.092,
+        "p95": 50.212,
+        "resamples": 2000,
+        "spread": 0.7625947095573576,
+        "spread_pct": 76.25947095573576,
+        "stdev": 8.75862993064011
+      },
+      "observe_tree": {
+        "ci95_high": 41.38,
+        "ci95_low": 41.128,
+        "cv": 0.028637553205932913,
+        "max": 45.618,
+        "mean": 41.72142857142857,
+        "median": 41.226,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 41.003,
+        "n": 21,
+        "p5": 41.013,
+        "p50": 41.226,
+        "p95": 43.781,
+        "resamples": 2000,
+        "spread": 0.06714209479454715,
+        "spread_pct": 6.714209479454715,
+        "stdev": 1.1947996305418151
+      },
+      "reset": {
+        "ci95_high": 388.89,
+        "ci95_low": 342.881,
+        "cv": 0.2073241662102165,
+        "max": 597.965,
+        "mean": 393.056,
+        "median": 353.259,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 325.777,
+        "n": 21,
+        "p5": 327.854,
+        "p50": 353.259,
+        "p95": 570.05,
+        "resamples": 2000,
+        "spread": 0.685604613045952,
+        "spread_pct": 68.5604613045952,
+        "stdev": 81.49000747392284
+      },
+      "tap": {
+        "ci95_high": 947.3131999999997,
+        "ci95_low": 929.281,
+        "cv": 0.019640921249119255,
+        "max": 989.49,
+        "mean": 942.6116190476191,
+        "median": 942.661,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 920.846,
+        "n": 21,
+        "p5": 922.701,
+        "p50": 942.661,
+        "p95": 978.189,
+        "resamples": 2000,
+        "spread": 0.05886315441075842,
+        "spread_pct": 5.886315441075842,
+        "stdev": 18.513760578219088
+      }
+    },
+    "loop_total": {
+      "ci95_high": 1490.368,
+      "ci95_low": 1434.13,
+      "cv": 0.07009359377614753,
+      "max": 1742.493,
+      "mean": 1494.1171904761904,
+      "median": 1448.11,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 1403.977,
+      "n": 21,
+      "p5": 1420.845,
+      "p50": 1448.11,
+      "p95": 1731.519,
+      "resamples": 2000,
+      "spread": 0.21453756965976342,
+      "spread_pct": 21.453756965976343,
+      "stdev": 104.72804340319693
+    },
+    "loop_wall_total": {
+      "ci95_high": 1494.887,
+      "ci95_low": 1439.839,
+      "cv": 0.06994762883459517,
+      "max": 1748.318,
+      "mean": 1499.3963333333334,
+      "median": 1453.285,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 1408.612,
+      "n": 21,
+      "p5": 1425.704,
+      "p50": 1453.285,
+      "p95": 1737.169,
+      "resamples": 2000,
+      "spread": 0.21431790736159811,
+      "spread_pct": 21.43179073615981,
+      "stdev": 104.87921819995293
+    },
+    "measured_tasks": 21,
+    "memory": {
+      "cgroup_gib_min": 0.07495560620057708,
+      "cgroup_memory_current_peak_mib": 231.414,
+      "interval_s": 0.1,
+      "last": {
+        "extra_cgroups": {},
+        "job_anon_shmem_mib": 19.629,
+        "job_memory_current_mib": 230.945,
+        "net_anon_shmem_mib": 3.149,
+        "sampler_mib": 16.48,
+        "t": 1794517596.281109,
+        "utc": "2026-11-12T21:06:36+00:00"
+      },
+      "net_anon_shmem_gib_min": 0.03381332289343699,
+      "net_anon_shmem_peak_mib": 106.59,
+      "samples": 334
+    },
+    "throughput": {
+      "cohort_wall_s": 33.417,
+      "verified_tasks": 21,
+      "verified_tasks_per_gib_min": 280.1658,
+      "verified_tasks_per_gib_min_net": 621.057,
+      "verified_tasks_per_s": 0.6284
+    },
+    "verified": 21
+  },
+  "phase": "loop1",
+  "samples": {
+    "loop_n1_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "false_pass": 0,
+          "measured": 21,
+          "n": 21,
+          "p95": 1731.519,
+          "verified": 21
+        }
+      ],
+      "median": 1448.11,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 1448.11,
+        "mean": 1448.11,
+        "median": 1448.11,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 1448.11,
+        "n": 1,
+        "p5": 1448.11,
+        "p50": 1448.11,
+        "p95": 1448.11,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "ms/task",
+      "values": [
+        1448.11
+      ]
+    },
+    "loop_n1_tasks_per_gib_min": {
+      "bad": 0,
+      "extra": [
+        {
+          "cohort_wall_s": 33.417,
+          "verified_tasks": 21,
+          "verified_tasks_per_gib_min": 280.1658,
+          "verified_tasks_per_gib_min_net": 621.057,
+          "verified_tasks_per_s": 0.6284
+        }
+      ],
+      "median": 280.166,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 280.166,
+        "mean": 280.166,
+        "median": 280.166,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 280.166,
+        "n": 1,
+        "p5": 280.166,
+        "p50": 280.166,
+        "p95": 280.166,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "tasks/GiB-min",
+      "values": [
+        280.166
+      ]
+    },
+    "loop_n1_tasks_per_s": {
+      "bad": 0,
+      "extra": [
+        {
+          "cohort_wall_s": 33.417,
+          "verified_tasks": 21,
+          "verified_tasks_per_gib_min": 280.1658,
+          "verified_tasks_per_gib_min_net": 621.057,
+          "verified_tasks_per_s": 0.6284
+        }
+      ],
+      "median": 0.628,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 0.628,
+        "mean": 0.628,
+        "median": 0.628,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.628,
+        "n": 1,
+        "p5": 0.628,
+        "p50": 0.628,
+        "p95": 0.628,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "tasks/s",
+      "values": [
+        0.628
+      ]
+    },
+    "loop_n1_verified_rate": {
+      "bad": 0,
+      "extra": [
+        {
+          "measured": 21,
+          "verified": 21
+        }
+      ],
+      "median": 1.0,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 1.0,
+        "mean": 1.0,
+        "median": 1.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 1.0,
+        "n": 1,
+        "p5": 1.0,
+        "p50": 1.0,
+        "p95": 1.0,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "fraction",
+      "values": [
+        1.0
+      ]
+    }
+  },
+  "schema": "acos-bench-phase/2",
+  "utc": "2026-11-12T21:06:36+00:00"
+}

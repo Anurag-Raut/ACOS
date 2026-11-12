@@ -1,0 +1,2666 @@
+{
+  "acos": "/home/Qui/Projects/acos/.cache/h6/target/release/acos",
+  "binary_sha256": "5d42c4f09ab14f37ab7b2eda89e241a1bf9a00f26c881d42e8658c329463d9fb",
+  "bundle_wall_s": 143.561,
+  "checks": {
+    "m4_fast": 20,
+    "m4_strict": 20,
+    "m5_good": 20,
+    "m7_fast_good": 20,
+    "m7_strict_good": 20,
+    "m8_counter_expected_count": "42",
+    "m8_counter_final_count": "42",
+    "m8_form_error_text": "Name is required",
+    "reference_md5": "39d1e4e3633d98d76b992edb4b250a78",
+    "teardown_lifecycles": [
+      "lifecycle"
+    ],
+    "teardown_verified": 44
+  },
+  "env": {
+    "ACOS_STRICT_SETTLE": "default"
+  },
+  "errors": [],
+  "host_after": {
+    "loadavg1": 1.93,
+    "loadavg15": 1.3,
+    "loadavg5": 1.34,
+    "mem_available_gib": 46.7,
+    "mem_available_mib": 47825.5,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
+        "comm": "bash",
+        "pid": 2790018
+      }
+    ],
+    "runnable": "5/2698",
+    "used_mib": 14083.2,
+    "used_pct": 22.75,
+    "utc": "2026-11-12T21:05:49+00:00"
+  },
+  "host_before": {
+    "loadavg1": 1.93,
+    "loadavg15": 1.3,
+    "loadavg5": 1.34,
+    "mem_available_gib": 46.7,
+    "mem_available_mib": 47825.5,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates-k2.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(",
+        "comm": "bash",
+        "pid": 2790018
+      }
+    ],
+    "runnable": "8/2698",
+    "used_mib": 14083.2,
+    "used_pct": 22.75,
+    "utc": "2026-11-12T21:05:49+00:00"
+  },
+  "ok": true,
+  "phase": "latency",
+  "samples": {
+    "cpu_active_tap_strict_pct": {
+      "bad": 0,
+      "extra": [
+        {
+          "cpu_pct": 44.985,
+          "cpu_s": 9.03,
+          "pids": 5,
+          "seconds": 20.073,
+          "wake_pids": 5,
+          "wakeups": 3837,
+          "wakeups_per_s": 191.149
+        }
+      ],
+      "median": 44.985,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 44.985,
+        "mean": 44.985,
+        "median": 44.985,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 44.985,
+        "n": 1,
+        "p5": 44.985,
+        "p50": 44.985,
+        "p95": 44.985,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "% of one core",
+      "values": [
+        44.985
+      ]
+    },
+    "m4_launch_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        }
+      ],
+      "median": 174.71800000000002,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 175.22199999999998,
+        "ci95_low": 158.9405,
+        "cv": 0.9741856145597434,
+        "max": 1107.947,
+        "mean": 215.74809999999997,
+        "median": 174.71800000000002,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 156.819,
+        "n": 20,
+        "p5": 156.88739999999999,
+        "p50": 174.71800000000002,
+        "p95": 224.71680000000066,
+        "resamples": 2000,
+        "spread": 0.3882221637152478,
+        "spread_pct": 38.82221637152478,
+        "stdev": 210.17869538859694
+      },
+      "unit": "ms",
+      "values": [
+        167.125,
+        1107.947,
+        157.332,
+        159.034,
+        174.696,
+        158.143,
+        158.847,
+        175.236,
+        174.74,
+        175.208,
+        174.313,
+        156.891,
+        156.819,
+        176.158,
+        175.174,
+        158.186,
+        175.097,
+        177.891,
+        178.231,
+        177.894
+      ]
+    },
+    "m4_launch_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        }
+      ],
+      "median": 309.25149999999996,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 309.851,
+        "ci95_low": 308.20950000000005,
+        "cv": 0.011701917313732157,
+        "max": 313.955,
+        "mean": 308.12825,
+        "median": 309.25149999999996,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 298.588,
+        "n": 20,
+        "p5": 299.6102,
+        "p50": 309.25149999999996,
+        "p95": 310.4172,
+        "resamples": 2000,
+        "spread": 0.03494566719967392,
+        "spread_pct": 3.494566719967392,
+        "stdev": 3.6056913035249907
+      },
+      "unit": "ms",
+      "values": [
+        299.664,
+        309.106,
+        306.442,
+        313.955,
+        308.285,
+        308.531,
+        309.945,
+        308.134,
+        304.002,
+        298.588,
+        309.082,
+        310.231,
+        309.662,
+        309.848,
+        307.794,
+        309.794,
+        309.851,
+        309.397,
+        310.114,
+        310.14
+      ]
+    },
+    "m5_screenshot_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        }
+      ],
+      "median": 23.807000000000002,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 23.974,
+        "ci95_low": 23.600287499999997,
+        "cv": 0.014832306284653159,
+        "max": 24.438,
+        "mean": 23.81145,
+        "median": 23.807000000000002,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 23.131,
+        "n": 20,
+        "p5": 23.31435,
+        "p50": 23.807000000000002,
+        "p95": 24.393349999999998,
+        "resamples": 2000,
+        "spread": 0.0453228042172469,
+        "spread_pct": 4.53228042172469,
+        "stdev": 0.3531787194817045
+      },
+      "unit": "ms",
+      "values": [
+        23.802,
+        23.324,
+        23.812,
+        23.471,
+        23.521,
+        23.728,
+        24.206,
+        23.547,
+        23.131,
+        23.711,
+        23.95,
+        24.322,
+        23.49,
+        23.998,
+        23.854,
+        23.637,
+        24.438,
+        23.876,
+        24.02,
+        24.391
+      ]
+    },
+    "m6_reset_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        }
+      ],
+      "median": 210.4255,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 211.4245,
+        "ci95_low": 203.432675,
+        "cv": 0.04114959378570877,
+        "max": 213.104,
+        "mean": 205.97095,
+        "median": 210.4255,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 184.584,
+        "n": 20,
+        "p5": 193.77335000000002,
+        "p50": 210.4255,
+        "p95": 212.59480000000002,
+        "resamples": 2000,
+        "spread": 0.08944472034045303,
+        "spread_pct": 8.944472034045303,
+        "stdev": 8.47562092415653
+      },
+      "unit": "ms",
+      "values": [
+        212.568,
+        210.12,
+        210.492,
+        208.808,
+        194.257,
+        210.465,
+        211.905,
+        212.294,
+        194.54,
+        198.15,
+        210.386,
+        184.584,
+        196.486,
+        213.104,
+        210.138,
+        195.912,
+        211.828,
+        211.832,
+        210.529,
+        211.021
+      ]
+    },
+    "m6_reset_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        }
+      ],
+      "median": 342.0195,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 348.716,
+        "ci95_low": 330.2785,
+        "cv": 0.040737063119156744,
+        "max": 362.064,
+        "mean": 341.31125000000003,
+        "median": 342.0195,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 312.792,
+        "n": 20,
+        "p5": 324.7088,
+        "p50": 342.0195,
+        "p95": 360.5003,
+        "resamples": 2000,
+        "spread": 0.10464754202611251,
+        "spread_pct": 10.464754202611251,
+        "stdev": 13.904017934528287
+      },
+      "unit": "ms",
+      "values": [
+        341.855,
+        342.527,
+        362.064,
+        358.881,
+        359.755,
+        312.792,
+        343.056,
+        329.68,
+        326.548,
+        337.61,
+        342.184,
+        359.152,
+        325.336,
+        330.402,
+        330.155,
+        329.331,
+        346.226,
+        348.716,
+        360.418,
+        339.537
+      ]
+    },
+    "m7_tree_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        }
+      ],
+      "median": 0.451,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 0.482,
+        "ci95_low": 0.441,
+        "cv": 0.12720513775756995,
+        "max": 0.595,
+        "mean": 0.46985,
+        "median": 0.451,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.384,
+        "n": 20,
+        "p5": 0.38970000000000005,
+        "p50": 0.451,
+        "p95": 0.5892999999999999,
+        "resamples": 2000,
+        "spread": 0.4425720620842569,
+        "spread_pct": 44.25720620842569,
+        "stdev": 0.059767333975394236
+      },
+      "unit": "ms",
+      "values": [
+        0.39,
+        0.443,
+        0.432,
+        0.595,
+        0.412,
+        0.452,
+        0.442,
+        0.446,
+        0.525,
+        0.481,
+        0.483,
+        0.46,
+        0.428,
+        0.507,
+        0.566,
+        0.472,
+        0.45,
+        0.384,
+        0.589,
+        0.44
+      ]
+    },
+    "m7_tree_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        }
+      ],
+      "median": 40.966,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 41.0595,
+        "ci95_low": 40.922,
+        "cv": 0.0027010797518135935,
+        "max": 41.196,
+        "mean": 40.9968,
+        "median": 40.966,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 40.86,
+        "n": 20,
+        "p5": 40.885650000000005,
+        "p50": 40.966,
+        "p95": 41.18175,
+        "resamples": 2000,
+        "spread": 0.00722794512522569,
+        "spread_pct": 0.722794512522569,
+        "stdev": 0.11073562636915153
+      },
+      "unit": "ms",
+      "values": [
+        41.035,
+        40.892,
+        41.178,
+        41.181,
+        41.088,
+        40.921,
+        41.196,
+        40.887,
+        40.976,
+        40.86,
+        40.978,
+        40.89,
+        40.927,
+        40.956,
+        40.931,
+        40.923,
+        41.084,
+        40.891,
+        40.997,
+        41.145
+      ]
+    },
+    "m8_tap_counter_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 19,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 24,
+          "frame_ms": 35
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 14,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 19,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 25,
+          "frame_ms": 35
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 22,
+          "frame_ms": 36
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 12,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 18,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 23,
+          "frame_ms": 35
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 13,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 19,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 24,
+          "frame_ms": 35
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 15,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 22,
+          "frame_ms": 36
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 11,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 22,
+          "frame_ms": 35
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 12,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 18,
+          "frame_ms": 20
+        }
+      ],
+      "median": 44.44,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 59.1285,
+        "ci95_low": 44.2575,
+        "cv": 0.15083597285157416,
+        "max": 60.219,
+        "mean": 49.61635,
+        "median": 44.44,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 43.945,
+        "n": 20,
+        "p5": 43.9887,
+        "p50": 44.44,
+        "p95": 59.72025000000001,
+        "resamples": 2000,
+        "spread": 0.3539952745274529,
+        "spread_pct": 35.39952745274529,
+        "stdev": 7.483930421594201
+      },
+      "unit": "ms",
+      "values": [
+        44.413,
+        60.219,
+        44.207,
+        43.992,
+        59.179,
+        44.099,
+        59.632,
+        44.371,
+        44.466,
+        59.551,
+        44.59,
+        44.308,
+        59.078,
+        44.477,
+        59.694,
+        44.414,
+        44.2,
+        59.501,
+        43.945,
+        43.991
+      ]
+    },
+    "m8_tap_counter_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 68,
+          "frame_ms": 935
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 925
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 928
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 919
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 941
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 67,
+          "frame_ms": 928
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 926
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 937
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 69,
+          "frame_ms": 929
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 69,
+          "frame_ms": 934
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 58,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 944
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 68,
+          "frame_ms": 945
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 56,
+          "frame_ms": 926
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 56,
+          "frame_ms": 914
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 941
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 67,
+          "frame_ms": 940
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 938
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 917
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 923
+        }
+      ],
+      "median": 953.014,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 961.2565,
+        "ci95_low": 948.9245,
+        "cv": 0.010406262027561187,
+        "max": 971.66,
+        "mean": 954.7076000000001,
+        "median": 953.014,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 939.45,
+        "n": 20,
+        "p5": 941.18185,
+        "p50": 953.014,
+        "p95": 969.97755,
+        "resamples": 2000,
+        "spread": 0.030215400823072794,
+        "spread_pct": 3.0215400823072796,
+        "stdev": 9.934937445304076
+      },
+      "unit": "ms",
+      "values": [
+        959.054,
+        947.939,
+        951.339,
+        941.96,
+        965.571,
+        952.182,
+        949.91,
+        961.325,
+        953.846,
+        958.796,
+        941.273,
+        969.889,
+        971.66,
+        950.153,
+        939.45,
+        966.695,
+        962.901,
+        961.188,
+        941.729,
+        947.292
+      ]
+    },
+    "m8_tap_form_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20
+        }
+      ],
+      "median": 45.1265,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 46.105000000000004,
+        "ci95_low": 44.7225,
+        "cv": 0.031221649910958372,
+        "max": 48.049,
+        "mean": 45.6262,
+        "median": 45.1265,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 43.762,
+        "n": 20,
+        "p5": 43.9919,
+        "p50": 45.1265,
+        "p95": 47.9103,
+        "resamples": 2000,
+        "spread": 0.08683146266606093,
+        "spread_pct": 8.683146266606093,
+        "stdev": 1.4245252431673687
+      },
+      "unit": "ms",
+      "values": [
+        46.042,
+        44.694,
+        44.944,
+        44.004,
+        44.484,
+        43.762,
+        44.075,
+        46.168,
+        47.842,
+        44.751,
+        45.34,
+        45.833,
+        45.055,
+        45.024,
+        44.28,
+        47.749,
+        47.903,
+        48.049,
+        47.327,
+        45.198
+      ]
+    },
+    "m8_tap_form_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 913
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 917
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 915
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 915
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 915
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 915
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 918
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 914
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 917
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 914
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 917
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 75,
+          "frame_ms": 912
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 916
+        }
+      ],
+      "median": 945.098,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 945.677,
+        "ci95_low": 943.513,
+        "cv": 0.002201243496447429,
+        "max": 946.854,
+        "mean": 944.2790000000001,
+        "median": 945.098,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 940.146,
+        "n": 20,
+        "p5": 940.46995,
+        "p50": 945.098,
+        "p95": 946.4873,
+        "resamples": 2000,
+        "spread": 0.00636690586584668,
+        "spread_pct": 0.636690586584668,
+        "stdev": 2.078588007581882
+      },
+      "unit": "ms",
+      "values": [
+        945.93,
+        943.796,
+        946.468,
+        945.857,
+        945.844,
+        945.677,
+        945.55,
+        945.0,
+        945.469,
+        946.854,
+        940.146,
+        941.55,
+        940.954,
+        942.542,
+        944.407,
+        945.004,
+        945.192,
+        940.487,
+        943.23,
+        945.623
+      ]
+    },
+    "tap_ack_ms": {
+      "bad": 0,
+      "median": 5.0,
+      "n": 80,
+      "ok": 80,
+      "stats": {
+        "ci95_high": 5.0,
+        "ci95_low": 5.0,
+        "cv": 0.0,
+        "max": 5.0,
+        "mean": 5.0,
+        "median": 5.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 5.0,
+        "n": 80,
+        "p5": 5.0,
+        "p50": 5.0,
+        "p95": 5.0,
+        "resamples": 2000,
+        "spread": 0.0,
+        "spread_pct": 0.0,
+        "stdev": 0.0
+      },
+      "unit": "ms",
+      "values": [
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0
+      ]
+    },
+    "teardown_ms": {
+      "bad": 0,
+      "median": 11.0,
+      "n": 44,
+      "ok": 44,
+      "stats": {
+        "ci95_high": 12.0,
+        "ci95_low": 11.0,
+        "cv": 0.0847300361766461,
+        "max": 15.0,
+        "mean": 11.318181818181818,
+        "median": 11.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 10.0,
+        "n": 44,
+        "p5": 10.0,
+        "p50": 11.0,
+        "p95": 12.0,
+        "resamples": 2000,
+        "spread": 0.18181818181818182,
+        "spread_pct": 18.181818181818183,
+        "stdev": 0.9589899549084036
+      },
+      "unit": "ms",
+      "values": [
+        11.0,
+        11.0,
+        10.0,
+        12.0,
+        12.0,
+        10.0,
+        12.0,
+        12.0,
+        10.0,
+        12.0,
+        11.0,
+        10.0,
+        10.0,
+        12.0,
+        10.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        12.0,
+        12.0,
+        12.0,
+        10.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        11.0,
+        12.0,
+        12.0,
+        12.0,
+        10.0,
+        11.0,
+        11.0,
+        12.0,
+        11.0,
+        11.0,
+        12.0,
+        13.0,
+        12.0,
+        11.0,
+        15.0,
+        12.0
+      ]
+    },
+    "teardown_wall_ms": {
+      "bad": 0,
+      "median": 16.171,
+      "n": 44,
+      "ok": 44,
+      "stats": {
+        "ci95_high": 16.3607125,
+        "ci95_low": 15.838000000000001,
+        "cv": 0.06213246593887956,
+        "max": 20.58,
+        "mean": 16.196863636363638,
+        "median": 16.171,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 14.519,
+        "n": 44,
+        "p5": 15.00275,
+        "p50": 16.171,
+        "p95": 17.26825,
+        "resamples": 2000,
+        "spread": 0.14009646898769387,
+        "spread_pct": 14.009646898769388,
+        "stdev": 1.0063510782030407
+      },
+      "unit": "ms",
+      "values": [
+        16.102,
+        15.497,
+        15.024,
+        16.304,
+        16.804,
+        15.482,
+        16.941,
+        16.352,
+        14.519,
+        16.173,
+        15.642,
+        14.813,
+        15.245,
+        17.23,
+        14.999,
+        16.217,
+        15.325,
+        15.26,
+        15.503,
+        16.6,
+        16.572,
+        17.062,
+        15.253,
+        16.369,
+        15.796,
+        15.722,
+        15.632,
+        16.269,
+        16.097,
+        16.413,
+        17.015,
+        17.162,
+        15.051,
+        15.994,
+        15.885,
+        16.169,
+        15.88,
+        16.221,
+        16.967,
+        17.489,
+        17.177,
+        16.58,
+        20.58,
+        17.275
+      ]
+    }
+  },
+  "schema": "acos-bench-phase/2",
+  "survivors": [],
+  "teardowns": [
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.102
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.497
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 10,
+      "verified": true,
+      "wall_ms": 15.024
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.304
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.804
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 10,
+      "verified": true,
+      "wall_ms": 15.482
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.941
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.352
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 10,
+      "verified": true,
+      "wall_ms": 14.519
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.173
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.642
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 10,
+      "verified": true,
+      "wall_ms": 14.813
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 10,
+      "verified": true,
+      "wall_ms": 15.245
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.23
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 10,
+      "verified": true,
+      "wall_ms": 14.999
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.217
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.325
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.26
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.503
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.6
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.572
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.062
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 10,
+      "verified": true,
+      "wall_ms": 15.253
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.369
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.796
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.722
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.632
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.269
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.097
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.413
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.015
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.162
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 10,
+      "verified": true,
+      "wall_ms": 15.051
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.994
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.885
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.169
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.88
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.221
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.967
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 13,
+      "verified": true,
+      "wall_ms": 17.489
+    },
+    {
+      "code": null,
+      "label": "m6-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.177
+    },
+    {
+      "code": null,
+      "label": "m6-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.58
+    },
+    {
+      "code": null,
+      "label": "m8-counter",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 15,
+      "verified": true,
+      "wall_ms": 20.58
+    },
+    {
+      "code": null,
+      "label": "m8-form",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.275
+    }
+  ],
+  "utc": "2026-11-12T21:05:49+00:00"
+}

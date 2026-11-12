@@ -1,0 +1,85 @@
+{
+  "host_after": {
+    "loadavg1": 0.34,
+    "loadavg15": 1.28,
+    "loadavg5": 0.85,
+    "mem_available_gib": 47.41,
+    "mem_available_mib": 48549.5,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(dat",
+        "comm": "bash",
+        "pid": 2678455
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && rm -rf /home/Qui/Projects/acos/.cache/p12/after-rebase && mkdir -p /home/Qui/Projects/acos/.cache/p12",
+        "comm": "bash",
+        "pid": 2686342
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 1800 -- results/art-runtime/evidence/P12/p12_gates_on.sh /home/Qui/Projec",
+        "comm": "bash",
+        "pid": 2686345
+      }
+    ],
+    "runnable": "2/2667",
+    "used_mib": 13359.2,
+    "used_pct": 21.58,
+    "utc": "2026-11-12T20:21:40+00:00"
+  },
+  "host_before": {
+    "loadavg1": 2.64,
+    "loadavg15": 1.53,
+    "loadavg5": 1.4,
+    "mem_available_gib": 47.3,
+    "mem_available_mib": 48434.3,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-gates.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/Projects/acos\necho \"== build $(dat",
+        "comm": "bash",
+        "pid": 2678455
+      }
+    ],
+    "runnable": "1/2648",
+    "used_mib": 13474.4,
+    "used_pct": 21.77,
+    "utc": "2026-11-12T20:18:01+00:00"
+  },
+  "ok": true,
+  "phases": {
+    "memory": {
+      "errors": [],
+      "ok": true,
+      "wall_s": 219.212
+    }
+  },
+  "schema": "acos-bench-bundle/1",
+  "utc": "2026-11-12T20:18:01+00:00",
+  "wall_s": 219.212
+}
