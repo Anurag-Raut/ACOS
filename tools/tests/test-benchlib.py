@@ -16,6 +16,23 @@ The suite has teeth in two directions:
          > .cache/benchlib-mutant.py
      BENCHLIB_PATH=.cache/benchlib-mutant.py python3 tools/tests/test-benchlib.py
      # expected: FAIL test_noisy_row_cannot_pass (mutation is caught)
+
+W45 denominator teeth (each mutant below is caught; W45.md records the output):
+
+     # guest sibling cgroup dropped from the sum (W41 defect 1.1)
+     sed 's/for cg, rows in (guest_series or {}).items():/for cg, rows in {}.items():/' \
+         tools/benchlib.py > .cache/m-no-guest.py
+     # shared page cache charged to the task (W41 defect 1.2)
+     sed 's/^PRIMARY_KEYS = ("anon", "shmem")/PRIMARY_KEYS = ("anon", "shmem", "file")/' \
+         tools/benchlib.py > .cache/m-file.py
+     # suite-lifetime scope accepted (W41 defect 1.3)
+     sed 's/        if len(names) > 1:/        if False:/' \
+         tools/benchlib.py > .cache/m-scope.py
+     # artifacts never pruned (decision e)
+     sed 's/^    if keep:$/    if True:/' tools/benchlib.py > .cache/m-noprune.py
+     for m in .cache/m-*.py; do
+       BENCHLIB_PATH=$m python3 tools/tests/test-benchlib.py | grep -E '^FAIL|passed,'
+     done
 """
 
 import importlib.util
@@ -24,6 +41,7 @@ import os
 import sys
 import tempfile
 import time
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -536,6 +554,296 @@ def test_abba_is_real_time_based():
     check("wall-time samples are positive",
           all(row["value"] > 0 for row in r["rows"]))
 
+
+
+# --------------------------------------------------------------------------- #
+# W45: cgroup scope denominators (the M11 measurement)
+# --------------------------------------------------------------------------- #
+
+MIB = 1 << 20
+
+
+def _fake_scope(cgroup_root, rel, *, anon=0.0, shmem=0.0, file=0.0, kernel=0.0,
+                sock=0.0, pids=(), limit="8G"):
+    """Create one fake cgroup v2 leaf with memory.current + memory.stat."""
+    d = Path(cgroup_root) / rel.lstrip("/")
+    d.mkdir(parents=True, exist_ok=True)
+    total = anon + shmem + file + kernel + sock
+    (d / "memory.current").write_text(str(int(total * MIB)))
+    (d / "memory.stat").write_text(
+        "anon %d\nfile %d\nshmem %d\nkernel %d\nkernel_stack 0\nsock %d\n"
+        "slab 0\npagetables 0\n"
+        % (int(anon * MIB), int((file + shmem) * MIB), int(shmem * MIB),
+           int(kernel * MIB), int(sock * MIB)))
+    if limit is not None:
+        (d / "memory.max").write_text(limit)
+    (d / "cgroup.procs").write_text(" ".join(str(p) for p in pids) + "\n")
+    return d
+
+
+def _fake_proc(proc_root, pid, ppid, comm, cgroup_rel, rss_mib=8.0):
+    d = Path(proc_root) / str(pid)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "comm").write_text(comm + "\n")
+    (d / "stat").write_text("%d (%s) S %d 0 0 0\n" % (pid, comm, ppid))
+    (d / "cgroup").write_text("0::%s\n" % cgroup_rel)
+    (d / "status").write_text("Name:\t%s\nVmRSS:\t%d kB\n" % (comm, int(rss_mib * 1024)))
+    (d / "smaps_rollup").write_text("Rss: %d kB\nPss: %d kB\n"
+                                    % (int(rss_mib * 1024), int(rss_mib * 1024)))
+    return d
+
+
+def _series(values, stat):
+    """Two-sample constant series over 60 s."""
+    return [{"t": 0.0, "bytes": values, "stat": dict(stat)},
+            {"t": 60.0, "bytes": values, "stat": dict(stat)}]
+
+
+def test_denominator_includes_guest_sibling():
+    """TEETH: the guest lives in a SIBLING scope; dropping it halves the result."""
+    job_stat = {"anon": 100 * MIB, "shmem": 10 * MIB, "file": 0, "kernel": 0}
+    guest_stat = {"anon": 100 * MIB, "shmem": 10 * MIB, "file": 0, "kernel": 0}
+    job = _series(110 * MIB, job_stat)
+    guest = {"guest.scope": _series(110 * MIB, guest_stat)}
+    d = bl.memory_denominators(job, guest, sampler_mib=0, window_s=60)
+
+    job_only = 110 / 1024.0          # GiB.min for one 110 MiB holder for 1 min
+    close("primary == job + guest anon+shmem", d["primary"]["gib_min"], 2 * job_only, 1e-9)
+    close("scope_runner_formula is job only (the defect)",
+          d["scope_runner_formula"]["gib_min"], job_only, 1e-9)
+    check("guest cgroup counted in primary",
+          d["primary"]["gib_min"] > d["scope_runner_formula"]["gib_min"] * 1.9,
+          repr(d["primary"]))
+    eq("guest scope listed", d["scope"]["guest_cgroups"], ["guest.scope"])
+    eq("scope_count is job+guest", d["scope"]["scope_count"], 2)
+    eq("primary is the gate value", d["primary"]["gate_uses"], True)
+    for k in ("resident", "job_all_incl_file", "scope_runner_formula"):
+        eq("%s is not a gate value" % k, d[k]["gate_uses"], False)
+    close("resident adds kernel only", d["resident"]["gib_min"], 2 * job_only, 1e-9)
+    close("job_all includes file (none here)", d["job_all_incl_file"]["gib_min"],
+          2 * job_only, 1e-9)
+
+
+def test_page_cache_not_charged_to_task():
+    """TEETH: shared file cache must not move the primary denominator."""
+    stat_small = {"anon": 50 * MIB, "shmem": 5 * MIB, "file": 100 * MIB, "kernel": 2 * MIB}
+    stat_big = {"anon": 50 * MIB, "shmem": 5 * MIB, "file": 900 * MIB, "kernel": 2 * MIB}
+    a = bl.memory_denominators(_series(157 * MIB, stat_small), {}, window_s=60)
+    b = bl.memory_denominators(_series(957 * MIB, stat_big), {}, window_s=60)
+    close("primary ignores page cache (a)", a["primary"]["gib_min"], 55 / 1024.0, 1e-9)
+    close("primary ignores page cache (b)", b["primary"]["gib_min"], 55 / 1024.0, 1e-9)
+    close("primary identical with 9x file cache", b["primary"]["gib_min"],
+          a["primary"]["gib_min"], 1e-12)
+    check("job_all does grow with file cache",
+          b["job_all_incl_file"]["gib_min"] > a["job_all_incl_file"]["gib_min"] * 1.5)
+    close("infra file cache = file - shmem (a)", a["infra_file_cache"]["gib_min"],
+          95 / 1024.0, 1e-9)
+    eq("infra file cache not charged", a["infra_file_cache"]["charged_to_task"], False)
+
+
+def test_sampler_cost_excluded():
+    """TEETH: subtract the sampler's ANON+SHMEM share, not its full RSS.
+
+    The sampler's VmRSS also holds file-backed pages (the Python interpreter and
+    benchlib.py), which are NOT part of an anon+shmem denominator. Subtracting
+    VmRSS would over-subtract and inflate M11 (the W45 review defect).
+    """
+    stat = {"anon": 120 * MIB, "shmem": 0, "file": 0, "kernel": 0}
+    d = bl.memory_denominators(_series(120 * MIB, stat), {}, sampler_mib=8,
+                               sampler_rss_mib=24, window_s=60)
+    close("raw primary is 120 MiB.min", d["primary"]["gib_min"], 120 / 1024.0, 1e-9)
+    close("subtracted amount is anon+shmem (8 MiB)", d["sampler"]["overhead_gib_min"],
+          8 / 1024.0, 1e-9)
+    close("full-RSS sensitivity is reported, not subtracted",
+          d["sampler"]["overhead_if_full_rss_gib_min"], 24 / 1024.0, 1e-9)
+    close("primary excl sampler uses the same-type charge",
+          d["primary"]["gib_min_excl_sampler"], (120 - 8) / 1024.0, 1e-9)
+    eq("sampler anon+shmem recorded", d["sampler"]["anon_shmem_mib"], 8)
+    eq("sampler rss recorded", d["sampler"]["rss_mib"], 24)
+    eq("sampler marked excluded", d["sampler"]["excluded"], True)
+    check("same-type exclusion is smaller than the RSS figure",
+          d["sampler"]["overhead_gib_min"]
+          < d["sampler"]["overhead_if_full_rss_gib_min"])
+    check("exclusion is applied to the gate value",
+          d["primary"]["gib_min_excl_sampler"] < d["primary"]["gib_min"])
+
+
+def test_anon_shmem_probe_uses_rss_split():
+    with tempfile.TemporaryDirectory() as d:
+        proc = Path(d) / "proc"
+        for pid, (anon, shmem, rss) in {700: (7.4, 0.3, 19.6),
+                                        701: (5.0, 0.0, 5.0)}.items():
+            _fake_proc(proc, pid, 1, "python3", "/job.scope", rss_mib=0)
+            (proc / str(pid) / "status").write_text(
+                "VmRSS:\t%d kB\nRssAnon:\t%d kB\nRssShmem:\t%d kB\n"
+                % (int(rss * 1024), int(anon * 1024), int(shmem * 1024)))
+        close("probe returns RssAnon+RssShmem, not VmRSS",
+              bl._anon_shmem_mib(700, proc), 7.7, 2e-3)
+        close("probe handles zero shmem", bl._anon_shmem_mib(701, proc), 5.0, 1e-3)
+        close("full RSS still available", bl._rss_mib(700, proc), 19.6, 1e-3)
+
+
+def test_scope_sampler_discovers_guest_sibling_and_ignores_flatpak():
+    """TEETH: a fake cgroup tree with a guest sibling and a foreign bwrap."""
+    with tempfile.TemporaryDirectory() as d:
+        cg_root = Path(d) / "cgroup"
+        proc_root = Path(d) / "proc"
+        info = Path(d) / "info"
+        info.mkdir()
+        job_rel = "/job.slice/run-p100-i1.scope"
+        guest_rel = "/guest.slice/run-p101-i2.scope"
+        foreign_rel = "/flatpak/run-p900.scope"
+        _fake_scope(cg_root, job_rel, anon=100, shmem=4, file=3, pids=[100, 101])
+        _fake_scope(cg_root, guest_rel, anon=100, shmem=4, file=3, pids=[101])
+        _fake_scope(cg_root, foreign_rel, anon=900, shmem=0, file=0, pids=[900])
+        # pid 100 is the sampler/root; 101 is its child (bwrap) in the guest scope;
+        # 900 is another user's bwrap whose ppid chain never reaches 100.
+        _fake_proc(proc_root, 100, 1, "python3", job_rel)
+        _fake_proc(proc_root, 101, 100, "bwrap", guest_rel)
+        _fake_proc(proc_root, 900, 1, "bwrap", foreign_rel)
+
+        sampler = bl.ScopeSampler(cg_root / job_rel.lstrip("/"), interval=0.02,
+                                  info_dirs=[info], pss_every=1,
+                                  proc_root=proc_root, cgroup_root=cg_root,
+                                  root_pid=100)
+        sampler.start()
+        time.sleep(0.12)
+        sampler.closing_sample()
+        sampler.stop_event.set()
+        sampler.join(timeout=5)
+
+        guests = sampler.guest_cgroups()
+        check("guest sibling scope discovered",
+              any(g.endswith("guest.slice/run-p101-i2.scope") for g in guests), repr(guests))
+        check("foreign flatpak bwrap NOT charged",
+              not any("flatpak" in g for g in guests), repr(guests))
+        check("sampler took >=2 job samples", len(sampler.samples) >= 2,
+              "n=%d" % len(sampler.samples))
+        check("closing sample appended", len(sampler.samples) >= 3)
+        span = sampler.samples[-1]["t"] - sampler.samples[0]["t"]
+        den = bl.memory_denominators(sampler.samples, sampler.guest,
+                                     sampler_mib=1, window_s=span)
+        job_only = 104 / 1024.0 * (span / 60.0)
+        close("primary includes guest scope", den["primary"]["gib_min"],
+              2 * job_only, 0.05 * job_only + 1e-12)
+        check("primary > job-only formula", den["primary"]["gib_min"]
+              > den["scope_runner_formula"]["gib_min"])
+
+
+def test_guest_evidence_file_route():
+    with tempfile.TemporaryDirectory() as d:
+        cg_root = Path(d) / "cgroup"
+        _fake_scope(cg_root, "/guest.slice/x.scope", anon=10)
+        ev = Path(d) / "run" / "cgroup"
+        ev.parent.mkdir(parents=True)
+        ev.write_text("0::/guest.slice/x.scope\n")
+        cg = bl.cgroup_from_info_file(ev, cg_root)
+        eq("evidence file resolves cgroup", str(cg), str(cg_root / "guest.slice/x.scope"))
+        eq("missing evidence file -> None",
+           bl.cgroup_from_info_file(Path(d) / "nope", cg_root), None)
+
+
+def test_scope_reuse_is_rejected():
+    """TEETH: two variants in one scope (the pre-W45 suite scope) must be refused."""
+    rows = [{"variant": "T01-good-r1", "job_cgroup": "/a/one.scope", "sampler_pid": 11},
+            {"variant": "T01-wrong-r1", "job_cgroup": "/a/one.scope", "sampler_pid": 12}]
+    r = bl.check_variant_scopes(rows)
+    check("reused scope rejected", not r["ok"], repr(r))
+    check("reused scope error names the defect",
+          any("reused" in e for e in r["errors"]), repr(r["errors"]))
+    check("reused scope error names both variants",
+          any("T01-good-r1" in e and "T01-wrong-r1" in e for e in r["errors"]))
+
+    fresh = [{"variant": "T01-good-r1", "job_cgroup": "/a/one.scope", "sampler_pid": 11},
+             {"variant": "T01-wrong-r1", "job_cgroup": "/a/two.scope", "sampler_pid": 12}]
+    r2 = bl.check_variant_scopes(fresh)
+    check("distinct fresh scopes accepted", r2["ok"], repr(r2["errors"]))
+    eq("distinct scope count", r2["distinct_scopes"], 2)
+
+    r3 = bl.check_variant_scopes([{"variant": "T01-good-r1", "job_cgroup": None}])
+    check("missing scope rejected (no guarded scope)", not r3["ok"],
+          repr(r3["errors"]))
+    r4 = bl.check_variant_scopes([{"variant": "a", "job_cgroup": "/a", "sampler_pid": 7},
+                                 {"variant": "b", "job_cgroup": "/b", "sampler_pid": 7}])
+    check("reused sampler pid rejected", not r4["ok"], repr(r4["errors"]))
+
+
+def test_prune_artifacts():
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "verdict.json").write_text('{"verdict": "pass"}')
+        (root / "art-frames").mkdir()
+        (root / "art-frames" / "session-timing.json").write_text("{}")
+        (root / "frame0.png").write_bytes(b"x" * MIB)
+        (root / "frame1.png").write_bytes(b"x" * MIB)
+        res = bl.prune_artifacts(root, keep=False, passed=True)
+        check("pass keeps verdict.json", "verdict.json" in res["kept"], repr(res))
+        check("pass keeps step timing",
+              "art-frames/session-timing.json" in res["kept"], repr(res))
+        check("pass drops frames", not (root / "frame0.png").exists()
+              and not (root / "frame1.png").exists(), repr(res["kept"]))
+        check("prune reports freed bytes", res["freed_bytes"] >= 2 * MIB, repr(res))
+        check("prune is recorded", res["pruned"])
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "verdict.json").write_text("{}")
+        for i in range(3):
+            (root / ("shot%d.png" % i)).write_bytes(b"x" * MIB)
+        res = bl.prune_artifacts(root, keep=True, passed=True)
+        eq("--keep-artifacts deletes nothing", res["deleted"], [])
+        eq("all files kept", len([p for p in root.iterdir() if p.is_file()]), 4)
+        check("keep mode not pruned", not res["pruned"])
+
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "verdict.json").write_text("{}")
+        for i in range(3):
+            (root / ("fail%d.png" % i)).write_bytes(b"x" * MIB)
+        res = bl.prune_artifacts(root, keep=False, passed=False, max_failure_mib=1.5)
+        kept_png = [k for k in res["kept"] if k.endswith(".png")]
+        deleted_png = [k for k in res["deleted"] if k.endswith(".png")]
+        eq("fail run keeps a capped failure artifact", len(kept_png), 1)
+        eq("fail run drops the rest", len(deleted_png), 2)
+        check("fail run keeps the verdict", "verdict.json" in res["kept"])
+
+
+def test_m11_ci_and_bar():
+    costs = {"T%02d" % i: 0.0282 for i in range(1, 12)}
+    verified = {k: True for k in costs}
+    m = bl.m11_denominator(costs, verified)
+    close("m11 = 11 / 0.3102", m["m11_tasks_per_gib_min"], 11 / 0.3102, 1e-6)
+    check("m11 CI produced", m["ci95_low"] is not None and m["ci95_high"] is not None,
+          repr(m))
+    check("m11 CI brackets the point estimate",
+          m["ci95_low"] <= m["m11_tasks_per_gib_min"] <= m["ci95_high"], repr(m))
+    check("above-bar M11 passes", m["passes_bar"], repr(m))
+    eq("required is bar*(1+noise), not the bare bar",
+       round(m["required_tasks_per_gib_min"], 4), round(24.4 * 1.05, 4))
+
+    expensive = {k: 0.05 for k in costs}
+    m2 = bl.m11_denominator(expensive, verified)
+    close("expensive suite m11", m2["m11_tasks_per_gib_min"], 11 / (11 * 0.05), 1e-9)
+    check("M11 just under bar*(1+noise) fails the gate", not m2["passes_bar"], repr(m2))
+
+    m3 = bl.m11_denominator({"T01": 0.01, "T02": None}, {"T01": True, "T02": True})
+    eq("missing cost excluded, not estimated", m3["missing_tasks"], ["T02"])
+    eq("missing cost task not verified in denominator", m3["tasks"], 1)
+    close("m11 with one task", m3["m11_tasks_per_gib_min"], 1 / 0.01, 1e-9)
+
+
+def test_sample_integral_forward_fill_guest():
+    """A guest discovered late must be charged from its first sample only."""
+    job = [{"t": 0, "bytes": 10, "stat": {"anon": 10}},
+           {"t": 30, "bytes": 10, "stat": {"anon": 10}},
+           {"t": 60, "bytes": 10, "stat": {"anon": 10}}]
+    guest = {"g": [{"t": 30, "bytes": 10, "stat": {"anon": 10}},
+                   {"t": 60, "bytes": 10, "stat": {"anon": 10}}]}
+    rows = bl.combine_series(job, guest)
+    eq("row count follows job samples", len(rows), 3)
+    eq("guest absent before its first sample", rows[0]["stat"]["anon"], 10)
+    eq("guest added after discovery", rows[1]["stat"]["anon"], 20)
+    eq("guest still counted at the end", rows[2]["stat"]["anon"], 20)
 
 def main():
     tests = [(name, fn) for name, fn in sorted(globals().items())

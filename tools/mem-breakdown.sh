@@ -22,14 +22,19 @@
 #     hold our descendants);
 #   * per-process PSS/RSS (guest dalvikvm64, acos-art + bwrap, host acos).
 # and reports integrals (GiB.min) and peaks for each *component* and each
-# *phase* (boot | launch | steps | teardown), plus two denominators:
+# *phase* (boot | launch | steps | teardown), plus the labelled denominators:
 #
-#   scope_gib_min   = integral(memory.current of the job scope)  -- run-suite's number
-#   job_gib_min     = integral(sum over job + guest cgroups memory.current)
-#   job_res_gib_min = integral(sum over job + guest of anon+shmem+kernel+sock)
-#                     (page cache excluded: the metric to gate M11 on)
+#   primary_anon_shmem         = job + guest, memory.stat anon+shmem, sampler
+#                                excluded -- the W45 gate value (same type as the
+#                                legacy numbers the 24.4 bar came from)
+#   scope_gib_min_runner_formula = job scope only (run-suite's pre-W45 number)
+#   job_gib_min_all_cgroups     = job + guest, memory.current (includes file cache)
+#   job_resident_no_file_gib_min = job + guest, anon+shmem+kernel+sock
+#   infra_file_cache_gib_min    = file - shmem, reported separately (never charged)
 #
-# It never edits run-suite.sh/benchlib.py. Usage (one ART run per lock):
+# The sampling core lives in tools/benchlib.py (W45), shared with run-suite.sh;
+# this script only adds the per-phase/per-process breakdown. Usage (one ART run
+# per lock):
 #
 #   tools/art-runtime/run-exclusive.sh --task W41 -- \
 #     tools/guarded.sh --mem 8G --time 900 -- \
@@ -59,22 +64,20 @@ exec python3 -I - "$@" <<'PY'
 import datetime
 import json
 import os
-import re
 import subprocess
 import sys
-import threading
 import time
 from pathlib import Path
 
 ROOT = Path(os.environ["ACOS_MEM_ROOT"])
 sys.path.insert(0, str(ROOT / "tools"))
-import benchlib  # noqa: E402  (stats, host gate, provenance, integrals)
+import benchlib  # noqa: E402  (sampler, denominators: shared with run-suite.sh W45)
 
 SUITE = ROOT / "scenarios/suite"
 BENCH = ROOT / "results/bench"
 SCRATCH = ROOT / ".cache/w41-mem"
 MiB = 1 << 20
-GiB = 1 << 30
+RESIDENT_KEYS = ("anon", "shmem", "kernel", "sock")
 
 
 def utc_now():
@@ -138,224 +141,8 @@ def scenario_path(task):
 
 
 # --------------------------------------------------------------------------- #
-# cgroup discovery and sampling
+# local helpers for phase/component reporting (the sampler lives in benchlib)
 # --------------------------------------------------------------------------- #
-def self_cgroup():
-    try:
-        for line in Path("/proc/self/cgroup").read_text().splitlines():
-            if line.startswith("0::"):
-                rel = line[3:].strip()
-                return Path("/sys/fs/cgroup") / rel.lstrip("/") if rel else None
-    except OSError:
-        pass
-    return None
-
-
-def cg_from_info_file(path):
-    """The launcher's evidence file: a `/proc/self/cgroup` snapshot of the guest scope."""
-    try:
-        for line in path.read_text().splitlines():
-            if line.startswith("0::"):
-                rel = line[3:].strip()
-                if rel and rel != "/":
-                    return Path("/sys/fs/cgroup") / rel.lstrip("/")
-    except OSError:
-        pass
-    return None
-
-
-def read_int(path, name):
-    try:
-        return int((path / name).read_text().strip())
-    except (OSError, ValueError):
-        return None
-
-
-STAT_KEYS = ("anon", "file", "shmem", "kernel", "kernel_stack", "sock",
-             "slab", "pagetables", "pgfault", "pgmajfault", "workingset_refault_file")
-
-
-def read_stat(path):
-    out = {}
-    try:
-        for line in (path / "memory.stat").read_text().splitlines():
-            k, _, v = line.partition(" ")
-            if k in STAT_KEYS:
-                try:
-                    out[k] = int(v)
-                except ValueError:
-                    pass
-    except OSError:
-        return None
-    return out
-
-
-def pss_of(pid):
-    """(comm, Pss_kb, Rss_kb) from /proc/<pid>/smaps_rollup (fallback status)."""
-    try:
-        comm = Path(f"/proc/{pid}/comm").read_text().strip()
-    except OSError:
-        return None
-    pss = rss = None
-    try:
-        for line in Path(f"/proc/{pid}/smaps_rollup").read_text().splitlines():
-            if line.startswith("Pss:"):
-                pss = int(line.split()[1])
-            elif line.startswith("Rss:"):
-                rss = int(line.split()[1])
-            if pss is not None and rss is not None:
-                break
-    except (OSError, ValueError, IndexError):
-        pass
-    if pss is None:
-        try:
-            pss = int(next(l for l in Path(f"/proc/{pid}/status").read_text().splitlines()
-                           if l.startswith("VmRSS:")).split()[1])
-            rss = pss
-        except (OSError, StopIteration, ValueError):
-            return None
-    return comm, pss, rss
-
-
-def classify(comm, tier="job"):
-    if tier == "guest":
-        # The guest's binder process is named after the app (e.g.
-        # ".formvalidation"); a plain dalvikvm64 is the runtime itself.
-        return "guest-dalvikvm" if comm.startswith("dalvikvm") else "guest-app"
-    if comm.startswith("dalvikvm"):
-        return "guest-dalvikvm"
-    if comm.startswith("acos-art"):
-        return "acos-art-launcher"
-    if comm.startswith("acos"):
-        return "acos-host"
-    if comm == "bwrap":
-        return "bwrap"
-    if comm.startswith("python"):
-        return "sampler-python"
-    if comm in ("sh", "timeout", "systemd-run", "cat", "sed"):
-        return "harness-shell"
-    return "other"
-
-
-def procs_in_cgroup(path):
-    try:
-        return [int(x) for x in (path / "cgroup.procs").read_text().split()]
-    except (OSError, ValueError):
-        return []
-
-
-class Sampler(threading.Thread):
-    """100 ms sampler of the job scope plus every guest scope the run creates."""
-
-    def __init__(self, job, stop, interval, info_dirs, pss_every=3):
-        super().__init__(daemon=True)
-        self.job = job
-        self.stop = stop
-        self.interval = interval
-        self.info_dirs = [Path(d) for d in info_dirs if d]
-        self.pss_every = pss_every
-        self.samples = []          # job scope
-        self.extra = {}            # str(cg) -> [{"t","bytes","stat"}]
-        self.pss = []              # [{"t","procs":[{class,comm,pid,pss_kb,rss_kb}]}]
-        self.discovered = set()
-        self.misses = 0
-        self.ticks = 0
-
-    def _discover(self):
-        found = set()
-        for d in self.info_dirs:
-            if not d.exists():
-                continue
-            try:
-                for p in d.rglob("cgroup"):
-                    cg = cg_from_info_file(p)
-                    if cg is not None and cg != self.job and cg.exists():
-                        found.add(cg)
-            except OSError:
-                continue
-        # Fallback: our own descendants that live in another scope (covers a
-        # launcher that has not yet written its evidence file this tick).
-        # Descendant-ness is checked by the ppid chain: other users of bwrap on
-        # this host (flatpak apps) must never be charged to this job.
-        me = os.getpid()
-        ppid = {}
-        for p in Path("/proc").iterdir():
-            if not p.name.isdigit():
-                continue
-            try:
-                # /proc/<pid>/stat: "pid (comm) state ppid ..." -- comm may
-                # contain spaces/parens, so split after the last ')'.
-                raw = (p / "stat").read_text()
-                tail = raw[raw.rfind(")") + 1:].split()
-                ppid[int(p.name)] = int(tail[1])
-            except (OSError, ValueError, IndexError):
-                continue
-
-        def is_descendant(pid):
-            hops = 0
-            while pid and hops < 64:
-                if pid == me:
-                    return True
-                pid = ppid.get(pid)
-                hops += 1
-            return False
-
-        for p in Path("/proc").iterdir():
-            if not p.name.isdigit() or not is_descendant(int(p.name)):
-                continue
-            try:
-                comm = (p / "comm").read_text().strip()
-            except OSError:
-                continue
-            try:
-                for line in (p / "cgroup").read_text().splitlines():
-                    if line.startswith("0::"):
-                        rel = line[3:].strip()
-                        cg = Path("/sys/fs/cgroup") / rel.lstrip("/")
-                        if cg != self.job and cg.exists():
-                            found.add(cg)
-            except OSError:
-                continue
-        self.discovered |= found
-        return found
-
-    def run(self):
-        tick = 0
-        while not self.stop.is_set():
-            t = time.time()
-            self.ticks += 1
-            cur = read_int(self.job, "memory.current")
-            if cur is None:
-                self.misses += 1
-            else:
-                self.samples.append({"t": t, "bytes": cur, "stat": read_stat(self.job)})
-            for cg in self._discover():
-                c = read_int(cg, "memory.current")
-                if c is not None:
-                    self.extra.setdefault(str(cg), []).append(
-                        {"t": t, "bytes": c, "stat": read_stat(cg)})
-            if tick % self.pss_every == 0:
-                cgs = [(self.job, "job")] + [(Path(x), "guest")
-                                             for x in self.extra]
-                procs = []
-                seen = set()
-                for cg, tier in cgs:
-                    for pid in procs_in_cgroup(cg):
-                        if pid in seen:
-                            continue
-                        seen.add(pid)
-                        r = pss_of(pid)
-                        if r:
-                            comm, pss, rss = r
-                            procs.append({"class": classify(comm, tier), "comm": comm,
-                                          "pid": pid, "pss_kb": pss, "rss_kb": rss})
-                self.pss.append({"t": t, "procs": procs})
-            tick += 1
-            left = self.interval - (time.time() - t)
-            if left > 0:
-                time.sleep(left)
-
-
 def series_integral(rows, key="bytes", t0=None, t1=None):
     sel = []
     for r in rows:
@@ -364,14 +151,13 @@ def series_integral(rows, key="bytes", t0=None, t1=None):
             continue
         if t1 is not None and t > t1:
             continue
-        v = r.get(key) if key != "bytes" else r.get("bytes")
+        v = r.get(key)
         if v is not None:
             sel.append({"t": t, "bytes": v})
     return benchlib.sample_integral(sel) if len(sel) >= 2 else None
 
 
 def stat_integral(rows, keys, t0=None, t1=None):
-    """Integral of the sum of the named memory.stat keys."""
     sel = []
     for r in rows:
         if t0 is not None and r["t"] < t0:
@@ -385,7 +171,7 @@ def stat_integral(rows, keys, t0=None, t1=None):
     return benchlib.sample_integral(sel) if len(sel) >= 2 else None
 
 
-def peak_of(rows, key=None, keys=None):
+def peak_of(rows, keys=None):
     vals = []
     for r in rows:
         if keys:
@@ -448,12 +234,12 @@ def one_rep(task, scenario, opts, acos, acos_art, rep, extra_env):
     env["ACOS_ART_BIN"] = acos_art
     cmd = [acos, "verify", str(scenario), "--engine", "art", "--json",
            "--artifacts", str(art)]
-    stop = threading.Event()
-    job = self_cgroup()
+    job = benchlib.cgroup_path()
     if job is None:
         die("cannot resolve this process's cgroup (no cgroup v2 0:: entry)")
     info_dirs = [env.get("ACOS_ART_DATA"), str(SCRATCH)]
-    sampler = Sampler(job, stop, opts["interval"], info_dirs)
+    sampler = benchlib.ScopeSampler(job, interval=opts["interval"],
+                                    info_dirs=info_dirs)
     sampler.start()
     t_start = time.time()
     proc = subprocess.run(cmd, cwd=str(ROOT), env=env, capture_output=True, text=True,
@@ -461,19 +247,8 @@ def one_rep(task, scenario, opts, acos, acos_art, rep, extra_env):
     t_end = time.time()
     # One closing sample so the teardown phase has two points even though the
     # guest scope is reaped as the task exits.
-    try:
-        t = time.time()
-        cur = read_int(job, "memory.current")
-        if cur is not None:
-            sampler.samples.append({"t": t, "bytes": cur, "stat": read_stat(job)})
-        for cg in list(sampler.extra):
-            c = read_int(Path(cg), "memory.current")
-            if c is not None:
-                sampler.extra[cg].append({"t": t, "bytes": c,
-                                          "stat": read_stat(Path(cg))})
-    except OSError:
-        pass
-    stop.set()
+    sampler.closing_sample()
+    sampler.stop_event.set()
     sampler.join(timeout=5)
     verdict = engine = session_timing = {}
     for name, dst in (("verdict.json", verdict), ("engine.json", engine),
@@ -484,30 +259,20 @@ def one_rep(task, scenario, opts, acos, acos_art, rep, extra_env):
                 dst.update(json.loads(f.read_text()))
             except json.JSONDecodeError:
                 pass
-    # Unify job + guest series into a per-timestamp sum (nearest sample is fine:
-    # every series is sampled on the same tick).
+    den = benchlib.memory_denominators(
+        sampler.samples, sampler.guest,
+        sampler_mib=benchlib._anon_shmem_mib(),
+        sampler_rss_mib=benchlib._rss_mib(), window_s=t_end - t_start,
+        interval_s=opts["interval"], job_cgroup=job, closing_sample=True)
+    total_rows = benchlib.combine_series(sampler.samples, sampler.guest)
     extra_series = []
-    for cg, rows in sampler.extra.items():
+    for cg, rows in sampler.guest.items():
         extra_series.append({"cgroup": cg, "n": len(rows),
                              "gib_min": gibmin(series_integral(rows)),
                              "peak_mib": mib(peak_of(rows)),
                              "anon_gib_min": gibmin(stat_integral(rows, ("anon",))),
                              "file_gib_min": gibmin(stat_integral(rows, ("file",))),
-                             "res_gib_min": gibmin(stat_integral(
-                                 rows, ("anon", "shmem", "kernel", "sock")))})
-    total_rows = []
-    for i, s in enumerate(sampler.samples):
-        total = s["bytes"]
-        st = dict(s.get("stat") or {})
-        for cg, rows in sampler.extra.items():
-            if i < len(rows):
-                total += rows[i]["bytes"]
-                rst = rows[i].get("stat") or {}
-                for k in ("anon", "file", "shmem", "kernel", "sock"):
-                    st[k] = st.get(k, 0) + rst.get(k, 0)
-        total_rows.append({"t": s["t"], "bytes": total, "stat": st})
-    keep = ("anon", "file", "shmem", "kernel", "sock")
-    phases = phase_windows(t_start, verdict, session_timing)
+                             "res_gib_min": gibmin(stat_integral(rows, RESIDENT_KEYS))})
     comp = {}
     for keys, label in (
             (("anon",), "anon"),
@@ -516,19 +281,22 @@ def one_rep(task, scenario, opts, acos, acos_art, rep, extra_env):
             (("shmem",), "shmem"),
             (("kernel",), "kernel"),
             (("sock",), "sock"),
-            (("anon", "shmem", "kernel", "sock"), "resident_no_file")):
+            (("anon", "shmem"), "primary_anon_shmem"),
+            (RESIDENT_KEYS, "resident_no_file")):
         if label == "file_excl_shmem":
             # file - shmem, using the paired samples
             sel = [{"t": r["t"], "bytes": max(0, r["stat"].get("file", 0) -
                                               r["stat"].get("shmem", 0))}
                    for r in total_rows if r["stat"]]
-            comp[label] = {"gib_min": gibmin(benchlib.sample_integral(sel)) if len(sel) > 1 else None,
+            comp[label] = {"gib_min": gibmin(benchlib.sample_integral(sel))
+                           if len(sel) > 1 else None,
                            "peak_mib": mib(max((x["bytes"] for x in sel), default=None))}
             continue
         comp[label] = {
             "gib_min": gibmin(stat_integral(total_rows, keys)),
             "peak_mib": mib(peak_of(total_rows, keys=keys)),
         }
+    phases = phase_windows(t_start, verdict, session_timing)
     phase_tbl = {}
     for name in ("boot", "launch", "steps", "teardown"):
         w0, w1 = phases[name]
@@ -536,42 +304,21 @@ def one_rep(task, scenario, opts, acos, acos_art, rep, extra_env):
             "seconds": round(w1 - w0, 3),
             "scope_gib_min": gibmin(series_integral(sampler.samples, t0=w0, t1=w1)),
             "job_gib_min": gibmin(series_integral(total_rows, t0=w0, t1=w1)),
+            "primary_anon_shmem_gib_min": gibmin(
+                stat_integral(total_rows, ("anon", "shmem"), t0=w0, t1=w1)),
             "resident_no_file_gib_min": gibmin(
-                stat_integral(total_rows, ("anon", "shmem", "kernel", "sock"),
-                              t0=w0, t1=w1)),
+                stat_integral(total_rows, RESIDENT_KEYS, t0=w0, t1=w1)),
             "peak_mib": mib(peak_of([r for r in total_rows if w0 <= r["t"] <= w1])),
         }
     # per-process PSS at the tick where the job+guest total peaked
-    pss_max = {}
+    pss_max = benchlib._pss_by_class(sampler.pss)
     pss_peak_tick = None
     if sampler.samples and sampler.pss:
         peak_i = max(range(len(sampler.samples)),
                      key=lambda i: sampler.samples[i]["bytes"])
         pss_peak_tick = min(sampler.pss,
                             key=lambda p: abs(p["t"] - sampler.samples[peak_i]["t"]))
-    for p in sampler.pss:
-        for row in p["procs"]:
-            cur = pss_max.setdefault(row["class"], {"pss_mib": 0, "rss_mib": 0,
-                                                    "comm": row["comm"], "n_procs": 0})
-            cur["pss_mib"] = max(cur["pss_mib"], round(row["pss_kb"] / 1024.0, 3))
-            cur["rss_mib"] = max(cur["rss_mib"], round(row["rss_kb"] / 1024.0, 3))
-            cur["n_procs"] = max(cur["n_procs"], 1)
-    self_rss = next((s for s in sampler.samples), None)
-    self_mib = None
-    try:
-        for line in Path("/proc/self/status").read_text().splitlines():
-            if line.startswith("VmRSS:"):
-                self_mib = round(int(line.split()[1]) / 1024.0, 2)
-    except (OSError, ValueError):
-        pass
-    scope_gib = gibmin(series_integral(sampler.samples))
-    job_gib = gibmin(series_integral(total_rows))
-    res_gib = gibmin(stat_integral(total_rows, ("anon", "shmem", "kernel", "sock")))
-    # The sampler itself lives in the job scope (24 MiB anon). Charge it out so a
-    # caller can see the task's own cost; the raw values above still include it.
-    self_gib = (round((self_mib or 0) / 1024.0 * (t_end - t_start) / 60.0, 9)
-                if self_mib else None)
-    st = (verdict.get("resources") or {}).get("wall_ms")
+    st_wall = (verdict.get("resources") or {}).get("wall_ms")
     return {
         "rep": rep,
         "scenario": str(scenario.relative_to(ROOT)) if str(scenario).startswith(str(ROOT))
@@ -584,24 +331,31 @@ def one_rep(task, scenario, opts, acos, acos_art, rep, extra_env):
                   if verdict.get("verdict") != "pass" else None),
         "rc": proc.returncode,
         "process_wall_s": round(t_end - t_start, 3),
-        "verdict_wall_ms": st,
+        "verdict_wall_ms": st_wall,
         "job_cgroup": str(job),
-        "guest_cgroups": sorted(sampler.extra),
+        "guest_cgroups": sorted(sampler.guest),
         "samples": {"ticks": sampler.ticks, "job": len(sampler.samples),
                     "misses": sampler.misses, "pss_ticks": len(sampler.pss),
                     "interval_s": opts["interval"]},
-        "self_rss_mib": self_mib,
+        "self_rss_mib": benchlib._rss_mib(),
         "phase": phase_tbl,
         "denominator": {
-            "scope_gib_min_runner_formula": scope_gib,
-            "job_gib_min_all_cgroups": job_gib,
-            "job_resident_no_file_gib_min": res_gib,
-            "job_peak_mib_all_cgroups": mib(peak_of(total_rows)),
-            "sampler_overhead_gib_min": self_gib,
-            "job_resident_excl_sampler_gib_min":
-                round(res_gib - self_gib, 9) if (res_gib is not None and self_gib) else res_gib,
-            "scope_peak_mib_runner_formula": mib(peak_of(sampler.samples)),
+            # W45 primary: same type as the legacy numbers the 24.4 bar uses.
+            "primary_anon_shmem_gib_min": den["primary"]["gib_min_excl_sampler"],
+            "scope_gib_min_runner_formula": den["scope_runner_formula"]["gib_min"],
+            "job_gib_min_all_cgroups": den["job_all_incl_file"]["gib_min"],
+            "job_resident_no_file_gib_min": den["resident"]["gib_min_excl_sampler"],
+            "job_resident_excl_sampler_gib_min": den["resident"]["gib_min_excl_sampler"],
+            "job_peak_mib_all_cgroups": den["components"]["peak_mib_all_cgroups"],
+            "sampler_overhead_gib_min": den["sampler"]["overhead_gib_min"],
+            "sampler_overhead_if_full_rss_gib_min":
+                den["sampler"]["overhead_if_full_rss_gib_min"],
+            "infra_file_cache_gib_min": den["infra_file_cache"]["gib_min"],
+            "labels": {k: den[k].get("gate_uses") for k in
+                       ("primary", "resident", "job_all_incl_file",
+                        "scope_runner_formula")},
         },
+        "denominators_full": den,
         "components": comp,
         "guest_series": extra_series,
         "pss_peak_mib_by_class": pss_max,
@@ -616,9 +370,6 @@ def one_rep(task, scenario, opts, acos, acos_art, rep, extra_env):
 
 
 def aggregate(paths):
-    """Print/emit one row per file: the same fields, with benchlib.stats."""
-    sys.path.insert(0, str(ROOT / "tools"))
-    import benchlib
     rows = []
     for p in paths:
         try:
@@ -629,6 +380,8 @@ def aggregate(paths):
             rows.append({
                 "file": p, "task": d.get("task"), "label": d.get("label"),
                 "env": d.get("env"), "rep": r["rep"], "verified": r["verdict"],
+                "primary_anon_shmem_gib_min":
+                    r["denominator"].get("primary_anon_shmem_gib_min"),
                 "scope_gib_min": r["denominator"]["scope_gib_min_runner_formula"],
                 "job_gib_min": r["denominator"]["job_gib_min_all_cgroups"],
                 "job_resident_gib_min": r["denominator"]["job_resident_no_file_gib_min"],
@@ -639,9 +392,9 @@ def aggregate(paths):
                 "kernel_gib_min": r["components"]["kernel"]["gib_min"],
                 "process_wall_s": r["process_wall_s"],
             })
-    fields = ("scope_gib_min", "job_gib_min", "job_resident_gib_min", "job_peak_mib",
-              "anon_gib_min", "file_gib_min", "shmem_gib_min", "kernel_gib_min",
-              "process_wall_s")
+    fields = ("primary_anon_shmem_gib_min", "scope_gib_min", "job_gib_min",
+              "job_resident_gib_min", "job_peak_mib", "anon_gib_min", "file_gib_min",
+              "shmem_gib_min", "kernel_gib_min", "process_wall_s")
     groups = {}
     for x in rows:
         groups.setdefault((x["task"], x["label"],
@@ -656,22 +409,23 @@ def aggregate(paths):
                       for f in fields}}
     out = {"schema": "acos-mem-breakdown-aggregate/2", "utc": utc_now(),
            "rows": rows, "groups": stats}
-    print("%-6s %-10s %-30s %3s %-10s %-10s %-10s %-9s %-9s %-8s" % (
-        "task", "label", "env", "n", "scope", "job_all", "resident", "anon",
-        "file", "peakMiB"))
+    print("%-6s %-10s %-30s %3s %-10s %-10s %-10s %-9s" % (
+        "task", "label", "env", "n", "primary", "resident", "job_all", "peakMiB"))
     for key, g in stats.items():
         st = g["stats"]
+
         def p50(f):
             v = st[f]["p50"]
             return ("%.5f" % v) if v is not None else "-"
-        print("%-6s %-10s %-30s %3d %-10s %-10s %-10s %-9s %-9s %-8s" % (
+        print("%-6s %-10s %-30s %3d %-10s %-10s %-10s %-9s" % (
             g["task"], g["label"], (g["env"] or "none")[:30], g["n_rows"],
-            p50("scope_gib_min"), p50("job_gib_min"), p50("job_resident_gib_min"),
-            p50("anon_gib_min"), p50("file_gib_min"), p50("job_peak_mib")))
+            p50("primary_anon_shmem_gib_min"), p50("job_resident_gib_min"),
+            p50("job_gib_min"), p50("job_peak_mib")))
         if g["n_rows"] >= 2:
-            for f in ("job_resident_gib_min", "job_gib_min", "scope_gib_min"):
+            for f in ("primary_anon_shmem_gib_min", "job_resident_gib_min",
+                      "job_gib_min"):
                 r = st[f]
-                print("       %-22s n=%d spread=%s ci95=%s..%s" % (
+                print("       %-30s n=%d spread=%s ci95=%s..%s" % (
                     f, r["n"], ("%.1f%%" % r["spread_pct"]) if r["spread"] is not None
                     else "n/a", r["ci95_low"], r["ci95_high"]))
     return out
@@ -722,6 +476,8 @@ def main():
             rep["retried_after"] = first
         reps.append(rep)
     fields = {
+        "primary_anon_shmem_gib_min": [r["denominator"]["primary_anon_shmem_gib_min"]
+                                       for r in reps],
         "scope_gib_min": [r["denominator"]["scope_gib_min_runner_formula"] for r in reps],
         "job_gib_min": [r["denominator"]["job_gib_min_all_cgroups"] for r in reps],
         "job_resident_gib_min": [r["denominator"]["job_resident_no_file_gib_min"]
@@ -736,7 +492,7 @@ def main():
     summary = {k: benchlib.stats([v for v in vs if v is not None]) for k, vs in fields.items()}
     passed = [r for r in reps if r["verdict"] == "pass"]
     out = {
-        "schema": "acos-mem-breakdown/1",
+        "schema": "acos-mem-breakdown/2",
         "utc_start": reps[0]["utc"] if reps else utc_now(),
         "retried": [r["rep"] for r in reps if r.get("retried_after")],
         "utc_finish": utc_now(),
@@ -754,12 +510,16 @@ def main():
             "interval_s": opts["interval"],
             "job_cgroup": "the cgroup this process runs in (guarded.sh scope)",
             "guest_cgroups": "discovered from the launcher's <run>/cgroup evidence "
-                             "file and from dalvikvm/bwrap /proc/<pid>/cgroup; "
-                             "systemd-run --scope puts them OUTSIDE the job scope",
-            "scope_gib_min_runner_formula": "run-suite.sh's number: job scope only",
+                             "file and from a ppid-chain descendant scan; systemd-run "
+                             "--scope puts them OUTSIDE the job scope",
+            "primary_anon_shmem_gib_min": "W45 primary (gate): job + guest, "
+                                          "memory.stat anon+shmem, sampler excluded",
+            "scope_gib_min_runner_formula": "run-suite.sh's pre-W45 number: job scope only",
             "job_gib_min_all_cgroups": "job scope + guest scopes, memory.current",
-            "job_resident_no_file_gib_min": "job + guest, sum(anon,shmem,kernel,sock): "
-                                            "shared page cache excluded",
+            "job_resident_no_file_gib_min": "job + guest, sum(anon,shmem,kernel,sock), "
+                                            "sampler excluded",
+            "infra_file_cache_gib_min": "file - shmem: shared read-only page cache, "
+                                        "reported separately, never charged",
             "phase_windows": "engine.json.timing session_start_ms / shutdown_ms; "
                              "approximate to one sample",
         },
@@ -769,11 +529,11 @@ def main():
     path.parent.mkdir(parents=True, exist_ok=True)
     benchlib.write_json(path, out)
     print(f"mem-breakdown: {opts['task']} {opts['label']} verified={out['verified']} "
+          f"primary={summary['primary_anon_shmem_gib_min']['p50']} "
           f"scope={summary['scope_gib_min']['p50']} "
-          f"job_all={summary['job_gib_min']['p50']} "
           f"job_resident={summary['job_resident_gib_min']['p50']} GiB.min")
-    print(f"spread: scope={summary['scope_gib_min']['spread']} "
-          f"job_all={summary['job_gib_min']['spread']} "
+    print(f"spread: primary={summary['primary_anon_shmem_gib_min']['spread']} "
+          f"scope={summary['scope_gib_min']['spread']} "
           f"job_resident={summary['job_resident_gib_min']['spread']}")
     print(f"wrote {path}")
     raise SystemExit(0 if len(passed) == len(reps) else 1)

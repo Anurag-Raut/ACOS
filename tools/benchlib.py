@@ -45,6 +45,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -1003,10 +1004,808 @@ def write_json(path, obj, indent=2):
 
 
 # --------------------------------------------------------------------------- #
+# Cgroup scope sampling for one variant (W45: the trustworthy M11 denominator)
+# --------------------------------------------------------------------------- #
+# W41 found three measurement defects in the suite denominator: (1) `acos-art`
+# creates the guest in a *sibling* systemd scope, so the runner's cgroup does not
+# contain it at all; (2) shared read-only page cache is charged to whichever
+# cgroup faults it in first, so the same binary swings >1.7x; (3) the suite used
+# one scope for all 22 variants, so every variant's integral was charged the
+# suite's cache high-water mark. The functions below implement the decided fix:
+#
+#   * one fresh scope per variant run (`guarded.sh` per run), the sampler runs
+#     *inside* that scope and resolves its own cgroup;
+#   * the job cgroup AND every guest cgroup the launcher creates are sampled
+#     (evidence file `<run>/cgroup` plus a ppid-chain descendant scan, so other
+#     bwrap users on the host are never charged);
+#   * 100 ms samples with an explicit closing sample after the child exits;
+#   * the sampler's own process is charged out (`sampler.excluded: true`) with
+#     its RSS and the window recorded;
+#   * the primary denominator (the only one that gates M11) is same-type with
+#     the legacy numbers the 24.4 bar was derived from: cgroup memory.stat
+#     anon+shmem. `resident` (anon+shmem+kernel), `job_all` (memory.current,
+#     includes file) and the old runner formula are reported alongside, each
+#     labelled, and the shared read-only page cache is reported separately as
+#     `infra_file_cache` (never charged to a task).
+
+CGROUP_ROOT = Path("/sys/fs/cgroup")
+PROC_ROOT = Path("/proc")
+
+MEMSTAT_KEYS = ("anon", "file", "shmem", "kernel", "kernel_stack", "sock",
+                "slab", "pagetables", "pgfault", "pgmajfault",
+                "workingset_refault_file")
+PRIMARY_KEYS = ("anon", "shmem")          # same type as the legacy numbers
+RESIDENT_KEYS = ("anon", "shmem", "kernel")
+CACHE_KEYS = ("file",)
+
+PRIMARY_METRIC_TYPE = "CGROUP_ANON_SHMEM"
+JOB_ALL_METRIC_TYPE = "CGROUP_MEMORY_CURRENT"
+LEGACY_DERIVED_BAR = 24.4                   # tasks/GiB.min (ADVISOR item 3)
+MIB = 1 << 20
+
+def cgroup_path(pid=None, proc_root=None, cgroup_root=None):
+    """Resolve a process's cgroup v2 path; None when it is not in a leaf scope."""
+    proc_root = Path(proc_root or PROC_ROOT)
+    cgroup_root = Path(cgroup_root or CGROUP_ROOT)
+    try:
+        lines = (proc_root / str(pid or "self") / "cgroup").read_text().splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        if line.startswith("0::"):
+            rel = line[3:].strip()
+            if not rel or rel == "/":
+                return None
+            return cgroup_root / rel.lstrip("/")
+    return None
+
+def cgroup_has_limit(cg):
+    """True when the cgroup has a finite memory.max (i.e. a guarded scope)."""
+    try:
+        mx = (Path(cg) / "memory.max").read_text().strip()
+    except OSError:
+        return False
+    return bool(mx) and mx != "max"
+
+def read_cgroup_int(cg, name):
+    try:
+        return int((Path(cg) / name).read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+def read_memstat(cg, keys=MEMSTAT_KEYS):
+    out = {}
+    try:
+        for line in (Path(cg) / "memory.stat").read_text().splitlines():
+            k, _, v = line.partition(" ")
+            if k in keys:
+                try:
+                    out[k] = int(v)
+                except ValueError:
+                    pass
+    except OSError:
+        return None
+    return out
+
+def cgroup_from_info_file(path, cgroup_root=None):
+    """Resolve the launcher's `<run>/cgroup` evidence file to a cgroup path."""
+    cgroup_root = Path(cgroup_root or CGROUP_ROOT)
+    try:
+        for line in Path(path).read_text().splitlines():
+            if line.startswith("0::"):
+                rel = line[3:].strip()
+                if rel and rel != "/":
+                    return cgroup_root / rel.lstrip("/")
+    except OSError:
+        pass
+    return None
+
+def procs_in_cgroup(cg, proc_root=None):
+    """(pid, comm) for the processes directly in a cgroup."""
+    proc_root = Path(proc_root or PROC_ROOT)
+    out = []
+    try:
+        pids = [int(x) for x in (Path(cg) / "cgroup.procs").read_text().split()]
+    except (OSError, ValueError):
+        return out
+    for pid in pids:
+        try:
+            comm = (proc_root / str(pid) / "comm").read_text().strip()
+        except OSError:
+            comm = "?"
+        out.append((pid, comm))
+    return out
+
+def pss_of(pid, proc_root=None):
+    """(comm, Pss_kb, Rss_kb) from smaps_rollup (fallback /proc/<pid>/status)."""
+    proc_root = Path(proc_root or PROC_ROOT)
+    try:
+        comm = (proc_root / str(pid) / "comm").read_text().strip()
+    except OSError:
+        return None
+    pss = rss = None
+    try:
+        for line in (proc_root / str(pid) / "smaps_rollup").read_text().splitlines():
+            if line.startswith("Pss:"):
+                pss = int(line.split()[1])
+            elif line.startswith("Rss:"):
+                rss = int(line.split()[1])
+            if pss is not None and rss is not None:
+                break
+    except (OSError, ValueError, IndexError):
+        pass
+    if pss is None:
+        try:
+            pss = int(next(l for l in (proc_root / str(pid) / "status").read_text().splitlines()
+                           if l.startswith("VmRSS:")).split()[1])
+            rss = pss
+        except (OSError, StopIteration, ValueError):
+            return None
+    return comm, pss, rss
+
+def classify_comm(comm, tier="job"):
+    """Process class for the PSS table (never used for the denominator)."""
+    if tier == "guest":
+        return "guest-dalvikvm" if comm.startswith("dalvikvm") else "guest-app"
+    if comm.startswith("dalvikvm"):
+        return "guest-dalvikvm"
+    if comm.startswith("acos-art"):
+        return "acos-art-launcher"
+    if comm.startswith("acos"):
+        return "acos-host"
+    if comm == "bwrap":
+        return "bwrap"
+    if comm.startswith("python"):
+        return "sampler-python"
+    if comm in ("sh", "timeout", "systemd-run", "cat", "sed"):
+        return "harness-shell"
+    return "other"
+
+def _ppid_map(proc_root):
+    ppid = {}
+    try:
+        entries = list(Path(proc_root).iterdir())
+    except OSError:
+        return ppid
+    for p in entries:
+        if not p.name.isdigit():
+            continue
+        try:
+            raw = (p / "stat").read_text()
+            tail = raw[raw.rfind(")") + 1:].split()
+            ppid[int(p.name)] = int(tail[1])
+        except (OSError, ValueError, IndexError):
+            continue
+    return ppid
+
+def descendant_cgroups(root_pid, job, proc_root=None, cgroup_root=None):
+    """Cgroups of our descendants that live outside the job cgroup.
+
+    This is the fallback for a launcher that has not written its `<run>/cgroup`
+    evidence file yet. Descendant-ness is proved by the ppid chain, so other
+    users of bwrap on the host (flatpak apps) are never charged to this job.
+    """
+    proc_root = Path(proc_root or PROC_ROOT)
+    cgroup_root = Path(cgroup_root or CGROUP_ROOT)
+    ppid = _ppid_map(proc_root)
+    job = Path(job) if job is not None else None
+
+    def is_descendant(pid):
+        hops = 0
+        while pid and hops < 64:
+            if pid == root_pid:
+                return True
+            pid = ppid.get(pid)
+            hops += 1
+        return False
+
+    found = set()
+    for p in Path(proc_root).iterdir():
+        if not p.name.isdigit() or not is_descendant(int(p.name)):
+            continue
+        try:
+            for line in (p / "cgroup").read_text().splitlines():
+                if line.startswith("0::"):
+                    rel = line[3:].strip()
+                    cg = cgroup_root / rel.lstrip("/")
+                    if rel and cg != job and cg.exists():
+                        found.add(cg)
+        except OSError:
+            continue
+    return found
+
+
+def _rss_mib(pid=None, proc_root=None):
+    proc_root = Path(proc_root or PROC_ROOT)
+    try:
+        for line in (proc_root / str(pid or "self") / "status").read_text().splitlines():
+            if line.startswith("VmRSS:"):
+                return round(int(line.split()[1]) / 1024.0, 3)
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def _anon_shmem_mib(pid=None, proc_root=None):
+    """RssAnon + RssShmem of a process -- the SAME TYPE as the primary denominator.
+
+    A sampler process's VmRSS also contains file-backed pages (the Python
+    interpreter and this module); subtracting VmRSS from an anon+shmem integral
+    over-charges the sampler and inflates M11. Fall back to VmRSS only when the
+    split is unavailable (recorded as ``split_available: false``).
+    """
+    proc_root = Path(proc_root or PROC_ROOT)
+    anon = shmem = None
+    try:
+        for line in (proc_root / str(pid or "self") / "status").read_text().splitlines():
+            if line.startswith("RssAnon:"):
+                anon = int(line.split()[1]) / 1024.0
+            elif line.startswith("RssShmem:"):
+                shmem = int(line.split()[1]) / 1024.0
+    except (OSError, ValueError, IndexError):
+        pass
+    if anon is None:
+        return _rss_mib(pid, proc_root)
+    return round(anon + (shmem or 0.0), 3)
+
+
+class ScopeSampler(threading.Thread):
+    """100 ms sampler of one job scope plus every guest scope the run creates.
+
+    Every path root is injectable so the unit tests can drive a fake cgroup tree
+    and a fake /proc (`tools/tests/test-benchlib.py`). `root_pid` is the process
+    whose ppid chain is trusted as "ours" (default: this process).
+    """
+
+    def __init__(self, job, *, interval=0.1, info_dirs=(), pss_every=3,
+                 proc_root=None, cgroup_root=None, root_pid=None,
+                 discover_every=2, stop_event=None):
+        super().__init__(daemon=True)
+        self.job = Path(job) if job is not None else None
+        self.interval = float(interval)
+        self.info_dirs = [Path(d) for d in info_dirs if d]
+        self.pss_every = max(1, int(pss_every))
+        self.proc_root = Path(proc_root or PROC_ROOT)
+        self.cgroup_root = Path(cgroup_root or CGROUP_ROOT)
+        self.root_pid = int(root_pid or os.getpid())
+        self.discover_every = max(1, int(discover_every))
+        self.stop_event = stop_event or threading.Event()
+        self.samples = []          # job scope rows
+        self.guest = {}            # str(cgroup) -> rows
+        self.pss = []              # [{"t", "procs": [...]}]
+        self.discovered = set()
+        self.misses = 0
+        self.ticks = 0
+
+    # -- discovery -------------------------------------------------------- #
+    def discover(self):
+        found = set()
+        for d in self.info_dirs:
+            if not d.exists():
+                continue
+            try:
+                for p in d.rglob("cgroup"):
+                    cg = cgroup_from_info_file(p, self.cgroup_root)
+                    if cg is not None and cg != self.job and cg.exists():
+                        found.add(cg)
+            except OSError:
+                continue
+        found |= descendant_cgroups(self.root_pid, self.job,
+                                    proc_root=self.proc_root,
+                                    cgroup_root=self.cgroup_root)
+        self.discovered |= found
+        return found
+
+    def guest_cgroups(self):
+        return sorted(str(c) for c in self.discovered)
+
+    # -- sampling --------------------------------------------------------- #
+    def sample_once(self):
+        t = time.time()
+        self.ticks += 1
+        if self.job is not None:
+            cur = read_cgroup_int(self.job, "memory.current")
+            if cur is None:
+                self.misses += 1
+            else:
+                self.samples.append({"t": t, "bytes": cur,
+                                     "stat": read_memstat(self.job)})
+        for cg in self.discover():
+            c = read_cgroup_int(cg, "memory.current")
+            if c is not None:
+                self.guest.setdefault(str(cg), []).append(
+                    {"t": t, "bytes": c, "stat": read_memstat(cg)})
+        if self.pss_every and self.ticks % self.pss_every == 0:
+            procs = []
+            seen = set()
+            for cg, tier in [(self.job, "job")] + [(Path(x), "guest") for x in self.guest]:
+                if cg is None:
+                    continue
+                for pid, comm in procs_in_cgroup(cg, self.proc_root):
+                    if pid in seen:
+                        continue
+                    seen.add(pid)
+                    r = pss_of(pid, self.proc_root)
+                    if r:
+                        comm, pss, rss = r
+                        procs.append({"class": classify_comm(comm, tier), "comm": comm,
+                                      "pid": pid, "pss_kb": pss, "rss_kb": rss})
+            self.pss.append({"t": t, "procs": procs})
+        return t
+
+    def run(self):
+        while not self.stop_event.is_set():
+            t0 = time.time()
+            self.sample_once()
+            left = self.interval - (time.time() - t0)
+            if left > 0:
+                self.stop_event.wait(left)
+
+    def closing_sample(self):
+        """One sample after the child exits, so teardown has two points."""
+        return self.sample_once()
+
+
+# --------------------------------------------------------------------------- #
+# Denominators (W45)
+# --------------------------------------------------------------------------- #
+
+def combine_series(job_rows, guest_series):
+    """Per-timestamp job+guest sum, forward-filling each guest series.
+
+    A guest scope is created mid-run (it is discovered after the launcher starts
+    it), so aligning by index (W41 did) mixes timestamps. Forward fill is the
+    correct reading: before the guest exists its charge is zero.
+    """
+    out = []
+    for s in job_rows or []:
+        t = s.get("t")
+        st = dict(s.get("stat") or {})
+        total = s.get("bytes") or 0
+        for cg, rows in (guest_series or {}).items():
+            pick = None
+            for r in rows:
+                if r.get("t") is None:
+                    continue
+                if r["t"] <= t:
+                    pick = r
+                else:
+                    break
+            if pick is None:
+                continue
+            total += pick.get("bytes") or 0
+            for k, v in (pick.get("stat") or {}).items():
+                st[k] = st.get(k, 0) + v
+        out.append({"t": t, "bytes": total, "stat": st})
+    return out
+
+def stat_key_integral(rows, keys):
+    """Integral (GiB.min) of the sum of the named memory.stat keys."""
+    sel = [{"t": r["t"], "bytes": sum((r.get("stat") or {}).get(k, 0) for k in keys)}
+           for r in rows or [] if r.get("stat") is not None]
+    return sample_integral(sel) if len(sel) >= 2 else None
+
+def stat_key_peak(rows, keys):
+    vals = [sum((r.get("stat") or {}).get(k, 0) for k in keys)
+            for r in rows or [] if r.get("stat") is not None]
+    return max(vals) if vals else None
+
+def _round(v):
+    return None if v is None else round(float(v), 9)
+
+def memory_denominators(job_samples, guest_series, *, sampler_mib=None,
+                        sampler_rss_mib=None, window_s=None,
+                        interval_s=MEMORY_SAMPLE_MS / 1000.0,
+                        job_cgroup=None, closing_sample=True):
+    """The labelled denominators for one variant run.
+
+    ``primary`` (anon+shmem, sampler excluded) is the ONLY denominator that may
+    be compared with the legacy-derived 24.4 tasks/GiB.min bar. The others are
+    recorded for continuity and debugging and are marked ``gate_uses: false``.
+    """
+    total_rows = combine_series(job_samples, guest_series)
+    if window_s is None and len(job_samples) >= 2:
+        window_s = job_samples[-1]["t"] - job_samples[0]["t"]
+    window_s = float(window_s or 0.0)
+    sampler_mib = sampler_mib or 0.0
+    overhead = (float(sampler_mib) / 1024.0) * (window_s / 60.0)
+    overhead_full_rss = (((float(sampler_rss_mib) if sampler_rss_mib is not None
+                           else float(sampler_mib)) / 1024.0) * (window_s / 60.0))
+
+    def series(rows):
+        return sample_integral([{"t": r["t"], "bytes": r["bytes"]} for r in rows])
+
+    scope_gib = series(job_samples) if job_samples else None
+    job_all = series(total_rows) if total_rows else None
+    primary_raw = stat_key_integral(total_rows, PRIMARY_KEYS)
+    resident_raw = stat_key_integral(total_rows, RESIDENT_KEYS)
+    file_incl = stat_key_integral(total_rows, ("file",))
+    shmem = stat_key_integral(total_rows, ("shmem",))
+    anon = stat_key_integral(total_rows, ("anon",))
+    kernel = stat_key_integral(total_rows, ("kernel",))
+    sock = stat_key_integral(total_rows, ("sock",))
+
+    def excl(v):
+        return None if v is None else max(0.0, v - overhead)
+
+    def entry(name, value, metric_type, gate, includes, excl_value=None, note=None):
+        return {
+            "name": name,
+            "gib_min": _round(value),
+            "gib_min_excl_sampler": _round(excl_value if excl_value is not None else value),
+            "metric_type": metric_type,
+            "gate_uses": bool(gate),
+            "includes": includes,
+            "note": note,
+        }
+
+    primary = excl(primary_raw)
+    resident = excl(resident_raw)
+    infra = None
+    if file_incl is not None:
+        infra = max(0.0, file_incl - (shmem or 0.0))
+
+    return {
+        "schema": "acos-scope-denominators/1",
+        "primary": entry("anon+shmem", primary_raw, PRIMARY_METRIC_TYPE, True,
+                         "job cgroup + every guest cgroup (memory.stat anon+shmem)",
+                         excl_value=primary,
+                         note="same type as the legacy 206 MiB core + 112 MiB/session "
+                              "numbers the 24.4 bar was derived from; gib_min is the raw "
+                              "sample, gib_min_excl_sampler is the gate value"),
+        "resident": entry("anon+shmem+kernel", resident_raw, PRIMARY_METRIC_TYPE, False,
+                          "job + guest cgroups, plus kernel overhead",
+                          excl_value=resident),
+        "job_all_incl_file": entry("memory.current (anon+file+shmem+kernel)", job_all,
+                                   JOB_ALL_METRIC_TYPE, False,
+                                   "job + guest cgroups; includes page cache",
+                                   note="affected by shared page cache: not a gate value"),
+        "scope_runner_formula": entry("job scope only (old runner formula)", scope_gib,
+                                      JOB_ALL_METRIC_TYPE, False,
+                                      "job cgroup only; reproduces the pre-W45 run-suite "
+                                      "number and excludes the guest",
+                                      note="kept for continuity; never gate on it"),
+        "infra_file_cache": {
+            "name": "file - shmem (shared read-only page cache)",
+            "gib_min": _round(infra),
+            "metric_type": "CGROUP_FILE_CACHE",
+            "charged_to_task": False,
+            "reported_separately": True,
+            "note": "ART sysroot/boot image/binary pages are read-only infra, not task "
+                    "cost (W41 4.3/1.2); reported here and never added to primary",
+        },
+        "sampler": {
+            "excluded": True,
+            "subtracted_metric": "sampler RssAnon+RssShmem (same type as the primary "
+                                 "anon+shmem denominator)",
+            "anon_shmem_mib": round(float(sampler_mib), 3) if sampler_mib else None,
+            "rss_mib": (round(float(sampler_rss_mib), 3)
+                        if sampler_rss_mib is not None else
+                        (round(float(sampler_mib), 3) if sampler_mib else None)),
+            "window_s": round(window_s, 3),
+            "overhead_gib_min": _round(overhead),
+            "overhead_if_full_rss_gib_min": _round(overhead_full_rss),
+            "note": "this sampler process runs inside the job scope; only its "
+                    "anon+shmem share is subtracted from the anon+shmem denominators "
+                    "(its file-backed pages are not part of that type). The full-RSS "
+                    "figure is reported for sensitivity only.",
+        },
+        "components": {
+            "anon_gib_min": _round(anon),
+            "shmem_gib_min": _round(shmem),
+            "kernel_gib_min": _round(kernel),
+            "sock_gib_min": _round(sock),
+            "file_incl_shmem_gib_min": _round(file_incl),
+            "file_excl_shmem_gib_min": _round(infra),
+            "peak_mib_all_cgroups": (round(max((r["bytes"] or 0) for r in total_rows) / MIB, 3)
+                                     if total_rows else None),
+            "peak_mib_primary": (round((stat_key_peak(total_rows, PRIMARY_KEYS) or 0) / MIB, 3)
+                                 if total_rows else None),
+        },
+        "scope": {
+            "job_cgroup": str(job_cgroup) if job_cgroup else None,
+            "guest_cgroups": sorted(guest_series or {}),
+            "scope_count": 1 + len(guest_series or {}),
+            "job_samples": len(job_samples or []),
+            "guest_samples": {k: len(v) for k, v in (guest_series or {}).items()},
+            "interval_s": interval_s,
+            "closing_sample": bool(closing_sample),
+        },
+    }
+
+
+def m11_denominator(task_costs, verified, *, bar=LEGACY_DERIVED_BAR,
+                    min_noise=MIN_NOISE, resamples=BOOTSTRAP_RESAMPLES,
+                    seed=BOOTSTRAP_SEED, ci=0.95):
+    """M11 = verified tasks / sum(task_costs), with a bootstrap CI over tasks.
+
+    ``task_costs`` maps task id -> GiB.min for that task (good + wrong twin, as
+    the suite runs both). ``verified`` maps task id -> bool. A task with a null
+    cost is excluded (and reported) rather than estimated. The CI resamples
+    tasks (the unit of work) and recomputes both numerator and denominator.
+    """
+    keys = [k for k in sorted(task_costs) if task_costs.get(k) is not None]
+    missing = [k for k in sorted(task_costs) if task_costs.get(k) is None]
+    total = sum(float(task_costs[k]) for k in keys) if keys else None
+    nver = sum(1 for k in keys if verified.get(k))
+    m11 = (nver / total) if total else None
+    out = {
+        "m11_tasks_per_gib_min": m11,
+        "gib_min": total,
+        "verified_tasks": nver,
+        "tasks": len(keys),
+        "missing_tasks": missing,
+        "bar_tasks_per_gib_min": float(bar),
+        "noise": float(min_noise),
+        "required_tasks_per_gib_min": float(bar) * (1.0 + float(min_noise)),
+        "passes_bar": (m11 is not None and m11 >= float(bar) * (1.0 + float(min_noise))),
+        "ci95_low": None, "ci95_high": None,
+        "ci95_width_pct": None,
+        "resamples": 0,
+        "method": "M11 = verified / sum(task anon+shmem GiB.min, good+wrong); "
+                  "percentile bootstrap resampling tasks (both numerator and "
+                  "denominator recomputed); passes bar only if M11 >= bar*(1+noise)",
+    }
+    if m11 is not None and len(keys) >= 2 and resamples:
+        rng = random.Random(seed)
+        vals = []
+        n = len(keys)
+        for _ in range(int(resamples)):
+            pick = [keys[rng.randrange(n)] for _ in range(n)]
+            c = sum(float(task_costs[k]) for k in pick)
+            v = sum(1 for k in pick if verified.get(k))
+            if c > 0:
+                vals.append(v / c)
+        vals.sort()
+        tail = (1.0 - ci) / 2.0
+        out["ci95_low"] = percentile(vals, 100.0 * tail)
+        out["ci95_high"] = percentile(vals, 100.0 * (1.0 - tail))
+        if m11:
+            out["ci95_width_pct"] = round(
+                100.0 * (out["ci95_high"] - out["ci95_low"]) / m11, 3)
+        out["resamples"] = int(resamples)
+    return out
+
+
+def check_variant_scopes(rows):
+    """Reject a suite-lifetime scope: every variant run must own a fresh cgroup.
+
+    ``rows`` is [{"variant", "job_cgroup", "sampler_pid"}]. A duplicated job
+    cgroup means two variants were measured in one scope (the W41 defect 1.3),
+    which charges shared page cache to every later variant. Returns
+    ``{ok, errors, distinct_scopes, scopes, variants}``.
+    """
+    errors = []
+    by = {}
+    pids = {}
+    for r in rows or []:
+        variant = r.get("variant")
+        cg = (r.get("job_cgroup") or "").strip()
+        if not cg:
+            errors.append("%s: no job cgroup resolved (no fresh guarded scope)" % variant)
+            continue
+        by.setdefault(cg, []).append(variant)
+        if r.get("sampler_pid") is not None:
+            pids.setdefault(r["sampler_pid"], []).append(variant)
+    for cg, names in sorted(by.items()):
+        if len(names) > 1:
+            errors.append("scope reused across %d variant runs (suite-lifetime scope): "
+                          "%s at %s" % (len(names), ", ".join(map(str, names)), cg))
+    for pid, names in sorted(pids.items()):
+        if len(names) > 1:
+            errors.append("sampler pid reused across variant runs: %s (pid %s)"
+                          % (", ".join(map(str, names)), pid))
+    return {
+        "ok": not errors,
+        "errors": errors,
+        "distinct_scopes": len(by),
+        "scopes": sorted(by),
+        "variants": len(rows or []),
+        "rule": "one fresh systemd scope per variant run (guarded.sh per run); the "
+                "suite-lifetime scope is a measurement defect and nulls M11",
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Artifact pruning (W45 decision e: the host disk filled during W41)
+# --------------------------------------------------------------------------- #
+
+ALWAYS_KEEP_EVIDENCE = ("verdict.json", "engine.json", "mem.json",
+                        "art-frames/session-timing.json")
+SMALL_EVIDENCE_BYTES = 32 * 1024
+
+
+def prune_artifacts(art_dir, *, keep=False, passed=True, max_failure_mib=4.0,
+                    always_keep=ALWAYS_KEEP_EVIDENCE,
+                    small_bytes=SMALL_EVIDENCE_BYTES):
+    """Prune one per-run artifact dir after the summary JSON has been written.
+
+    * ``keep=True`` (``--keep-artifacts``): delete nothing.
+    * passing run: keep the declared evidence files plus any file <= 32 KiB
+      (verdict, step timing, trees); delete frames/PNGs/screenshots.
+    * failing/unsupported run: additionally keep up to ``max_failure_mib`` of
+      the remaining failure artifacts (name order), so the failure evidence
+      survives without letting one run fill the disk.
+    """
+    root = Path(art_dir)
+    out = {"dir": str(root), "pruned": False, "kept": [], "deleted": [],
+           "freed_bytes": 0, "kept_bytes": 0, "reason": None}
+    if not root.exists():
+        out["reason"] = "missing"
+        return out
+    files = [p for p in sorted(root.rglob("*")) if p.is_file()]
+    keep_set = set()
+    for p in files:
+        rel = str(p.relative_to(root))
+        try:
+            size = p.stat().st_size
+        except OSError:
+            continue
+        if rel in always_keep or size <= small_bytes:
+            keep_set.add(p)
+    if keep:
+        out["reason"] = "--keep-artifacts"
+        out["kept"] = [str(p.relative_to(root)) for p in files]
+        out["kept_bytes"] = sum(p.stat().st_size for p in files)
+        return out
+    if not passed:
+        cap = int(max_failure_mib * MIB)
+        used = sum(p.stat().st_size for p in keep_set)
+        for p in files:
+            if p in keep_set:
+                continue
+            size = p.stat().st_size
+            if used + size <= cap:
+                keep_set.add(p)
+                used += size
+    for p in files:
+        rel = str(p.relative_to(root))
+        size = p.stat().st_size
+        if p in keep_set:
+            out["kept"].append(rel)
+            out["kept_bytes"] += size
+        else:
+            try:
+                p.unlink()
+            except OSError:
+                out["kept"].append(rel)
+                out["kept_bytes"] += size
+                continue
+            out["deleted"].append(rel)
+            out["freed_bytes"] += size
+    # remove directories left empty
+    for d in sorted((p for p in root.rglob("*") if p.is_dir()),
+                    key=lambda p: len(p.parts), reverse=True):
+        try:
+            d.rmdir()
+        except OSError:
+            pass
+    out["pruned"] = bool(out["deleted"])
+    out["reason"] = "pass: evidence subset" if passed else "fail: evidence + capped failure artifacts"
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# CLI: sample-scope (used by tools/run-suite.sh once per variant run)
+# --------------------------------------------------------------------------- #
+
+def sample_scope(argv):
+    """Run one command inside the current (fresh) scope and write its memory JSON.
+
+    Usage: benchlib.py sample-scope --out FILE [--interval S] [--label L]
+                                    [--info-dir D] -- CMD [ARGS...]
+
+    The sampler samples its own cgroup plus every guest cgroup the command
+    creates, takes a closing sample, subtracts its own cost and exits with the
+    command's return code. It writes the command's stdout/stderr next to FILE so
+    the caller can read the verdict envelope without interleaving.
+    """
+    opts = {"out": None, "interval": MEMORY_SAMPLE_MS / 1000.0, "label": None,
+            "info_dirs": []}
+    cmd = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--":
+            cmd = argv[i + 1:]
+            break
+        if a in ("--out", "--interval", "--label", "--info-dir"):
+            if i + 1 >= len(argv):
+                print("benchlib sample-scope: %s needs a value" % a, file=sys.stderr)
+                return 2
+            v = argv[i + 1]
+            if a == "--info-dir":
+                opts["info_dirs"].append(v)
+            elif a == "--interval":
+                opts["interval"] = float(v)
+            else:
+                opts[a[2:]] = v
+            i += 2
+            continue
+        print("benchlib sample-scope: unknown argument %r" % a, file=sys.stderr)
+        return 2
+    if not cmd:
+        print("benchlib sample-scope: no command after --", file=sys.stderr)
+        return 2
+    out = Path(opts["out"]) if opts["out"] else None
+    if out is None:
+        print("benchlib sample-scope: --out is required", file=sys.stderr)
+        return 2
+    out.parent.mkdir(parents=True, exist_ok=True)
+    job = cgroup_path()
+    stop = threading.Event()
+    sampler = ScopeSampler(job, interval=opts["interval"],
+                           info_dirs=opts["info_dirs"], stop_event=stop)
+    t0 = time.time()
+    sampler.start()
+    rc = None
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        rc = proc.returncode
+        stdout, stderr = proc.stdout or "", proc.stderr or ""
+    except OSError as exc:
+        stdout, stderr = "", "benchlib sample-scope: exec failed: %s" % exc
+        rc = 127
+    t1 = time.time()
+    sampler.closing_sample()
+    stop.set()
+    sampler.join(timeout=5)
+    self_rss_mib = _rss_mib()
+    self_mib = _anon_shmem_mib()
+    den = memory_denominators(sampler.samples, sampler.guest, sampler_mib=self_mib,
+                              sampler_rss_mib=self_rss_mib,
+                              window_s=t1 - t0, interval_s=opts["interval"],
+                              job_cgroup=job, closing_sample=True)
+    result = {
+        "schema": "acos-scope-sample/1",
+        "utc": utc_now(),
+        "label": opts["label"],
+        "command": cmd,
+        "rc": rc,
+        "wall_s": round(t1 - t0, 3),
+        "scope_available": job is not None,
+        "scope_limit": cgroup_has_limit(job) if job is not None else False,
+        "job_cgroup": str(job) if job is not None else None,
+        "sampler_pid": os.getpid(),
+        "sampler_rss_mib": self_rss_mib,
+        "sampler_anon_shmem_mib": self_mib,
+        "samples": {"ticks": sampler.ticks, "job": len(sampler.samples),
+                    "misses": sampler.misses, "pss_ticks": len(sampler.pss),
+                    "interval_s": opts["interval"]},
+        "denominators": den,
+        "pss_peak_mib_by_class": _pss_by_class(sampler.pss),
+        "stdout_path": str(out) + ".stdout",
+        "stderr_path": str(out) + ".stderr",
+    }
+    Path(str(out) + ".stdout").write_text(stdout)
+    Path(str(out) + ".stderr").write_text(stderr)
+    write_json(out, result)
+    p = den["primary"]
+    print("sample-scope: %s rc=%s scope=%s primary_anon_shmem=%s GiB.min "
+          "(guest scopes %d)" % (opts["label"] or "run", rc, job,
+                                  p["gib_min_excl_sampler"],
+                                  len(den["scope"]["guest_cgroups"])))
+    return int(rc)
+
+
+def _pss_by_class(pss_rows):
+    peak = {}
+    for p in pss_rows or []:
+        for row in p.get("procs") or []:
+            cur = peak.setdefault(row["class"], {"pss_mib": 0.0, "rss_mib": 0.0,
+                                                 "comm": row.get("comm")})
+            cur["pss_mib"] = max(cur["pss_mib"], round((row.get("pss_kb") or 0) / 1024.0, 3))
+            cur["rss_mib"] = max(cur["rss_mib"], round((row.get("rss_kb") or 0) / 1024.0, 3))
+    return peak
+
+
+# --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
 
 def _cli(argv):
+    if argv and argv[0] == "sample-scope":
+        return sample_scope(argv[1:])
     if not argv or argv[0] in ("-h", "--help"):
         print(__doc__.strip())
         return 0
@@ -1039,6 +1838,16 @@ def _cli(argv):
         return 0
     if cmd == "classify":
         print(json.dumps([classify_error(c) for c in argv[1:]], indent=2))
+        return 0
+    if cmd == "m11":
+        # m11 COST VERIFIED [COST VERIFIED ...] -- quick sanity from the CLI
+        pairs = []
+        for arg in argv[1:]:
+            cost, _, ver = arg.partition(":")
+            pairs.append((cost, float(cost), ver == "1"))
+        costs = {c: v for c, v, _ in pairs}
+        verified = {c: ok for c, _, ok in pairs}
+        print(json.dumps(m11_denominator(costs, verified), indent=2, sort_keys=True))
         return 0
     print("benchlib: unknown command %r" % cmd, file=sys.stderr)
     return 2

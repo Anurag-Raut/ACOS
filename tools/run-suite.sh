@@ -12,33 +12,56 @@
 #   * tasks that cannot be expressed are recorded as named UNSUPPORTED (never
 #     skipped silently, never faked).
 #
+# Memory measurement contract (W45; fixes the W41 denominator defects):
+#   * ONE FRESH GUARDED SCOPE PER VARIANT RUN. Every run is wrapped in
+#     `tools/guarded.sh` (a new transient systemd scope), and the sampler runs
+#     *inside* that scope, so the suite-lifetime scope (W41 1.3) cannot exist.
+#     A duplicated job cgroup across runs is a hard measurement defect: M11 is
+#     null and the run is not accepted.
+#   * The sampler (`python3 tools/benchlib.py sample-scope`) samples the job
+#     cgroup AND every guest cgroup `acos-art` creates (a sibling scope, W41 1.1)
+#     every 100 ms, with a closing sample after the child exits.
+#   * PRIMARY DENOMINATOR = cgroup `memory.stat` anon+shmem, job+guest, sampler
+#     excluded. It is the same type as the legacy numbers the 24.4 bar was
+#     derived from, so it is the ONLY number the bar is evaluated on.
+#   * Also recorded, each labelled `gate_uses: false`: `resident`
+#     (anon+shmem+kernel), `job_all_incl_file` (memory.current, includes page
+#     cache), `scope_runner_formula` (the pre-W45 job-scope-only number) and
+#     `infra_file_cache` (shared read-only page cache, reported separately and
+#     never charged to a task).
+#   * The sampler's own RSS x window is subtracted from every denominator.
+#   * Per-run artifact dirs are pruned after the summary JSON is written unless
+#     --keep-artifacts (the host disk filled during W41). Passing runs keep a
+#     small evidence subset (verdict/engine/session-timing/mem + files <= 32 KiB);
+#     non-pass runs additionally keep up to 4 MiB of failure artifacts.
+#
 # M11 formula (advisor item 3, exact):
-#   job_gib_min = sum over 100 ms samples of memory.current_bytes / 2^30 * dt_s / 60
-#                 per job cgroup, from job submit to cleanup complete
-#   M11         = verified_good / sum(job_gib_min) over the suite at N=10
-#                 concurrent, 3 rounds, median
+#   primary_gib_min = sum over 100 ms samples of (anon+shmem bytes)/2^30 * dt_s/60
+#                     for the job cgroup + every guest cgroup, per variant run
+#   M11             = verified_good / sum(primary_gib_min) over the suite at N=10
+#                     concurrent, 3 rounds, median
 #   if false_pass > 0: M11 := 0
 #   legacy-derived bar:
 #     ((206 MiB core / 10) + 112.1 MiB marginal) / 1024 * (19 s / 60)
 #       = 0.0410 GiB*min/task  =>  24.4 tasks/GiB*min (legacy-derived-bound)
-#     ACOS must exceed 24.4 * (1 + noise).
-# This runner executes N=1, one round by default, so its m11 value is a
-# placeholder for cost visibility (gate_eligible=false); the gateable N=10,
-# 3-round number is produced by the bench-session suite (advisor items 1/3).
-# When the runner is inside a guarded systemd scope (memory.max finite, which is
-# how W30 runs it) it samples that cgroup every 100 ms and fills job_gib_min;
-# otherwise job_gib_min/m11 stay null rather than being estimated.
+#     ACOS must exceed 24.4 * (1 + noise); noise = max(spread, 5 %).
+# This runner executes N=1 by default, so its M11 is labelled gate_eligible=false
+# (the gateable N=10 x 3-round number comes from the bench-session suite). The
+# CI is a bootstrap over tasks (both numerator and denominator recomputed).
 #
-# Usage (mandated W30 form):
-#   tools/art-runtime/run-exclusive.sh --task W30 -- \
-#     tools/guarded.sh --mem 8G --time 900 -- tools/run-suite.sh
+# Usage (mandated form; the whole suite inside one host-wide ART lock):
+#   tools/art-runtime/run-exclusive.sh --task W45 -- \
+#     tools/guarded.sh --mem 8G --time 1800 -- tools/run-suite.sh --rounds 2
 #
-# Standalone use (the script then wraps every variant in
-# run-exclusive.sh + guarded.sh itself, still one ART job at a time):
+# Standalone use (the script then wraps every variant in run-exclusive.sh itself,
+# still one ART job at a time):
 #   tools/run-suite.sh [--rounds N] [--only T01,T02] [--acos PATH]
+#                      [--acos-art PATH] [--out FILE] [--timeout S] [--mem 8G]
+#                      [--no-host-gate] [--keep-artifacts]
 #
 # Exit: 0 = all expressible variants behaved as declared (UNSUPPORTED recorded);
-#       1 = false pass, wrong-variant mismatch, or a correct variant failed;
+#       1 = false pass, wrong-variant mismatch, a correct variant failed, or the
+#           per-variant-fresh-scope rule was violated (M11 null);
 #       2 = usage/host/index/prebuilt-APK problem (no verdicts written).
 set -uo pipefail
 
@@ -51,7 +74,6 @@ import datetime
 import hashlib
 import json
 import os
-import re
 import subprocess
 import sys
 import time
@@ -61,12 +83,14 @@ import yaml
 
 ROOT = Path(os.environ["ACOS_SUITE_ROOT"])
 sys.path.insert(0, str(ROOT / "tools"))
-import benchlib  # noqa: E402  (W29; host gate, provenance, stats, error classes)
+import benchlib  # noqa: E402  (stats, host gate, provenance, scope denominators)
 
 SUITE_DIR = ROOT / "scenarios/suite"
 INDEX = SUITE_DIR / "INDEX.yaml"
 BENCH_DIR = ROOT / "results/bench"
-ARTIFACT_DIR = ROOT / ".cache/w30-suite"
+DEFAULT_ARTIFACT_DIR = ROOT / ".cache/w30-suite"
+LEGACY_BAR = benchlib.LEGACY_DERIVED_BAR
+NOISE = benchlib.MIN_NOISE
 
 def utc_now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
@@ -80,7 +104,10 @@ def die(message, code=2):
 
 def parse_args(argv):
     opts = {"rounds": 1, "only": None, "acos": None, "acos_art": None,
-            "out": None, "host_gate": True, "timeout": 180}
+            "out": None, "host_gate": True, "timeout": 180, "mem": "8G",
+            "keep_artifacts": False, "artifacts": str(DEFAULT_ARTIFACT_DIR),
+            "sampler": str(ROOT / "tools/benchlib.py"),
+            "interval": benchlib.MEMORY_SAMPLE_MS / 1000.0}
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -96,15 +123,29 @@ def parse_args(argv):
             i += 1; opts["out"] = argv[i]
         elif a == "--timeout":
             i += 1; opts["timeout"] = int(argv[i])
+        elif a == "--mem":
+            i += 1; opts["mem"] = argv[i]
+        elif a == "--artifacts":
+            i += 1; opts["artifacts"] = argv[i]
+        elif a == "--sampler":
+            i += 1; opts["sampler"] = argv[i]
+        elif a == "--interval":
+            i += 1; opts["interval"] = float(argv[i])
         elif a == "--no-host-gate":
             opts["host_gate"] = False
+        elif a == "--keep-artifacts":
+            opts["keep_artifacts"] = True
         elif a in ("-h", "--help"):
             print("run-suite.sh [--rounds N] [--only T01,T02] [--acos PATH] "
-                  "[--acos-art PATH] [--out FILE] [--timeout S] [--no-host-gate]")
+                  "[--acos-art PATH] [--out FILE] [--timeout S] [--mem 8G] "
+                  "[--artifacts DIR] [--sampler PATH] [--interval S] "
+                  "[--no-host-gate] [--keep-artifacts]")
             raise SystemExit(0)
         else:
             die(f"unknown argument {a!r}")
         i += 1
+    if not (0.02 <= opts["interval"] <= 5.0):
+        die("--interval must be 0.02..5.0 s")
     return opts
 
 def sha256(path):
@@ -115,73 +156,94 @@ def sha256(path):
     return h.hexdigest()
 
 # --------------------------------------------------------------------------- #
-# cgroup sampling (per-job memory.current every 100 ms)
+# one measured variant run: fresh guarded scope + in-scope sampler
 # --------------------------------------------------------------------------- #
-def cgroup_path():
-    try:
-        text = Path("/proc/self/cgroup").read_text()
-    except OSError:
-        return None
-    for line in text.splitlines():
-        if line.startswith("0::"):
-            rel = line[3:].strip()
-            if not rel:
-                return None
-            return Path("/sys/fs/cgroup") / rel.lstrip("/")
-    return None
+def run_measured(cmd, env, mem_json, opts, label, inside_lock):
+    """Run `cmd` in its own guarded scope, sampled by benchlib sample-scope.
 
-def cgroup_sampler():
-    """Return (path, None) when this process is in a finite-memory leaf cgroup."""
-    path = cgroup_path()
-    if not path:
-        return None
-    try:
-        mx = (path / "memory.max").read_text().strip()
-        if not (path / "memory.current").exists() or mx == "max":
-            return None
-    except OSError:
-        return None
-    return path
+    Returns the sampler's JSON (or {} when no measurement was produced) plus the
+    command's stdout/stderr and rc. Every run gets a NEW scope: guarded.sh is
+    invoked per run, never once for the suite.
+    """
+    mem_json.parent.mkdir(parents=True, exist_ok=True)
+    info_dirs = [str(mem_json.parent)]
+    if os.environ.get("ACOS_ART_DATA"):
+        info_dirs.append(os.environ["ACOS_ART_DATA"])
+    sampler_cmd = ([sys.executable, "-I", str(opts["sampler"]), "sample-scope",
+                    "--out", str(mem_json), "--interval", str(opts["interval"]),
+                    "--label", label]
+                   + [x for d in info_dirs for x in ("--info-dir", d)]
+                   + ["--"] + cmd)
+    wrapped = [str(ROOT / "tools/guarded.sh"), "--mem", opts["mem"], "--time",
+               str(opts["timeout"]), "--"] + sampler_cmd
+    if not inside_lock:
+        # Standalone: one ART job at a time. Task names stay short (<=16 chars):
+        # the launcher derives a unix socket path from ACOS_ART_DATA (W41 §7.2).
+        short = ("W45-" + label)[:16]
+        wrapped = [str(ROOT / "tools/art-runtime/run-exclusive.sh"),
+                   "--task", short, "--"] + wrapped
+    proc = subprocess.run(wrapped, cwd=str(ROOT), env=env, capture_output=True,
+                          text=True, timeout=opts["timeout"] + 90)
+    data = {}
+    if mem_json.exists():
+        try:
+            data = json.loads(mem_json.read_text())
+        except json.JSONDecodeError:
+            data = {}
+    stdout = ""
+    stderr_tail = (proc.stderr or "")[-1500:]
+    for suffix, name in ((".stdout", "stdout"), (".stderr", "stderr")):
+        p = Path(str(mem_json) + suffix)
+        if p.exists():
+            try:
+                text = p.read_text()
+            except OSError:
+                text = ""
+            if name == "stdout":
+                stdout = text
+            elif proc.returncode not in (0, 1) or "sample-scope" in text:
+                stderr_tail = (stderr_tail + "\n" + text)[-1500:]
+    return {"data": data, "stdout": stdout, "stderr_tail": stderr_tail,
+            "rc": proc.returncode, "wall_ms": int((data.get("wall_s") or 0) * 1000)}
 
-def read_cgroup(path, name):
-    try:
-        return int((path / name).read_text().strip())
-    except (OSError, ValueError):
-        return None
+def mem_block(data):
+    """The labelled memory record for one run (every denominator, gate flags)."""
+    den = (data or {}).get("denominators") or {}
 
-def run_one(cmd, env, cgpath, timeout_s):
-    """Run one verify command, sampling memory.current. Returns dict."""
-    t0 = time.time()
-    t0_wall = time.monotonic()
-    proc = subprocess.Popen(cmd, cwd=str(ROOT), env=env,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    samples = []
-    peak = None
-    while True:
-        if cgpath is not None:
-            now = time.time()
-            cur = read_cgroup(cgpath, "memory.current")
-            if cur is not None:
-                samples.append({"t": now, "bytes": cur})
-                peak = cur if peak is None else max(peak, cur)
-        if proc.poll() is not None:
-            break
-        if time.monotonic() - t0_wall > timeout_s + 10:
-            proc.kill()
-            break
-        time.sleep(0.1)
-    out, err = proc.communicate()
-    t1 = time.time()
-    wall_ms = int((t1 - t0) * 1000)
-    gib_min = benchlib.sample_integral(samples) if samples else None
+    def val(entry, key="gib_min_excl_sampler"):
+        return ((den.get(entry) or {}).get(key))
+
+    comp = den.get("components") or {}
+    sampler = den.get("sampler") or {}
+    scope = den.get("scope") or {}
     return {
-        "rc": proc.returncode,
-        "stdout": out,
-        "stderr": err,
-        "wall_ms": wall_ms,
-        "cgroup_samples": len(samples),
-        "cgroup_peak_mib": round(peak / (1 << 20), 3) if peak is not None else None,
-        "cgroup_gib_min": round(gib_min, 9) if gib_min is not None else None,
+        "metric": "cgroup memory.stat anon+shmem, job+guest scopes, sampler excluded",
+        "metric_type": "CGROUP_ANON_SHMEM",
+        "primary_anon_shmem_gib_min": val("primary"),
+        "resident_gib_min": val("resident"),
+        "job_all_gib_min": val("job_all_incl_file"),
+        "scope_gib_min_runner_formula": val("scope_runner_formula"),
+        "infra_file_cache_gib_min": (den.get("infra_file_cache") or {}).get("gib_min"),
+        "sampler_overhead_gib_min": sampler.get("overhead_gib_min"),
+        "sampler_overhead_if_full_rss_gib_min": sampler.get("overhead_if_full_rss_gib_min"),
+        "sampler_anon_shmem_mib": sampler.get("anon_shmem_mib"),
+        "sampler_rss_mib": sampler.get("rss_mib"),
+        "peak_mib_all_cgroups": comp.get("peak_mib_all_cgroups"),
+        "peak_mib_primary": comp.get("peak_mib_primary"),
+        "components": comp,
+        "job_cgroup": scope.get("job_cgroup"),
+        "sampler_pid": (data or {}).get("sampler_pid"),
+        "guest_cgroups": scope.get("guest_cgroups") or [],
+        "guest_scope_count": len(scope.get("guest_cgroups") or []),
+        "scope_count": scope.get("scope_count"),
+        "samples": (data or {}).get("samples"),
+        "scope_available": (data or {}).get("scope_available"),
+        "scope_limit": (data or {}).get("scope_limit"),
+        "closing_sample": scope.get("closing_sample"),
+        # Legacy aliases kept for readers of pre-W45 suite JSON: BOTH now carry
+        # the primary anon+shmem value (not memory.current of the job scope).
+        "cgroup_gib_min": val("primary"),
+        "cgroup_peak_mib": comp.get("peak_mib_all_cgroups"),
     }
 
 def verdict_error(verdict_obj, envelope):
@@ -201,33 +263,31 @@ def verdict_error(verdict_obj, envelope):
                 "message": err.get("message"), "step": None, "step_index": None}
     return None
 
-def run_variant(task, kind, spec, opts, env, stamp_s, cgpath, inside_lock,
-                acos_bin):
+def run_variant(task, kind, spec, opts, env, stamp_s, inside_lock, acos_bin):
     scenario_rel = spec["scenario"]
     scenario = SUITE_DIR / scenario_rel
     if not scenario.exists():
         die(f"{task['id']}-{kind}: missing scenario {scenario}")
-    artifacts = ARTIFACT_DIR / stamp_s / f"{task['id']}-{kind}"
+    artifacts = Path(opts["artifacts"]) / stamp_s / f"{task['id']}-{kind}"
     artifacts.mkdir(parents=True, exist_ok=True)
     acos_art = opts["acos_art"] or env.get("ACOS_ART_BIN") or str(ROOT / "target/debug/acos-art")
     env = dict(env)
     env["ACOS_ART_BIN"] = acos_art
     runs = []
     for rnd in range(1, opts["rounds"] + 1):
+        run_dir = artifacts / f"r{rnd}"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        mem_json = run_dir / "mem.json"
         cmd = [acos_bin, "verify", str(scenario), "--engine", "art", "--json",
-               "--artifacts", str(artifacts / f"r{rnd}")]
-        if not inside_lock:
-            cmd = [str(ROOT / "tools/art-runtime/run-exclusive.sh"),
-                   "--task", f"W30-{task['id']}-{kind}",
-                   "--", str(ROOT / "tools/guarded.sh"),
-                   "--mem", "8G", "--time", str(opts["timeout"]), "--", *cmd]
-        run = run_one(cmd, env, cgpath, opts["timeout"])
+               "--artifacts", str(run_dir)]
+        label = f"{task['id']}-{kind}"
+        measured = run_measured(cmd, env, mem_json, opts, label, inside_lock)
         envelope = {}
         try:
-            envelope = json.loads(run["stdout"])
+            envelope = json.loads(measured["stdout"])
         except json.JSONDecodeError:
             pass
-        verdict_file = artifacts / f"r{rnd}" / "verdict.json"
+        verdict_file = run_dir / "verdict.json"
         verdict_obj = {}
         if verdict_file.exists():
             try:
@@ -240,41 +300,41 @@ def run_variant(task, kind, spec, opts, env, stamp_s, cgpath, inside_lock,
             # guard, unsupported engine start). Use the envelope status.
             verdict = envelope.get("status", "error")
         error = verdict_error(verdict_obj, envelope)
-        code = (error or {}).get("code")
         # `wall_ms` is the verdict/executor wall the suite has always reported.
-        # The process wall (guest spawn -> clean shutdown, i.e. what the runner
-        # actually waited) is recorded next to it, and `engine.json.timing`
-        # carries the per-step attribution (W34 request).
-        effective_wall = (verdict_obj.get("resources") or {}).get("wall_ms", run["wall_ms"])
+        # The process wall (guest spawn -> clean shutdown) is recorded next to
+        # it, and `engine.json.timing` carries the per-step attribution.
+        effective_wall = (verdict_obj.get("resources") or {}).get("wall_ms",
+                                                                  measured["wall_ms"])
         engine_timing = None
-        engine_file = artifacts / f"r{rnd}" / "engine.json"
+        engine_file = run_dir / "engine.json"
         if engine_file.exists():
             try:
                 engine_report = json.loads(engine_file.read_text())
-                # The block lives under `engine` in the file and carries
-                # `steps[]`, `attributed_ms`, `verdict_wall_ms`,
-                # `unattributed_ms`, `session_start_ms`.
                 engine_timing = (engine_report.get("engine") or {}).get("timing") \
                     or engine_report.get("timing")
             except (json.JSONDecodeError, OSError):
                 engine_timing = None
+        mem = mem_block(measured["data"])
         runs.append({
             "round": rnd,
-            "rc": run["rc"],
+            "rc": measured["rc"],
             "verdict": verdict,
             "error": error,
             "wall_ms": effective_wall,
-            "process_wall_ms": run["wall_ms"],
+            "process_wall_ms": measured["wall_ms"],
             "engine_timing": engine_timing,
-            "cgroup_peak_mib": run["cgroup_peak_mib"],
-            "cgroup_gib_min": run["cgroup_gib_min"],
-            "artifacts": str(artifacts / f"r{rnd}"),
-            "stderr_tail": (run["stderr"] or "")[-1200:] if run["rc"] not in (0, 1) else None,
+            "mem": mem,
+            "artifacts": str(run_dir),
+            "stderr_tail": (measured["stderr_tail"] or "")[-1200:]
+                           if (measured["rc"] not in (0, 1) or not measured["data"])
+                           else None,
         })
     walls = [r["wall_ms"] or 0 for r in runs]
     process_walls = [r["process_wall_ms"] or 0 for r in runs]
-    peaks = [r["cgroup_peak_mib"] for r in runs if r["cgroup_peak_mib"] is not None]
-    gibs = [r["cgroup_gib_min"] for r in runs if r["cgroup_gib_min"] is not None]
+    peaks = [r["mem"]["peak_mib_all_cgroups"] for r in runs
+             if r["mem"]["peak_mib_all_cgroups"] is not None]
+    gibs = [r["mem"]["primary_anon_shmem_gib_min"] for r in runs
+            if r["mem"]["primary_anon_shmem_gib_min"] is not None]
     first_bad = next((r for r in runs if r["verdict"] != "pass"), None)
     ordered = [r["verdict"] for r in runs]
     # Worst verdict wins: error/fail/unsupported/unknown over pass.
@@ -298,11 +358,108 @@ def run_variant(task, kind, spec, opts, env, stamp_s, cgpath, inside_lock,
         "process_wall_ms_p50": benchlib.stats(process_walls)["p50"] if process_walls else None,
         "runs": runs,
         "mem": {
-            "metric": "cgroup memory.current (sampled 100 ms)" if peaks else None,
+            "metric": "anon+shmem (cgroup memory.stat, job+guest, sampler excluded)",
+            "metric_type": "CGROUP_ANON_SHMEM",
+            "primary_anon_shmem_gib_min": benchlib._round(sum(gibs)) if gibs else None,
             "cgroup_peak_mib": max(peaks) if peaks else None,
-            "cgroup_gib_min": round(sum(gibs), 9) if gibs else None,
+            "guest_scope_count": sum((r["mem"].get("guest_scope_count") or 0)
+                                     for r in runs),
+            "denominators": {f: [r["mem"][f] for r in runs] for f in (
+                "primary_anon_shmem_gib_min", "resident_gib_min", "job_all_gib_min",
+                "scope_gib_min_runner_formula", "infra_file_cache_gib_min",
+                "sampler_overhead_gib_min")},
         },
     }
+
+# --------------------------------------------------------------------------- #
+# aggregation
+# --------------------------------------------------------------------------- #
+DENOMINATORS = (
+    ("primary", "anon+shmem (job+guest, sampler excluded)", "primary_anon_shmem_gib_min",
+     True, "CGROUP_ANON_SHMEM"),
+    ("resident", "anon+shmem+kernel", "resident_gib_min", False, "CGROUP_ANON_SHMEM"),
+    ("job_all_incl_file", "memory.current (includes shared file cache)",
+     "job_all_gib_min", False, "CGROUP_MEMORY_CURRENT"),
+    ("scope_runner_formula", "job scope only (pre-W45 runner formula)",
+     "scope_gib_min_runner_formula", False, "CGROUP_MEMORY_CURRENT"),
+)
+
+def run_for(rec, kind, rnd):
+    for r in (rec.get(kind) or {}).get("runs") or []:
+        if r.get("round") == rnd:
+            return r
+    return None
+
+def verified_map(active):
+    out = {}
+    for t in active:
+        good = t.get("good") or {}
+        out[t["id"]] = (good.get("verdict") == "pass")
+    return out
+
+def task_costs(active, field, rnd=None):
+    """Per-task GiB.min (good + wrong twin). None if any needed value is missing."""
+    costs = {}
+    for t in active:
+        total = 0.0
+        ok = True
+        kinds = ("good", "wrong")
+        rounds = [rnd] if rnd is not None else \
+            sorted({r.get("round") for k in kinds for r in ((t.get(k) or {}).get("runs") or [])})
+        for kind in kinds:
+            for rr in rounds:
+                run = run_for(t, kind, rr)
+                v = ((run or {}).get("mem") or {}).get(field)
+                if v is None:
+                    ok = False
+                else:
+                    total += v
+        costs[t["id"]] = (total / len(rounds)) if (ok and rounds) else None
+    return costs
+
+def denominators_block(active, rounds, false_pass):
+    out = {}
+    for key, label, field, gate, metric_type in DENOMINATORS:
+        per_round = []
+        for rnd in range(1, rounds + 1):
+            per_round.append(benchlib.m11_denominator(
+                task_costs(active, field, rnd), verified_map(active), bar=LEGACY_BAR))
+        head = benchlib.m11_denominator(task_costs(active, field), verified_map(active),
+                                        bar=LEGACY_BAR)
+        round_m11 = [x["m11_tasks_per_gib_min"] for x in per_round
+                     if x["m11_tasks_per_gib_min"] is not None]
+        if false_pass:
+            head["m11_tasks_per_gib_min"] = 0.0
+            head["passes_bar"] = False
+            head["zeroed_by_false_pass"] = True
+        head["per_round"] = per_round
+        head["round_m11"] = round_m11
+        head["round_spread_pct"] = (
+            round(100.0 * (max(round_m11) - min(round_m11)) / head["m11_tasks_per_gib_min"], 3)
+            if len(round_m11) >= 2 and head["m11_tasks_per_gib_min"] else None)
+        out[key] = {
+            "name": label,
+            "metric_type": metric_type,
+            "gate_uses": gate,
+            "m11": head,
+            "note": ("PRIMARY: same type/state basis as the legacy 24.4 bar; the only "
+                     "denominator the bar is evaluated on" if gate else
+                     "recorded for continuity/debugging; NOT a gate value"),
+        }
+    return out
+
+def scope_rows(task_records):
+    rows = []
+    for t in task_records:
+        for kind in ("good", "wrong"):
+            for run in (t.get(kind) or {}).get("runs") or []:
+                mem = run.get("mem") or {}
+                rows.append({
+                    "variant": f"{t['id']}-{kind}-r{run.get('round')}",
+                    "job_cgroup": mem.get("job_cgroup"),
+                    "sampler_pid": (run.get("mem") or {}).get("sampler_pid"),
+                })
+    return rows
 
 def main():
     opts = parse_args(sys.argv[1:])
@@ -316,14 +473,14 @@ def main():
             die("--only selected no task")
     acos_bin = opts["acos"] or os.environ.get("ACOS_SUITE_ACOS") or str(ROOT / "target/debug/acos")
     if not Path(acos_bin).exists():
-        die(f"acos binary not found: {acos_bin} (build target/debug/acos; no release requirement for correctness)")
+        die(f"acos binary not found: {acos_bin} (build target/debug/acos; use "
+            "tools/art-runtime/bench-release.sh for a release build)")
     for task in tasks:
         apk = ROOT / (task.get("apk") or "")
         if task.get("apk") and not apk.exists():
             die(f"{task['id']}: prebuilt fixture APK missing: {apk} (do not rebuild fixtures for the suite)")
 
     inside_lock = bool(os.environ.get("ACOS_ART_DATA"))
-    cgpath = cgroup_sampler()
     gate = benchlib.host_gate(ROOT, check_lock=not inside_lock) if opts["host_gate"] else None
     contaminated = bool(gate and not gate["ok"])
     if contaminated:
@@ -339,7 +496,8 @@ def main():
     stamp_s = stamp()
     started = utc_now()
     print(f"run-suite: {len(tasks)} tasks, rounds={opts['rounds']}, "
-          f"inside_lock={inside_lock}, cgroup={cgpath or 'none'}, stamp={stamp_s}")
+          f"inside_lock={inside_lock}, fresh_scope_per_variant=guarded.sh, "
+          f"sampler={opts['sampler']}, stamp={stamp_s}")
     task_records = []
     for task in tasks:
         rec = {
@@ -360,14 +518,15 @@ def main():
         if task.get("status") == "UNSUPPORTED":
             rec.update({"verdict": "unsupported", "error": {"code": "UNSUPPORTED_EXPRESSION",
                         "message": task.get("reason") or "not expressible in the scenario format"},
-                        "wall_ms": 0, "task_ok": True, "false_pass": False, "good": None, "wrong": None})
+                        "wall_ms": 0, "task_ok": True, "false_pass": False,
+                        "good": None, "wrong": None})
             task_records.append(rec)
             print(f"{task['id']:4s} UNSUPPORTED  {rec['error']['code']}")
             continue
         good = run_variant(task, "good", {**task["good"], "expected": task["good"].get("expected", "pass"),
                                          "error": task["good"].get("error")},
-                           opts, env, stamp_s, cgpath, inside_lock, acos_bin)
-        wrong = run_variant(task, "wrong", task["wrong"], opts, env, stamp_s, cgpath,
+                           opts, env, stamp_s, inside_lock, acos_bin)
+        wrong = run_variant(task, "wrong", task["wrong"], opts, env, stamp_s,
                             inside_lock, acos_bin)
         task_ok = bool(good["task_ok"] and wrong["task_ok"])
         rec.update({
@@ -381,11 +540,15 @@ def main():
             "wrong": wrong,
         })
         task_records.append(rec)
+        g_mem = good["mem"]["primary_anon_shmem_gib_min"]
+        w_mem = wrong["mem"]["primary_anon_shmem_gib_min"]
         print(f"{task['id']:4s} good={good['verdict']:<11s} "
               f"wrong={wrong['verdict']:<11s} "
               f"code={(wrong.get('error') or {}).get('code')!s:<20s} "
               f"{'OK' if task_ok else 'MISMATCH'}  "
-              f"{good['wall_ms'] + wrong['wall_ms']} ms")
+              f"{good['wall_ms'] + wrong['wall_ms']} ms  "
+              f"mem={_fmt(g_mem)}+{_fmt(w_mem)} GiB.min  "
+              f"guest_scopes={good['mem']['guest_scope_count']}/{wrong['mem']['guest_scope_count']}")
 
     # ---- summary / gates ---------------------------------------------------
     active = [t for t in task_records if t["status"] != "UNSUPPORTED"]
@@ -406,20 +569,7 @@ def main():
         cls = benchlib.classify_error(err.get("code"), err.get("message")).get("class")
         if cls in ("harness", "infra_timeout", "host_guard") or g.get("verdict") is None:
             false_fail_runs.append({"task": t["id"], "code": err.get("code"), "class": cls})
-    def task_gib(t):
-        return sum((t.get(k) or {}).get("mem", {}).get("cgroup_gib_min") or 0.0
-                   for k in ("good", "wrong"))
 
-    def task_has_gib(t):
-        return any((t.get(k) or {}).get("mem", {}).get("cgroup_gib_min") is not None
-                   for k in ("good", "wrong"))
-
-    gib_total = sum(task_gib(t) for t in active)
-    has_gib = any(task_has_gib(t) for t in active)
-    legacy_bar = 24.4
-    m11 = None
-    if has_gib and gib_total > 0:
-        m11 = 0.0 if false_pass else good_pass / gib_total
     summary = {
         "tasks_total": len(task_records),
         "tasks_expressible": len(active),
@@ -437,35 +587,61 @@ def main():
         "task_ok_count": sum(1 for t in active if t.get("task_ok")),
         "contaminated_host_gate": contaminated,
     }
+
+    scope_check = benchlib.check_variant_scopes(scope_rows(active))
+    denoms = denominators_block(active, opts["rounds"], false_pass)
+    primary = denoms["primary"]["m11"]
+    infra_total = None
+    infra_vals = [r["mem"]["infra_file_cache_gib_min"] for t in active
+                  for k in ("good", "wrong") for r in (t.get(k) or {}).get("runs") or []
+                  if r["mem"]["infra_file_cache_gib_min"] is not None]
+    if infra_vals:
+        infra_total = benchlib._round(sum(infra_vals) / max(1, opts["rounds"]))
+    verdict = "INVALID_SCOPE"
+    if scope_check["ok"] and primary["m11_tasks_per_gib_min"] is not None:
+        verdict = "PASS" if primary["passes_bar"] else "FAIL"
     m11_block = {
-        "formula": "M11 = verified_good / sum(job_gib_min); job_gib_min = "
-                   "integral(memory.current_bytes/2^30 dt_s/60) per job cgroup; "
-                   "if false_pass > 0 then M11 := 0",
-        "legacy_derived_bar_tasks_per_gib_min": legacy_bar,
+        "formula": "M11 = verified_tasks / sum(primary anon+shmem GiB.min); primary = "
+                   "job cgroup + every guest cgroup memory.stat (anon+shmem), 100 ms "
+                   "samples with a closing sample, sampler cost subtracted; if "
+                   "false_pass > 0 then M11 := 0",
+        "primary_denominator": "anon+shmem (CGROUP_ANON_SHMEM)",
+        "legacy_derived_bar_tasks_per_gib_min": LEGACY_BAR,
         "legacy_derivation": "((206 MiB / 10) + 112.1 MiB) / 1024 * (19 s / 60) "
                              "= 0.0410 GiB*min/task => 24.4 tasks/GiB*min",
-        "acos_bar_with_noise": round(legacy_bar * 1.05, 3),
+        "noise": NOISE,
+        "required_tasks_per_gib_min": round(LEGACY_BAR * (1 + NOISE), 4),
         "verified_tasks": good_pass,
-        "job_gib_min": round(gib_total, 6) if has_gib else None,
-        "m11_tasks_per_gib_min": round(m11, 4) if m11 is not None else None,
-        "m11_above_legacy_bar": (m11 > legacy_bar * 1.05) if m11 is not None else None,
+        "false_pass_count": false_pass,
         "false_pass_zeroes_m11": bool(false_pass),
-        "n_concurrent": 1,
+        "m11_tasks_per_gib_min": primary["m11_tasks_per_gib_min"],
+        "gib_min": primary["gib_min"],
+        "ci95_low": primary["ci95_low"],
+        "ci95_high": primary["ci95_high"],
+        "ci95_width_pct": primary["ci95_width_pct"],
         "rounds": opts["rounds"],
+        "round_m11": primary["round_m11"],
+        "round_spread_pct": primary["round_spread_pct"],
+        "above_legacy_bar": primary["passes_bar"],
+        "verdict_vs_bar": verdict,
+        "denominators": denoms,
+        "infra_file_cache_gib_min": infra_total,
+        "infra_file_cache_note": "shared read-only page cache (file - shmem) across the "
+                                 "same runs; reported separately and never charged to a task",
+        "scope_check": scope_check,
+        "n_concurrent": 1,
         "gate_eligible": False,
-        "gate_eligible_reason": "W30 correctness run: N=1, rounds=" + str(opts["rounds"]) +
-                                " (the gateable N=10 x 3-round number comes from the "
-                                "bench-session suite, advisor items 1/3)",
-        "cgroup_source": str(cgpath) if cgpath else None,
-        "note": ("job_gib_min is filled from per-job cgroup memory.current samples when the "
-                 "runner is inside a finite-memory guarded scope; otherwise it stays null "
-                 "rather than being estimated."),
+        "gate_eligible_reason": "W45 correctness run: N=1 (the gateable N=10 x 3-round "
+                                "number comes from the bench-session suite). Costs and CI "
+                                "are still recorded with the decided denominator.",
+        "note": "Only the primary anon+shmem number is compared with the 24.4 bar. "
+                "resident/job_all/scope_runner_formula are reported with gate_uses=false.",
     }
     provenance = benchlib.provenance(
         ROOT, binaries=[acos_bin, acos_art], profile=None, gate=gate, engine="art",
         extra={"suite": index.get("suite"), "stamp": stamp_s})
     result = {
-        "schema": "acos-suite/1",
+        "schema": "acos-suite/2",
         "suite": index.get("suite"),
         "stamp": stamp_s,
         "utc_start": started,
@@ -476,25 +652,91 @@ def main():
         "inside_exclusive_lock": inside_lock,
         "host_gate": gate,
         "provenance": provenance,
+        "measurement": {
+            "fresh_scope_per_variant": True,
+            "scope_wrapper": "tools/guarded.sh per variant run",
+            "sampler": opts["sampler"],
+            "interval_s": opts["interval"],
+            "guest_cgroups": "discovered from the launcher's <run>/cgroup evidence file "
+                             "and a ppid-chain descendant scan (sibling scope included)",
+            "closing_sample": True,
+            "sampler_excluded": True,
+            "primary_denominator": "anon+shmem",
+            "infra_file_cache_charged": False,
+            "artifacts_kept": bool(opts["keep_artifacts"]),
+        },
         "tasks": task_records,
         "summary": summary,
         "m11": m11_block,
+        "artifacts": {"root": str(Path(opts["artifacts"]) / stamp_s),
+                      "pruned": False, "runs": []},
     }
     out = Path(opts["out"]) if opts["out"] else (BENCH_DIR / f"suite-{stamp_s}.json")
     out.parent.mkdir(parents=True, exist_ok=True)
     benchlib.write_json(out, result)
+
+    # ---- artifact pruning (after the summary JSON exists: decision e) ------
+    prune_runs = []
+    for t in task_records:
+        for kind in ("good", "wrong"):
+            for run in (t.get(kind) or {}).get("runs") or []:
+                art = run.get("artifacts")
+                if not art:
+                    continue
+                res = benchlib.prune_artifacts(
+                    art, keep=opts["keep_artifacts"],
+                    passed=(run.get("verdict") == "pass"))
+                prune_runs.append({
+                    "variant": f"{t['id']}-{kind}-r{run.get('round')}",
+                    "dir": res["dir"], "pruned": res["pruned"],
+                    "deleted": res["deleted"], "kept": res["kept"],
+                    "freed_bytes": res["freed_bytes"], "kept_bytes": res["kept_bytes"],
+                    "reason": res["reason"]})
+    result["artifacts"] = {
+        "root": str(Path(opts["artifacts"]) / stamp_s),
+        "kept_all": bool(opts["keep_artifacts"]),
+        "pruned": any(r["pruned"] for r in prune_runs),
+        "freed_bytes": sum(r["freed_bytes"] for r in prune_runs),
+        "kept_bytes": sum(r["kept_bytes"] for r in prune_runs),
+        "runs": prune_runs,
+    }
+    benchlib.write_json(out, result)
+
     print(f"\nverified_tasks={summary['verified_tasks']}/{summary['tasks_expressible']} "
           f"unsupported={summary['tasks_unsupported']} "
           f"false_pass={summary['false_pass_count']} "
-          f"false_fail={summary['false_fail_count']} "
-          f"m11={m11_block['m11_tasks_per_gib_min']} "
-          f"job_gib_min={m11_block['job_gib_min']}")
+          f"false_fail={summary['false_fail_count']}")
+    print(f"M11(primary anon+shmem)={_fmt(primary['m11_tasks_per_gib_min'])} tasks/GiB.min "
+          f"gib_min={_fmt(primary['gib_min'])} "
+          f"ci95={_fmt(primary['ci95_low'])}..{_fmt(primary['ci95_high'])} "
+          f"bar={LEGACY_BAR} verdict={verdict}")
+    for key, blk in denoms.items():
+        mm = blk["m11"]
+        print(f"  {key:22s} {blk['name']:48s} gib_min={_fmt(mm['gib_min'])} "
+              f"m11={_fmt(mm['m11_tasks_per_gib_min'])} gate={blk['gate_uses']}")
+    print(f"  infra_file_cache (not charged) = {_fmt(infra_total)} GiB.min")
+    print(f"  fresh-scope check: ok={scope_check['ok']} "
+          f"distinct_scopes={scope_check['distinct_scopes']} "
+          f"variants={scope_check['variants']}")
+    if scope_check["errors"]:
+        for e in scope_check["errors"]:
+            print(f"  SCOPE DEFECT: {e}", file=sys.stderr)
+    print(f"  artifacts: pruned={result['artifacts']['pruned']} "
+          f"freed={result['artifacts']['freed_bytes'] / (1 << 20):.1f} MiB "
+          f"kept={result['artifacts']['kept_bytes'] / (1 << 20):.1f} MiB")
     print(f"wrote {out}")
-    if false_pass > 0 or good_fail > 0 or summary["task_ok_count"] != len(active):
-        print("run-suite: NOT ACCEPTED (see tasks[] for the mismatching variant)", file=sys.stderr)
+    if (false_pass > 0 or good_fail > 0 or summary["task_ok_count"] != len(active)
+            or not scope_check["ok"]):
+        print("run-suite: NOT ACCEPTED (see tasks[] and m11.scope_check)", file=sys.stderr)
         raise SystemExit(1)
-    print("run-suite: ACCEPTED (all expressible correct variants pass; all wrong variants fail with the declared code)")
+    print("run-suite: ACCEPTED (all expressible correct variants pass; all wrong variants "
+          "fail with the declared code; one fresh scope per variant)")
     raise SystemExit(0)
+
+def _fmt(v):
+    if v is None:
+        return "none"
+    return ("%.5f" % v) if abs(v) < 10 else ("%.2f" % v)
 
 main()
 PY

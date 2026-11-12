@@ -1,0 +1,512 @@
+{
+  "binaries": {
+    "acos": "/home/Qui/Projects/acos/.cache/w45-target/release/acos",
+    "acos_art": "/home/Qui/Projects/acos/.cache/w45-target/release/acos-art"
+  },
+  "engine": "art",
+  "env": {},
+  "host_gate": {
+    "art_lock_checked": false,
+    "art_lock_held": null,
+    "last_art_run": "task=W45-T01-wrong started_utc=2026-11-12T04:27:24Z finished_utc=2026-11-12T04:27:31Z elapsed_s=7 queue_wait_s=7 rc=1 cmd=/home/Qui/Projects/acos/tools/guarded.sh --mem 2G --time 120 -- /usr/bin/python3 -I /home/Qui/Projects/acos/.cache/tests/run-suite-4161648/bin/reused-sampler.py sample-scope --out /home/Qui/Projects/acos/.cache/tests/run-suite-4161648/art/20261112T042720Z/T01-wrong/r1/mem.json --interval 0.1 --label T01-wrong --info-dir /home/Qui/Projects/acos/.cache/tests/run-suite-4161648/art/20261112T042720Z/T01-wrong/r1 -- /home/Qui/Projects/acos/.cache/tests/run-suite-4161648/bin/acos verify /home/Qui/Projects/acos/scenarios/suite/T01-install-wrong.yaml --engine art --json --artifacts /home/Qui/Projects/acos/.cache/tests/run-suite-4161648/art/20261112T042720Z/T01-wrong/r1",
+    "limits": {
+      "loadavg1_max": 4.0,
+      "min_avail_gib": 30.0
+    },
+    "loadavg1": 4.56,
+    "loadavg15": 2.38,
+    "loadavg5": 2.17,
+    "mem_available_gib": 45.63,
+    "mem_available_mib": 46729.5,
+    "mem_total_gib": 60.46,
+    "ok": false,
+    "reasons": [
+      "loadavg1 4.56 > 4.00"
+    ],
+    "utc": "2026-11-12T04:27:31+00:00"
+  },
+  "label": "w45-postfix-smoke",
+  "method": {
+    "guest_cgroups": "discovered from the launcher's <run>/cgroup evidence file and from a ppid-chain descendant scan; systemd-run --scope puts them OUTSIDE the job scope",
+    "infra_file_cache_gib_min": "file - shmem: shared read-only page cache, reported separately, never charged",
+    "interval_s": 0.1,
+    "job_cgroup": "the cgroup this process runs in (guarded.sh scope)",
+    "job_gib_min_all_cgroups": "job scope + guest scopes, memory.current",
+    "job_resident_no_file_gib_min": "job + guest, sum(anon,shmem,kernel,sock), sampler excluded",
+    "phase_windows": "engine.json.timing session_start_ms / shutdown_ms; approximate to one sample",
+    "primary_anon_shmem_gib_min": "W45 primary (gate): job + guest, memory.stat anon+shmem, sampler excluded",
+    "scope_gib_min_runner_formula": "run-suite.sh's pre-W45 number: job scope only"
+  },
+  "reps": [
+    {
+      "artifacts": "/home/Qui/Projects/acos/.cache/w41-mem/20261112T042731Z/T01-install-good/r1",
+      "components": {
+        "anon": {
+          "gib_min": 0.00092462,
+          "peak_mib": 105.516
+        },
+        "file_excl_shmem": {
+          "gib_min": 4.8839e-05,
+          "peak_mib": 18.629
+        },
+        "file_incl_shmem": {
+          "gib_min": 0.00021308,
+          "peak_mib": 36.879
+        },
+        "kernel": {
+          "gib_min": 4.2557e-05,
+          "peak_mib": 4.504
+        },
+        "primary_anon_shmem": {
+          "gib_min": 0.001088861,
+          "peak_mib": 123.77
+        },
+        "resident_no_file": {
+          "gib_min": 0.001131419,
+          "peak_mib": 128.273
+        },
+        "shmem": {
+          "gib_min": 0.000164241,
+          "peak_mib": 18.254
+        },
+        "sock": {
+          "gib_min": 0.0,
+          "peak_mib": 0.0
+        }
+      },
+      "denominator": {
+        "infra_file_cache_gib_min": 4.8839e-05,
+        "job_gib_min_all_cgroups": 0.001261179,
+        "job_peak_mib_all_cgroups": 154.766,
+        "job_resident_excl_sampler_gib_min": 0.00100189,
+        "job_resident_no_file_gib_min": 0.00100189,
+        "labels": {
+          "job_all_incl_file": false,
+          "primary": true,
+          "resident": false,
+          "scope_runner_formula": false
+        },
+        "primary_anon_shmem_gib_min": 0.000959333,
+        "sampler_overhead_gib_min": 0.000129529,
+        "sampler_overhead_if_full_rss_gib_min": 0.000280916,
+        "scope_gib_min_runner_formula": 0.000298498
+      },
+      "denominators_full": {
+        "components": {
+          "anon_gib_min": 0.00092462,
+          "file_excl_shmem_gib_min": 4.8839e-05,
+          "file_incl_shmem_gib_min": 0.00021308,
+          "kernel_gib_min": 4.2557e-05,
+          "peak_mib_all_cgroups": 154.766,
+          "peak_mib_primary": 123.77,
+          "shmem_gib_min": 0.000164241,
+          "sock_gib_min": 0.0
+        },
+        "infra_file_cache": {
+          "charged_to_task": false,
+          "gib_min": 4.8839e-05,
+          "metric_type": "CGROUP_FILE_CACHE",
+          "name": "file - shmem (shared read-only page cache)",
+          "note": "ART sysroot/boot image/binary pages are read-only infra, not task cost (W41 4.3/1.2); reported here and never added to primary",
+          "reported_separately": true
+        },
+        "job_all_incl_file": {
+          "gate_uses": false,
+          "gib_min": 0.001261179,
+          "gib_min_excl_sampler": 0.001261179,
+          "includes": "job + guest cgroups; includes page cache",
+          "metric_type": "CGROUP_MEMORY_CURRENT",
+          "name": "memory.current (anon+file+shmem+kernel)",
+          "note": "affected by shared page cache: not a gate value"
+        },
+        "primary": {
+          "gate_uses": true,
+          "gib_min": 0.001088861,
+          "gib_min_excl_sampler": 0.000959333,
+          "includes": "job cgroup + every guest cgroup (memory.stat anon+shmem)",
+          "metric_type": "CGROUP_ANON_SHMEM",
+          "name": "anon+shmem",
+          "note": "same type as the legacy 206 MiB core + 112 MiB/session numbers the 24.4 bar was derived from; gib_min is the raw sample, gib_min_excl_sampler is the gate value"
+        },
+        "resident": {
+          "gate_uses": false,
+          "gib_min": 0.001131419,
+          "gib_min_excl_sampler": 0.00100189,
+          "includes": "job + guest cgroups, plus kernel overhead",
+          "metric_type": "CGROUP_ANON_SHMEM",
+          "name": "anon+shmem+kernel",
+          "note": null
+        },
+        "sampler": {
+          "anon_shmem_mib": 11.324,
+          "excluded": true,
+          "note": "this sampler process runs inside the job scope; only its anon+shmem share is subtracted from the anon+shmem denominators (its file-backed pages are not part of that type). The full-RSS figure is reported for sensitivity only.",
+          "overhead_gib_min": 0.000129529,
+          "overhead_if_full_rss_gib_min": 0.000280916,
+          "rss_mib": 24.559,
+          "subtracted_metric": "sampler RssAnon+RssShmem (same type as the primary anon+shmem denominator)",
+          "window_s": 0.703
+        },
+        "schema": "acos-scope-denominators/1",
+        "scope": {
+          "closing_sample": true,
+          "guest_cgroups": [
+            "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p4166417-i8373223.scope"
+          ],
+          "guest_samples": {
+            "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p4166417-i8373223.scope": 5
+          },
+          "interval_s": 0.1,
+          "job_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p4166402-i8389604.scope",
+          "job_samples": 9,
+          "scope_count": 2
+        },
+        "scope_runner_formula": {
+          "gate_uses": false,
+          "gib_min": 0.000298498,
+          "gib_min_excl_sampler": 0.000298498,
+          "includes": "job cgroup only; reproduces the pre-W45 run-suite number and excludes the guest",
+          "metric_type": "CGROUP_MEMORY_CURRENT",
+          "name": "job scope only (old runner formula)",
+          "note": "kept for continuity; never gate on it"
+        }
+      },
+      "env": {},
+      "error": null,
+      "guest_cgroups": [
+        "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p4166417-i8373223.scope"
+      ],
+      "guest_series": [
+        {
+          "anon_gib_min": 0.000443474,
+          "cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p4166417-i8373223.scope",
+          "file_gib_min": 0.000104136,
+          "gib_min": 0.000598498,
+          "n": 5,
+          "peak_mib": 97.586,
+          "res_gib_min": 0.000565423
+        }
+      ],
+      "job_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p4166402-i8389604.scope",
+      "label": "w45-postfix-smoke",
+      "phase": {
+        "boot": {
+          "job_gib_min": 0.000340787,
+          "peak_mib": 116.16,
+          "primary_anon_shmem_gib_min": 0.000302448,
+          "resident_no_file_gib_min": 0.000314976,
+          "scope_gib_min": 6.0069e-05,
+          "seconds": 0.348
+        },
+        "launch": {
+          "job_gib_min": 0.000189535,
+          "peak_mib": 116.398,
+          "primary_anon_shmem_gib_min": 0.000170266,
+          "resident_no_file_gib_min": 0.000176698,
+          "scope_gib_min": 3.0643e-05,
+          "seconds": 0.236
+        },
+        "steps": {
+          "job_gib_min": null,
+          "peak_mib": null,
+          "primary_anon_shmem_gib_min": null,
+          "resident_no_file_gib_min": null,
+          "scope_gib_min": null,
+          "seconds": 0.01
+        },
+        "teardown": {
+          "job_gib_min": null,
+          "peak_mib": 154.766,
+          "primary_anon_shmem_gib_min": null,
+          "resident_no_file_gib_min": null,
+          "scope_gib_min": null,
+          "seconds": 0.104
+        }
+      },
+      "process_wall_s": 0.703,
+      "pss_at_peak_tick": [
+        {
+          "class": "harness-shell",
+          "comm": "timeout",
+          "pid": 4166402,
+          "pss_mib": 0.191,
+          "rss_mib": 2.395
+        },
+        {
+          "class": "sampler-python",
+          "comm": "python3",
+          "pid": 4166403,
+          "pss_mib": 16.611,
+          "rss_mib": 23.949
+        },
+        {
+          "class": "acos-host",
+          "comm": "acos",
+          "pid": 4166407,
+          "pss_mib": 7.148,
+          "rss_mib": 9.637
+        },
+        {
+          "class": "acos-art-launcher",
+          "comm": "acos-art",
+          "pid": 4166408,
+          "pss_mib": 16.426,
+          "rss_mib": 18.578
+        },
+        {
+          "class": "guest-app",
+          "comm": "bwrap",
+          "pid": 4166417,
+          "pss_mib": 0.146,
+          "rss_mib": 2.301
+        },
+        {
+          "class": "guest-app",
+          "comm": "bwrap",
+          "pid": 4166419,
+          "pss_mib": 0.128,
+          "rss_mib": 1.324
+        },
+        {
+          "class": "guest-app",
+          "comm": "ixtures.counter",
+          "pid": 4166423,
+          "pss_mib": 195.512,
+          "rss_mib": 198.246
+        }
+      ],
+      "pss_peak_mib_by_class": {
+        "acos-art-launcher": {
+          "comm": "acos-art",
+          "pss_mib": 16.426,
+          "rss_mib": 18.578
+        },
+        "acos-host": {
+          "comm": "acos",
+          "pss_mib": 7.148,
+          "rss_mib": 9.637
+        },
+        "guest-app": {
+          "comm": "bwrap",
+          "pss_mib": 195.512,
+          "rss_mib": 198.246
+        },
+        "harness-shell": {
+          "comm": "timeout",
+          "pss_mib": 0.192,
+          "rss_mib": 2.395
+        },
+        "sampler-python": {
+          "comm": "python3",
+          "pss_mib": 17.039,
+          "rss_mib": 24.375
+        }
+      },
+      "rc": 0,
+      "rc_stdout_tail": null,
+      "rep": 1,
+      "samples": {
+        "interval_s": 0.1,
+        "job": 9,
+        "misses": 0,
+        "pss_ticks": 4,
+        "ticks": 9
+      },
+      "scenario": "scenarios/suite/T01-install-good.yaml",
+      "self_rss_mib": 24.559,
+      "stderr_tail": null,
+      "utc": "2026-11-12T04:27:32+00:00",
+      "verdict": "pass",
+      "verdict_wall_ms": 246
+    }
+  ],
+  "retried": [],
+  "scenario": "scenarios/suite/T01-install-good.yaml",
+  "schema": "acos-mem-breakdown/2",
+  "summary": {
+    "anon_gib_min": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 0.00092462,
+      "mean": 0.00092462,
+      "median": 0.00092462,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 0.00092462,
+      "n": 1,
+      "p5": 0.00092462,
+      "p50": 0.00092462,
+      "p95": 0.00092462,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "file_gib_min": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 0.00021308,
+      "mean": 0.00021308,
+      "median": 0.00021308,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 0.00021308,
+      "n": 1,
+      "p5": 0.00021308,
+      "p50": 0.00021308,
+      "p95": 0.00021308,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "job_gib_min": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 0.001261179,
+      "mean": 0.001261179,
+      "median": 0.001261179,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 0.001261179,
+      "n": 1,
+      "p5": 0.001261179,
+      "p50": 0.001261179,
+      "p95": 0.001261179,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "job_peak_mib": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 154.766,
+      "mean": 154.766,
+      "median": 154.766,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 154.766,
+      "n": 1,
+      "p5": 154.766,
+      "p50": 154.766,
+      "p95": 154.766,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "job_resident_gib_min": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 0.00100189,
+      "mean": 0.00100189,
+      "median": 0.00100189,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 0.00100189,
+      "n": 1,
+      "p5": 0.00100189,
+      "p50": 0.00100189,
+      "p95": 0.00100189,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "kernel_gib_min": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 4.2557e-05,
+      "mean": 4.2557e-05,
+      "median": 4.2557e-05,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 4.2557e-05,
+      "n": 1,
+      "p5": 4.2557e-05,
+      "p50": 4.2557e-05,
+      "p95": 4.2557e-05,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "primary_anon_shmem_gib_min": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 0.000959333,
+      "mean": 0.000959333,
+      "median": 0.000959333,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 0.000959333,
+      "n": 1,
+      "p5": 0.000959333,
+      "p50": 0.000959333,
+      "p95": 0.000959333,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "process_wall_s": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 0.703,
+      "mean": 0.703,
+      "median": 0.703,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 0.703,
+      "n": 1,
+      "p5": 0.703,
+      "p50": 0.703,
+      "p95": 0.703,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "scope_gib_min": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 0.000298498,
+      "mean": 0.000298498,
+      "median": 0.000298498,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 0.000298498,
+      "n": 1,
+      "p5": 0.000298498,
+      "p50": 0.000298498,
+      "p95": 0.000298498,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "shmem_gib_min": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 0.000164241,
+      "mean": 0.000164241,
+      "median": 0.000164241,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 0.000164241,
+      "n": 1,
+      "p5": 0.000164241,
+      "p50": 0.000164241,
+      "p95": 0.000164241,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    }
+  },
+  "task": "T01",
+  "utc_finish": "2026-11-12T04:27:32+00:00",
+  "utc_start": "2026-11-12T04:27:32+00:00",
+  "verified": "1/1"
+}
