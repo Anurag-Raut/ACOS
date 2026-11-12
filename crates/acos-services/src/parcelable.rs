@@ -581,6 +581,19 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Full,
     },
+    // `FeatureInfo.writeToParcel` (API 34, `FeatureInfo.java`):
+    // `writeString8(name); writeInt(version); writeInt(reqGlEsVersion);
+    // writeInt(flags)`.
+    ParcelableSpec {
+        class: "android.content.pm.FeatureInfo",
+        fields: &[
+            FieldOp::Str8, // name
+            FieldOp::Int,  // version
+            FieldOp::Int,  // reqGlEsVersion
+            FieldOp::Int,  // flags
+        ],
+        verification: Verification::Full,
+    },
     // `android.app.ContentProviderHolder.writeToParcel` (API 34): the
     // `ProviderInfo` payload with **no** presence marker (the framework calls
     // `info.writeToParcel(dest, 0)` directly), the provider as a strong binder,
