@@ -3,6 +3,6 @@
 set -eu
 acos verify \
  --apk fixtures/build/apps/hostile-forest.apk \
-  --scenario scenarios/w44-hostile-forest-trusted.yaml \
+  --scenario scenarios/negative/w44-hostile-forest-trusted.yaml \
   --artifacts . \
   --required-fidelity art-reference
