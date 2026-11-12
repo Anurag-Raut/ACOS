@@ -12,6 +12,7 @@ acos-apk = { path = "../acos-apk" }
 acos-dex = { path = "../acos-dex" }
 acos-parcel = { path = "../acos-parcel" }
 acos-protocol = { path = "../acos-protocol" }
+acos-sfgeom = { path = "../acos-sfgeom" }
 acos-wm = { path = "../acos-wm" }
 rustix = { version = "1.1", features = ["net", "time"] }
 serde = { workspace = true }

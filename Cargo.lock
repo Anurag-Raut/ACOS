@@ -254,6 +254,7 @@ dependencies = [
  "acos-dex",
  "acos-parcel",
  "acos-protocol",
+ "acos-sfgeom",
  "acos-wm",
  "proptest",
  "rustix",
