@@ -300,6 +300,20 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             with_base(json!({
                 "apk": {"type": "string", "description": "Path to the .apk, under ACOS_ALLOWED_ROOTS."},
                 "timeout_ms": {"type": "integer", "minimum": 1, "description": "Wall-clock ceiling for the launch (defaults to the server call budget)."},
+                "settle": {
+                    "type": "string", "enum": ["fast", "strict"],
+                    "description": "How the launch reply binds its tree. `strict` (default) keeps the \
+                                    150 ms quiet window and is assertion evidence. `fast` binds the app's \
+                                    first traversal from a fresh in-guest probe sample with no quiet \
+                                    window; it may be mid-animation and is never assertion evidence. \
+                                    The reply's `settle` object names the mode and how it was bound."
+                },
+                "pixels": {
+                    "type": "boolean",
+                    "description": "Capture a PNG for the launch reply (default false). Without it the \
+                                    reply carries the bound C1 frame identity (`buffer_generation`, \
+                                    `frame_number`) and no md5; `settle:fast` refuses pixels."
+                },
                 "native": {
                     "type": "boolean",
                     "description": "Run the APK's lib/<abi>/*.so under the ADR-0022 confinement. \

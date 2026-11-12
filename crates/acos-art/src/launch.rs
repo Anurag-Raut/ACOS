@@ -1345,6 +1345,45 @@ struct ProbeSample {
     generation: u64,
 }
 
+/// P9: the launcher's event-driven wake channel for the startup loop.
+///
+/// Before this the startup loop polled `activity-resumed.marker`, the newest
+/// probe sample and the C1 generation every 10 ms, so a launch reply could wait
+/// up to one poll quantum after its last real prerequisite landed. The
+/// guest-stdout drain thread now bumps `tick` and signals `signal` whenever it
+/// parses a new probe sample, and the startup loop waits on that instead of
+/// sleeping. The timeout stays as the fallback for the marker file, which the
+/// guest writes as a file and has no host-side event.
+#[derive(Default)]
+struct ProbeWake {
+    tick: std::sync::Mutex<u64>,
+    signal: std::sync::Condvar,
+}
+
+impl ProbeWake {
+    /// A new probe sample (or any guest line the startup loop cares about) has
+    /// been parsed. Never blocks on the caller's own state lock.
+    fn notify(&self) {
+        let mut tick = self.tick.lock().unwrap_or_else(|e| e.into_inner());
+        *tick = tick.wrapping_add(1);
+        self.signal.notify_all();
+    }
+
+    /// Wait until the tick differs from `seen`, or `timeout` elapses.
+    fn wait(&self, seen: &mut u64, timeout: std::time::Duration) {
+        let tick = self.tick.lock().unwrap_or_else(|e| e.into_inner());
+        if *tick != *seen {
+            *seen = *tick;
+            return;
+        }
+        let (tick, _) = self
+            .signal
+            .wait_timeout(tick, timeout)
+            .unwrap_or_else(|e| e.into_inner());
+        *seen = *tick;
+    }
+}
+
 #[derive(Default)]
 struct ProbeState {
     latest: Option<ProbeSample>,
@@ -1370,6 +1409,8 @@ struct ProbeState {
     /// a slow tap can be attributed to a guest stage instead of guessed. Off
     /// unless the variable names a file; no reply changes.
     trace: Option<TraceSink>,
+    /// P9: event-driven wake for the startup loop (see [`ProbeWake`]).
+    wake: Arc<ProbeWake>,
 }
 
 /// W59 latency trace: `elapsed_us tag text` per line, written under one lock
@@ -1906,6 +1947,11 @@ fn drain_tee_lines<R: std::io::Read>(
                             generation,
                         });
                     }
+                    // P9: wake the startup loop (and anyone else waiting on a
+                    // fresh sample) instead of making it poll for this.
+                    let wake = Arc::clone(&state.wake);
+                    drop(state);
+                    wake.notify();
                 }
             }
         } else if let Some(json) = trimmed.strip_prefix(PROBE_ERROR_PREFIX) {
@@ -2710,6 +2756,16 @@ fn interactive_serve(
     // have none and the request is a no-op.
     let mut guest_stdin = child.stdin.take();
     let startup_deadline = started + startup_budget;
+    // P9: the drain thread signals this on every parsed probe sample, so the
+    // loop below is woken by the guest instead of polling on a fixed 10 ms
+    // sleep. `wake_seen` is the tick this loop has already consumed.
+    let wake = Arc::clone(
+        &probe_state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .wake,
+    );
+    let mut wake_seen = 0u64;
     // Startup: the real Activity is resumed, the guest probe has produced a
     // sample, and C1 has stored at least one buffer. Ready means all three.
     loop {
@@ -2769,7 +2825,11 @@ fn interactive_serve(
                 clean: false,
             });
         }
-        std::thread::sleep(Duration::from_millis(10));
+        // Woken by the guest's next probe sample; the 10 ms timeout is the
+        // fallback for `activity-resumed.marker`, which is a file the guest
+        // writes (no host event), so this loop never blocks past one old poll
+        // quantum.
+        wake.wait(&mut wake_seen, Duration::from_millis(10));
     }
     let probe = latest_probe(probe_state).expect("startup required a probe sample");
     let (width, height) = {
@@ -3050,6 +3110,15 @@ fn interactive_serve(
                     // Metadata-only frame identity: no buffer clone, no PNG
                     // encode/write, no md5 (P3: that capture was 34.5 ms of the
                     // request and the tree reply never used its pixels).
+                    //
+                    // P9: the logical sequence advances on every tree reply, not
+                    // only on captures. Before this, a session that only ever
+                    // took metadata trees answered `frame_seq: 0` forever, so a
+                    // launch reply had no sequence to be newer than and two
+                    // observations could not be ordered. The number stays a
+                    // host-side logical frame id; the bound C1 buffer is named by
+                    // `buffer_generation`/`frame_number` below.
+                    captures += 1;
                     let meta = {
                         let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
                         state.latest_frame_metadata()
@@ -3063,9 +3132,9 @@ fn interactive_serve(
                         "probe_seq": probe.seq,
                         "probe_at_ms": probe.at_ms,
                         "settle": settle_json,
-                        // The logical capture sequence stays monotonic even when
-                        // no pixels are written; frame identity below is the C1
-                        // metadata for the buffer this probe is bound to.
+                        // Logical frame id (advances per tree reply, capture or
+                        // not); frame identity below is the C1 metadata for the
+                        // buffer this probe is bound to.
                         "frame_seq": captures,
                     });
                     if let Some(meta) = meta {
@@ -4238,6 +4307,7 @@ mod probe_line_tests {
                 oversized_lines: self.oversized_lines,
                 bad_probe_lines: self.bad_probe_lines,
                 trace: None,
+                wake: Arc::clone(&self.wake),
             }
         }
     }
