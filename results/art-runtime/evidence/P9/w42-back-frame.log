@@ -1,0 +1,4 @@
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  artifacts: /home/Qui/Projects/acos/.cache/p9-gates/w42-back-frame
+  steps: 17
