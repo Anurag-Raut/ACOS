@@ -875,7 +875,15 @@ real failure is a post-first-frame SIGSEGV — MEASURED (partial: one half repro
   one `ACOSCRASH {json}` line, and keep `native_crash`/`native-crash.txt` + the run tree on a signal
   death. Measured crash rate: **before 1/10** (R2, same APK; GR2 2/6 white screens), **after 0/40**
   (20 default, 20 `ACOS_ART_EARLY_GC=0`), 20/20 trees with `Set up Gaten` in both arms. Early GC is
-  not implicated (0 crashes in either arm).
+  not implicated (0 crashes in either arm). Run-tree retention is **bounded by construction**
+  (review correction, §1.4 of R3): a tree is kept only for a crash signal the guest raised itself
+  (`SIGSEGV/SIGBUS/SIGILL/SIGFPE/SIGABRT/SIGTRAP/SIGSYS`) *and* whose `native_crash` record was
+  parsed — never for `SIGKILL`/`SIGTERM`/`SIGHUP`/`SIGINT` (GL1's bounded destroy, timeouts, resets);
+  at most `ACOS_ART_KEEP_CRASH_MAX` kept trees per data root (default 8, `0` = keep none), oldest
+  pruned first and logged, `kept-for-crash.json` marking only those trees so explicit
+  `ACOS_ART_KEEP_RUN`/`ACOS_ART_KEEP_SESSION` trees are never touched; `kept_run_dir` is recorded in
+  `session-exit.json`. Verified end to end with cap=1 (two crashes -> exactly one tree, the older
+  pruned and logged).
 - **Finding (proven):** a deterministic post-`activity-resumed` fault now yields
   `SIGSEGV (11) fault_addr=0x0 in thread 15 "acos-launch-wat": /data/lib/libacos_binder_driver.so
   (Java_dev_acos_art_Nat_crashTest+39)` plus ART's own `*** *** ***` / `Fatal signal` / registers /
@@ -889,10 +897,13 @@ real failure is a post-first-frame SIGSEGV — MEASURED (partial: one half repro
   §2–§4; loop artefacts `.cache/r3/loop/{on2,egcoff}/run1…20`; crash fixture
   `.cache/r3/crashtest/root3/{native-crash.txt,native-crash.json,session-exit.json}` (gitignored).
 - **Regression:** `cargo test -p acos-cli -p acos-art -p acos-services -p acos-verify` 629 passed /
-  0 failed; the 8 mandatory gates re-run **under `ANDROID_ROOT=/system/`** (7 pass, T03-render-wrong
-  fails as expected), which is the check that the trailing-slash value is inert for the framework.
-  The pre-existing S6 test that asserted "a signal death cleans up its run tree" was updated to the
-  new contract (tree kept, no surviving process) — the one deliberate behaviour change.
+  0 failed at the first commit; after the retention correction `-p acos-art -p acos-cli` is 285
+  passed / 0 failed (30 binaries) and the retention units are 9/9. The 8 mandatory gates re-run
+  **under `ANDROID_ROOT=/system/`** (7 pass, T03-render-wrong fails as expected), which is the check
+  that the trailing-slash value is inert for the framework; `v2-art-counter` and
+  `w22-counter-reset` were re-run again after the retention change. The S6 signal test keeps S4's
+  original clean-up contract (SIGSYS with no crash record keeps nothing); the one deliberate
+  behaviour change is that a *guest crash with evidence* keeps one bounded tree.
 - **Conclusion / next:** keep the loop at n≥100 to separate rare from fixed; every occurrence now
   arrives with a library + offset to bisect. `R2b` (`+1080 px`) and `R2c` (per-view canvas) untouched.
 

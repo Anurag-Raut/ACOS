@@ -565,7 +565,7 @@ pub(crate) fn launch_session(
         if disk_full_for_run(free, min) {
             let free = free.unwrap_or(0);
             let result = disk_full_result(opts, &package, free, min);
-            write_session_exit(&out, &result, None, None, None);
+            write_session_exit(&out, &result, None, None, None, None);
             // An interactive caller waits for a *ready line*: refusing without
             // one would look like a dead session (`INTERNAL`) to it. Name the
             // host condition on the protocol instead.
@@ -1668,26 +1668,45 @@ pub(crate) fn launch_session(
         .as_ref()
         .map(|crash| write_native_crash(&out, crash))
         .transpose()?;
-    write_session_exit(&out, &result, guest_crash.as_deref(), native_crash.as_ref(), crash_path.as_deref());
-    // Only a *signal* death keeps the tree: an ordinary non-zero exit leaves
-    // nothing a debugger needs, and S4's "scratch is scratch" still holds for
-    // every other outcome.
-    let signalled = result.guest_signal.is_some();
-    if signalled {
-        if let Some(crash) = &native_crash {
-            eprintln!(
-                "acos-art: native crash: {} (raw dump: {})",
-                crash.summary(),
-                crash_path
-                    .as_deref()
-                    .map(|p| p.display().to_string())
-                    .unwrap_or_else(|| "(not written)".to_string())
-            );
-        }
-        // Keep the per-run tree for a crash (never for a clean end): the
-        // launcher still owns the cleanup for every other outcome.
-        run.keep();
+    if let Some(crash) = &native_crash {
+        eprintln!(
+            "acos-art: native crash: {} (raw dump: {})",
+            crash.summary(),
+            crash_path
+                .as_deref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "(not written)".to_string())
+        );
     }
+    // Keep the per-run tree only for a crash the *guest* raised itself and whose
+    // evidence was actually captured, under a retention cap: a SIGKILL/SIGTERM
+    // from the host (bounded destroy, watchdog, timeout) is a teardown decision
+    // and never keeps anything, and a crash loop must not fill the disk
+    // (`ACOS_ART_KEEP_CRASH_MAX`, default 8; 0 = keep none). Every other outcome
+    // is still removed by `RunDir::drop` (S4).
+    let kept_run_dir = if crate::keeps_run_tree_for_crash(
+        result.guest_signal,
+        native_crash.is_some(),
+    ) {
+        let detail = serde_json::json!({
+            "utc_ms": host_ms(),
+            "route": "launch",
+            "code": result.code,
+            "guest_signal": result.guest_signal,
+            "native_crash": native_crash.as_ref().map(crate::crash::NativeCrash::summary),
+        });
+        crate::keep_run_for_guest_crash(run, detail)
+    } else {
+        None
+    };
+    write_session_exit(
+        &out,
+        &result,
+        guest_crash.as_deref(),
+        native_crash.as_ref(),
+        crash_path.as_deref(),
+        kept_run_dir.as_deref(),
+    );
     Ok(result)
 }
 
@@ -1998,6 +2017,7 @@ fn write_session_exit(
     guest_crash: Option<&str>,
     native_crash: Option<&crate::crash::NativeCrash>,
     native_crash_path: Option<&Path>,
+    kept_run_dir: Option<&Path>,
 ) {
     let disk_full = result.code.as_deref() == Some("HOST_DISK_FULL");
     let doc = serde_json::json!({
@@ -2024,6 +2044,10 @@ fn write_session_exit(
         // shim line or ART's dump — the plain `guest_signal` stays the evidence.
         "native_crash": native_crash.map(crate::crash::NativeCrash::to_json),
         "native_crash_path": native_crash_path.map(|p| p.display().to_string()),
+        // R3: where the crashed run's tree was kept (extracted native libs,
+        // loaders, `/proc` leftovers, `out/`), when retention kept it. Absent
+        // when nothing was kept (host-sent signal, no crash record, cap 0).
+        "kept_run_dir": kept_run_dir.map(|p| p.display().to_string()),
         // R4: a guest that died without printing a crash line (native abort,
         // `System.exit`, a kill) still has the framework's own logd trail and
         // its last stdout/stderr lines. Bounded, newest last.

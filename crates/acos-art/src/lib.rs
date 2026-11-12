@@ -811,6 +811,149 @@ impl RunDir {
     }
 }
 
+// ------------------------------------------------- crash run-tree retention --
+
+/// Marker written into a run tree that was kept because the guest crashed, so
+/// retention can find *its own* trees and never touches `--keep`/`ACOS_ART_KEEP_RUN`
+/// or `ACOS_ART_KEEP_SESSION` trees.
+pub const CRASH_KEEP_MARKER: &str = "kept-for-crash.json";
+
+/// Default `ACOS_ART_KEEP_CRASH_MAX`: how many kept crash trees one data root
+/// may hold. 8 is enough for a debugging session and bounded under a crash loop.
+pub const KEEP_CRASH_MAX_DEFAULT: usize = 8;
+
+/// Signals a **guest raised itself** when it crashes. A signal the *host* sends
+/// — SIGKILL from GL1's bounded destroy, SIGTERM/SIGINT/SIGHUP from a watchdog or
+/// an operator — is a teardown decision, never crash evidence, and must never
+/// keep a tree: every normally-torn-down session would leak its run tree
+/// (extracted native libs included) and a crash loop would fill the disk.
+pub const GUEST_CRASH_SIGNALS: [i32; 7] = [
+    4,  // SIGILL
+    5,  // SIGTRAP
+    6,  // SIGABRT
+    7,  // SIGBUS
+    8,  // SIGFPE
+    11, // SIGSEGV
+    31, // SIGSYS (a guest syscall filter kill is still the guest's own end)
+];
+
+/// Is `signal` one a guest raises itself (as opposed to one the host sends)?
+#[must_use]
+pub fn is_guest_crash_signal(signal: i32) -> bool {
+    GUEST_CRASH_SIGNALS.contains(&signal)
+}
+
+/// `ACOS_ART_KEEP_CRASH_MAX` (default [`KEEP_CRASH_MAX_DEFAULT`], `0` = keep
+/// none): how many kept crash run trees one data root may hold.
+#[must_use]
+pub fn keep_crash_max() -> usize {
+    std::env::var("ACOS_ART_KEEP_CRASH_MAX")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(KEEP_CRASH_MAX_DEFAULT)
+}
+
+/// The retention decision, spelled out so it is testable without a guest:
+/// keep the tree only when the guest died of a signal **it raised itself** *and*
+/// its crash record was actually parsed. A SIGKILL (9), SIGTERM (15), SIGHUP (1)
+/// or SIGINT (2) never keeps anything, and neither does a crash signal whose
+/// evidence could not be captured (nothing to debug then).
+#[must_use]
+pub fn keeps_run_tree_for_crash(signal: Option<i32>, has_native_crash: bool) -> bool {
+    has_native_crash && matches!(signal, Some(s) if is_guest_crash_signal(s))
+}
+
+/// Kept crash trees under `runs_root`, oldest first (marker mtime, then path).
+fn kept_crash_trees(runs_root: &Path) -> Vec<(std::time::SystemTime, PathBuf)> {
+    let mut trees: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
+    let Ok(rd) = fs::read_dir(runs_root) else { return trees };
+    for e in rd.flatten() {
+        let dir = e.path();
+        if !e.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            continue;
+        }
+        let marker = dir.join(CRASH_KEEP_MARKER);
+        let Ok(meta) = fs::metadata(&marker) else { continue };
+        let at = meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+        trees.push((at, dir));
+    }
+    trees.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    trees
+}
+
+/// Prune kept crash trees under `runs_root` until at most `keep` remain, oldest
+/// first. Only trees carrying [`CRASH_KEEP_MARKER`] are candidates: an explicit
+/// `ACOS_ART_KEEP_RUN`/`ACOS_ART_KEEP_SESSION` tree is never pruned. Returns what
+/// was removed, and says so on stderr (a deletion is never silent).
+pub fn prune_kept_crash_trees(runs_root: &Path, keep: usize) -> Vec<PathBuf> {
+    let mut trees = kept_crash_trees(runs_root);
+    let mut removed = Vec::new();
+    while trees.len() > keep {
+        let (_, path) = trees.remove(0);
+        match fs::remove_dir_all(&path) {
+            Ok(()) => {
+                eprintln!(
+                    "acos-art: pruned kept crash tree {} (ACOS_ART_KEEP_CRASH_MAX={keep})",
+                    path.display()
+                );
+                removed.push(path);
+            }
+            Err(e) => eprintln!(
+                "acos-art: warning: could not prune kept crash tree {}: {e}",
+                path.display()
+            ),
+        }
+    }
+    removed
+}
+
+/// Keep `run` because its guest crashed, under the retention cap.
+///
+/// Returns the kept path (for `session-exit.json.kept_run_dir`) or `None` when
+/// nothing was kept — either the cap is `0` or the tree did not survive pruning.
+/// `ACOS_ART_KEEP_SESSION=1` keeps everything and is exempt from the cap, as
+/// before (explicit opt-in).
+pub fn keep_run_for_guest_crash(run: RunDir, detail: serde_json::Value) -> Option<PathBuf> {
+    let path = run.path().to_path_buf();
+    let root = path
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| path.clone());
+    if std::env::var_os("ACOS_ART_KEEP_SESSION").is_some() {
+        eprintln!(
+            "acos-art: keeping crashed run tree {} (ACOS_ART_KEEP_SESSION=1: keep everything)",
+            path.display()
+        );
+        run.keep();
+        return Some(path);
+    }
+    let cap = keep_crash_max();
+    if cap == 0 {
+        // "Keep none": drop any kept crash trees from earlier runs as well, so
+        // the variable means what it says. This run's tree is removed by Drop.
+        let _ = prune_kept_crash_trees(&root, 0);
+        return None;
+    }
+    let _ = fs::write(
+        path.join(CRASH_KEEP_MARKER),
+        serde_json::to_vec_pretty(&detail).unwrap_or_default(),
+    );
+    let pruned = prune_kept_crash_trees(&root, cap);
+    if !path.join(CRASH_KEEP_MARKER).is_file() {
+        // Pruned under us (a concurrent run lowered the cap): nothing to keep.
+        return None;
+    }
+    run.keep();
+    eprintln!(
+        "acos-art: kept crashed run tree {} ({} of at most {}; {} pruned)",
+        path.display(),
+        kept_crash_trees(&root).len(),
+        cap,
+        pruned.len()
+    );
+    Some(path)
+}
+
 impl Drop for RunDir {
     fn drop(&mut self) {
         if self.keep {
@@ -1553,6 +1696,83 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    /// R3 retention policy: only a signal the guest raised itself *and* a parsed
+    /// crash record keep a tree. Host-sent teardown signals never do — keeping
+    /// them would leak one run tree (extracted native libs included) per normal
+    /// destroy/reset, which is what the N=10 loop does thousands of times.
+    #[test]
+    fn only_a_guest_crash_with_evidence_keeps_the_run_tree() {
+        for host_signal in [libc::SIGKILL, libc::SIGTERM, libc::SIGHUP, libc::SIGINT] {
+            assert!(
+                !keeps_run_tree_for_crash(Some(host_signal), true),
+                "signal {host_signal} is sent by the host, not raised by the guest"
+            );
+            assert!(!keeps_run_tree_for_crash(Some(host_signal), false));
+        }
+        for guest_signal in [
+            libc::SIGSEGV,
+            libc::SIGBUS,
+            libc::SIGILL,
+            libc::SIGFPE,
+            libc::SIGABRT,
+            libc::SIGTRAP,
+            libc::SIGSYS,
+        ] {
+            assert!(
+                keeps_run_tree_for_crash(Some(guest_signal), true),
+                "signal {guest_signal} is a guest crash with evidence"
+            );
+            // A crash signal whose record could not be parsed has nothing to
+            // debug, so it must not pin a tree either.
+            assert!(!keeps_run_tree_for_crash(Some(guest_signal), false));
+        }
+        assert!(!keeps_run_tree_for_crash(None, true));
+    }
+
+    /// R3 retention cap: the marker identifies *kept crash* trees, the oldest are
+    /// pruned first, and a tree without the marker is never touched.
+    #[test]
+    fn kept_crash_trees_are_pruned_oldest_first_and_unmarked_trees_survive() {
+        let root = scratch_dir("crash-cap").join("runs");
+        fs::create_dir_all(&root).unwrap();
+        // 5 kept crash trees, oldest first, distinguished by marker mtime.
+        let mut kept = Vec::new();
+        for i in 0..5u64 {
+            let dir = root.join(format!("run-{i}"));
+            fs::create_dir_all(dir.join("out")).unwrap();
+            fs::write(dir.join("out/launch.json"), "{}").unwrap();
+            let marker = dir.join(CRASH_KEEP_MARKER);
+            fs::write(&marker, "{\"route\":\"launch\"}").unwrap();
+            // mtime is what retention orders by; force it so the test is not
+            // dependent on filesystem timestamp granularity.
+            let f = fs::OpenOptions::new().write(true).open(&marker).unwrap();
+            f.set_modified(std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1000 + i))
+                .unwrap();
+            kept.push(dir);
+        }
+        // An explicit `ACOS_ART_KEEP_RUN` tree (no marker) must never be pruned.
+        let explicit = root.join("run-explicit");
+        fs::create_dir_all(explicit.join("out")).unwrap();
+
+        let pruned = prune_kept_crash_trees(&root, 2);
+        assert_eq!(pruned.len(), 3, "pruned {pruned:?}");
+        assert_eq!(
+            pruned,
+            kept[0..3].to_vec(),
+            "the three *oldest* kept crash trees are the ones removed"
+        );
+        assert!(kept[3].is_dir() && kept[4].is_dir(), "the two newest survive");
+        assert!(explicit.is_dir(), "a non-crash (explicit --keep) tree survives");
+        assert_eq!(kept_crash_trees(&root).len(), 2);
+
+        // `ACOS_ART_KEEP_CRASH_MAX=0` means keep none.
+        let pruned = prune_kept_crash_trees(&root, 0);
+        assert_eq!(pruned.len(), 2);
+        assert!(kept_crash_trees(&root).is_empty());
+        assert!(explicit.is_dir(), "still untouched");
+        let _ = fs::remove_dir_all(root.parent().unwrap());
     }
 
     /// S4: in a run, every shared input is `--ro-bind` and every writable path

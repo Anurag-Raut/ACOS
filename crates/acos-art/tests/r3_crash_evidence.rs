@@ -242,11 +242,107 @@ fn a_guest_killed_by_a_signal_leaves_fault_addr_code_thread_and_a_native_frame()
         raw.contains("Backtrace:"),
         "the raw ART dump must carry the backtrace section:\n{raw}"
     );
+    let kept = doc["kept_run_dir"]
+        .as_str()
+        .map(PathBuf::from)
+        .expect("a kept crash tree must be recorded in session-exit.json");
+    assert!(
+        kept.is_dir(),
+        "kept_run_dir must exist: {}",
+        kept.display()
+    );
+    assert!(
+        kept.join("kept-for-crash.json").is_file(),
+        "the kept tree carries the retention marker: {}",
+        kept.display()
+    );
+    let runs: Vec<_> = std::fs::read_dir(data.join("runs"))
+        .map(|rd| rd.flatten().map(|e| e.path()).collect())
+        .unwrap_or_default();
+    assert_eq!(
+        runs,
+        vec![kept.clone()],
+        "exactly the kept crash tree remains under <data>/runs"
+    );
+}
+
+/// The counterpart the review asked for: a signal **the host sends** is a
+/// teardown decision, never crash evidence. `--timeout` makes the launcher
+/// SIGKILL the guest's process group; nothing may be kept.
+#[test]
+fn a_host_sigkill_does_not_keep_the_run_tree() {
+    let _guard = art_guard();
+    if require_art().is_none() {
+        return;
+    }
+    let data = seed_data("r3kill");
+    let out = data.parent().unwrap().join("out");
+    let _ = std::fs::remove_dir_all(&out);
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_acos-art"));
+    cmd.arg("launch")
+        .arg("--data")
+        .arg(&data)
+        .arg("--apk")
+        .arg(apk())
+        .arg("--until")
+        .arg("activity-resumed")
+        .arg("--out")
+        .arg(&out)
+        .arg("--timeout")
+        .arg("1")
+        .env("ACOS_ART_QUIET_GUARD", "1")
+        .env_remove("ACOS_ART_KEEP_RUN")
+        .env_remove("ACOS_ART_KEEP_SESSION")
+        .env_remove("ACOS_ART_SECCOMP_AUDIT")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .process_group(0);
+    let mut child = cmd.spawn().expect("spawn acos-art launch");
+    let pid = child.id() as i32;
+    let mut out_pipe = child.stdout.take().expect("piped stdout");
+    let mut err_pipe = child.stderr.take().expect("piped stderr");
+    let out_thread = std::thread::spawn(move || {
+        let mut v = Vec::new();
+        let _ = out_pipe.read_to_end(&mut v);
+        v
+    });
+    let err_thread = std::thread::spawn(move || {
+        let mut v = Vec::new();
+        let _ = err_pipe.read_to_end(&mut v);
+        v
+    });
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) => {}
+            Err(e) => panic!("try_wait on launch: {e}"),
+        }
+        if started.elapsed() >= Duration::from_secs(120) {
+            unsafe {
+                libc::kill(-pid, libc::SIGKILL);
+                libc::kill(pid, libc::SIGKILL);
+            }
+            let _ = child.wait();
+            panic!("the SIGKILL launch never returned");
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let stderr = String::from_utf8_lossy(&err_thread.join().unwrap()).to_string();
+    let _stdout = String::from_utf8_lossy(&out_thread.join().unwrap()).to_string();
+    let record = std::fs::read_to_string(out.join("session-exit.json"))
+        .unwrap_or_else(|e| panic!("no session-exit.json: {e}\nstderr:\n{stderr}"));
+    let doc: serde_json::Value = serde_json::from_str(&record).expect("session-exit.json is JSON");
+    assert!(
+        doc["kept_run_dir"].is_null(),
+        "a host SIGKILL must not keep a tree:\n{record}"
+    );
     let runs: Vec<_> = std::fs::read_dir(data.join("runs"))
         .map(|rd| rd.flatten().map(|e| e.path()).collect())
         .unwrap_or_default();
     assert!(
-        !runs.is_empty(),
-        "a crashed run must keep its per-run tree (R2 lost its stack to the cleanup)"
+        runs.is_empty(),
+        "a host SIGKILL leaves no run tree (S4 keeps holding): {runs:?}"
     );
 }
