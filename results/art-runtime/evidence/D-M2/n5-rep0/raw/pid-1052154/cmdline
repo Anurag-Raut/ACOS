@@ -1,0 +1,1 @@
+.cache/dm2-target/release/acos serve --socket .cache/dm2/runs/scratch-n5-rep0/serve.sock --engine art --idle-timeout 900 --max-sessions 8

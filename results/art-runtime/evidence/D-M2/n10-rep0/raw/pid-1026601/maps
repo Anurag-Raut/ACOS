@@ -1,0 +1,36 @@
+6415afb4f000-6415afb52000 r--p 00000000 103:06 17080495                  /usr/bin/bwrap
+6415afb52000-6415afb5d000 r-xp 00003000 103:06 17080495                  /usr/bin/bwrap
+6415afb5d000-6415afb62000 r--p 0000e000 103:06 17080495                  /usr/bin/bwrap
+6415afb62000-6415afb63000 r--p 00013000 103:06 17080495                  /usr/bin/bwrap
+6415afb63000-6415afb64000 rw-p 00014000 103:06 17080495                  /usr/bin/bwrap
+6415d9d0e000-6415d9d2f000 rw-p 00000000 00:00 0                          [heap]
+7becff400000-7becff424000 r--p 00000000 103:06 17042384                  /usr/lib/libc.so.6
+7becff424000-7becff59f000 r-xp 00024000 103:06 17042384                  /usr/lib/libc.so.6
+7becff59f000-7becff615000 r--p 0019f000 103:06 17042384                  /usr/lib/libc.so.6
+7becff615000-7becff619000 r--p 00214000 103:06 17042384                  /usr/lib/libc.so.6
+7becff619000-7becff61b000 rw-p 00218000 103:06 17042384                  /usr/lib/libc.so.6
+7becff61b000-7becff623000 rw-p 00000000 00:00 0 
+7becff655000-7becff657000 rw-p 00000000 00:00 0 
+7becff657000-7becff65b000 r--p 00000000 103:06 17043543                  /usr/lib/libgcc_s.so.1
+7becff65b000-7becff67e000 r-xp 00004000 103:06 17043543                  /usr/lib/libgcc_s.so.1
+7becff67e000-7becff682000 r--p 00027000 103:06 17043543                  /usr/lib/libgcc_s.so.1
+7becff682000-7becff683000 r--p 0002b000 103:06 17043543                  /usr/lib/libgcc_s.so.1
+7becff683000-7becff684000 rw-p 0002c000 103:06 17043543                  /usr/lib/libgcc_s.so.1
+7becff684000-7becff687000 r--p 00000000 103:06 17056494                  /usr/lib/libcap.so.2.78
+7becff687000-7becff68c000 r-xp 00003000 103:06 17056494                  /usr/lib/libcap.so.2.78
+7becff68c000-7becff68e000 r--p 00008000 103:06 17056494                  /usr/lib/libcap.so.2.78
+7becff68e000-7becff68f000 r--p 00009000 103:06 17056494                  /usr/lib/libcap.so.2.78
+7becff68f000-7becff690000 rw-p 0000a000 103:06 17056494                  /usr/lib/libcap.so.2.78
+7becff690000-7becff692000 rw-p 00000000 00:00 0 
+7becff692000-7becff6d2000 r--p 00000000 103:06 14812457                  /etc/ld.so.cache
+7becff6d2000-7becff6d6000 r--p 00000000 00:00 0                          [vvar]
+7becff6d6000-7becff6d8000 r--p 00000000 00:00 0                          [vvar_vclock]
+7becff6d8000-7becff6da000 r-xp 00000000 00:00 0                          [vdso]
+7becff6da000-7becff6db000 r--p 00000000 103:06 17042369                  /usr/lib/ld-linux-x86-64.so.2
+7becff6db000-7becff708000 r-xp 00001000 103:06 17042369                  /usr/lib/ld-linux-x86-64.so.2
+7becff708000-7becff717000 r--p 0002e000 103:06 17042369                  /usr/lib/ld-linux-x86-64.so.2
+7becff717000-7becff719000 r--p 0003d000 103:06 17042369                  /usr/lib/ld-linux-x86-64.so.2
+7becff719000-7becff71a000 rw-p 0003f000 103:06 17042369                  /usr/lib/ld-linux-x86-64.so.2
+7becff71a000-7becff71b000 rw-p 00000000 00:00 0 
+7ffdfc247000-7ffdfc26b000 rw-p 00000000 00:00 0                          [stack]
+ffffffffff600000-ffffffffff601000 --xp 00000000 00:00 0                  [vsyscall]

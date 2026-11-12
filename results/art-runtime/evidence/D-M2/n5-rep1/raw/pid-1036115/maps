@@ -1,0 +1,78 @@
+59ef00891000-59ef009c9000 r--p 00000000 103:06 27284321                  /home/Qui/Projects/acos/.cache/dm2-target/release/acos-art
+59ef009c9000-59ef00e61000 r-xp 00137000 103:06 27284321                  /home/Qui/Projects/acos/.cache/dm2-target/release/acos-art
+59ef00e61000-59ef00e84000 r--p 005ce000 103:06 27284321                  /home/Qui/Projects/acos/.cache/dm2-target/release/acos-art
+59ef00e84000-59ef00e85000 rw-p 005f0000 103:06 27284321                  /home/Qui/Projects/acos/.cache/dm2-target/release/acos-art
+59ef152b3000-59ef1537a000 rw-p 00000000 00:00 0                          [heap]
+7cbe4c000000-7cbe4c021000 rw-p 00000000 00:00 0 
+7cbe4c021000-7cbe50000000 ---p 00000000 00:00 0 
+7cbe54000000-7cbe54021000 rw-p 00000000 00:00 0 
+7cbe54021000-7cbe58000000 ---p 00000000 00:00 0 
+7cbe58000000-7cbe58021000 rw-p 00000000 00:00 0 
+7cbe58021000-7cbe5c000000 ---p 00000000 00:00 0 
+7cbe5c000000-7cbe5c509000 rw-p 00000000 00:00 0 
+7cbe5c509000-7cbe60000000 ---p 00000000 00:00 0 
+7cbe60000000-7cbe60021000 rw-p 00000000 00:00 0 
+7cbe60021000-7cbe64000000 ---p 00000000 00:00 0 
+7cbe64000000-7cbe64021000 rw-p 00000000 00:00 0 
+7cbe64021000-7cbe68000000 ---p 00000000 00:00 0 
+7cbe68000000-7cbe68171000 rw-p 00000000 00:00 0 
+7cbe68171000-7cbe6c000000 ---p 00000000 00:00 0 
+7cbe6c000000-7cbe6c021000 rw-p 00000000 00:00 0 
+7cbe6c021000-7cbe70000000 ---p 00000000 00:00 0 
+7cbe709f8000-7cbe71a00000 rw-p 00000000 00:00 0 
+7cbe71a00000-7cbe71a24000 r--p 00000000 103:06 17042384                  /usr/lib/libc.so.6
+7cbe71a24000-7cbe71b9f000 r-xp 00024000 103:06 17042384                  /usr/lib/libc.so.6
+7cbe71b9f000-7cbe71c15000 r--p 0019f000 103:06 17042384                  /usr/lib/libc.so.6
+7cbe71c15000-7cbe71c19000 r--p 00214000 103:06 17042384                  /usr/lib/libc.so.6
+7cbe71c19000-7cbe71c1b000 rw-p 00218000 103:06 17042384                  /usr/lib/libc.so.6
+7cbe71c1b000-7cbe71c23000 rw-p 00000000 00:00 0 
+7cbe71cc9000-7cbe71cd9000 r--p 00000000 103:06 17042399                  /usr/lib/libm.so.6
+7cbe71cd9000-7cbe71d75000 r-xp 00010000 103:06 17042399                  /usr/lib/libm.so.6
+7cbe71d75000-7cbe71dfe000 r--p 000ac000 103:06 17042399                  /usr/lib/libm.so.6
+7cbe71dfe000-7cbe71dff000 r--p 00134000 103:06 17042399                  /usr/lib/libm.so.6
+7cbe71dff000-7cbe71e00000 rw-p 00135000 103:06 17042399                  /usr/lib/libm.so.6
+7cbe71e00000-7cbe71e9a000 r--p 00000000 103:06 17083701                  /usr/lib/libstdc++.so.6.0.36
+7cbe71e9a000-7cbe7201d000 r-xp 0009a000 103:06 17083701                  /usr/lib/libstdc++.so.6.0.36
+7cbe7201d000-7cbe720bd000 r--p 0021d000 103:06 17083701                  /usr/lib/libstdc++.so.6.0.36
+7cbe720bd000-7cbe720ce000 r--p 002bc000 103:06 17083701                  /usr/lib/libstdc++.so.6.0.36
+7cbe720ce000-7cbe720cf000 rw-p 002cd000 103:06 17083701                  /usr/lib/libstdc++.so.6.0.36
+7cbe720cf000-7cbe720d3000 rw-p 00000000 00:00 0 
+7cbe721d6000-7cbe721d7000 ---p 00000000 00:00 0 
+7cbe721d7000-7cbe721d9000 rw-p 00000000 00:00 0 
+7cbe721d9000-7cbe721da000 ---p 00000000 00:00 0 
+7cbe721da000-7cbe721dc000 rw-p 00000000 00:00 0 
+7cbe721dc000-7cbe721dd000 ---p 00000000 00:00 0 
+7cbe721dd000-7cbe721df000 rw-p 00000000 00:00 0 
+7cbe721df000-7cbe721e0000 ---p 00000000 00:00 0 
+7cbe721e0000-7cbe721e2000 rw-p 00000000 00:00 0 
+7cbe721e2000-7cbe721e3000 ---p 00000000 00:00 0 
+7cbe721e3000-7cbe721e5000 rw-p 00000000 00:00 0 
+7cbe721e5000-7cbe721e6000 ---p 00000000 00:00 0 
+7cbe721e6000-7cbe721e8000 rw-p 00000000 00:00 0 
+7cbe721e8000-7cbe721e9000 ---p 00000000 00:00 0 
+7cbe721e9000-7cbe721eb000 rw-p 00000000 00:00 0 
+7cbe721eb000-7cbe721ec000 rw-p 00000000 00:00 0 
+7cbe721ec000-7cbe721ed000 rw-p 00000000 00:00 0 
+7cbe721ed000-7cbe721ee000 ---p 00000000 00:00 0 
+7cbe721ee000-7cbe721f0000 rw-p 00000000 00:00 0 
+7cbe721f0000-7cbe721f1000 ---p 00000000 00:00 0 
+7cbe721f1000-7cbe721f3000 rw-p 00000000 00:00 0 
+7cbe721f3000-7cbe721fa000 rw-p 00000000 00:00 0 
+7cbe721fa000-7cbe721fe000 r--p 00000000 103:06 17043543                  /usr/lib/libgcc_s.so.1
+7cbe721fe000-7cbe72221000 r-xp 00004000 103:06 17043543                  /usr/lib/libgcc_s.so.1
+7cbe72221000-7cbe72225000 r--p 00027000 103:06 17043543                  /usr/lib/libgcc_s.so.1
+7cbe72225000-7cbe72226000 r--p 0002b000 103:06 17043543                  /usr/lib/libgcc_s.so.1
+7cbe72226000-7cbe72227000 rw-p 0002c000 103:06 17043543                  /usr/lib/libgcc_s.so.1
+7cbe72227000-7cbe72229000 rw-p 00000000 00:00 0 
+7cbe72229000-7cbe72269000 r--p 00000000 103:06 14812457                  /etc/ld.so.cache
+7cbe72269000-7cbe7226d000 r--p 00000000 00:00 0                          [vvar]
+7cbe7226d000-7cbe7226f000 r--p 00000000 00:00 0                          [vvar_vclock]
+7cbe7226f000-7cbe72271000 r-xp 00000000 00:00 0                          [vdso]
+7cbe72271000-7cbe72272000 r--p 00000000 103:06 17042369                  /usr/lib/ld-linux-x86-64.so.2
+7cbe72272000-7cbe7229f000 r-xp 00001000 103:06 17042369                  /usr/lib/ld-linux-x86-64.so.2
+7cbe7229f000-7cbe722ae000 r--p 0002e000 103:06 17042369                  /usr/lib/ld-linux-x86-64.so.2
+7cbe722ae000-7cbe722b0000 r--p 0003d000 103:06 17042369                  /usr/lib/ld-linux-x86-64.so.2
+7cbe722b0000-7cbe722b1000 rw-p 0003f000 103:06 17042369                  /usr/lib/ld-linux-x86-64.so.2
+7cbe722b1000-7cbe722b2000 rw-p 00000000 00:00 0 
+7fffd25f3000-7fffd2615000 rw-p 00000000 00:00 0                          [stack]
+ffffffffff600000-ffffffffff601000 --xp 00000000 00:00 0                  [vsyscall]
