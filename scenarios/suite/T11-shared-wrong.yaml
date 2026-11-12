@@ -1,0 +1,19 @@
+# T11 wrong: after one fragment tap the expectation claims two taps. Must fail
+# ASSERTION_FAILED.
+version: 1
+name: T11-shared-wrong
+description: >-
+  Switch to Beta, tap the fragment once, then assert Beta taps=2.
+app: fixtures/build/apps/fragments-nav.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.fragmentsnav/.MainActivity, clear_state: true}
+  - tap: {selector: {id: show_b}}
+  - tap: {selector: {id: frag_text}}
+  - assert_text: {selector: {id: frag_text}, text: {exact: "Beta taps=2"}}

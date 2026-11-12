@@ -1,0 +1,28 @@
+# T07 wrong: the submit is valid, but the log assertion demands a failure line
+# that never occurs. Must fail with ASSERTION_FAILED (not ELEMENT_NOT_FOUND).
+version: 1
+name: T07-form-wrong
+description: >-
+  Type a valid form and submit, then require a validation_failed log line.
+app: fixtures/build/apps/form-validation.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.formvalidation/.MainActivity, clear_state: true}
+  - wait_for: {selector: {hint: {exact: Name}}, timeout_ms: 5000}
+  - tap: {selector: {id: name}}
+  - type: {selector: {id: name}, text: "Ada"}
+  - tap: {selector: {id: email}}
+  - type: {selector: {id: email}, text: "ada@example.com"}
+  - tap: {selector: {id: submit}}
+  - assert_log:
+      tag: AcosForm
+      since_previous_step: true
+      ordered: true
+      timeout_ms: 5000
+      patterns: ['^validation_failed reason=name']

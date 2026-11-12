@@ -1,0 +1,18 @@
+# T04 wrong: the RTL line is asserted with different text. Must fail with
+# ASSERTION_FAILED (the node exists; its text differs).
+version: 1
+name: T04-text-wrong
+description: >-
+  Launch widget-gallery and assert a truncated Arabic string the fixture does
+  not render.
+app: fixtures/build/apps/widget-gallery.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.widgetgallery/.MainActivity, clear_state: true}
+  - assert_text: {selector: {id: rtl}, text: {exact: "مرحبا"}}

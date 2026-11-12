@@ -1,0 +1,35 @@
+# T10 correct: per-session list state and no leakage between items.
+#
+# Scope note (recorded in INDEX.yaml): true "two concurrent accounts" needs two
+# live guest sessions in one task; this suite runs one ART job at a time (the
+# N=10 concurrent form belongs to the bench-session suite). This variant proves
+# the session-local list state: add alpha+beta, clear, then add gamma and assert
+# alpha is gone and gamma is present.
+version: 1
+name: T10-isolation-good
+description: >-
+  Launch todo-list, add alpha and beta, assert both rows, clear, assert alpha is
+  absent, add gamma and assert gamma present and alpha still absent.
+app: fixtures/build/apps/todo-list.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.todolist/.MainActivity, clear_state: true}
+  - tap: {selector: {id: input}}
+  - type: {selector: {id: input}, text: "alpha"}
+  - tap: {selector: {id: add}}
+  - assert_text: {selector: {text: {exact: alpha}}, text: {exact: alpha}}
+  - type: {text: "beta"}
+  - tap: {selector: {id: add}}
+  - assert_text: {selector: {text: {exact: beta}}, text: {exact: beta}}
+  - tap: {selector: {id: clear}}
+  - assert_not_visible: {selector: {text: {exact: alpha}}}
+  - type: {text: "gamma"}
+  - tap: {selector: {id: add}}
+  - assert_text: {selector: {text: {exact: gamma}}, text: {exact: gamma}}
+  - assert_not_visible: {selector: {text: {exact: alpha}}}

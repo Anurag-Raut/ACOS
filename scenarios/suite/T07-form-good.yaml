@@ -1,0 +1,34 @@
+# T07 correct: type -> submit -> validated result.
+#
+# Scope note (recorded in INDEX.yaml): the scenario format has no scroll step,
+# so the advisor's "type/scroll/submit" scroll half is UNSUPPORTED in a scenario.
+# This variant types into both fields and submits, requiring the app's own
+# `validation_ok` log line and the cleared inline error.
+version: 1
+name: T07-form-good
+description: >-
+  Launch form-validation, type a valid name and email, submit, and assert the
+  AcosForm validation_ok line plus the empty inline error.
+app: fixtures/build/apps/form-validation.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.formvalidation/.MainActivity, clear_state: true}
+  - wait_for: {selector: {hint: {exact: Name}}, timeout_ms: 5000}
+  - tap: {selector: {id: name}}
+  - type: {selector: {id: name}, text: "Ada"}
+  - tap: {selector: {id: email}}
+  - type: {selector: {id: email}, text: "ada@example.com"}
+  - tap: {selector: {id: submit}}
+  - assert_log:
+      tag: AcosForm
+      since_previous_step: true
+      ordered: true
+      timeout_ms: 5000
+      patterns: ['^validation_ok name=Ada email=ada@example\.com$']
+  - assert_text: {selector: {id: error}, text: {regex: "^$"}}

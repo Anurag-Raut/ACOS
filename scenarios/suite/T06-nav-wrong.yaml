@@ -1,0 +1,21 @@
+# T06 wrong: after Back the expectation claims the pre-back screen state
+# (current=Beta). The framework popped the fragment; must fail ASSERTION_FAILED.
+version: 1
+name: T06-nav-wrong
+description: >-
+  Tap Show Beta and press Back, then assert current=Beta (the screen before the
+  pop) instead of the popped state.
+app: fixtures/build/apps/fragments-nav.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.fragmentsnav/.MainActivity, clear_state: true}
+  - tap: {selector: {id: show_b}}
+  - assert_text: {selector: {id: state}, text: {exact: "current=Beta"}}
+  - back: {}
+  - assert_text: {selector: {id: state}, text: {exact: "current=Beta"}}

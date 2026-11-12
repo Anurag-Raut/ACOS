@@ -1,0 +1,301 @@
+# ACOS agent-task suite T01-T12 (W30; advisor item 2).
+#
+# One task = one CORRECT variant that must pass strictly and one deliberately
+# WRONG variant that must fail with the expected structured error code. The
+# wrong twins seed wrong text / wrong post-tap state / missing element / wrong
+# log / wrong region, so a harness that reports a pass for them is broken
+# (false pass). `tools/run-suite.sh` reads this file; it never guesses a task.
+#
+# Schema per task:
+#   id, title, app, apk, apk_sha256, verbs, good{scenario,expected,error},
+#   wrong{scenario,expected,error}, mapping, unsupported (list of named gaps)
+#
+# verdict values: pass | fail | unsupported. A wrong variant is only counted
+# correct when its verdict is fail AND its error code equals `wrong.error`.
+# `status: UNSUPPORTED` tasks are reported as UNSUPPORTED and are excluded from
+# verified_tasks (never faked, never counted as a pass).
+version: 1
+suite: acos-agent-tasks-12
+engine: art
+concurrency: 1            # one ART job at a time (run-exclusive)
+rounds: 1                 # W30 acceptance: one clean pass/fail per variant (advisor item 2 benchmarks use 3)
+
+tasks:
+  - id: T01
+    title: build/install then first frame
+    app: counter
+    apk: fixtures/build/apps/counter.apk
+    apk_sha256: e037aee210471283479f04339235e783c1d344aa560f82a22ae1b53ee6610366
+    verbs: [launch, wait_for, assert_text, assert_no_crash]
+    good:
+      scenario: T01-install-good.yaml
+      expected: pass
+      error: null
+    wrong:
+      scenario: T01-install-wrong.yaml
+      expected: fail
+      error: ASSERTION_FAILED
+    mapping: >-
+      counter.apk. `acos verify --engine art` installs the APK (PmsState +
+      native_libs), binds the Activity and completes the first live frame; the
+      suite uses the prebuilt APK under fixtures/build/apps (no rebuild, no new
+      APK). Wrong twin: first-frame count 1 while the fixture renders 0.
+    unsupported: []
+
+  - id: T02
+    title: state logic 0 -> 1 -> 2 -> reset
+    app: counter
+    apk: fixtures/build/apps/counter.apk
+    apk_sha256: e037aee210471283479f04339235e783c1d344aa560f82a22ae1b53ee6610366
+    verbs: [launch, assert_text, tap, assert_log]
+    good:
+      scenario: T02-state-good.yaml
+      expected: pass
+      error: null
+    wrong:
+      scenario: T02-state-wrong.yaml
+      expected: fail
+      error: ASSERTION_FAILED
+    mapping: >-
+      counter.apk. Two Increments plus Reset, each transition bound to the
+      app's own AcosCounter log line. Wrong twin: assert pre-tap count 0 after
+      the tap (wrong state after tap).
+    unsupported: []
+
+  - id: T03
+    title: component render vs a frozen live-ART baseline
+    app: hello-views
+    apk: fixtures/build/apps/hello-views.apk
+    apk_sha256: 3c00f4cacca563351f43b797b8fe855c3413593a1c81aeb6ec0f3cc155a5e429
+    verbs: [launch, wait_for, assert_text, assert_region]
+    good:
+      scenario: T03-render-good.yaml
+      expected: pass
+      error: null
+    wrong:
+      scenario: T03-render-wrong.yaml
+      expected: fail
+      error: ASSERTION_FAILED
+    mapping: >-
+      hello-views.apk. assert_region compares the top 1080x700 pixels of the
+      fresh 1080x2209 C1 frame to baselines/T03-hello-views-top.png, captured
+      from the same fixture on real ART (frames are byte-deterministic across
+      runs: four captures, one sha256). The fixture reference PNG is a full
+      display frame (1080x2400, status/nav bars included) while assert_screenshot
+      requires the frame size, so the phone SSIM comparison stays with
+      tools/art-render-app-compare.py (W24: 0.9778 aligned). Wrong twin: the
+      same top baseline against a shifted rectangle (x=0,y=120), i.e. the
+      wrong region.
+    unsupported:
+      - "SSIM >= 0.98 against the 1080x2400 fixture reference is not a scenario
+         assertion in this build (assert_screenshot needs same-size images;
+         assert_region is exact). Covered by tools/art-render-app-compare.py."
+
+  - id: T04
+    title: long text, RTL and spanned runs
+    app: widget-gallery
+    apk: fixtures/build/apps/widget-gallery.apk
+    apk_sha256: bad162f7928da534e4d4ef149b003bb3823ff9a72583699de583bb3ad2a08d76
+    verbs: [launch, assert_text]
+    good:
+      scenario: T04-text-good.yaml
+      expected: pass
+      error: null
+    wrong:
+      scenario: T04-text-wrong.yaml
+      expected: fail
+      error: ASSERTION_FAILED
+    mapping: >-
+      widget-gallery.apk: ellipsized long line, RTL Arabic line, bold/italic/
+      normal SpannableString, EditText hint. Wrong twin: truncated Arabic text.
+    unsupported:
+      - "fontScale=1.3 and locale=ar launch parameters: the scenario format has
+         no font-scale field and set_locale maps to the ART engine's absent
+         `environment` capability (UNSUPPORTED_BACKEND). Long text/RTL are
+         verified from the fixture's own content instead."
+
+  - id: T05
+    title: incremental install preserving app data
+    status: UNSUPPORTED
+    app: sqlite-crud
+    apk: fixtures/build/apps/sqlite-crud.apk
+    apk_sha256: 0e50ebbd2ea3c037f1e92dc87cab370c5132af7890db80df971d9b050f0ef412
+    verbs: []
+    good: null
+    wrong: null
+    mapping: null
+    unsupported:
+      - "Reinstall/relaunch preserving app data cannot be expressed: acos-art
+         creates a fresh run dir with an EMPTY app-data for every launch
+         (crates/acos-art/src/lib.rs new_run_dir; W22 reset = fresh process +
+         empty app-data), and there is no install/relaunch scenario verb or
+         shared-data-dir option. A second `launch` step only re-observes the
+         same live session (would be a fake pass), so this task is reported
+         UNSUPPORTED rather than faked."
+    reason: >-
+      Named UNSUPPORTED for the advisor item 2 mapping T05. The single-session
+      disk-backed half is covered by T08; the cross-process half needs an
+      explicit install/relaunch command with a caller-supplied app-data root.
+
+  - id: T06
+    title: tap -> new screen -> back
+    app: fragments-nav
+    apk: fixtures/build/apps/fragments-nav.apk
+    apk_sha256: 7636339889eab262f92e6d476043f76a5e58513082d2393bbea2ddf953c7a790
+    verbs: [launch, assert_text, tap, back]
+    good:
+      scenario: T06-nav-good.yaml
+      expected: pass
+      error: null
+    wrong:
+      scenario: T06-nav-wrong.yaml
+      expected: fail
+      error: ASSERTION_FAILED
+    mapping: >-
+      fragments-nav.apk: Show Beta replaces the fragment screen, the framework
+      Back path pops the back stack and updates the header (popped=true). Wrong
+      twin: assert the pre-back screen state after Back.
+    unsupported:
+      - "two-activity.apk (tap Go -> DetailActivity -> back) is not expressible:
+         the tap surfaces UNSUPPORTED_ANDROID_API because
+         IActivityTaskManager.startActivity has no multi-Activity path in the
+         launcher. Verified by a probe run, not assumed."
+
+  - id: T07
+    title: type, submit, validated result
+    app: form-validation
+    apk: fixtures/build/apps/form-validation.apk
+    apk_sha256: 5528815228b63e3e29a5fda7aa45532024d0da056637daa2a7d98264b64efa10
+    verbs: [launch, wait_for, tap, type, assert_log, assert_text]
+    good:
+      scenario: T07-form-good.yaml
+      expected: pass
+      error: null
+    wrong:
+      scenario: T07-form-wrong.yaml
+      expected: fail
+      error: ASSERTION_FAILED
+    mapping: >-
+      form-validation.apk: type into both EditTexts, Submit, require the app's
+      AcosForm validation_ok line and the cleared inline error. Wrong twin:
+      require a validation_failed line that never occurs (wrong log).
+    unsupported:
+      - "scroll: the scenario format has no scroll/swipe step (Step enum has no
+         swipe/scroll), so the advisor's scroll half cannot be expressed. The
+         list-scroll fixture has no scroll verb either; W15/W19 cover taps."
+
+  - id: T08
+    title: disk-backed persistence (single session)
+    app: sqlite-crud
+    apk: fixtures/build/apps/sqlite-crud.apk
+    apk_sha256: 0e50ebbd2ea3c037f1e92dc87cab370c5132af7890db80df971d9b050f0ef412
+    verbs: [launch, assert_text, tap, type]
+    good:
+      scenario: T08-persist-good.yaml
+      expected: pass
+      error: null
+    wrong:
+      scenario: T08-persist-wrong.yaml
+      expected: fail
+      error: ASSERTION_FAILED
+    mapping: >-
+      sqlite-crud.apk: insert two notes through SQLiteOpenHelper and assert the
+      Cursor reload's rows=N plus the list row text. Wrong twin: assert rows=1
+      after two inserts (stale state).
+    unsupported:
+      - "cross-process persistence (relaunch/reinstall survival) is the T05
+         limitation: every launch gets empty app-data, so the DB file does not
+         survive the session. T08 verifies the DB-file-backed reload instead."
+
+  - id: T09
+    title: reset returns to initial state
+    app: counter
+    apk: fixtures/build/apps/counter.apk
+    apk_sha256: e037aee210471283479f04339235e783c1d344aa560f82a22ae1b53ee6610366
+    verbs: [launch, assert_text, tap, reset]
+    good:
+      scenario: T09-reset-good.yaml
+      expected: pass
+      error: null
+    wrong:
+      scenario: T09-reset-wrong.yaml
+      expected: fail
+      error: ASSERTION_FAILED
+    mapping: >-
+      counter.apk: inc -> 1, host-observed reset (fresh acos-art process, empty
+      app-data) -> 0, inc -> 1 proves the post-reset guest is live. Wrong twin:
+      assert the pre-reset count 1 after reset.
+    unsupported:
+      - "crash-then-reset: the scenario format has only assert_no_crash (no
+         assert_crash), and broken-crash.apk exits before its first live frame
+         with UNSUPPORTED_BACKEND / GUEST_EXITED (probe run). Switching APK
+         across reset is also not a supported command."
+
+  - id: T10
+    title: per-session list isolation (no leakage between items)
+    app: todo-list
+    apk: fixtures/build/apps/todo-list.apk
+    apk_sha256: 4a8c72bac5c642af7ed766f495b8775a7f8a5414cc4afdb7bf435356689cabcf
+    verbs: [launch, tap, type, assert_text, assert_not_visible]
+    good:
+      scenario: T10-isolation-good.yaml
+      expected: pass
+      error: null
+    wrong:
+      scenario: T10-isolation-wrong.yaml
+      expected: fail
+      error: ELEMENT_NOT_FOUND
+    mapping: >-
+      todo-list.apk: add alpha+beta, assert both, Clear, assert alpha absent,
+      add gamma and assert gamma present / alpha still absent. Wrong twin:
+      require alpha to be visible after Clear -> node absent, ELEMENT_NOT_FOUND.
+    unsupported:
+      - "two truly concurrent accounts: the suite runs one ART job at a time
+         (run-exclusive; per W30 packet). The N=10 concurrent M11 numerator is
+         the bench-session suite's job (advisor items 1/2), not this runner."
+
+  - id: T11
+    title: shared state across two views
+    app: fragments-nav
+    apk: fixtures/build/apps/fragments-nav.apk
+    apk_sha256: 7636339889eab262f92e6d476043f76a5e58513082d2393bbea2ddf953c7a790
+    verbs: [launch, assert_text, tap]
+    good:
+      scenario: T11-shared-good.yaml
+      expected: pass
+      error: null
+    wrong:
+      scenario: T11-shared-wrong.yaml
+      expected: fail
+      error: ASSERTION_FAILED
+    mapping: >-
+      fragments-nav.apk: header id=state and fragment id=frag_text both describe
+      the installed fragment; tapping updates the fragment's counter while the
+      header keeps current=Beta. Wrong twin: assert taps=2 after one tap.
+    unsupported: []
+
+  - id: T12
+    title: dialog invocation (provider round trip blocked)
+    app: dialogs-menus
+    apk: fixtures/build/apps/dialogs-menus.apk
+    apk_sha256: e3e25ff139baf623abe65ccbcb126c694cb39c46c9366883010e0be8d6da6ae6
+    verbs: [launch, assert_text, tap, assert_log, assert_no_crash]
+    good:
+      scenario: T12-dialog-good.yaml
+      expected: pass
+      error: null
+    wrong:
+      scenario: T12-dialog-wrong.yaml
+      expected: fail
+      error: ASSERTION_FAILED
+    mapping: >-
+      dialogs-menus.apk: tap Alert dialog and require the app's own
+      AcosDialogs `dialog_shown` line plus status Idle (OK not pressed). Wrong
+      twin: require `dialog_ok`, which only a confirmed dialog emits.
+    unsupported:
+      - "dialog-window nodes (android:id/message, button1): the live probe does
+         not traverse the AlertDialog's separate WindowManagerGlobal root in this
+         binary (probe: ELEMENT_NOT_FOUND). W27 owns that tree change."
+      - "service-provider round trip: tap Send calls startService; the guest
+         ends after the gesture without a settled frame (INTERNAL: the guest
+         ended after the gesture without a settled frame). Probe-verified."

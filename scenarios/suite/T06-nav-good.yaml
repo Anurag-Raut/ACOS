@@ -1,0 +1,30 @@
+# T06 correct: tap -> new screen -> back.
+#
+# The advisor's original mapping (two-activity: tap Go -> DetailActivity -> back)
+# is not expressible today: tapping `go` surfaces UNSUPPORTED_ANDROID_API
+# (IActivityTaskManager.startActivity has no multi-Activity path). This variant
+# uses fragments-nav, where Show Beta replaces the fragment screen and the
+# framework Back path pops the back stack and updates the header state.
+version: 1
+name: T06-nav-good
+description: >-
+  Launch fragments-nav, tap Show Beta (new fragment screen), assert the new
+  screen and header, press Back and assert the back-stack pop.
+app: fixtures/build/apps/fragments-nav.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.fragmentsnav/.MainActivity, clear_state: true}
+  - assert_text: {selector: {id: state}, text: {exact: "current=Alpha"}}
+  - assert_text: {selector: {id: frag_text}, text: {exact: "Alpha taps=0"}}
+  - tap: {selector: {id: show_b}}
+  - assert_text: {selector: {id: state}, text: {exact: "current=Beta"}}
+  - assert_text: {selector: {id: frag_text}, text: {exact: "Beta taps=0"}}
+  - back: {}
+  - assert_text: {selector: {id: state}, text: {exact: "popped=true"}}
+  - assert_text: {selector: {id: frag_text}, text: {exact: "Alpha taps=0"}}

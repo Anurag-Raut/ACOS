@@ -1,0 +1,23 @@
+# T08 wrong: after two inserts the expectation claims rows=1 (stale state).
+# Must fail ASSERTION_FAILED.
+version: 1
+name: T08-persist-wrong
+description: >-
+  Insert two notes and then assert the DB reports only one row.
+app: fixtures/build/apps/sqlite-crud.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.sqlitecrud/.MainActivity, clear_state: true}
+  - tap: {selector: {id: item_input}}
+  - type: {selector: {id: item_input}, text: "note1"}
+  - tap: {selector: {id: add}}
+  - tap: {selector: {id: item_input}}
+  - type: {selector: {id: item_input}, text: "note2"}
+  - tap: {selector: {id: add}}
+  - assert_text: {selector: {id: status}, text: {exact: "rows=1"}}

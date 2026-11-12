@@ -1,0 +1,32 @@
+# T02 correct: counter state logic 0 -> 1 -> 2 -> reset 0, with the app's own
+# guest log lines bound to each transition.
+#
+# assert_log must immediately follow the action that emits the line: the
+# executor flushes the guest log at the start of each step, so an assertion
+# between the action and the log check consumes the line into the earlier
+# step's slice (a real ledger rule, not a scenario quirk).
+version: 1
+name: T02-state-good
+description: >-
+  Launch counter, assert 0, tap Increment twice asserting the log line then the
+  count 1 and 2, tap Reset and assert its log line then count 0.
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.counter/.MainActivity, clear_state: true}
+  - assert_text: {selector: {id: count}, text: {exact: "0"}}
+  - tap: {selector: {id: inc}}
+  - assert_log: {tag: AcosCounter, since_previous_step: true, ordered: true, timeout_ms: 5000, patterns: ['^increment value=1$']}
+  - assert_text: {selector: {id: count}, text: {exact: "1"}}
+  - tap: {selector: {id: inc}}
+  - assert_log: {tag: AcosCounter, since_previous_step: true, ordered: true, timeout_ms: 5000, patterns: ['^increment value=2$']}
+  - assert_text: {selector: {id: count}, text: {exact: "2"}}
+  - tap: {selector: {id: reset}}
+  - assert_log: {tag: AcosCounter, since_previous_step: true, ordered: true, timeout_ms: 5000, patterns: ['^reset value=0$']}
+  - assert_text: {selector: {id: count}, text: {exact: "0"}}

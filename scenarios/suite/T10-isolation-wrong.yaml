@@ -1,0 +1,21 @@
+# T10 wrong: after clearing the list the expectation requires alpha to still be
+# visible. The node is absent, so this must fail with ELEMENT_NOT_FOUND.
+version: 1
+name: T10-isolation-wrong
+description: >-
+  Add alpha, clear the list, then assert alpha is still visible.
+app: fixtures/build/apps/todo-list.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.todolist/.MainActivity, clear_state: true}
+  - tap: {selector: {id: input}}
+  - type: {selector: {id: input}, text: "alpha"}
+  - tap: {selector: {id: add}}
+  - tap: {selector: {id: clear}}
+  - assert_visible: {selector: {text: {exact: alpha}}}

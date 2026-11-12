@@ -1,0 +1,20 @@
+# T03 wrong: the region assertion names a shifted rectangle (y=120) but compares
+# it to the top-of-screen baseline, i.e. the wrong region. Must fail with
+# ASSERTION_FAILED (the frame itself is meaningful and fresh).
+version: 1
+name: T03-render-wrong
+description: >-
+  Same hello-views launch, but compare the shifted region y=120 against the
+  top-of-screen baseline.
+app: fixtures/build/apps/hello-views.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity, clear_state: true}
+  - wait_for: {selector: {id: result}, timeout_ms: 5000}
+  - assert_region: {x: 0, y: 120, w: 1080, h: 700, equals_png: baselines/T03-hello-views-top.png}

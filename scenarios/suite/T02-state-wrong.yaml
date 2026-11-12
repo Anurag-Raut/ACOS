@@ -1,0 +1,19 @@
+# T02 wrong: after tapping Increment the expectation claims the state did not
+# change (count 0). Must fail with ASSERTION_FAILED, never pass on stale state.
+version: 1
+name: T02-state-wrong
+description: >-
+  Tap Increment and then assert the pre-tap count 0; the live tree shows 1.
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.counter/.MainActivity, clear_state: true}
+  - assert_text: {selector: {id: count}, text: {exact: "0"}}
+  - tap: {selector: {id: inc}}
+  - assert_text: {selector: {id: count}, text: {exact: "0"}}

@@ -1,0 +1,24 @@
+# T12 wrong: the dialog is shown but OK is never pressed, so the `dialog_ok`
+# line cannot exist. Must fail with ASSERTION_FAILED (wrong log).
+version: 1
+name: T12-dialog-wrong
+description: >-
+  Open the dialog and require the dialog_ok line that only a confirmed dialog
+  emits.
+app: fixtures/build/apps/dialogs-menus.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.dialogsmenus/.MainActivity, clear_state: true}
+  - tap: {selector: {id: dialog}}
+  - assert_log:
+      tag: AcosDialogs
+      since_previous_step: true
+      ordered: true
+      timeout_ms: 5000
+      patterns: ['^dialog_ok which=0$']

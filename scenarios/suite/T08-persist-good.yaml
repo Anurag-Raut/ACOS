@@ -1,0 +1,32 @@
+# T08 correct: disk-backed SQLite state inside one live session.
+#
+# Scope note (recorded in INDEX.yaml): acos-art gives every launch a fresh run
+# directory with an EMPTY app-data (W22), so cross-process persistence (reinstall
+# / relaunch) is UNSUPPORTED. This variant verifies that inserted rows are read
+# back from the SQLite database file by the Cursor reload, not kept in memory.
+version: 1
+name: T08-persist-good
+description: >-
+  Launch sqlite-crud, insert note1 and note2, and assert the rows re-queried
+  from notes.db (status rows=N and the list row text) after each insert.
+app: fixtures/build/apps/sqlite-crud.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.sqlitecrud/.MainActivity, clear_state: true}
+  - assert_text: {selector: {id: status}, text: {exact: "rows=0"}}
+  - tap: {selector: {id: item_input}}
+  - type: {selector: {id: item_input}, text: "note1"}
+  - tap: {selector: {id: add}}
+  - assert_text: {selector: {id: status}, text: {exact: "rows=1"}}
+  - assert_text: {selector: {text: {exact: "1: note1"}}, text: {exact: "1: note1"}}
+  - tap: {selector: {id: item_input}}
+  - type: {selector: {id: item_input}, text: "note2"}
+  - tap: {selector: {id: add}}
+  - assert_text: {selector: {id: status}, text: {exact: "rows=2"}}
+  - assert_text: {selector: {text: {exact: "2: note2"}}, text: {exact: "2: note2"}}

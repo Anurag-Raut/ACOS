@@ -1,0 +1,30 @@
+# T09 correct: reset is host-observed and really clears state.
+#
+# Scope note (recorded in INDEX.yaml): the advisor's T09 also asked for a crash
+# assertion first (`assert_crash`). The scenario format has only assert_no_crash,
+# and broken-crash exits before its first live frame (UNSUPPORTED_BACKEND:
+# GUEST_EXITED), so the crash half is UNSUPPORTED. reset itself is exercised here
+# on counter: inc -> 1, reset (fresh acos-art process, empty app-data) -> 0,
+# inc -> 1 again proves the post-reset guest is live and state was cleared.
+version: 1
+name: T09-reset-good
+description: >-
+  Launch counter, increment to 1, reset the app and assert 0, then increment
+  again and assert 1.
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.counter/.MainActivity, clear_state: true}
+  - assert_text: {selector: {id: count}, text: {exact: "0"}}
+  - tap: {selector: {id: inc}}
+  - assert_text: {selector: {id: count}, text: {exact: "1"}}
+  - reset: {scope: app}
+  - assert_text: {selector: {id: count}, text: {exact: "0"}}
+  - tap: {selector: {id: inc}}
+  - assert_text: {selector: {id: count}, text: {exact: "1"}}

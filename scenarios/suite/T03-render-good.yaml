@@ -1,0 +1,23 @@
+# T03 correct: component render. The first 700 rows of the live C1 frame
+# (1080x2209 window) are compared byte-exactly against a frozen baseline that
+# was captured from the same fixture on real ART (T03-hello-views-top.png).
+# `assert_region` crops its own fresh frame; a moved glyph or a wrong app fails.
+version: 1
+name: T03-render-good
+description: >-
+  Launch hello-views, assert the title and result text, then require the top
+  1080x700 pixels to equal the frozen live-ART baseline.
+app: fixtures/build/apps/hello-views.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity, clear_state: true}
+  - wait_for: {selector: {id: result}, timeout_ms: 5000}
+  - assert_text: {selector: {id: title}, text: {exact: "Hello ACOS"}}
+  - assert_text: {selector: {id: result}, text: {exact: "clicks: 0"}}
+  - assert_region: {x: 0, y: 0, w: 1080, h: 700, equals_png: baselines/T03-hello-views-top.png}

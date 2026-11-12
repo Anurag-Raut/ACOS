@@ -1,0 +1,22 @@
+# T01 correct: install counter.apk through `acos verify --engine art` (the launch
+# step installs the APK, binds the Activity and completes a first live frame),
+# then assert the first observable state.
+version: 1
+name: T01-install-good
+description: >-
+  Install/launch counter.apk, wait for the first live tree, assert the initial
+  count and the Increment label, and require no crash.
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.counter/.MainActivity, clear_state: true}
+  - wait_for: {selector: {id: count}, timeout_ms: 5000}
+  - assert_text: {selector: {id: count}, text: {exact: "0"}}
+  - assert_text: {selector: {id: inc}, text: {exact: Increment}}
+  - assert_no_crash: {}

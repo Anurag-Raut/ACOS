@@ -1,0 +1,29 @@
+# T11 correct: two views share one state model.
+#
+# The header TextView (id=state) and the fragment TextView (id=frag_text) both
+# describe the fragment that FragmentManager installed; tapping the fragment
+# updates only the fragment's tap counter while the header keeps the same model.
+version: 1
+name: T11-shared-good
+description: >-
+  Launch fragments-nav, assert Alpha in the header and fragment, switch to Beta
+  and assert both views agree, then tap the fragment and assert taps=1 while the
+  header still reads current=Beta.
+app: fixtures/build/apps/fragments-nav.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.fragmentsnav/.MainActivity, clear_state: true}
+  - assert_text: {selector: {id: state}, text: {exact: "current=Alpha"}}
+  - assert_text: {selector: {id: frag_text}, text: {exact: "Alpha taps=0"}}
+  - tap: {selector: {id: show_b}}
+  - assert_text: {selector: {id: state}, text: {exact: "current=Beta"}}
+  - assert_text: {selector: {id: frag_text}, text: {exact: "Beta taps=0"}}
+  - tap: {selector: {id: frag_text}}
+  - assert_text: {selector: {id: frag_text}, text: {exact: "Beta taps=1"}}
+  - assert_text: {selector: {id: state}, text: {exact: "current=Beta"}}

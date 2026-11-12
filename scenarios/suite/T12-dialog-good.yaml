@@ -1,0 +1,35 @@
+# T12 correct: dialog invocation.
+#
+# Scope note (recorded in INDEX.yaml): the advisor's T12 also asked for the
+# dialog window's message/OK nodes and the service-provider round trip. The
+# dialog window is not traversed by the live probe in this binary (W27 owns that
+# change), and service-provider's Send tap currently ends the guest without a
+# settled frame (INTERNAL). This variant verifies the dialog is really invoked:
+# the app's own AcosDialogs `dialog_shown` line appears after the tap and the
+# Activity status is still Idle (OK was not pressed).
+version: 1
+name: T12-dialog-good
+description: >-
+  Launch dialogs-menus, assert the button/status, tap the dialog button, assert
+  the guest log dialog_shown and that the status is still Idle.
+app: fixtures/build/apps/dialogs-menus.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.dialogsmenus/.MainActivity, clear_state: true}
+  - assert_text: {selector: {id: dialog}, text: {exact: "Alert dialog"}}
+  - assert_text: {selector: {id: status}, text: {exact: "Idle"}}
+  - tap: {selector: {id: dialog}}
+  - assert_log:
+      tag: AcosDialogs
+      since_previous_step: true
+      ordered: true
+      timeout_ms: 5000
+      patterns: ['^dialog_shown$']
+  - assert_text: {selector: {id: status}, text: {exact: "Idle"}}
+  - assert_no_crash: {}

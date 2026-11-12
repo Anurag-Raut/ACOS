@@ -1,0 +1,19 @@
+# T01 wrong: the install/launch is fine but the first-frame expectation is wrong
+# (count 1 where the app renders 0). Must fail with ASSERTION_FAILED.
+version: 1
+name: T01-install-wrong
+description: >-
+  Same install/launch as T01-good, then assert a first-frame count of 1 that the
+  fixture never renders.
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+budgets: {memory_mib: 512, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.counter/.MainActivity, clear_state: true}
+  - wait_for: {selector: {id: count}, timeout_ms: 5000}
+  - assert_text: {selector: {id: count}, text: {exact: "1"}}
