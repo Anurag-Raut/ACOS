@@ -75,8 +75,38 @@ fn node_path(index: usize, field: &str) -> String {
     format!("nodes[{index}].{field}")
 }
 
-/// Build an `ELEMENT_NOT_FOUND` result for a selector that matched nothing.
-pub fn element_missing(kind: &str, selector: &acos_protocol::Selector) -> Evaluated {
+/// The error for a selector that matched nothing.
+///
+/// A tree the probe marked `truncated` (any window) does **not** prove the node
+/// is absent: the selector may have fallen beyond the sampled node budget. That
+/// case is a distinct, non-retryable `TREE_TRUNCATED`, never `ELEMENT_NOT_FOUND`.
+pub fn missing_error(
+    observation: Option<&SessionObservation>,
+    selector: &acos_protocol::Selector,
+) -> BackendError {
+    let truncated = observation.is_some_and(|observation| observation.tree.truncated);
+    if truncated {
+        BackendError::Failed {
+            code: ErrorCode::TreeTruncated,
+            detail: format!(
+                "selector {selector:?} matched no node, but the tree was truncated at the node budget; the node may exist beyond the sampled prefix"
+            ),
+        }
+    } else {
+        BackendError::Failed {
+            code: ErrorCode::ElementNotFound,
+            detail: format!("selector {selector:?} matched no node"),
+        }
+    }
+}
+
+/// Build the failure for a selector that matched nothing.
+pub fn element_missing(
+    kind: &str,
+    selector: &acos_protocol::Selector,
+    observation: Option<&SessionObservation>,
+) -> Evaluated {
+    let truncated = observation.is_some_and(|observation| observation.tree.truncated);
     Evaluated::fail(
         kind,
         Vec::new(),
@@ -84,12 +114,13 @@ pub fn element_missing(kind: &str, selector: &acos_protocol::Selector) -> Evalua
             expected: json!(selector),
             actual: Value::Null,
             path: None,
-            detail: Some("selector matched no node".to_string()),
+            detail: Some(if truncated {
+                "selector matched no node in a truncated tree".to_string()
+            } else {
+                "selector matched no node".to_string()
+            }),
         },
-        BackendError::Failed {
-            code: ErrorCode::ElementNotFound,
-            detail: format!("selector {selector:?} matched no node"),
-        },
+        missing_error(observation, selector),
     )
 }
 
@@ -105,10 +136,7 @@ pub fn eval_text(assertion: &TextAssertion, observation: &SessionObservation) ->
                 path: None,
                 detail: Some("selector matched no node".to_string()),
             },
-            BackendError::Failed {
-                code: ErrorCode::ElementNotFound,
-                detail: format!("selector {:?} matched no node", assertion.selector),
-            },
+            missing_error(Some(observation), &assertion.selector),
         );
     };
     let matched = vec![node.id.clone()];
@@ -176,10 +204,7 @@ pub fn eval_visible(assertion: &VisibilityAssertion, observation: &SessionObserv
                 path: None,
                 detail: Some("selector matched no node".to_string()),
             },
-            BackendError::Failed {
-                code: ErrorCode::ElementNotFound,
-                detail: format!("selector {:?} matched no node", assertion.selector),
-            },
+            missing_error(Some(observation), &assertion.selector),
         );
     };
     let matched = vec![node.id.clone()];
@@ -261,10 +286,7 @@ pub fn eval_state(assertion: &StateAssertion, observation: &SessionObservation) 
                 path: None,
                 detail: Some("selector matched no node".to_string()),
             },
-            BackendError::Failed {
-                code: ErrorCode::ElementNotFound,
-                detail: format!("selector {:?} matched no node", assertion.selector),
-            },
+            missing_error(Some(observation), &assertion.selector),
         );
     };
     let matched = vec![node.id.clone()];
@@ -493,6 +515,48 @@ mod tests {
             evaluated.result.diff.as_ref().unwrap().path.as_deref(),
             Some("nodes[0].bounds")
         );
+    }
+
+    #[test]
+    fn truncated_tree_reports_tree_truncated_not_element_not_found() {
+        let selector = Selector::by_id("does_not_exist");
+        let assertion = VisibilityAssertion {
+            selector: selector.clone(),
+            bounds: None,
+            timeout_ms: None,
+        };
+        // Same missing selector, same tree shape: only `truncated` differs.
+        let plain = eval_visible(&assertion, &observation());
+        assert_eq!(
+            plain.error.as_ref().unwrap().code(),
+            ErrorCode::ElementNotFound
+        );
+        let mut truncated_observation = observation();
+        truncated_observation.tree.truncated = true;
+        let truncated = eval_visible(&assertion, &truncated_observation);
+        assert_eq!(
+            truncated.error.as_ref().unwrap().code(),
+            ErrorCode::TreeTruncated
+        );
+        assert!(truncated
+            .error
+            .as_ref()
+            .unwrap()
+            .to_protocol_error()
+            .message
+            .contains("truncated"));
+        assert!(!plain
+            .error
+            .as_ref()
+            .unwrap()
+            .to_protocol_error()
+            .message
+            .contains("truncated"));
+        // The distinct code is honest about what it means: never retryable as a
+        // stale ref, and the hint names the node budget.
+        assert!(!ErrorCode::TreeTruncated.retryable());
+        assert!(ErrorCode::TreeTruncated.hint().contains("2000"));
+        assert!(ErrorCode::TreeTruncated.hint().contains("budget"));
     }
 
     #[test]

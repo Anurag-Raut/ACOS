@@ -78,6 +78,11 @@ fn scenario_files(dir: &Path, out: &mut Vec<PathBuf>) {
         if path.is_dir() {
             scenario_files(&path, out);
         } else if path.extension().and_then(|e| e.to_str()) == Some("yaml") {
+            // `INDEX.yaml` is the suite manifest (it has `tasks:`, not `steps:`),
+            // not a scenario; validating it as one is a category error.
+            if path.file_name().and_then(|name| name.to_str()) == Some("INDEX.yaml") {
+                continue;
+            }
             out.push(path);
         }
     }
@@ -112,7 +117,14 @@ fn every_checked_in_scenario_parses_and_validates() {
             path.display(),
             scenario.app
         );
-        let is_negative = path.components().any(|part| part.as_os_str() == "negative");
+        // Negative scenarios live under `negative/`; the suite's deliberately
+        // wrong twins (`*-wrong.yaml`) also declare a non-pass expectation and
+        // must not be required to pass. Every other scenario must expect pass.
+        let is_negative = path.components().any(|part| part.as_os_str() == "negative")
+            || path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.ends_with("-wrong.yaml"));
         if is_negative {
             negative += 1;
             assert!(

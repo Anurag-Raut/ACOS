@@ -396,7 +396,10 @@ fn missing_native_symbol(message: &str) -> Option<String> {
 
 fn input_error(error: SessionError) -> BackendError {
     let code = ErrorCode::from_str_opt(error.code).unwrap_or(ErrorCode::Internal);
-    if code == ErrorCode::ElementNotFound {
+    // `TREE_TRUNCATED` is the truncated-tree form of a missing selector: it
+    // belongs on the `Failed` (assertion) path with `ELEMENT_NOT_FOUND`, and it
+    // is deliberately *not* retryable like a stale ref.
+    if code == ErrorCode::ElementNotFound || code == ErrorCode::TreeTruncated {
         return BackendError::Failed {
             code,
             detail: error.message,

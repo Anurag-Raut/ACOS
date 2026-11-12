@@ -162,6 +162,10 @@ pub enum ErrorCode {
     AssertionFailed,
     /// A selector matched no node.
     ElementNotFound,
+    /// A selector matched nothing in a tree the probe reported as truncated
+    /// (`UiTree::truncated`, any window). The node may exist beyond the
+    /// sampled prefix, so this is not proof of absence.
+    TreeTruncated,
     /// A UI node reference is no longer valid.
     StaleRef,
     /// A tree-only assertion ran on an untrusted APK run, where the tree is
@@ -295,6 +299,7 @@ impl ErrorCode {
             ErrorCode::AppNotResponding => "APP_NOT_RESPONDING",
             ErrorCode::AssertionFailed => "ASSERTION_FAILED",
             ErrorCode::ElementNotFound => "ELEMENT_NOT_FOUND",
+            ErrorCode::TreeTruncated => "TREE_TRUNCATED",
             ErrorCode::StaleRef => "STALE_REF",
             ErrorCode::InsufficientHostEvidence => "INSUFFICIENT_HOST_EVIDENCE",
             ErrorCode::UnsupportedAssertion => "UNSUPPORTED_ASSERTION",
@@ -466,6 +471,9 @@ impl ErrorCode {
             ErrorCode::ElementNotFound => {
                 "Re-observe the tree and check the selector (id/text/class/bounds). If the node is legitimately absent, fix the scenario expectation."
             }
+            ErrorCode::TreeTruncated => {
+                "The tree was truncated at the node budget (2000 nodes per window by default), so the node may exist beyond the sampled prefix. Raise the probe node budget or narrow the selector (id/class/bounds); this is not proof the node is absent."
+            }
             ErrorCode::StaleRef => {
                 "Re-run observe/assert to obtain fresh node ids; never reuse node refs across a mutation."
             }
@@ -575,6 +583,7 @@ impl ErrorCode {
         match self {
             ErrorCode::AssertionFailed
             | ErrorCode::ElementNotFound
+            | ErrorCode::TreeTruncated
             | ErrorCode::InsufficientHostEvidence => Status::Fail,
             ErrorCode::AppCrashed => Status::Crash,
             ErrorCode::AppNotResponding | ErrorCode::Timeout => Status::Timeout,
@@ -747,6 +756,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::AppNotResponding,
     ErrorCode::AssertionFailed,
     ErrorCode::ElementNotFound,
+    ErrorCode::TreeTruncated,
     ErrorCode::StaleRef,
     ErrorCode::InsufficientHostEvidence,
     ErrorCode::UnsupportedAssertion,

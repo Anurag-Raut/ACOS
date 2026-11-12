@@ -147,6 +147,11 @@
         "visible": {
           "description": "Whether the node is visible.",
           "type": "boolean"
+        },
+        "window": {
+          "default": "",
+          "description": "Window this node belongs to (empty when the engine reports one window or predates multi-window probes). `bounds` is local to this window; `bounds_on_screen` is display space.",
+          "type": "string"
         }
       },
       "required": [
@@ -191,7 +196,7 @@
     },
     "truncated": {
       "default": false,
-      "description": "True when the tree was truncated by a node limit.",
+      "description": "True when any window of the tree was truncated by a node limit.",
       "type": "boolean"
     }
   },

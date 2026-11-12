@@ -83,7 +83,8 @@ single ELF whose `e_machine` the in-process loader cannot map.
 | `APP_CRASHED` | The app process crashed (uncaught exception / signal / abort). | acos-vm / acos-runtime | 1 |
 | `APP_NOT_RESPONDING` | The app is not responding (ANR / main-thread stall). | acos-runtime | 1 |
 | `ASSERTION_FAILED` | An assertion ran and did not hold. | acos-verify | 1 |
-| `ELEMENT_NOT_FOUND` | A selector matched no node. | acos-runtime / acos-verify | 1 |
+| `ELEMENT_NOT_FOUND` | A selector matched no node (the tree was complete). | acos-runtime / acos-verify | 1 |
+| `TREE_TRUNCATED` | A selector matched nothing in a tree the probe reported as truncated (`UiTree.truncated`, any window). Non-pass, non-retryable; the hint names the node budget. Never `ELEMENT_NOT_FOUND`. | acos-verify / acos-cli | 1 |
 | `STALE_REF` | A UI node reference is no longer valid. | acos-runtime | 1 |
 | `INSUFFICIENT_HOST_EVIDENCE` | A guest-asserted channel was asked to justify a pass on an untrusted APK run: the UI tree (`UNTRUSTED_TREE_ASSERTION`), the guest log (`UNTRUSTED_LOG_ASSERTION`, an `assert_log` step), or crash reports. Fail closed and require host-observed evidence. | acos-cli / acos-verify | 1 |
 | `UNSUPPORTED_ASSERTION` | The requested assertion kind has no implementation in this build (for example `assert_region.text_ocr` with no OCR engine). | acos-verify | 1 |

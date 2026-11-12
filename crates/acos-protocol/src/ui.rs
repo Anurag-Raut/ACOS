@@ -417,6 +417,11 @@ pub struct UiNode {
     /// Owning package (empty when unknown).
     #[serde(default)]
     pub package: String,
+    /// Window this node belongs to (empty when the engine reports one window
+    /// or predates multi-window probes). `bounds` is local to this window;
+    /// `bounds_on_screen` is display space.
+    #[serde(default)]
+    pub window: String,
 }
 
 impl UiNode {
@@ -439,7 +444,14 @@ impl UiNode {
             selected: false,
             children: Vec::new(),
             package: String::new(),
+            window: String::new(),
         }
+    }
+
+    /// Builder: set the owning window label.
+    pub fn with_window(mut self, window: impl Into<String>) -> Self {
+        self.window = window.into();
+        self
     }
 
     /// Builder: set Android id.
@@ -492,7 +504,7 @@ pub struct UiTree {
     pub package: String,
     /// Root nodes in document/window order.
     pub nodes: Vec<UiNode>,
-    /// True when the tree was truncated by a node limit.
+    /// True when any window of the tree was truncated by a node limit.
     #[serde(default)]
     pub truncated: bool,
     /// False when the text/semantics route was unavailable.

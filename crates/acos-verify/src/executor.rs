@@ -247,6 +247,11 @@ pub fn run_scenario(
         }
         step_log_cursors.push(all_logs.len());
 
+        // The step's clock starts **before** an `assert_log` wait: the wait is
+        // part of the step, so a wrong twin whose line never appears must show
+        // its full `timeout_ms` on the step, not in `unattributed_ms` (W34 §3).
+        let step_started = clock.now_unix_ms();
+
         // `assert_log.timeout_ms` is the wait-for-log semantic: the line the
         // triggering action produced may still be in flight when the step
         // starts (buffered liblog write, logd reader thread). Poll the log
@@ -296,7 +301,6 @@ pub fn run_scenario(
             &all_logs[..]
         };
 
-        let step_started = clock.now_unix_ms();
         let cause_id = format!("{}:{}:{}", options.request_id, step.kind(), index);
         let exec = execute_step(
             backend,
@@ -724,7 +728,7 @@ fn execute_step(
                 let elapsed = started.elapsed();
                 if elapsed >= timeout {
                     let mut exec =
-                        StepExec::failed(assertions::element_missing("wait_for", &wait.selector));
+                        StepExec::failed(assertions::element_missing("wait_for", &wait.selector, last.as_ref()));
                     exec.status = Status::Timeout;
                     exec.error = Some(
                         ProtocolError::new(

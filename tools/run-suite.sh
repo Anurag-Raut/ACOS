@@ -241,19 +241,38 @@ def run_variant(task, kind, spec, opts, env, stamp_s, cgpath, inside_lock,
             verdict = envelope.get("status", "error")
         error = verdict_error(verdict_obj, envelope)
         code = (error or {}).get("code")
+        # `wall_ms` is the verdict/executor wall the suite has always reported.
+        # The process wall (guest spawn -> clean shutdown, i.e. what the runner
+        # actually waited) is recorded next to it, and `engine.json.timing`
+        # carries the per-step attribution (W34 request).
         effective_wall = (verdict_obj.get("resources") or {}).get("wall_ms", run["wall_ms"])
+        engine_timing = None
+        engine_file = artifacts / f"r{rnd}" / "engine.json"
+        if engine_file.exists():
+            try:
+                engine_report = json.loads(engine_file.read_text())
+                # The block lives under `engine` in the file and carries
+                # `steps[]`, `attributed_ms`, `verdict_wall_ms`,
+                # `unattributed_ms`, `session_start_ms`.
+                engine_timing = (engine_report.get("engine") or {}).get("timing") \
+                    or engine_report.get("timing")
+            except (json.JSONDecodeError, OSError):
+                engine_timing = None
         runs.append({
             "round": rnd,
             "rc": run["rc"],
             "verdict": verdict,
             "error": error,
             "wall_ms": effective_wall,
+            "process_wall_ms": run["wall_ms"],
+            "engine_timing": engine_timing,
             "cgroup_peak_mib": run["cgroup_peak_mib"],
             "cgroup_gib_min": run["cgroup_gib_min"],
             "artifacts": str(artifacts / f"r{rnd}"),
             "stderr_tail": (run["stderr"] or "")[-1200:] if run["rc"] not in (0, 1) else None,
         })
     walls = [r["wall_ms"] or 0 for r in runs]
+    process_walls = [r["process_wall_ms"] or 0 for r in runs]
     peaks = [r["cgroup_peak_mib"] for r in runs if r["cgroup_peak_mib"] is not None]
     gibs = [r["cgroup_gib_min"] for r in runs if r["cgroup_gib_min"] is not None]
     first_bad = next((r for r in runs if r["verdict"] != "pass"), None)
@@ -275,6 +294,8 @@ def run_variant(task, kind, spec, opts, env, stamp_s, cgpath, inside_lock,
         "false_pass": bool(kind == "wrong" and worst == "pass"),
         "wall_ms": int(sum(walls)),
         "wall_ms_p50": benchlib.stats(walls)["p50"] if walls else None,
+        "process_wall_ms": int(sum(process_walls)),
+        "process_wall_ms_p50": benchlib.stats(process_walls)["p50"] if process_walls else None,
         "runs": runs,
         "mem": {
             "metric": "cgroup memory.current (sampled 100 ms)" if peaks else None,

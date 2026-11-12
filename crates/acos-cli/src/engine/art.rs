@@ -38,7 +38,7 @@
 //! offline: this engine is [`Mode::Live`]; if the binary, the sysroot or a command
 //! is unavailable the caller gets a structured error, never a preview pass.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -126,9 +126,16 @@ pub struct ArtSession {
     last_input: Option<InputDelivery>,
     /// `(dx, dy)` from display/screen coordinates to the input channel's
     /// window-local convention, measured from the probe's `bounds_on_screen`
-    /// minus `bounds` (normally the status-bar inset). The engine resolves tap
-    /// points from screen bounds; `inject_tap` takes window-local points.
+    /// minus `bounds` (normally the status-bar inset). This is the **first**
+    /// window's offset: the fallback for an input that carries no window label
+    /// (an explicit screen point). A selector tap uses `window_offsets`.
     input_offset: (i32, i32),
+    /// Per-window `(dx, dy)` display-to-window offsets, keyed by the probe's
+    /// `window` label. Every window has its own input channel and its own
+    /// origin (a dialog sits at `[152,976]`, the Activity at `[0,128]`), so a
+    /// single global offset sends the dialog's button to the wrong channel
+    /// point (W36 §4.2).
+    window_offsets: HashMap<String, (i32, i32)>,
     /// Guest boot time: `acos-art` spawn to its ready line. Charged to the
     /// session, not to the `launch` step (the executor's clock starts later).
     session_start_ms: u64,
@@ -219,33 +226,87 @@ impl CachedFrame {
     }
 }
 
-/// Measure the display-to-window offset from one probe tree: the difference
-/// between a node's `bounds_on_screen` and its window-local `bounds`. The
-/// decor root is the first node and carries both; a single offset is enough
-/// because every node in one window shares the window origin.
-fn probe_input_offset(tree: &serde_json::Value) -> Option<(i32, i32)> {
-    fn walk(node: &serde_json::Value) -> Option<(i32, i32)> {
+/// Measure one node's display-to-window offset: `bounds_on_screen` minus the
+/// window-local `bounds`. Returns `None` when either bound is missing/empty.
+fn node_input_offset(node: &serde_json::Value) -> Option<(i32, i32)> {
+    let window = node
+        .get("bounds")
+        .and_then(|value| value.as_str())
+        .and_then(parse_bounds)?;
+    let screen = node
+        .get("bounds_on_screen")
+        .and_then(|value| value.as_str())
+        .and_then(parse_bounds)?;
+    if screen.width() <= 0 || screen.height() <= 0 {
+        return None;
+    }
+    Some((
+        screen.left() - window.left(),
+        screen.top() - window.top(),
+    ))
+}
+
+/// Per-window display-to-window offsets from one probe tree.
+///
+/// Each window has its own input channel with its own origin, so the engine
+/// must subtract the origin of the window that contains the target node. The
+/// probe labels every node with `window`; a probe that predates the field maps
+/// its single root under `""`. The root of each window carries both coordinate
+/// spaces; the first node that has both decides that window's origin.
+fn probe_window_offsets(tree: &serde_json::Value) -> HashMap<String, (i32, i32)> {
+    fn walk(
+        node: &serde_json::Value,
+        inherited_window: &str,
+        offsets: &mut HashMap<String, (i32, i32)>,
+    ) {
         let window = node
-            .get("bounds")
+            .get("window")
             .and_then(|value| value.as_str())
-            .and_then(parse_bounds);
-        let screen = node
-            .get("bounds_on_screen")
-            .and_then(|value| value.as_str())
-            .and_then(parse_bounds);
-        if let (Some(window), Some(screen)) = (window, screen) {
-            if screen.width() > 0 && screen.height() > 0 {
-                return Some((screen.left() - window.left(), screen.top() - window.top()));
+            .unwrap_or(inherited_window);
+        if !offsets.contains_key(window) {
+            if let Some(offset) = node_input_offset(node) {
+                offsets.insert(window.to_string(), offset);
             }
         }
-        node.get("children")
-            .and_then(|children| children.as_array())
-            .and_then(|children| children.iter().find_map(walk))
+        if let Some(children) = node.get("children").and_then(|value| value.as_array()) {
+            for child in children {
+                walk(child, window, offsets);
+            }
+        }
     }
-    tree.get("nodes")
-        .and_then(|nodes| nodes.as_array())
-        .and_then(|nodes| nodes.iter().find_map(walk))
-        .or_else(|| walk(tree))
+    let mut offsets = HashMap::new();
+    match tree.get("nodes").and_then(|nodes| nodes.as_array()) {
+        Some(nodes) => {
+            for node in nodes {
+                walk(node, "", &mut offsets);
+            }
+        }
+        None => walk(tree, "", &mut offsets),
+    }
+    offsets
+}
+
+/// The first window's offset, in document order (the fallback for an input
+/// that carries no window label).
+fn probe_input_offset(tree: &serde_json::Value) -> Option<(i32, i32)> {
+    match tree.get("nodes").and_then(|nodes| nodes.as_array()) {
+        Some(nodes) => nodes.iter().find_map(node_input_offset),
+        None => node_input_offset(tree),
+    }
+}
+
+/// The offset to subtract for one window. An unknown or empty label falls back
+/// to the first window's measured offset (a single-window tree, or an explicit
+/// screen point on a pre-multi-window probe).
+fn offset_for_window(
+    offsets: &HashMap<String, (i32, i32)>,
+    fallback: (i32, i32),
+    window: &str,
+) -> (i32, i32) {
+    if window.is_empty() {
+        return fallback;
+    }
+    offsets.get(window).copied().unwrap_or(fallback)
 }
 
 /// Import acks from a reply's `gesture` record (guest-asserted).
@@ -498,6 +559,7 @@ impl ArtSession {
             process_group: Some(_pid as i32),
             last_input: None,
             input_offset: (0, 0),
+            window_offsets: HashMap::new(),
             session_start_ms: 0,
             frame_wait_secs,
             settle_budget,
@@ -877,8 +939,12 @@ impl ArtSession {
             }
             return Ok(());
         };
-        if let Some(offset) = probe_input_offset(tree_value) {
-            self.input_offset = offset;
+        let offsets = probe_window_offsets(tree_value);
+        if !offsets.is_empty() {
+            if let Some(offset) = probe_input_offset(tree_value) {
+                self.input_offset = offset;
+            }
+            self.window_offsets = offsets;
         }
         let tree = ui_tree_from_json(&self.package, self.frame_meta(seq, &md5), tree_value)?;
         let signature = tree_signature(&tree);
@@ -1227,11 +1293,21 @@ impl SessionBackend for ArtSession {
     }
 
     fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {
+        // No window label: subtract the first window's measured origin. This is
+        // the pre-multi-window behaviour and is right for a single-window tree.
+        let (dx, dy) = self.input_offset;
+        self.input_command(
+            serde_json::json!({"cmd":"tap","x":x - dx,"y":y - dy}),
+            "input.tap",
+        )
+    }
+
+    fn tap_in_window(&mut self, window: &str, x: i32, y: i32) -> Result<(), BackendError> {
         // The engine's tap coordinates are display/screen coordinates (resolved
         // from the probe's `bounds_on_screen`). The interactive input channel's
-        // transform is window-local (W10/I2), so subtract the measured window
-        // origin here, once, in the backend that owns that convention.
-        let (dx, dy) = self.input_offset;
+        // transform is window-local (W10/I2), so subtract the origin of the
+        // window that contains the node, measured from the same probe tree.
+        let (dx, dy) = offset_for_window(&self.window_offsets, self.input_offset, window);
         self.input_command(
             serde_json::json!({"cmd":"tap","x":x - dx,"y":y - dy}),
             "input.tap",
@@ -1248,7 +1324,8 @@ impl SessionBackend for ArtSession {
             })?
             .clone();
         let bounds = node.bounds;
-        self.tap(
+        self.tap_in_window(
+            &node.window,
             (bounds.left() + bounds.right()) / 2,
             (bounds.top() + bounds.bottom()) / 2,
         )
@@ -1583,6 +1660,60 @@ mod tests {
             "nodes": [{"class": "android.view.View", "bounds": "[0,0][10,10]"}]
         });
         assert_eq!(probe_input_offset(&legacy), None);
+    }
+
+    #[test]
+    fn per_window_offsets_map_a_dialog_tap_into_the_dialog_window() {
+        // The W36 measurement: Activity window at screen offset `[0,128]`, the
+        // AlertDialog's frame at `[152,976]`. Each node carries its `window`
+        // label; `bounds` is local to that window.
+        let tree = serde_json::json!({
+            "nodes": [{
+                "class": "android.widget.FrameLayout",
+                "window": "main",
+                "bounds": "[0,0][1080,2209]",
+                "bounds_on_screen": "[0,128][1080,2337]",
+                "children": [{
+                    "class": "android.widget.TextView",
+                    "id": "count",
+                    "window": "main",
+                    "bounds": "[42,189][63,240]",
+                    "bounds_on_screen": "[42,317][63,368]"
+                }]
+            }, {
+                "class": "android.widget.FrameLayout",
+                "window": "window-2#1",
+                "bounds": "[0,0][720,480]",
+                "bounds_on_screen": "[152,976][872,1456]",
+                "children": [{
+                    "class": "android.widget.Button",
+                    "id": "button1",
+                    "window": "window-2#1",
+                    "bounds": "[534,318][702,460]",
+                    "bounds_on_screen": "[686,1294][854,1436]"
+                }]
+            }]
+        });
+        let offsets = probe_window_offsets(&tree);
+        assert_eq!(offsets.get("main"), Some(&(0, 128)));
+        assert_eq!(offsets.get("window-2#1"), Some(&(152, 976)));
+        assert_eq!(probe_input_offset(&tree), Some((0, 128)));
+
+        // Screen point of the dialog's OK button -> dialog-local point that the
+        // dialog's own InputChannel receives, not a point offset by `[0,128]`.
+        let ok_center_screen = (770, 1365);
+        let (dx, dy) = offset_for_window(&offsets, (0, 128), "window-2#1");
+        assert_eq!(
+            (ok_center_screen.0 - dx, ok_center_screen.1 - dy),
+            (618, 389)
+        );
+        // The Activity's button keeps the Activity origin.
+        let (dx, dy) = offset_for_window(&offsets, (0, 128), "main");
+        assert_eq!((540 - dx, 1290 - dy), (540, 1162));
+        // An explicit screen point (no label) and an unknown label fall back to
+        // the first window, never to a guessed dialog origin.
+        assert_eq!(offset_for_window(&offsets, (0, 128), ""), (0, 128));
+        assert_eq!(offset_for_window(&offsets, (0, 128), "gone"), (0, 128));
     }
 
     /// A fake `acos-art` that speaks just enough of the interactive protocol to

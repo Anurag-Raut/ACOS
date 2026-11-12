@@ -1,0 +1,10 @@
+v2-counter	v2-art-counter	rc=0	verdict=pass	wall=7590	steps=11	badstep=	code=
+w19	w19-form-behavior	rc=0	verdict=pass	wall=2711	steps=8	badstep=	code=
+w22-reset	w22-counter-reset	rc=0	verdict=pass	wall=4274	steps=9	badstep=	code=
+w22-log	w22-counter-log	rc=0	verdict=pass	wall=7835	steps=6	badstep=	code=
+w23	w23-rn-hello-tap	rc=0	verdict=pass	wall=1860	steps=6	badstep=	code=
+w24	w24-counter-labels	rc=0	verdict=pass	wall=2700	steps=7	badstep=	code=
+two-activity	w15-two-activity	rc=0	verdict=pass	wall=575	steps=3	badstep=	code=
+dialog-menu	w15-dialog-menu	rc=0	verdict=pass	wall=575	steps=3	badstep=	code=
+w28-gaten	w28-gaten-release-tap	rc=0	verdict=pass	wall=3389	steps=4	badstep=	code=
+w31-evidence	w31-gaten-release-evidence	rc=0	verdict=pass	wall=3433	steps=5	badstep=	code=

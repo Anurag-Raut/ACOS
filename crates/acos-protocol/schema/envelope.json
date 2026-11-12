@@ -479,6 +479,13 @@
           "type": "string"
         },
         {
+          "description": "A selector matched nothing in a tree the probe reported as truncated (`UiTree::truncated`, any window). The node may exist beyond the sampled prefix, so this is not proof of absence.",
+          "enum": [
+            "TREE_TRUNCATED"
+          ],
+          "type": "string"
+        },
+        {
           "description": "A UI node reference is no longer valid.",
           "enum": [
             "STALE_REF"

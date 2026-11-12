@@ -394,6 +394,16 @@ pub trait SessionBackend {
 
     fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError>;
 
+    /// Tap a screen point inside the window labelled `window`.
+    ///
+    /// A multi-window tree reports `bounds_on_screen` (display space) but each
+    /// window's input channel takes window-local coordinates, so the backend
+    /// must subtract that window's origin, not one global offset. Backends that
+    /// only have one coordinate space keep [`Self::tap`].
+    fn tap_in_window(&mut self, _window: &str, x: i32, y: i32) -> Result<(), BackendError> {
+        self.tap(x, y)
+    }
+
     /// Tap the first node whose text equals `text` (host-side selector).
     fn tap_text(&mut self, text: &str) -> Result<(), BackendError>;
 
@@ -621,19 +631,31 @@ impl EngineBackend {
         }
     }
 
-    /// Resolve a selector to a screen point from the current tree.
-    fn point_for(&mut self, selector: &Selector) -> Result<(i32, i32), BackendError> {
+    /// Resolve a selector to a screen point and the window it belongs to, from
+    /// the current tree.
+    fn point_for(&mut self, selector: &Selector) -> Result<(String, i32, i32), BackendError> {
         let tree = match self {
             EngineBackend::Session { session, .. } => session.tree()?,
             EngineBackend::Native(_) => unreachable!("native path forwards input"),
         };
         let node = tree.find_one(selector).ok_or_else(|| {
             BackendError::Failed {
-                code: ErrorCode::AssertionFailed,
-                detail: format!("no node matches selector {selector:?}"),
+                code: if tree.truncated {
+                    ErrorCode::TreeTruncated
+                } else {
+                    ErrorCode::AssertionFailed
+                },
+                detail: if tree.truncated {
+                    format!(
+                        "no node matches selector {selector:?}, but the tree was truncated at the node budget"
+                    )
+                } else {
+                    format!("no node matches selector {selector:?}")
+                },
             }
         })?;
         Ok((
+            node.window.clone(),
             (node.bounds.left() + node.bounds.right()) / 2,
             (node.bounds.top() + node.bounds.bottom()) / 2,
         ))
@@ -769,7 +791,7 @@ impl Backend for EngineBackend {
                 // action's frame and must not count as the action's progress.
                 enum Target {
                     Text(String),
-                    Point(i32, i32),
+                    Point(String, i32, i32),
                 }
                 match action {
                     InputAction::Tap { selector, x, y } => {
@@ -787,7 +809,10 @@ impl Backend for EngineBackend {
                             Target::Text(text)
                         } else {
                             let point = match (x, y) {
-                                (Some(x), Some(y)) => (*x, *y),
+                                // An explicit screen point carries no window
+                                // label: the backend falls back to the first
+                                // window's measured origin.
+                                (Some(x), Some(y)) => (String::new(), *x, *y),
                                 _ => {
                                     let selector = selector.as_ref().ok_or_else(|| {
                                         BackendError::Unsupported {
@@ -798,15 +823,15 @@ impl Backend for EngineBackend {
                                     self.point_for(selector)?
                                 }
                             };
-                            Target::Point(point.0, point.1)
+                            Target::Point(point.0, point.1, point.2)
                         };
                         // The action starts here; `previous` is the frame before it.
                         let previous = self.current_frame_seq();
                         match target {
                             Target::Text(text) => self.tap_node(&text)?,
-                            Target::Point(x, y) => {
+                            Target::Point(window, x, y) => {
                                 if let EngineBackend::Session { session, .. } = self {
-                                    session.tap(x, y)?;
+                                    session.tap_in_window(&window, x, y)?;
                                 }
                             }
                         }
@@ -1089,6 +1114,11 @@ fn ui_node_from_json(value: &serde_json::Value, depth: usize) -> UiNode {
             node.children.push(ui_node_from_json(child, depth + 1));
         }
     }
+    node.window = value
+        .get("window")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     node
 }
 
