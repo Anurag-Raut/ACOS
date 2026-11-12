@@ -2377,12 +2377,21 @@ enum SettleEnd {
 /// window (`ACOSLAUNCH_FAST_WINDOW_MS`, default 100 ms = two probe periods), the strict quiet rule
 /// takes over and the reply reports `state_changed:false`: a fast observation
 /// never claims a change it did not see.
+///
+/// **P10**: the guest probe is event-driven (view dirty -> one sample after the
+/// frame), so an *idle* screen no longer produces a sample every 50 ms. The
+/// strict rule is unchanged, but a sample must still exist after the last C1
+/// store; the host asks the guest for one (the same `PROBE` wake the fast path
+/// uses) at settle entry and, if the newest sample predates the last store,
+/// after the quiet window has elapsed. That keeps the invariant "a probe sample
+/// after the last store" without waiting for the slow fallback poll.
 #[allow(clippy::too_many_arguments)]
 fn wait_for_settled_observation(
     child: &mut std::process::Child,
     cgroup: &mut crate::cgroup::RunCgroup,
     live: &acos_services::registry::LiveHandles,
     probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+    guest_stdin: &mut Option<std::process::ChildStdin>,
     deadline: Instant,
     min_generation: u64,
     min_probe_seq: u64,
@@ -2400,6 +2409,15 @@ fn wait_for_settled_observation(
     let mut last_change_ms = host_ms();
     let mut first_change_probe: Option<ProbeSample> = None;
     let (unsupported_baseline, _) = latest_unsupported(probe_state);
+    // P10: one immediate sample at strict entry, so the 150 ms quiet window
+    // never waits on the slow fallback poll on an idle screen. Fast mode keeps
+    // its pre-action baseline: it must not take an extra sample at entry (that
+    // sample can already be the post-input state) and relies on the dirty
+    // probe, exactly as the fast rule intends.
+    if mode == SettleMode::Strict {
+        request_guest_probe(guest_stdin);
+    }
+    let mut last_wake = Instant::now();
     loop {
         // A structured guest marker is more informative than the generic
         // "no fresh frame" timeout, and it is the only honest result for an
@@ -2427,6 +2445,16 @@ fn wait_for_settled_observation(
             .as_ref()
             .map(|p| p.at_ms >= last_change_ms)
             .unwrap_or(false);
+        // P10: the last store can land after the last event-driven sample
+        // (the draw listener fires before the buffer is committed). Ask for
+        // one sample now instead of waiting for the fallback poll; this keeps
+        // the strict invariant "a probe sample after the last store" at the
+        // same cost it had with the 50 ms poll.
+        if !probe_after && last_change.elapsed() >= quiet && last_wake.elapsed() >= Duration::from_millis(20)
+        {
+            request_guest_probe(guest_stdin);
+            last_wake = Instant::now();
+        }
         // Fast mode binds the guest's own post-input tree sample. The baseline
         // was taken before the gesture was published, so this can only be a
         // change the input caused.
@@ -2968,6 +2996,7 @@ fn interactive_serve(
                         cgroup,
                         live,
                         probe_state,
+                        &mut guest_stdin,
                         Instant::now() + Duration::from_millis(1500),
                         0,
                         0,
@@ -3311,6 +3340,7 @@ fn interactive_serve(
                     cgroup,
                     live,
                     probe_state,
+                    &mut guest_stdin,
                     Instant::now() + frame_wait,
                     g0,
                     p0,

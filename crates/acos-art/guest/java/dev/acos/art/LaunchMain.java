@@ -568,6 +568,96 @@ public final class LaunchMain {
     static final Object sProbeWake = new Object();
     static boolean sProbeRequested = false;
 
+    // ------------------------------------------------- P10: view-dirty probe
+    //
+    // P3 measured ~19.4 full tree walks/s on an idle screen because the probe
+    // thread polled every 50 ms. P10 makes the walk event-driven: a listener on
+    // every attached root marks the tree dirty (and bumps a generation) on
+    // layout, draw, window attach/detach and focus change. Listeners never walk
+    // and never serialise; they only set a flag and wake the probe thread. The
+    // thread emits at most one sample per debounce window (one frame), and a
+    // slow poll remains the fallback so a missed event can only delay a sample,
+    // never stop it (canvases / draws we do not observe).
+    static final java.util.concurrent.atomic.AtomicBoolean sTreeDirty =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+    static volatile long sDirtyAtMs = 0;
+    static volatile long sViewGeneration = 0;
+    /** Roots whose ViewTreeObserver already has our listeners (identity map). */
+    static final java.util.IdentityHashMap<View, Boolean> sWatchedRoots =
+            new java.util.IdentityHashMap<View, Boolean>();
+
+    /** Mark the view tree dirty. Called from view callbacks; must never throw. */
+    static void markTreeDirty() {
+        sViewGeneration++;
+        sDirtyAtMs = System.currentTimeMillis();
+        sTreeDirty.set(true);
+        synchronized (sProbeWake) {
+            sProbeWake.notifyAll();
+        }
+    }
+
+    /** Register the dirty listeners on one window root, once. */
+    static void watchRoot(final View root) {
+        if (root == null) return;
+        try {
+            synchronized (sWatchedRoots) {
+                if (sWatchedRoots.containsKey(root)) return;
+            }
+            final android.view.ViewTreeObserver vto = root.getViewTreeObserver();
+            if (vto == null || !vto.isAlive()) return;
+            vto.addOnGlobalLayoutListener(
+                    new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+                        @Override
+                        public void onGlobalLayout() {
+                            markTreeDirty();
+                        }
+                    });
+            vto.addOnDrawListener(new android.view.ViewTreeObserver.OnDrawListener() {
+                @Override
+                public void onDraw() {
+                    markTreeDirty();
+                }
+            });
+            vto.addOnWindowAttachListener(
+                    new android.view.ViewTreeObserver.OnWindowAttachListener() {
+                        @Override
+                        public void onWindowAttached() {
+                            markTreeDirty();
+                        }
+
+                        @Override
+                        public void onWindowDetached() {
+                            markTreeDirty();
+                        }
+                    });
+            vto.addOnWindowFocusChangeListener(
+                    new android.view.ViewTreeObserver.OnWindowFocusChangeListener() {
+                        @Override
+                        public void onWindowFocusChanged(boolean hasFocus) {
+                            markTreeDirty();
+                        }
+                    });
+            synchronized (sWatchedRoots) {
+                sWatchedRoots.put(root, Boolean.TRUE);
+            }
+        } catch (Throwable ignored) {
+            // A listener we cannot register is covered by the fallback poll.
+        }
+    }
+
+    /** Watch every current window root (main + dialogs/menus/popups). */
+    static void watchProbeRoots(View decor) {
+        try {
+            watchRoot(decor);
+            java.util.List<View> roots = windowViews();
+            if (roots != null) {
+                for (View root : roots) watchRoot(root);
+            }
+        } catch (Throwable ignored) {
+            // Fallback poll still covers an unobserved root.
+        }
+    }
+
     /**
      * W10: a periodic read-only view-tree sample for the interactive session.
      *
@@ -594,14 +684,28 @@ public final class LaunchMain {
      * the literal text is not forced through the fallback. Nothing is
      * invoked; the only calls are getters.
      *
-     * <p>P3b: the 50 ms cadence is a fallback. A host `PROBE` line on stdin (or
-     * the wake object) schedules one sample immediately; the walk itself never
-     * runs per draw.
+     * <p>P10: the walk is event-driven. A view callback marks the tree dirty;
+     * the probe thread emits one sample per debounce window (one frame) and
+     * coalesces bursts, so a burst of draws never becomes a burst of walks.
+     * The slow poll (`P10_PROBE_FALLBACK_MS`, default 250 ms) is the fallback:
+     * a missed event can delay a sample but can never stop it. A host `PROBE`
+     * line on stdin schedules one sample immediately (cause {@code wake}).
+     * Every sample names its {@code cause}: {@code dirty|wake|poll}.
      */
     static void startLiveProbe(final Object activity) {
         final android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
         final java.util.concurrent.atomic.AtomicBoolean pending =
                 new java.util.concurrent.atomic.AtomicBoolean(false);
+        // P10: register the dirty listeners before the first sample and force
+        // one immediately (the launch `ready` line waits for a probe sample).
+        try {
+            Object window = activity.getClass().getMethod("getWindow").invoke(activity);
+            Object decor = window.getClass().getMethod("getDecorView").invoke(window);
+            if (decor instanceof View) watchProbeRoots((View) decor);
+        } catch (Throwable ignored) {
+        }
+        sDirtyAtMs = 0;
+        sTreeDirty.set(true);
         // P3b: the host writes one `PROBE` line to the guest's stdin when a
         // fast tree needs a sample now. The control thread only wakes the
         // probe thread; it never walks or mutates the view tree itself.
@@ -630,8 +734,18 @@ public final class LaunchMain {
         Thread t = new Thread(new Runnable() {
             @Override
             public void run() {
+                // One frame is 16.7 ms; a dirty probe waits for a single
+                // debounce window after the last dirty mark and is at least
+                // P10_PROBE_MIN_GAP_MS after the previous one, so a burst of
+                // draw callbacks coalesces into one walk.
+                final long debounceMs =
+                        envLong("P10_PROBE_DEBOUNCE_MS", 8);
+                final long minGapMs = envLong("P10_PROBE_MIN_GAP_MS", 25);
+                final long fallbackMs =
+                        envLong("P10_PROBE_FALLBACK_MS", 250);
                 long seq = 0;
                 long pendingSince = 0;
+                long lastEmitMs = 0;
                 while (true) {
                     // Diagnostic: if the main thread has not run a probe for
                     // >2 s it is blocked somewhere; a Java stack from this
@@ -650,35 +764,65 @@ public final class LaunchMain {
                         pendingSince = 0;
                     }
                     if (!pending.get()) {
-                        pending.set(true);
-                        final long n = ++seq;
-                        main.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                try {
-                                    emitProbe(activity, n);
-                                } catch (Throwable t) {
-                                    // A probe must never disturb the app, but it
-                                    // must not hide its own failure either
-                                    // (W36): publish one structured error line
-                                    // so a missing window is never a silent
-                                    // "probe froze" mystery.
-                                    probeError("sample", n, null, t);
-                                } finally {
-                                    pending.set(false);
+                        boolean wake;
+                        synchronized (sProbeWake) {
+                            wake = sProbeRequested;
+                            sProbeRequested = false;
+                        }
+                        final long n;
+                        String cause = null;
+                        if (wake) {
+                            cause = "wake";
+                        } else if (sTreeDirty.get()
+                                && now - sDirtyAtMs >= debounceMs
+                                && now - lastEmitMs >= minGapMs) {
+                            cause = "dirty";
+                        } else if (now - lastEmitMs >= fallbackMs) {
+                            cause = "poll";
+                        }
+                        if (cause != null) {
+                            n = ++seq;
+                            sTreeDirty.set(false);
+                            lastEmitMs = now;
+                            final String why = cause;
+                            pending.set(true);
+                            main.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    try {
+                                        emitProbe(activity, n, why);
+                                    } catch (Throwable t) {
+                                        // A probe must never disturb the app, but it
+                                        // must not hide its own failure either
+                                        // (W36): publish one structured error line
+                                        // so a missing window is never a silent
+                                        // "probe froze" mystery.
+                                        probeError("sample", n, null, t);
+                                    } finally {
+                                        pending.set(false);
+                                    }
                                 }
-                            }
-                        });
+                            });
+                        }
                     }
-                    // The 50 ms poll is the fallback cadence (canvas/background
-                    // draws). A host `PROBE` request or a dirty view wakes this
-                    // wait immediately; no probe runs per draw (P3b).
+                    // Wait for a view event, a host request, or the fallback
+                    // tick, whichever is first. No probe runs per draw: the
+                    // listeners only mark dirty (P10).
                     try {
+                        long waitMs = fallbackMs - (System.currentTimeMillis() - lastEmitMs);
+                        long nowMs = System.currentTimeMillis();
+                        long gapWait = minGapMs - (nowMs - lastEmitMs);
+                        if (gapWait > waitMs) waitMs = gapWait;
+                        if (sTreeDirty.get()) {
+                            long dirtyWait = debounceMs - (nowMs - sDirtyAtMs);
+                            if (dirtyWait < waitMs) waitMs = dirtyWait;
+                        }
+                        if (pending.get()) waitMs = 10;
+                        if (waitMs < 1) waitMs = 1;
                         synchronized (sProbeWake) {
                             if (!sProbeRequested) {
-                                sProbeWake.wait(50);
+                                sProbeWake.wait(waitMs);
                             }
-                            sProbeRequested = false;
                         }
                     } catch (InterruptedException e) {
                         return;
@@ -743,7 +887,16 @@ public final class LaunchMain {
         System.err.flush();
     }
 
-    static void emitProbe(Object activity, long seq) throws Throwable {
+    static long envLong(String name, long fallback) {
+        try {
+            String value = System.getenv(name);
+            if (value != null && value.length() > 0) return Long.parseLong(value);
+        } catch (Throwable ignored) {
+        }
+        return fallback;
+    }
+
+    static void emitProbe(Object activity, long seq, String cause) throws Throwable {
         long probeStart = System.nanoTime();
         Object window = activity.getClass().getMethod("getWindow").invoke(activity);
         Object decor = window.getClass().getMethod("getDecorView").invoke(window);
@@ -816,9 +969,14 @@ public final class LaunchMain {
                 nodes.append(one);
             }
         }
+        // P10: a new window root (dialog/menu/popup) is registered for dirty
+        // events here, on the main thread and outside any draw dispatch.
+        watchProbeRoots((View) decor);
         StringBuilder j = new StringBuilder(nodes.length() + 512);
         j.append("ACOSPROBE {\"seq\":").append(seq)
                 .append(",\"time\":").append(System.currentTimeMillis())
+                .append(",\"cause\":\"").append(cause).append('"')
+                .append(",\"view_generation\":").append(sViewGeneration)
                 .append(",\"windows\":[").append(windows).append("]")
                 .append(",\"tree\":{\"nodes\":[").append(nodes).append(']')
                 .append(",\"window_count\":").append(z)
