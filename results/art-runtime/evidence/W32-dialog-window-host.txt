@@ -1,0 +1,76 @@
+W32 item 1 — the dialog window ATTACHES; the block W27 saw is downstream of the host
+date -u: 2026-11-12T01:23:09Z (tap), 01:24:26-01:24:34Z (blocked-state capture)
+binary: .cache/w32-target/debug/acos-art (acos-services built from this tree:
+  ACOS_WMS_TRACE instrumentation only; no behaviour change)
+fixtures/build/apps/dialog-menu.apk, launch path (LaunchMain live probe, which W27
+extended to the WindowManagerGlobal window forest).
+
+Repro: results/art-runtime/evidence/W32-repro-dialog.sh .cache/w32/repro3  (launch --interactive,
+ACOS_WMS_TRACE=1, tap (173,252) = the app's Show-dialog button; 252 because the
+launch-probe `bounds` are screen space and the input path is content-relative).
+
+1. The host completes the whole dialog attach (ACOSWMS trace, verbatim):
+
+   ACOSWMS enter code=2 (addToDisplayAsUser) avail=484         <- activity 0x…08
+   ACOSWMS add-request window=0x100000008 type=1 token=None title=Some("…/MainActivity") w=-1 h=-1
+   ACOSWMS add-done window=0x100000008 result=0 frame=[0,128,1080,2337]
+   …
+   ACOSWMS enter code=2 (addToDisplayAsUser) avail=480         <- DIALOG 0x…11
+   ACOSWMS add-request window=0x100000011 type=2 token=None title=Some("…/MainActivity") w=-2 h=-2
+   ACOSWMS add-done window=0x100000011 result=0 frame=[0,128,1080,2337]
+   ACOSWMS enter code=39 (setOnBackInvokedCallbackInfo)
+   ACOSWMS enter code=5 (relayout)
+   ACOSWMS relayout-request window=0x100000011 type=2 w=-2 h=-2 req=776x513
+   ACOSWMS relayout-done window=0x100000011 result=0x7 frame=[152,976,928,1489]
+   ACOSWMS enter code=9 (finishDrawing)                        <- the dialog DREW
+   ACOSWMS enter code=5 (relayout)
+   ACOSWMS relayout-request window=0x100000011 type=2 w=-2 h=-2 req=776x513
+   ACOSWMS relayout-done window=0x100000011 result=0x0 frame=[152,976,928,1489]
+
+   * `type=2` = TYPE_APPLICATION; a dialog is a TOP-LEVEL app window on this image,
+     so `token=None` is the image's own shape, not a missing parent token
+     (`PhoneWindow.adjustLayoutParamsForSubWindow` only assigns a token for
+     FIRST_SUB_WINDOW..LAST_SUB_WINDOW = 1000..1999; a TYPE_APPLICATION dialog keeps
+     `null`). WRAP_CONTENT (`w=-2`) gets the client-measured 776x513 and is centred
+     in the app bounds: x=(1080-776)/2=152, y=128+(2209-513)/2=976. The reply is
+     ADD_OKAY=0, then a separate `SurfaceControl` layer (bind_surface_layer), z above
+     the activity (`z = windows.len()+1`), its own insets/frames.
+   * `finishDrawing` on the dialog proves the app's first dialog traversal completed
+     and C1 stored its buffer (c1_generation 7 -> 66 across the tap).
+
+2. What stops is the guest probe, and the main thread is NOT blocked. `kill -QUIT`
+   of the guest (pid 3367636, tid 1) during the stall, ART dump:
+
+     "main" prio=5 tid=1 Native
+       | state=S schedstat=( 241529772 107212 400 ) …
+       | held mutexes=
+       native: #00 … bionic/libc.so (__epoll_pwait+10)
+       at android.os.MessageQueue.nativePollOnce(Native method)
+       at android.os.MessageQueue.next(MessageQueue.java:335)
+       at android.os.Looper.loopOnce(Looper.java:162)
+       at android.os.Looper.loop(Looper.java:294)
+       at dev.acos.art.LaunchMain.run(LaunchMain.java:346)
+       at dev.acos.art.LaunchMain.main(LaunchMain.java:158)
+
+   i.e. the main thread is idle in the main looper, holding no mutex, waiting for a
+   message. Per-thread wchan at the same instant (blocked.txt):
+
+     3367636 do_epoll_wait  S   <- main thread: looper idle
+     3367657 futex_do_wait  S   <- "acos-live-probe" thread: Thread.sleep(50)
+     (Signal Catcher 3367642 Dl — processing the SIGQUIT)
+
+   The launcher's `tap` reply reports `probe_seq 83 -> 83`: the W27 live probe
+   publishes no further sample after the dialog attaches (it published 83 samples
+   before it, ~50 ms apart). `ACOSPROBE-STALL-DETECT` (printed when the probe's
+   `pending` flag stays set for >2 s) does NOT appear in the guest stderr, which
+   means the main-thread Runnable DID run and `emitProbe` threw; that throw is
+   swallowed by `catch (Throwable ignored)` in the Runnable.
+
+   => W27's "addView blocks the app main thread before the WindowManager host path"
+      is REJECTED as stated: the host answers add/relayout/finishDrawing for the
+      dialog, and the guest main thread returns to its looper. The remaining wall is
+      inside `LaunchMain.emitProbe` once a second window is in mViews, plus the
+      session path (acos-art `SessionMain`/`AppMain.dumpTree`) which never walks
+      mViews at all, and the C1 capture which keeps one layer's pixels.
+
+Not changed by W32 on the guest side (acos-art is W31-owned); see W32.md §request.

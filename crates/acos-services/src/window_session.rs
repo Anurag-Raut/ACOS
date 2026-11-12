@@ -429,6 +429,21 @@ fn write_relayout_result(r: &RelayoutResult, reply: &mut Parcel) -> SResult<()> 
 // Dispatch
 // ---------------------------------------------------------------------------
 
+/// Drop guard for `ACOS_WMS_TRACE`: one `exit` line per transaction, including
+/// the early `?` returns, so a line that never completes is visible.
+struct RawTransactTrace {
+    enabled: bool,
+    code: u32,
+}
+
+impl Drop for RawTransactTrace {
+    fn drop(&mut self) {
+        if self.enabled {
+            eprintln!("ACOSWMS exit code={}", self.code);
+        }
+    }
+}
+
 impl ServiceObject for WindowSessionService {
     fn call(
         &mut self,
@@ -552,10 +567,31 @@ impl ServiceObject for WindowSessionService {
         data: &mut Parcel,
         reply: &mut Parcel,
     ) -> SResult<bool> {
+        // `ACOS_WMS_TRACE=1` prints one line per `IWindowSession` transaction
+        // (code, request size, whether the state lock was acquired, and the
+        // add/relayout shapes). W32 needed it to locate a dialog window that
+        // blocked the guest main thread: the last `enter` with no `exit` is the
+        // transaction that never completed, which no probe sample can show
+        // (the guest stops sampling and `WindowManagerGlobal.mLock` hides why).
+        let trace = std::env::var_os("ACOS_WMS_TRACE").is_some();
+        let _trace_guard = RawTransactTrace { enabled: trace, code };
+        if trace {
+            eprintln!(
+                "ACOSWMS enter code={code} ({}) avail={}",
+                method_name(code).unwrap_or_else(|| "?".into()),
+                data.data_avail()
+            );
+        }
         if interface != DESCRIPTOR {
             return Ok(false);
         }
+        if trace {
+            eprintln!("ACOSWMS lock-wait code={code}");
+        }
         let mut state = self.lock();
+        if trace {
+            eprintln!("ACOSWMS locked code={code}");
+        }
         let window_id = self.window_id_binder;
         match code {
             codes::ADD_TO_DISPLAY | codes::ADD_TO_DISPLAY_AS_USER => {
@@ -580,9 +616,21 @@ impl ServiceObject for WindowSessionService {
                         method_name(code).unwrap_or_else(|| "addToDisplayAsUser".into())
                     ))
                 })?;
+                if trace {
+                    eprintln!(
+                        "ACOSWMS add-request window={:#x} type={} token={:?} title={:?} w={} h={}",
+                        window.0, params.type_, params.token, params.title, params.width, params.height
+                    );
+                }
                 let add = state
                     .add_to_display_as_user(window, params, requested_visible_types)
                     .map_err(werr)?;
+                if trace {
+                    eprintln!(
+                        "ACOSWMS add-done window={:#x} result={} frame={:?}",
+                        window.0, add.result, add.out_frame
+                    );
+                }
                 // I2: create the authoritative pair before the reply so the
                 // body written below is the fd the guest installs its real
                 // `InputEventReceiver` on. The FOCUS/TOUCH_MODE messages are
@@ -680,6 +728,13 @@ impl ServiceObject for WindowSessionService {
                             ))
                         })?,
                 };
+                if trace {
+                    eprintln!(
+                        "ACOSWMS relayout-request window={:#x} type={} token={:?} w={} h={} req={}x{}",
+                        window.0, params.type_, params.token, params.width, params.height,
+                        requested_width, requested_height
+                    );
+                }
                 let mut r = state.relayout_with_requested(
                     window.0,
                     params,
@@ -688,6 +743,12 @@ impl ServiceObject for WindowSessionService {
                     seq,
                 )
                 .map_err(werr)?;
+                if trace {
+                    eprintln!(
+                        "ACOSWMS relayout-done window={:#x} result={:#x} frame={:?}",
+                        window.0, r.result, r.frames.frame
+                    );
+                }
                 // W5: bind the window's `SurfaceControl` to a real compositor
                 // layer before it goes on the wire. A failure (exhausted handle
                 // pool) leaves the W3 placeholder body, which is a legal reply

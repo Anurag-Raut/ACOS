@@ -1,0 +1,9 @@
+W32 acceptance rows on the shared target/debug binary (acos 63 MB, acos-art 14 MB, CARGO_PROFILE_DEV_DEBUG=0, 2026-11-12T01:35Z)
+# name	status	steps	scenario	apk	wall
+v2-counter	pass	11/11	scenarios/v2-art-counter.yaml	fixtures/build/apps/counter.apk	wall=6598ms
+w19-form-behavior	pass	8/8	scenarios/w19-form-behavior.yaml	fixtures/build/apps/form-validation.apk	wall=2422ms
+w23-rn-tap	pass	6/6	scenarios/w23-rn-hello-tap.yaml	fixtures/build/apps/rn-hello.apk	wall=1548ms
+two-activity	pass	3/3	scenarios/w15-two-activity.yaml	fixtures/build/apps/two-activity.apk	wall=496ms
+dialog-menu	pass	3/3	scenarios/w15-dialog-menu.yaml	fixtures/build/apps/dialog-menu.apk	wall=495ms
+w28-gaten-release	pass	4/4	scenarios/w28-gaten-release-tap.yaml	.cache/gaten/gaten-x86_64-release.apk	wall=2383ms
+w27-dialog-window	fail	4/5	scenarios/w27-dialog-window.yaml	fixtures/build/apps/dialog-menu.apk	wall=17544ms

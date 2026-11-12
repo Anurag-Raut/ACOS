@@ -1,0 +1,54 @@
+W32: ACOS_WMS_TRACE of the dialog tap (repro3, 2026-11-12T01:24Z)
+ACOSWMS enter code=2 (addToDisplayAsUser) avail=484
+ACOSWMS add-request window=0x100000008 type=1 token=None title=Some("dev.acos.fixtures.dialogmenu/dev.acos.fixtures.dialogmenu.MainActivity") w=-1 h=-1
+ACOSWMS enter code=2 (addToDisplayAsUser) avail=480
+ACOSWMS add-request window=0x100000011 type=2 token=None title=Some("dev.acos.fixtures.dialogmenu/dev.acos.fixtures.dialogmenu.MainActivity") w=-2 h=-2
+ACOSWMS add-done window=0x100000011 result=0 frame=RectI { left: 0, top: 128, right: 1080, bottom: 2337 }
+ACOSWMS relayout-request window=0x100000011 type=2 token=None w=-2 h=-2 req=776x513
+ACOSWMS relayout-done window=0x100000011 result=0x7 frame=RectI { left: 152, top: 976, right: 928, bottom: 1489 }
+ACOSWMS relayout-request window=0x100000011 type=2 token=None w=-2 h=-2 req=776x513
+ACOSWMS relayout-done window=0x100000011 result=0x0 frame=RectI { left: 152, top: 976, right: 928, bottom: 1489 }
+
+=== ART SIGQUIT dump of the guest main thread (logd, truncated at 2560 bytes by the log cap):
+
+----- pid 2 at 2026-11-12 01:24:28.508323426+0000 -----
+Cmd line: /system/apex/com.android.art/bin/dalvikvm64 -cp /data/app/launch-guest/classes.dex dev.acos.art.LaunchMain /data/app/dialog-menu.apk dev.acos.fixtures.dialogmenu /data/out/launch activity-resumed dev.acos.fixtures.dialogmenu.MainActivity  0 /data/overlay/GoogleConfigOverlay.idmap,/data/overlay/GoogleWebViewOverlay.idmap,/data/overlay/LargeScreenConfigOverlay.idmap,/data/overlay/PixelConfigOverlayCommon.idmap,/data/overlay/framework-res__auto_generated_rro_product.idmap 2130903040  0
+Build fingerprint: 'unknown'
+ABI: 'x86_64'
+Build type: optimized
+suspend all histogram:	Sum: 12us 99% C.I. 80ns-1000ns Avg: 333ns Max: 1000ns
+DALVIK THREADS (15):
+"main" prio=5 tid=1 Native
+  | group="main" sCount=1 ucsCount=0 flags=1 obj=0x12f00000 self=0x7f9963e0b6f0
+  | sysTid=2 nice=0 cgrp=default sched=0/0 handle=0x7f9b1899b4f8
+  | state=S schedstat=( 241529772 107212 400 ) utm=11 stm=12 core=8 HZ=100
+  | stack=0x7ffc0251e000-0x7ffc02520000 stackSize=8188KB
+  | held mutexes=
+  native: #00 pc 000b94da  /apex/com.android.runtime/lib64/bionic/libc.so (__epoll_pwait+10) (BuildId: fa337969c798946280caa45e2d71a2e7)
+  at android.os.MessageQueue.nativePollOnce(Native method)
+  at android.os.MessageQueue.next(MessageQueue.java:335)
+  at android.os.Looper.loopOnce(Looper.java:162)
+  at android.os.Looper.loop(Looper.java:294)
+  at dev.acos.art.LaunchMain.run(LaunchMain.java:346)
+  at dev.acos.art.LaunchMain.main(LaunchMain.java:158)
+
+"ReferenceQueueDaemon" daemon prio=5 tid=8 Waiting
+  | group="system" sCount=1 ucsCount=0 flags=1 obj=0x12f01488 self=0x7f9963e10a60
+  | sysTid=10 nice=0 cgrp=default sched=0/0 handle=0x7f9843eedc80
+  | state=S schedstat=( 1375023 0 21 ) utm=0 stm=0 core=26 HZ=100
+  | stack=0x7f9843dea000-0x7f9843dec000 stackSize=1039KB
+  | held mutexes=
+  at java.lang.Object.wait(Native method)
+  - waiting on <0x0c324c66> (a java.lang.Class<java.lang.ref.ReferenceQueue>)
+  at java.lang.Object.wait(Object.java:386)
+  at java.lang.Object.wait(Object.java:524)
+  at java.lang.Daemons$ReferenceQueueDaemon.runInternal(Daemons.java:239)
+  - locked <0x0c324c66> (a java.lang.Class<java.lang.ref.ReferenceQueue>)
+  at java.lang.Daemons$Daemon.run(Daemons.java:145)
+  at java.lang.Thread.run(Thread.java:1012)
+
+"FinalizerDaemon" daemon prio=5 tid=10 Waiting
+  | group="system" sCount=1 ucsCount=0 flags=1 obj=0x12f01500 self=0x7f9963e1b140
+  | sysTid=11 nice=0 cgrp=default sched=0/0 handle=0x7f9843de3c80
+  | state=S schedstat=( 1312515 0 19 ) utm=0 stm=0 core=12 HZ=100
+  | stack

@@ -925,6 +925,14 @@ pub struct PmsState {
     /// dex-load notifications (oneway, recorded) as
     /// `(package, loaderIsa, classLoaderContextMap size)`.
     pub dex_loads: Vec<(String, String, usize)>,
+    /// `setComponentEnabledSetting` overrides, keyed by
+    /// `(package, class)` → `COMPONENT_ENABLED_STATE_*` (W32).
+    ///
+    /// The manifest's own `android:enabled` is **not** in here: on a device it
+    /// is `ActivityInfo.enabled`/`ServiceInfo.enabled`, not a component
+    /// *setting*, and `PackageManager.getComponentEnabledSetting` reports
+    /// `COMPONENT_ENABLED_STATE_DEFAULT` (0) until an app calls the setter.
+    pub component_settings: Vec<((String, String), i32)>,
     /// installer package (null = side-loaded).
     pub installer_package: Option<String>,
     /// `sourceDir` the state was built from.
@@ -965,6 +973,7 @@ impl PmsState {
             providers: Vec::new(),
             services: Vec::new(),
             dex_loads: Vec::new(),
+            component_settings: Vec::new(),
             installer_package: None,
             apk_path: apk,
         }
@@ -1063,6 +1072,7 @@ impl PmsState {
             providers,
             services,
             dex_loads: Vec::new(),
+            component_settings: Vec::new(),
             installer_package: None,
             apk_path: path.to_path_buf(),
         })
@@ -1106,12 +1116,88 @@ impl PmsState {
             .map(|(_, p)| p.clone())
             .collect()
     }
+
+    /// `COMPONENT_ENABLED_STATE_DEFAULT` (the stock value of
+    /// `PackageManager.COMPONENT_ENABLED_STATE_DEFAULT`).
+    pub const COMPONENT_ENABLED_STATE_DEFAULT: i32 = 0;
+    /// `COMPONENT_ENABLED_STATE_ENABLED`.
+    pub const COMPONENT_ENABLED_STATE_ENABLED: i32 = 1;
+    /// `COMPONENT_ENABLED_STATE_DISABLED`.
+    pub const COMPONENT_ENABLED_STATE_DISABLED: i32 = 2;
+    /// `COMPONENT_ENABLED_STATE_DISABLED_USER`.
+    pub const COMPONENT_ENABLED_STATE_DISABLED_USER: i32 = 3;
+    /// `COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED`.
+    pub const COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED: i32 = 4;
+
+    /// `PackageManager.getComponentEnabledSetting(ComponentName, userId)`.
+    ///
+    /// ACOS installs one package for one user (`uid` on the fixture), so the
+    /// userId is accepted and not part of the key: a setting recorded for the
+    /// installed package is the answer for the installed app. A component that
+    /// was never set answers `COMPONENT_ENABLED_STATE_DEFAULT`, exactly as
+    /// `PackageManagerService.getComponentEnabledSetting` does.
+    #[must_use]
+    pub fn component_setting(&self, package: &str, class: &str) -> i32 {
+        self.component_settings
+            .iter()
+            .find(|((p, c), _)| p == package && c == class)
+            .map(|(_, state)| *state)
+            .unwrap_or(Self::COMPONENT_ENABLED_STATE_DEFAULT)
+    }
+
+    /// Record a `setComponentEnabledSetting` override. Returns `false` (and
+    /// changes nothing) when `new_state` is not one of the five stock values
+    /// `PackageManagerService` accepts — the framework throws
+    /// `IllegalArgumentException` for those, so the host must not store
+    /// something the getter could then report as a valid setting.
+    pub fn set_component_setting(
+        &mut self,
+        package: &str,
+        class: &str,
+        new_state: i32,
+    ) -> bool {
+        if !(Self::COMPONENT_ENABLED_STATE_DEFAULT..=Self::COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED)
+            .contains(&new_state)
+        {
+            return false;
+        }
+        match self
+            .component_settings
+            .iter_mut()
+            .find(|((p, c), _)| p == package && c == class)
+        {
+            Some((_, state)) => *state = new_state,
+            None => self
+                .component_settings
+                .push(((package.to_string(), class.to_string()), new_state)),
+        }
+        true
+    }
 }
 
 impl Default for PmsState {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// `ComponentName` (`package`, `class`) from a decoded parcelable argument.
+///
+/// The image's `ComponentName.writeToParcel` writes `mPackage` then `mClass`,
+/// which is also what `parcelable.rs`'s spec records; a missing argument is an
+/// empty pair, so the getter answers DEFAULT instead of failing.
+fn component_parts(component: Option<&Parcelable>) -> (String, String) {
+    let package = component
+        .and_then(|p| p.field(0))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let class = component
+        .and_then(|p| p.field(1))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    (package, class)
 }
 
 fn launch_mode_code(mode: Option<&str>) -> i32 {
@@ -1300,6 +1386,47 @@ impl ServiceObject for PmsService {
                     _ => vec![Value::Str(None)],
                 }
             }
+            // W32: `IPackageManager.getComponentEnabledSetting` (code 85)
+            // `(ComponentName, userId) -> int` and
+            // `setComponentEnabledSetting` (code 83)
+            // `(ComponentName, newState, flags, userId, callingPackage) -> void`.
+            // The wire order is the image's `$Stub$Proxy`/`$Stub` order from the
+            // generated table; `ComponentName.writeToParcel` is `package`,
+            // `class`. Stock answers DEFAULT (0) until something sets a value.
+            "getComponentEnabledSetting" => {
+                let (package, class) = component_parts(args.first().and_then(Value::as_parcelable));
+                let _user_id = args.get(1).and_then(Value::as_int).unwrap_or(0);
+                vec![Value::Int(state.component_setting(&package, &class))]
+            }
+            "setComponentEnabledSetting" => {
+                let (package, class) = component_parts(args.first().and_then(Value::as_parcelable));
+                let new_state = args.get(1).and_then(Value::as_int).unwrap_or(-1);
+                let _flags = args.get(2).and_then(Value::as_int).unwrap_or(0);
+                let _user_id = args.get(3).and_then(Value::as_int).unwrap_or(0);
+                let _calling_package = args.get(4).and_then(Value::as_str).unwrap_or_default();
+                if !state.set_component_setting(&package, &class, new_state) {
+                    // The framework's own reply to an invalid state is a
+                    // `SecurityException`/`IllegalArgumentException`; there is
+                    // no valid AIDL value, so nothing is stored and the
+                    // request is reported as a bad request.
+                    return Err(ServiceError::BadRequest {
+                        interface: interface.to_string(),
+                        method: method.name.clone(),
+                        detail: format!(
+                            "setComponentEnabledSetting: newState {new_state} is not a \
+                             COMPONENT_ENABLED_STATE_* value"
+                        ),
+                    });
+                }
+                Vec::new()
+            }
+            // W32: `IPackageManager.queryProperty(String, userId) ->
+            // ParceledListSlice<Property>`. `acos-apk` parses no `<property>`
+            // manifest elements (API 31+ `android:property`), so the honest
+            // stock answer is the empty result — the typed `null` slice the
+            // framework's `queryProperty` caller turns into an empty list,
+            // never a fabricated `Property`.
+            "queryProperty" => vec![Value::TypedObject(Parcelable::Null)],
             "resolveContentProvider" => {
                 // `resolveContentProvider(String authority, long flags, int userId)`.
                 let authority = args.first().and_then(Value::as_str).unwrap_or_default();
@@ -1384,6 +1511,9 @@ mod tests {
                 hardware_accelerated: None,
                 theme: None,
                 process: None,
+                // W31 added the rest of `parseBaseApplication`'s flag inputs;
+                // absent attributes stay `None` so the stock defaults apply.
+                ..Default::default()
             },
             activities: Vec::new(),
             services: Vec::new(),
