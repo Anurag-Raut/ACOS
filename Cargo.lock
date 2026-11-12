@@ -263,6 +263,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "acos-sfgeom"
+version = "0.1.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "acos-sqlite"
 version = "0.1.0"
 dependencies = [

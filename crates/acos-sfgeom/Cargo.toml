@@ -1,0 +1,15 @@
+[package]
+name = "acos-sfgeom"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "AOSP Android 14 SurfaceFlinger layer geometry (libui Transform/Rect + FrontEnd transform/bounds algebra) compiled into ACOS's Rust compositor."
+
+[build-dependencies]
+# Pinned to the version already in Cargo.lock; the workspace builds offline.
+cc = "=1.11.1"
+
+[lib]
+name = "acos_sfgeom"
+path = "src/lib.rs"
