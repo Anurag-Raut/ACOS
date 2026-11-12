@@ -2894,16 +2894,16 @@
   "walls_addressed": {
    "R4_evidence": {
     "commits": [
-     "fea6d68"
+     "6a08341"
     ],
     "funnel_delta": 0,
     "apps_reclassified": 9
    },
    "R1_null_services": {
     "commits": [
-     "335612c",
-     "8f2c52d",
-     "546993a"
+     "cdc1a69",
+     "11fabb7",
+     "c389090"
     ],
     "apps_left_wall": 13,
     "new_full_ladder": [
@@ -2915,9 +2915,9 @@
    },
    "R2_notification_channels": {
     "commits": [
-     "f4500ce",
-     "b71f5e0",
-     "8f2c52d"
+     "3484c3b",
+     "e3d0c47",
+     "11fabb7"
     ],
     "apps_left_wall": 6,
     "new_full_ladder": [
@@ -2926,8 +2926,8 @@
    },
    "R3_read_only_queries": {
     "commits": [
-     "9ea2923",
-     "8f2c52d"
+     "35374c2",
+     "11fabb7"
     ],
     "apps_left_wall": 7,
     "new_full_ladder": []

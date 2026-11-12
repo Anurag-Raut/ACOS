@@ -488,7 +488,7 @@ viewBox defect and an insets defect — MEASURED (two defects open)
 
 ## E5.1 — K2/R4: guest crash evidence carries the cause chain and stack — MEASURED (accepted)
 
-- **Date / commit:** 2026-11-12 `fea6d68`.
+- **Date / commit:** 2026-11-12 `6a08341`.
 - **Agent / bottleneck:** K2; the K1 corpus had 9 apps whose first failing call
   was hidden behind a framework wrapper (`Unable to create application …`).
 - **Baseline:** K1 `guest_crash` was one line, host-truncated at 600 chars; no
@@ -512,7 +512,7 @@ viewBox defect and an insets defect — MEASURED (two defects open)
 
 ## E5.2 — K2/R1: publish the services Android always publishes — MEASURED (accepted)
 
-- **Date / commit:** 2026-11-12 `335612c` (+`8f2c52d`, `546993a`).
+- **Date / commit:** 2026-11-12 `cdc1a69` (+`11fabb7`, `c389090`).
 - **Agent / bottleneck:** K2; R1 was K1's largest wall (13/42 apps), a null
   where Android never returns one.
 - **Baseline:** K1 first frame 5/42; 13 apps died on
@@ -534,7 +534,7 @@ viewBox defect and an insets defect — MEASURED (two defects open)
 - **Fidelity / evidence:** `results/compat/K2.md` §3,
   `.cache/k2/runs-final2/`, `results/compat/k2-results.json`.
 - **Result:** accepted. **Trade-offs/regression:** publishing JobScheduler and
-  Shortcut exposed missing `JobInfo`/`ShortcutInfo` payload codecs; `8f2c52d`
+  Shortcut exposed missing `JobInfo`/`ShortcutInfo` payload codecs; `11fabb7`
   consumes those list arguments opaquely and the platform answer (success) is
   returned. Feeder and Aegis were restored (Aegis now full pass).
   **Follow-up:** real filesystem provisioning for
@@ -542,7 +542,7 @@ viewBox defect and an insets defect — MEASURED (two defects open)
 
 ## E5.3 — K2/R2: notification channel parcels and get-channel queries — MEASURED (accepted)
 
-- **Date / commit:** 2026-11-12 `f4500ce`, correction `b71f5e0`.
+- **Date / commit:** 2026-11-12 `3484c3b`, correction `e3d0c47`.
 - **Agent / bottleneck:** K2; 6/42 apps (14 %) were rejected at
   `INotificationManager.createNotificationChannels`.
 - **Baseline:** `IllegalArgumentException: bad request for …createNotificationChannels`
@@ -566,7 +566,7 @@ viewBox defect and an insets defect — MEASURED (two defects open)
 
 ## E5.4 — K2/R3: answer the read-only AMS/PMS/ATMS/connectivity queries — MEASURED (accepted)
 
-- **Date / commit:** 2026-11-12 `9ea2923`.
+- **Date / commit:** 2026-11-12 `35374c2`.
 - **Agent / bottleneck:** K2; 7/42 apps blocked on a read-only transaction the
   tables knew but no handler answered.
 - **Baseline:** 7 first-failing `UNSUPPORTED_ANDROID_API` transactions
@@ -604,7 +604,7 @@ Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
 | Agent loop | 2.21 s/task; 136.8 tasks/GiB-min (N=1), 188.0 (N=5) | main P5 (pre-P9/P10/P11) | P5 | 2026-11-12 |
 | Agent loop N=10 (Z7 method, fresh launch/task) | 45.0 tasks/GiB-min main; **67.7 with exec-path early GC** (seam, off by default → H2); 103.6 zygote+early GC (research, trusted only) | Z7 `zygote-z7-lifetime` | Z7, E2.8 | 2026-11-12 |
 | Teardown (`acos_destroy`) | ~20 ms lifecycle, 300 ms bound then group kill | main GL1 | E2.7 | 2026-11-12 |
-| Compat first-frame rate (K1 corpus, real ART, N=1) | **13/42 (31.0 %)**; tap 7/42 (16.7 %) | K2 `335612c…546993a` | K2/R1–R3 | 2026-11-12 |
+| Compat first-frame rate (K1 corpus, real ART, N=1) | **13/42 (31.0 %)**; tap 7/42 (16.7 %) | K2 `cdc1a69…c389090` | K2/R1–R3 | 2026-11-12 |
 | False passes | 0 | all | P1–P11, K2 | 2026-11-12 |
 
 ## Backlog (optimization hypotheses; rank = impact × confidence ÷ (cost × risk))
