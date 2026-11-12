@@ -2564,7 +2564,12 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
             if size < 0 {
                 D::Null
             } else {
-                let mut entries = Vec::with_capacity(size as usize);
+                // Guest-controlled count: every entry is at least two 4-byte
+                // `writeValue` type tags, so never reserve more than the parcel
+                // can hold (sandbox §5 gate 1; a hostile `i32::MAX` must not
+                // allocate). Truncation is still caught by the reads below.
+                let cap = (size as usize).min(parcel.remaining() / 8);
+                let mut entries = Vec::with_capacity(cap);
                 for _ in 0..size {
                     let k = read_dynamic(parcel)?;
                     let v = read_dynamic(parcel)?;

@@ -354,6 +354,18 @@ impl CursorWindowView {
             method: "createFromParcel".into(),
             detail: "window size out of range".into(),
         })?;
+        // Guest-controlled size (sandbox §5 gate 1): an inline window cannot be
+        // larger than what is left in the parcel, so refuse before allocating.
+        if size_usize > parcel.remaining() {
+            return Err(ServiceError::BadRequest {
+                interface: "android.database.CursorWindow".into(),
+                method: "createFromParcel".into(),
+                detail: format!(
+                    "window size {size_usize} exceeds the {} bytes left in the parcel",
+                    parcel.remaining()
+                ),
+            });
+        }
         let mut data = Vec::with_capacity(size_usize);
         for _ in 0..size_usize.div_ceil(4) {
             data.extend_from_slice(&parcel.read_int32()?.to_le_bytes());
@@ -514,7 +526,9 @@ impl QueryRequest {
         let projection = if count < 0 {
             None
         } else {
-            let mut columns = Vec::with_capacity(usize::try_from(count).unwrap_or(0));
+            // Guest-controlled count: each String16 takes at least 4 bytes.
+            let cap = usize::try_from(count).unwrap_or(0).min(parcel.remaining() / 4);
+            let mut columns = Vec::with_capacity(cap);
             for _ in 0..count {
                 columns.push(parcel.read_string16()?.unwrap_or_default());
             }
