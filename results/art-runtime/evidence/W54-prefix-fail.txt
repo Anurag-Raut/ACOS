@@ -1,0 +1,14 @@
+# W54: scenarios/w54-dialog-pixels.yaml on the PRE-FIX binaries (.cache/w54/acos-pre, HEAD^4-files)
+# verdict=fail steps=11
+step  0 launch           pass 
+step  1 wait_for         pass 
+step  2 tap              pass 
+step  3 type             pass 
+step  4 tap              pass 
+step  5 type             pass 
+step  6 tap              pass 
+step  7 assert_log       pass 
+step  8 assert_text      pass 
+step  9 capture          pass 
+step 10 assert_region    fail 
+   hash 56ba685fac0b6a9bc8330bfe159c46ff07afd2ab526f7b0e860aac676b75efb3 != e753006d4f666db1697d1562fda113a024aa37c5dc76e492514832ff346ae79c

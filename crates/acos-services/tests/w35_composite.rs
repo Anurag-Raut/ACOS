@@ -547,7 +547,12 @@ fn more_visible_layers_than_the_cap_are_refused() {
 }
 
 #[test]
-fn layers_far_apart_are_refused_before_a_canvas_is_allocated() {
+fn layers_far_apart_are_clipped_to_the_display_not_a_huge_canvas() {
+    // W54: the composite is the display viewport (SurfaceFlinger clipping), so a
+    // layer two displays away contributes nothing. Before W54 the canvas was the
+    // raw union of layer frames and this transaction was refused with
+    // CanvasTooLarge; the memory bound is now the display itself, which is
+    // tighter, and the visible layer still composites at its own pixels.
     let mut r = rig();
     let a = Buf::solid(8, 8, 8, 0x2_0000_0201, RED);
     let b = Buf::solid(8, 8, 8, 0x2_0000_0202, BLUE);
@@ -563,8 +568,8 @@ fn layers_far_apart_are_refused_before_a_canvas_is_allocated() {
         Layer {
             handle: BinderId(0x9101),
             layer_id: 2,
-            // Two windows this far apart cannot be one display; the union is
-            // larger than any accepted buffer dimension.
+            // Two windows this far apart cannot be one display: the far layer
+            // is off the display viewport.
             x: 8185.0,
             y: 0.0,
             z: 1,
@@ -572,12 +577,14 @@ fn layers_far_apart_are_refused_before_a_canvas_is_allocated() {
         },
     ]);
     r.transact(&mut parcel).expect("transaction decodes");
-    let err = r.capture().expect_err("an out-of-bounds canvas must be refused");
-    assert!(
-        matches!(err, CompositeError::CanvasTooLarge { .. }),
-        "expected CanvasTooLarge, got {err:?}"
+    let frame = r.capture().expect("the on-display layer still composites");
+    assert_eq!(
+        (frame.width, frame.height),
+        (8, 8),
+        "the canvas is the on-display layer, not the union with an off-display one"
     );
-    assert_eq!(err.code(), "COMPOSITE_CANVAS_TOO_LARGE");
+    assert_eq!(frame.layers, 2, "both layers are considered, one draws nothing");
+    assert_eq!(&frame.rgba[..4], &RED);
 }
 
 #[test]

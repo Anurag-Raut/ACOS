@@ -130,6 +130,35 @@ impl WindowRecord {
             compat_scale: 1.0,
         }
     }
+
+    /// `LayoutParams.surfaceInsets` — the client's own drawing surface insets
+    /// (**W54**).
+    ///
+    /// Stock `ViewRootImpl` computes them in `performTraversals`
+    /// (`WindowManager.LayoutParams.setSurfaceInsets`: `ceil(view.getZ() * 2)`
+    /// per side) and `ThreadedRenderer.setup` makes the drawing surface
+    /// `frame + insets` while translating the canvas by `(insetLeft, insetTop)`
+    /// (`ThreadedRenderer.java:515-535`, `:741`). The window manager therefore
+    /// owns the other half of that contract: the window's *surface* is the
+    /// frame grown by the insets, and the layer sits at `frame − insets` (see
+    /// `SurfaceView.java:1180`, which converts a frame into the window layer's
+    /// coordinate space exactly that way). This is what puts an elevation-
+    /// shadowed dialog's card at its frame instead of 2·Z inside a too-small
+    /// buffer.
+    #[must_use]
+    pub fn surface_insets(&self) -> RectI {
+        self.params.surface_insets
+    }
+
+    /// The window's `SurfaceControl` size: frame + surface insets.
+    #[must_use]
+    pub fn surface_size(&self) -> (i32, i32) {
+        let insets = self.surface_insets();
+        (
+            (self.frame.width() + insets.left + insets.right).max(0),
+            (self.frame.height() + insets.top + insets.bottom).max(0),
+        )
+    }
 }
 
 /// `addToDisplayAsUser` out-parameters.
@@ -415,6 +444,7 @@ impl WindowManager {
             return Err(WmError::UnknownSession(session));
         }
         let old_frame = record.frame;
+        let old_surface_size = record.surface_size();
         let first = !record.first_relayout_done;
         record.params = params;
         record.frame = compute_frame_for_requested(
@@ -424,7 +454,11 @@ impl WindowManager {
             requested_height,
         );
         record.parent_frame = record.frame;
-        let resized = record.frame != old_frame;
+        let (surface_width, surface_height) = record.surface_size();
+        // Stock resizes the window surface when the frame *or* the surface
+        // insets change (`RELAYOUT_RES_SURFACE_RESIZED`).
+        let resized = record.frame != old_frame
+            || (surface_width, surface_height) != old_surface_size;
         record.relayout_seq += 1;
         let sync_seq_out = if sync_seq >= 0 {
             sync_seq as u64
@@ -436,10 +470,15 @@ impl WindowManager {
         record.has_surface = true;
 
         let frames = record.client_frames();
+        // W54: the surface the client draws into is the frame grown by the
+        // client's surface insets (stock `WindowState.getSurfaceWidth/Height`).
+        // The client already sized its hardware renderer that way
+        // (`ThreadedRenderer.setup`), so a surface at the bare frame size clips
+        // the card and leaves the inset band transparent.
         let surface = SurfaceControlInfo {
             name: record.surface_name.clone(),
-            width: record.frame.width(),
-            height: record.frame.height(),
+            width: surface_width,
+            height: surface_height,
             handle: record.surface_handle,
             // The services layer binds this control to a real compositor layer
             // (`SurfaceState::bind_layer`, W5) before it goes on the wire.

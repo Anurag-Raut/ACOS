@@ -745,9 +745,9 @@ impl ServiceObject for WindowSessionService {
                 };
                 if trace {
                     eprintln!(
-                        "ACOSWMS relayout-request window={:#x} type={} token={:?} w={} h={} req={}x{}",
+                        "ACOSWMS relayout-request window={:#x} type={} token={:?} w={} h={} req={}x{} surfaceInsets={:?}",
                         window.0, params.type_, params.token, params.width, params.height,
-                        requested_width, requested_height
+                        requested_width, requested_height, params.surface_insets
                     );
                 }
                 let mut r = state.relayout_with_requested(
@@ -760,8 +760,8 @@ impl ServiceObject for WindowSessionService {
                 .map_err(werr)?;
                 if trace {
                     eprintln!(
-                        "ACOSWMS relayout-done window={:#x} result={:#x} frame={:?}",
-                        window.0, r.result, r.frames.frame
+                        "ACOSWMS relayout-done window={:#x} result={:#x} frame={:?} surface={}x{}",
+                        window.0, r.result, r.frames.frame, r.surface.width, r.surface.height
                     );
                 }
                 // W5: bind the window's `SurfaceControl` to a real compositor

@@ -563,10 +563,20 @@ pub struct SurfaceState {
     destroyed_layers: u64,
     /// Stored buffers dropped with their layer (evidence: memfds released).
     released_buffers: u64,
+    /// The display C1 composites onto (`DisplayState.layerStackSpaceRect`).
+    ///
+    /// SurfaceFlinger clips every layer to the display viewport; a window whose
+    /// surface is larger than its frame (one with surface insets, W54) extends
+    /// past the display edge on purpose, and the frame must stay display-sized.
+    display: DisplayDescriptor,
 }
 
 impl SurfaceState {
-    fn new(client_binder: BinderId, handle_pool: Vec<BinderId>) -> Self {
+    fn new(
+        client_binder: BinderId,
+        handle_pool: Vec<BinderId>,
+        display: DisplayDescriptor,
+    ) -> Self {
         Self {
             client_binder,
             layers: HashMap::new(),
@@ -586,6 +596,7 @@ impl SurfaceState {
             destroyed: std::collections::HashSet::new(),
             destroyed_layers: 0,
             released_buffers: 0,
+            display,
         }
     }
 
@@ -871,19 +882,25 @@ impl SurfaceState {
         let mut max_y = i64::MIN;
         let mut input_bytes = 0u64;
         for (_, buffer, p) in &layers {
-            let (crop_left, crop_top, width, height) = drawn_region(buffer);
-            let x0 = i64::from(p.x) + i64::from(crop_left);
-            let y0 = i64::from(p.y) + i64::from(crop_top);
-            min_x = min_x.min(x0);
-            min_y = min_y.min(y0);
-            max_x = max_x.max(x0 + i64::from(width));
-            max_y = max_y.max(y0 + i64::from(height));
+            let Some((clipped_x0, clipped_y0, clipped_x1, clipped_y1)) =
+                placed_rect(drawn_region(buffer), p, self.display)
+            else {
+                continue;
+            };
+            min_x = min_x.min(clipped_x0);
+            min_y = min_y.min(clipped_y0);
+            max_x = max_x.max(clipped_x1);
+            max_y = max_y.max(clipped_y1);
             let bytes = checked_buffer_bytes(buffer.width, buffer.height, buffer.stride)
                 .ok_or(CompositeError::CanvasTooLarge {
                     width: i64::from(buffer.width),
                     height: i64::from(buffer.height),
                 })?;
             input_bytes = input_bytes.saturating_add(bytes);
+        }
+        if min_x == i64::MAX {
+            // Every visible layer lies entirely outside the display.
+            return Err(CompositeError::NoFrame);
         }
         let canvas_width = max_x - min_x;
         let canvas_height = max_y - min_y;
@@ -943,11 +960,18 @@ impl SurfaceState {
             let list: Vec<String> = layers
                 .iter()
                 .map(|(layer, buffer, p)| {
+                    let (cl, ct, cw, ch) = drawn_region(buffer);
                     format!(
-                        "layer{}({}x{} z={} at {},{}{} parent={:?})",
+                        "layer{}(buf={}x{} crop={:?} drawn=[{},{}+{}x{}] z={} at {},{}{} \
+                         parent={:?} name={:?})",
                         layer.layer_id,
                         buffer.width,
                         buffer.height,
+                        buffer.crop,
+                        cl,
+                        ct,
+                        cw,
+                        ch,
                         p.z,
                         p.x,
                         p.y,
@@ -956,7 +980,8 @@ impl SurfaceState {
                         } else {
                             String::new()
                         },
-                        layer.parent.map(|h| h.0)
+                        layer.parent.map(|h| h.0),
+                        layer.name
                     )
                 })
                 .collect();
@@ -1362,7 +1387,7 @@ pub fn install(
     let pool = (0..LAYER_HANDLE_POOL)
         .map(|_| host.register_aux(LAYER_HANDLE_DESCRIPTOR))
         .collect::<Vec<_>>();
-    let state = Arc::new(Mutex::new(SurfaceState::new(BinderId(0), pool)));
+    let state = Arc::new(Mutex::new(SurfaceState::new(BinderId(0), pool, display)));
     let binder = host.register_dynamic(
         CLIENT_DESCRIPTOR,
         Box::new(SurfaceClientService::new(Arc::clone(&state), display)),
@@ -1630,6 +1655,40 @@ fn apply_layer_state(
                 "none"
             },
             layer.reparent
+        );
+        // W54: the full geometry a compositor must honour. `crop` is the
+        // legacy `setCrop` rect, `buffer_crop` the BLAST/BBQ buffer crop in
+        // **buffer** coordinates, `destination_frame` BLAST's `Rect(mSize)`.
+        eprintln!(
+            "ACOSC1 layer-state handle={:#x} layer={} pos=({},{}) z={} matrix={:?} crop={:?} \
+             buffer_crop={:?} destination_frame={:?} buffer_dim={:?} corner_radius={}",
+            handle.0,
+            layer.layer_id,
+            layer.x,
+            layer.y,
+            layer.z,
+            layer.matrix,
+            layer.crop,
+            layer.buffer_crop,
+            layer.destination_frame,
+            layer.buffer.as_ref().and_then(|b| b.buffer.as_ref()).map(|b| (b.width, b.height)),
+            layer.corner_radius
+        );
+        eprintln!(
+            "ACOSC1 layer-graphic handle={:#x} layer={} buffer={:?} cached={:?} frame={:?} \
+             dataspace={} transform={} drop_input={}",
+            handle.0,
+            layer.layer_id,
+            layer
+                .buffer
+                .as_ref()
+                .and_then(|b| b.buffer.as_ref())
+                .map(|m| (m.width, m.height, m.stride, m.format, m.id)),
+            layer.buffer.as_ref().map(|b| b.cached_buffer_id),
+            layer.buffer.as_ref().map(|b| b.frame_number),
+            layer.dataspace,
+            layer.buffer_transform,
+            layer.drop_input_mode
         );
     }
     state.layers.entry(handle.0).or_insert_with(|| LayerRecord {
@@ -1936,6 +1995,32 @@ fn try_clone(meta: &GraphicBufferMeta) -> Option<OwnedFd> {
     // `dup` can fail on a descriptor limit (EMFILE); the caller treats that as
     // "no frame stored", never as a panic in the host.
     meta.fd.try_clone().ok()
+}
+
+/// The display-space rectangle a layer draws into (**W54**).
+///
+/// `crop` is the buffer region the layer shows ([`drawn_region`]), `p` its
+/// placement (a window layer's placement is `frame − surfaceInsets`, pushed by
+/// the window manager). The result is clipped to the display viewport, which is
+/// what SurfaceFlinger does for every layer
+/// (`Layer::setGeometry`/`composeSurfaces` intersect with the display clip); a
+/// window surface is `frame + surfaceInsets` so it deliberately overhangs the
+/// display edge. `None` when nothing of the layer is on the display.
+#[must_use]
+pub fn placed_rect(
+    crop: (u32, u32, u32, u32),
+    placement: &LayerPlacement,
+    display: DisplayDescriptor,
+) -> Option<(i64, i64, i64, i64)> {
+    let (crop_left, crop_top, width, height) = crop;
+    let x0 = i64::from(placement.x) + i64::from(crop_left);
+    let y0 = i64::from(placement.y) + i64::from(crop_top);
+    let clipped_x0 = x0.max(0);
+    let clipped_y0 = y0.max(0);
+    let clipped_x1 = (x0 + i64::from(width)).min(i64::from(display.width.max(0)));
+    let clipped_y1 = (y0 + i64::from(height)).min(i64::from(display.height.max(0)));
+    (clipped_x1 > clipped_x0 && clipped_y1 > clipped_y0)
+        .then_some((clipped_x0, clipped_y0, clipped_x1, clipped_y1))
 }
 
 /// `stride * 4 * height`, checked, and `None` when the geometry is outside the

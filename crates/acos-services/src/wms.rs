@@ -261,9 +261,17 @@ impl WmsState {
         } else {
             0.0
         };
+        // W54: the layer is the window's *surface*, which stock sizes as
+        // `frame + surfaceInsets` and positions at `frame − surfaceInsets`
+        // (`WindowState.getSurfaceWidth/Height` + `setSurfaceBoundariesLocked`;
+        // `SurfaceView.java:1180` converts a frame into this space the same
+        // way). The client draws its content at the inset offset inside that
+        // larger buffer, so dropping the offset draws an elevation-shadowed
+        // dialog 2·Z too far right and down, clipped by the buffer edge.
+        let insets = record.params.surface_insets;
         let placement = crate::surface_client::LayerPlacement {
-            x: record.frame.left,
-            y: record.frame.top,
+            x: record.frame.left - insets.left,
+            y: record.frame.top - insets.top,
             z: i32::try_from(record.z).unwrap_or(i32::MAX),
             alpha: record.params.alpha.clamp(0.0, 1.0),
             dim_amount,

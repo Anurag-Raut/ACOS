@@ -1,0 +1,11 @@
+# W54 traces: dialog surface insets (direct acos-art session, dialog-menu)
+# post-fix .cache/w54/acos-art-post, 2026-11-12T05:32:27Z
+# commands: ACOS_WMS_TRACE=1 ACOSC1_TRACE=1 ACOS_W6_DUMP=... launch --apk dialog-menu.apk, tap Show dialog
+ACOSC1 composite 1080x2209 origin=(0,128) of layer3(buf=1080x2209 crop=Some(Rect { left: 0, top: 0, right: 0, bottom: 0 }) drawn=[0,0+1080x2209] z=1 at 0,128 parent=Some(20) name="bbq-wrapper")
+ACOSWMS relayout-request window=0x100000012 type=2 token=Some(BinderId(4294967299)) w=-2 h=-2 req=1024x513 surfaceInsets=RectI { left: 84, top: 84, right: 84, bottom: 84 }
+ACOSWMS relayout-done window=0x100000012 result=0x7 frame=RectI { left: 28, top: 976, right: 1052, bottom: 1489 } surface=1192x681
+ACOSWMS relayout-done window=0x100000012 result=0x0 frame=RectI { left: 28, top: 976, right: 1052, bottom: 1489 } surface=1192x681
+ACOSC1 layer-state handle=0xf layer=6 pos=(0,0) z=0 matrix=[1.0, 0.0, 1.0, 0.0] crop=Rect { left: 0, top: 0, right: -1, bottom: -1 } buffer_crop=Rect { left: 0, top: 0, right: -1, bottom: -1 } destination_frame=Rect { left: 0, top: 0, right: 1192, bottom: 681 } buffer_dim=None corner_radius=0
+ACOSC1 layer-state handle=0xf layer=6 pos=(0,0) z=0 matrix=[1.0, 0.0, 1.0, 0.0] crop=Rect { left: 0, top: 0, right: -1, bottom: -1 } buffer_crop=Rect { left: 0, top: 0, right: 0, bottom: 0 } destination_frame=Rect { left: 0, top: 0, right: 1192, bottom: 681 } buffer_dim=Some((1192, 681)) corner_radius=0
+ACOSC1 layer-state handle=0xf layer=6 pos=(0,0) z=0 matrix=[1.0, 0.0, 1.0, 0.0] crop=Rect { left: 0, top: 0, right: -1, bottom: -1 } buffer_crop=Rect { left: 0, top: 0, right: 0, bottom: 0 } destination_frame=Rect { left: 0, top: 0, right: 1192, bottom: 681 } buffer_dim=None corner_radius=0
+ACOSC1 composite 1080x2209 origin=(0,128) of layer3(buf=1080x2209 crop=Some(Rect { left: 0, top: 0, right: 0, bottom: 0 }) drawn=[0,0+1080x2209] z=1 at 0,128 parent=Some(20) name="bbq-wrapper") + layer6(buf=1192x681 crop=Some(Rect { left: 0, top: 0, right: 0, bottom: 0 }) drawn=[0,0+1192x681] z=2 at -56,892 dim=0.6 parent=Some(17) name="bbq-wrapper")

@@ -1,0 +1,118 @@
+# w54-dialog-pixels: the success AlertDialog must be drawn **where its window
+# frame is**, at its full 1024x513 size.
+#
+# W54: the tree said the dialog window root was `[28,976][1052,1489]` (1024 px,
+# the stock W47 width) and form-validation passed 26/26, but the frame showed
+# the card at `(154, 974)` in frame coordinates with hard, un-rounded right and
+# bottom edges — the guest had drawn the card at `surfaceInsets` (+84) inside a
+# buffer the window manager had sized to the bare frame, so the card was
+# translated by 84+42 px and clipped by the buffer edge. The tree was right and
+# the pixels were wrong: exactly the false pass this scenario closes.
+#
+# Coordinates are **frame** pixels (the C1 composite: display width 1080, the app
+# area 2209 px tall starting at screen y=128, so frame y = screen y − 128). The
+# card (`android:id/parentPanel`) is at screen `[70,1018][1010,1447]`, i.e. frame
+# `[70,890][1010,1319]`; the dialog window frame adds the 42 px shadow inset.
+#
+# Each region below is a single flat colour in a correct render:
+#   A  inside the card's top band           -> (240,240,243) card
+#   B  inside the card's left band          -> (240,240,243) card
+#   C  outside the card's bottom-right round -> (96,96,97) dim (the dialog's
+#      FLAG_DIM_BEHIND over the Activity)
+# Pre-fix all three are wrong: A/B are dim (card starts at x=154, y=974) and C
+# is card white (the card is cut at the buffer edge, so no rounded corner).
+version: 1
+name: w54-dialog-pixels
+description: >-
+  Launch form-validation, fill it with a valid form, raise the "Submitted: Ada"
+  AlertDialog and assert the exact pixels of the dialog card at its window frame
+  (left band, top band) and the dim outside its bottom-right rounded corner.
+app: fixtures/build/apps/form-validation.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - input
+  - screenshot
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 90000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.formvalidation/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: name}
+      timeout_ms: 5000
+
+  - tap:
+      selector: {id: name}
+  - type:
+      selector: {id: name}
+      text: Ada
+  - tap:
+      selector: {id: email}
+  - type:
+      selector: {id: email}
+      text: "ada@example.com"
+  - tap:
+      selector: {id: submit}
+
+  - assert_log:
+      tag: AcosForm
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^validation_ok name=Ada email=ada@example.com$'
+
+  # The tree is the other half of the evidence: the dialog window root is 1024
+  # px wide and the message sits at its stock bounds (W47).
+  - assert_text:
+      selector: {id: message}
+      text: {exact: "Submitted: Ada"}
+      bounds: [70, 1157, 1010, 1214]
+
+  - capture:
+      name: success-dialog
+      format: png
+      fresh: true
+
+  # A: inside the card's top band, above the title, left of nothing.
+  #    Correct (240,240,243,255) everywhere; pre-fix dim (96,96,97,255).
+  - assert_region:
+      x: 200
+      y: 910
+      w: 200
+      h: 40
+      hash: "e753006d4f666db1697d1562fda113a024aa37c5dc76e492514832ff346ae79c"
+
+  # B: inside the card's left band, left of the pre-fix card's x=154 edge.
+  #    Correct (240,240,243,255); pre-fix dim.
+  - assert_region:
+      x: 90
+      y: 1000
+      w: 40
+      h: 100
+      hash: "a72e051873a520049475589e02061ef34a2445a43be991d44228bb3a2cc9be29"
+
+  # C: outside the card's bottom-right rounded corner, inside the window frame.
+  #    Correct dim (96,96,97,255); pre-fix card white (the card was cut flat at
+  #    the buffer edge, which is why the right/bottom corners were missing).
+  - assert_region:
+      x: 990
+      y: 1306
+      w: 20
+      h: 10
+      hash: "e90ad15ecb29b5d9e3d7c8d1ef89a2b4ce5d0dfb7ba26dcfba11ffdd8ebf3f94"
+
+  - assert_no_crash: {}
