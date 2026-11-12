@@ -1,0 +1,43 @@
+# P11: settle-lab case `delay1000`.
+#
+# The step sequence is the same in quiet and event strict modes; only the
+# ACOS_STRICT_SETTLE switch changes. The assertion is on the case's known final
+# state, so an early "settled" reply is visible as a failed assertion.
+version: 1
+name: p11-delay1000
+description: >-
+  postDelayed 1000 ms update, beyond both settle rules; wait_for is the contract.
+app: fixtures/build/apps/settle-lab.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.settletab/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: delay1000}
+      timeout_ms: 8000
+  - tap:
+      selector: {id: delay1000}
+  - wait_for:
+      selector: {id: delay1000_done}
+      timeout_ms: 5000
+  - assert_text:
+      selector: {id: delay1000_text}
+      text: {exact: "delay1000-done"}

@@ -871,6 +871,15 @@ pub(crate) fn launch_session(
     if std::env::var_os("ACOSART_HW_VERBOSE").is_some() {
         sb.env("ACOSART_HW_VERBOSE", "1");
     }
+    // P11: the guest owns the framework-signal verdict, so the settle switch and
+    // its queue horizon must cross the sandbox boundary (the guest env is
+    // cleared). Unset means quiet, exactly as before.
+    if let Ok(value) = std::env::var("ACOS_STRICT_SETTLE") {
+        sb.env("ACOS_STRICT_SETTLE", &value);
+    }
+    if let Ok(value) = std::env::var("ACOS_STRICT_SETTLE_HORIZON_MS") {
+        sb.env("ACOS_STRICT_SETTLE_HORIZON_MS", &value);
+    }
     crate::watchdog::note_guest_priority_gap("launch");
     // Z4 (research seam): each forked guest writes its stdout/stderr to its own
     // session FIFO, so the per-session probe parser sees only that child's
@@ -1429,6 +1438,15 @@ struct ProbeSample {
     /// for a fast tree only when this is at least the generation that was
     /// current when the request started (P3b invalidation rule).
     generation: u64,
+    /// P11 event mode: guest wall clock of the last draw and its ordinal. The
+    /// host binds a settled sample to a draw at/after the gesture publish and
+    /// requires the sample to stay on the same draw for one confirmation
+    /// window, so a reply can never be bound to a pre-draw buffer.
+    draw_ms: u64,
+    draw_seq: u64,
+    /// P11: the guest's framework-signal verdict for this sample.
+    settled: bool,
+    pending: Vec<String>,
 }
 
 /// P9: the launcher's event-driven wake channel for the startup loop.
@@ -1553,6 +1571,19 @@ fn env_u64(name: &str, default: u64) -> u64 {
         .ok()
         .and_then(|v| v.trim().parse().ok())
         .unwrap_or(default)
+}
+
+/// P11: is the strict rule the event-driven one? Unset/`quiet` (the default)
+/// keeps P10's 150 ms quiet rule byte-identical; `event` opts into the guest's
+/// framework-signal verdict. The default is deliberately `quiet`: adoption is
+/// a separate decision after P11's correctness evidence is reviewed.
+fn strict_settle_event() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| {
+        std::env::var("ACOS_STRICT_SETTLE")
+            .map(|v| v.trim().eq_ignore_ascii_case("event"))
+            .unwrap_or(false)
+    })
 }
 
 // ---------------------------------------------------------------- W43: exit evidence
@@ -2023,6 +2054,32 @@ fn drain_tee_lines<R: std::io::Read>(
                                 .latest_generation()
                         })
                         .unwrap_or(0);
+                    // P11: event-mode fields are absent in quiet mode, so a
+                    // quiet sample parses exactly as before (settled=false,
+                    // draw_ms=0 are simply unused there).
+                    let event = value.get("settle");
+                    let draw_ms = event
+                        .and_then(|v| v.get("draw_ms"))
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let draw_seq = event
+                        .and_then(|v| v.get("draw_seq"))
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let settled = event
+                        .and_then(|v| v.get("settled"))
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    let pending = event
+                        .and_then(|v| v.get("pending"))
+                        .and_then(|v| v.as_array())
+                        .map(|values| {
+                            values
+                                .iter()
+                                .filter_map(|v| v.as_str().map(str::to_string))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
                     let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
                     let newer = state.latest.as_ref().map(|p| p.seq < seq).unwrap_or(true);
                     if newer {
@@ -2031,6 +2088,10 @@ fn drain_tee_lines<R: std::io::Read>(
                             tree,
                             at_ms: host_ms(),
                             generation,
+                            draw_ms,
+                            draw_seq,
+                            settled,
+                            pending,
                         });
                     }
                     // P9: wake the startup loop (and anyone else waiting on a
@@ -2452,6 +2513,11 @@ struct SettleTiming {
     frame_ms: Option<u64>,
     state_changed: Option<bool>,
     bound: &'static str,
+    /// P11: `Some("event")` only for the opt-in event rule. Quiet/fast leave
+    /// this `None`, so their `settle` JSON is byte-identical to P10/P1.
+    rule: Option<&'static str>,
+    /// P11: why the event rule timed out (e.g. `anim`, `queue`, `traversal`).
+    reason: Option<String>,
 }
 
 impl SettleTiming {
@@ -2462,11 +2528,13 @@ impl SettleTiming {
             frame_ms: None,
             state_changed: None,
             bound: "strict-quiet",
+            rule: None,
+            reason: None,
         }
     }
 
     fn to_json(&self, settled: bool, ack_ms: u64) -> serde_json::Value {
-        serde_json::json!({
+        let mut value = serde_json::json!({
             "mode": self.mode.as_str(),
             "settled": settled,
             "ack_ms": ack_ms,
@@ -2475,7 +2543,19 @@ impl SettleTiming {
             "state_changed": self.state_changed,
             "bound": self.bound,
             "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
-        })
+        });
+        if let Some(rule) = self.rule {
+            if let Some(map) = value.as_object_mut() {
+                map.insert("strict_rule".into(), serde_json::json!(rule));
+                if let Some(reason) = self.reason.as_deref() {
+                    map.insert("reason".into(), serde_json::json!(reason));
+                    map.insert("animating".into(), serde_json::json!(
+                        reason.contains("anim") || reason.contains("frame")
+                    ));
+                }
+            }
+        }
+        value
     }
 }
 
@@ -2528,6 +2608,194 @@ enum SettleEnd {
 /// uses) at settle entry and, if the newest sample predates the last store,
 /// after the quiet window has elapsed. That keeps the invariant "a probe sample
 /// after the last store" without waiting for the slow fallback poll.
+/// P11: the opt-in event-driven strict rule.
+///
+/// The guest reports, on the UI thread, whether the framework still has work:
+/// pending traversals/layout/dirty draws, Choreographer frame callbacks,
+/// active AnimationHandler animators / LayoutTransition / ViewPropertyAnimator,
+/// a main-Looper message due inside the horizon, and unstable window/focus/IME
+/// state. A sample is a candidate when all of that is clear, it was taken after
+/// a draw at/after the gesture publish, and it saw the latest C1 store. The host
+/// then requires the *same draw* to remain the newest draw for one confirmation
+/// window (`ACOS_STRICT_SETTLE_CONFIRM_MS`, default 24 ms), so the C1 store can
+/// commit that draw before a PNG/tree is bound. A newer draw, a newer store, or
+/// any newly pending signal restarts the candidate. Anything still pending at
+/// the deadline returns `bound:"timeout"` with the guest's reason; it is never
+/// reported as settled.
+#[allow(clippy::too_many_arguments)]
+fn wait_for_event_settled(
+    child: &mut std::process::Child,
+    cgroup: &mut crate::cgroup::RunCgroup,
+    live: &acos_services::registry::LiveHandles,
+    probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+    guest_stdin: &mut Option<std::process::ChildStdin>,
+    deadline: Instant,
+    min_generation: u64,
+    min_probe_seq: u64,
+    previous_fnv: Option<u64>,
+    publish_epoch_ms: u64,
+) -> SettleEnd {
+    let confirm = Duration::from_millis(env_u64("ACOS_STRICT_SETTLE_CONFIRM_MS", 24));
+    // A tree request has no publish timestamp; it must not serve a sample that
+    // was already current before the request, so the floor is the entry sample.
+    let entry_floor = if publish_epoch_ms == 0 {
+        latest_probe(probe_state)
+            .map(|p| p.seq)
+            .unwrap_or(min_probe_seq)
+    } else {
+        min_probe_seq
+    };
+    let (unsupported_baseline, _) = latest_unsupported(probe_state);
+    let mut last_generation = min_generation;
+    let mut last_wake = Instant::now();
+    let mut candidate: Option<ProbeSample> = None;
+    let mut candidate_since = Instant::now();
+    let mut first_change_ms: Option<u64> = None;
+    let mut last_reason = String::from("no-probe");
+    request_guest_probe(guest_stdin);
+    loop {
+        let (unsupported_seq, marker) = latest_unsupported(probe_state);
+        if unsupported_seq > unsupported_baseline {
+            return SettleEnd::Unsupported(marker.unwrap_or(serde_json::Value::Null));
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => return SettleEnd::GuestExited(status),
+            _ => {}
+        }
+        let generation = latest_generation(live);
+        if generation > last_generation {
+            trace_host(
+                probe_state,
+                &format!("settle event generation {last_generation}->{generation}"),
+            );
+            last_generation = generation;
+        }
+        let probe = latest_probe(probe_state);
+        let mut valid: Option<ProbeSample> = None;
+        match &probe {
+            None => last_reason = "no-probe".to_string(),
+            Some(sample) => {
+                if sample.seq <= entry_floor {
+                    last_reason = "probe-floor".to_string();
+                } else if !sample.settled {
+                    last_reason = sample
+                        .pending
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| "unsettled".to_string());
+                } else if publish_epoch_ms != 0 && sample.draw_ms < publish_epoch_ms {
+                    last_reason = "no-draw-after-action".to_string();
+                } else if sample.generation < generation {
+                    last_reason = "newer-store".to_string();
+                } else {
+                    valid = Some(sample.clone());
+                }
+            }
+        }
+        if let Some(sample) = valid {
+            let pixels_changed = match previous_fnv {
+                None => true,
+                Some(previous) => {
+                    let current = {
+                        let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+                        state.capture_latest().map(|c| c.fnv1a)
+                    };
+                    current != Some(previous) && current.is_some()
+                }
+            };
+            if !pixels_changed {
+                last_reason = "pixels-unchanged".to_string();
+                candidate = None;
+            } else {
+                let restart = match &candidate {
+                    None => true,
+                    Some(current) => sample.draw_seq != current.draw_seq || sample.seq < current.seq,
+                };
+                if restart {
+                    candidate = Some(sample.clone());
+                    candidate_since = Instant::now();
+                    if first_change_ms.is_none() && publish_epoch_ms != 0 {
+                        first_change_ms =
+                            Some(host_ms().saturating_sub(publish_epoch_ms));
+                    }
+                }
+                if candidate
+                    .as_ref()
+                    .map(|current| sample.draw_seq == current.draw_seq)
+                    .unwrap_or(false)
+                    && candidate_since.elapsed() >= confirm
+                    && sample.generation == generation
+                {
+                    let timing = SettleTiming {
+                        mode: SettleMode::Strict,
+                        first_change_ms,
+                        frame_ms: if publish_epoch_ms == 0 {
+                            None
+                        } else {
+                            Some(host_ms().saturating_sub(publish_epoch_ms))
+                        },
+                        state_changed: None,
+                        bound: "strict-event",
+                        rule: Some("event"),
+                        reason: None,
+                    };
+                    trace_host(
+                        probe_state,
+                        &format!(
+                            "settle event ready gen={generation} probe_seq={} draw_seq={} draw_ms={} confirm_ms={}",
+                            sample.seq,
+                            sample.draw_seq,
+                            sample.draw_ms,
+                            confirm.as_millis()
+                        ),
+                    );
+                    return SettleEnd::Settled(Settled {
+                        probe: sample,
+                        generation,
+                        timing,
+                    });
+                }
+            }
+        } else if let Some(sample) = &probe {
+            // A new draw or newly pending work invalidates the confirmation
+            // window. A newer store for the same draw does not: the next
+            // settled sample on that draw is exactly what we want to bind.
+            if let Some(current) = &candidate {
+                if sample.draw_seq != current.draw_seq || !sample.settled {
+                    candidate = None;
+                }
+            }
+        }
+        // An idle screen emits nothing; one wake per ~20 ms while a settle is
+        // waiting is enough to confirm the same draw without a poll cadence.
+        if last_wake.elapsed() >= Duration::from_millis(20) {
+            request_guest_probe(guest_stdin);
+            last_wake = Instant::now();
+        }
+        if Instant::now() >= deadline {
+            trace_host(
+                probe_state,
+                &format!("settle event timeout reason={last_reason} gen={generation}"),
+            );
+            return SettleEnd::Timeout {
+                generation,
+                probe_seq: probe.as_ref().map(|p| p.seq).unwrap_or(0),
+                timing: SettleTiming {
+                    mode: SettleMode::Strict,
+                    first_change_ms,
+                    frame_ms: None,
+                    state_changed: None,
+                    bound: "timeout",
+                    rule: Some("event"),
+                    reason: Some(last_reason),
+                },
+            };
+        }
+        cgroup.sample();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn wait_for_settled_observation(
     child: &mut std::process::Child,
@@ -2543,6 +2811,20 @@ fn wait_for_settled_observation(
     baseline_probe: Option<ProbeSample>,
     publish_epoch_ms: u64,
 ) -> SettleEnd {
+    if mode == SettleMode::Strict && strict_settle_event() {
+        return wait_for_event_settled(
+            child,
+            cgroup,
+            live,
+            probe_state,
+            guest_stdin,
+            deadline,
+            min_generation,
+            min_probe_seq,
+            previous_fnv,
+            publish_epoch_ms,
+        );
+    }
     let quiet = Duration::from_millis(150);
     let fast_window = Duration::from_millis(env_u64("ACOSLAUNCH_FAST_WINDOW_MS", 100));
     let fast_deadline = Instant::now() + fast_window;
@@ -2631,6 +2913,8 @@ fn wait_for_settled_observation(
                 frame_ms: frame_ms(last_change_ms),
                 state_changed: Some(true),
                 bound: "state-commit",
+                rule: None,
+                reason: None,
             };
             trace_host(
                 probe_state,
@@ -2691,6 +2975,8 @@ fn wait_for_settled_observation(
                         frame_ms: frame_ms(last_change_ms),
                         state_changed,
                         bound,
+                        rule: None,
+                        reason: None,
                     };
                     trace_host(
                         probe_state,
@@ -2725,6 +3011,8 @@ fn wait_for_settled_observation(
                         None
                     },
                     bound: "timeout",
+                    rule: None,
+                    reason: None,
                 },
             };
         }
@@ -3195,14 +3483,30 @@ fn interactive_serve(
                 };
                 let p3_t_settled = p3_now_us();
                 let tree_age_ms = host_ms().saturating_sub(probe.at_ms);
-                let settle_json = serde_json::json!({
+                let strict_event = mode == SettleMode::Strict && strict_settle_event();
+                let mut settle_json = serde_json::json!({
                     "mode": mode.as_str(),
                     "settled": true,
                     "probe_seq": probe.seq,
                     "tree_age_ms": tree_age_ms,
-                    "bound": if mode == SettleMode::Fast { "probe-fresh" } else { "strict-quiet" },
-                    "meaning": "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply",
+                    "bound": if mode == SettleMode::Fast {
+                        "probe-fresh"
+                    } else if strict_event {
+                        "strict-event"
+                    } else {
+                        "strict-quiet"
+                    },
+                    "meaning": if strict_event {
+                        "mode=strict with ACOS_STRICT_SETTLE=event: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply"
+                    } else {
+                        "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; mode=strict keeps the 150 ms quiet window; tree_age_ms is host receipt -> reply"
+                    },
                 });
+                if strict_event {
+                    if let Some(map) = settle_json.as_object_mut() {
+                        map.insert("strict_rule".into(), serde_json::json!("event"));
+                    }
+                }
                 if !want_pixels {
                     // Metadata-only frame identity: no buffer clone, no PNG
                     // encode/write, no md5 (P3: that capture was 34.5 ms of the
@@ -4460,6 +4764,10 @@ mod probe_line_tests {
             tree: serde_json::json!({"nodes": []}),
             at_ms: 1_000,
             generation,
+            draw_ms: 0,
+            draw_seq: 0,
+            settled: false,
+            pending: Vec::new(),
         }
     }
 
