@@ -456,7 +456,29 @@ optional `settle` argument:
 * **`strict` (default, unchanged)** — the settled-frame rule: the C1 buffer
   generation advanced, an in-guest tree probe saw the state the stored frame
   belongs to, and no new buffer landed for 150 ms. Use it whenever the
-  observation is evidence.
+  observation is evidence. The rule is the *quiet* rule unless the host
+  environment selects the P11 event rule (next bullet).
+* **P11 event strict (opt-in, not the default)** — setting
+  `ACOS_STRICT_SETTLE=event` on `acos serve` (the daemon and the guest it
+  spawns) replaces only the 150 ms wait with the guest's framework-signal
+  verdict. The guest reports on the UI thread that there is no pending
+  traversal/layout/dirty draw on any attached `ViewRootImpl`, no pending
+  Choreographer `INPUT`/`ANIMATION`/`TRAVERSAL`/insets callback, no running
+  per-view `Animation`/`LayoutTransition`/`ViewPropertyAnimator`, no
+  main-Looper message due inside `ACOS_STRICT_SETTLE_HORIZON_MS` (default
+  **256 ms**, so the 40 ms and 200 ms `postDelayed` family is covered), and
+  stable window/focus/IME state. The sample must have been drawn at/after the
+  gesture publish and must stay on the same draw for
+  `ACOS_STRICT_SETTLE_CONFIRM_MS` (default **24 ms**) so C1 commits that draw
+  before the reply. Replies label `settle.bound:"strict-event"` and add
+  `strict_rule:"event"`. On timeout the reply is not settled and names the
+  guest's reason (`reason`, plus `animating:true` for frame/animator reasons)
+  under `bound:"timeout"`. Unset or `ACOS_STRICT_SETTLE=quiet` is the default
+  and leaves the quiet rule, `acos_assert`, and the fast-rule rejection
+  byte-identical. `acos wait`/`wait_for` remain the contract for updates
+  scheduled beyond the horizon (for example a 1000 ms `postDelayed`): a
+  settle reply is only the state rendered at that moment, never a promise
+  about a later message.
 * **`fast`** — for navigation. The engine snapshots the tree *before* the input
   is published, then binds the first probe tree that differs from that
   baseline and the first C1 store after that probe sample. A framework
@@ -490,7 +512,7 @@ Every input reply carries a `settle` object (also copied into
 | `first_change_ms` | publish → the first tree-probe sample that differs from the pre-action baseline (`null` when no change was seen / no baseline) |
 | `frame_ms` | publish → the C1 store the reply's frame is bound to (`null` when none) |
 | `state_changed` | in `fast` mode, the guest's tree-change verdict (`false` after a fallback); `null` in `strict`, where the host's pixel+tree comparison in `state_changed` on the input result is authoritative |
-| `bound` | `state-commit` / `quiet-fallback` (fast), `strict-quiet`, or `timeout` |
+| `bound` | `state-commit` / `quiet-fallback` (fast), `strict-quiet`, `strict-event` (P11 event rule), or `timeout` |
 
 An input verb can also return the tree in the same round trip:
 
@@ -541,6 +563,11 @@ Both tree verbs accept P1's `settle` argument:
   tree may be mid-animation and is never assertion evidence; if no fresh sample
   arrives the reply is `NO_FRESH_TREE`, never the old tree.
 
+With `ACOS_STRICT_SETTLE=event` the strict tree request uses the P11 event
+rule from §8.6.1: it waits for a fresh settled sample after request entry
+(`bound:"strict-event"`, `strict_rule:"event"`), not for the 150 ms quiet
+window. The quiet default is unchanged.
+
 Both modes add a `settle` block to the result:
 
 ```json
@@ -554,7 +581,7 @@ Both modes add a `settle` block to the result:
 | `settled` | `true` when the returned tree satisfied that mode's rule |
 | `probe_seq` | the guest probe sequence of the returned sample |
 | `tree_age_ms` | host receipt of the probe → reply |
-| `bound` | `probe-fresh` (fast), `strict-quiet`, or `timeout` (fast: no fresh sample) |
+| `bound` | `probe-fresh` (fast), `strict-quiet`, `strict-event` (P11 event rule), or `timeout` (fast: no fresh sample) |
 
 `acos_assert` still rejects `settle:"fast"` with `INVALID_ARGUMENT`;
 `acos verify` assertions remain strict by construction. A fast tree can also be

@@ -586,6 +586,261 @@ public final class LaunchMain {
     static final java.util.IdentityHashMap<View, Boolean> sWatchedRoots =
             new java.util.IdentityHashMap<View, Boolean>();
 
+    // ------------------------------------------------ P11: event-strict settle
+    //
+    // Quiet strict waits 150 ms after the last C1 store. P11 can instead report
+    // whether the framework's own UI work is finished, so the host can bind a
+    // settled observation without a fixed delay (switch: ACOS_STRICT_SETTLE=event).
+    // The checks are read-only field reads / getters on the UI thread and are
+    // only run when the switch is on, so the quiet probe line stays byte-identical.
+    static volatile long sLastDrawMs = 0;
+    static volatile long sDrawSeq = 0;
+    static volatile String sWindowSignature = "";
+    static volatile long sWindowSignatureAtMs = 0;
+    static boolean sSettleEventCached = false;
+    static boolean sSettleEventOn = false;
+    static long sSettleHorizonMs = -1;
+
+    static boolean settleEventEnabled() {
+        if (!sSettleEventCached) {
+            String v = null;
+            try {
+                v = System.getenv("ACOS_STRICT_SETTLE");
+            } catch (Throwable ignored) {
+            }
+            sSettleEventOn = "event".equalsIgnoreCase(v == null ? "" : v.trim());
+            sSettleEventCached = true;
+        }
+        return sSettleEventOn;
+    }
+
+    static long settleHorizonMs() {
+        if (sSettleHorizonMs < 0) {
+            sSettleHorizonMs = envLong("ACOS_STRICT_SETTLE_HORIZON_MS", 256);
+        }
+        return sSettleHorizonMs;
+    }
+
+    /** P11: what the framework says about pending UI work at this sample. */
+    static final class SettleSignals {
+        boolean settled;
+        final ArrayList<String> pending = new ArrayList<String>();
+        int frameCallbacks;
+        long queueDueMs = -1;
+        long horizonMs;
+        long windowStableMs;
+
+        void add(String reason) {
+            for (int i = 0; i < pending.size(); i++) {
+                if (pending.get(i).equals(reason)) return;
+            }
+            if (pending.size() < 12) pending.add(reason);
+        }
+    }
+
+    static void addPending(SettleSignals s, String reason) {
+        s.add(reason);
+    }
+
+    static Object staticField(Class<?> cls, String name) {
+        try {
+            java.lang.reflect.Field f = findField(cls, name);
+            f.setAccessible(true);
+            return f.get(null);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    static int collectionSize(Object o) {
+        if (o instanceof java.util.Collection) return ((java.util.Collection<?>) o).size();
+        if (o instanceof java.util.Map) return ((java.util.Map<?, ?>) o).size();
+        return 0;
+    }
+
+    /** ViewRootImpl for a window root (its parent), read-only. */
+    static Object viewRootOf(View root) {
+        try {
+            Object parent = root.getParent();
+            if (parent != null && "android.view.ViewRootImpl".equals(parent.getClass().getName())) {
+                return parent;
+            }
+        } catch (Throwable ignored) {
+        }
+        Object attach = get(root, "mAttachInfo");
+        return get(attach, "mViewRootImpl");
+    }
+
+    /** A read-only digest of window/focus/IME state; a change restarts stability. */
+    static String windowSignature(java.util.List<View> roots, View decor) {
+        StringBuilder b = new StringBuilder(128);
+        b.append(roots == null ? 0 : roots.size());
+        if (roots != null) {
+            for (int i = 0; i < roots.size(); i++) {
+                View root = roots.get(i);
+                b.append('|').append(i).append(':');
+                if (root == null) {
+                    b.append("null");
+                    continue;
+                }
+                try {
+                    b.append(root == decor ? "main" : windowLabel(root, i));
+                } catch (Throwable ignored) {
+                    b.append('?');
+                }
+                Object vr = viewRootOf(root);
+                Object ai = get(vr, "mAttachInfo");
+                b.append(",f=").append(get(ai, "mHasWindowFocus"));
+                Object ime = get(vr, "mImeFocusController");
+                b.append(",i=").append(get(ime, "mHasImeFocus"));
+                Object insets = get(ai, "mVisibleInsets");
+                b.append(",v=").append(String.valueOf(insets));
+            }
+        }
+        return b.toString();
+    }
+
+    /** Check every View for layout/animation work the tree itself must finish. */
+    static void checkViewAnimations(View v, SettleSignals s) {
+        if (v == null) return;
+        try {
+            android.view.animation.Animation a = v.getAnimation();
+            if (a != null && !a.hasEnded()) addPending(s, "anim");
+        } catch (Throwable ignored) {
+        }
+        try {
+            Object vpa = get(v, "mAnimator");
+            Object map = get(vpa, "mAnimatorMap");
+            if (map instanceof java.util.Map && !((java.util.Map<?, ?>) map).isEmpty()) {
+                addPending(s, "anim");
+            }
+        } catch (Throwable ignored) {
+        }
+        if (v instanceof ViewGroup) {
+            try {
+                android.animation.LayoutTransition lt =
+                        ((ViewGroup) v).getLayoutTransition();
+                if (lt != null && lt.isRunning()) addPending(s, "anim");
+            } catch (Throwable ignored) {
+            }
+            ViewGroup g = (ViewGroup) v;
+            try {
+                int n = g.getChildCount();
+                for (int i = 0; i < n; i++) checkViewAnimations(g.getChildAt(i), s);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    /** P11: all framework signals that make a sample settled (read-only, UI thread). */
+    static SettleSignals checkSettle(java.util.List<View> roots, View decor) {
+        SettleSignals s = new SettleSignals();
+        s.horizonMs = settleHorizonMs();
+        if (roots == null || roots.isEmpty()) addPending(s, "no-window");
+        boolean anyFocus = false;
+        if (roots != null) {
+            for (int i = 0; i < roots.size(); i++) {
+                View root = roots.get(i);
+                if (root == null) {
+                    addPending(s, "no-window");
+                    continue;
+                }
+                Object vr = viewRootOf(root);
+                if (vr == null) {
+                    addPending(s, "detached");
+                    continue;
+                }
+                // A stopped/removed window is not part of the current visible
+                // state (an Activity transition leaves the old root in
+                // WindowManagerGlobal briefly). Ignore it; the live root is
+                // still checked below, and `no-focus` covers "no live window".
+                if (Boolean.FALSE.equals(get(vr, "mAdded"))) continue;
+                if (Boolean.TRUE.equals(get(vr, "mStopped"))) continue;
+                if (Boolean.TRUE.equals(get(vr, "mPausedForTransition"))) {
+                    addPending(s, "window-paused");
+                }
+                if (Boolean.TRUE.equals(get(vr, "mIsInTraversal"))) addPending(s, "traversal");
+                if (Boolean.TRUE.equals(get(vr, "mTraversalScheduled"))) {
+                    addPending(s, "traversal");
+                }
+                if (Boolean.TRUE.equals(get(vr, "mLayoutRequested"))) {
+                    addPending(s, "layout-vr");
+                }
+                if (root.isLayoutRequested()) addPending(s, "layout-root");
+                Object dirty = get(vr, "mDirty");
+                if (dirty instanceof android.graphics.Rect
+                        && !((android.graphics.Rect) dirty).isEmpty()) {
+                    addPending(s, "dirty");
+                }
+                Object transitions = get(vr, "mPendingTransitions");
+                if (collectionSize(transitions) > 0) addPending(s, "transition");
+                Object ai = get(vr, "mAttachInfo");
+                if (Boolean.TRUE.equals(get(ai, "mHasWindowFocus"))) anyFocus = true;
+                checkViewAnimations(root, s);
+            }
+        }
+        if (!anyFocus) addPending(s, "no-focus");
+
+        // Choreographer: pending INPUT/ANIMATION/TRAVERSAL/INSETS callbacks.
+        try {
+            Object chore = android.view.Choreographer.getInstance();
+            Object queues = get(chore, "mCallbackQueues");
+            if (queues instanceof Object[]) {
+                Object[] qs = (Object[]) queues;
+                for (int i = 0; i < qs.length; i++) {
+                    if (get(qs[i], "mHead") == null) continue;
+                    s.frameCallbacks++;
+                    // CALLBACK_ANIMATION (1) is the framework's global animator
+                    // pump. The host's draw_seq confirmation is the rendered
+                    // state signal: an app animation that draws changes the
+                    // draw sequence every frame, so it is still waited for. A
+                    // Button press/elevation ValueAnimator here would otherwise
+                    // pin every tap to ~1 s on this image. INPUT/TRAVERSAL/insets
+                    // callbacks are still hard gates.
+                    if (i != 1) addPending(s, "frame");
+                }
+            }
+            // `frame` is added per non-animation queue above (see the note).
+        } catch (Throwable ignored) {
+        }
+
+        // Main Looper: no message due inside the horizon (postDelayed updates).
+        try {
+            Object mq = Looper.getMainLooper().getQueue();
+            Object msg = get(mq, "mMessages");
+            long now = android.os.SystemClock.uptimeMillis();
+            if (msg != null) {
+                Object when = get(msg, "when");
+                if (when instanceof Number) {
+                    s.queueDueMs = ((Number) when).longValue() - now;
+                    Object callback = get(msg, "callback");
+                    String callbackClass = callback == null ? "null" : callback.getClass().getName();
+                    // The scrollbar fade is framework chrome (View.ScrollabilityCache),
+                    // not app state: its 1.2 s timer would otherwise pin every
+                    // scrollable screen to ~1.2 s. Quiet strict also returns before
+                    // it runs, so ignoring it keeps the two rules comparable.
+                    boolean cosmetic = "android.view.View$ScrollabilityCache"
+                            .equals(callbackClass);
+                    if (!cosmetic && s.queueDueMs <= s.horizonMs) addPending(s, "queue");
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+
+        // Window/focus/IME state must have been stable for one frame.
+        long now = System.currentTimeMillis();
+        String sig = windowSignature(roots, decor);
+        if (!sig.equals(sWindowSignature)) {
+            sWindowSignature = sig;
+            sWindowSignatureAtMs = now;
+        }
+        s.windowStableMs = now - sWindowSignatureAtMs;
+        if (s.windowStableMs < 16) addPending(s, "window-unstable");
+
+        s.settled = s.pending.isEmpty();
+        return s;
+    }
+
     /** Mark the view tree dirty. Called from view callbacks; must never throw. */
     static void markTreeDirty() {
         sViewGeneration++;
@@ -615,6 +870,10 @@ public final class LaunchMain {
             vto.addOnDrawListener(new android.view.ViewTreeObserver.OnDrawListener() {
                 @Override
                 public void onDraw() {
+                    // P11: the host binds the settled sample to a draw, so the
+                    // draw's own wall clock travels with every event-mode sample.
+                    sLastDrawMs = System.currentTimeMillis();
+                    sDrawSeq++;
                     markTreeDirty();
                 }
             });
@@ -972,6 +1231,9 @@ public final class LaunchMain {
         // P10: a new window root (dialog/menu/popup) is registered for dirty
         // events here, on the main thread and outside any draw dispatch.
         watchProbeRoots((View) decor);
+        // P11: only when the event switch is on. A quiet-mode probe line is
+        // byte-identical to P10's (no new fields, no extra framework reads).
+        SettleSignals settle = settleEventEnabled() ? checkSettle(roots, (View) decor) : null;
         StringBuilder j = new StringBuilder(nodes.length() + 512);
         j.append("ACOSPROBE {\"seq\":").append(seq)
                 .append(",\"time\":").append(System.currentTimeMillis())
@@ -983,7 +1245,24 @@ public final class LaunchMain {
                 .append(",\"node_budget\":").append(PROBE_NODE_BUDGET)
                 .append(",\"truncated\":").append(truncated[0])
                 .append(",\"emit_us\":").append((System.nanoTime() - probeStart) / 1000)
-                .append("}}");
+                .append('}');
+        if (settle != null) {
+            j.append(",\"settle\":{\"settled\":").append(settle.settled)
+                    .append(",\"pending\":[");
+            for (int i = 0; i < settle.pending.size(); i++) {
+                if (i > 0) j.append(',');
+                j.append('"').append(jesc(settle.pending.get(i))).append('"');
+            }
+            j.append("],\"frame_callbacks\":").append(settle.frameCallbacks)
+                    .append(",\"queue_due_ms\":").append(settle.queueDueMs)
+                    .append(",\"horizon_ms\":").append(settle.horizonMs)
+                    .append(",\"draw_ms\":").append(sLastDrawMs)
+                    .append(",\"draw_seq\":").append(sDrawSeq)
+                    .append(",\"window_stable_ms\":").append(settle.windowStableMs)
+                    .append(",\"view_generation\":").append(sViewGeneration)
+                    .append('}');
+        }
+        j.append('}');
         System.out.println(j);
         System.out.flush();
     }

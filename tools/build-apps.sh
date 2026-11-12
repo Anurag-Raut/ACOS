@@ -187,9 +187,11 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # Each is a plain android.app.Activity app exercising one Android subsystem:
 # counter (view state + onSaveInstanceState), todo-list (ListView + input +
 # SharedPreferences), multi-activity (Intent extras + back stack +
-# onSaveInstanceState) and form-validation (EditText validation + Toast +
-# AlertDialog).
-for app in counter todo-list multi-activity form-validation; do
+# onSaveInstanceState), form-validation (EditText validation + Toast +
+# AlertDialog) and settle-lab (P11: animations, delayed/chained updates,
+# dialogs, Activity transition, ListView scroll, infinite progress,
+# LayoutTransition, rapid taps).
+for app in counter todo-list multi-activity form-validation settle-lab; do
     build_apk "$app"
 done
 

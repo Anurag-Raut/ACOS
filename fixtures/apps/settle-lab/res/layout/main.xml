@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/anim_start"
+                android:layout_width="150dp"
+                android:layout_height="44dp"
+                android:text="Anim 300ms" />
+            <TextView
+                android:id="@+id/anim_text"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:textSize="12sp"
+                android:text="anim-idle" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/delay40"
+                android:layout_width="150dp"
+                android:layout_height="44dp"
+                android:text="Delay 40ms" />
+            <TextView
+                android:id="@+id/delay40_text"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:textSize="12sp"
+                android:text="delay40-idle" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/delay200"
+                android:layout_width="150dp"
+                android:layout_height="44dp"
+                android:text="Delay 200ms" />
+            <TextView
+                android:id="@+id/delay200_text"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:textSize="12sp"
+                android:text="delay200-idle" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/delay1000"
+                android:layout_width="150dp"
+                android:layout_height="44dp"
+                android:text="Delay 1000ms" />
+            <TextView
+                android:id="@+id/delay1000_text"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:textSize="12sp"
+                android:text="delay1000-idle" />
+            <TextView
+                android:id="@+id/delay1000_done"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:visibility="gone"
+                android:text="done" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/bg_start"
+                android:layout_width="150dp"
+                android:layout_height="44dp"
+                android:text="Background 150ms" />
+            <TextView
+                android:id="@+id/bg_text"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:textSize="12sp"
+                android:text="bg-idle" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/chain_start"
+                android:layout_width="150dp"
+                android:layout_height="44dp"
+                android:text="Chain 3 hops" />
+            <TextView
+                android:id="@+id/chain_text"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:textSize="12sp"
+                android:text="chain-idle" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/dialog_start"
+                android:layout_width="150dp"
+                android:layout_height="44dp"
+                android:text="Fade dialog" />
+            <Button
+                android:id="@+id/activity_start"
+                android:layout_width="150dp"
+                android:layout_height="44dp"
+                android:text="Activity transition" />
+            <TextView
+                android:id="@+id/window_text"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:textSize="12sp"
+                android:text="window-idle" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/list_start"
+                android:layout_width="150dp"
+                android:layout_height="44dp"
+                android:text="List smooth scroll" />
+            <TextView
+                android:id="@+id/list_status"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:textSize="12sp"
+                android:text="list-idle" />
+        </LinearLayout>
+
+        <ListView
+            android:id="@+id/fling_list"
+            android:layout_width="match_parent"
+            android:layout_height="150dp"
+            android:scrollbars="none"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/progress_start"
+                android:layout_width="150dp"
+                android:layout_height="44dp"
+                android:text="Infinite progress" />
+            <Button
+                android:id="@+id/progress_stop"
+                android:layout_width="100dp"
+                android:layout_height="44dp"
+                android:text="Stop" />
+            <ProgressBar
+                android:id="@+id/progress_indeterminate"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:indeterminate="false"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/lt_start"
+                android:layout_width="150dp"
+                android:layout_height="44dp"
+                android:text="LayoutTransition" />
+            <LinearLayout
+                android:id="@+id/lt_container"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:orientation="horizontal" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/rapid_inc"
+                android:layout_width="150dp"
+                android:layout_height="44dp"
+                android:text="Rapid increment" />
+            <Button
+                android:id="@+id/rapid_reset"
+                android:layout_width="100dp"
+                android:layout_height="44dp"
+                android:text="Reset" />
+            <TextView
+                android:id="@+id/rapid_count"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:textSize="14sp"
+                android:text="0" />
+        </LinearLayout>
+</LinearLayout>

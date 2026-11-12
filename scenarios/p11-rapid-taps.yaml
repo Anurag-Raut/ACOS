@@ -1,0 +1,58 @@
+# P11: settle-lab case `rapid-taps`.
+#
+# The step sequence is the same in quiet and event strict modes; only the
+# ACOS_STRICT_SETTLE switch changes. The assertion is on the case's known final
+# state, so an early "settled" reply is visible as a failed assertion.
+version: 1
+name: p11-rapid-taps
+description: >-
+  Ten taps 30 ms apart on a counter must settle at 10.
+app: fixtures/build/apps/settle-lab.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.settletab/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: rapid_inc}
+      timeout_ms: 5000
+  - tap:
+      selector: {id: rapid_inc}
+  - tap:
+      selector: {id: rapid_inc}
+  - tap:
+      selector: {id: rapid_inc}
+  - tap:
+      selector: {id: rapid_inc}
+  - tap:
+      selector: {id: rapid_inc}
+  - tap:
+      selector: {id: rapid_inc}
+  - tap:
+      selector: {id: rapid_inc}
+  - tap:
+      selector: {id: rapid_inc}
+  - tap:
+      selector: {id: rapid_inc}
+  - tap:
+      selector: {id: rapid_inc}
+  - assert_text:
+      selector: {id: rapid_count}
+      text: {exact: "10"}
