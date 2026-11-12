@@ -1,0 +1,6 @@
+verify: fail (ok=false, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  error: ASSERTION_FAILED: region differs from scenarios/suite/baselines/T03-hello-views-top.png (568029 differing bytes)
+  artifacts: /home/Qui/Projects/acos/.cache/w1-after/artifacts/T03-render-wrong
+  steps: 3
+verify: ASSERTION_FAILED (assertion): region differs from scenarios/suite/baselines/T03-hello-views-top.png (568029 differing bytes) [class=assertion, retryable=false]
