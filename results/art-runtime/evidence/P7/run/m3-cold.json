@@ -1,0 +1,3140 @@
+{
+  "definition": "nothing running -> acos serve + acos_launch -> first frame byte-identical to the verified count-0 reference",
+  "page_cache_dropped": true,
+  "phase": "M3-cold-cache",
+  "rows": [
+    {
+      "accepted_on": "launch",
+      "cold_frame_ms": 663.994025439024,
+      "daemon_start_ms": 1.861572003690526,
+      "destroy_wall_ms": 61.0540299967397,
+      "fadvise": {
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 368640,
+          "size": 2350507
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 196608,
+          "size": 598461
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 507904,
+          "size": 4303311
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 249856,
+          "size": 822201
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3403776,
+          "size": 3659952
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 1900544,
+          "size": 2463208
+        },
+        "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 661.9969364255667,
+      "host": {
+        "loadavg1": 9.8,
+        "loadavg15": 4.43,
+        "loadavg5": 7.5,
+        "mem_available_gib": 38.08,
+        "mem_available_mib": 38996.2,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "8/3384",
+        "used_mib": 22912.5,
+        "used_pct": 37.01
+      },
+      "launch_count_text": "0",
+      "launch_frame_captured_at": "2026-11-12T10:33:02.432Z",
+      "launch_frame_landed_ms": 659.9998474121094,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_frame_seq": 1,
+      "launch_start_ms": 1.9970890134572983,
+      "launch_tree_ok": true,
+      "launch_wall_ms": 660.4690620151814,
+      "m3_ms": 853.0657039955258,
+      "m_ms": 662.4661510286387,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "polls": 0,
+      "rep": 0,
+      "total_wall_ms": 853.0340339930262,
+      "utc": "2026-11-12T10:33:01.700+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12,
+      "verify_tree_wall_ms": 177.1183640230447
+    },
+    {
+      "accepted_on": "launch",
+      "cold_frame_ms": 662.3562024324201,
+      "daemon_start_ms": 2.511882979888469,
+      "destroy_wall_ms": 75.89041499886662,
+      "fadvise": {
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 479232,
+          "size": 2350507
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 598461
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 880640,
+          "size": 4303311
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 822201
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3493888,
+          "size": 3659952
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2056192,
+          "size": 2463208
+        },
+        "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 659.6780144318473,
+      "host": {
+        "loadavg1": 9.8,
+        "loadavg15": 4.43,
+        "loadavg5": 7.5,
+        "mem_available_gib": 38.04,
+        "mem_available_mib": 38950.1,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "2/3323",
+        "used_mib": 22958.6,
+        "used_pct": 37.08
+      },
+      "launch_count_text": "0",
+      "launch_frame_captured_at": "2026-11-12T10:33:03.399Z",
+      "launch_frame_landed_ms": 656.9998264312744,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_frame_seq": 1,
+      "launch_start_ms": 2.6781880005728453,
+      "launch_tree_ok": true,
+      "launch_wall_ms": 657.6145399885718,
+      "m3_ms": 838.4681419993285,
+      "m_ms": 660.2927279891446,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "polls": 0,
+      "rep": 1,
+      "total_wall_ms": 838.4330359986052,
+      "utc": "2026-11-12T10:33:02.685+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12,
+      "verify_tree_wall_ms": 177.69240000052378
+    },
+    {
+      "accepted_on": "launch",
+      "cold_frame_ms": 673.2842028141022,
+      "daemon_start_ms": 2.432863984722644,
+      "destroy_wall_ms": 65.63158199423924,
+      "fadvise": {
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 479232,
+          "size": 2350507
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 598461
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 880640,
+          "size": 4303311
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 822201
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3493888,
+          "size": 3659952
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2056192,
+          "size": 2463208
+        },
+        "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 670.6420928239822,
+      "host": {
+        "loadavg1": 9.34,
+        "loadavg15": 4.42,
+        "loadavg5": 7.44,
+        "mem_available_gib": 38.04,
+        "mem_available_mib": 38949.4,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "1/3323",
+        "used_mib": 22959.3,
+        "used_pct": 37.09
+      },
+      "launch_count_text": "0",
+      "launch_frame_captured_at": "2026-11-12T10:33:04.377Z",
+      "launch_frame_landed_ms": 667.9999828338623,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_frame_seq": 1,
+      "launch_start_ms": 2.642109990119934,
+      "launch_tree_ok": true,
+      "launch_wall_ms": 667.9447770002298,
+      "m3_ms": 849.4210779899731,
+      "m_ms": 670.5868869903497,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "polls": 0,
+      "rep": 2,
+      "total_wall_ms": 849.4045469851699,
+      "utc": "2026-11-12T10:33:03.654+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12,
+      "verify_tree_wall_ms": 178.55779902311042
+    },
+    {
+      "accepted_on": "launch",
+      "cold_frame_ms": 656.1022168607451,
+      "daemon_start_ms": 2.4068539787549525,
+      "destroy_wall_ms": 80.41048800805584,
+      "fadvise": {
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 479232,
+          "size": 2350507
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 598461
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 880640,
+          "size": 4303311
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 822201
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3493888,
+          "size": 3659952
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2056192,
+          "size": 2463208
+        },
+        "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 653.5511198744643,
+      "host": {
+        "loadavg1": 9.34,
+        "loadavg15": 4.42,
+        "loadavg5": 7.44,
+        "mem_available_gib": 37.98,
+        "mem_available_mib": 38895.3,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "1/3323",
+        "used_mib": 23013.4,
+        "used_pct": 37.17
+      },
+      "launch_count_text": "0",
+      "launch_frame_captured_at": "2026-11-12T10:33:05.326Z",
+      "launch_frame_landed_ms": 651.0000228881836,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_frame_seq": 1,
+      "launch_start_ms": 2.551096986280754,
+      "launch_tree_ok": true,
+      "launch_wall_ms": 651.165346003836,
+      "m3_ms": 833.8980739936233,
+      "m_ms": 653.7164429901168,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "polls": 0,
+      "rep": 3,
+      "total_wall_ms": 833.8768639951013,
+      "utc": "2026-11-12T10:33:04.622+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12,
+      "verify_tree_wall_ms": 179.88724398310296
+    },
+    {
+      "accepted_on": "launch",
+      "cold_frame_ms": 665.296689781826,
+      "daemon_start_ms": 2.4166829825844616,
+      "destroy_wall_ms": 70.47077899915166,
+      "fadvise": {
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 479232,
+          "size": 2350507
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 598461
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 880640,
+          "size": 4303311
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 822201
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3493888,
+          "size": 3659952
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2056192,
+          "size": 2463208
+        },
+        "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 662.6483878062572,
+      "host": {
+        "loadavg1": 9.34,
+        "loadavg15": 4.42,
+        "loadavg5": 7.44,
+        "mem_available_gib": 37.98,
+        "mem_available_mib": 38889.8,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "1/3340",
+        "used_mib": 23019.0,
+        "used_pct": 37.18
+      },
+      "launch_count_text": "0",
+      "launch_frame_captured_at": "2026-11-12T10:33:06.302Z",
+      "launch_frame_landed_ms": 660.0000858306885,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_frame_seq": 1,
+      "launch_start_ms": 2.6483019755687565,
+      "launch_tree_ok": true,
+      "launch_wall_ms": 659.6170279954094,
+      "m3_ms": 843.0011500022374,
+      "m_ms": 662.2653299709782,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "polls": 0,
+      "rep": 4,
+      "total_wall_ms": 842.9778360005002,
+      "utc": "2026-11-12T10:33:05.588+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12,
+      "verify_tree_wall_ms": 180.43333699461073
+    },
+    {
+      "accepted_on": "launch",
+      "cold_frame_ms": 659.959590935614,
+      "daemon_start_ms": 1.8312249740120023,
+      "destroy_wall_ms": 76.21949698659591,
+      "fadvise": {
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 479232,
+          "size": 2350507
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 598461
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 880640,
+          "size": 4303311
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 822201
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3493888,
+          "size": 3659952
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2056192,
+          "size": 2463208
+        },
+        "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 657.9797449230682,
+      "host": {
+        "loadavg1": 9.34,
+        "loadavg15": 4.42,
+        "loadavg5": 7.44,
+        "mem_available_gib": 37.94,
+        "mem_available_mib": 38845.6,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "1/3340",
+        "used_mib": 23063.1,
+        "used_pct": 37.25
+      },
+      "launch_count_text": "0",
+      "launch_frame_captured_at": "2026-11-12T10:33:07.261Z",
+      "launch_frame_landed_ms": 655.9998989105225,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_frame_seq": 1,
+      "launch_start_ms": 1.9798460125457495,
+      "launch_tree_ok": true,
+      "launch_wall_ms": 657.1430069743656,
+      "m3_ms": 838.7132060015574,
+      "m_ms": 659.1228529869113,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "polls": 0,
+      "rep": 5,
+      "total_wall_ms": 838.6939000047278,
+      "utc": "2026-11-12T10:33:06.554+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12,
+      "verify_tree_wall_ms": 179.15536899818107
+    },
+    {
+      "accepted_on": "launch",
+      "cold_frame_ms": 661.9373223511502,
+      "daemon_start_ms": 1.8423360015731305,
+      "destroy_wall_ms": 73.66314000682905,
+      "fadvise": {
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 479232,
+          "size": 2350507
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 598461
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 880640,
+          "size": 4303311
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 822201
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3493888,
+          "size": 3659952
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2056192,
+          "size": 2463208
+        },
+        "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 659.9686573608778,
+      "host": {
+        "loadavg1": 9.34,
+        "loadavg15": 4.42,
+        "loadavg5": 7.44,
+        "mem_available_gib": 38.0,
+        "mem_available_mib": 38915.2,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "2/3322",
+        "used_mib": 22993.5,
+        "used_pct": 37.14
+      },
+      "launch_count_text": "0",
+      "launch_frame_captured_at": "2026-11-12T10:33:08.229Z",
+      "launch_frame_landed_ms": 657.9999923706055,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_frame_seq": 1,
+      "launch_start_ms": 1.968664990272373,
+      "launch_tree_ok": true,
+      "launch_wall_ms": 657.8027260256931,
+      "m3_ms": 841.0206320113502,
+      "m_ms": 659.7713910159655,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "polls": 0,
+      "rep": 6,
+      "total_wall_ms": 840.9973880043253,
+      "utc": "2026-11-12T10:33:07.519+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12,
+      "verify_tree_wall_ms": 180.95171899767593
+    },
+    {
+      "accepted_on": "launch",
+      "cold_frame_ms": 651.9389339373447,
+      "daemon_start_ms": 1.8395110091660172,
+      "destroy_wall_ms": 86.74770899233408,
+      "fadvise": {
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 479232,
+          "size": 2350507
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 598461
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 880640,
+          "size": 4303311
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 822201
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3493888,
+          "size": 3659952
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2056192,
+          "size": 2463208
+        },
+        "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 649.9694679223467,
+      "host": {
+        "loadavg1": 9.34,
+        "loadavg15": 4.42,
+        "loadavg5": 7.44,
+        "mem_available_gib": 37.97,
+        "mem_available_mib": 38885.3,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "1/3323",
+        "used_mib": 23023.4,
+        "used_pct": 37.19
+      },
+      "launch_count_text": "0",
+      "launch_frame_captured_at": "2026-11-12T10:33:09.186Z",
+      "launch_frame_landed_ms": 648.0000019073486,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_frame_seq": 1,
+      "launch_start_ms": 1.9694660149980336,
+      "launch_tree_ok": true,
+      "launch_wall_ms": 647.9895559896249,
+      "m3_ms": 827.8964170021936,
+      "m_ms": 649.959022004623,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "polls": 0,
+      "rep": 7,
+      "total_wall_ms": 827.8767190058716,
+      "utc": "2026-11-12T10:33:08.485+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12,
+      "verify_tree_wall_ms": 177.61160800000653
+    },
+    {
+      "accepted_on": "launch",
+      "cold_frame_ms": 682.1170032490045,
+      "daemon_start_ms": 1.8689559947233647,
+      "destroy_wall_ms": 56.47373400279321,
+      "fadvise": {
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 479232,
+          "size": 2350507
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 598461
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 880640,
+          "size": 4303311
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 822201
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3493888,
+          "size": 3659952
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2056192,
+          "size": 2463208
+        },
+        "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 680.0584882730618,
+      "host": {
+        "loadavg1": 9.47,
+        "loadavg15": 4.46,
+        "loadavg5": 7.5,
+        "mem_available_gib": 38.0,
+        "mem_available_mib": 38908.6,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "3/3325",
+        "used_mib": 23000.1,
+        "used_pct": 37.15
+      },
+      "launch_count_text": "0",
+      "launch_frame_captured_at": "2026-11-12T10:33:10.185Z",
+      "launch_frame_landed_ms": 677.9999732971191,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_frame_seq": 1,
+      "launch_start_ms": 2.0585149759426713,
+      "launch_tree_ok": true,
+      "launch_wall_ms": 678.2396880153101,
+      "m3_ms": 857.8511889791116,
+      "m_ms": 680.2982029912528,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "polls": 0,
+      "rep": 8,
+      "total_wall_ms": 857.8319629887119,
+      "utc": "2026-11-12T10:33:09.452+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12,
+      "verify_tree_wall_ms": 177.26274800952524
+    },
+    {
+      "accepted_on": "launch",
+      "cold_frame_ms": 648.9258489455096,
+      "daemon_start_ms": 1.8166070221923292,
+      "destroy_wall_ms": 89.70623800996691,
+      "fadvise": {
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 430080,
+          "size": 2350507
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 598461
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 876544,
+          "size": 4303311
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 822201
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 856064,
+          "size": 868352
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3493888,
+          "size": 3659952
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 1978368,
+          "size": 2463208
+        },
+        "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 646.9629149360117,
+      "host": {
+        "loadavg1": 9.47,
+        "loadavg15": 4.46,
+        "loadavg5": 7.5,
+        "mem_available_gib": 37.95,
+        "mem_available_mib": 38857.8,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "1/3340",
+        "used_mib": 23050.9,
+        "used_pct": 37.23
+      },
+      "launch_count_text": "0",
+      "launch_frame_captured_at": "2026-11-12T10:33:11.118Z",
+      "launch_frame_landed_ms": 644.9999809265137,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_frame_seq": 1,
+      "launch_start_ms": 1.9629340094979852,
+      "launch_tree_ok": true,
+      "launch_wall_ms": 645.2571760164574,
+      "m3_ms": 824.6107499871869,
+      "m_ms": 647.2201100259554,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "polls": 0,
+      "rep": 9,
+      "total_wall_ms": 824.5630589954089,
+      "utc": "2026-11-12T10:33:10.421+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12,
+      "verify_tree_wall_ms": 177.03021701890975
+    },
+    {
+      "accepted_on": "launch",
+      "cold_frame_ms": 657.9762278706767,
+      "daemon_start_ms": 1.8423560250084847,
+      "destroy_wall_ms": 74.05703500262462,
+      "fadvise": {
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 479232,
+          "size": 2350507
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 598461
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 880640,
+          "size": 4303311
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 822201
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 868352,
+          "size": 868352
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3493888,
+          "size": 3659952
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 2056192,
+          "size": 2463208
+        },
+        "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 655.9881358698476,
+      "host": {
+        "loadavg1": 9.47,
+        "loadavg15": 4.46,
+        "loadavg5": 7.5,
+        "mem_available_gib": 38.04,
+        "mem_available_mib": 38949.3,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "1/3321",
+        "used_mib": 22959.4,
+        "used_pct": 37.09
+      },
+      "launch_count_text": "0",
+      "launch_frame_captured_at": "2026-11-12T10:33:12.094Z",
+      "launch_frame_landed_ms": 654.0000438690186,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_frame_seq": 1,
+      "launch_start_ms": 1.988092000829056,
+      "launch_tree_ok": true,
+      "launch_wall_ms": 654.57152100862,
+      "m3_ms": 839.7576110146474,
+      "m_ms": 656.5596130094491,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "polls": 0,
+      "rep": 10,
+      "total_wall_ms": 839.738976006629,
+      "utc": "2026-11-12T10:33:11.387+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12,
+      "verify_tree_wall_ms": 182.90925200562924
+    },
+    {
+      "accepted_on": "launch",
+      "cold_frame_ms": 648.9646013942547,
+      "daemon_start_ms": 1.8327680008951575,
+      "destroy_wall_ms": 88.95003699581139,
+      "fadvise": {
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/apex/com.android.art/bin/dalvikvm64": {
+          "after": 0,
+          "before": 12288,
+          "size": 11216
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/abx.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4498
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/am.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 569438
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.base-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 12842
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.hidl.manager-V1.0-java.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 29906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.base.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33430
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.mock.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 64486
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/android.test.runner.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 108218
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/appwidget.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5726
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bmgr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 33886
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/boot.vdex": {
+          "after": 0,
+          "before": 77824,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/bu.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 7370
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.future.usb.accessory.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 5390
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.location.provider.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 26966
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.media.remotedisplay.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9570
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.mediadrm.signer.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2962
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/com.android.nfc_extras.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 8002
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/content.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20042
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ext.jar": {
+          "after": 0,
+          "before": 413696,
+          "size": 2350507
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework-graphics.jar": {
+          "after": 0,
+          "before": 4096,
+          "size": 3813
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/framework.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 40011934
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/hid.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 24026
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/ims-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 598461
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/incident-helper-cmd.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15638
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/javax.obex.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 1682
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/lockagent.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 9906
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/locksettings.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 2578
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/monkey.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 117926
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 490090
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/requestsync.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 13262
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/services.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 20621436
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/sm.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 10894
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/svc.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 15666
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telecom.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 17942
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/telephony-common.jar": {
+          "after": 0,
+          "before": 876544,
+          "size": 4303311
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uiautomator.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 414918
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/uinput.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 25330
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/voip-common.jar": {
+          "after": 0,
+          "before": 397312,
+          "size": 822201
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/vr.jar": {
+          "after": 0,
+          "before": 0,
+          "size": 4494
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.art": {
+          "after": 0,
+          "before": 856064,
+          "size": 868352
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.oat": {
+          "after": 0,
+          "before": 3493888,
+          "size": 3659952
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/framework/x86_64/boot.vdex": {
+          "after": 0,
+          "before": 0,
+          "size": 77404
+        },
+        "/home/Qui/Projects/acos/.cache/art/sysroot/system/lib64/libandroid_runtime.so": {
+          "after": 0,
+          "before": 1974272,
+          "size": 2463208
+        },
+        "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk": {
+          "after": 0,
+          "before": 16384,
+          "size": 12756
+        }
+      },
+      "frame_landed_ms": 646.9824103696737,
+      "host": {
+        "loadavg1": 9.47,
+        "loadavg15": 4.46,
+        "loadavg5": 7.5,
+        "mem_available_gib": 38.17,
+        "mem_available_mib": 39083.4,
+        "mem_total_gib": 60.46,
+        "mem_total_mib": 61908.7,
+        "runnable": "1/3329",
+        "used_mib": 22825.3,
+        "used_pct": 36.87
+      },
+      "launch_count_text": "0",
+      "launch_frame_captured_at": "2026-11-12T10:33:13.051Z",
+      "launch_frame_landed_ms": 645.0002193450928,
+      "launch_frame_md5": "39d1e4e3633d98d76b992edb4b250a78",
+      "launch_frame_seq": 1,
+      "launch_start_ms": 1.9821910245809704,
+      "launch_tree_ok": true,
+      "launch_wall_ms": 645.2399340050761,
+      "m3_ms": 824.6912820031866,
+      "m_ms": 647.222125029657,
+      "ok": true,
+      "phase": "M3-cold-cache",
+      "polls": 0,
+      "rep": 11,
+      "total_wall_ms": 824.6736190048978,
+      "utc": "2026-11-12T10:33:12.353+00:00",
+      "verified": true,
+      "verify_count_text": "0",
+      "verify_nodes": 12,
+      "verify_tree_wall_ms": 177.20229300903156
+    }
+  ],
+  "utc": "2026-11-12T10:33:13.319+00:00"
+}
