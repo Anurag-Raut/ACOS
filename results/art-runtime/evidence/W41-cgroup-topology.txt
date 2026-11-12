@@ -1,0 +1,23 @@
+W41 evidence: the ART guest does not live in the guarded job cgroup (2026-11-12T03:03Z)
+
+One T01 verify under `run-exclusive.sh -> guarded.sh --mem 8G`; a 100 ms sampler
+in the job scope recorded /proc/<pid>/cgroup for every acos*/bwrap/dalvikvm
+process. Excerpt (.cache/w41/probe-out.txt, local times UTC+5:30):
+
+  pid=3855286 comm=acos        cg=.../app.slice/run-p3855427-i8055567.scope
+  pid=3855427 comm=timeout     cg=.../app.slice/run-p3855427-i8055567.scope
+  pid=3855429 comm=acos        cg=.../app.slice/run-p3855427-i8055567.scope
+  pid=3855434 comm=acos-art    cg=.../app.slice/run-p3855427-i8055567.scope
+  pid=3855923 comm=bwrap       cg=.../app.slice/run-p3855923-i8086200.scope
+  pid=3855944 comm=bwrap       cg=.../app.slice/run-p3855923-i8086200.scope
+  SELF (sampler)               cg=.../app.slice/run-p3855427-i8055567.scope memcur=22220800
+
+`acos-art` spawns the guest through `systemd-run --user --scope`, which creates
+run-p3855923-i8086200.scope in the SAME app.slice (a sibling, not a child of the
+job scope). run-suite.sh samples /proc/self/cgroup, i.e. run-p3855427 only, so
+the guest's memory (guest cgroup peak ~110 MiB) is never in its integral.
+`systemd-cgls`/`/sys/fs/cgroup/.../run-p3855427.../` has no child scopes.
+
+Also excluded from the job scope by the same probe: flatpak bwrap scopes
+(app-flatpak-...), i.e. unrelated host processes are NOT charged to the job; the
+contamination is page-cache ownership, not foreign processes in the scope.

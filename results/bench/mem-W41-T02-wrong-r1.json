@@ -1,0 +1,393 @@
+{
+  "binaries": {
+    "acos": ".cache/w41/bin/acos",
+    "acos_art": ".cache/w41/bin/acos-art"
+  },
+  "engine": "art",
+  "env": {},
+  "host_gate": null,
+  "label": "wrong",
+  "method": {
+    "guest_cgroups": "discovered from the launcher's <run>/cgroup evidence file and from dalvikvm/bwrap /proc/<pid>/cgroup; systemd-run --scope puts them OUTSIDE the job scope",
+    "interval_s": 0.1,
+    "job_cgroup": "the cgroup this process runs in (guarded.sh scope)",
+    "job_gib_min_all_cgroups": "job scope + guest scopes, memory.current",
+    "job_resident_no_file_gib_min": "job + guest, sum(anon,shmem,kernel,sock): shared page cache excluded",
+    "phase_windows": "engine.json.timing session_start_ms / shutdown_ms; approximate to one sample",
+    "scope_gib_min_runner_formula": "run-suite.sh's number: job scope only"
+  },
+  "reps": [
+    {
+      "artifacts": "/home/Qui/Projects/acos/.cache/w41-mem/20261112T033810Z/T02-state-wrong/r1",
+      "components": {
+        "anon": {
+          "gib_min": 0.006649004,
+          "peak_mib": 170.133
+        },
+        "file_excl_shmem": {
+          "gib_min": 0.003541348,
+          "peak_mib": 91.605
+        },
+        "file_incl_shmem": {
+          "gib_min": 0.004404049,
+          "peak_mib": 91.605
+        },
+        "kernel": {
+          "gib_min": 0.000299173,
+          "peak_mib": 6.09
+        },
+        "resident_no_file": {
+          "gib_min": 0.007810879,
+          "peak_mib": 194.504
+        },
+        "shmem": {
+          "gib_min": 0.000862701,
+          "peak_mib": 18.281
+        },
+        "sock": {
+          "gib_min": 0.0,
+          "peak_mib": 0.0
+        }
+      },
+      "denominator": {
+        "job_gib_min_all_cgroups": 0.011801616,
+        "job_peak_mib_all_cgroups": 277.098,
+        "job_resident_no_file_gib_min": 0.007810879,
+        "scope_gib_min_runner_formula": 0.006853612,
+        "scope_peak_mib_runner_formula": 172.848
+      },
+      "env": {},
+      "error": {
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text exactly \"0\", got text \"1\" / hint \"\"",
+        "retryable": false
+      },
+      "guest_cgroups": [
+        "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3957863-i8192518.scope"
+      ],
+      "guest_series": [
+        {
+          "anon_gib_min": 0.003637477,
+          "cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3957863-i8192518.scope",
+          "file_gib_min": 0.000848358,
+          "gib_min": 0.004863083,
+          "n": 31,
+          "peak_mib": 104.285,
+          "res_gib_min": 0.004618833
+        }
+      ],
+      "job_cgroup": "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3957754-i8220751.scope",
+      "label": "wrong",
+      "phase": {
+        "boot": {
+          "job_gib_min": 0.000524773,
+          "peak_mib": 166.793,
+          "resident_no_file_gib_min": 0.000349822,
+          "scope_gib_min": 0.000218869,
+          "seconds": 0.384
+        },
+        "launch": {
+          "job_gib_min": 0.001562465,
+          "peak_mib": 213.164,
+          "resident_no_file_gib_min": 0.001120113,
+          "scope_gib_min": 0.000758126,
+          "seconds": 0.585
+        },
+        "steps": {
+          "job_gib_min": 0.008245897,
+          "peak_mib": 277.098,
+          "resident_no_file_gib_min": 0.005507796,
+          "scope_gib_min": 0.004829717,
+          "seconds": 2.166
+        },
+        "teardown": {
+          "job_gib_min": 0.000273953,
+          "peak_mib": 168.418,
+          "resident_no_file_gib_min": 0.000122405,
+          "scope_gib_min": 0.000273953,
+          "seconds": 0.204
+        }
+      },
+      "process_wall_s": 3.348,
+      "pss_at_peak_tick": [
+        {
+          "class": "harness-shell",
+          "comm": "timeout",
+          "pid": 3957754,
+          "pss_mib": 0.188,
+          "rss_mib": 2.395
+        },
+        {
+          "class": "sampler-python",
+          "comm": "python3",
+          "pid": 3957755,
+          "pss_mib": 15.26,
+          "rss_mib": 22.742
+        },
+        {
+          "class": "acos-host",
+          "comm": "acos",
+          "pid": 3957853,
+          "pss_mib": 52.099,
+          "rss_mib": 54.578
+        },
+        {
+          "class": "acos-art-launcher",
+          "comm": "acos-art",
+          "pid": 3957854,
+          "pss_mib": 60.457,
+          "rss_mib": 62.613
+        },
+        {
+          "class": "guest-app",
+          "comm": "bwrap",
+          "pid": 3957863,
+          "pss_mib": 0.196,
+          "rss_mib": 2.297
+        },
+        {
+          "class": "guest-app",
+          "comm": "bwrap",
+          "pid": 3957865,
+          "pss_mib": 0.145,
+          "rss_mib": 1.32
+        },
+        {
+          "class": "guest-app",
+          "comm": "ixtures.counter",
+          "pid": 3957869,
+          "pss_mib": 204.355,
+          "rss_mib": 207.234
+        }
+      ],
+      "pss_peak_mib_by_class": {
+        "acos-art-launcher": {
+          "comm": "acos-art",
+          "n_procs": 1,
+          "pss_mib": 60.457,
+          "rss_mib": 62.613
+        },
+        "acos-host": {
+          "comm": "acos",
+          "n_procs": 1,
+          "pss_mib": 71.425,
+          "rss_mib": 73.965
+        },
+        "guest-app": {
+          "comm": "bwrap",
+          "n_procs": 1,
+          "pss_mib": 213.465,
+          "rss_mib": 216.258
+        },
+        "harness-shell": {
+          "comm": "timeout",
+          "n_procs": 1,
+          "pss_mib": 0.188,
+          "rss_mib": 2.395
+        },
+        "sampler-python": {
+          "comm": "python3",
+          "n_procs": 1,
+          "pss_mib": 15.271,
+          "rss_mib": 22.754
+        }
+      },
+      "rc": 1,
+      "rc_stdout_tail": null,
+      "rep": 1,
+      "retried_after": {
+        "rc": 1,
+        "stderr_tail": "",
+        "utc": "2026-11-12T03:38:08+00:00",
+        "verdict": "fail"
+      },
+      "samples": {
+        "interval_s": 0.1,
+        "job": 35,
+        "misses": 0,
+        "pss_ticks": 12,
+        "ticks": 34
+      },
+      "scenario": "scenarios/suite/T02-state-wrong.yaml",
+      "self_rss_mib": 22.71,
+      "stderr_tail": "",
+      "utc": "2026-11-12T03:38:13+00:00",
+      "verdict": "fail",
+      "verdict_wall_ms": 2751
+    }
+  ],
+  "retried": [
+    1
+  ],
+  "scenario": "scenarios/suite/T02-state-wrong.yaml",
+  "schema": "acos-mem-breakdown/1",
+  "summary": {
+    "anon_gib_min": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 0.006649004,
+      "mean": 0.006649004,
+      "median": 0.006649004,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 0.006649004,
+      "n": 1,
+      "p5": 0.006649004,
+      "p50": 0.006649004,
+      "p95": 0.006649004,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "file_gib_min": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 0.004404049,
+      "mean": 0.004404049,
+      "median": 0.004404049,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 0.004404049,
+      "n": 1,
+      "p5": 0.004404049,
+      "p50": 0.004404049,
+      "p95": 0.004404049,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "job_gib_min": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 0.011801616,
+      "mean": 0.011801616,
+      "median": 0.011801616,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 0.011801616,
+      "n": 1,
+      "p5": 0.011801616,
+      "p50": 0.011801616,
+      "p95": 0.011801616,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "job_peak_mib": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 277.098,
+      "mean": 277.098,
+      "median": 277.098,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 277.098,
+      "n": 1,
+      "p5": 277.098,
+      "p50": 277.098,
+      "p95": 277.098,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "job_resident_gib_min": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 0.007810879,
+      "mean": 0.007810879,
+      "median": 0.007810879,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 0.007810879,
+      "n": 1,
+      "p5": 0.007810879,
+      "p50": 0.007810879,
+      "p95": 0.007810879,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "kernel_gib_min": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 0.000299173,
+      "mean": 0.000299173,
+      "median": 0.000299173,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 0.000299173,
+      "n": 1,
+      "p5": 0.000299173,
+      "p50": 0.000299173,
+      "p95": 0.000299173,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "process_wall_s": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 3.348,
+      "mean": 3.348,
+      "median": 3.348,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 3.348,
+      "n": 1,
+      "p5": 3.348,
+      "p50": 3.348,
+      "p95": 3.348,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "scope_gib_min": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 0.006853612,
+      "mean": 0.006853612,
+      "median": 0.006853612,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 0.006853612,
+      "n": 1,
+      "p5": 0.006853612,
+      "p50": 0.006853612,
+      "p95": 0.006853612,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    },
+    "shmem_gib_min": {
+      "ci95_high": null,
+      "ci95_low": null,
+      "cv": null,
+      "max": 0.000862701,
+      "mean": 0.000862701,
+      "median": 0.000862701,
+      "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+      "min": 0.000862701,
+      "n": 1,
+      "p5": 0.000862701,
+      "p50": 0.000862701,
+      "p95": 0.000862701,
+      "resamples": 0,
+      "spread": null,
+      "spread_pct": null,
+      "stdev": null
+    }
+  },
+  "task": "scenarios/suite/T02-state-wrong.yaml",
+  "utc_finish": "2026-11-12T03:38:13+00:00",
+  "utc_start": "2026-11-12T03:38:13+00:00",
+  "verified": "0/1"
+}
