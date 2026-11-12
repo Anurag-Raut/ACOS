@@ -73,6 +73,57 @@ fn create(service: &mut NotificationService, package: &str, channels: Vec<Parcel
         .expect("createNotificationChannels decodes and succeeds");
 }
 
+/// A channel that sets an `AudioAttributes` exercises the image's
+/// `AudioAttributes.writeToParcel` order (5 ints, StringArray, nullable
+/// string, bundle marker, Bundle). Getting that order wrong desynchronised the
+/// rest of the channel and was the K1 "bad string: String16 is not NUL
+/// terminated" failure.
+#[test]
+fn a_channel_with_audio_attributes_round_trips() {
+    let mut service = service();
+    let mut payload = channel("alerts", Some("chat"));
+    if let Parcelable::Ordered { values, .. } = &mut payload {
+        values[15] = Value::Cond {
+            present: true,
+            values: vec![Value::Parcelable(Parcelable::ordered(
+                "android.media.AudioAttributes",
+                vec![
+                    Value::Int(0),
+                    Value::Int(0),
+                    Value::Int(5),
+                    Value::Int(0),
+                    Value::Int(0),
+                    Value::StringArray(None),
+                    Value::Str(None),
+                    Value::Int(0),
+                    Value::Bundle(None),
+                ],
+            ))],
+        };
+    }
+    create(&mut service, "pkg", vec![payload]);
+    let reply = service
+        .call(
+            "android.app.INotificationManager",
+            method("android.app.INotificationManager", "getNotificationChannel"),
+            &[
+                Value::Str(Some("pkg".into())),
+                Value::Int(0),
+                Value::Str(Some("alerts".into())),
+                Value::Str(None),
+            ],
+        )
+        .expect("get")
+        .reply;
+    assert_eq!(
+        reply[0].as_parcelable().and_then(|p| p.field(0)).and_then(|v| match v {
+            Value::Cond { values, .. } => values[0].as_str(),
+            _ => None,
+        }),
+        Some("alerts")
+    );
+}
+
 #[test]
 fn create_then_get_returns_the_same_channel() {
     let mut service = service();

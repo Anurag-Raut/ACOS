@@ -1566,10 +1566,9 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Int,         // usage
             FieldOp::Int,         // capture preset
             FieldOp::Int,         // ? (image classes2.dex)
-            FieldOp::StringArray, // tags
-            FieldOp::Str16,       // ? 
-            FieldOp::Int,
-            FieldOp::Int,
+            FieldOp::StringArray, // tags (image writes StringArray before the string)
+            FieldOp::Str16,       // formatted tags (nullable: -1)
+            FieldOp::Int,         // bundle presence
             FieldOp::Bundle,
         ],
         verification: Verification::Prefix,
