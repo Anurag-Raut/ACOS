@@ -1,0 +1,321 @@
+{
+ "child_exit": [
+  "child_exit pid=2 tag=1 mode=exit code=7"
+ ],
+ "cold": {
+  "exec_to_main_ms": [],
+  "exec_to_ready_ms": [],
+  "work_ms": []
+ },
+ "fork_to_post_fork_ms": [
+  5
+ ],
+ "fork_to_ready_ms": [
+  22,
+  21
+ ],
+ "gc_lines": [
+  "gc pid=2 n=5 ms=[1,1,1,1,1] gc_requested=5 heap_used_kb=20598 heap_total_kb=26726 max_kb=524288 threads=7",
+  "gc pid=2 n=5 ms=[1,1,1,1,1] gc_requested=5 heap_used_kb=20598 heap_total_kb=26726 max_kb=524288 threads=7"
+ ],
+ "hold_ms": 6000,
+ "isolation": [
+  "iso_private_dir path=/data/data/pkg-1 exists=true canWrite=true",
+  "iso_own_file wrote=true read_n=11 data=tag=1 pid=2",
+  "iso_sibling path=/data/data/pkg-2/secret.txt errno=2(ENOENT)",
+  "iso_zygote path=/data/zygote-private/secret.txt errno=2(ENOENT)",
+  "iso_sibling_dir_exists=false iso_data_listing=[pkg-1]",
+  "iso_private_dir path=/data/data/pkg-99 exists=true canWrite=true",
+  "iso_own_file wrote=true read_n=12 data=tag=99 pid=2",
+  "iso_sibling path=/data/data/pkg-1/secret.txt errno=2(ENOENT)",
+  "iso_zygote path=/data/zygote-private/secret.txt errno=2(ENOENT)",
+  "iso_sibling_dir_exists=false iso_data_listing=[pkg-99]"
+ ],
+ "late_fork": [
+  "late_fork child=27 threads=6"
+ ],
+ "log": "/home/Qui/Projects/acos/.cache/z2-logs/run-n1.log",
+ "n": 1,
+ "parent_ns": [
+  "parent_ns parent mnt=mnt:[4026533519] pid=pid:[4026533538] user=user:[4026533824] net=net:[4026533587] ipc=ipc:[4026533522] uts=uts:[4026533521] cgroup=cgroup:[4026533585] time=time:[4026531834]"
+ ],
+ "parent_pid": 1337776,
+ "parent_private": [
+  "parent_private path=/data/zygote-private/secret.txt read_n=26 data=zygote-secret pid=1337756"
+ ],
+ "preload_limit": 800,
+ "reap_lines": [
+  "reaped child=8 pid=8 exit=7 status=0x700",
+  "late_fork_reaped child=27 pid=27 exit=0 status=0x0"
+ ],
+ "roles": {
+  "1337756": "other",
+  "1337775": "other",
+  "1337776": "zygote",
+  "1337782": "sandbox-helper",
+  "1337788": "sandbox-helper",
+  "1337789": "app"
+ },
+ "sandbox_ids": [
+  "sandbox_ids pid=2 ppid=1 uid=0 euid=0 gid=0 threads=7",
+  "sandbox_ids pid=2 ppid=1 uid=0 euid=0 gid=0 threads=7"
+ ],
+ "sandbox_ms": [
+  3
+ ],
+ "sandbox_ns": [
+  "sandbox_ns mnt=mnt:[4026533822] pid=pid:[4026533825] user=user:[4026533264] net=net:[4026533587] ipc=ipc:[4026533522] uts=uts:[4026533521] cgroup=cgroup:[4026533585] time=time:[4026531834]",
+  "sandbox_ns mnt=mnt:[4026533826] pid=pid:[4026533827] user=user:[4026533822] net=net:[4026533587] ipc=ipc:[4026533522] uts=uts:[4026533521] cgroup=cgroup:[4026533585] time=time:[4026531834]"
+ ],
+ "sandbox_rc": [
+  "sandbox_rc 0:userns=0 1:mntns=0 2:pidns=0 3:mount_private=0 4:tmpfs_data=0 5:mkdir_private=0 6:tmpfs_zygote=0 7:proc=0 8:seccomp=0 9:capset=0 10:setresgid=0 11:setresuid_other=-22 12:setresuid=0 13:uid_before=1000 14:gid_before=984 15:pid_in_ns=2 16:reaper_pid=0",
+  "sandbox_rc 0:userns=0 1:mntns=0 2:pidns=0 3:mount_private=0 4:tmpfs_data=0 5:mkdir_private=0 6:tmpfs_zygote=0 7:proc=0 8:seccomp=0 9:capset=0 10:setresgid=0 11:setresuid_other=-22 12:setresuid=0 13:uid_before=1000 14:gid_before=984 15:pid_in_ns=2 16:reaper_pid=0"
+ ],
+ "sandbox_seccomp": [
+  "sandbox_seccomp status=2 ptrace_rc=-1 mount_rc=-1 unshare_rc=-1 fork_rc=-1",
+  "sandbox_seccomp status=2 ptrace_rc=-1 mount_rc=-1 unshare_rc=-1 fork_rc=-1"
+ ],
+ "snapshot": {
+  "1337776": {
+   "comm": "main",
+   "groups": {
+    "boot_image": {
+     "Private_Dirty": 36,
+     "Pss": 16463,
+     "Rss": 50280,
+     "Shared_Clean": 2936,
+     "Shared_Dirty": 43132
+    },
+    "dalvik_all_anon": {
+     "Private_Dirty": 128,
+     "Pss": 13609,
+     "Rss": 53676,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 53548
+    },
+    "dalvik_main_space": {
+     "Private_Dirty": 24,
+     "Pss": 26,
+     "Rss": 32,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 8
+    },
+    "dalvik_region_space": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0
+    },
+    "dalvik_zygote_space": {
+     "Private_Dirty": 16,
+     "Pss": 21,
+     "Rss": 36,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 20
+    }
+   },
+   "mappings": {
+    "boot_image": 870,
+    "dalvik_all_anon": 580,
+    "dalvik_main_space": 20,
+    "dalvik_region_space": 10,
+    "dalvik_zygote_space": 10
+   },
+   "rollup": {
+    "Private_Clean": 45976,
+    "Private_Dirty": 520,
+    "Pss": 70816,
+    "Rss": 127124,
+    "Shared_Clean": 18204,
+    "Shared_Dirty": 62424,
+    "Swap": 0
+   }
+  },
+  "1337782": {
+   "comm": "z2ns",
+   "groups": {
+    "boot_image": {
+     "Private_Dirty": 0,
+     "Pss": 10801,
+     "Rss": 43168,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 43168
+    },
+    "dalvik_all_anon": {
+     "Private_Dirty": 0,
+     "Pss": 13535,
+     "Rss": 53656,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 53656
+    },
+    "dalvik_main_space": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 16,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 16
+    },
+    "dalvik_region_space": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0
+    },
+    "dalvik_zygote_space": {
+     "Private_Dirty": 0,
+     "Pss": 13,
+     "Rss": 36,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 36
+    }
+   },
+   "mappings": {
+    "boot_image": 870,
+    "dalvik_all_anon": 580,
+    "dalvik_main_space": 20,
+    "dalvik_region_space": 10,
+    "dalvik_zygote_space": 10
+   },
+   "rollup": {
+    "Private_Clean": 0,
+    "Private_Dirty": 8,
+    "Pss": 16808,
+    "Rss": 65440,
+    "Shared_Clean": 2624,
+    "Shared_Dirty": 62808,
+    "Swap": 0
+   }
+  },
+  "1337788": {
+   "comm": "z2init",
+   "groups": {
+    "boot_image": {
+     "Private_Dirty": 0,
+     "Pss": 10801,
+     "Rss": 43168,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 43168
+    },
+    "dalvik_all_anon": {
+     "Private_Dirty": 0,
+     "Pss": 13535,
+     "Rss": 53656,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 53656
+    },
+    "dalvik_main_space": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 16,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 16
+    },
+    "dalvik_region_space": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0
+    },
+    "dalvik_zygote_space": {
+     "Private_Dirty": 0,
+     "Pss": 13,
+     "Rss": 36,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 36
+    }
+   },
+   "mappings": {
+    "boot_image": 870,
+    "dalvik_all_anon": 580,
+    "dalvik_main_space": 20,
+    "dalvik_region_space": 10,
+    "dalvik_zygote_space": 10
+   },
+   "rollup": {
+    "Private_Clean": 0,
+    "Private_Dirty": 8,
+    "Pss": 15926,
+    "Rss": 62796,
+    "Shared_Clean": 4,
+    "Shared_Dirty": 62784,
+    "Swap": 0
+   }
+  },
+  "1337789": {
+   "comm": "z2app",
+   "groups": {
+    "boot_image": {
+     "Private_Dirty": 44,
+     "Pss": 12493,
+     "Rss": 46304,
+     "Shared_Clean": 2936,
+     "Shared_Dirty": 43124
+    },
+    "dalvik_all_anon": {
+     "Private_Dirty": 2452,
+     "Pss": 15543,
+     "Rss": 54816,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 52364
+    },
+    "dalvik_main_space": {
+     "Private_Dirty": 44,
+     "Pss": 44,
+     "Rss": 44,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0
+    },
+    "dalvik_region_space": {
+     "Private_Dirty": 2040,
+     "Pss": 2040,
+     "Rss": 2040,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0
+    },
+    "dalvik_zygote_space": {
+     "Private_Dirty": 16,
+     "Pss": 21,
+     "Rss": 36,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 20
+    }
+   },
+   "mappings": {
+    "boot_image": 870,
+    "dalvik_all_anon": 605,
+    "dalvik_main_space": 20,
+    "dalvik_region_space": 10,
+    "dalvik_zygote_space": 10
+   },
+   "rollup": {
+    "Private_Clean": 296,
+    "Private_Dirty": 3160,
+    "Pss": 26436,
+    "Rss": 80900,
+    "Shared_Clean": 16480,
+    "Shared_Dirty": 60964,
+    "Swap": 0
+   }
+  }
+ },
+ "static_check": {
+  "ihash_String": [
+   "142058083"
+  ],
+  "inherited": [
+   "42"
+  ],
+  "private": [
+   "0",
+   "1002",
+   "99002"
+  ]
+ },
+ "thread_lines": [
+  "threads pid=2 n=4 contended=80000 expected=80000 ms=8 threads=7",
+  "threads pid=2 n=4 contended=80000 expected=80000 ms=8 threads=7"
+ ]
+}
