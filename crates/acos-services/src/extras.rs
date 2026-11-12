@@ -201,6 +201,76 @@ impl ServiceObject for ThermalService {
 }
 
 // ---------------------------------------------------------------------------
+// IAlarmManager ("alarm")
+// ---------------------------------------------------------------------------
+
+/// `IAlarmManager` handler: alarms are accepted and recorded, but nothing wakes
+/// the host (there is no suspend state). This is the same contract as a real
+/// device whose app alarm is queued: `set` succeeds, `setTime` is a system
+/// operation, and no alarm clock is currently displayed.
+#[derive(Debug, Default)]
+pub struct AlarmState {
+    /// Pending alarms: `(package, type)`.
+    pub alarms: Vec<(String, i32)>,
+}
+
+impl AlarmState {
+    /// New empty state.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+/// `IAlarmManager` handler.
+pub struct AlarmService {
+    state: std::sync::Arc<std::sync::Mutex<AlarmState>>,
+}
+
+impl AlarmService {
+    /// Wrap shared state.
+    #[must_use]
+    pub fn new(state: std::sync::Arc<std::sync::Mutex<AlarmState>>) -> Self {
+        Self { state }
+    }
+}
+
+impl ServiceObject for AlarmService {
+    fn call(&mut self, interface: &str, method: &MethodInfo, args: &[Value]) -> Result<CallResult> {
+        if interface != "android.app.IAlarmManager" {
+            return Err(unsupported(interface, method));
+        }
+        let reply = match method.name.as_str() {
+            "set" => {
+                let package = str_arg(args, 0).unwrap_or_default();
+                let kind = int_arg(args, 1);
+                self.state
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .alarms
+                    .push((package, kind));
+                Vec::new()
+            }
+            "remove" | "removeAll" | "setTimeZone" => Vec::new(),
+            "setTime" => vec![Value::Bool(true)],
+            // No idle deadline is scheduled; `Long.MAX_VALUE` is the platform's
+            // "no next wake from idle" value.
+            "getNextWakeFromIdleTime" => vec![Value::Long(i64::MAX)],
+            "getNextAlarmClock" => vec![typed_null()],
+            // An app's own alarms (including exact alarms) are schedulable on a
+            // device with no battery-saver policy restricting them.
+            "canScheduleExactAlarms" | "hasScheduleExactAlarm" => vec![Value::Bool(true)],
+            "getConfigVersion" => vec![Value::Int(0)],
+            _ => return Err(unsupported(interface, method)),
+        };
+        Ok(CallResult {
+            reply,
+            deliveries: Vec::new(),
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
 // IShortcutService ("shortcut")
 // ---------------------------------------------------------------------------
 

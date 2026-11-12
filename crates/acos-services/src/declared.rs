@@ -704,12 +704,15 @@ impl ServiceObject for NotificationService {
                 let package = str_arg(args, 0);
                 let id = int_arg(args, 3);
                 self.state.lock().unwrap().posted.push((package, id));
-                return Err(unsupported(interface, method))
+                Vec::new()
             }
+            // A real NMS removes the notification and returns normally (it
+            // does not throw when there is nothing to cancel). ACOS has no
+            // status bar, so the removal is recorded and the call succeeds.
             "cancelNotificationWithTag" | "cancelAllNotifications" => {
                 let package = str_arg(args, 0);
                 self.state.lock().unwrap().posted.push((package, 0));
-                return Err(unsupported(interface, method))
+                Vec::new()
             }
             "enqueueToast" | "enqueueTextToast" => {
                 let package = str_arg(args, 0);

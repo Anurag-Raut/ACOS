@@ -140,6 +140,10 @@ pub const NAMES: &[(&str, &str)] = &[
     ("power", "android.os.IPowerManager"),
     ("account", "android.accounts.IAccountManager"),
     ("thermalservice", "android.os.IThermalService"),
+    ("alarm", "android.app.IAlarmManager"),
+    // `TrafficStats.init` asks for this binder on every process start; it only
+    // has to resolve, not answer a network query (there is no network).
+    ("netstats", "android.net.INetworkStatsService"),
 ];
 
 /// Descriptor for a `ServiceManager` name.
@@ -266,6 +270,7 @@ pub fn install_with_handles(host: &mut ServiceHost) -> LiveHandles {
     let shortcuts = Arc::new(Mutex::new(crate::extras::ShortcutState::new()));
     let jobs = Arc::new(Mutex::new(crate::extras::JobState::new()));
     let power = Arc::new(Mutex::new(crate::extras::PowerState::new()));
+    let alarm = Arc::new(Mutex::new(crate::extras::AlarmState::new()));
 
     // ATMS shares one state across the three interfaces.
     let atms_am = Arc::clone(&atms);
@@ -533,6 +538,13 @@ pub fn install_with_handles(host: &mut ServiceHost) -> LiveHandles {
         "android.os.IThermalService",
         move |_w| Box::new(crate::extras::ThermalService::new()) as Box<dyn ServiceObject>,
     );
+    host.register("alarm", "android.app.IAlarmManager", move |_w| {
+        Box::new(crate::extras::AlarmService::new(Arc::clone(&alarm))) as Box<dyn ServiceObject>
+    });
+    // TrafficStats only needs the binder to resolve; a real network manager is
+    // out of scope on a device with no network.
+    host.register_aux("android.net.INetworkStatsService");
+    host.alias_service_name("permissionmgr", "android.permission.IPermissionManager");
 
     // IActivityClientController and IContentProvider are addressed through the
     // aux binders but still need dispatch objects.

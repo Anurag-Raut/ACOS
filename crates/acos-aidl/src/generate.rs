@@ -301,6 +301,9 @@ pub const DECLARED_INTERFACES: &[&str] = &[
     // `PowerManager`'s constructor fetches `IThermalService`; without it Koin
     // resolution of `android.os.PowerManager` itself fails (com.fsck.k9).
     "android.os.IThermalService",
+    // `AlarmManager` is resolved by apps that schedule wakeups at startup
+    // (com.fsck.k9, org.wikipedia); on a real device it is always published.
+    "android.app.IAlarmManager",
 ];
 
 /// `(interface -> AIDL method names)` referenced by the measured work-lists.
