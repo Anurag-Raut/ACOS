@@ -355,7 +355,8 @@ real execution artifact (the E2.1 C1 gate), not a plan.*
   whether a production reset can issue the request without a guest-side hook.
 - **Fidelity / evidence:** MEASURED on real ART, `real-ART` fidelity, 0 false passes.
   `results/art-runtime/Z7.md`; `results/art-runtime/evidence/Z7/{run-lifetime.sh,run-loop.sh,
-  summarize.py,summary.json,table.txt}`; raw JSONs in `.cache/z7-runs/`.
+  run-cycles.sh,run-form.sh,summarize.py,summary.json,table.txt}`; bulky raw JSONs were removed
+  after the batch, the committed summary carries every cell.
 - **Regression / false pass:** every task verified `0` → real tap → `1` plus a non-empty C1
   screenshot; a task that only acknowledges is not a pass. No false passes in 210+210 tasks.
 - **Conclusion / next:** keep the hook as an off-by-default research seam
