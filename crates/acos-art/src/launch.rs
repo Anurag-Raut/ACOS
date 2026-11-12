@@ -56,6 +56,16 @@ pub struct LaunchOpts {
     pub out: Option<PathBuf>,
     /// Wall-clock budget for the guest.
     pub timeout: Duration,
+    /// Panel width in pixels (the launch display).
+    pub width: u32,
+    /// Panel height in pixels.
+    pub panel_height: u32,
+    /// Density in dpi.
+    pub density_dpi: u32,
+    /// Status-bar top inset in pixels (the window's top inset).
+    pub status_inset: u32,
+    /// Navigation-bar bottom inset in pixels.
+    pub nav_inset: u32,
 }
 
 impl Default for LaunchOpts {
@@ -65,6 +75,11 @@ impl Default for LaunchOpts {
             until: "application-created".into(),
             out: None,
             timeout: Duration::from_secs(120),
+            width: 1080,
+            panel_height: 2400,
+            density_dpi: 420,
+            status_inset: 128,
+            nav_inset: 63,
         }
     }
 }
@@ -848,6 +863,35 @@ pub(crate) fn launch_session(
     sb.env("ACOSART_LOAD", "libandroid_runtime.so");
     sb.env("E3G_SOCK", "/data/acos-launch.sock");
     sb.env("ACOSLAUNCH_RESUME_MS", &resume_ms.to_string());
+    // Display geometry the guest boots at. Forwarded only when the caller set
+    // it (`acos-art launch --width …`, or the engine's `ACOS_ART_*`), so the
+    // default guest is unchanged and the reference-device baselines keep
+    // their exact numbers. `ACOSLAUNCH_SCREEN_LAYOUT` below stays the host's
+    // WMS value.
+    let geometry = [
+        ("ACOSLAUNCH_WIDTH", opts.width),
+        ("ACOSLAUNCH_PANEL_HEIGHT", opts.panel_height),
+        ("ACOSLAUNCH_DENSITY", opts.density_dpi),
+        ("ACOSLAUNCH_STATUS_INSET", opts.status_inset),
+        ("ACOSLAUNCH_NAV_INSET", opts.nav_inset),
+    ];
+    let defaults = (1080u32, 2400u32, 420u32, 128u32, 63u32);
+    let current = (
+        opts.width,
+        opts.panel_height,
+        opts.density_dpi,
+        opts.status_inset,
+        opts.nav_inset,
+    );
+    if current != defaults {
+        eprintln!(
+            "acos-art: launch: display {}x{}@{} status={} nav={} (caller geometry)",
+            opts.width, opts.panel_height, opts.density_dpi, opts.status_inset, opts.nav_inset
+        );
+    }
+    for (var, value) in geometry {
+        sb.env(var, &value.to_string());
+    }
     // W47: the guest's bind/launch Configuration must carry the same
     // screen-layout size/long bits as the WMS `MergedConfiguration`.
     // Without them (`screenLayout` left at 0) `ResTable_config` selected the
@@ -1077,6 +1121,7 @@ pub(crate) fn launch_session(
     let status = if interactive {
         let frames_dir = out.join("live-frames");
         let dead = interactive_serve(
+            opts.density_dpi,
             &mut child,
             &mut cgroup,
             &live,
@@ -3153,6 +3198,7 @@ fn wait_for_fast_tree(
 
 #[allow(clippy::too_many_arguments)]
 fn interactive_serve(
+    density_dpi: u32,
     child: &mut std::process::Child,
     cgroup: &mut crate::cgroup::RunCgroup,
     live: &acos_services::registry::LiveHandles,
@@ -3265,7 +3311,10 @@ fn interactive_serve(
         "activity": activity.unwrap_or(""),
         "width": width,
         "height": height,
-        "density": 420,
+        // The density the guest actually booted at (`--density`, or the
+        // reference default) — not a constant, or a phone-matched run reports
+        // the emulator's 420 while running at 400.
+        "density": density_dpi,
         "capture_source": CAPTURE_SOURCE,
         "buffer_generation": latest_generation(live),
         "probe_seq": probe.seq,

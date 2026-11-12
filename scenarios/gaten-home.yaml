@@ -1,0 +1,45 @@
+# gaten-home: Gaten (RN 0.86.3 / Fabric / Hermes) on REAL ART — GR1 target scenario.
+#
+# This is the owner-facing flow: launch the app's own launcher Activity on the
+# ART engine (no frozen RN driver), read its first screen, walk the three
+# onboarding Skip pages, and land on the Home tab (wordmark, search field, Daily
+# streak, Anki, WaniKani, Recently looked up, Home/Analytics/Settings bar), then
+# open Analytics.
+#
+# The APK is never committed. Override the path with `--apk`, or drop the x86_64
+# release build at the default path below (`acos inspect` / `--engine art` only
+# needs the APK; no signing).
+#
+# Status at GR1 (results/gaten/GR1.md): steps 1-2 pass (first frame, welcome
+# screen, real tree/pixels via `--engine art`); the `tap` on "Set up Gaten"
+# lands but the welcome flow does not advance, so the Skip pages and Home are
+# not reached yet. Keep the scenario as the definition of done; run it with
+#   acos verify --engine art scenarios/gaten-home.yaml
+version: 1
+name: gaten-home
+description: >-
+  Gaten's own MainActivity on real ART: first screen, onboarding skips, Home tab
+  with its texts, then the Analytics tab.
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+expectation: pass
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  - wait_for: {selector: {text: {contains: "Set up Gaten"}}, timeout_ms: 60000}
+  - capture: {name: gaten-welcome, format: png, fresh: true}
+  - tap: {selector: {text: {contains: "Set up Gaten"}}}
+  - tap: {selector: {text: {exact: Skip}}}
+  - tap: {selector: {text: {exact: Skip}}}
+  - tap: {selector: {text: {exact: Skip}}}
+  - wait_for: {selector: {text: {contains: "猫, ねこ, neko"}}, timeout_ms: 30000}
+  - assert_text: {selector: {text: {contains: "Daily streak"}}, text: {contains: "Daily streak"}}
+  - assert_text: {selector: {text: {contains: "Recently looked up"}}, text: {contains: "Recently looked up"}}
+  - capture: {name: gaten-home, format: png, fresh: true}
+  - tap: {selector: {text: {contains: Analytics}}}
+  - wait_for: {selector: {text: {contains: "Accuracy"}}, timeout_ms: 30000}
+  - capture: {name: gaten-analytics, format: png, fresh: true}

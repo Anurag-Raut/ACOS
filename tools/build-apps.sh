@@ -14,6 +14,7 @@
 #   fixtures/build/apps/todo-list.apk
 #   fixtures/build/apps/multi-activity.apk
 #   fixtures/build/apps/form-validation.apk
+#   fixtures/build/apps/svg-viewbox.apk
 # Installation on a device is attempted only if one is already attached; no
 # emulator is ever started here.
 set -euo pipefail
@@ -191,7 +192,7 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # AlertDialog) and settle-lab (P11: animations, delayed/chained updates,
 # dialogs, Activity transition, ListView scroll, infinite progress,
 # LayoutTransition, rapid taps).
-for app in counter todo-list multi-activity form-validation settle-lab; do
+for app in counter todo-list multi-activity form-validation settle-lab svg-viewbox; do
     build_apk "$app"
 done
 

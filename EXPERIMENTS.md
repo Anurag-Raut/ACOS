@@ -323,3 +323,82 @@ real execution artifact (the E2.1 C1 gate), not a plan.*
   with no non-determinism (`results/oracle/dexprogs-nondeterminism.txt`).
 - **Conclusion / next:** `physical-device` still not captured; bind the renderer
   to the framework graphics natives (M3).
+
+## E13.1 — Gaten (RN 0.86.3 / Fabric / Hermes) on real ART: routing, then a
+viewBox defect and an insets defect — MEASURED (two defects open)
+
+- **Date / commit:** 2026-11-12; GR1 worktree `gaten-gr1-rn-art` (GR1 commits 1–4),
+  engine base `bf70bb7`.
+- **Question / goal:** G1 (§3.1–3.2) concluded that a React Native ≥0.82 APK can
+  never reach real ART and needs a rewritten RN driver. Is that true of the
+  *engine* or only of the *route*?
+- **Inputs / method:** Gaten `dev` `f344272` x86_64 release (unsigned,
+  sha256 `e04c7ffc…`); `acos-art launch` interactive, one guest per run, all runs
+  under `tools/art-runtime/run-exclusive.sh` + `tools/guarded.sh --mem 8G`.
+  Routing read in `crates/acos-mcp/src/session_backend.rs` and
+  `crates/acos-cli/src/engine/serve.rs`. Reference device: moto g35 ZA222WGJPP,
+  same source commit rebuilt as `com.gaten.acosref` (arm64, identical JS bundle
+  sha256 `3c5428ea…`).
+- **Baseline (before GR1):** every RN APK is routed to `RnSession` (frozen Rust
+  VM + hand-written `BridgeProbe.java`), `serve` *refuses* `engine: "art"` when
+  an `rn`/`flutter`/`native` flag is present, and the CLI has no way to ask for
+  ART at all; Gaten release dies at `UNSUPPORTED_RN_DRIVER` in 401–488 ms.
+- **Hypothesis:** the ART engine already boots an arbitrary APK's own launcher
+  Activity and loads its `lib/<abi>/` closure, so an RN APK needs *routing*, not
+  a new driver.
+- **Result:** with `acos launch --engine art` (new flag) the request goes to the
+  ART launcher: `stage_reached=first_frame`, `engine:"art"`,
+  `engine_frozen:false`, **764 ms** (daemon) / 714 ms (launcher ready line).
+  The guest installs **23 native libs** (`libhermesvm`, `libfbjni`,
+  `libappmodules`, `libonnxruntime`, …) and Gaten's own `MainApplication` /
+  Fabric mount real `android.view.View`s: 100+ node tree with
+  `com.gaten:id/action_bar_root`, `SvgView` nodes and Japanese text; C1
+  screenshots are 1080×2209 PNGs; a `tap` is accepted
+  (`gesture.acks[0].handled=true`, `latency_us≈15 100`).
+- **Second measurement (visual verification, phone-matched geometry):** ACOS
+  boots `1080x2292 @ 400 dpi` with the phone's 108 px status inset after the
+  geometry plumbing below. Welcome screen SSIM `0.8485`, 14.6 % of pixels differ
+  by >16/255, and two defects explain all of it:
+  **(a)** the wordmark's ink is 631×152 px where the device draws 252×60 px, and
+  `fixtures/apps/svg-viewbox` proves why: `canvas=1080x2292` while
+  `view=270x116` (`canvasIsViewPx=false`, `scale=0.2357` vs the correct
+  `0.0589`). The launch guest draws through one window-sized **software** canvas
+  (`FLAG_HARDWARE_ACCELERATED` deliberately cleared, P4b §4), so there is no
+  per-view `RenderNode` and `Canvas.getWidth()` is the window's;
+  react-native-svg sizes its viewBox transform from exactly that number. The
+  boxes are identical on both systems (270×116 px), so this is native drawing,
+  not layout or metrics. Requesting the flag makes the guest exit status 1 —
+  there is no HWUI path to fall back on.
+  **(b)** the footer is exactly 60 px (24 dp) lower on ACOS although the button
+  is pixel-identical in size (387.6×80.4 dp): the device gives the app a
+  full-display window (`frame=[0,0][1080,2400]`, edge-to-edge) and *reports*
+  status 108 / gesture-bar 24 dp, while ACOS **carves** the window
+  (`DecorView [0,108][1080,2400]`) and reports zero insets; `--nav-inset 60`
+  cannot help because the frame is carved, not inset.
+- **Finding (proven):** G1's "RN cannot reach ART" is a routing statement, not a
+  capability statement — RN 0.86 Fabric/Hermes runs on real ART with no RN
+  driver. Two defects remain, both ACOS-side and both at the graphics/window
+  layer: (i) the launch guest has no per-view RenderNode canvas (wordmark/SVG,
+  and any library reading `canvas.getWidth()`); (ii) the WMS shim carves the app
+  window instead of reporting insets (all bottom-anchored layout, and
+  `screenHeightDp` consumers).
+- **Fidelity / evidence:** `art-reference` (real ART guest, host-observed
+  pixels); `results/gaten/GR1.md`,
+  `results/gaten/GR1-visual-metrics.md`,
+  `results/gaten/evidence/GR1/` (launch envelope, trees, PNGs,
+  `svg-probe.json`, `visual/welcome/{device,acos,diff,side-by-side}.png`,
+  `metrics.json`, `elements.json`).
+- **Regression / false pass:** new `fixtures/apps/svg-viewbox` +
+  `scenarios/svg-viewbox.yaml` (asserts `canvasIsViewPx=true`,
+  `inkInsideView=true`; **red today by design**, kept out of the gate list);
+  `scenarios/gaten-home.yaml` defines the owner flow end to end. No Gaten
+  source, bundle or APK was modified.
+- **Conclusion / next:** (1) give the launch guest the real HWUI path
+  (`FLAG_HARDWARE_ACCELERATED`, RenderThread, `beginRecording(w,h)` per view,
+  replay into the C1 buffer) — that is the single fix for the wordmark and for
+  every SVG/canvas-drawing RN library; (2) model the app window as
+  full-display + reported insets in `acos-wm` (108 px status, 24 dp gesture
+  bar); (3) then the onboarding `tap` that lands but does not advance is the
+  next wall to attack (it is delivered and `handled`, so the input channel is
+  fine — RN's JS responder path or the app's `GatenAppInfo.setOnboardingStep`
+  native call is next).

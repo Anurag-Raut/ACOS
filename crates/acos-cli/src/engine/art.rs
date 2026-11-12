@@ -906,6 +906,37 @@ impl ArtSession {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        // Display geometry. The defaults are the API-34 emulator profile the
+        // existing baselines were captured on; `ACOS_ART_*` lets a caller match
+        // a *reference device* exactly (1080x2400 @ 400 dpi with a 108 px status
+        // inset and no navigation bar, for the owner's Moto G35). The guest
+        // reports back what it actually used in its ready line, and every reply
+        // carries that.
+        //
+        // `ACOS_DISPLAY_OVERRIDE` is the same spec the WMS shim reads
+        // (`acos-services::display`), so the window frame, the insets the app
+        // sees and the DisplayInfo reply all come from one source instead of
+        // the guest's reference constants.
+        for (var, flag) in [
+            ("ACOS_ART_WIDTH", "--width"),
+            ("ACOS_ART_PANEL_HEIGHT", "--panel-height"),
+            ("ACOS_ART_DENSITY", "--density"),
+            ("ACOS_ART_STATUS_INSET", "--status-inset"),
+            ("ACOS_ART_NAV_INSET", "--nav-inset"),
+        ] {
+            if let Ok(value) = std::env::var(var) {
+                command.arg(flag).arg(value);
+            }
+        }
+        if let (Ok(w), Ok(h), Ok(dpi), Ok(top), Ok(bottom)) = (
+            std::env::var("ACOS_ART_WIDTH"),
+            std::env::var("ACOS_ART_PANEL_HEIGHT"),
+            std::env::var("ACOS_ART_DENSITY"),
+            std::env::var("ACOS_ART_STATUS_INSET"),
+            std::env::var("ACOS_ART_NAV_INSET"),
+        ) {
+            command.env("ACOS_DISPLAY_OVERRIDE", format!("{w}x{h}@{dpi}/{top}/{bottom}"));
+        }
         if std::env::var_os("ACOSLAUNCH_FRAME_WAIT_SECS").is_none() {
             command.env("ACOSLAUNCH_FRAME_WAIT_SECS", frame_wait_secs.to_string());
         }
@@ -1095,6 +1126,9 @@ impl ArtSession {
         }
         if let Some(height) = ready.get("height").and_then(|v| v.as_u64()) {
             session.height = height as u32;
+        }
+        if let Some(density) = ready.get("density").and_then(|v| v.as_u64()) {
+            session.density = density as u32;
         }
         if let Some(package) = ready.get("package").and_then(|v| v.as_str()) {
             session.package = package.to_string();
