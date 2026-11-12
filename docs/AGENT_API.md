@@ -453,15 +453,10 @@ optional `settle` argument:
  "id": "inc", "settle": "fast"}
 ```
 
-* **`strict` (default, unchanged)** — the settled-frame rule: the C1 buffer
-  generation advanced, an in-guest tree probe saw the state the stored frame
-  belongs to, and no new buffer landed for 150 ms. Use it whenever the
-  observation is evidence. Since 2026-11-12 the rule is the P11 *event* rule
-  by default (next bullet); `ACOS_STRICT_SETTLE=quiet` restores the quiet rule.
-* **P11 event strict (default)** — unless `ACOS_STRICT_SETTLE=quiet` is set on
-  `acos serve` (the daemon and the guest it spawns), the event rule replaces
-  only the 150 ms wait with the guest's framework-signal
-  verdict. The guest reports on the UI thread that there is no pending
+* **`strict` (default, event-only)** — the P11 event rule is now the only
+  strict rule (P12, owner decision 2026-11-12; the old 150 ms quiet window is
+  deleted, and `ACOS_STRICT_SETTLE` is ignored with a one-line warning). The
+  guest reports on the UI thread that there is no pending
   traversal/layout/dirty draw on any attached `ViewRootImpl`, no pending
   Choreographer `INPUT`/`ANIMATION`/`TRAVERSAL`/insets callback, no running
   per-view `Animation`/`LayoutTransition`/`ViewPropertyAnimator`, no
@@ -473,21 +468,23 @@ optional `settle` argument:
   before the reply. Replies label `settle.bound:"strict-event"` and add
   `strict_rule:"event"`. On timeout the reply is not settled and names the
   guest's reason (`reason`, plus `animating:true` for frame/animator reasons)
-  under `bound:"timeout"`. `ACOS_STRICT_SETTLE=quiet` selects the old 150 ms
-  quiet rule; either way `acos_assert` and the fast-rule rejection are
-  unchanged. `acos wait`/`wait_for` remain the contract for updates
-  scheduled beyond the horizon (for example a 1000 ms `postDelayed`): a
-  settle reply is only the state rendered at that moment, never a promise
-  about a later message.
-* **`fast`** — for navigation. The engine snapshots the tree *before* the input
-  is published, then binds the first probe tree that differs from that
-  baseline and the first C1 store after that probe sample. A framework
-  animation (for example a Button ripple) that keeps storing frames no longer
-  gates the reply, so the returned frame **may be mid-animation**. If no tree
-  change is observed within the bounded window
-  (`ACOSLAUNCH_FAST_WINDOW_MS`, default 100 ms = two 50 ms probe periods), the strict quiet rule runs
-  instead and the reply reports `state_changed: false`; fast never claims a
-  change it did not observe in the tree.
+  under `bound:"timeout"` — but it still carries the latest tree and frame
+  identity, so the agent can use what is on screen (next bullet and
+  §8.6.4). `acos_assert`, `acos verify` assertions and the fast-rule rejection
+  are unchanged: a timeout is never a pass. `acos wait`/`wait_for` remain the
+  contract for updates scheduled beyond the horizon (for example a 1000 ms
+  `postDelayed`): a settle reply is only the state rendered at that moment,
+  never a promise about a later message.
+* **`fast`** — for navigation and for any look at an animating screen. The
+  engine snapshots the tree *before* the input is published, then binds the
+  first probe tree that differs from that baseline and the first C1 store
+  after that probe sample. A framework animation (for example a Button
+  ripple) that keeps storing frames no longer gates the reply, so the returned
+  frame **may be mid-animation**. If no tree change is observed within the
+  bounded window (`ACOSLAUNCH_FAST_WINDOW_MS`, default 100 ms = two 50 ms
+  probe periods), the fast rule's own `quiet-fallback` runs and the reply
+  reports `state_changed: false`; fast never claims a change it did not
+  observe in the tree. `fast` is immediate and is never assertion evidence.
 
 Every input reply carries a `settle` object (also copied into
 `timing.input`):
@@ -507,12 +504,12 @@ Every input reply carries a `settle` object (also copied into
 | field | meaning |
 |---|---|
 | `mode` | `fast` or `strict`; the mode this observation was taken with |
-| `settled` | `true` only when a settled observation was returned; `false` on the documented no-fresh-frame failure |
+| `settled` | `true` only when a settled observation was returned; `false` on a settle timeout (the tree/frame are still present; see §8.6.4) or the documented no-fresh-frame failure |
 | `ack_ms` | publish → this gesture's own `FINISHED` acknowledgment. Focus/touch-mode acks queued at window attach are drained and discarded, never counted |
 | `first_change_ms` | publish → the first tree-probe sample that differs from the pre-action baseline (`null` when no change was seen / no baseline) |
 | `frame_ms` | publish → the C1 store the reply's frame is bound to (`null` when none) |
 | `state_changed` | in `fast` mode, the guest's tree-change verdict (`false` after a fallback); `null` in `strict`, where the host's pixel+tree comparison in `state_changed` on the input result is authoritative |
-| `bound` | `state-commit` / `quiet-fallback` (fast), `strict-quiet`, `strict-event` (P11 event rule), or `timeout` |
+| `bound` | `state-commit` / `quiet-fallback` (fast), `strict-event` (the only strict rule since P12), or `timeout` |
 
 An input verb can also return the tree in the same round trip:
 
@@ -552,9 +549,8 @@ Both tree verbs accept P1's `settle` argument:
  "settle": "fast"}
 ```
 
-* **`strict` (default, unchanged)** — the settled-frame rule: C1 advanced, a
-  probe sample was taken after the last store, and no new store landed for
-  150 ms. Use it whenever the tree is evidence.
+* **`strict` (default)** — the event rule from §8.6.1 (P12: the 150 ms quiet
+  window is deleted). Use it whenever the tree is evidence.
 * **`fast`** — for inspection and navigation. It returns the newest probe sample
   whose C1 frame generation is at least the generation current when the request
   began, so a sample from before the request's last frame store is never served.
@@ -563,10 +559,11 @@ Both tree verbs accept P1's `settle` argument:
   tree may be mid-animation and is never assertion evidence; if no fresh sample
   arrives the reply is `NO_FRESH_TREE`, never the old tree.
 
-With `ACOS_STRICT_SETTLE=event` the strict tree request uses the P11 event
-rule from §8.6.1: it waits for a fresh settled sample after request entry
-(`bound:"strict-event"`, `strict_rule:"event"`), not for the 150 ms quiet
-window. The quiet default is unchanged.
+A strict tree request uses the event rule from §8.6.1: it waits for a fresh
+settled sample after request entry (`bound:"strict-event"`,
+`strict_rule:"event"`). With an explicit `settle_timeout_ms` (§8.6.4) the reply
+may instead be `settled:false`, `bound:"timeout"` and still carry the latest
+tree and frame identity; `acos_assert` refuses such a tree.
 
 Both modes add a `settle` block to the result:
 
@@ -581,7 +578,7 @@ Both modes add a `settle` block to the result:
 | `settled` | `true` when the returned tree satisfied that mode's rule |
 | `probe_seq` | the guest probe sequence of the returned sample |
 | `tree_age_ms` | host receipt of the probe → reply |
-| `bound` | `probe-fresh` (fast), `strict-quiet`, `strict-event` (P11 event rule), or `timeout` (fast: no fresh sample) |
+| `bound` | `probe-fresh` (fast), `strict-event` (strict), or `timeout` (no settled sample; the tree is the latest observed state) |
 
 `acos_assert` still rejects `settle:"fast"` with `INVALID_ARGUMENT`;
 `acos verify` assertions remain strict by construction. A fast tree can also be
@@ -598,10 +595,12 @@ for every tree verb remains `strict`, so existing callers see no change.
  "apk": "fixtures/build/apps/counter.apk", "settle": "fast"}
 ```
 
-* **`strict` (default, unchanged)** — the launch/reset reply binds its tree with
-  the settled-frame rule: C1 advanced, a probe sample was taken after the last
-  store, and no new store landed for 150 ms. This is the mode every assertion
-  and pixel check runs on.
+* **`strict` (default)** — the launch/reset reply binds its tree with the P12
+  event rule (§8.6.1): C1 advanced, a fresh probe sample was drawn at/after the
+  request and the framework reported no pending work, and the same draw stayed
+  newest for the confirmation window. This is the mode every assertion and
+  pixel check runs on. `settle_timeout_ms` (§8.6.4) bounds it; a timeout still
+  returns the latest tree with `settled:false`.
 * **`fast`** — the reply binds the app's **first traversal** from a probe sample
   whose C1 generation is at least the generation current when the request began
   (P3b's freshness rule). No quiet window, no second probe period. A fast launch
@@ -639,7 +638,7 @@ level of the result:
 | `settled` | `true` when the returned tree satisfied that mode's rule |
 | `probe_seq` | the guest probe sequence of the returned sample |
 | `tree_age_ms` | host receipt of the probe → reply |
-| `bound` | `probe-fresh` (fast), `strict-quiet` (strict), or `timeout` |
+| `bound` | `probe-fresh` (fast), `strict-event` (strict), or `timeout` |
 
 `reset` also returns `tree` (plus `tree_node_count`, `tree_max_nodes`,
 `tree_truncated`), the relaunched app's bound tree, so "reset → first correct
@@ -651,6 +650,76 @@ no longer copies a PNG nobody asked for; pass `pixels:true` to get P7's
 pixel-identical launch reply back. Assertions, `acos verify`, scenario
 assertions and `assert_screenshot` never pass a settle option: no check is
 weakened by any of this.
+
+### 8.6.4 Screenshot any time, animating screens, and `settle_timeout_ms` (P12)
+
+An agent must never be trapped by a screen that animates forever. Three
+independent ways out, cheapest first:
+
+1. **Frame-only `acos_observe` / `acos observe --screenshot` is an immediate
+   capture.** It issues one `screenshot` command on the held guest and returns
+   the newest completed C1 buffer (with `frame_seq`, `md5`,
+   `buffer_generation`); it does **not** run a settle rule and does not wait for
+   the app to stop drawing. Use it whenever you only need to see the screen.
+2. **`settle:"fast"` on a tree verb is immediate.** It binds the newest probe
+   sample (and, for launch/reset, the first differing traversal) without a
+   settle wait. The frame may be mid-animation, so it is for inspection and
+   navigation, never for assertions.
+3. **`strict` + `settle_timeout_ms`** when you want the strongest observation
+   but a bounded wait. `settle_timeout_ms` is accepted by `acos_launch`,
+   `acos_reset`, `acos_observe_tree`, `acos_observe`, `acos_tap`, `acos_text`,
+   `acos_key` and `acos_action` (and `split` equivalents), by scenario steps
+   (`tap`/`type`/`key`/`launch`/`reset`), and by the CLI as
+   `--settle-timeout-ms`. Default: the engine's long-standing deadline, so
+   existing callers are unchanged. On expiry the reply is still a real
+   observation: `ok:true`, the latest `tree`, the latest frame identity,
+   `settle.settled:false`, `settle.bound:"timeout"`, `settle.reason` (the
+   guest's own reason, e.g. `anim`, `frame`, `queue`) and
+   `settle.animating:true` for animation/frame reasons, plus a `warning` that
+   says it is not evidence. `acos_assert` and `acos verify` assertions refuse
+   such an observation (they stay strict, so a timeout can never pass).
+
+```json
+{"base": {"request_id": "req_7", "session_id": "s_progress"},
+ "settle": "strict", "settle_timeout_ms": 500}
+```
+
+On an indeterminate `ProgressBar` (or any forever-animating screen) use
+`settle:"fast"` or a frame-only `acos_observe` to see it, and
+`settle_timeout_ms` when you need the tree that is on screen without paying the
+full default deadline. If the screen is animating for real, `animations:"off"`
+(see §8.6.5) is the functional-check answer; do not turn it on for
+animation/transition tests.
+
+### 8.6.5 `animations:"on"|"off"` (P12)
+
+Every session has an animation setting, default **`on`** (real Android
+behaviour). `off` sets Android's three animation scales
+(`animator_duration_scale`, `transition_animation_scale`,
+`window_animation_scale`) to `0` — the standard CI setting — before the app's
+first traversal:
+
+* Surfaces: `acos launch --animations off|on` (ART session, `--keep`), `acos
+  verify --animations off|on` (ART engine), the MCP/serve `acos_launch` field
+  `animations:"off"|"on"`, and a scenario's top-level `animations: off`.
+* It is **launch-time only** (changing it mid-session would be a different
+  device state; destroy and relaunch the session instead).
+* Every reply for that session states `animations:"off"|"on"`, and verify's
+  `engine` block carries it too, so a functional pass cannot be mistaken for
+  animation evidence.
+* Mechanism (the real framework's own path): the WMS host answers
+  `IWindowManager.getCurrentAnimatorScale()` with the session scale and the
+  guest installs it with `ValueAnimator.setDurationScale` — the same two points
+  a device's `Settings.Global` observer updates. That covers
+  `ValueAnimator`/`ObjectAnimator`/`StateListAnimator` (including the
+  framework's ~0.9 s Button press/elevation animator) and the native
+  `RenderNodeAnimator` (ripple). ACOS's WMS runs no transition animations of its
+  own, so there is no server-side window/Activity transition duration to scale;
+  app-side transition animators use the same `ValueAnimator` scale.
+* When to use: functional checks (tap → state, forms, assertions) where the
+  framework's press/ripple animation only adds latency. When **not** to use:
+  anything testing animation, transition, ripple or timing behaviour; those
+  need `animations:"on"`.
 
 ### 8.7 `assert`
 

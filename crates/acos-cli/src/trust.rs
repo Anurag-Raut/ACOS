@@ -334,6 +334,10 @@ impl Backend for TrustGuard {
     fn capture(&mut self) -> Result<SessionObservation, BackendError> {
         self.inner.capture()
     }
+
+    fn set_settle_timeout(&mut self, timeout_ms: Option<u64>) {
+        self.inner.set_settle_timeout(timeout_ms);
+    }
 }
 
 #[cfg(test)]
@@ -366,7 +370,10 @@ mod tests {
         let refusal = untrusted_gate(Trust::Untrusted, Certification::NotCertified)
             .expect("a downgraded certification must refuse an untrusted run");
         assert_eq!(refusal.code, ErrorCode::UntrustedApkNotCertified);
-        assert_eq!(refusal.details.as_ref().unwrap()["certification"], "not-certified");
+        assert_eq!(
+            refusal.details.as_ref().unwrap()["certification"],
+            "not-certified"
+        );
         assert_eq!(
             refusal.details.as_ref().unwrap()["override_required"],
             false

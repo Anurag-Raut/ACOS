@@ -65,10 +65,7 @@ pub const SESSION_TOOL_NAMES: &[&str] = &[
 
 /// Identify a command from its wire name (`run-dex`).
 pub fn command_from_wire(wire: &str) -> Option<CommandName> {
-    all_commands()
-        .iter()
-        .copied()
-        .find(|c| c.as_str() == wire)
+    all_commands().iter().copied().find(|c| c.as_str() == wire)
 }
 
 /// Identify a command from its MCP tool name (`acos_run_dex`).
@@ -144,13 +141,22 @@ impl ToolInfo {
                 self.fidelity.as_str(),
                 command.as_str()
             ),
-            None => format!("\n\n[MCP: {availability} fidelity={}]", self.fidelity.as_str()),
+            None => format!(
+                "\n\n[MCP: {availability} fidelity={}]",
+                self.fidelity.as_str()
+            ),
         };
         let description = format!("{}{marker}", self.description);
 
         let read_only = matches!(
             self.command,
-            Some(CommandName::Inspect | CommandName::Observe | CommandName::Events | CommandName::Profile | CommandName::CapabilityReport)
+            Some(
+                CommandName::Inspect
+                    | CommandName::Observe
+                    | CommandName::Events
+                    | CommandName::Profile
+                    | CommandName::CapabilityReport
+            )
         ) || self.command.is_none();
         let annotations = json!({
             "title": title_for(self),
@@ -314,6 +320,21 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     reply carries the bound C1 frame identity (`buffer_generation`, \
                                     `frame_number`) and no md5; `settle:fast` refuses pixels."
                 },
+                "settle_timeout_ms": {
+                    "type": "integer", "minimum": 1, "maximum": 600000,
+                    "description": "P12: bound the strict/fast settle wait. On timeout the reply still \
+                                    carries the latest tree and frame identity with `settled:false` and \
+                                    `bound:timeout`; a timeout is never assertion evidence."
+                },
+                "animations": {
+                    "type": "string", "enum": ["on", "off"],
+                    "description": "P12: per-session framework animation scales. `on` (default) is real \
+                                    Android behaviour. `off` sets the three animation scales to 0 \
+                                    (standard CI practice) so functional checks are not slowed by the \
+                                    framework's ~0.9 s press/elevation animator; never use it for \
+                                    animation/transition testing. Launch-time only: every reply states \
+                                    `animations`."
+                },
                 "native": {
                     "type": "boolean",
                     "description": "Run the APK's lib/<abi>/*.so under the ADR-0022 confinement. \
@@ -332,7 +353,18 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              `UNSUPPORTED_BACKEND` with `details.reason=not_ready` and `details.stage_reached`, \
              never an empty tree. Common errors: UNSUPPORTED_BACKEND (not_ready), TIMEOUT.",
             with_base(json!({
-                "max_nodes": {"type": "integer", "minimum": 1, "description": "Truncate the walk after this many nodes."}
+                "max_nodes": {"type": "integer", "minimum": 1, "description": "Truncate the walk after this many nodes."},
+                "settle": {
+                    "type": "string", "enum": ["fast", "strict"],
+                    "description": "`strict` (default) is the event-settled rule and assertion evidence. \
+                                    `fast` binds the newest probe sample immediately (may be \
+                                    mid-animation; not assertion evidence)."
+                },
+                "settle_timeout_ms": {
+                    "type": "integer", "minimum": 1, "maximum": 600000,
+                    "description": "P12: bound the strict settle wait. On timeout the tree is still \
+                                    returned with `settled:false` and `bound:timeout`."
+                }
             })),
         ),
         "acos_tap" => (
@@ -350,7 +382,17 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                 "y": {"type": "integer", "description": "Y coordinate for a point tap (requires `x`)."},
                 "text": {"type": "string", "description": "Node label to tap."},
                 "id": {"type": "string", "description": "Node `resource_id` (or bare local name) to tap; takes precedence over text and x/y."},
-                "testID": {"type": "string", "description": "React Native testID to tap (resolves to the nearest clickable ancestor); used when `id` and `text` are absent."}
+                "testID": {"type": "string", "description": "React Native testID to tap (resolves to the nearest clickable ancestor); used when `id` and `text` are absent."},
+                "settle": {
+                    "type": "string", "enum": ["fast", "strict"],
+                    "description": "`fast` for navigation (may be mid-animation); `strict` (default) is \
+                                    the event-settled rule."
+                },
+                "settle_timeout_ms": {
+                    "type": "integer", "minimum": 1, "maximum": 600000,
+                    "description": "P12: bound the settle wait. On timeout the reply still carries the \
+                                    latest tree and frame identity with `settled:false`, `bound:timeout`."
+                }
             })),
         ),
         "acos_key" => (
@@ -553,7 +595,11 @@ mod tests {
         assert_eq!(infos.len(), 24);
         let names: BTreeSet<&str> = infos.iter().map(|t| t.tool_name.as_str()).collect();
         for descriptor in mcp_tools().tools {
-            assert!(names.contains(descriptor.name.as_str()), "{}", descriptor.name);
+            assert!(
+                names.contains(descriptor.name.as_str()),
+                "{}",
+                descriptor.name
+            );
         }
         for info in &infos {
             let is_server_tool = info.tool_name == CAPABILITIES_TOOL
@@ -580,7 +626,10 @@ mod tests {
         let json = run.to_json("2025-06-18");
         assert_eq!(json["annotations"]["available"], false);
         assert_eq!(json["_meta"]["acos"]["available"], false);
-        assert!(json["description"].as_str().unwrap().contains("available=false"));
+        assert!(json["description"]
+            .as_str()
+            .unwrap()
+            .contains("available=false"));
         assert_eq!(json["title"], "acos run");
     }
 }

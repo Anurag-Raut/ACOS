@@ -365,7 +365,9 @@ pub fn tap(args: TapArgs) -> ExitCode {
         let envelope = fail(
             &request_id,
             ErrorCode::InvalidArgument,
-            format!("`--testID {test_id}` needs a live React Native session in the `acos serve` daemon"),
+            format!(
+                "`--testID {test_id}` needs a live React Native session in the `acos serve` daemon"
+            ),
             json!({"field": "testID"}),
         );
         return emit(&envelope, args.json);
@@ -681,28 +683,25 @@ pub fn logs(args: LogsArgs) -> ExitCode {
                 .min_priority
                 .as_deref()
                 .and_then(acos_runtime::session::parse_log_priority);
-            let records: Vec<Value> = acos_runtime::session::summarize_logs(
-                &lines,
-                args.tag.as_deref(),
-                min_priority,
-            )
-            .into_iter()
-            .map(|record| {
-                let repeat = record.repeat_count;
-                let line = if repeat > 1 {
-                    format!("{} (repeated {repeat} times)", record.line)
-                } else {
-                    record.line.clone()
-                };
-                json!({
-                    "priority": record.priority,
-                    "tag": record.tag,
-                    "message": record.message,
-                    "line": line,
-                    "repeat_count": repeat,
-                })
-            })
-            .collect();
+            let records: Vec<Value> =
+                acos_runtime::session::summarize_logs(&lines, args.tag.as_deref(), min_priority)
+                    .into_iter()
+                    .map(|record| {
+                        let repeat = record.repeat_count;
+                        let line = if repeat > 1 {
+                            format!("{} (repeated {repeat} times)", record.line)
+                        } else {
+                            record.line.clone()
+                        };
+                        json!({
+                            "priority": record.priority,
+                            "tag": record.tag,
+                            "message": record.message,
+                            "line": line,
+                            "repeat_count": repeat,
+                        })
+                    })
+                    .collect();
             let kept = records
                 .iter()
                 .map(|r| r["repeat_count"].as_u64().unwrap_or(1))
@@ -798,6 +797,9 @@ pub struct SessionObserveArgs {
     /// Write the completed frame as PNG to this path.
     #[arg(long)]
     pub screenshot: Option<PathBuf>,
+    /// P12b: strict/fast settle deadline in milliseconds (default: engine).
+    #[arg(long)]
+    pub settle_timeout_ms: Option<u64>,
     /// Emit the standard ACOS JSON envelope instead of a text summary.
     #[arg(long)]
     pub json: bool,
@@ -822,6 +824,9 @@ pub struct SessionTapArgs {
     /// Tap the React Native node with this `testID`.
     #[arg(long = "testID")]
     pub test_id: Option<String>,
+    /// P12b: strict/fast settle deadline in milliseconds (default: engine).
+    #[arg(long)]
+    pub settle_timeout_ms: Option<u64>,
     /// Emit the standard ACOS JSON envelope instead of a text summary.
     #[arg(long)]
     pub json: bool,
@@ -835,6 +840,9 @@ pub struct SessionKeyArgs {
     pub session: String,
     /// Key code (`4` = BACK, `66` = ENTER) or a name (`back`, `home`, `enter`).
     pub code: String,
+    /// P12b: strict/fast settle deadline in milliseconds (default: engine).
+    #[arg(long)]
+    pub settle_timeout_ms: Option<u64>,
     /// Emit the standard ACOS JSON envelope instead of a text summary.
     #[arg(long)]
     pub json: bool,
@@ -851,6 +859,9 @@ pub struct SessionTextArgs {
     /// Text to type into the focused editor (flag form, matching `acos tap --text`).
     #[arg(long = "text", value_name = "TEXT")]
     pub text_flag: Option<String>,
+    /// P12b: strict/fast settle deadline in milliseconds (default: engine).
+    #[arg(long)]
+    pub settle_timeout_ms: Option<u64>,
     /// Emit the standard ACOS JSON envelope instead of a text summary.
     #[arg(long)]
     pub json: bool,
@@ -942,6 +953,7 @@ fn session_observe(args: SessionObserveArgs) -> ExitCode {
         "text": args.text,
         "png": args.screenshot.is_some(),
         "screenshot": args.screenshot.as_ref().map(|p| p.display().to_string()),
+        "settle_timeout_ms": args.settle_timeout_ms,
     });
     if let Some(code) = call_ensure_daemon(tool, &daemon_args, args.json) {
         return code;
@@ -966,6 +978,7 @@ fn session_tap(args: SessionTapArgs) -> ExitCode {
         "text": args.label,
         "id": args.id,
         "testID": args.test_id,
+        "settle_timeout_ms": args.settle_timeout_ms,
     });
     if let Some(code) = call_ensure_daemon("acos_tap", &daemon_args, args.json) {
         return code;
@@ -987,6 +1000,7 @@ fn session_key(args: SessionKeyArgs) -> ExitCode {
     let daemon_args = json!({
         "base": daemon_base(&args.session),
         "code": args.code,
+        "settle_timeout_ms": args.settle_timeout_ms,
     });
     if let Some(code) = call_ensure_daemon("acos_key", &daemon_args, args.json) {
         return code;
@@ -1016,6 +1030,7 @@ fn session_text(args: SessionTextArgs) -> ExitCode {
     let daemon_args = json!({
         "base": daemon_base(&args.session),
         "text": text.clone(),
+        "settle_timeout_ms": args.settle_timeout_ms,
     });
     if let Some(code) = call_ensure_daemon("acos_text", &daemon_args, args.json) {
         return code;

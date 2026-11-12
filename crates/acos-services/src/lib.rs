@@ -40,12 +40,13 @@
 #![forbid(unsafe_code)]
 
 pub mod ams;
+pub mod animation;
 pub mod atms;
 pub mod clipboard;
-pub mod compositor_client;
-pub mod declared;
 pub mod codec;
+pub mod compositor_client;
 pub mod cursor;
+pub mod declared;
 pub mod display;
 pub mod display_events;
 pub mod error;
@@ -66,8 +67,8 @@ pub mod registry;
 pub mod surface_client;
 pub mod trace;
 pub mod value;
-pub mod wms;
 pub mod window_session;
+pub mod wms;
 
 pub use error::{codes, Result, ServiceError};
 pub use host::{CallResult, PendingDelivery, ServiceHost, ServiceObject, Wiring};

@@ -37,10 +37,10 @@ use acos_parcel::binder::BinderId;
 use acos_wm::codec::{LayoutParams, SurfaceControlInfo};
 use acos_wm::display::DisplaySpec;
 use acos_wm::error::{Result as WmResult, WmError};
-use acos_wm::wms::{AddWindowResult, RelayoutResult, SessionId, WindowId, WindowManager};
 /// W47: the stock `Configuration.screenLayout` for the reference display;
 /// `acos-art` forwards it to the launch guest (`ACOSLAUNCH_SCREEN_LAYOUT`).
 pub use acos_wm::wms::REFERENCE_SCREEN_LAYOUT;
+use acos_wm::wms::{AddWindowResult, RelayoutResult, SessionId, WindowId, WindowManager};
 
 use acos_aidl::MethodInfo;
 
@@ -417,11 +417,7 @@ impl WmsState {
     }
 
     /// `IWindowSession.updateRequestedVisibleTypes` (oneway).
-    pub fn update_requested_visible_types(
-        &mut self,
-        window: WindowId,
-        types: i32,
-    ) -> WmResult<()> {
+    pub fn update_requested_visible_types(&mut self, window: WindowId, types: i32) -> WmResult<()> {
         self.wm.update_requested_visible_types(window, types)
     }
 
@@ -460,9 +456,13 @@ impl WmsState {
     }
 
     /// `IWindowManager.getCurrentAnimatorScale`.
+    ///
+    /// P12: the per-session animation scale installed by the launcher (the
+    /// real-Android path is the `animator_duration_scale` setting observed by
+    /// the system process, which then calls `IWindowSessionCallback`).
     #[must_use]
-    pub const fn current_animator_scale(&self) -> f32 {
-        1.0
+    pub fn current_animator_scale(&self) -> f32 {
+        crate::animation::scale()
     }
 
     /// `IWindowManager.hasNavigationBar`.
@@ -593,11 +593,9 @@ impl ServiceObject for WmsService {
 pub fn install(host: &mut crate::host::ServiceHost) -> Arc<Mutex<WmsState>> {
     let state = Arc::new(Mutex::new(WmsState::new()));
     let factory_state = Arc::clone(&state);
-    host.register(
-        "window",
-        "android.view.IWindowManager",
-        move |w| Box::new(WmsService::new(Arc::clone(&factory_state), w)) as Box<dyn ServiceObject>,
-    );
+    host.register("window", "android.view.IWindowManager", move |w| {
+        Box::new(WmsService::new(Arc::clone(&factory_state), w)) as Box<dyn ServiceObject>
+    });
     state
 }
 
@@ -621,7 +619,9 @@ mod tests {
         assert_eq!(add.result, ADD_OKAY);
         assert_eq!(add.out_frame, RectI::new(0, 128, 1080, 2337));
         assert_eq!(
-            add.insets_state.visible_insets_for(inset_type::STATUS_BAR).top,
+            add.insets_state
+                .visible_insets_for(inset_type::STATUS_BAR)
+                .top,
             128,
             "status bar inset"
         );

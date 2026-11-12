@@ -63,6 +63,15 @@ pub struct VerifyArgs {
     #[arg(long, value_name = "ENGINE", default_value = "rust-vm")]
     pub engine: String,
 
+    /// P12: framework animation scales for the ART session (`on`/`off`).
+    ///
+    /// `off` sets Android's three animation scales to 0 for functional checks
+    /// (standard CI practice); it is never for animation/transition testing.
+    /// Overrides a scenario's top-level `animations`. Launch-time only; the
+    /// Rust VM has no framework animators and refuses `off`.
+    #[arg(long, value_name = "on|off")]
+    pub animations: Option<String>,
+
     /// Treat this run as an untrusted APK.
     ///
     /// Untrusted is an explicit opt-in and is allowed by product policy
@@ -191,6 +200,52 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         },
     };
 
+    // P12: the session animation choice (CLI overrides the scenario). The
+    // scenario is parsed here too because the CLI's `scenario` is still a path;
+    // the verifier parses it again for its own validation.
+    let scenario_animations = acos_protocol::scenario::Scenario::load(&scenario)
+        .ok()
+        .and_then(|scenario| scenario.animations);
+    let animations: &'static str = match args
+        .animations
+        .as_deref()
+        .or(scenario_animations.as_deref())
+    {
+        None => "on",
+        Some(value) => match value.trim().to_ascii_lowercase().as_str() {
+            "on" => "on",
+            "off" => "off",
+            other => {
+                let envelope = Envelope::failure(
+                    request_id,
+                    ProtocolBackend::AcosNative,
+                    Fidelity::StaticAnalysis,
+                    ProtocolError::new(
+                        ErrorCode::InvalidArgument,
+                        format!("animations must be \"on\" or \"off\" (got {other:?})"),
+                    )
+                    .with_hint("`animations: off` sets Android's three animation scales to 0 for functional checks; it is not for animation testing."),
+                    Metrics::wall_ms(0),
+                );
+                return finish_run(&envelope, &args, &artifacts, Some(trust));
+            }
+        },
+    };
+    if engine == Engine::RustVm && animations == "off" {
+        let envelope = Envelope::failure(
+            request_id,
+            ProtocolBackend::AcosNative,
+            Fidelity::StaticAnalysis,
+            ProtocolError::new(
+                ErrorCode::UnsupportedBackend,
+                "animations:off is an ART-engine setting",
+            )
+            .with_hint("The Rust VM has no Android framework animators to scale. Use `--engine art` for a real framework session."),
+            Metrics::wall_ms(0),
+        );
+        return finish_run(&envelope, &args, &artifacts, Some(trust));
+    }
+
     let request = VerifyRequest {
         base: RequestBase::new(request_id.clone()),
         apk: args.apk.as_ref().map(|path| path.display().to_string()),
@@ -245,6 +300,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     // Guest boot to its ready line happens before the executor's clock starts,
     // so it is recorded here and charged separately from the `launch` step.
     let mut session_boot_ms: Option<u64> = None;
+    let mut session_animations: Option<&'static str> = None;
     let backend: EngineBackend = match engine {
         // The default route is forwarded verbatim: engine selection does not
         // change Rust VM behaviour.
@@ -270,9 +326,12 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                     return finish_run(&envelope, &args, &artifacts, Some(trust));
                 }
             };
-            match crate::engine::art::ArtSession::start(&apk, &artifacts) {
+            match crate::engine::art::ArtSession::start_with_animations(
+                &apk, &artifacts, animations,
+            ) {
                 Ok(session) => {
                     session_boot_ms = Some(session.session_start_ms());
+                    session_animations = Some(session.animations());
                     EngineBackend::session(Box::new(session))
                 }
                 Err(error) => {
@@ -312,6 +371,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         trust,
         &artifacts,
         session_boot_ms,
+        session_animations,
     );
     finish_run(&envelope, &args, &artifacts, Some(trust))
 }
@@ -327,6 +387,7 @@ pub(crate) fn annotate(
     trust: crate::trust::Trust,
     artifacts: &Path,
     session_boot_ms: Option<u64>,
+    session_animations: Option<&'static str>,
 ) {
     let engine = engine.unwrap_or(Engine::RustVm);
     let Some(result) = envelope.result().cloned() else {
@@ -372,7 +433,8 @@ pub(crate) fn annotate(
     let session_exit_summary = session_exit
         .as_ref()
         .map(|doc| crate::failure::session_exit_summary(doc, artifacts));
-    let timing = step_timing(&verdict, session_boot_ms);    let engine_block = serde_json::json!({
+    let timing = step_timing(&verdict, session_boot_ms);
+    let engine_block = serde_json::json!({
         "engine": engine.as_str(),
         "mode": mode.as_str(),
         "trust": trust.as_str(),
@@ -386,6 +448,7 @@ pub(crate) fn annotate(
             "missing": caps.missing(),
         })),
         "explicit": args.engine != "rust-vm" || mode == Mode::Preview,
+        "animations": session_animations.unwrap_or("on"),
     });
     if let Some(object) = verdict.as_object_mut() {
         object.insert("engine".to_string(), engine_block["engine"].clone());

@@ -203,7 +203,9 @@ pub fn resolve_component(package: &str, component: &str) -> Option<String> {
         return Some(format!("{package}.{rest}"));
     }
     if component.contains('.') {
-        return component.starts_with(package).then(|| component.to_string());
+        return component
+            .starts_with(package)
+            .then(|| component.to_string());
     }
     // A bare class name is relative to the package.
     Some(format!("{package}.{component}"))
@@ -587,10 +589,7 @@ impl BackendError {
     /// Convert to a protocol error (with details where useful).
     pub fn to_protocol_error(&self) -> ProtocolError {
         match self {
-            BackendError::Unsupported {
-                capability,
-                detail,
-            } => ProtocolError::new(
+            BackendError::Unsupported { capability, detail } => ProtocolError::new(
                 ErrorCode::UnsupportedBackend,
                 format!("{detail} (missing capability `{capability}`)"),
             )
@@ -604,15 +603,12 @@ impl BackendError {
                 message,
                 stack,
                 fatal,
-            } => ProtocolError::new(
-                ErrorCode::AppCrashed,
-                format!("{exception}: {message}"),
-            )
-            .with_details(serde_json::json!({
-                "exception": exception,
-                "stack": stack,
-                "fatal": fatal,
-            })),
+            } => ProtocolError::new(ErrorCode::AppCrashed, format!("{exception}: {message}"))
+                .with_details(serde_json::json!({
+                    "exception": exception,
+                    "stack": stack,
+                    "fatal": fatal,
+                })),
             BackendError::Timeout { detail } => ProtocolError::new(ErrorCode::Timeout, detail),
             BackendError::Failed { code, detail } => ProtocolError::new(*code, detail.clone()),
             BackendError::Error { code, detail } => ProtocolError::new(*code, detail.clone()),
@@ -721,6 +717,12 @@ pub trait Backend {
             "this backend cannot capture frames",
         ))
     }
+
+    /// P12b: the per-step settle deadline (`settle_timeout_ms`). Backends that
+    /// bind observations through a settle rule apply it to the next observation;
+    /// the default is a no-op (a backend with no settle rule has nothing to
+    /// bound). A timeout is still an observation, never a pass for an assertion.
+    fn set_settle_timeout(&mut self, _timeout_ms: Option<u64>) {}
 }
 
 #[cfg(test)]
@@ -762,9 +764,6 @@ mod tests {
         assert_eq!(error.code(), ErrorCode::UnsupportedBackend);
         assert_eq!(error.status(), Status::Unsupported);
         let protocol = error.to_protocol_error();
-        assert_eq!(
-            protocol.details.as_ref().unwrap()["capability"],
-            "ui.tree"
-        );
+        assert_eq!(protocol.details.as_ref().unwrap()["capability"], "ui.tree");
     }
 }

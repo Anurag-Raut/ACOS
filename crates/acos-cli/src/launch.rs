@@ -87,6 +87,15 @@ pub struct LaunchArgs {
     /// (`1080x2400 @ 400 dpi`, 108 px status bar, gesture navigation).
     #[arg(long)]
     pub reference: bool,
+
+    /// P12: framework animation scales for an ART session (`on`/`off`).
+    ///
+    /// `off` sets Android's three animation scales to 0 for functional checks
+    /// (standard CI practice); it is not for animation/transition testing.
+    /// Launch-time only, and ART-only: the in-process Rust VM has no framework
+    /// animators, so it refuses `off` rather than pretending.
+    #[arg(long, value_name = "on|off")]
+    pub animations: Option<String>,
 }
 
 /// Build the display override for `acos launch` from its flags.
@@ -161,6 +170,21 @@ pub fn run(args: LaunchArgs) -> ExitCode {
     // needs the daemon: the ART guest is its own process, not this one.
     let flutter = !art && (args.flutter || detect_flutter(&args.apk));
     let rn = !art && (args.rn || detect_react_native(&args.apk));
+    if let Some(value) = args.animations.as_deref() {
+        if !value.eq_ignore_ascii_case("on") && !value.eq_ignore_ascii_case("off") {
+            eprintln!("launch: animations must be \"on\" or \"off\" (got {value:?})");
+            return ExitCode::FAILURE;
+        }
+        if value.eq_ignore_ascii_case("off") && !(args.keep || flutter || rn || art) {
+            eprintln!(
+                "launch: animations:off is an ART-session setting; `acos launch` without \
+                 --keep/--engine art/--flutter/--rn runs the in-process Rust VM, which has \
+                 no framework animators. Use `acos launch --keep --animations off` or \
+                 `acos verify --engine art`."
+            );
+            return ExitCode::FAILURE;
+        }
+    }
     if args.keep || flutter || rn || art {
         // The ABI gate (UNSUPPORTED_ABI, ADR-0018 W59-A) must run here too: the
         // daemon route's own backends report an ABI miss as WRONG_ABI. Only the
@@ -236,6 +260,7 @@ fn run_keep(
         "flutter": flutter,
         "rn": rn,
         "display": display.map(|o| o.spec()),
+        "animations": args.animations.clone(),
         "timeout_ms": args.timeout.saturating_mul(1000),
     });
     // The engine is forwarded verbatim: the daemon must answer with the engine
@@ -340,10 +365,7 @@ fn print_daemon_launch(result: &Value) {
             println!("  [{status:>11}] {name}");
             if let Some(blocker) = stage.get("blocker") {
                 let code = blocker.get("code").and_then(Value::as_str).unwrap_or("");
-                let message = blocker
-                    .get("message")
-                    .and_then(Value::as_str)
-                    .unwrap_or("");
+                let message = blocker.get("message").and_then(Value::as_str).unwrap_or("");
                 println!("      {code}: {}", first_line(message));
             }
         }

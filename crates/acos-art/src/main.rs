@@ -115,6 +115,7 @@ fn real_main() -> Result<ExitCode> {
     let mut expected: Option<PathBuf> = None;
     let mut apk: Option<PathBuf> = None;
     let mut until = "application-created".to_string();
+    let mut animations = acos_art::launch::Animations::On;
     let mut package: Option<String> = None;
     let mut layout: Option<String> = None;
     let mut size: (u32, u32, u32) = (1080, 2062, 420);
@@ -173,6 +174,10 @@ fn real_main() -> Result<ExitCode> {
             "--out" => out = Some(PathBuf::from(next(&mut i)?)),
             "--apk" => apk = Some(PathBuf::from(next(&mut i)?)),
             "--until" => until = next(&mut i)?,
+            "--animations" => {
+                let value = next(&mut i)?;
+                animations = acos_art::launch::Animations::parse(&value).map_err(Error::Layout)?;
+            }
             "--package" => package = Some(next(&mut i)?),
             "--activity" => activity = Some(next(&mut i)?),
             "--session-id" => session_id = Some(next(&mut i)?),
@@ -241,9 +246,21 @@ fn real_main() -> Result<ExitCode> {
                     eprintln!("acos-art: {d}");
                 }
             }
-            Ok(if res.succeeded() { ExitCode::SUCCESS } else { ExitCode::from(1) })
+            Ok(if res.succeeded() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            })
         }
-        "verify" => verify(&root, programs, expected, json_out, timeout, rlimit_as_mb, json),
+        "verify" => verify(
+            &root,
+            programs,
+            expected,
+            json_out,
+            timeout,
+            rlimit_as_mb,
+            json,
+        ),
         "build-image" => {
             let dir = build_image(&root, out, force)?;
             println!("{}", dir.display());
@@ -286,7 +303,9 @@ fn real_main() -> Result<ExitCode> {
                     res.frame.as_deref().unwrap_or("-"),
                     res.tree.as_deref().unwrap_or("-"),
                     res.frame_md5.as_deref().unwrap_or("-"),
-                    res.nodes.map(|n| n.to_string()).unwrap_or_else(|| "-".into()),
+                    res.nodes
+                        .map(|n| n.to_string())
+                        .unwrap_or_else(|| "-".into()),
                     res.width,
                     res.panel_height,
                     res.density_dpi
@@ -296,15 +315,25 @@ fn real_main() -> Result<ExitCode> {
                     format!("{:?}", res.outcome).to_lowercase(),
                     res.code.as_deref().unwrap_or("-"),
                     res.wall_ms,
-                    res.draw_cold_us.map(|v| v.to_string()).unwrap_or_else(|| "-".into()),
-                    res.draw_warm_us.map(|v| v.to_string()).unwrap_or_else(|| "-".into()),
-                    res.peak_rss_mb.map(|v| format!("{v:.0}")).unwrap_or_else(|| "-".into())
+                    res.draw_cold_us
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|| "-".into()),
+                    res.draw_warm_us
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|| "-".into()),
+                    res.peak_rss_mb
+                        .map(|v| format!("{v:.0}"))
+                        .unwrap_or_else(|| "-".into())
                 );
                 for d in &res.diagnostics {
                     eprintln!("acos-art: {d}");
                 }
             }
-            Ok(if res.succeeded() { ExitCode::SUCCESS } else { ExitCode::from(1) })
+            Ok(if res.succeeded() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            })
         }
         "session" => {
             let apk = apk.ok_or_else(|| Error::Layout("session needs --apk FILE".into()))?;
@@ -338,6 +367,7 @@ fn real_main() -> Result<ExitCode> {
                 density_dpi: size.2,
                 status_inset,
                 nav_inset,
+                animations,
             };
             let res = acos_art::launch::launch(&root, &opts)?;
             println!("{}", serde_json::to_string_pretty(&res).unwrap());
@@ -374,7 +404,10 @@ fn real_main() -> Result<ExitCode> {
             // Same sweep every run performs at startup, callable on its own so a
             // host can reap an orphaned run root without starting a guest.
             let n = root.sweep_stale_runs()?;
-            println!("janitor: removed {n} stale run dir(s) under {}", root.runs_dir().display());
+            println!(
+                "janitor: removed {n} stale run dir(s) under {}",
+                root.runs_dir().display()
+            );
             Ok(ExitCode::SUCCESS)
         }
         other => Err(Error::Layout(format!("unknown command {other}"))),
@@ -395,7 +428,8 @@ fn verify(
     json: bool,
 ) -> Result<ExitCode> {
     let programs = programs.unwrap_or_else(|| root.repo_root.join("fixtures/build/dexprogs"));
-    let expected = expected.unwrap_or_else(|| root.repo_root.join("fixtures/expected-art/dexprogs"));
+    let expected =
+        expected.unwrap_or_else(|| root.repo_root.join("fixtures/expected-art/dexprogs"));
     let mut names: Vec<String> = std::fs::read_dir(&expected)?
         .filter_map(|e| e.ok())
         .filter_map(|e| {
@@ -409,7 +443,10 @@ fn verify(
         .collect();
     names.sort();
     if names.is_empty() {
-        return Err(Error::Layout(format!("no .exit fixtures in {}", expected.display())));
+        return Err(Error::Layout(format!(
+            "no .exit fixtures in {}",
+            expected.display()
+        )));
     }
 
     println!(
@@ -423,12 +460,16 @@ fn verify(
     for name in &names {
         let dex = programs.join(name).join("classes.dex");
         if !dex.is_file() {
-            println!("{name:<30} {:<5} {:>6} {:>5} {:>7} {}", "skip", "-", "-", "-", "no dex built");
+            println!(
+                "{name:<30} {:<5} {:>6} {:>5} {:>7} {}",
+                "skip", "-", "-", "-", "no dex built"
+            );
             rows.push(serde_json::json!({"program": name, "skip": true, "note": "no dex built"}));
             skipped += 1;
             continue;
         }
-        let exp_out = std::fs::read_to_string(expected.join(format!("{name}.stdout"))).unwrap_or_default();
+        let exp_out =
+            std::fs::read_to_string(expected.join(format!("{name}.stdout"))).unwrap_or_default();
         let exp_exit: i32 = std::fs::read_to_string(expected.join(format!("{name}.exit")))
             .ok()
             .and_then(|s| s.trim().parse().ok())
@@ -459,10 +500,15 @@ fn verify(
             notes.push("stdout differs".to_string());
         }
         if !exit_ok {
-            notes.push(format!("outcome={:?} code={}", res.outcome, res.code.as_deref().unwrap_or("-")));
+            notes.push(format!(
+                "outcome={:?} code={}",
+                res.outcome,
+                res.code.as_deref().unwrap_or("-")
+            ));
         }
         // Soft check: every fixture stderr line should appear in the real stderr.
-        let exp_err = std::fs::read_to_string(expected.join(format!("{name}.stderr"))).unwrap_or_default();
+        let exp_err =
+            std::fs::read_to_string(expected.join(format!("{name}.stderr"))).unwrap_or_default();
         let stderr_ok = exp_err
             .lines()
             .filter(|l| !l.trim().is_empty())
@@ -474,7 +520,9 @@ fn verify(
             "{:<30} {:<5} {:>6} {:>5} {:>7} {}",
             name,
             if ok { "PASS" } else { "FAIL" },
-            res.exit.map(|c| c.to_string()).unwrap_or_else(|| "sig".into()),
+            res.exit
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "sig".into()),
             exp_exit,
             res.wall_ms,
             notes.join(", ")
@@ -500,7 +548,11 @@ fn verify(
     }
 
     let total = names.len() - skipped;
-    println!("\n{pass}/{total} pass, {} fail ({} skipped)", total - pass, skipped);
+    println!(
+        "\n{pass}/{total} pass, {} fail ({} skipped)",
+        total - pass,
+        skipped
+    );
     // ART must reach real fatal-abort behaviour: no suppressed CHECKs anywhere.
     println!("fatal ART log entries recorded: {fatal_total}");
     let summary = serde_json::json!({
@@ -521,7 +573,11 @@ fn verify(
     } else if json {
         println!("{}", serde_json::to_string_pretty(&summary).unwrap());
     }
-    Ok(if pass == total { ExitCode::SUCCESS } else { ExitCode::from(1) })
+    Ok(if pass == total {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -588,7 +644,10 @@ fn build_image(root: &ArtRoot, out: Option<PathBuf>, force: bool) -> Result<Path
         )));
     }
     if !named.join("boot.art").is_file() {
-        return Err(Error::Layout(format!("dex2oat produced no {}", named.join("boot.art").display())));
+        return Err(Error::Layout(format!(
+            "dex2oat produced no {}",
+            named.join("boot.art").display()
+        )));
     }
     std::fs::write(
         out.join("MANIFEST.txt"),
@@ -619,15 +678,42 @@ fn doctor(root: &ArtRoot) {
     println!("repo root      {}", root.repo_root.display());
     println!("sysroot        {}", root.sysroot.display());
     println!("data           {}", root.data.display());
-    println!("apex modules   {} ({})", root.modules.len(), ok(root.modules.len() > 30));
+    println!(
+        "apex modules   {} ({})",
+        root.modules.len(),
+        ok(root.modules.len() > 30)
+    );
     let bwrap = which("bwrap");
-    println!("bwrap          {}", bwrap.as_deref().map(Path::display).map(|d| d.to_string()).unwrap_or("MISSING".into()));
-    let dalvik = root.sysroot.join("system/apex/com.android.art/bin/dalvikvm64");
-    println!("dalvikvm64     {} {}", dalvik.display(), if dalvik.is_file() { "" } else { "(MISSING)" });
-    let dex2oat = root.sysroot.join("system/apex/com.android.art/bin/dex2oat64");
-    println!("dex2oat64      {} {}", dex2oat.display(), if dex2oat.is_file() { "" } else { "(MISSING)" });
+    println!(
+        "bwrap          {}",
+        bwrap
+            .as_deref()
+            .map(Path::display)
+            .map(|d| d.to_string())
+            .unwrap_or("MISSING".into())
+    );
+    let dalvik = root
+        .sysroot
+        .join("system/apex/com.android.art/bin/dalvikvm64");
+    println!(
+        "dalvikvm64     {} {}",
+        dalvik.display(),
+        if dalvik.is_file() { "" } else { "(MISSING)" }
+    );
+    let dex2oat = root
+        .sysroot
+        .join("system/apex/com.android.art/bin/dex2oat64");
+    println!(
+        "dex2oat64      {} {}",
+        dex2oat.display(),
+        if dex2oat.is_file() { "" } else { "(MISSING)" }
+    );
     match root.device_bootclasspath() {
-        Ok(jars) => println!("bootclasspath  {} jars, first={}", jars.len(), jars.first().cloned().unwrap_or_default()),
+        Ok(jars) => println!(
+            "bootclasspath  {} jars, first={}",
+            jars.len(),
+            jars.first().cloned().unwrap_or_default()
+        ),
         Err(e) => println!("bootclasspath  ERROR: {e}"),
     }
     match root.classpaths() {
@@ -644,10 +730,29 @@ fn doctor(root: &ArtRoot) {
         ),
     }
     let ld = root.data.join("linkerconfig/ld.config.txt");
-    println!("linkerconfig   {} {}", ld.display(), if ld.is_file() { "" } else { "(not generated yet)" });
+    println!(
+        "linkerconfig   {} {}",
+        ld.display(),
+        if ld.is_file() {
+            ""
+        } else {
+            "(not generated yet)"
+        }
+    );
     let img = root.data.join("img/x86_64/boot.art");
-    println!("boot image     {} {}", img.display(), if img.is_file() { "" } else { "(absent: imageless JIT)" });
-    println!("shim source    {} bytes (compiled on demand with $CC/clang)", acos_art::SHIM_SOURCE.len());
+    println!(
+        "boot image     {} {}",
+        img.display(),
+        if img.is_file() {
+            ""
+        } else {
+            "(absent: imageless JIT)"
+        }
+    );
+    println!(
+        "shim source    {} bytes (compiled on demand with $CC/clang)",
+        acos_art::SHIM_SOURCE.len()
+    );
     let virt = root.sysroot.join("system/lib64/libartshim.so");
     let _ = virt;
     println!("userns         {}", userns_enabled());

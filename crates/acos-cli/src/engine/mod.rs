@@ -22,13 +22,11 @@ use std::path::Path;
 
 use acos_protocol::commands::{KeyName, ResetScope};
 use acos_protocol::ui::{Bounds, UiNode, UiTree};
-use acos_protocol::{
-    Backend as ProtocolBackend, ErrorCode, Fidelity, FrameMeta, Selector,
-};
+use acos_protocol::{Backend as ProtocolBackend, ErrorCode, Fidelity, FrameMeta, Selector};
 use acos_verify::backend::{Capabilities, LaunchRequest};
 use acos_verify::{
-    Backend, BackendError, EnvironmentChange, InputAction, LaunchOutcome, LogRecord,
-    ManifestInfo, SessionObservation,
+    Backend, BackendError, EnvironmentChange, InputAction, LaunchOutcome, LogRecord, ManifestInfo,
+    SessionObservation,
 };
 
 pub mod art;
@@ -360,12 +358,19 @@ pub trait SessionBackend {
         None
     }
 
+    /// P12b: per-request settle deadline (`settle_timeout_ms`). A session
+    /// engine with a settle rule applies it to the next observation; the
+    /// default has no settle rule and ignores it.
+    fn set_settle_timeout(&mut self, _timeout_ms: Option<u64>) {}
+
     /// The highest completed frame sequence this session has seen (0 when none).
     ///
     /// A tree-less reply (a pure screenshot) can advance the sequence past the
     /// bound tree, so freshness checks use this, not [`Self::last_frame`].
     fn last_frame_seq(&self) -> u64 {
-        self.last_frame().map(|frame| frame.frame_seq()).unwrap_or(0)
+        self.last_frame()
+            .map(|frame| frame.frame_seq())
+            .unwrap_or(0)
     }
 
     /// A *fresh* capture that must complete a new frame (a `capture` step).
@@ -514,11 +519,10 @@ impl EngineBackend {
             EngineBackend::Native(_) => String::new(),
             EngineBackend::Session {
                 manifest, package, ..
-            } => package.clone().or_else(|| {
-                manifest
-                    .as_ref()
-                    .map(|manifest| manifest.package.clone())
-            }).unwrap_or_default(),
+            } => package
+                .clone()
+                .or_else(|| manifest.as_ref().map(|manifest| manifest.package.clone()))
+                .unwrap_or_default(),
         }
     }
 
@@ -967,6 +971,13 @@ impl Backend for EngineBackend {
             }
         }
     }
+
+    fn set_settle_timeout(&mut self, timeout_ms: Option<u64>) {
+        match self {
+            EngineBackend::Native(_) => {}
+            EngineBackend::Session { session, .. } => session.set_settle_timeout(timeout_ms),
+        }
+    }
 }
 
 impl Drop for EngineBackend {
@@ -1049,7 +1060,10 @@ pub fn ui_tree_from_json(
 }
 
 fn ui_node_from_json(value: &serde_json::Value, depth: usize) -> UiNode {
-    let id = format!("n{depth}_{}", value.get("id").and_then(|v| v.as_str()).unwrap_or(""));
+    let id = format!(
+        "n{depth}_{}",
+        value.get("id").and_then(|v| v.as_str()).unwrap_or("")
+    );
     let class = value
         .get("class")
         .and_then(|v| v.as_str())
@@ -1210,7 +1224,14 @@ mod tests {
         };
         assert_eq!(
             caps.missing(),
-            vec!["tap_text", "type_text", "key", "logs", "environment", "crash_reports"]
+            vec![
+                "tap_text",
+                "type_text",
+                "key",
+                "logs",
+                "environment",
+                "crash_reports"
+            ]
         );
         assert!(!caps.to_protocol().environment);
         assert!(caps.to_protocol().input);
@@ -1289,9 +1310,7 @@ mod tests {
         assert!(node.checked);
         assert!(node.selected);
         // Selector text also matches a hint, and content-desc selectors work.
-        assert!(tree
-            .find_one(&Selector::by_text("Name"))
-            .is_some());
+        assert!(tree.find_one(&Selector::by_text("Name")).is_some());
         assert!(tree
             .find_one(&Selector {
                 content_desc: Some(acos_protocol::TextMatch::exact("player-name")),
@@ -1348,7 +1367,12 @@ mod engine_tests {
     fn request(scenario: &str, artifacts: &std::path::Path) -> VerifyRequest {
         VerifyRequest {
             base: RequestBase::new("req_engine_test"),
-            apk: Some(repo().join("fixtures/build/apps/counter.apk").display().to_string()),
+            apk: Some(
+                repo()
+                    .join("fixtures/build/apps/counter.apk")
+                    .display()
+                    .to_string(),
+            ),
             scenario: repo().join(scenario).display().to_string(),
             artifacts: artifacts.display().to_string(),
             reference: None,
@@ -1357,7 +1381,12 @@ mod engine_tests {
         }
     }
 
-    fn args(scenario: &str, artifacts: &std::path::Path, engine: &str, json: bool) -> crate::verify::VerifyArgs {
+    fn args(
+        scenario: &str,
+        artifacts: &std::path::Path,
+        engine: &str,
+        json: bool,
+    ) -> crate::verify::VerifyArgs {
         crate::verify::VerifyArgs {
             scenario: Some(repo().join(scenario)),
             scenario_flag: None,
@@ -1368,6 +1397,7 @@ mod engine_tests {
             flags: Vec::new(),
             native: false,
             engine: engine.to_string(),
+            animations: None,
             untrusted: false,
             json,
         }
@@ -1402,23 +1432,38 @@ mod engine_tests {
         }
         fn manifest(&mut self, _apk: &Path) -> Result<ManifestInfo, BackendError> {
             self.calls.fetch_add(1, Ordering::SeqCst);
-            Err(BackendError::unsupported("probe", "the Rust VM must not run"))
+            Err(BackendError::unsupported(
+                "probe",
+                "the Rust VM must not run",
+            ))
         }
         fn launch(&mut self, _r: &LaunchRequest) -> Result<LaunchOutcome, BackendError> {
             self.calls.fetch_add(1, Ordering::SeqCst);
-            Err(BackendError::unsupported("probe", "the Rust VM must not run"))
+            Err(BackendError::unsupported(
+                "probe",
+                "the Rust VM must not run",
+            ))
         }
         fn observe(&mut self) -> Result<SessionObservation, BackendError> {
             self.calls.fetch_add(1, Ordering::SeqCst);
-            Err(BackendError::unsupported("probe", "the Rust VM must not run"))
+            Err(BackendError::unsupported(
+                "probe",
+                "the Rust VM must not run",
+            ))
         }
         fn reset(&mut self, _scope: ResetScope) -> Result<(), BackendError> {
             self.calls.fetch_add(1, Ordering::SeqCst);
-            Err(BackendError::unsupported("probe", "the Rust VM must not run"))
+            Err(BackendError::unsupported(
+                "probe",
+                "the Rust VM must not run",
+            ))
         }
         fn capture(&mut self) -> Result<SessionObservation, BackendError> {
             self.calls.fetch_add(1, Ordering::SeqCst);
-            Err(BackendError::unsupported("probe", "the Rust VM must not run"))
+            Err(BackendError::unsupported(
+                "probe",
+                "the Rust VM must not run",
+            ))
         }
     }
 
@@ -1448,6 +1493,7 @@ mod engine_tests {
             crate::trust::Trust::Trusted,
             &dir,
             None,
+            None,
         );
         let verdict = envelope.result().unwrap().get("verdict").unwrap();
         assert_eq!(verdict["engine"], "art");
@@ -1462,10 +1508,7 @@ mod engine_tests {
         // The decisive transition really happened three times: Increment,
         // Reset (the app's own control; the real launch engine has no reset
         // command), then Increment again.
-        let taps = steps
-            .iter()
-            .filter(|step| step["step"] == "tap")
-            .count();
+        let taps = steps.iter().filter(|step| step["step"] == "tap").count();
         assert_eq!(taps, 3);
         let calls = calls.lock().unwrap();
         assert!(
@@ -1498,16 +1541,21 @@ mod engine_tests {
             crate::trust::Trust::Trusted,
             &dir,
             None,
+            None,
         );
         assert!(!envelope.status().is_pass());
         assert_eq!(envelope.status(), Status::Unsupported);
         let verdict = envelope.result().unwrap().get("verdict").unwrap();
         assert_eq!(verdict["verdict"], "unsupported");
         assert_eq!(verdict["mode"], "preview");
-        assert_eq!(verdict["failure"]["error"]["details"]["capability"], "mode.live");
+        assert_eq!(
+            verdict["failure"]["error"]["details"]["capability"],
+            "mode.live"
+        );
         // The written evidence carries the same decision.
         let written: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(dir.join("verdict.json")).unwrap()).unwrap();
+            serde_json::from_str(&std::fs::read_to_string(dir.join("verdict.json")).unwrap())
+                .unwrap();
         assert_eq!(written["verdict"], "unsupported");
         assert_eq!(written["mode"], "preview");
     }
@@ -1523,7 +1571,11 @@ mod engine_tests {
         let _native_route = EngineBackend::native(Box::new(probe));
         let req = request("scenarios/v2-art-type-unsupported.yaml", &dir);
         let envelope = acos_verify::verify(&req, &mut backend);
-        assert_eq!(probe_calls.load(Ordering::SeqCst), 0, "engine=art invoked the Rust VM");
+        assert_eq!(
+            probe_calls.load(Ordering::SeqCst),
+            0,
+            "engine=art invoked the Rust VM"
+        );
         assert!(!envelope.status().is_pass());
         assert_eq!(envelope.status(), Status::Unsupported);
         let verdict = envelope.result().unwrap().get("verdict").unwrap();
@@ -1538,18 +1590,27 @@ mod engine_tests {
             unsupported["error"]["details"]["capability"],
             "input.type_text"
         );
-        assert_eq!(
-            unsupported["error"]["code"],
-            "UNSUPPORTED_BACKEND"
-        );
+        assert_eq!(unsupported["error"]["code"], "UNSUPPORTED_BACKEND");
     }
 
     #[test]
     fn art_session_capabilities_report_the_protocol_gaps() {
         let backend = EngineBackend::session(Box::new(FakeSession::live()));
         let caps = backend.session_capabilities().unwrap();
-        for command in ["launch", "tree", "screenshot", "tap", "tap_text", "key", "reset", "close"] {
-            assert!(caps.names().contains(&command), "{command} must be supported");
+        for command in [
+            "launch",
+            "tree",
+            "screenshot",
+            "tap",
+            "tap_text",
+            "key",
+            "reset",
+            "close",
+        ] {
+            assert!(
+                caps.names().contains(&command),
+                "{command} must be supported"
+            );
         }
         for missing in ["type_text", "logs", "environment", "crash_reports"] {
             assert!(
@@ -1579,15 +1640,11 @@ mod engine_tests {
     fn fresh_screenshot_carries_a_new_sequence_and_a_capture_time() {
         let dir = artifacts("fresh-shot");
         let mut backend = EngineBackend::session(Box::new(FakeSession::live()));
-        backend
-            .launch(&launch_request(&dir))
-            .expect("fake launch");
+        backend.launch(&launch_request(&dir)).expect("fake launch");
         // `SessionBackend::screenshot` is a fresh capture, not the cached PNG.
-        let shot = |engine: &mut EngineBackend| {
-            match engine {
-                EngineBackend::Session { session, .. } => session.screenshot(),
-                EngineBackend::Native(_) => unreachable!(),
-            }
+        let shot = |engine: &mut EngineBackend| match engine {
+            EngineBackend::Session { session, .. } => session.screenshot(),
+            EngineBackend::Native(_) => unreachable!(),
         };
         let first = shot(&mut backend).expect("first fresh screenshot");
         let second = shot(&mut backend).expect("second fresh screenshot");
@@ -1623,9 +1680,7 @@ mod engine_tests {
             },
         ] {
             let mut backend = EngineBackend::session(Box::new(FakeSession::stale_tap()));
-            backend
-                .launch(&launch_request(&dir))
-                .expect("fake launch");
+            backend.launch(&launch_request(&dir)).expect("fake launch");
             let error = backend
                 .input(&InputAction::Tap {
                     selector: Some(selector.clone()),
@@ -1646,9 +1701,7 @@ mod engine_tests {
     fn stale_capture_is_rejected_as_no_fresh_frame() {
         let dir = artifacts("stale-capture");
         let mut backend = EngineBackend::session(Box::new(FakeSession::stale_capture()));
-        backend
-            .launch(&launch_request(&dir))
-            .expect("fake launch");
+        backend.launch(&launch_request(&dir)).expect("fake launch");
         let error = backend
             .capture()
             .expect_err("a capture that reuses the previous frame must fail");
@@ -1664,13 +1717,17 @@ mod engine_tests {
         backend
             .launch(&launch_request(&dir))
             .expect("fake launch without a frame");
-        let observe = backend.observe().expect_err("observe must not invent a frame");
+        let observe = backend
+            .observe()
+            .expect_err("observe must not invent a frame");
         assert_eq!(observe.code(), ErrorCode::NoFreshFrame);
         assert!(
             observe.to_string().contains(LIVE_FRAME_UNAVAILABLE),
             "{observe}"
         );
-        let capture = backend.capture().expect_err("capture must not invent a frame");
+        let capture = backend
+            .capture()
+            .expect_err("capture must not invent a frame");
         assert_eq!(capture.code(), ErrorCode::NoFreshFrame);
         assert!(
             capture.to_string().contains(LIVE_FRAME_UNAVAILABLE),
@@ -1685,7 +1742,11 @@ mod engine_tests {
         let mut backend = EngineBackend::session(Box::new(FakeSession::no_live_frame()));
         let req = request("scenarios/v2-art-counter.yaml", &dir);
         let envelope = acos_verify::verify(&req, &mut backend);
-        assert!(!envelope.status().is_pass(), "must not pass: {:?}", envelope.status());
+        assert!(
+            !envelope.status().is_pass(),
+            "must not pass: {:?}",
+            envelope.status()
+        );
         let error = envelope.error().expect("a structured failure");
         assert_eq!(error.code, ErrorCode::NoFreshFrame);
         assert!(
@@ -1789,7 +1850,11 @@ mod engine_tests {
                 .iter()
                 .position(|call| call == "type_text(7)")
                 .expect("the replacement text is typed");
-            assert_eq!(deletes.len(), 1, "one DEL per existing character: {calls:?}");
+            assert_eq!(
+                deletes.len(),
+                1,
+                "one DEL per existing character: {calls:?}"
+            );
             assert!(deletes[0] < typed, "clear must precede typing: {calls:?}");
         }
         // Negative control: without clear, no DEL is sent.
