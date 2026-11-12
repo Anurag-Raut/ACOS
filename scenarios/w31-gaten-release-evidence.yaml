@@ -1,0 +1,54 @@
+# W31: does the *saved* per-step tree contain the nodes the assertion matched?
+#
+# This is `w28-gaten-release-tap.yaml` with one extra `assert_text` step so the
+# same selector is evaluated twice against two bound observations (the
+# `wait_for` poll's tree and the frame-bound assertion's tree). Both steps
+# write `tree/<frame_seq>.json`; both files must contain the matched text.
+# `crates/acos-art/tests/w31_tree_evidence.rs` checks the artifacts.
+#
+# Acceptance companion: `w28-gaten-release-tap.yaml` must still pass unchanged.
+version: 1
+name: w31-gaten-release-evidence
+description: >-
+  Launch Gaten (release x86_64) on real ART, wait for its home screen text,
+  re-assert the same text against the bound frame, tap the search field at its
+  live bounds and capture the frame the tap produced. No network, no login.
+app: .cache/gaten/gaten-x86_64-release.apk
+engine: native-preferred
+fallback: report-only
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 2048
+  wall_ms: 300000
+steps:
+  - launch:
+      activity: com.gaten.app.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {text: {exact: "Recently looked up"}}
+      timeout_ms: 60000
+
+  - assert_text:
+      selector: {text: {exact: "Recently looked up"}}
+      text: {exact: "Recently looked up"}
+
+  - tap:
+      x: 583
+      y: 409
+
+  - capture:
+      name: gaten-after-search-tap
+      format: png
+      fresh: true

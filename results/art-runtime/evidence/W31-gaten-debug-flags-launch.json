@@ -1,0 +1,1919 @@
+{
+  "outcome": "ok",
+  "code": null,
+  "apk": ".cache/gaten/gaten-x86_64-debug-launcherpatch-aligned.apk",
+  "package": "com.gaten",
+  "until": "activity-resumed",
+  "application_created": true,
+  "activity_launched": true,
+  "guest_exit": 0,
+  "guest_signal": null,
+  "wall_ms": 521,
+  "activity": "com.gaten.app.MainActivity",
+  "activity_target": null,
+  "timeout_ms": null,
+  "application_marker": "package=com.gaten\napplication=com.gaten.app.MainApplication\napplication_classloader_is_apk=true\napplication_base=com.gaten//data/app/gaten-x86_64-debug-launcherpatch-aligned.apk\ninstrumentation=android.app.Instrumentation\ninstrumentation_source=framework (bind request instrumentationName=null)\napp_flags=0x38808046\napp_flags_source=env\nsourceDir=/data/app/gaten-x86_64-debug-launcherpatch-aligned.apk\n",
+  "activity_marker": "package=com.gaten\nactivity=com.gaten.app.MainActivity\nlifecycle=onCreate,onStart,onResume\nresumed=true\ncalled=true\nstopped=false\nwindow=com.android.internal.policy.PhoneWindow@9ec911f\ntimeout_ms=60000\n",
+  "looper_trace": [
+    ">>>>> Dispatching to Handler (android.app.ActivityThread$H) {6b33922} null: 110",
+    "<<<<< Finished to Handler (android.app.ActivityThread$H) {6b33922} null",
+    ">>>>> Dispatching to Handler (android.app.ActivityThread$H) {6b33922} null: 159",
+    "<<<<< Finished to Handler (android.app.ActivityThread$H) {6b33922} null"
+  ],
+  "bind_application": {
+    "request_bytes": 1324,
+    "delivered": true,
+    "app_thread_wire": 1,
+    "code": 5
+  },
+  "service_calls": [
+    {
+      "descriptor": "android.app.IActivityManager",
+      "code": 25,
+      "method": "attachApplication"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 41,
+      "method": "getPreferredWideGamutColorSpaceId"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 55,
+      "method": "getOverlaySupport"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.os.INetworkManagementService",
+      "code": 42,
+      "method": "setUidCleartextNetworkPolicy"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 106,
+      "method": "notifyDexLoad"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.app.IActivityManager",
+      "code": 9,
+      "method": "checkPermission"
+    },
+    {
+      "descriptor": "android.net.IConnectivityManager",
+      "code": 32,
+      "method": "getProxyForNetwork"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 20,
+      "method": "getPackagesForUid"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 9,
+      "method": "getApplicationInfo"
+    },
+    {
+      "descriptor": "android.app.IGameManagerService",
+      "code": 4,
+      "method": "isAngleEnabled"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 100,
+      "method": "hasSystemFeature"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 100,
+      "method": "hasSystemFeature"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 100,
+      "method": "hasSystemFeature"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 100,
+      "method": "hasSystemFeature"
+    },
+    {
+      "descriptor": "android.app.IActivityManager",
+      "code": 101,
+      "method": "handleApplicationWtf"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 3,
+      "method": "getPackageInfo"
+    },
+    {
+      "descriptor": "android.app.IActivityManager",
+      "code": 9,
+      "method": "checkPermission"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 9,
+      "method": "getApplicationInfo"
+    },
+    {
+      "descriptor": "android.app.IActivityManager",
+      "code": 26,
+      "method": "finishAttachApplication"
+    },
+    {
+      "descriptor": "android.view.contentcapture.IContentCaptureManager",
+      "code": 12,
+      "method": "registerContentCaptureOptionsCallback"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.view.IWindowManager",
+      "code": 42,
+      "method": "getCurrentAnimatorScale"
+    },
+    {
+      "descriptor": "android.view.IWindowManager",
+      "code": 5,
+      "method": "useBLAST"
+    },
+    {
+      "descriptor": "android.app.IActivityTaskManager",
+      "code": 18,
+      "method": "getActivityClientController"
+    },
+    {
+      "descriptor": "android.app.IActivityClientController",
+      "code": 21,
+      "method": "getDisplayId"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 100,
+      "method": "hasSystemFeature"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 14,
+      "method": "getServiceInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.app.IActivityManager",
+      "code": 30,
+      "method": "getContentProvider"
+    },
+    {
+      "descriptor": "android.content.IContentProvider",
+      "code": 21,
+      "method": "call"
+    },
+    {
+      "descriptor": "android.content.IContentProvider",
+      "code": 21,
+      "method": "call"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 100,
+      "method": "hasSystemFeature"
+    },
+    {
+      "descriptor": "android.app.IActivityClientController",
+      "code": 43,
+      "method": "setTaskDescription"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 11,
+      "method": "getActivityInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 11,
+      "method": "getActivityInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 100,
+      "method": "hasSystemFeature"
+    },
+    {
+      "descriptor": "android.view.IWindowManager",
+      "code": 73,
+      "method": "hasNavigationBar"
+    },
+    {
+      "descriptor": "android.view.accessibility.IAccessibilityManager",
+      "code": 3,
+      "method": "addClient"
+    },
+    {
+      "descriptor": "android.view.accessibility.IAccessibilityManager",
+      "code": 19,
+      "method": "getRecommendedTimeoutMillis"
+    },
+    {
+      "descriptor": "android.view.accessibility.IAccessibilityManager",
+      "code": 25,
+      "method": "getFocusStrokeWidth"
+    },
+    {
+      "descriptor": "android.view.accessibility.IAccessibilityManager",
+      "code": 26,
+      "method": "getFocusColor"
+    },
+    {
+      "descriptor": "android.app.IActivityClientController",
+      "code": 43,
+      "method": "setTaskDescription"
+    },
+    {
+      "descriptor": "android.app.IActivityClientController",
+      "code": 43,
+      "method": "setTaskDescription"
+    },
+    {
+      "descriptor": "android.os.IUserManager",
+      "code": 75,
+      "method": "isUserUnlockingOrUnlocked"
+    },
+    {
+      "descriptor": "android.gui.SensorServer",
+      "code": 1,
+      "method": "code 1"
+    },
+    {
+      "descriptor": "android.app.IActivityManager",
+      "code": 19,
+      "method": "registerReceiverWithFeature"
+    },
+    {
+      "descriptor": "android.os.IUserManager",
+      "code": 75,
+      "method": "isUserUnlockingOrUnlocked"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.app.IActivityClientController",
+      "code": 10,
+      "method": "reportSizeConfigurations"
+    },
+    {
+      "descriptor": "android.content.IContentProvider",
+      "code": 21,
+      "method": "call"
+    },
+    {
+      "descriptor": "com.android.internal.app.IVoiceInteractionManagerService",
+      "code": 50,
+      "method": "notifyActivityEventChanged"
+    },
+    {
+      "descriptor": "android.os.IUserManager",
+      "code": 75,
+      "method": "isUserUnlockingOrUnlocked"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 85,
+      "method": "getComponentEnabledSetting"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 11,
+      "method": "getActivityInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 85,
+      "method": "getComponentEnabledSetting"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 3,
+      "method": "getPackageInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 83,
+      "method": "setComponentEnabledSetting"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 85,
+      "method": "getComponentEnabledSetting"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 3,
+      "method": "getPackageInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 83,
+      "method": "setComponentEnabledSetting"
+    },
+    {
+      "descriptor": "android.content.IContentProvider",
+      "code": 21,
+      "method": "call"
+    },
+    {
+      "descriptor": "com.android.internal.app.IVoiceInteractionManagerService",
+      "code": 50,
+      "method": "notifyActivityEventChanged"
+    },
+    {
+      "descriptor": "com.android.internal.view.IInputMethodManager",
+      "code": 1,
+      "method": "addClient"
+    },
+    {
+      "descriptor": "android.view.IWindowManager",
+      "code": 4,
+      "method": "openSession"
+    },
+    {
+      "descriptor": "android.gui.ISurfaceComposer",
+      "code": 3,
+      "method": "code 3"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 9,
+      "method": "getApplicationInfo"
+    },
+    {
+      "descriptor": "android.gui.ISurfaceComposer",
+      "code": 2,
+      "method": "code 2"
+    },
+    {
+      "descriptor": "android.gui.IDisplayEventConnection",
+      "code": 1,
+      "method": "code 1"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 203,
+      "method": "queryProperty"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 9,
+      "method": "getApplicationInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 3,
+      "method": "getPackageInfo"
+    },
+    {
+      "descriptor": "android.gui.IDisplayEventConnection",
+      "code": 3,
+      "method": "code 3"
+    },
+    {
+      "descriptor": "android.view.IWindowSession",
+      "code": 2,
+      "method": "addToDisplayAsUser"
+    },
+    {
+      "descriptor": "com.android.internal.view.IInputMethodManager",
+      "code": 22,
+      "method": "isImeTraceEnabled"
+    },
+    {
+      "descriptor": "android.ui.ISurfaceComposer",
+      "code": 8,
+      "method": "code 8"
+    },
+    {
+      "descriptor": "android.ui.ISurfaceComposer",
+      "code": 8,
+      "method": "code 8"
+    },
+    {
+      "descriptor": "android.ui.ISurfaceComposer",
+      "code": 8,
+      "method": "code 8"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 5,
+      "method": "registerCallbackWithEventMask"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.app.IActivityClientController",
+      "code": 2,
+      "method": "activityResumed"
+    },
+    {
+      "descriptor": "android.app.IActivityManager",
+      "code": 19,
+      "method": "registerReceiverWithFeature"
+    },
+    {
+      "descriptor": "android.os.IUserManager",
+      "code": 75,
+      "method": "isUserUnlockingOrUnlocked"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 9,
+      "method": "getApplicationInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 9,
+      "method": "getApplicationInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 3,
+      "method": "getPackageInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 9,
+      "method": "getApplicationInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 9,
+      "method": "getApplicationInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 3,
+      "method": "getPackageInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 9,
+      "method": "getApplicationInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 9,
+      "method": "getApplicationInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 3,
+      "method": "getPackageInfo"
+    },
+    {
+      "descriptor": "android.view.IWindowSession",
+      "code": 39,
+      "method": "setOnBackInvokedCallbackInfo"
+    },
+    {
+      "descriptor": "android.view.IWindowSession",
+      "code": 5,
+      "method": "relayout"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.gui.ISurfaceComposerClient",
+      "code": 1,
+      "method": "code 1"
+    },
+    {
+      "descriptor": "android.gui.ISurfaceComposer",
+      "code": 57,
+      "method": "code 57"
+    },
+    {
+      "descriptor": "android.ui.ISurfaceComposer",
+      "code": 8,
+      "method": "code 8"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.gui.IDisplayEventConnection",
+      "code": 3,
+      "method": "code 3"
+    },
+    {
+      "descriptor": "android.ui.ISurfaceComposer",
+      "code": 8,
+      "method": "code 8"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 100,
+      "method": "hasSystemFeature"
+    },
+    {
+      "descriptor": "android.ui.ISurfaceComposer",
+      "code": 8,
+      "method": "code 8"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.view.IWindowManager",
+      "code": 45,
+      "method": "isInTouchMode"
+    },
+    {
+      "descriptor": "android.view.IWindowSession",
+      "code": 9,
+      "method": "finishDrawing"
+    },
+    {
+      "descriptor": "com.android.internal.view.IInputMethodManager",
+      "code": 9,
+      "method": "startInputOrWindowGainedFocus"
+    },
+    {
+      "descriptor": "android.view.IWindowSession",
+      "code": 5,
+      "method": "relayout"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.gui.ISurfaceComposerClient",
+      "code": 1,
+      "method": "code 1"
+    },
+    {
+      "descriptor": "android.gui.ISurfaceComposer",
+      "code": 57,
+      "method": "code 57"
+    },
+    {
+      "descriptor": "android.ui.ISurfaceComposer",
+      "code": 8,
+      "method": "code 8"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.ui.ISurfaceComposer",
+      "code": 8,
+      "method": "code 8"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.ui.ISurfaceComposer",
+      "code": 8,
+      "method": "code 8"
+    },
+    {
+      "descriptor": "android.gui.IDisplayEventConnection",
+      "code": 3,
+      "method": "code 3"
+    },
+    {
+      "descriptor": "android.gui.IDisplayEventConnection",
+      "code": 4,
+      "method": "code 4"
+    },
+    {
+      "descriptor": "android.gui.IDisplayEventConnection",
+      "code": 3,
+      "method": "code 3"
+    },
+    {
+      "descriptor": "android.app.IActivityClientController",
+      "code": 1,
+      "method": "activityIdle"
+    },
+    {
+      "descriptor": "android.gui.IDisplayEventConnection",
+      "code": 3,
+      "method": "code 3"
+    },
+    {
+      "descriptor": "android.app.IUiModeManager",
+      "code": 1,
+      "method": "addCallback"
+    },
+    {
+      "descriptor": "android.app.IUiModeManager",
+      "code": 25,
+      "method": "getContrast"
+    },
+    {
+      "descriptor": "android.app.IUiModeManager",
+      "code": 5,
+      "method": "getCurrentModeType"
+    },
+    {
+      "descriptor": "android.gui.IDisplayEventConnection",
+      "code": 3,
+      "method": "code 3"
+    },
+    {
+      "descriptor": "android.content.IContentProvider",
+      "code": 21,
+      "method": "call"
+    },
+    {
+      "descriptor": "android.gui.IDisplayEventConnection",
+      "code": 3,
+      "method": "code 3"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.ui.ISurfaceComposer",
+      "code": 8,
+      "method": "code 8"
+    },
+    {
+      "descriptor": "android.gui.IDisplayEventConnection",
+      "code": 3,
+      "method": "code 3"
+    },
+    {
+      "descriptor": "android.gui.IDisplayEventConnection",
+      "code": 3,
+      "method": "code 3"
+    },
+    {
+      "descriptor": "android.view.IWindowSession",
+      "code": 5,
+      "method": "relayout"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.gui.ISurfaceComposerClient",
+      "code": 1,
+      "method": "code 1"
+    },
+    {
+      "descriptor": "android.gui.ISurfaceComposer",
+      "code": 57,
+      "method": "code 57"
+    },
+    {
+      "descriptor": "android.ui.ISurfaceComposer",
+      "code": 8,
+      "method": "code 8"
+    },
+    {
+      "descriptor": "android.ui.ISurfaceComposer",
+      "code": 8,
+      "method": "code 8"
+    },
+    {
+      "descriptor": "android.ui.ISurfaceComposer",
+      "code": 8,
+      "method": "code 8"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.ui.ISurfaceComposer",
+      "code": 8,
+      "method": "code 8"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.ui.ISurfaceComposer",
+      "code": 8,
+      "method": "code 8"
+    },
+    {
+      "descriptor": "android.content.IContentProvider",
+      "code": 21,
+      "method": "call"
+    },
+    {
+      "descriptor": "android.content.IContentProvider",
+      "code": 21,
+      "method": "call"
+    },
+    {
+      "descriptor": "android.content.IContentProvider",
+      "code": 21,
+      "method": "call"
+    },
+    {
+      "descriptor": "android.content.IContentProvider",
+      "code": 21,
+      "method": "call"
+    },
+    {
+      "descriptor": "android.content.IContentProvider",
+      "code": 21,
+      "method": "call"
+    },
+    {
+      "descriptor": "android.content.IContentProvider",
+      "code": 21,
+      "method": "call"
+    },
+    {
+      "descriptor": "android.os.IUserManager",
+      "code": 75,
+      "method": "isUserUnlockingOrUnlocked"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 3,
+      "method": "getPackageInfo"
+    }
+  ],
+  "unsupported": [
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 3,
+      "method": "getPackageInfo",
+      "error": "SERVICE_UNKNOWN_NAME"
+    },
+    {
+      "descriptor": "android.app.IActivityClientController",
+      "code": 2,
+      "method": "activityResumed",
+      "error": "SERVICE_ILLEGAL_STATE"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 3,
+      "method": "getPackageInfo",
+      "error": "SERVICE_UNKNOWN_NAME"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 3,
+      "method": "getPackageInfo",
+      "error": "SERVICE_UNKNOWN_NAME"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 3,
+      "method": "getPackageInfo",
+      "error": "SERVICE_UNKNOWN_NAME"
+    },
+    {
+      "descriptor": "android.app.IActivityClientController",
+      "code": 1,
+      "method": "activityIdle",
+      "error": "SERVICE_ILLEGAL_STATE"
+    }
+  ],
+  "stdout": "…er) {95fea64} android.view.Choreographer$FrameDisplayEventReceiver@49974cd: 0\nACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {95fea64} android.view.Choreographer$FrameDisplayEventReceiver@49974cd\nACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {b03a5d} com.swmansion.worklets.AndroidUIScheduler$scheduleTriggerOnUI$1@6224cb2: 0\nACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {b03a5d} com.swmansion.worklets.AndroidUIScheduler$scheduleTriggerOnUI$1@6224cb2\nACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {b03a5d} com.swmansion.worklets.AndroidUIScheduler$scheduleTriggerOnUI$1@3a51403: 0\nACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {b03a5d} com.swmansion.worklets.AndroidUIScheduler$scheduleTriggerOnUI$1@3a51403\nACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {b03a5d} com.facebook.react.modules.statusbar.StatusBarModule$$ExternalSyntheticLambda1@6b49f80: 0\nACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {b03a5d} com.facebook.react.modules.statusbar.StatusBarModule$$ExternalSyntheticLambda1@6b49f80\nACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {b03a5d} com.reactnativekeyboardcontroller.modules.statusbar.StatusBarManagerCompatModuleImpl$$ExternalSyntheticLambda0@8119b9: 0\nACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {b03a5d} com.reactnativekeyboardcontroller.modules.statusbar.StatusBarManagerCompatModuleImpl$$ExternalSyntheticLambda0@8119b9\nACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {95fea64} android.view.Choreographer$FrameDisplayEventReceiver@49974cd: 0\nACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {95fea64} android.view.Choreographer$FrameDisplayEventReceiver@49974cd\nACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {7a55867} com.swmansion.reanimated.DrawPassDetector$$ExternalSyntheticLambda0@9003614: 0\nACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {7a55867} com.swmansion.reanimated.DrawPassDetector$$ExternalSyntheticLambda0@9003614\nACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {b03a5d} com.facebook.react.fabric.FabricUIManager$MountItemDispatchListener$$ExternalSyntheticLambda0@f10612d: 0\nACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {b03a5d} com.facebook.react.fabric.FabricUIManager$MountItemDispatchListener$$ExternalSyntheticLambda0@f10612d\nACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {d634662} androidx.core.content.res.ResourcesCompat$FontCallback$$ExternalSyntheticLambda1@48303f3: 0\nACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {d634662} androidx.core.content.res.ResourcesCompat$FontCallback$$ExternalSyntheticLambda1@48303f3\nACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {7eee8b0} androidx.core.content.res.ResourcesCompat$FontCallback$$ExternalSyntheticLambda0@3bee329: 0\nACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {7eee8b0} androidx.core.content.res.ResourcesCompat$FontCallback$$ExternalSyntheticLambda0@3bee329\nACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {b03a5d} com.swmansion.worklets.AndroidUIScheduler$scheduleTriggerOnUI$1@9815dc5: 0\nACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {b03a5d} com.swmansion.worklets.AndroidUIScheduler$scheduleTriggerOnUI$1@9815dc5\nACOSLAUNCH TRACE >>>>> Dispatching to Handler (com.facebook.react.bridge.queue.MessageQueueThreadHandler) {5cdb94a} com.facebook.react.bridge.ReactContext$1@205231a: 0\nACOSLAUNCH TRACE <<<<< Finished to Handler (com.facebook.react.bridge.queue.MessageQueueThreadHandler) {5cdb94a} com.facebook.react.bridge.ReactContext$1@205231a\nACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {95fea64} android.view.Choreographer$FrameDisplayEventReceiver@49974cd: 0\nACOSLAUNCH MARK activity-resumed activity=com.gaten.app.MainActivity window=com.android.internal.policy.PhoneWindow@9ec911f\n",
+  "stderr": "… and suffix.\nW1112 01:32:03.029974 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderLeftColor'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029976 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderBlockColor'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029978 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderRightColor'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029978 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderStartColor'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029980 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderBottomColor'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029981 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderEndEndRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029983 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderTopEndRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029984 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderBlockEndColor'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029985 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderTopLeftRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029987 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderEndStartRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029989 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderStartEndRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029989 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderTopRightRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029991 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderTopStartRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029992 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderBlockStartColor'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029994 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderBottomEndRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029994 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderBottomLeftRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029996 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderStartStartRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029997 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderBottomRightRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.029999 1239116928 RawPropsKeyMap.cpp:65] Component property map contains multiple entries for 'borderBottomStartRadius'. Ensure all calls to convertRawProp use a consistent prefix, name and suffix.\nW1112 01:32:03.035692 1067031680 ReactInstance.cpp:267] ReactInstance: evaluateJavaScript() with JS bundle\n",
+  "logs": [
+    {
+      "prio": 6,
+      "tag": "cutils-trace",
+      "message": "Error opening trace file: Permission denied (13)"
+    },
+    {
+      "prio": 4,
+      "tag": "",
+      "message": "Using CollectorTypeCC GC."
+    },
+    {
+      "prio": 3,
+      "tag": "nativeloader",
+      "message": "InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so"
+    },
+    {
+      "prio": 3,
+      "tag": "",
+      "message": "I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat"
+    },
+    {
+      "prio": 5,
+      "tag": "ziparchive",
+      "message": "Unable to open '/data/app/launch-guest/classes.dm': No such file or directory"
+    },
+    {
+      "prio": 5,
+      "tag": "ziparchive",
+      "message": "Unable to open '/data/app/launch-guest/classes.dm': No such file or directory"
+    },
+    {
+      "prio": 4,
+      "tag": "nativeloader",
+      "message": "InitApexLibraries skipped: No such file or directory"
+    },
+    {
+      "prio": 3,
+      "tag": "nativeloader",
+      "message": "InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so"
+    },
+    {
+      "prio": 3,
+      "tag": "nativeloader",
+      "message": "Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand"
+    },
+    {
+      "prio": 3,
+      "tag": "nativeloader",
+      "message": "InitExtendedPublicLibraries: "
+    },
+    {
+      "prio": 4,
+      "tag": "nativeloader",
+      "message": "InitVendorPublicLibraries skipped: No such file or directory"
+    },
+    {
+      "prio": 3,
+      "tag": "nativeloader",
+      "message": "InitProductPublicLibraries: "
+    },
+    {
+      "prio": 6,
+      "tag": "ProcessState",
+      "message": "Binder driver /dev/binder is unavailable. Using /dev/binder instead."
+    },
+    {
+      "prio": 3,
+      "tag": "CompatibilityChangeReporter",
+      "message": "Compat change id reported: 171979766; UID 1000; state: ENABLED"
+    },
+    {
+      "prio": 3,
+      "tag": "CompatibilityChangeReporter",
+      "message": "Compat change id reported: 242716250; UID 1000; state: ENABLED"
+    },
+    {
+      "prio": 4,
+      "tag": "Typeface",
+      "message": "Preloading /system/fonts/Roboto-Regular.ttf"
+    },
+    {
+      "prio": 4,
+      "tag": "Typeface",
+      "message": "Preloading /system/fonts/RobotoStatic-Regular.ttf"
+    },
+    {
+      "prio": 3,
+      "tag": "CompatibilityChangeReporter",
+      "message": "Compat change id reported: 247079863; UID 1000; state: ENABLED"
+    },
+    {
+      "prio": 5,
+      "tag": "ziparchive",
+      "message": "Unable to open '/data/app/gaten-x86_64-debug-launcherpatch-aligned.dm': No such file or directory"
+    },
+    {
+      "prio": 5,
+      "tag": "ziparchive",
+      "message": "Unable to open '/data/app/gaten-x86_64-debug-launcherpatch-aligned.dm': No such file or directory"
+    },
+    {
+      "prio": 3,
+      "tag": "nativeloader",
+      "message": "Configuring clns-2 for other apk /data/app/gaten-x86_64-debug-launcherpatch-aligned.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/com.gaten"
+    },
+    {
+      "prio": 2,
+      "tag": "GraphicsEnvironment",
+      "message": "Currently set values for:"
+    },
+    {
+      "prio": 2,
+      "tag": "GraphicsEnvironment",
+      "message": "  angle_gl_driver_selection_pkgs=[]"
+    },
+    {
+      "prio": 2,
+      "tag": "GraphicsEnvironment",
+      "message": "  angle_gl_driver_selection_values=[]"
+    },
+    {
+      "prio": 2,
+      "tag": "GraphicsEnvironment",
+      "message": "ANGLE GameManagerService for com.gaten: false"
+    },
+    {
+      "prio": 2,
+      "tag": "GraphicsEnvironment",
+      "message": "com.gaten is not listed in per-application setting"
+    },
+    {
+      "prio": 2,
+      "tag": "GraphicsEnvironment",
+      "message": "Neither updatable production driver nor prerelease driver is supported."
+    },
+    {
+      "prio": 6,
+      "tag": "SystemServiceRegistry",
+      "message": "No service published for: netstats\nandroid.os.ServiceManager$ServiceNotFoundException: No service published for: netstats\n\tat android.os.ServiceManager.getServiceOrThrow(ServiceManager.java:166)\n\tat android.app.SystemServiceRegistry$139.createService(SystemServiceRegistry.java:1872)\n\tat android.app.SystemServiceRegistry$CachedServiceFetcher.getService(SystemServiceRegistry.java:1971)\n\tat android.app.SystemServiceRegistry.getSystemService(SystemServiceRegistry.java:1645)\n\tat android.app.ContextImpl.getSystemService(ContextImpl.java:2212)\n\tat android.content.Context.getSystemService(Context.java:4420)\n\tat android.net.TrafficStats.init(TrafficStats.java:216)\n\tat android.app.ActivityThread.handleBindApplication(ActivityThread.java:6921)\n\tat android.app.ActivityThread.-$$Nest$mhandleBindApplication(Unknown Source:0)\n\tat android.app.ActivityThread$H.handleMessage(ActivityThread.java:2236)\n\tat android.os.Handler.dispatchMessage(Handler.java:106)\n\tat android.os.Looper.loopOnce(Looper.java:205)\n\tat android.os.Looper.loop(Looper.java:294)\n\tat dev.acos.art.LaunchMain.run(LaunchMain.java:351)\n\tat dev.acos.art.LaunchMain.main(LaunchMain.java:163)\n"
+    },
+    {
+      "prio": 6,
+      "tag": "TrafficStats",
+      "message": "TrafficStats not initialized, uid=1000"
+    },
+    {
+      "prio": 4,
+      "tag": "",
+      "message": "WaitForGcToComplete blocked ClassLinker on Background for 6.928ms"
+    },
+    {
+      "prio": 5,
+      "tag": "SoLoader",
+      "message": "Initializing SoLoader: 0"
+    },
+    {
+      "prio": 5,
+      "tag": "SoLoader",
+      "message": "Recording new base apk path: /data/app/gaten-x86_64-debug-launcherpatch-aligned.apk\nPreviously recorded 0 base apk paths."
+    },
+    {
+      "prio": 4,
+      "tag": "SoLoader",
+      "message": "Preparing SO source: DirectorySoSource[root = /vendor/lib64 flags = 2]"
+    },
+    {
+      "prio": 4,
+      "tag": "SoLoader",
+      "message": "Preparing SO source: DirectorySoSource[root = /system/lib64 flags = 2]"
+    },
+    {
+      "prio": 4,
+      "tag": "SoLoader",
+      "message": "Preparing SO source: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]"
+    },
+    {
+      "prio": 4,
+      "tag": "SoLoader",
+      "message": "Preparing SO source: BackupSoSource[root = /data/app-data/com.gaten/lib-main flags = 1 apks = [/data/app/gaten-x86_64-debug-launcherpatch-aligned.apk]]"
+    },
+    {
+      "prio": 4,
+      "tag": "SoLoader",
+      "message": "init finish: 4 SO sources prepared"
+    },
+    {
+      "prio": 5,
+      "tag": "SoLoader",
+      "message": "SoLoader initialized: 0"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Entering merged library JNI_OnLoad.\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing 13 pre-merged libs (including stub)\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libfabricjni_so.  onload_func: 47071530\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreact_devsupportjni_so.  onload_func: 472bd110\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreact_featureflagsjni_so.  onload_func: 472cf9a0\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreact_newarchdefaults_so.  onload_func: 47378560\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreact_tracingjni_so.  onload_func: 4767abb0\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreactnativeblob_so.  onload_func: 4768db00\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreactnativejni_so.  onload_func: 476b0d70\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreactnativejni_common_so.  onload_func: 476b6860\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register librninstance_so.  onload_func: 47733590\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libturbomodulejsijni_so.  onload_func: 478963b0\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libuimanagerjni_so.  onload_func: 478ac780\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libyoga_so.  onload_func: 478bb780\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "About to register 12 actual methods.\n"
+    },
+    {
+      "prio": 3,
+      "tag": "AppCompatDelegate",
+      "message": "Checking for metadata for AppLocalesMetadataHolderService : Service not found"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Entering merged library JNI_OnLoad.\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing 4 pre-merged libs (including stub)\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libhermes_executor_so.  onload_func: 4a12f6e0\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libhermesinstancejni_so.  onload_func: 4a15bb60\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libjsijniprofiler_so.  onload_func: 4a15d900\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "About to register 3 actual methods.\n"
+    },
+    {
+      "prio": 5,
+      "tag": "AcosPriority",
+      "message": "setpriority(-8) clamped to 0 (host RLIMIT_NICE is below stock init.rc's 40; guest-only adapter, W21)"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:BridgelessReact",
+      "message": "ReactHost{0}.startSurface(surfaceId = 0): Schedule"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:BridgelessReact",
+      "message": "ReactHost{0}.attachSurface(surfaceId = 0)"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:BridgelessReact",
+      "message": "ReactHost{0}.getOrCreateReactInstanceTask()"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:BridgelessReact",
+      "message": "ReactHost{0}.getOrCreateReactInstanceTask(): Start"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:BridgelessReact",
+      "message": "ReactHost{0}.getJSBundleLoader()"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:BridgelessReact",
+      "message": "ReactHost{0}.isMetroRunning()"
+    },
+    {
+      "prio": 6,
+      "tag": "logdw",
+      "message": "com.gaten.app.MainActivity"
+    },
+    {
+      "prio": 6,
+      "tag": "logdw",
+      "message": "com.gaten.app.MainActivity"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:BridgelessReact",
+      "message": "ReactHost{0}.onHostResume(activity)"
+    },
+    {
+      "prio": 6,
+      "tag": "LauncherIcon",
+      "message": "Could not switch the launcher icon; the entry keeps the one it has.\nandroid.content.pm.PackageManager$NameNotFoundException: ComponentInfo{com.gaten/com.gaten.app.LauncherIconSystem}\n\tat android.app.ApplicationPackageManager.getActivityInfo(ApplicationPackageManager.java:570)\n\tat android.app.ApplicationPackageManager.getActivityInfo(ApplicationPackageManager.java:553)\n\tat com.gaten.app.ui.theme.LauncherIcon.isEnabled(LauncherIcon.kt:106)\n\tat com.gaten.app.ui.theme.LauncherIcon.switchTo(LauncherIcon.kt:79)\n\tat com.gaten.app.ui.theme.LauncherIcon.sync$lambda$0(LauncherIcon.kt:66)\n\tat com.gaten.app.ui.theme.LauncherIcon.$r8$lambda$aMPXmlWtGaR4M6PzKD8NQq3vKqY(Unknown Source:0)\n\tat com.gaten.app.ui.theme.LauncherIcon$$ExternalSyntheticLambda1.run(D8$$SyntheticClass:0)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1145)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:644)\n\tat java.lang.Thread.run(Thread.java:1012)\n"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ReactNative",
+      "message": "The packager does not seem to be running as we got an IOException requesting its status: socket failed: EACCES (Permission denied)"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ReconnectingWebSocket",
+      "message": "Couldn't connect to \"ws://localhost:8081/message?device=ACOS%20ART%20-%2014%20-%20API%2034&app=com.gaten&clientid=BridgelessDevSupportManager\", will silently retry"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ReconnectingWebSocket",
+      "message": "Couldn't connect to \"ws://localhost:8081/message?device=ACOS%20ART%20-%2014%20-%20API%2034&app=com.gaten&clientid=BridgelessDevSupportManager\", will silently retry"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:BridgelessReact",
+      "message": "ReactHost{0}.isMetroRunning(): Async result = false"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:BridgelessReact",
+      "message": "ReactHost{0}.getOrCreateReactInstanceTask(): Creating BridgelessReactContext"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:BridgelessReact",
+      "message": "ReactHost{0}.getOrCreateReactInstanceTask(): Creating ReactInstance"
+    },
+    {
+      "prio": 6,
+      "tag": "logdw",
+      "message": "com.gaten.app.MainActivity"
+    },
+    {
+      "prio": 3,
+      "tag": "CompatibilityChangeReporter",
+      "message": "Compat change id reported: 237531167; UID 1000; state: ENABLED"
+    },
+    {
+      "prio": 5,
+      "tag": "GatenOcr",
+      "message": "Could not read the recognition pack's state\njava.lang.IllegalArgumentException: unknown service name \"com.android.vending\"\n\tat android.os.Parcel.createExceptionOrNull(Parcel.java:3061)\n\tat android.os.Parcel.createException(Parcel.java:3041)\n\tat android.os.Parcel.readException(Parcel.java:3024)\n\tat android.os.Parcel.readException(Parcel.java:2966)\n\tat android.content.pm.IPackageManager$Stub$Proxy.getPackageInfo(IPackageManager.java:4418)\n\tat android.content.pm.PackageManager.getPackageInfoAsUserUncached(PackageManager.java:10903)\n\tat android.content.pm.PackageManager.-$$Nest$smgetPackageInfoAsUserUncached(Unknown Source:0)\n\tat android.content.pm.PackageManager$2.recompute(PackageManager.java:10916)\n\tat android.content.pm.PackageManager$2.recompute(PackageManager.java:10913)\n\tat android.app.PropertyInvalidatedCache.query(PropertyInvalidatedCache.java:934)\n\tat android.content.pm.PackageManager.getPackageInfoAsUserCached(PackageManager.java:10930)\n\tat android.app.ApplicationPackageManager.getPackageInfoAsUser(ApplicationPackageManager.java:251)\n\tat android.app.ApplicationPackageManager.getPackageInfo(ApplicationPackageManager.java:216)\n\tat android.app.ApplicationPackageManager.getPackageInfo(ApplicationPackageManager.java:210)\n\tat com.google.android.play.core.assetpacks.internal.ai.b(com.google.android.play:asset-delivery@@2.3.0:4)\n\tat com.google.android.play.core.assetpacks.ax.<init>(com.google.android.play:asset-delivery@@2.3.0:3)\n\tat com.google.android.play.core.assetpacks.ay.a(com.google.android.play:asset-delivery@@2.3.0:3)\n\tat com.google.android.play.core.assetpacks.internal.aq.d(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.aq.a(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.at.a(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.aq.d(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.aq.a(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.t.a(com.google.android.play:asset-delivery@@2.3.0:5)\n\tat com.google.android.play.core.assetpacks.internal.aq.d(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.aq.a(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.ap.a(com.google.android.play:asset-delivery@@2.3.0:2)\n\tat com.google.android.play.core.assetpacks.inte"
+    },
+    {
+      "prio": 4,
+      "tag": "PlayCore",
+      "message": "UID: [1000]  PID: [2] AssetPackStateListenerRegistryV2 : registerListener"
+    },
+    {
+      "prio": 4,
+      "tag": "PlayCore",
+      "message": "UID: [1000]  PID: [2] AssetPackServiceListenerRegistry : registerListener"
+    },
+    {
+      "prio": 5,
+      "tag": "GatenOcr",
+      "message": "Lost the recognition pack's state updates\njava.lang.IllegalArgumentException: unknown service name \"com.android.vending\"\n\tat android.os.Parcel.createExceptionOrNull(Parcel.java:3061)\n\tat android.os.Parcel.createException(Parcel.java:3041)\n\tat android.os.Parcel.readException(Parcel.java:3024)\n\tat android.os.Parcel.readException(Parcel.java:2966)\n\tat android.content.pm.IPackageManager$Stub$Proxy.getPackageInfo(IPackageManager.java:4418)\n\tat android.content.pm.PackageManager.getPackageInfoAsUserUncached(PackageManager.java:10903)\n\tat android.content.pm.PackageManager.-$$Nest$smgetPackageInfoAsUserUncached(Unknown Source:0)\n\tat android.content.pm.PackageManager$2.recompute(PackageManager.java:10916)\n\tat android.content.pm.PackageManager$2.recompute(PackageManager.java:10913)\n\tat android.app.PropertyInvalidatedCache.query(PropertyInvalidatedCache.java:934)\n\tat android.content.pm.PackageManager.getPackageInfoAsUserCached(PackageManager.java:10930)\n\tat android.app.ApplicationPackageManager.getPackageInfoAsUser(ApplicationPackageManager.java:251)\n\tat android.app.ApplicationPackageManager.getPackageInfo(ApplicationPackageManager.java:216)\n\tat android.app.ApplicationPackageManager.getPackageInfo(ApplicationPackageManager.java:210)\n\tat com.google.android.play.core.assetpacks.internal.ai.b(com.google.android.play:asset-delivery@@2.3.0:4)\n\tat com.google.android.play.core.assetpacks.ax.<init>(com.google.android.play:asset-delivery@@2.3.0:3)\n\tat com.google.android.play.core.assetpacks.ay.a(com.google.android.play:asset-delivery@@2.3.0:3)\n\tat com.google.android.play.core.assetpacks.internal.aq.d(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.aq.a(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.at.a(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.aq.d(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.aq.a(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.t.a(com.google.android.play:asset-delivery@@2.3.0:5)\n\tat com.google.android.play.core.assetpacks.internal.aq.d(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.aq.a(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.ap.a(com.google.android.play:asset-delivery@@2.3.0:2)\n\tat com.google.android.play.core.assetpacks.intern"
+    },
+    {
+      "prio": 5,
+      "tag": "GatenOcr",
+      "message": "\tat kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:720)\n\tat kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:707)\n"
+    },
+    {
+      "prio": 5,
+      "tag": "GatenOcr",
+      "message": "Could not read the recognition pack's state\njava.lang.IllegalArgumentException: unknown service name \"com.android.vending\"\n\tat android.os.Parcel.createExceptionOrNull(Parcel.java:3061)\n\tat android.os.Parcel.createException(Parcel.java:3041)\n\tat android.os.Parcel.readException(Parcel.java:3024)\n\tat android.os.Parcel.readException(Parcel.java:2966)\n\tat android.content.pm.IPackageManager$Stub$Proxy.getPackageInfo(IPackageManager.java:4418)\n\tat android.content.pm.PackageManager.getPackageInfoAsUserUncached(PackageManager.java:10903)\n\tat android.content.pm.PackageManager.-$$Nest$smgetPackageInfoAsUserUncached(Unknown Source:0)\n\tat android.content.pm.PackageManager$2.recompute(PackageManager.java:10916)\n\tat android.content.pm.PackageManager$2.recompute(PackageManager.java:10913)\n\tat android.app.PropertyInvalidatedCache.query(PropertyInvalidatedCache.java:934)\n\tat android.content.pm.PackageManager.getPackageInfoAsUserCached(PackageManager.java:10930)\n\tat android.app.ApplicationPackageManager.getPackageInfoAsUser(ApplicationPackageManager.java:251)\n\tat android.app.ApplicationPackageManager.getPackageInfo(ApplicationPackageManager.java:216)\n\tat android.app.ApplicationPackageManager.getPackageInfo(ApplicationPackageManager.java:210)\n\tat com.google.android.play.core.assetpacks.internal.ai.b(com.google.android.play:asset-delivery@@2.3.0:4)\n\tat com.google.android.play.core.assetpacks.ax.<init>(com.google.android.play:asset-delivery@@2.3.0:3)\n\tat com.google.android.play.core.assetpacks.ay.a(com.google.android.play:asset-delivery@@2.3.0:3)\n\tat com.google.android.play.core.assetpacks.internal.aq.d(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.aq.a(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.at.a(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.aq.d(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.aq.a(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.t.a(com.google.android.play:asset-delivery@@2.3.0:5)\n\tat com.google.android.play.core.assetpacks.internal.aq.d(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.aq.a(com.google.android.play:asset-delivery@@2.3.0:1)\n\tat com.google.android.play.core.assetpacks.internal.ap.a(com.google.android.play:asset-delivery@@2.3.0:2)\n\tat com.google.android.play.core.assetpacks.inte"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:BridgelessReact",
+      "message": "ReactHost{0}.getOrCreateReactInstanceTask(): Loading JS Bundle"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:BridgelessReact",
+      "message": "ReactHost{0}.getOrCreateReactInstanceTask(): DevSupportManager.onNewReactContextCreated()"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:BridgelessReact",
+      "message": "ReactHost{0}.startSurface(surfaceId = 0): Execute"
+    },
+    {
+      "prio": 4,
+      "tag": "ReactNativeJS",
+      "message": "Running \"Gaten\""
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Entering merged library JNI_OnLoad.\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing 13 pre-merged libs (including stub)\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libfabricjni_so.  onload_func: 47071530\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreact_devsupportjni_so.  onload_func: 472bd110\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreact_featureflagsjni_so.  onload_func: 472cf9a0\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreact_newarchdefaults_so.  onload_func: 47378560\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreact_tracingjni_so.  onload_func: 4767abb0\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreactnativeblob_so.  onload_func: 4768db00\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreactnativejni_so.  onload_func: 476b0d70\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreactnativejni_common_so.  onload_func: 476b6860\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register librninstance_so.  onload_func: 47733590\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libturbomodulejsijni_so.  onload_func: 478963b0\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libuimanagerjni_so.  onload_func: 478ac780\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libyoga_so.  onload_func: 478bb780\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "About to register 12 actual methods.\n"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ReactNative",
+      "message": "Packager connection already open, nooping."
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:BridgelessReact",
+      "message": "ReactHost{0}.ReactContext.onHostResume()"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.reactnativekeyboardcontroller.OverKeyboardViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.reactnativekeyboardcontroller.views.overlay.OverKeyboardHostShadowNode"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.reactnativekeyboardcontroller.KeyboardToolbarGroupViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.uimanager.LayoutShadowNode"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.ScreenFooterManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.ScreenContainerViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.ModalScreenViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.reactnativekeyboardcontroller.KeyboardGestureAreaViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewShadowNode"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.safearea.SafeAreaViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.ScreenViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.reanimated.view.REASharedTransitionBoundaryManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.ScreenStackViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.gamma.stack.header.config.StackHeaderConfigViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaProviderManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.SearchBarManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.reactnativekeyboardcontroller.ClippingScrollViewDecoratorViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.host.TabsHostViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.gamma.stack.header.subview.StackHeaderSubviewViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.gaten.app.rn.GatenCardWebViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.gaten.app.rn.GatenThemeTransitionManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.reactnativekeyboardcontroller.KeyboardControllerViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.gamma.scrollviewmarker.ScrollViewMarkerViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderConfigViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.gamma.modals.formsheet.FormSheetContentWrapperViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.ScreenContentWrapperManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.reactnativepagerview.PagerViewViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.gamma.stack.host.StackHostViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderSubviewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.gamma.stack.screen.StackScreenViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.gamma.modals.formsheet.FormSheetHostViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.reactnativekeyboardcontroller.KeyboardBackgroundViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.screen.TabsScreenViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeMergeManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.VirtualViewManager$RenderableShadowNode"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerDetectorViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LinearGradientManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.progressbar.ReactProgressBarViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeColorMatrixManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$SymbolManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PatternManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.SvgViewManager"
+    },
+    {
+      "prio": 3,
+      "tag": "CompatibilityChangeReporter",
+      "message": "Compat change id reported: 210923482; UID 1000; state: ENABLED"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$UseViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TSpanViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FilterManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:BridgelessReact",
+      "message": "ReactHost{0}.getOrCreateReactInstanceTask(): Executing ReactInstanceEventListeners"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MarkerManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerButtonViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ForeignObjectManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$GroupViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ImageViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeCompositeManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RadialGradientManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeOffsetManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PathViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.drawer.ReactDrawerLayoutManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$DefsViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.debuggingoverlay.DebuggingOverlayManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeGaussianBlurManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollContainerViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ClipPathViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeBlendManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.view.ReactViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$CircleViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$EllipseViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LineViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeFloodManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.image.ReactImageManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MaskManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RectViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextPathViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.scroll.ReactScrollViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.text.SelectableTextViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerRootViewManager"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ViewManagerPropertyUpdater",
+      "message": "Could not find generated setter for class com.facebook.react.views.virtual.view.ReactVirtualViewManager"
+    },
+    {
+      "prio": 4,
+      "tag": "ReactNative",
+      "message": "[GESTURE HANDLER] Initialize gesture handler for root view com.facebook.react.runtime.ReactSurfaceView{d491426 V.E...... ......ID 0,0-1080,2209 #1}"
+    },
+    {
+      "prio": 3,
+      "tag": "CompatibilityChangeReporter",
+      "message": "Compat change id reported: 289878283; UID 1000; state: ENABLED"
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ReactNative",
+      "message": "StatusBarModule: Ignored status bar change, current activity is edge-to-edge."
+    },
+    {
+      "prio": 5,
+      "tag": "unknown:ReactNative",
+      "message": "StatusBarModule: Ignored status bar change, current activity is edge-to-edge."
+    },
+    {
+      "prio": 4,
+      "tag": "ThemedReactContext",
+      "message": "KeyboardController::windowDidResize\n"
+    },
+    {
+      "prio": 4,
+      "tag": "",
+      "message": "System.exit called, status: 0"
+    }
+  ],
+  "notes": [
+    "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=167MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3383526-i7438266.scope)",
+    "seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0",
+    "logd: 198 entries"
+  ],
+  "marker": "package=com.gaten\napplication=com.gaten.app.MainApplication\napplication_classloader_is_apk=true\napplication_base=com.gaten//data/app/gaten-x86_64-debug-launcherpatch-aligned.apk\ninstrumentation=android.app.Instrumentation\ninstrumentation_source=framework (bind request instrumentationName=null)\napp_flags=0x38808046\napp_flags_source=env\nsourceDir=/data/app/gaten-x86_64-debug-launcherpatch-aligned.apk\n"
+}

@@ -443,6 +443,45 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         .as_ref()
         .map(|l| l.label.clone())
         .unwrap_or_default();
+    // W31: `ApplicationInfo.flags` from the parsed manifest. `PmsState::from_apk`
+    // is the host's `PackageParser` equivalent (`acos-apk`'s typed manifest);
+    // its `AppInfo.flags` is what a package manager hands the framework, and
+    // `FLAG_INSTALLED` is the post-install bit PMS sets. `FLAG_HARDWARE_ACCELERATED`
+    // is cleared here, once, because the surface-less ACOS window draws through
+    // the software `ViewRootImpl` path (P4b §4) and the guest must not be told
+    // otherwise. No APK-specific bit is synthesised in the guest.
+    const FLAG_INSTALLED: i32 = 1 << 23;
+    const FLAG_HARDWARE_ACCELERATED: i32 = 1 << 29;
+    let mut app_flags = installed
+        .as_ref()
+        .map(|state| ((state.app.flags & !FLAG_HARDWARE_ACCELERATED) | FLAG_INSTALLED) as i64)
+        .unwrap_or(-1);
+    // Diagnostic seam (W31): `ACOSLAUNCH_APP_FLAGS=0x…` (or decimal) lets a run
+    // prove a *future* manifest derivation end to end before the host PMS owns
+    // it (`crates/acos-apk::manifest::Manifest::application_flags` is unit
+    // tested on counter + Gaten). It never invents bits: the value is logged
+    // and recorded in `application-created.marker` as `app_flags=…`.
+    let mut app_flags_source = if installed.is_some() { "manifest" } else { "default" };
+    if let Ok(raw) = std::env::var("ACOSLAUNCH_APP_FLAGS") {
+        let text = raw.trim();
+        let parsed = if let Some(hex) = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")) {
+            i64::from_str_radix(hex, 16).ok()
+        } else {
+            text.parse::<i64>().ok()
+        };
+        if let Some(value) = parsed {
+            if (0..=u32::MAX as i64).contains(&value) {
+                app_flags = value;
+                app_flags_source = "env";
+            }
+        }
+    }
+    eprintln!(
+        "acos-art: launch: app flags=0x{:08x} (source={}; installed={})",
+        app_flags.max(0),
+        app_flags_source,
+        installed.is_some()
+    );
     let argv: Vec<String> = vec![
         "-cp".into(),
         "/data/app/launch-guest/classes.dex".into(),
@@ -464,6 +503,10 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         activity_label.literal.clone().unwrap_or_default(),
         // W27: the alias's targetActivity (empty for a plain activity).
         activity_target.clone(),
+        // W31: manifest-derived `ApplicationInfo.flags` (`-1` = none) and the
+        // source label recorded in `application-created.marker`.
+        app_flags.to_string(),
+        app_flags_source.to_string(),
     ];
     crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();

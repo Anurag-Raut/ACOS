@@ -1,0 +1,76 @@
+acos-art: guards rss_max=2048MiB rlimit_data=2560MiB stream_cap=8MiB log_cap=50000
+/home/Qui/Projects/acos/.cache/art-locks/data-W31-flags-gaten4-3381774/shim/artshim.c:95:13: warning: unused function 'sys6' [-Wunused-function]
+   95 | static long sys6(long n, long a, long b, long c, long d, long e, long f) {
+      |             ^~~~
+/home/Qui/Projects/acos/.cache/art-locks/data-W31-flags-gaten4-3381774/shim/artshim.c:111:13: warning: unused function 'sb_putn' [-Wunused-function]
+  111 | static void sb_putn(struct sbuf *s, const char *p, usize n) { while (n--) sb_putc(s, *p++); }
+      |             ^~~~~~~
+2 warnings generated.
+acos-art: launch: native libs installed=23 dir=/home/Qui/Projects/acos/.cache/art-locks/data-W31-flags-gaten4-3381774/runs/3382040-0/app-lib guest=/data/app-lib/x86_64
+acos-art: launch: static overlays: 5 applied (5 idmaps generated, 0 cached, 2952 B)
+acos-art: launch: resume budget=60000ms (dex=31 native_bytes=112907056 default=45000ms) (ACOSLAUNCH_RESUME_MS)
+acos-art: launch: app flags=0x38808046 (source=env; installed=true)
+acos-art: launch: guest RLIMIT_NICE 0 < init.rc 40: Process.setThreadPriority(THREAD_PRIORITY_DISPLAY) will throw SecurityException (start the runner with a stock nice limit >= 24 / CAP_SYS_RESOURCE in the initial userns)
+acos-binder-peer: launch bindApplication request stashed (1324 bytes)
+acos-binder-peer: launch reply template stashed for android.hardware.display.IDisplayManager code 1 (232 bytes, framework-marshalled)
+acos-binder-peer: launch reply template stashed for android.content.pm.IPackageManager code 9 (648 bytes, framework-marshalled)
+acos-binder-peer: launch reply template stashed for android.content.pm.IPackageManager code 44 (392 bytes, framework-marshalled)
+acos-binder-peer: delivering bindApplication (1324 bytes, code 5) to java binder wire=1
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.content.pm.IPackageManager.getApplicationInfo answered from a framework-marshalled reply (648 bytes)
+acos-binder-peer: launch ClientTransaction request stashed (2036 bytes, framework-marshalled)
+acos-binder-peer: delivering ClientTransaction (2036 bytes, IApplicationThread.scheduleTransaction code 54) to java binder wire=1
+acos-binder-peer: android.content.pm.IPackageManager.getApplicationInfo answered from a framework-marshalled reply (648 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.content.pm.IPackageManager.getApplicationInfo answered from a framework-marshalled reply (648 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.content.pm.IPackageManager.getApplicationInfo answered from a framework-marshalled reply (648 bytes)
+acos-binder-peer: UNSUPPORTED_ANDROID_API {"code":3,"descriptor":"android.content.pm.IPackageManager","error":"SERVICE_UNKNOWN_NAME","kind":"UNSUPPORTED_ANDROID_API","message":"unknown service name \"com.android.vending\"","method":"getPackageInfo"}
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: UNSUPPORTED_ANDROID_API {"code":2,"descriptor":"android.app.IActivityClientController","error":"SERVICE_ILLEGAL_STATE","kind":"UNSUPPORTED_ANDROID_API","message":"illegal state in atms: no activity for token 0x0","method":"activityResumed"}
+acos-binder-peer: android.content.pm.IPackageManager.getApplicationInfo answered from a framework-marshalled reply (648 bytes)
+acos-binder-peer: android.content.pm.IPackageManager.getApplicationInfo answered from a framework-marshalled reply (648 bytes)
+acos-binder-peer: UNSUPPORTED_ANDROID_API {"code":3,"descriptor":"android.content.pm.IPackageManager","error":"SERVICE_UNKNOWN_NAME","kind":"UNSUPPORTED_ANDROID_API","message":"unknown service name \"com.android.vending\"","method":"getPackageInfo"}
+acos-binder-peer: android.content.pm.IPackageManager.getApplicationInfo answered from a framework-marshalled reply (648 bytes)
+acos-binder-peer: android.content.pm.IPackageManager.getApplicationInfo answered from a framework-marshalled reply (648 bytes)
+acos-binder-peer: UNSUPPORTED_ANDROID_API {"code":3,"descriptor":"android.content.pm.IPackageManager","error":"SERVICE_UNKNOWN_NAME","kind":"UNSUPPORTED_ANDROID_API","message":"unknown service name \"com.android.vending\"","method":"getPackageInfo"}
+acos-binder-peer: android.content.pm.IPackageManager.getApplicationInfo answered from a framework-marshalled reply (648 bytes)
+acos-binder-peer: android.content.pm.IPackageManager.getApplicationInfo answered from a framework-marshalled reply (648 bytes)
+acos-binder-peer: UNSUPPORTED_ANDROID_API {"code":3,"descriptor":"android.content.pm.IPackageManager","error":"SERVICE_UNKNOWN_NAME","kind":"UNSUPPORTED_ANDROID_API","message":"unknown service name \"com.android.vending\"","method":"getPackageInfo"}
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+ACOSW13 ime startInput sequence=1 client=Some(4294967302) recorded=6 editor={inputType=0 imeOptions=0 package=Some("com.gaten") fieldId=0 hint=None autofill=Some(0) extras=false surrounding=false mime=None} -> NO_IME
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: UNSUPPORTED_ANDROID_API {"code":1,"descriptor":"android.app.IActivityClientController","error":"SERVICE_ILLEGAL_STATE","kind":"UNSUPPORTED_ANDROID_API","message":"illegal state in atms: no activity for token 0x0","method":"activityIdle"}
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-art: launch wall=521ms until=activity-resumed application_created=true activity_resumed=true txn=Some(2036)/true reverse_replies=6 reverse_failed=0 logd=198 (logd: 198 entries) peer_resource_limits=0
+acos-art: cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=167MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3383526-i7438266.scope)
+acos-art: seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0
+acos-art: logd: 198 entries

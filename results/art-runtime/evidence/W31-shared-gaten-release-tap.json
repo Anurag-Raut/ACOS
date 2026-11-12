@@ -1,0 +1,209 @@
+{
+  "request_id": "req_371d35_18e72949ab59e702",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "session_id": "s_art_gaten-x86_64-release",
+  "isolation": "process",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "screenshot",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": "results/art-runtime/evidence/W31-artifacts/shared-gaten-release-tap",
+    "verdict": {
+      "app": {
+        "package": "com.gaten.app",
+        "path": ".cache/gaten/gaten-x86_64-release.apk",
+        "sha256": "0f14f7f3046ae84b095157764abcecfd9cc87902ffd52e3db81e9e21359b65f4"
+      },
+      "backend": "acos-native",
+      "engine": "art",
+      "evidence": {
+        "artifacts": "results/art-runtime/evidence/W31-artifacts/shared-gaten-release-tap",
+        "engine_report": "results/art-runtime/evidence/W31-artifacts/shared-gaten-release-tap/engine.json",
+        "verdict": "results/art-runtime/evidence/W31-artifacts/shared-gaten-release-tap/verdict.json"
+      },
+      "evidence_provenance": {
+        "binder_transactions": "host-observed",
+        "crash_reports": "guest-asserted",
+        "frames": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "logs": "guest-asserted",
+        "static_manifest": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-12T01:52:59.486Z",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [],
+      "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+      "reproducer": {
+        "acos_version": "0.1.0",
+        "apk_path": ".cache/gaten/gaten-x86_64-release.apk",
+        "apk_sha256": "0f14f7f3046ae84b095157764abcecfd9cc87902ffd52e3db81e9e21359b65f4",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 420,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": "scenarios/w28-gaten-release-tap.yaml",
+        "scenario_sha256": "7074d91fb1ba6f7b79714ea2edec278de439d61e7ef1807cc0657f12537df0ef"
+      },
+      "request_id": "req_371d35_18e72949ab59e702",
+      "resources": {
+        "events": 188,
+        "frames_captured": 4,
+        "memory_mib": 235,
+        "peak_rss_bytes": 247083008,
+        "sessions": 1,
+        "steps": 4,
+        "wall_ms": 2366
+      },
+      "scenario": {
+        "name": "w28-gaten-release-tap",
+        "path": "scenarios/w28-gaten-release-tap.yaml",
+        "sha256": "7074d91fb1ba6f7b79714ea2edec278de439d61e7ef1807cc0657f12537df0ef"
+      },
+      "schema_version": 1,
+      "session_id": "s_art_gaten-x86_64-release",
+      "started_at": "2026-11-12T01:52:57.120Z",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 571,
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "provenance": {
+            "frame": "host-observed",
+            "launch_markers": "guest-asserted",
+            "lifecycle_markers": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "launch"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 1,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/1.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/1.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/01-wait_for.json"
+            }
+          ],
+          "frame_seq": 1,
+          "index": 1,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "wait_for"
+        },
+        {
+          "assertions": [
+            {
+              "kind": "state_change",
+              "matched_node_ids": [],
+              "message": "UI tree and screenshot both changed",
+              "passed": true
+            }
+          ],
+          "duration_ms": 1284,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/2.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/2.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/02-tap.json"
+            }
+          ],
+          "frame_seq": 2,
+          "index": 2,
+          "provenance": {
+            "frame": "host-observed",
+            "host_input": "host-observed",
+            "input_acks": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "tap"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 492,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/3.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/3.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/03-capture.json"
+            }
+          ],
+          "frame_seq": 3,
+          "index": 3,
+          "provenance": {
+            "frame": "host-observed"
+          },
+          "status": "pass",
+          "step": "capture"
+        }
+      ],
+      "trust": "trusted",
+      "unsupported_steps": [],
+      "verdict": "pass"
+    },
+    "verdict_path": "results/art-runtime/evidence/W31-artifacts/shared-gaten-release-tap/verdict.json"
+  },
+  "metrics": {
+    "wall_ms": 2366,
+    "peak_rss_bytes": 247083008
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  }
+}

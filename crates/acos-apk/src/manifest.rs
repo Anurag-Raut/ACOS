@@ -4,6 +4,25 @@ use crate::arsc::ResourceTable;
 use crate::axml::{TypedValue, XmlAttribute, XmlDocument, XmlNode};
 use crate::error::Result;
 
+// `ApplicationInfo` flag bits, from the API-34 image's `ApplicationInfo`
+// (`.cache/aosp/base/core/java/android/content/pm/ApplicationInfo.java`).
+pub const FLAG_DEBUGGABLE: i32 = 1 << 1;
+pub const FLAG_HAS_CODE: i32 = 1 << 2;
+pub const FLAG_ALLOW_TASK_REPARENTING: i32 = 1 << 5;
+pub const FLAG_TEST_ONLY: i32 = 1 << 8;
+pub const FLAG_ALLOW_CLEAR_USER_DATA: i32 = 1 << 6;
+pub const FLAG_VM_SAFE_MODE: i32 = 1 << 14;
+pub const FLAG_ALLOW_BACKUP: i32 = 1 << 15;
+pub const FLAG_LARGE_HEAP: i32 = 1 << 20;
+pub const FLAG_MULTIARCH: i32 = 1 << 21;
+pub const FLAG_SUPPORTS_RTL: i32 = 1 << 22;
+/// Set by the package manager on an installed package, not by `PackageParser`.
+pub const FLAG_INSTALLED: i32 = 1 << 23;
+pub const FLAG_IS_GAME: i32 = 1 << 25;
+pub const FLAG_USES_CLEARTEXT_TRAFFIC: i32 = 1 << 27;
+pub const FLAG_EXTRACT_NATIVE_LIBS: i32 = 1 << 28;
+pub const FLAG_HARDWARE_ACCELERATED: i32 = 1 << 29;
+
 /// `<uses-permission>`.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct UsesPermission {
@@ -30,6 +49,19 @@ pub struct ApplicationInfo {
     pub extract_native_libs: Option<bool>,
     /// `android:hardwareAccelerated` (absent = application default, see PMS).
     pub hardware_accelerated: Option<bool>,
+    /// W31: the rest of `ParsingPackageUtils.parseBaseApplication`'s
+    /// `ApplicationInfo.flags` inputs. `None` means "attribute absent"; the
+    /// stock default is applied in [`Manifest::application_flags`], never here.
+    pub has_code: Option<bool>,
+    pub uses_cleartext_traffic: Option<bool>,
+    pub large_heap: Option<bool>,
+    pub supports_rtl: Option<bool>,
+    pub is_game: Option<bool>,
+    pub vm_safe_mode: Option<bool>,
+    pub allow_clear_user_data: Option<bool>,
+    pub allow_task_reparenting: Option<bool>,
+    pub test_only: Option<bool>,
+    pub multi_arch: Option<bool>,
     pub theme: Option<u32>,
     pub process: Option<String>,
 }
@@ -217,6 +249,83 @@ impl Manifest {
         })
     }
 
+    /// The `<application>` `ApplicationInfo.flags` **as `PackageParser` computes
+    /// them**, transcribed from `.cache/aosp/base/core/java/android/content/pm/
+    /// PackageParser.java::parseBaseApplication` (tag android-14.0.0_r75) and
+    /// checked against the API-34 image's `ApplicationInfo` constants.
+    ///
+    /// `FLAG_INSTALLED` is **not** a parser flag: the package manager sets it on
+    /// an installed package after parsing, so it is applied separately by
+    /// [`Self::application_flags_installed`].
+    ///
+    /// Attributes this model does not carry yet (backupAgent, `killAfterRestore`,
+    /// `restoreAnyVersion`, `fullBackupOnly`) are documented as unmodelled: their
+    /// bits are only set when a backup agent is declared, and no corpus APK
+    /// declares one.
+    #[must_use]
+    pub fn application_flags(&self) -> i32 {
+        // `usesCleartextTraffic` and `hardwareAccelerated` default from
+        // targetSdkVersion, so an absent `<uses-sdk>` keeps the launcher's
+        // previous assumption (API 34).
+        let target_sdk = self.target_sdk.unwrap_or(34) as i32;
+        let app = &self.application;
+        let mut flags = 0i32;
+        // PackageParser.parseBaseApplication, in its own order.
+        if app.allow_backup.unwrap_or(true) {
+            flags |= FLAG_ALLOW_BACKUP;
+        }
+        if app.debuggable.unwrap_or(false) {
+            flags |= FLAG_DEBUGGABLE;
+        }
+        if app.vm_safe_mode.unwrap_or(false) {
+            flags |= FLAG_VM_SAFE_MODE;
+        }
+        if app.hardware_accelerated.unwrap_or(target_sdk >= 14) {
+            flags |= FLAG_HARDWARE_ACCELERATED;
+        }
+        if app.has_code.unwrap_or(true) {
+            flags |= FLAG_HAS_CODE;
+        }
+        if app.allow_task_reparenting.unwrap_or(false) {
+            flags |= FLAG_ALLOW_TASK_REPARENTING;
+        }
+        if app.allow_clear_user_data.unwrap_or(true) {
+            flags |= FLAG_ALLOW_CLEAR_USER_DATA;
+        }
+        if app.test_only.unwrap_or(false) {
+            flags |= FLAG_TEST_ONLY;
+        }
+        if app.large_heap.unwrap_or(false) {
+            flags |= FLAG_LARGE_HEAP;
+        }
+        // `sa.getBoolean(usesCleartextTraffic, targetSdkVersion < P)`: an app
+        // targeting API 27 or lower may talk cleartext by default; an app
+        // targeting 28+ must ask for `android:usesCleartextTraffic="true"`.
+        if app.uses_cleartext_traffic.unwrap_or(target_sdk < 28) {
+            flags |= FLAG_USES_CLEARTEXT_TRAFFIC;
+        }
+        if app.supports_rtl.unwrap_or(false) {
+            flags |= FLAG_SUPPORTS_RTL;
+        }
+        if app.multi_arch.unwrap_or(false) {
+            flags |= FLAG_MULTIARCH;
+        }
+        if app.extract_native_libs.unwrap_or(true) {
+            flags |= FLAG_EXTRACT_NATIVE_LIBS;
+        }
+        if app.is_game.unwrap_or(false) {
+            flags |= FLAG_IS_GAME;
+        }
+        flags
+    }
+
+    /// The flags a **stock package manager leaves on an installed package**:
+    /// the parser's flags plus `FLAG_INSTALLED` (`PackageManagerService`).
+    #[must_use]
+    pub fn application_flags_installed(&self) -> i32 {
+        self.application_flags() | FLAG_INSTALLED
+    }
+
     /// All components as `(kind, &Component)`.
     pub fn all_components(&self) -> Vec<(ComponentKind, &Component)> {
         let mut out = Vec::new();
@@ -246,6 +355,16 @@ fn parse_application(app: &XmlNode, package: &str) -> ApplicationInfo {
         allow_backup: attr_bool(app, "allowBackup"),
         extract_native_libs: attr_bool(app, "extractNativeLibs"),
         hardware_accelerated: attr_bool(app, "hardwareAccelerated"),
+        has_code: attr_bool(app, "hasCode"),
+        uses_cleartext_traffic: attr_bool(app, "usesCleartextTraffic"),
+        large_heap: attr_bool(app, "largeHeap"),
+        supports_rtl: attr_bool(app, "supportsRtl"),
+        is_game: attr_bool(app, "isGame"),
+        vm_safe_mode: attr_bool(app, "vmSafeMode"),
+        allow_clear_user_data: attr_bool(app, "allowClearUserData"),
+        allow_task_reparenting: attr_bool(app, "allowTaskReparenting"),
+        test_only: attr_bool(app, "testOnly"),
+        multi_arch: attr_bool(app, "multiArch"),
         theme: attr_ref(app, "theme"),
         process: attr_string(app, "process"),
     }

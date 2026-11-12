@@ -80,6 +80,18 @@ public final class LaunchMain {
     /** W27: effective `Activity.mResumed` wait (`ACOSLAUNCH_RESUME_MS`). */
     static long sResumeMs = 12000L;
     /**
+     * W31: `ApplicationInfo.flags` as `PackageParser` derived them from the
+     * APK's manifest, plus the package manager's post-install
+     * `FLAG_INSTALLED`. `-1` = the host supplied none (older callers): keep the
+     * historical `FLAG_HAS_CODE | FLAG_INSTALLED` value so such a caller is not
+     * silently changed. The host clears `FLAG_HARDWARE_ACCELERATED` before
+     * passing it (P4b: the surface-less ACOS window only draws through the
+     * software `ViewRootImpl` path).
+     */
+    static int sAppFlags = -1;
+    /** W31: where `sAppFlags` came from (`manifest`, `env`, or `default`). */
+    static String sAppFlagsSource = "default";
+    /**
      * Frame-probe progress: `-1` = probe disabled, otherwise the number of
      * completed `doFrame` callbacks. The watcher waits for this before sending
      * the activity transaction so the probe evidence is not cut short by the
@@ -122,6 +134,18 @@ public final class LaunchMain {
         }
         if (args.length > 11 && args[11] != null) sActivityLabelText = args[11];
         if (args.length > 12 && args[12] != null) sTargetActivity = args[12];
+        // W31: manifest-derived `ApplicationInfo.flags` (decimal; `-1`/absent =
+        // none supplied).
+        if (args.length > 13 && args[13] != null && args[13].trim().length() > 0) {
+            try {
+                sAppFlags = (int) Long.parseLong(args[13].trim());
+            } catch (NumberFormatException ignored) {
+                sAppFlags = -1;
+            }
+        }
+        if (args.length > 14 && args[14] != null && args[14].trim().length() > 0) {
+            sAppFlagsSource = args[14].trim();
+        }
         // W27: the resume budget is configurable. The host picks a documented
         // default from the APK shape and forwards it; an explicit value from
         // the environment is clammped to a sane deadline.
@@ -522,7 +546,11 @@ public final class LaunchMain {
      * <p>The walk runs on the main thread (a Handler post between messages), so
      * it observes the same state the app draws and never races a traversal.
      * Every sample is one stdout line: {@code ACOSPROBE } followed by JSON
-     * {@code {"seq":N,"time":ms,"tree":{"nodes":[...]}}}.
+     * {@code {"seq":N,"time":ms,"tree":{"nodes":[...],"node_budget":N,
+     * "truncated":bool}}}. W31: a sample that stopped at the {@link
+     * #PROBE_NODE_BUDGET} cap says so; the engine copies the flag into the
+     * saved {@code UiTree}, so a saved tree never claims completeness it does
+     * not have.
      *
      * <p>Bounds are reported twice: {@code bounds} is
      * {@code View.getLocationInWindow} (the coordinate space the host's
@@ -628,6 +656,12 @@ public final class LaunchMain {
         }
         StringBuilder nodes = new StringBuilder(2048);
         StringBuilder windows = new StringBuilder(256);
+        // W31: the per-window node budget is a hard cap, so the sample must say
+        // so. Before W31 a tree that stopped at the cap was reported as if it
+        // were the whole hierarchy (`truncated` absent => false), which made a
+        // saved tree claim completeness it did not have. One flag for the whole
+        // sample: true if any window stopped at the cap.
+        boolean[] truncated = new boolean[]{false};
         int z = 0;
         boolean sawMain = false;
         for (View root : roots) {
@@ -642,9 +676,9 @@ public final class LaunchMain {
             if (windows.length() > 0) windows.append(',');
             windows.append("{\"z\":").append(z)
                     .append(",\"window\":\"").append(jesc(label)).append("\"}");
-            int[] budget = new int[]{160};
+            int[] budget = new int[]{PROBE_NODE_BUDGET};
             try {
-                appendViewJson(root, nodes, budget, label);
+                appendViewJson(root, nodes, budget, truncated, label);
             } catch (Throwable ignored) {
                 // A probe must never disturb the app; skip one bad window.
             }
@@ -653,9 +687,9 @@ public final class LaunchMain {
         if (!sawMain) {
             // The Activity decor was not in mViews (window not attached yet):
             // keep the old single-window sample rather than an empty tree.
-            int[] budget = new int[]{160};
+            int[] budget = new int[]{PROBE_NODE_BUDGET};
             try {
-                appendViewJson((View) decor, nodes, budget, "main");
+                appendViewJson((View) decor, nodes, budget, truncated, "main");
             } catch (Throwable ignored) {
                 return;
             }
@@ -664,7 +698,10 @@ public final class LaunchMain {
         j.append("ACOSPROBE {\"seq\":").append(seq)
                 .append(",\"time\":").append(System.currentTimeMillis())
                 .append(",\"windows\":[").append(windows).append("]")
-                .append(",\"tree\":{\"nodes\":[").append(nodes).append("]}}");
+                .append(",\"tree\":{\"nodes\":[").append(nodes).append(']')
+                .append(",\"node_budget\":").append(PROBE_NODE_BUDGET)
+                .append(",\"truncated\":").append(truncated[0])
+                .append("}}");
         System.out.println(j);
         System.out.flush();
     }
@@ -738,8 +775,15 @@ public final class LaunchMain {
         return title + "#" + z;
     }
 
-    static void appendViewJson(View v, StringBuilder out, int[] budget, String window) {
-        if (budget[0]-- <= 0) return;
+    /** W31: how many nodes one window's probe sample may carry (hard cap). */
+    static final int PROBE_NODE_BUDGET = 160;
+
+    static void appendViewJson(View v, StringBuilder out, int[] budget, boolean[] truncated,
+            String window) {
+        if (budget[0]-- <= 0) {
+            truncated[0] = true;
+            return;
+        }
         int[] loc = new int[2];
         try {
             v.getLocationInWindow(loc);
@@ -850,11 +894,16 @@ public final class LaunchMain {
             boolean first = true;
             StringBuilder kids = new StringBuilder();
             int n = g.getChildCount();
-            for (int i = 0; i < n && budget[0] > 0; i++) {
+            for (int i = 0; i < n; i++) {
+                if (budget[0] <= 0) {
+                    // There are children this sample cannot carry: say so.
+                    truncated[0] = true;
+                    break;
+                }
                 View child = g.getChildAt(i);
                 if (child == null) continue;
                 StringBuilder one = new StringBuilder();
-                appendViewJson(child, one, budget, window);
+                appendViewJson(child, one, budget, truncated, window);
                 if (one.length() == 0) continue;
                 if (!first) kids.append(',');
                 kids.append(one);
@@ -1024,6 +1073,10 @@ public final class LaunchMain {
                 + "\napplication_base=" + appBase
                 + "\ninstrumentation=" + (instr == null ? "null" : instr.getClass().getName())
                 + "\ninstrumentation_source=framework (bind request instrumentationName=null)"
+                // W31: the flags the framework was given for this app, and where
+                // they came from (manifest-derived vs the historical default).
+                + "\napp_flags=0x" + Integer.toHexString(sAppFlags >= 0 ? sAppFlags : (0x4 | 0x800000))
+                + "\napp_flags_source=" + (sAppFlags >= 0 ? sAppFlagsSource : "default")
                 + "\nsourceDir=" + sApk + "\n";
         write(new File(sOut, "application-created.marker"), marker);
         System.out.println("ACOSLAUNCH MARK application-created package=" + sPkg
@@ -1260,6 +1313,15 @@ public final class LaunchMain {
                 // ActivityThread's own natives (nInitZygoteChildHeapProfiling is
                 // called from handleBindApplication).
                 "register_android_app_ActivityThread",
+                // W31: `Activity.performStart` reads
+                // `getDlWarning()` only when the app's
+                // `ApplicationInfo.flags` has FLAG_DEBUGGABLE. The guest used to
+                // hardcode flags without it; once the manifest-derived flags are
+                // truthful (Gaten debug is debuggable) the framework calls this
+                // native, so the image's own registration must be present.
+                // Symbol: `_ZN7android29register_android_app_ActivityEP7_JNIEnv`
+                // (`nm -D .cache/art/sysroot/system/lib64/libandroid_runtime.so`).
+                "register_android_app_Activity",
                 // LoadedApk.createOrUpdateClassLoaderLocked -> libnativeloader
                 // (the APK's class loader namespace).
                 "register_com_android_internal_os_ClassLoaderFactory",
@@ -1508,8 +1570,28 @@ public final class LaunchMain {
         ai.uid = android.os.Process.myUid();
         ai.minSdkVersion = 26;
         ai.targetSdkVersion = 34;
-        // FLAG_HAS_CODE(0x4) | FLAG_INSTALLED(0x800000)
-        ai.flags = 0x4 | 0x800000;
+        // W31: the flags `PackageParser.parseBaseApplication` derives from the
+        // manifest (`acos-apk::manifest::Manifest::application_flags`), plus
+        // PMS's post-install `FLAG_INSTALLED`. The host supplies them; before
+        // W31 this line hardcoded `0x4 | 0x800000`, so
+        // `FLAG_USES_CLEARTEXT_TRAFFIC` (1<<27) was missing for an APK whose
+        // manifest sets `android:usesCleartextTraffic="true"` and
+        // `NetworkSecurityPolicy` denied RN's `http://localhost:8081` probe
+        // (W28 §6.1).
+        // FLAG_HARDWARE_ACCELERATED is deliberately absent: the platform default
+        // for the software `ViewRootImpl` path is the only drawing route a
+        // surface-less ACOS window can serve at all (P4b.md §4); the host clears
+        // the bit the manifest asks for and the guest never re-adds it.
+        if (sAppFlags >= 0) {
+            ai.flags = sAppFlags;
+        } else {
+            // FLAG_HAS_CODE(0x4) | FLAG_INSTALLED(0x800000)
+            ai.flags = 0x4 | 0x800000;
+        }
+        System.out.println("ACOSLAUNCH MARK app-flags flags=0x"
+                + Integer.toHexString(ai.flags)
+                + " source=" + (sAppFlags >= 0 ? sAppFlagsSource : "default"));
+        System.out.flush();
         // No `FLAG_HARDWARE_ACCELERATED`: the platform default for an app that
         // does not ask for it is the software ViewRootImpl path, which is the
         // only drawing route a surface-less ACOS window can serve at all

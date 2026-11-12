@@ -1,0 +1,10 @@
+v2-art-counter	fixtures/build/apps/counter.apk	0	pass	1/1///1/1	6584
+w19-form-behavior	fixtures/build/apps/form-validation.apk	0	pass	8///8	2428
+w22-counter-reset	fixtures/build/apps/counter.apk	0	pass	9///9	3942
+w22-counter-log	fixtures/build/apps/counter.apk	0	pass	6///6	7433
+w23-rn-hello-tap	fixtures/build/apps/rn-hello.apk	0	pass	6///6	1585
+w24-counter-labels	fixtures/build/apps/counter.apk	0	pass	7///7	2347
+w21-native-hello	fixtures/build/apps/native-hello.apk	0	pass	2///2	946
+w15-two-activity	fixtures/build/apps/two-activity.apk	0	pass	3///3	504
+w15-dialog-menu	fixtures/build/apps/dialog-menu.apk	0	pass	3///3	506
+w28-gaten-release-tap	.cache/gaten/gaten-x86_64-release.apk	0	pass	4///4	2398

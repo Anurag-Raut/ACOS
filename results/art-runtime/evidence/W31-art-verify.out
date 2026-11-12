@@ -1,0 +1,32 @@
+program                        pass    exit   exp wall_ms notes
+01_hello                       PASS       0     0      67 
+02_int_arith                   PASS       0     0      57 
+03_long_arith                  PASS       0     0      67 
+04_float_double                PASS       0     0      65 
+05_branches_loops              PASS       0     0      57 
+06_switch                      PASS       0     0      62 
+07_static_methods_recursion    PASS       0     0      62 
+08_arrays                      PASS       0     0      62 
+09_strings                     PASS       0     0      77 
+10_objects_fields              PASS       0     0      67 
+11_inheritance_virtual         PASS       0     0      67 
+12_interfaces                  PASS       0     0      57 
+13_exceptions                  PASS       0     0      67 
+14_instanceof_casts            PASS       0     0      67 
+15_inner_lambda                PASS       0     0      67 
+16_enums                       PASS       0     0      67 
+17_generics_collections        PASS       0     0      67 
+18_string_format_misc          PASS       0     0      67 
+19_threads_sync                PASS       0     0      87 
+20_uncaught                    PASS       1     1      67 
+21_regex_basic                 PASS       0     0      70 
+22_regex_advanced              PASS       0     0      72 
+23_regex_split_replace         PASS       0     0      72 
+24_zip_roundtrip               PASS       0     0      72 
+25_security_digest             PASS       0     0      72 
+26_regex_matrix                PASS       0     0      77 
+27_annotations_reflection      PASS       0     0      62 
+28_sqlite_basic                skip       -     -       - no dex built
+
+27/27 pass, 0 fail (1 skipped)
+fatal ART log entries recorded: 0
