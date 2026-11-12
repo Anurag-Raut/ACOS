@@ -952,6 +952,140 @@ public final class LaunchMain {
      * line on stdin schedules one sample immediately (cause {@code wake}).
      * Every sample names its {@code cause}: {@code dirty|wake|poll}.
      */
+    /**
+     * R2 W6: geometry trace. Every place the app can read a display or window
+     * size is sampled from a watcher thread and printed whenever it changes:
+     * `DisplayMetrics`, `Configuration.screenWidthDp/HeightDp`, the
+     * `WindowManager` window metrics (bounds + insets), the decor view's laid
+     * out size and screen position, and `ViewRootImpl.mWinFrame` / `mWidth` /
+     * `mHeight` (what the last `relayout` reply told it).
+     *
+     * <p>Off unless `ACOSLAUNCH_GEOM_TRACE` is forwarded. Read-only: reflection
+     * field reads of scalars and the framework's own getters, no mutation, no
+     * `Surface` monitor (see the W6 deadlock note in {@link #probeViewRoot}).
+     */
+    static void startGeometryTrace(final Object activity) {
+        final long t0 = System.currentTimeMillis();
+        final java.io.File out = new java.io.File(sOut, "geometry-trace.txt");
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String last = "";
+                for (int i = 0; i < 60; i++) {
+                    String line = geometryLine(activity, System.currentTimeMillis() - t0);
+                    if (!line.equals(last)) {
+                        System.out.println(line);
+                        System.out.flush();
+                        try {
+                            appendLine(out, line);
+                        } catch (Throwable ignored) {
+                        }
+                        last = line;
+                    }
+                    try {
+                        Thread.sleep(100);
+                    } catch (Throwable ignored) {
+                        return;
+                    }
+                }
+                try {
+                    appendLine(out, "ACOSGEO trace-end elapsed_ms="
+                            + (System.currentTimeMillis() - t0));
+                } catch (Throwable ignored) {
+                }
+            }
+        }, "acos-geometry-trace");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    static void appendLine(java.io.File f, String line) throws Exception {
+        java.io.FileOutputStream fos = new java.io.FileOutputStream(f, true);
+        try {
+            fos.write((line + "\n").getBytes("UTF-8"));
+        } finally {
+            fos.close();
+        }
+    }
+
+    /** One `ACOSGEO` sample: every size the app can observe, or `<err>` per field. */
+    static String geometryLine(final Object activity, long elapsedMs) {
+        StringBuilder b = new StringBuilder("ACOSGEO t=").append(elapsedMs);
+        try {
+            android.content.res.Resources res = (android.content.res.Resources)
+                    activity.getClass().getMethod("getResources").invoke(activity);
+            android.util.DisplayMetrics dm = res.getDisplayMetrics();
+            android.content.res.Configuration cfg = res.getConfiguration();
+            b.append(" app_dm=").append(dm.widthPixels).append('x').append(dm.heightPixels)
+                    .append('@').append(dm.densityDpi);
+            b.append(" app_cfg=").append(cfg.screenWidthDp).append('x').append(cfg.screenHeightDp)
+                    .append("@").append(cfg.densityDpi)
+                    .append(" smallest=").append(cfg.smallestScreenWidthDp)
+                    .append(" orient=").append(cfg.orientation);
+            android.util.DisplayMetrics sdm = android.content.res.Resources.getSystem()
+                    .getDisplayMetrics();
+            android.content.res.Configuration scfg = android.content.res.Resources.getSystem()
+                    .getConfiguration();
+            b.append(" sys_dm=").append(sdm.widthPixels).append('x').append(sdm.heightPixels)
+                    .append('@').append(sdm.densityDpi);
+            b.append(" sys_cfg=").append(scfg.screenWidthDp).append('x').append(scfg.screenHeightDp)
+                    .append(" smallest=").append(scfg.smallestScreenWidthDp);
+        } catch (Throwable x) {
+            b.append(" res=<err ").append(unwrap(x)).append('>');
+        }
+        try {
+            Object wm = activity.getClass().getMethod("getSystemService", String.class)
+                    .invoke(activity, android.content.Context.WINDOW_SERVICE);
+            Object metrics = wm.getClass().getMethod("getCurrentWindowMetrics").invoke(wm);
+            android.graphics.Rect bounds = (android.graphics.Rect) metrics.getClass()
+                    .getMethod("getBounds").invoke(metrics);
+            Object insets = metrics.getClass().getMethod("getWindowInsets").invoke(metrics);
+            b.append(" win_metrics=").append(rect(bounds));
+            try {
+                android.graphics.Insets sb = ((android.view.WindowInsets) insets)
+                        .getInsets(android.view.WindowInsets.Type.statusBars());
+                android.graphics.Insets nb = ((android.view.WindowInsets) insets)
+                        .getInsets(android.view.WindowInsets.Type.navigationBars());
+                b.append(" win_insets=status:").append(sb.top)
+                        .append(" nav:").append(nb.bottom);
+            } catch (Throwable x) {
+                b.append(" win_insets=<err ").append(unwrap(x)).append('>');
+            }
+        } catch (Throwable x) {
+            b.append(" win_metrics=<err ").append(unwrap(x)).append('>');
+        }
+        try {
+            Object window = activity.getClass().getMethod("getWindow").invoke(activity);
+            View decor = (View) window.getClass().getMethod("getDecorView").invoke(window);
+            int[] loc = new int[2];
+            decor.getLocationOnScreen(loc);
+            b.append(" decor=")
+                    .append(decor.getWidth()).append('x').append(decor.getHeight())
+                    .append(" measured=").append(decor.getMeasuredWidth()).append('x')
+                    .append(decor.getMeasuredHeight())
+                    .append(" at=").append(loc[0]).append(',').append(loc[1]);
+            Object vr = Class.forName("android.view.View").getMethod("getViewRootImpl")
+                    .invoke(decor);
+            if (vr == null) {
+                b.append(" vr=null");
+            } else {
+                Object frame = get(vr, "mWinFrame");
+                b.append(" win_frame=").append(frame instanceof android.graphics.Rect
+                        ? rect((android.graphics.Rect) frame) : String.valueOf(frame));
+                b.append(" vr_wh=").append(get(vr, "mWidth")).append('x')
+                        .append(get(vr, "mHeight"));
+                b.append(" vr_layout_requested=").append(get(vr, "mLayoutRequested"));
+            }
+        } catch (Throwable x) {
+            b.append(" decor=<err ").append(unwrap(x)).append('>');
+        }
+        return b.toString();
+    }
+
+    static String rect(android.graphics.Rect r) {
+        return "[" + r.left + ',' + r.top + "][" + r.right + ',' + r.bottom + ']';
+    }
+
     static void startLiveProbe(final Object activity) {
         final android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
         final java.util.concurrent.atomic.AtomicBoolean pending =
@@ -1898,6 +2032,7 @@ public final class LaunchMain {
                 // these samples as the app's live UI; nothing is mutated.
                 // Off unless the launcher forwards the variable.
                 if (System.getenv("ACOSLAUNCH_LIVE_PROBE") != null) {
+                    if (System.getenv("ACOSLAUNCH_GEOM_TRACE") != null) startGeometryTrace(activity);
                     startLiveProbe(activity);
                     System.out.println("ACOSLAUNCH MARK live-probe-started");
                     System.out.flush();
