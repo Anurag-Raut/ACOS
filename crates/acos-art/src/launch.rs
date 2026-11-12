@@ -221,14 +221,15 @@ pub const ENV_ART_XMS: &str = "ACOS_ART_XMS";
 pub const ENV_ART_XMX: &str = "ACOS_ART_XMX";
 pub const ENV_ART_HEAP_TARGET_UTILIZATION: &str = "ACOS_ART_HEAP_TARGET_UTILIZATION";
 
-/// Z7: forward the guest-side post-first-frame release hook. Right after its
-/// first live frame the guest asks ART for a collection
-/// (`System.gc()` then `VMRuntime.requestConcurrentGC()`; on this image only
-/// the latter collects) and optionally `VMRuntime.trimHeap()`, instead of
-/// waiting for the post-fork `ReduceTargetFootprintTask` schedule (+2 s/+10 s).
-/// `ACOS_ART_GC_DELAY_MS` delays that request. Unset = inert.
-pub const ENV_ART_GC_AFTER_FIRST_FRAME: &str = "ACOS_ART_GC_AFTER_FIRST_FRAME";
-pub const ENV_ART_TRIM_AFTER_FIRST_FRAME: &str = "ACOS_ART_TRIM_AFTER_FIRST_FRAME";
+/// H2: the guest-side post-first-frame release hook, now **on by default**.
+/// Right after its first live frame the guest asks ART for one background CC
+/// collection (`VMRuntime.requestConcurrentGC()`), instead of waiting for the
+/// post-fork `ReduceTargetFootprintTask` schedule (+2 s/+10 s). Z7 measured
+/// `System.gc()` inert on this image, so H2 removed it; the request is made
+/// once. `ACOS_ART_EARLY_GC=0` is the escape hatch / A-B off arm;
+/// `ACOS_ART_GC_DELAY_MS` delays the request (research knob, 0 = at the first
+/// frame). Both are forwarded to the cleared guest environment.
+pub const ENV_ART_EARLY_GC: &str = "ACOS_ART_EARLY_GC";
 pub const ENV_ART_GC_DELAY_MS: &str = "ACOS_ART_GC_DELAY_MS";
 
 fn valid_heap_size(text: &str) -> bool {
@@ -986,9 +987,10 @@ pub(crate) fn launch_session(
     if std::env::var_os("ACOSLAUNCH_PROBE").is_some() {
         sb.env("ACOSLAUNCH_PROBE", "1");
     }
-    // Z7: the guest-side post-first-frame release hook (OFF by default).
-    for knob in [ENV_ART_GC_AFTER_FIRST_FRAME, ENV_ART_TRIM_AFTER_FIRST_FRAME,
-                 ENV_ART_GC_DELAY_MS] {
+    // H2: the guest-side post-first-frame release hook (ON by default; the
+    // guest treats `ACOS_ART_EARLY_GC=0` as off). Forward only the host value
+    // so an unset variable means "default".
+    for knob in [ENV_ART_EARLY_GC, ENV_ART_GC_DELAY_MS] {
         if let Ok(v) = std::env::var(knob) {
             sb.env(knob, &v);
         }

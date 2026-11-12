@@ -648,6 +648,57 @@ screen — MEASURED (false pass found; one layout wall open)
   layout / first-paint defect, which is the same work item as the per-view HWUI canvas, and is the
   reason a green run is still luck-dependent.
 
+## E2.10 — H2: the post-first-frame ART collection as the exec-path product default — MEASURED (accepted)
+
+- **Date / commit:** 2026-11-13; `54b9c33` on `perf-h2-early-gc` (off `main` `1f21ea7`, includes Z7).
+- **Question / goal:** Z7 measured the exec-path early release behind an off-by-default seam. Does
+  making it the product default (one `VMRuntime.requestConcurrentGC()` after the first live frame,
+  no `System.gc()`, no trim) keep the memory/throughput win without hurting the first agent action,
+  correctness or compatibility?
+- **Method:** one release binary. The only arm difference is `ACOS_ART_EARLY_GC` (off `0`, on `1`;
+  unset is now on). Memory: Z7 `lifetime.py`, whole-tree ΣPss at 0.5/2/5/15 s after each child's own
+  first frame, N=1/5/10, **3 interleaved reps** per arm/cell. Loop: Z7 `loop.py`, fresh launch per
+  task, N=5 and N=10, **3 interleaved 1-minute reps** per arm; whole-tree PSS integral as
+  denominator. First action: one fresh launch per sample, first request cycled strict tree / fast
+  tree / tap, n=20 per arm for counter and form-validation. K1: the 5 corpus apps that reach a first
+  frame. Host load recorded in `.cache/h2/runs/host.log`; every ART run under
+  `run-exclusive.sh` + `guarded.sh` (8G, 24G at N=10).
+- **Inputs:** `fixtures/build/apps/{counter,form-validation}.apk`; the 5 K1 APKs; API-34 sysroot;
+  x86_64 host; `CARGO_TARGET_DIR=.cache/h2-target`, release.
+- **Result:**
+  * **Memory per session (ΣPss, median of 3 reps).** N=1: **−28.9 to −30.4 MiB** (12.8–13.3 %);
+    N=5: **−144.0 to −153.0 MiB = −28.8 to −30.6 MiB/session** (27.1–28.2 %); N=10: **−281.8 to
+    −300.2 MiB = −28.2 to −30.0 MiB/session** (31.2–32.5 %) at every age. `ΣPrivate_Dirty` falls
+    with it (N=10, 0.5 s: 750.4 → 468.7 MiB); `SwapPss` is 0.000 in every cell.
+  * **Agent loop.** N=5: off 98.8 → on **135.6 tasks/GiB-min (+37.2 %)**, net anon+shmem 119.1 →
+    171.0; N=10: 55.7 → **85.9 (+54.2 %)**, net 56.2 → 84.8. Throughput and latency are unchanged
+    (N=5 p50/p95 3669.8/5979.6 → 3705.8/5991.3 ms, +1.0 %/+0.2 %; N=10 7072.3/11695.6 →
+    7044.9/11623.8, −0.4 %/−0.6 %). **0 false passes** in 640/640 verified tasks.
+  * **First action.** Counter strict tree 142.0→141.7 ms, fast 0.2→0.3 ms, tap 945.1→938.9 ms;
+    form-validation strict 141.9→141.6 ms, tap 170.8→170.2 ms. 0 failures; 20/20 “on” launches
+    logged the release marker. No delay knob was needed.
+  * **Compatibility/validation.** 552 cargo tests pass, 0 fail; the 7 gates are green except the
+    expected-fail `T03-render-wrong` (rc 1, `ASSERTION_FAILED`); the 11 `p11-*` gate scenarios pass under
+    real ART with 0 false passes (progress-timeout is the documented non-pass); K1's 5 first-frame apps keep every stage they reached (first frame
+    513/541/1006/1136/584 ms, no ladder regression).
+- **Finding (proven vs hypothesis):** proven for these fixtures/image/host. The Z7 finding survives
+  the mechanism cleanup and is not an off-by-default curiosity: the default saves ~29 MiB/session
+  (not just at N=10) and +37 %/+54 % tasks/GiB-min at N=5/N=10, with no first-action, correctness or
+  stage regression. **Hypothesis, not measured:** heavier apps (React Native/Gaten/Compose) at scale,
+  a production reset that issues the request without the guest hook, and the 30 s form-validation
+  input hang.
+- **Fidelity / evidence:** MEASURED on real ART, `real-ART` fidelity, 0 false passes.
+  `results/art-runtime/H2.md`; `results/art-runtime/evidence/H2/{summary.json,table.txt}`;
+  `research/h2/{first_action.py,run-batch.sh,summarize.py}`. Raw runs under `.cache/h2/runs/`.
+- **Regression / false pass:** every loop task is tree → real tap → asserted value → screenshot md5;
+  no acknowledgement is a pass. 0 false passes in 640 loop tasks, 0 in the p11 gate corpus, 0 in K1.
+  The Z7 form-validation N=5 30 s `:id/name` tap timeout reproduces **with the GC off** (2/5 verified
+  in both off runs and both on runs; taps 30.008–30.026 s); it is pre-existing and recorded as H9.
+- **Conclusion / next:** **accepted as the product default**; `ACOS_ART_EARLY_GC=0` is the escape
+  hatch and the A/B off arm. `System.gc()` and the `trimHeap` branch were removed (Z7 measured both
+  inert). Next: H9 (input hang under load), then the same A/B on a heavier app under P12's settle
+  work.
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
@@ -663,21 +714,24 @@ Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
 | Memory / extra session | 100.9 MiB cgroup (pre-W1); zygote research 22.2 MiB Pss | O2; Z6 | O2, Z6 | 2026-11-12 |
 | Agent loop | 2.21 s/task; 136.8 tasks/GiB-min (N=1), 188.0 (N=5) | main P5 (pre-P9/P10/P11) | P5 | 2026-11-12 |
 | Agent loop N=10 (Z7 method, fresh launch/task) | 45.0 tasks/GiB-min main; **67.7 with exec-path early GC** (seam, off by default → H2); 103.6 zygote+early GC (research, trusted only) | Z7 `zygote-z7-lifetime` | Z7, E2.8 | 2026-11-12 |
+| Agent loop N=10/N=5, H2 default-on | **85.9 tasks/GiB-min** (off 55.7, +54.2 %) / **135.6** (off 98.8, +37.2 %); 1-min interleaved reps, 0 false passes | `perf-h2-early-gc` `54b9c33` | H2, E2.10 | 2026-11-13 |
+| Early-GC memory saving per session | **28.2–30.6 MiB ΣPss** at N=5/N=10 (27.1–32.5 %); 28.9–30.4 MiB at N=1 | H2 default `54b9c33` | H2, E2.10 | 2026-11-13 |
 | Teardown (`acos_destroy`) | ~20 ms lifecycle, 300 ms bound then group kill | main GL1 | E2.7 | 2026-11-12 |
 | Compat first-frame rate (K1 corpus, real ART, N=1) | **13/42 (31.0 %)**; tap 7/42 (16.7 %) | K2 `cdc1a69…c389090` | K2/R1–R3 | 2026-11-12 |
-| False passes | 0 | all | P1–P11, K2 | 2026-11-12 |
+| False passes | 0 | all | P1–P11, K2, H2 (640 loop tasks + p11 gates + K1) | 2026-11-13 |
 
 ## Backlog (optimization hypotheses; rank = impact × confidence ÷ (cost × risk))
 
 | ID | Hypothesis | Metric | Expected | Confidence | Cost | Risk | Status |
 |---|---|---|---|---|---|---|---|
 | H1 | Strict numbers drop after event settle; re-measure M3–M8 and take cheap wins (M7, M5 fast PNG) | M4/M6/M7/M5 | −30–60 % strict | high | low | low | queued |
-| H2 | Early post-first-frame concurrent GC (Z7 finding) on the exec path | M1/M2 | −23–30 MiB/session | high (measured in Z7) | low | low | after Z7 |
+| H2 | Early post-first-frame concurrent GC (Z7 finding) on the exec path | M1/M2 | −23–30 MiB/session | high (measured in Z7) | low | low | **accepted: product default `54b9c33`, E2.9** |
 | H4 | CPU per idle session: remove 250 ms fallback poll and other timers | CPU, wakeups | large at N≥10 | medium | low | low | queued |
 | H5 | Agent loop with animations:off + event settle | loop latency | 2.2 s → <0.8 s | medium-high | low | low | after P12 |
 | H6 | Nightly metric regression bench | all | guard | high | medium | low | queued |
 | H7 | Shrink per-session boot-image private memory (26.3 MiB decompressed per session) without a warm pool | M2 | −10–25 MiB | medium | medium | medium (ASLR/B3) | backlog |
 | H8 | Faster PNG (SIMD deflate) or region/downscaled screenshots for agents | M5 | 24 → 10–15 ms | medium | medium | low | backlog |
+| H9 | Form-validation N=5 under host load: 3/5 `:id/name` taps hit the 30 s bound (2/5 verified) **with early GC off and on**, 2/2 runs each; Z7 saw the same in a/a′/c′ | loop correctness | remove a pre-existing input/queue stall | high (reproduced) | medium | low | backlog (evidence `results/art-runtime/H2.md` §5) |
 | H3 | Warm exec pool | M3/M4 | −73 ms launch | — | — | +idle memory | **declined by owner 2026-11-12** (no spare processes) |
 | H9 | K2 next walls: AndroidKeyStore shim, GL/BLAST natives, WebView provider classification | compat first-frame | +3–5 apps | high (K1/K2 evidence) | medium | medium | queued |
 | H10 | K2 PMS error class (`NameNotFoundException`) and `checkService` null for unknown names | compat | +2 apps (vlc, fdroid) | high | low | low | queued |

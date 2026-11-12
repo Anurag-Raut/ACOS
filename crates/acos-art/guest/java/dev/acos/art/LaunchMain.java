@@ -1051,12 +1051,12 @@ public final class LaunchMain {
                                 public void run() {
                                     try {
                                         emitProbe(activity, n, why);
-                                        // Z7: the first emitted sample is the
-                                        // host's `ready` (first frame). Optionally
-                                        // run ART's own explicit-GC/trim path now
+                                        // H2: the first emitted sample is the
+                                        // host's `ready` (first frame). Request
+                                        // ART's own background collection now
                                         // instead of waiting for the post-fork
-                                        // footprint schedule. Inert unless the
-                                        // launcher forwarded the knob.
+                                        // footprint schedule. On by default;
+                                        // ACOS_ART_EARLY_GC=0 turns it off.
                                         if (n == 1) maybeEarlyRelease();
                                     } catch (Throwable t) {
                                         // A probe must never disturb the app, but it
@@ -1155,26 +1155,23 @@ public final class LaunchMain {
     }
 
     /**
-     * Z7 (research seam, OFF by default): after the first live frame, run the
-     * real ART release paths once on a daemon thread.
+     * H2 (product default): after the first live frame, request one real ART
+     * background collection on a daemon thread.
      *
-     * <p>{@code ACOS_ART_GC_AFTER_FIRST_FRAME=1} calls {@code System.gc()},
-     * which reaches {@code Heap::CollectGarbage(kGcCauseExplicit)}; an explicit
-     * GC makes {@code GarbageCollector::ShouldEagerlyReleaseMemoryToOS()} true,
-     * so the CC collector's {@code ClearFromSpace}/{@code ReleaseFreeRegions}
-     * returns the freed region space to the OS immediately (the same release
-     * Z6 measured 10 s after a zygote fork).
-     *
-     * <p>{@code ACOS_ART_TRIM_AFTER_FIRST_FRAME=1} then calls the hidden
-     * {@code dalvik.system.VMRuntime.getRuntime().trimHeap()} reflectively
-     * ({@code VMRuntime_trimHeap} -> {@code Heap::Trim}); reflection keeps the
-     * production dex compilable against the public SDK stubs and makes a
-     * missing hidden API a recorded no-op, never a crash.
+     * <p>{@code ACOS_ART_EARLY_GC=0} turns it off (the A/B off arm and the
+     * escape hatch). Otherwise the thread calls the hidden
+     * {@code dalvik.system.VMRuntime.getRuntime().requestConcurrentGC()}
+     * reflectively: the scheduled CC collection is not app-perceptible, so
+     * {@code GarbageCollector::ShouldEagerlyReleaseMemoryToOS()} is true and
+     * {@code ClearFromSpace}/{@code ReleaseFreeRegions} returns the region
+     * space to the OS within ~1 s (Z7). {@code System.gc()} is not called:
+     * Z7 measured it inert on this image (gc-count 3 -> 3, 0 ms).
+     * {@code ACOS_ART_GC_DELAY_MS} optionally delays the request (research
+     * knob, 0 = at the first frame).
      */
     static void maybeEarlyRelease() {
-        final boolean gc = System.getenv("ACOS_ART_GC_AFTER_FIRST_FRAME") != null;
-        final boolean trim = System.getenv("ACOS_ART_TRIM_AFTER_FIRST_FRAME") != null;
-        if (!gc && !trim) return;
+        final String knob = System.getenv("ACOS_ART_EARLY_GC");
+        if (knob != null && knob.trim().equals("0")) return;
         final long delayMs = envLong("ACOS_ART_GC_DELAY_MS", 0L);
         Thread t = new Thread(new Runnable() {
             @Override
@@ -1187,38 +1184,15 @@ public final class LaunchMain {
                     }
                 }
                 long c0 = runtimeStat("art.gc.gc-count");
-                System.out.println("ACOSLAUNCH EARLY_RELEASE start gc=" + gc + " trim=" + trim
-                        + " delay_ms=" + delayMs + " gc_count_before=" + c0);
+                System.out.println("ACOSLAUNCH EARLY_RELEASE start delay_ms=" + delayMs
+                        + " gc_count_before=" + c0);
                 System.out.flush();
-                if (gc) {
-                    try {
-                        System.gc();
-                    } catch (Throwable x) {
-                        System.err.println("ACOSLAUNCH EARLY_RELEASE gc_error " + x);
-                    }
-                    // On this image `System.gc()` is inert (Z7 measured:
-                    // gc-count 3 -> 3, 0 ms), so the release is requested
-                    // through ART's own asynchronous GC entry point. The GC it
-                    // schedules is a background CC collection; the process is
-                    // not jank-perceptible, so the collector takes the eager
-                    // `ReleaseFreeRegions` branch (the same release AOSP's
-                    // post-fork path performs at +10 s).
-                    try {
-                        Class<?> vm = Class.forName("dalvik.system.VMRuntime");
-                        Object rt = vm.getMethod("getRuntime").invoke(null);
-                        vm.getMethod("requestConcurrentGC").invoke(rt);
-                    } catch (Throwable x) {
-                        System.err.println("ACOSLAUNCH EARLY_RELEASE concurrent_error " + x);
-                    }
-                }
-                if (trim) {
-                    try {
-                        Class<?> vm = Class.forName("dalvik.system.VMRuntime");
-                        Object rt = vm.getMethod("getRuntime").invoke(null);
-                        vm.getMethod("trimHeap").invoke(rt);
-                    } catch (Throwable x) {
-                        System.err.println("ACOSLAUNCH EARLY_RELEASE trim_error " + x);
-                    }
+                try {
+                    Class<?> vm = Class.forName("dalvik.system.VMRuntime");
+                    Object rt = vm.getMethod("getRuntime").invoke(null);
+                    vm.getMethod("requestConcurrentGC").invoke(rt);
+                } catch (Throwable x) {
+                    System.err.println("ACOSLAUNCH EARLY_RELEASE concurrent_error " + x);
                 }
                 long c1 = runtimeStat("art.gc.gc-count");
                 System.out.println("ACOSLAUNCH EARLY_RELEASE done ms="
