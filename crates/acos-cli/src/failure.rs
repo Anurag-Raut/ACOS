@@ -172,6 +172,29 @@ pub fn classify_session_exit(artifacts: &Path) -> Option<(ErrorCode, Value)> {
     Some((code, facts))
 }
 
+/// Classify a lost session from the harness child's own exit status, for the
+/// case where the launcher was killed before it could write
+/// `session-exit.json` (W53, applied in W55).
+///
+/// Same evidence model as [`classify_facts_by_process`]: the terminating signal
+/// or exit code is the process evidence. A child that died carries a real
+/// cause, so this never returns `INTERNAL` for `status.signal().is_some()`.
+/// `GuestExited` is the code that is documented to carry "the guest exit code,
+/// terminating signal and stage"; a dedicated `HOST_SIGNAL` code would be its
+/// better long-term home.
+pub fn classify_child_exit(status: std::process::ExitStatus) -> Option<(ErrorCode, Value)> {
+    use std::os::unix::process::ExitStatusExt;
+    let facts = json!({
+        "source": "acos-art child exit status (no session-exit.json)",
+        "guest_exit": status.code(),
+        "guest_signal": status.signal(),
+    });
+    if status.signal().is_some() || status.code().is_some() {
+        return Some((ErrorCode::GuestExited, facts));
+    }
+    None
+}
+
 /// Build the protocol error for one art reply / launch code, attaching every
 /// session-exit fact the session left behind.
 pub fn art_error(code: &str, message: &str, artifacts: &Path) -> ProtocolError {
@@ -337,6 +360,23 @@ mod tests {
         assert!(!ErrorCode::HostPanic.retryable());
         assert!(!ErrorCode::GuestExited.retryable());
         assert!(!is_known_art_code("SOMETHING_NEW"));
+    }
+
+    #[test]
+    fn child_exit_status_is_classified_never_internal() {
+        use std::os::unix::process::ExitStatusExt;
+        // A launcher SIGKILLed (memcg OOM, watchdog, parent kill path) has a
+        // signal and no exit code; that is the W53 case.
+        let killed = std::process::ExitStatus::from_raw(9); // SIGKILL
+        let (code, facts) = classify_child_exit(killed).expect("a signalled child is classified");
+        assert_eq!(code, ErrorCode::GuestExited);
+        assert_eq!(facts["guest_signal"], serde_json::json!(9));
+        assert_eq!(facts["guest_exit"], serde_json::Value::Null);
+        // A child that exited with a code is classified too.
+        let exited = std::process::ExitStatus::from_raw(1 << 8);
+        let (code, facts) = classify_child_exit(exited).expect("an exited child is classified");
+        assert_eq!(code, ErrorCode::GuestExited);
+        assert_eq!(facts["guest_exit"], serde_json::json!(1));
     }
 
     #[test]

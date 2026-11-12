@@ -151,7 +151,122 @@ pub struct ArtSession {
     input_baseline: Option<(String, u64)>,
     /// Input settle accounting, written next to the guest evidence.
     settle: SettleStats,
+    /// Host-observed phase timings of the most recent input command (W55).
+    last_input_timing: Option<InputTiming>,
+    /// Host-observed phase timings of the most recent tree/capture command.
+    last_phase: Option<PhaseTiming>,
     closed: bool,
+}
+
+/// Host-observed phases of one input command (W55 latency decomposition).
+///
+/// The engine can only time the parts it sees: how long the guest took to
+/// answer the single `tap`/`key`/`type_text` line (which is where the guest's
+/// own delivery + settle window + capture happen), how long the host spent
+/// absorbing the reply (PNG read + tree parse), and the guest's own ack
+/// latency. The remainder is the settle wait, named as a measured estimate
+/// rather than split with numbers the guest does not publish.
+#[derive(Debug, Clone, Default)]
+pub struct InputTiming {
+    /// Write of the command line to `acos-art` → its reply line.
+    pub guest_ms: u64,
+    /// Host side of the reply: PNG read + tree parse + signature.
+    pub absorb_ms: u64,
+    /// The guest's own input delivery ack (`latency_us`), when it reported one.
+    pub ack_ms: u64,
+    /// Wall time the host's own recovery loop spent, when the guest refused the
+    /// frame (`0` when the guest settled it).
+    pub host_recovery_ms: u64,
+    /// Bound frame sequence before / after the command.
+    pub frame_seq_before: u64,
+    pub frame_seq_after: u64,
+    /// Commands the engine issued itself to settle a refused input.
+    pub recovery_polls: u64,
+}
+
+impl InputTiming {
+    /// The settle estimate: guest time that is neither the guest's ack nor the
+    /// host's absorb. It bounds nothing by itself; it is what is left over.
+    pub const fn settle_estimate_ms(&self) -> u64 {
+        self.guest_ms
+            .saturating_sub(self.ack_ms)
+            .saturating_sub(self.absorb_ms)
+    }
+
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "guest_command_ms": self.guest_ms,
+            "absorb_ms": self.absorb_ms,
+            "input_ack_ms": self.ack_ms,
+            "host_recovery_ms": self.host_recovery_ms,
+            "recovery_polls": self.recovery_polls,
+            "settle_estimate_ms": self.settle_estimate_ms(),
+            "frame_seq_before": self.frame_seq_before,
+            "frame_seq_after": self.frame_seq_after,
+            "how": "guest_command_ms is the whole tap/key/type_text round trip (guest \
+                     delivery + its settle window + C1 capture); input_ack_ms is the guest's \
+                     own delivery ack; absorb_ms is host PNG read + tree parse; \
+                     settle_estimate_ms is the remainder",
+        })
+    }
+}
+
+/// Host-observed phases of one read-only command (tree / capture).
+#[derive(Debug, Clone, Default)]
+pub struct PhaseTiming {
+    /// Write of the command line to `acos-art` -> its reply line.
+    pub guest_ms: u64,
+    /// Host side of the reply: PNG read + tree parse.
+    pub absorb_ms: u64,
+}
+
+impl PhaseTiming {
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "guest_command_ms": self.guest_ms,
+            "absorb_ms": self.absorb_ms,
+        })
+    }
+}
+
+/// A dead session's own exit evidence.
+///
+/// `state` is what the host can see: the child exited (a `try_wait` status), the
+/// session was closed by the host, or there is no child at all. The protocol
+/// code is decided by [`crate::failure::classify_session_exit`] and, when the
+/// launcher died before writing its record,
+/// [`crate::failure::classify_child_exit`] (W53).
+#[derive(Debug, Clone)]
+pub struct GuestExit {
+    pub state: String,
+    pub exit_code: Option<i32>,
+    pub signal: Option<i32>,
+}
+
+impl GuestExit {
+    fn from_status(state: &str, status: Option<std::process::ExitStatus>) -> Self {
+        use std::os::unix::process::ExitStatusExt;
+        match status {
+            Some(status) => GuestExit {
+                state: state.to_string(),
+                exit_code: status.code(),
+                signal: status.signal(),
+            },
+            None => GuestExit {
+                state: state.to_string(),
+                exit_code: None,
+                signal: None,
+            },
+        }
+    }
+
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "state": self.state,
+            "exit_code": self.exit_code,
+            "signal": self.signal,
+        })
+    }
 }
 
 /// How the input steps of one session reached their bound frame.
@@ -421,6 +536,12 @@ impl ArtSession {
             code: acos_protocol::ErrorCode::RenderIo,
             detail: format!("cannot create {}: {error}", out.display()),
         })?;
+        // A previous guest in this artifacts directory may have left its own
+        // `session-exit.json`. That record describes a *different* process and
+        // must never classify this one (W55): a relaunch (`reset`, or a serve
+        // relaunch after a death) reuses the directory, so the stale record is
+        // removed before the new guest can die silently and inherit it.
+        let _ = std::fs::remove_file(crate::failure::session_exit_path(artifacts));
         let timeout = Duration::from_secs(
             std::env::var("ACOS_ART_TIMEOUT_SECS")
                 .ok()
@@ -578,6 +699,8 @@ impl ArtSession {
             settle_polls,
             input_baseline: None,
             settle: SettleStats::default(),
+            last_input_timing: None,
+            last_phase: None,
             closed: false,
         };
         // The ready line is the protocol's first reply. If the session dies
@@ -703,6 +826,66 @@ impl ArtSession {
         &self.apk
     }
 
+    /// Host-observed phase timings of the most recent input command.
+    pub fn last_input_timing(&self) -> Option<&InputTiming> {
+        self.last_input_timing.as_ref()
+    }
+
+    /// Host-observed phase timings of the most recent tree/capture command.
+    pub fn last_phase_timing(&self) -> Option<&PhaseTiming> {
+        self.last_phase.as_ref()
+    }
+
+    /// Is the guest still alive? `Some(exit)` means it is not, and carries what
+    /// the OS reports. Never blocks.
+    ///
+    /// This is the guard a daemon needs before it answers any verb from cached
+    /// state: `cached` is a frame of a process that may no longer exist. A
+    /// session the host closed counts as dead even if its pid lingers, because
+    /// nothing can be served from it any more.
+    pub fn liveness(&mut self) -> Option<GuestExit> {
+        if let Some(child) = self.child.as_mut() {
+            match child.try_wait() {
+                Ok(Some(status)) => return Some(GuestExit::from_status("exited", Some(status))),
+                Ok(None) => {
+                    if self.closed {
+                        return Some(GuestExit::from_status("closed", None));
+                    }
+                    return None;
+                }
+                Err(error) => {
+                    return Some(GuestExit {
+                        state: format!("wait-error: {error}"),
+                        exit_code: None,
+                        signal: None,
+                    })
+                }
+            }
+        }
+        Some(GuestExit::from_status(
+            if self.closed { "closed" } else { "no-child" },
+            None,
+        ))
+    }
+
+    /// Drop the bound frame and report what was dropped.
+    ///
+    /// Called when a session is known dead: a cached frame from a dead guest is
+    /// exactly the stale evidence the agent must never receive. The returned
+    /// tuple is the discarded frame's identity, kept for the error details.
+    pub fn invalidate_frame(&mut self) -> Option<(u64, String, String)> {
+        let cached = self.cached.take()?;
+        Some((cached.seq, cached.md5, cached.captured_at))
+    }
+
+    /// The art child's exit status, if it has already exited (never blocks).
+    fn child_exit_status(&mut self) -> Option<std::process::ExitStatus> {
+        self.child.as_mut().and_then(|c| match c.try_wait() {
+            Ok(Some(status)) => Some(status),
+            _ => None,
+        })
+    }
+
     /// The display width in pixels.
     pub const fn width(&self) -> u32 {
         self.width
@@ -745,7 +928,7 @@ impl ArtSession {
     fn read_line(&mut self, timeout: Duration, context: &str) -> Result<String, BackendError> {
         match self.lines.recv_timeout(timeout) {
             Ok(Ok(line)) => Ok(line),
-            Ok(Err(error)) => Err(self.session_lost(context, &error.to_string())),
+            Ok(Err(error)) => Err(self.session_lost_mut(context, &error.to_string())),
             Err(RecvTimeoutError::Timeout) => Err(BackendError::Timeout {
                 detail: format!(
                     "{context}: no reply from acos-art within {}s; stderr tail: {}",
@@ -754,7 +937,7 @@ impl ArtSession {
                 ),
             }),
             Err(RecvTimeoutError::Disconnected) => {
-                Err(self.session_lost(context, "acos-art session exited"))
+                Err(self.session_lost_mut(context, "acos-art session exited"))
             }
         }
     }
@@ -762,9 +945,14 @@ impl ArtSession {
     /// A lost session is classified from its own exit record when there is one
     /// (W46): a full disk, a panic, an OOM kill or a guest exit is a known cause
     /// and must never surface as `INTERNAL: session exited`.
-    fn session_lost(&self, context: &str, detail: &str) -> BackendError {
-        match crate::failure::classify_session_exit(&self.artifacts) {
-            Some((code, facts)) => BackendError::Protocol {
+    ///
+    /// When the launcher died before it could write `session-exit.json`, the
+    /// engine still holds its `Child`, so the child's own exit status is the
+    /// evidence (W53): a SIGKILLed launcher is `GUEST_EXITED` with
+    /// `details.session_exit.guest_signal`, never `INTERNAL`.
+    fn session_lost_mut(&mut self, context: &str, detail: &str) -> BackendError {
+        if let Some((code, facts)) = crate::failure::classify_session_exit(&self.artifacts) {
+            return BackendError::Protocol {
                 code,
                 detail: format!(
                     "{context}: {detail} (classified from {}); stderr tail: {}",
@@ -773,11 +961,33 @@ impl ArtSession {
                 ),
                 hint: None,
                 details: Some(serde_json::json!({"session_exit": facts})),
-            },
-            None => BackendError::Error {
-                code: acos_protocol::ErrorCode::Internal,
-                detail: format!("{context}: {detail}; stderr tail: {}", self.stderr_tail()),
-            },
+            };
+        }
+        if let Some((code, facts)) = self
+            .child_exit_status()
+            .and_then(crate::failure::classify_child_exit)
+        {
+            return BackendError::Protocol {
+                code,
+                detail: format!(
+                    "{context}: {detail} (no {}; the acos-art child's own exit status was \
+                     classified instead); stderr tail: {}",
+                    crate::failure::session_exit_path(&self.artifacts).display(),
+                    self.stderr_tail()
+                ),
+                hint: Some(
+                    "The launcher died before it could write session-exit.json. The signal or \
+                     exit code in details.session_exit is the evidence; check the host kill \
+                     paths (memcg OOM, the launcher RSS watchdog, guarded.sh's wall clock) and \
+                     the session's logcat/live-session.json."
+                        .to_string(),
+                ),
+                details: Some(serde_json::json!({"session_exit": facts})),
+            };
+        }
+        BackendError::Error {
+            code: acos_protocol::ErrorCode::Internal,
+            detail: format!("{context}: {detail}; stderr tail: {}", self.stderr_tail()),
         }
     }
 
@@ -793,27 +1003,31 @@ impl ArtSession {
         request: serde_json::Value,
     ) -> Result<serde_json::Value, acos_protocol::ProtocolError> {
         let artifacts = self.artifacts.clone();
-        let stdin = self.stdin.as_mut().ok_or_else(|| {
-            acos_protocol::ProtocolError::new(
-                ErrorCode::Internal,
-                "the ART session stdin is closed",
-            )
-            .with_hint(
-                "The session was already shut down (close/shutdown/drop). Do not send commands \
-                 to a closed session; start a new one.",
-            )
-        })?;
+        if self.stdin.is_none() {
+            // A session the host closed (or one whose guest was reaped) has
+            // nothing to answer with. Classify it from the guest's own evidence
+            // instead of reporting a bare harness INTERNAL (W53/W55).
+            return Err(self
+                .session_lost_mut("command", "the ART session stdin is closed")
+                .to_protocol_error());
+        }
+        let stdin = self.stdin.as_mut().expect("checked above");
         let line = request.to_string();
         if let Err(error) = writeln!(stdin, "{line}").and_then(|_| stdin.flush()) {
-            let code = if crate::failure::is_disk_full(&error) {
-                ErrorCode::HostDiskFull
-            } else {
-                ErrorCode::Internal
-            };
-            return Err(acos_protocol::ProtocolError::new(
-                code,
-                format!("cannot write to acos-art: {error}"),
-            ));
+            if crate::failure::is_disk_full(&error) {
+                return Err(acos_protocol::ProtocolError::new(
+                    ErrorCode::HostDiskFull,
+                    format!("cannot write to acos-art: {error}"),
+                ));
+            }
+            // EPIPE/ENOTCONN: the session is already gone. Classify it exactly
+            // like a disconnected read (W53): a launcher death is never
+            // `INTERNAL`, and a disk-full/write failure stays its own code.
+            self.stdin = None;
+            let detail = format!("cannot write to acos-art: {error}");
+            return Err(self
+                .session_lost_mut("command", &detail)
+                .to_protocol_error());
         }
         let timeout = self.timeout;
         let reply = self
@@ -864,11 +1078,51 @@ impl ArtSession {
         request: serde_json::Value,
         context: &str,
     ) -> Result<(), BackendError> {
+        let started = Instant::now();
+        let mut timing = InputTiming {
+            frame_seq_before: self.cached.as_ref().map(|frame| frame.seq).unwrap_or(0),
+            ..InputTiming::default()
+        };
+        let outcome = self.input_command_inner(request, context, started, &mut timing);
+        timing.frame_seq_after = self.cached.as_ref().map(|frame| frame.seq).unwrap_or(0);
+        // The guest's own delivery ack (host-measured round trip, guest-reported
+        // latency) is what separates "input delivery" from "settle" in the
+        // reply's phase evidence.
+        timing.ack_ms = if outcome.is_ok() {
+            self.last_input
+            .as_ref()
+            .map(|delivery| {
+                delivery
+                    .acks
+                    .iter()
+                    .filter_map(|ack| ack.latency_us)
+                    .map(|us| us / 1000)
+                    .max()
+                    .unwrap_or(0)
+            })
+            .unwrap_or(0)
+        } else {
+            0
+        };
+        self.last_input_timing = Some(timing);
+        outcome
+    }
+
+    fn input_command_inner(
+        &mut self,
+        request: serde_json::Value,
+        context: &str,
+        started: Instant,
+        timing: &mut InputTiming,
+    ) -> Result<(), BackendError> {
         match self.command_raw(request) {
             Ok(reply) => {
+                timing.guest_ms = started.elapsed().as_millis() as u64;
                 self.settle.guest += 1;
                 let baseline = self.input_baseline.clone();
+                let absorb_started = Instant::now();
                 self.absorb(&reply)?;
+                timing.absorb_ms = absorb_started.elapsed().as_millis() as u64;
                 // Compare exactly the pair the executor's `changed_from` will
                 // compare: this action's frame against the frame it was handed
                 // at the previous step (snapshotted by `begin_input` before the
@@ -880,6 +1134,7 @@ impl ArtSession {
                 Ok(())
             }
             Err(error) if error.code == ErrorCode::NoFreshFrame => {
+                timing.guest_ms = started.elapsed().as_millis() as u64;
                 // Recover the guest's delivery evidence from the structured reply.
                 let reply = error
                     .details
@@ -890,14 +1145,19 @@ impl ArtSession {
                 if reply.get("gesture").is_none() {
                     return Err(BackendError::from_protocol(error));
                 }
+                let recovery_started = Instant::now();
+                let polls_before = self.settle.recovery_polls;
                 if std::env::var_os("ACOS_ART_SETTLE_MODE").as_deref() == Some("guest-only".as_ref())
                 {
                     // Diagnostic: the pre-W34 behaviour (one recovery capture,
                     // `visual_change: false`), for A/B cost runs.
                     let previous = self.seen_seq;
                     self.request_tree()?;
+                    timing.recovery_polls = 1;
                     if let Some(cached) = self.cached.as_ref() {
                         if cached.seq <= previous {
+                            timing.host_recovery_ms =
+                                recovery_started.elapsed().as_millis() as u64;
                             return Err(stale_frame(
                                 previous,
                                 cached.seq,
@@ -909,9 +1169,12 @@ impl ArtSession {
                     self.settle.recovery_polls += 1;
                     self.settle.recovered_no_change += 1;
                     self.last_input = Some(delivery(&reply, false));
-                    return Ok(());
+                } else {
+                    self.settle_after_input(&reply, context)?;
+                    timing.recovery_polls = self.settle.recovery_polls - polls_before;
                 }
-                self.settle_after_input(&reply, context)
+                timing.host_recovery_ms = recovery_started.elapsed().as_millis() as u64;
+                Ok(())
             }
             Err(error) => Err(BackendError::from_protocol(error)),
         }
@@ -1101,8 +1364,17 @@ impl ArtSession {
     /// Ask for the live tree. The `tree` command re-traverses, draws and
     /// publishes a new frame, so the reply's tree and PNG share one `frame_seq`.
     fn request_tree(&mut self) -> Result<(), BackendError> {
+        let started = Instant::now();
         let reply = self.command(serde_json::json!({"cmd":"tree"}))?;
-        self.absorb(&reply)
+        let mut timing = PhaseTiming {
+            guest_ms: started.elapsed().as_millis() as u64,
+            absorb_ms: 0,
+        };
+        let absorb_started = Instant::now();
+        let result = self.absorb(&reply);
+        timing.absorb_ms = absorb_started.elapsed().as_millis() as u64;
+        self.last_phase = Some(timing);
+        result
     }
 
     fn require_cached_tree(&mut self) -> Result<UiTree, BackendError> {
@@ -1393,7 +1665,12 @@ impl SessionBackend for ArtSession {
         // A pure capture command: no tree is returned, so the bound tree keeps
         // its own sequence. Freshness is proven by the sequence advancing.
         let previous = self.seen_seq;
+        let started = Instant::now();
         let reply = self.command(serde_json::json!({"cmd":"screenshot"}))?;
+        let mut phase = PhaseTiming {
+            guest_ms: started.elapsed().as_millis() as u64,
+            absorb_ms: 0,
+        };
         let raw_seq = reply
             .get("frame_seq")
             .and_then(|v| v.as_u64())
@@ -1414,7 +1691,10 @@ impl SessionBackend for ArtSession {
         if seq <= previous {
             return Err(stale_frame(previous, seq, "screenshot"));
         }
+        let absorb_started = Instant::now();
         let png = read_png(Path::new(png_path))?;
+        phase.absorb_ms = absorb_started.elapsed().as_millis() as u64;
+        self.last_phase = Some(phase);
         if png.is_empty() {
             return Err(live_frame_unavailable(
                 "the ART screenshot frame file is empty",
@@ -1514,9 +1794,25 @@ impl SessionBackend for ArtSession {
         let boot_ms = self.session_start_ms;
         // Same teardown rule as `close`: the old guest's whole process group
         // must be gone before the replacement starts (one ART guest at a time).
+        //
+        // W55: if any part of the relaunch fails, `self` is left with the OLD
+        // guest already stopped. It must then be a **provably dead** session:
+        // closed, with no bound frame, so no verb can answer from the stale
+        // frame and `liveness()` says exactly why. Before W55 a failed relaunch
+        // left a closed-but-held session whose cached tree `acos_launch` served
+        // for the rest of the daemon's life (W50 §7 item 3).
         self.closed = true;
-        self.shutdown()?;
-        let mut fresh = ArtSession::start(&apk, &artifacts)?;
+        if let Err(error) = self.shutdown() {
+            self.invalidate_frame();
+            return Err(error);
+        }
+        let mut fresh = match ArtSession::start(&apk, &artifacts) {
+            Ok(fresh) => fresh,
+            Err(error) => {
+                self.invalidate_frame();
+                return Err(error);
+            }
+        };
         fresh.seq_offset = offset;
         fresh.log_offset = log_offset;
         // Session-level cost accounting spans the relaunch.
@@ -1524,8 +1820,14 @@ impl SessionBackend for ArtSession {
         fresh.session_start_ms = boot_ms.saturating_add(fresh.session_start_ms);
         // Leave a live frame bound: the step after `reset` may be a pure
         // assertion (`assert_text`), which reads the last completed frame.
-        let reply = fresh.command(serde_json::json!({"cmd":"tree"}))?;
-        fresh.absorb(&reply)?;
+        let bound = fresh
+            .command(serde_json::json!({"cmd":"tree"}))
+            .and_then(|reply| fresh.absorb(&reply));
+        if let Err(error) = bound {
+            let _ = fresh.close();
+            self.invalidate_frame();
+            return Err(error);
+        }
         fresh.last_input = None;
         *self = fresh;
         Ok(())
@@ -2174,5 +2476,113 @@ mod tests {
             Vec::<u32>::new(),
             "a killed process group must leave no survivors"
         );
+    }
+
+    /// A launcher that dies without writing `session-exit.json` (SIGKILL, no
+    /// record) must be classified from its own exit status: `GUEST_EXITED`,
+    /// never `INTERNAL` (W53 hunk, applied in W55).
+    #[test]
+    fn a_killed_launcher_is_classified_from_its_exit_status() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = scratch_dir("killed-launcher");
+        let script = dir.join("fake-acos-art-dies.sh");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\n\
+             echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.test\",\"width\":1080,\"height\":2400,\"density\":420}'\n\
+             kill -9 $$\n",
+        )
+        .unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        let mut session = ArtSession::start(&apk, &dir).expect("ready line arrives first");
+        // The child is already gone: the write fails with EPIPE or the read sees
+        // EOF. Either way the error is the classified guest exit.
+        let error = session.tree().expect_err("a dead launcher cannot answer");
+        assert_eq!(
+            error.code(),
+            ErrorCode::GuestExited,
+            "a killed launcher is never INTERNAL: {error}"
+        );
+        let details = error
+            .to_protocol_error()
+            .details
+            .unwrap_or(serde_json::Value::Null);
+        assert_eq!(
+            details["session_exit"]["source"],
+            serde_json::json!("acos-art child exit status (no session-exit.json)"),
+            "{details}"
+        );
+        assert_eq!(details["session_exit"]["guest_signal"], serde_json::json!(9));
+        assert!(session.liveness().is_some(), "liveness agrees");
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A reset whose replacement guest fails must NOT leave a closed-but-held
+    /// session with a cached frame: that is the W50 stale-frame bug. The
+    /// session is dead, has no bound frame, and says why.
+    #[test]
+    fn a_failed_reset_leaves_a_provably_dead_session() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = scratch_dir("failed-reset");
+        let png = dir.join("tiny.png");
+        std::fs::write(&png, super::super::fake::TINY_PNG).unwrap();
+        let marker = dir.join("first-guest-ran");
+        let script = dir.join("fake-acos-art-reset-fails.sh");
+        let mut body = String::new();
+        body.push_str("#!/bin/sh\n");
+        body.push_str(&format!(
+            "if [ -f '{m}' ]; then echo 'acos-art: replacement guest failed' >&2; exit 1; fi\n",
+            m = marker.display()
+        ));
+        body.push_str(&format!(": > '{}'\n", marker.display()));
+        body.push_str("echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.test\",\"width\":1080,\"height\":2400,\"density\":420}'\n");
+        body.push_str("while IFS= read -r line; do\n");
+        body.push_str("  case \"$line\" in\n");
+        body.push_str(&format!(
+            "    *'\"cmd\":\"tree\"'*) echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[]}}}}' ;;\n",
+            png.display()
+        ));
+        body.push_str("    *'\"cmd\":\"logs\"'*) echo '{\"ok\":true,\"cmd\":\"logs\",\"total\":0,\"kept\":0,\"dropped\":0,\"entries\":[]}' ;;\n");
+        body.push_str("    *'\"cmd\":\"close\"'*) exit 0 ;;\n");
+        body.push_str("    *) echo '{\"ok\":false,\"code\":\"BAD_REQUEST\",\"error\":\"no\"}' ;;\n");
+        body.push_str("  esac\n");
+        body.push_str("done\n");
+        std::fs::write(&script, body).unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        // A stale record from an earlier guest in the same directory must not
+        // survive into this session.
+        let stale = dir.join("art-frames/session-exit.json");
+        std::fs::create_dir_all(dir.join("art-frames")).unwrap();
+        std::fs::write(&stale, br#"{"outcome":"crash","code":"GUEST_EXITED","stage":"stale"}"#).unwrap();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        assert!(!stale.exists(), "a stale session-exit.json must be removed at start");
+        let before = session.frame().expect("first frame");
+        assert!(before.frame_seq() >= 1);
+        let error = session.reset().expect_err("the replacement guest dies");
+        assert_ne!(error.code(), ErrorCode::Internal, "{error}");
+        assert!(
+            session.liveness().is_some(),
+            "a failed reset leaves a provably dead session"
+        );
+        assert!(
+            session.frame_info().is_none(),
+            "the dead session's cached frame is discarded, never served"
+        );
+        assert!(session.bound_tree().is_none());
+        // Closing it is still clean (idempotent), so the daemon can drop it.
+        let _ = session.close();
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

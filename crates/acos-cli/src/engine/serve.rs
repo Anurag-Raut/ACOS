@@ -44,7 +44,7 @@ use serde_json::{json, Value};
 
 use crate::trust::Trust;
 
-use super::art::ArtSession;
+use super::art::{ArtSession, GuestExit};
 use super::{Engine, SessionBackend};
 
 /// The engine label every ART reply carries.
@@ -63,6 +63,9 @@ pub const EVIDENCE_GUEST_ASSERTED: &str = "guest-asserted";
 /// A socket session held by this daemon.
 struct HeldArtSession {
     apk: PathBuf,
+    /// Where this guest's frames and its `session-exit.json` go. Needed to
+    /// classify a lost guest (W55).
+    artifacts: PathBuf,
     trust: Trust,
     /// `Mutex` because two connections may address the same session id; the
     /// guest takes one command at a time.
@@ -145,16 +148,25 @@ impl ServeEngine {
             .unwrap_or_default();
         let art = self.art.lock().unwrap_or_else(|e| e.into_inner());
         for (id, held) in art.iter() {
-            let session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+            let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+            // A dead guest is reported as dead, with its own exit facts, never
+            // as a live frame sequence (W55).
+            let exit = session.liveness();
             sessions.push(json!({
                 "session_id": id,
                 "launched": true,
                 "package": session.package(),
                 "apk": held.apk.display().to_string(),
                 "stage_reached": "first_frame",
-                "frame_seq": session.frame_info().map(|f| f.0).unwrap_or(0),
+                "frame_seq": if exit.is_some() {
+                    0
+                } else {
+                    session.frame_info().map(|f| f.0).unwrap_or(0)
+                },
                 "engine": ENGINE_ART,
-                "mode": "live",
+                "mode": if exit.is_some() { "dead" } else { "live" },
+                "live": exit.is_none(),
+                "guest_exit": exit.as_ref().map(GuestExit::to_json),
                 "native": true,
                 "trust": held.trust.as_str(),
             }));
@@ -378,6 +390,9 @@ impl ServeEngine {
                 );
             }
         };
+        // A previous guest for this id that has died is never served. Its frame
+        // is discarded and a fresh guest replaces it below; the reply says so.
+        let mut replaced_guest: Option<Value> = None;
         if let Some(held) = self.held(id) {
             if held.apk != apk {
                 return with_hint(
@@ -400,13 +415,56 @@ impl ServeEngine {
                      then acos_launch the other APK.",
                 );
             }
-            // Re-launch on the live session = hand back its bound live frame
-            // (the daemon's whole point); never boot a second guest.
-            let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
-            return match session.ensure_bound_tree() {
-                Ok(tree) => launch_reply(request_id, id, &held, &session, &tree, false),
-                Err(error) => art_error(request_id, Some(id), held.trust, &error),
+            let dead = {
+                let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+                session.liveness().map(|exit| {
+                    let discarded = session.invalidate_frame();
+                    let classified =
+                        crate::failure::classify_session_exit(&held.artifacts).or_else(|| {
+                            exit.exit_code
+                                .or(exit.signal)
+                                .and_then(|_| crate::failure::classify_child_exit(exit_status(&exit)))
+                        });
+                    json!({
+                        "guest_exit": exit.to_json(),
+                        "session_exit": classified.map(|(code, facts)| json!({
+                            "code": code.as_str(),
+                            "facts": facts,
+                        })),
+                        "discarded_frame": discarded.map(|(seq, md5, at)| json!({
+                            "frame_seq": seq,
+                            "md5": md5,
+                            "captured_at": at,
+                            "served": false,
+                        })),
+                    })
+                })
             };
+            match dead {
+                None => {
+                    // Re-launch on the live session = hand back its bound live
+                    // frame (the daemon's whole point); never boot a second
+                    // guest.
+                    let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+                    return match session.ensure_bound_tree() {
+                        Ok(tree) => {
+                            launch_reply(request_id, id, &held, &session, &tree, false, None)
+                        }
+                        Err(error) => art_error(request_id, Some(id), held.trust, &error),
+                    };
+                }
+                Some(details) => {
+                    // Dead: drop the held session (dropping closes and reaps the
+                    // process group) and start a fresh guest for the same APK.
+                    self.art
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .remove(id);
+                    let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+                    let _ = session.teardown();
+                    replaced_guest = Some(details);
+                }
+            }
         }
         if self.session_count() >= self.max_sessions {
             return art_failure(
@@ -433,6 +491,7 @@ impl ServeEngine {
                 };
                 let held = Arc::new(HeldArtSession {
                     apk: apk.clone(),
+                    artifacts: artifacts.clone(),
                     trust,
                     session: Mutex::new(session),
                 });
@@ -442,7 +501,7 @@ impl ServeEngine {
                     .insert(id.to_string(), Arc::clone(&held));
                 self.set_route(id, Route::Art);
                 let guard = held.session.lock().unwrap_or_else(|e| e.into_inner());
-                launch_reply(request_id, id, &held, &guard, &started, true)
+                launch_reply(request_id, id, &held, &guard, &started, true, replaced_guest)
             }
             Err(error) => {
                 // Structured, and never a silent fallback to the Rust VM.
@@ -549,20 +608,33 @@ impl ServeEngine {
         args: &Value,
     ) -> Envelope {
         let trust = held.trust;
-        if trust == Trust::Untrusted && tool == "acos_assert" {
-            // Fail closed: the tree is guest-asserted and cannot corroborate a
-            // pass on an untrusted run (same rule as verify's TrustGuard).
+        let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+        // Correctness first: a dead guest must never answer from its cache.
+        // Every verb starts with the child's own liveness, not with a frame.
+        if let Some(exit) = session.liveness() {
+            return guest_exit_envelope(request_id, id, held, &mut session, tool, &exit);
+        }
+        // Then policy: the same fail-closed rules verify's TrustGuard applies.
+        if let Some((assertion, message)) = trust_refusal(trust, tool, args) {
             return art_failure(
                 request_id,
                 Some(id),
                 trust,
                 ErrorCode::InsufficientHostEvidence,
-                "acos_assert on an untrusted run: the tree is guest-asserted and cannot \
-                 justify a pass",
-                json!({"engine": ENGINE_ART, "verb": tool}),
+                message,
+                json!({
+                    "engine": ENGINE_ART,
+                    "verb": tool,
+                    "assertion": assertion,
+                    "trust_guard": "crate::trust::TrustGuard (observe/logs_since fail closed)",
+                    "allowed": ["acos_observe (frame only)", "acos_tap", "acos_key", "acos_text"],
+                }),
             );
         }
-        let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+        // A verb that mutates the guest but was refused above never reaches it;
+        // a verb whose *own* preconditions need the tree (tap by selector) is
+        // still allowed: navigation only, never a pass.
+        let started = std::time::Instant::now();
         let outcome = match tool {
             "acos_observe_tree" => observe_tree(&mut session, args),
             "acos_observe" => observe(&mut session, args),
@@ -595,6 +667,7 @@ impl ServeEngine {
                 result["session_id"] = json!(id);
                 label_meta(&mut result, ENGINE_ART, trust, evidence_for(tool));
                 label_frame(&mut result, &session);
+                label_timing(&mut result, &session, tool, started);
                 let envelope = Envelope::pass(
                     request_id,
                     ProtocolBackend::AcosNative,
@@ -650,6 +723,134 @@ impl ServeEngine {
         relabel_legacy(envelope, label, trust, frozen)
     }
 
+}
+
+/// The trust rules serve applies to an untrusted session, mirroring
+/// [`crate::trust::TrustGuard`] on the verify path.
+///
+/// `TrustGuard` refuses exactly two channels on an untrusted run: `observe`
+/// (the UI tree) and `logs_since` (guest log lines), with
+/// `INSUFFICIENT_HOST_EVIDENCE`. It still allows `capture` (host pixels),
+/// `input` (host-injected; a selector only navigates) and session lifecycle.
+/// Serve maps the same channels:
+///
+/// * `acos_observe_tree`, `acos_assert`, `acos_observe {tree|text}` -> `observe`
+/// * `acos_logs`                                                  -> `logs_since`
+/// * `acos_observe` with neither `tree` nor `text` (frame/screenshot) -> `capture`
+/// * `acos_tap` / `acos_key` / `acos_text` / `acos_action`          -> `input`
+///
+/// A refusal names the assertion class in the message so an agent can tell a
+/// policy refusal from a guest failure.
+fn trust_refusal(trust: Trust, tool: &str, args: &Value) -> Option<(&'static str, String)> {
+    if trust != Trust::Untrusted {
+        return None;
+    }
+    let wants_tree = args.get("tree").and_then(Value::as_bool).unwrap_or(false)
+        || args.get("text").and_then(Value::as_bool).unwrap_or(false);
+    match tool {
+        "acos_observe_tree" | "acos_assert" => Some((
+            "UNTRUSTED_TREE_ASSERTION",
+            format!(
+                "{tool} on an untrusted run: the UI tree is guest-asserted and cannot justify a \
+                 pass. Use a host-observed assertion (acos_observe frame / screenshot region) \
+                 instead; the tree still resolves tap targets for navigation."
+            ),
+        )),
+        "acos_observe" if wants_tree => Some((
+            "UNTRUSTED_TREE_ASSERTION",
+            "acos_observe with `tree`/`text` on an untrusted run: the tree is guest-asserted \
+             and cannot justify a pass. Ask for the frame only (tree:false, text:false) or use \
+             a host-observed region assertion."
+                .to_string(),
+        )),
+        "acos_logs" => Some((
+            "UNTRUSTED_LOG_ASSERTION",
+            "acos_logs on an untrusted run: the guest log is guest-asserted and cannot justify \
+             a pass. Use a host-observed assertion (acos_observe frame / screenshot region)."
+                .to_string(),
+        )),
+        _ => None,
+    }
+}
+
+/// One ART verb's reply when the guest behind the session is not alive.
+///
+/// A dead session has no frame to serve. The cached frame is dropped first
+/// (its identity is reported, never handed over), and the code comes from the
+/// session's own `session-exit.json` when it wrote one, else from the child's
+/// exit status (`crate::failure::classify_child_exit`), else `GUEST_EXITED`.
+/// `INTERNAL` is never used for a guest death (W53/W55).
+fn guest_exit_envelope(
+    request_id: &str,
+    id: &str,
+    held: &HeldArtSession,
+    session: &mut ArtSession,
+    verb: &str,
+    exit: &GuestExit,
+) -> Envelope {
+    let discarded = session.invalidate_frame();
+    let classified = crate::failure::classify_session_exit(&held.artifacts).or_else(|| {
+        exit.exit_code
+            .or(exit.signal)
+            .and_then(|_| crate::failure::classify_child_exit(exit_status(exit)))
+    });
+    let (code, facts) = match classified {
+        Some((code, facts)) => (code, json!(facts)),
+        None => (ErrorCode::GuestExited, Value::Null),
+    };
+    let detail = format!(
+        "GUEST_EXITED: the ART guest for session `{id}` is not alive ({}), so `{verb}` has no \
+         live frame to observe; the cached frame was discarded, not served",
+        describe_exit(exit)
+    );
+    let details = json!({
+        "verb": verb,
+        "guest_exit": exit.to_json(),
+        "session_exit": facts,
+        "session_exit_path": crate::failure::session_exit_path(&held.artifacts)
+            .display()
+            .to_string(),
+        "discarded_frame": discarded.map(|(seq, md5, at)| json!({
+            "frame_seq": seq,
+            "md5": md5,
+            "captured_at": at,
+            "served": false,
+        })),
+        "launch_hint": "call acos_launch with this session id to start a fresh guest",
+    });
+    with_hint(
+        art_failure(
+            request_id,
+            Some(id),
+            held.trust,
+            code,
+            detail,
+            details,
+        ),
+        "The guest process ended. `acos_launch` on this session id relaunches a fresh guest \
+         (it never returns the dead session's frame). Read details.session_exit / \
+         details.guest_exit and the session's logcat before retrying the same app.",
+    )
+}
+
+/// Rebuild the exit status the child reported (`classify_child_exit` takes a
+/// real `ExitStatus`). `GuestExit` keeps the raw code/signal for exactly this.
+fn exit_status(exit: &GuestExit) -> std::process::ExitStatus {
+    use std::os::unix::process::ExitStatusExt;
+    match (exit.signal, exit.exit_code) {
+        // Signal-only: the wait status stores the signal in the low 7 bits.
+        (Some(signal), _) => std::process::ExitStatus::from_raw(signal),
+        (None, Some(code)) => std::process::ExitStatus::from_raw(code << 8),
+        (None, None) => std::process::ExitStatus::from_raw(0),
+    }
+}
+
+fn describe_exit(exit: &GuestExit) -> String {
+    match (exit.signal, exit.exit_code) {
+        (Some(signal), _) => format!("{}: signal {signal}", exit.state),
+        (None, Some(code)) => format!("{}: exit {code}", exit.state),
+        (None, None) => exit.state.clone(),
+    }
 }
 
 /// The labels of a reply that carries no guest observation (status/destroy).
@@ -725,6 +926,42 @@ fn label_frame(result: &mut Value, session: &ArtSession) {
     }
 }
 
+/// Per-phase timers for one verb (W55).
+///
+/// `total_ms` is what the caller waited; the phase fields come from the
+/// engine's own measurements around the single `acos-art` round trip and the
+/// host-side absorb. Nothing here is estimated except
+/// `settle_estimate_ms`, which is defined as the remainder and says so.
+fn label_timing(result: &mut Value, session: &ArtSession, tool: &str, started: std::time::Instant) {
+    let total_ms = started.elapsed().as_millis() as u64;
+    let Some(object) = result.as_object_mut() else {
+        return;
+    };
+    let mut timing = json!({
+        "total_ms": total_ms,
+        "note": "total_ms is the whole serve verb; the other fields are measured around the \
+                 acos-art round trip and the host-side absorb",
+    });
+    match tool {
+        "acos_tap" | "acos_text" | "acos_key" | "acos_action" => {
+            if let Some(input) = session.last_input_timing() {
+                if let Some(map) = timing.as_object_mut() {
+                    map.insert("input".into(), input.to_json());
+                }
+            }
+        }
+        "acos_observe" | "acos_observe_tree" | "acos_assert" => {
+            if let Some(phase) = session.last_phase_timing() {
+                if let Some(map) = timing.as_object_mut() {
+                    map.insert("read".into(), phase.to_json());
+                }
+            }
+        }
+        _ => {}
+    }
+    object.insert("timing".into(), timing);
+}
+
 // -- verb implementations --------------------------------------------------- //
 
 fn launch_reply(
@@ -734,13 +971,14 @@ fn launch_reply(
     session: &ArtSession,
     tree: &UiTree,
     fresh_guest: bool,
+    replaced_guest: Option<Value>,
 ) -> Envelope {
     let (max_nodes, node_count, truncated, tree_value) = tree_json(tree, 2000);
     let mut result = json!({
         "session_id": id,
         "launched": true,
         "relaunch": !fresh_guest,
-        "package": session.package(),
+        "replaced_guest": replaced_guest,
         "activity": session.activity(),
         "apk": held.apk.display().to_string(),
         "stage_reached": "first_frame",
