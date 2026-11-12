@@ -803,6 +803,54 @@ screen — MEASURED (false pass found; one layout wall open)
   P12; H12 (N=5 assert flake); H9/H10/H11 below.
 - **Fidelity / evidence:** `art-reference` (real ART, release); artifacts above.
 
+## E13.3 — Gaten launch stability (W6) instrumented; the +1080 px offset did not reproduce and the
+real failure is a post-first-frame SIGSEGV — MEASURED (partial: one half reproduced, one not)
+
+- **Date / commit:** 2026-11-13; R2 worktree `render-r2-gaten-layout` (off `main` `2f9bf4a`).
+  Diagnostic only: an env-gated guest geometry trace plus its forwarding.
+- **Question / goal:** GR2 §4 W6 — in 2 of 6 launches the welcome screen lays out one display width
+  off (`+1080 px`, so the button reads "Set up" and the highlighted `<Text>` spans vanish) or paints
+  nothing at all for 60 s. Is the first measure pass seeing a different display width/density
+  (`DisplayInfo`/`Configuration`/`WindowMetrics` race vs `ACOS_DISPLAY_OVERRIDE`/`LaunchMain`
+  geometry), a Fabric/Yoga read of 0 or 2×, a race with the WMS relayout, or a wrong `ReactTextView`
+  width — and can ACOS be fixed at that layer without patching Gaten?
+- **Inputs / method:** same read-only APK (`f344272`, sha256 `e04c7ffc…`), phone-matched geometry
+  (`1080x2400 @ 400 dpi`, 108 px status). New `ACOSLAUNCH_GEOM_TRACE=1` starts a read-only watcher in
+  `LaunchMain` that samples `DisplayMetrics`, `Configuration` (`screenWidthDp/HeightDp/densityDpi/`
+  `smallestScreenWidthDp`), `WindowManager` window metrics + insets, the decor's measured/laid-out
+  size and screen origin, and `ViewRootImpl.mWinFrame`/`mWidth`/`mHeight`, printing one `ACOSGEO`
+  line per change and writing `<run>/art-frames/geometry-trace.txt`. 10 launches, each: launch → 2 s →
+  `tree` + `screenshot` → trace → destroy, under `run-exclusive.sh` + `guarded.sh --mem 8G`.
+- **Result:** **9/10 correct** (243-node tree with `Set up Gaten` and `なるほど、`; frames identical
+  ink 0.0939) and **1/10 lost its guest to SIGSEGV (`signal 11`, `GUEST_KILLED_BY_SIGNAL`,
+  `exit_code 1`, no OOM) between the first frame and the next observation** — the same shape as GR2's
+  empty-tree/white-screen launch and GR1's "flag request exits 1". The `+1080 px` layout offset did
+  **not** reproduce. In every correct run the trace shows one consistent geometry from the first
+  sample on (`app_dm=1080x2292@400`, `app_cfg=432x917@400`, `win_frame=[0,108][1080,2400]`,
+  `decor=1080x2292 at=0,108`) with no second width and no re-layout.
+- **Finding (proven):** the failure class GR2 measured is **two defects, not one**: (a) a rare native
+  crash of the ART guest after the window is up (reproduced 1/10, stack not yet captured — the run's
+  own directory was removed by the loop's `session destroy`), and (b) the `+1080 px` layout offset,
+  which is not reproducible at n=10 on current `main`. The trace cannot yet see a first-measure race
+  because it starts at `activity-resumed`; it must move to `application-created` (a 5-line change).
+- **Fidelity / evidence:** `art-reference` (real ART guest, host-observed pixels);
+  `results/render/R2.md` §2–§3 (the 10-launch table, the exit record quoted verbatim, the good-run
+  geometry); loop artifacts in `.cache/r2/loop/run1…run10` (gitignored).
+- **A (per-view canvas):** **not implemented, design only.** The hardware per-view canvas
+  (`RenderNode.beginRecording(w,h)`) needs HWUI's RenderThread/EGL/Skia-GPU path; the ART guest's
+  `HardwareRenderer` natives come from stock `libhwui.so`, and ACOS's `RenderNode`/
+  `HardwareRenderer` replacement is an `acos-vm` native the ART process cannot resolve. The honest
+  bounded alternative (~250–400 lines of guest Java: nested per-view `Bitmap` canvas + blit, opt-in)
+  changes the drawing model for every app and costs 1.5–3× draw time on text-heavy screens, so it is
+  an owner decision, not a rendering-task edit. `scenarios/svg-viewbox.yaml` stays red.
+- **Regression / false pass:** no product behaviour changed (trace is off by default); no gate
+  re-run because nothing in drawing/WMS/verify moved. The negative result is kept deliberately: it
+  narrows W6 to a crash + an unreproduced offset instead of "a fragmented layout layer".
+- **Conclusion / next:** (1) start the trace at `application-created` and keep the failing run's
+  `session-exit.json`/`stdout_tail`/`stderr_tail`/`/proc/<pid>/maps`; (2) capture the SIGSEGV with a
+  guest SIGSEGV handler (faulting address + mapped path) and bisect the app's 23 native libs and the
+  gralloc shim; (3) owner decision on the opt-in per-view canvas vs the full `libhwui` shim.
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
@@ -851,3 +899,6 @@ merged after that build; re-baseline on merged main.
 | K3a | K2 next walls: AndroidKeyStore shim, GL/BLAST natives, WebView provider classification | compat first-frame | +3–5 apps | high (K1/K2 evidence) | medium | medium | queued |
 | K3b | K2 PMS error class (`NameNotFoundException`) and `checkService` null for unknown names | compat | +2 apps (vlc, fdroid) | high | low | low | queued |
 | K3c | K2 app provider delivery (androidx.startup/WorkManager `InitializationProvider`) | compat | +element, feeders | medium | high | medium | investigated (K2 §6) |
+| R2a | Gaten launch flake: SIGSEGV after first frame (~1/10). Guest SIGSEGV handler dumping fault address + mapped path, then bisect the app's 23 native libs / the gralloc shim | verified-launch stability | 9/10 → 10/10 | high (reproduced) | low | low | **next** (R2 §6) |
+| R2b | W6 `+1080 px` fragment offset: move `ACOSLAUNCH_GEOM_TRACE` to `application-created`, keep failing runs, n=20. Then a first-measure race vs a pager-translation source is decidable from `win_frame` vs `app_cfg` | layout correctness | catch + fix the root cause | medium | low | low | **next** (R2 §6) |
+| R2c | Per-view canvas for the ART guest without a GPU: opt-in per-view nested `Bitmap` canvas + blit (R2 §4.3) vs a `libhwui`-shim `RenderNode`/`HardwareRenderer` | SVG/wordmark fidelity | `canvasIsViewPx=true` | medium | medium/high | medium (draw cost 1.5–3×) | **owner decision** (R2 §4) |

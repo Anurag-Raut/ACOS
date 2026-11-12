@@ -1050,6 +1050,12 @@ pub(crate) fn launch_session(
     if std::env::var_os("ACOSLAUNCH_PROBE").is_some() {
         sb.env("ACOSLAUNCH_PROBE", "1");
     }
+    // R2 W6: forward the geometry trace switch (DisplayMetrics, Configuration,
+    // WindowMetrics, decor size, ViewRootImpl frame) to the guest. Read-only;
+    // the guest writes `<run>/geometry-trace.txt` and prints `ACOSGEO` lines.
+    if std::env::var_os("ACOSLAUNCH_GEOM_TRACE").is_some() {
+        sb.env("ACOSLAUNCH_GEOM_TRACE", "1");
+    }
     // H2: the guest-side post-first-frame release hook (ON by default; the
     // guest treats `ACOS_ART_EARLY_GC=0` as off). Forward only the host value
     // so an unset variable means "default".
