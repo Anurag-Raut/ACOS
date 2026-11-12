@@ -547,6 +547,14 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         app_flags_source,
         installed.is_some()
     );
+    // Z3 (research seam, off by default): `ACOS_ZYGOTE_APP=<build dir>` runs the
+    // guest as a pre-initialised ART zygote (`dev.acos.art.ZygoteApp`, built by
+    // `research/zygote-proto/z3/build.sh`) that does the app-independent
+    // framework init once, then forks one child which re-enters the *unmodified*
+    // `LaunchMain.main` with the argv built here. Unset => this function's argv,
+    // class path and sandbox are exactly what they were before this seam.
+    // See results/art-runtime/Z3.md.
+    let zygote_app: Option<PathBuf> = std::env::var_os("ACOS_ZYGOTE_APP").map(PathBuf::from);
     let argv: Vec<String> = vec![
         "-cp".into(),
         "/data/app/launch-guest/classes.dex".into(),
@@ -573,6 +581,26 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         app_flags.to_string(),
         app_flags_source.to_string(),
     ];
+    let argv: Vec<String> = match &zygote_app {
+        None => argv,
+        Some(dir) => {
+            eprintln!(
+                "acos-art: launch: Z3 zygote guest {} (app child forked from a pre-initialised ART)",
+                dir.display()
+            );
+            let mut v: Vec<String> = vec![
+                "-Xzygote".into(),
+                "-Xhidden-api-policy:disabled".into(),
+                "-cp".into(),
+                "/data/app/z3/classes.dex".into(),
+                "dev.acos.art.ZygoteApp".into(),
+            ];
+            // Drop the production `-cp <dex> <class>` triple; the guest argv
+            // (`apk package out until activity …`) is passed through verbatim.
+            v.extend(argv.iter().skip(3).cloned());
+            v
+        }
+    };
     crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();
     sb.run_root(run.path());
@@ -590,6 +618,17 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         "/data/libacoshw.so",
     );
     sb.ro_bind(&driver, "/data/lib/libacos_binder_driver.so");
+    if let Some(dir) = &zygote_app {
+        // Z3 research guest dex + the raw-syscall fork shim (Z1/Z2). bwrap
+        // creates no mount point inside the read-only /data tree, so the
+        // guest-visible directory is seeded in the data root (like
+        // `app/launch-guest` above) and the built dex is bound over it.
+        fs::create_dir_all(root.data.join("app/z3"))?;
+        fs::create_dir_all(root.data.join("shim"))?;
+        fs::copy(dir.join("lib/libz2fork.so"), root.data.join("shim/libz2fork.so"))?;
+        sb.ro_bind(&dir.join("dex"), "/data/app/z3");
+        sb.ro_bind(&dir.join("lib/libz2fork.so"), "/data/shim/libz2fork.so");
+    }
     sb.rw_bind(&sockets.0, "/dev/socket");
     // The importer socket is the only writable file the peer needs in /data.
     sb.rw_bind(&sock, "/data/acos-launch.sock");
