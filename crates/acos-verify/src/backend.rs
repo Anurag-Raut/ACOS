@@ -529,6 +529,23 @@ pub enum BackendError {
         /// Detail.
         detail: String,
     },
+    /// A structured protocol failure with evidence attached (W46).
+    ///
+    /// Used when the failure was classified from a session's own record
+    /// (`session-exit.json`) or from an `acos-art` reply code: the code, the
+    /// retryability and the facts must reach the verdict unchanged instead of
+    /// being flattened into a detail string.
+    #[error("backend error ({code}): {detail}")]
+    Protocol {
+        /// Error code.
+        code: ErrorCode,
+        /// Detail.
+        detail: String,
+        /// The producer's situation-specific hint, when it has one.
+        hint: Option<String>,
+        /// Structured facts (art reply, session-exit record, stage, ...).
+        details: Option<serde_json::Value>,
+    },
 }
 
 impl BackendError {
@@ -540,13 +557,25 @@ impl BackendError {
         }
     }
 
+    /// Build a backend error from a structured protocol failure.
+    pub fn from_protocol(error: ProtocolError) -> Self {
+        BackendError::Protocol {
+            code: error.code,
+            detail: error.message,
+            hint: Some(error.hint),
+            details: error.details,
+        }
+    }
+
     /// The protocol error code this maps to.
     pub const fn code(&self) -> ErrorCode {
         match self {
             BackendError::Unsupported { .. } => ErrorCode::UnsupportedBackend,
             BackendError::Crash { .. } => ErrorCode::AppCrashed,
             BackendError::Timeout { .. } => ErrorCode::Timeout,
-            BackendError::Failed { code, .. } | BackendError::Error { code, .. } => *code,
+            BackendError::Failed { code, .. }
+            | BackendError::Error { code, .. }
+            | BackendError::Protocol { code, .. } => *code,
         }
     }
 
@@ -587,6 +616,22 @@ impl BackendError {
             BackendError::Timeout { detail } => ProtocolError::new(ErrorCode::Timeout, detail),
             BackendError::Failed { code, detail } => ProtocolError::new(*code, detail.clone()),
             BackendError::Error { code, detail } => ProtocolError::new(*code, detail.clone()),
+            BackendError::Protocol {
+                code,
+                detail,
+                hint,
+                details,
+            } => {
+                let error = ProtocolError::new(*code, detail.clone());
+                let error = match hint {
+                    Some(hint) => error.with_hint(hint.clone()),
+                    None => error,
+                };
+                match details {
+                    Some(details) => error.with_details(details.clone()),
+                    None => error,
+                }
+            }
         }
     }
 }

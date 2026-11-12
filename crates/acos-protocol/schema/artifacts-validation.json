@@ -655,6 +655,41 @@
           "type": "string"
         },
         {
+          "description": "The host scratch filesystem refused a write (ENOSPC/EDQUOT) or has less free space than the configured minimum. A host condition, never app behaviour; retrying after freeing space is safe.",
+          "enum": [
+            "HOST_DISK_FULL"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The launcher (or another ACOS harness process) panicked. A harness bug: the panic message and the stage are evidence, not an app failure.",
+          "enum": [
+            "HOST_PANIC"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A host memory ceiling (launcher watchdog, cgroup limit, memcg OOM) was hit. Reduce concurrency or run on a host with more headroom; retry is safe once memory is available.",
+          "enum": [
+            "HOST_MEMORY_LIMIT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The guest seccomp filter (and its proof) could not be installed. The host kernel/configuration cannot provide the isolation layer, so guest code is refused (fail closed). Distinct from `LANDLOCK_UNAVAILABLE`.",
+          "enum": [
+            "SECCOMP_UNAVAILABLE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The guest process ended before the requested lifecycle stage completed. Carries the guest exit code, terminating signal and stage; inspect them to separate an app crash from a host condition.",
+          "enum": [
+            "GUEST_EXITED"
+          ],
+          "type": "string"
+        },
+        {
           "description": "ACOS itself failed (distinct from an app crash).",
           "enum": [
             "INTERNAL"

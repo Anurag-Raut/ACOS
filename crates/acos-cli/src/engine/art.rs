@@ -581,6 +581,20 @@ impl ArtSession {
                          (no live frame exists): {detail}"
                     ),
                 },
+                BackendError::Protocol {
+                    code,
+                    detail,
+                    hint,
+                    details,
+                } => BackendError::Protocol {
+                    code,
+                    detail: format!(
+                        "{LIVE_FRAME_UNAVAILABLE}: the ART session ended before its ready line \
+                         (no live frame exists): {detail}"
+                    ),
+                    hint,
+                    details,
+                },
                 BackendError::Timeout { detail } => BackendError::Timeout {
                     detail: format!(
                         "{LIVE_FRAME_UNAVAILABLE}: the ART session produced no ready line: {detail}"
@@ -591,7 +605,7 @@ impl ArtSession {
         let ready: serde_json::Value =
             serde_json::from_str(&ready).map_err(|error| BackendError::Error {
                 code: acos_protocol::ErrorCode::Internal,
-                detail: format!("acos-art ready line is not JSON: {error}"),
+                detail: format!("acos-art ready line is not JSON: {error}; stderr tail: {}", session.stderr_tail()),
             })?;
         if ready.get("ok").and_then(|v| v.as_bool()) != Some(true) {
             let code = ready
@@ -602,10 +616,18 @@ impl ArtSession {
                 .get("error")
                 .and_then(|v| v.as_str())
                 .unwrap_or("acos-art session did not start");
-            return Err(BackendError::Unsupported {
-                capability: "engine.art.session".into(),
-                detail: format!("{code}: {message}; stderr tail: {}", session.stderr_tail()),
-            });
+            // W46: the ready line names the cause (`HOST_DISK_FULL`, ...). Map it
+            // to its protocol code and keep the session's own exit record. Folding
+            // every refusal into `UNSUPPORTED_BACKEND` hid a full disk and a seccomp
+            // refusal behind the same label.
+            let mut error = crate::failure::art_error(code, message, &artifacts);
+            if let Some(object) = error.details.as_mut().and_then(|d| d.as_object_mut()) {
+                object.insert(
+                    "stderr_tail".to_string(),
+                    serde_json::json!(session.stderr_tail()),
+                );
+            }
+            return Err(BackendError::from_protocol(error));
         }
         if let Some(width) = ready.get("width").and_then(|v| v.as_u64()) {
             session.width = width as u32;
@@ -641,10 +663,7 @@ impl ArtSession {
     fn read_line(&mut self, timeout: Duration, context: &str) -> Result<String, BackendError> {
         match self.lines.recv_timeout(timeout) {
             Ok(Ok(line)) => Ok(line),
-            Ok(Err(error)) => Err(BackendError::Error {
-                code: acos_protocol::ErrorCode::Internal,
-                detail: format!("{context}: {error}; stderr tail: {}", self.stderr_tail()),
-            }),
+            Ok(Err(error)) => Err(self.session_lost(context, &error.to_string())),
             Err(RecvTimeoutError::Timeout) => Err(BackendError::Timeout {
                 detail: format!(
                     "{context}: no reply from acos-art within {}s; stderr tail: {}",
@@ -652,13 +671,31 @@ impl ArtSession {
                     self.stderr_tail()
                 ),
             }),
-            Err(RecvTimeoutError::Disconnected) => Err(BackendError::Error {
-                code: acos_protocol::ErrorCode::Internal,
+            Err(RecvTimeoutError::Disconnected) => {
+                Err(self.session_lost(context, "acos-art session exited"))
+            }
+        }
+    }
+
+    /// A lost session is classified from its own exit record when there is one
+    /// (W46): a full disk, a panic, an OOM kill or a guest exit is a known cause
+    /// and must never surface as `INTERNAL: session exited`.
+    fn session_lost(&self, context: &str, detail: &str) -> BackendError {
+        match crate::failure::classify_session_exit(&self.artifacts) {
+            Some((code, facts)) => BackendError::Protocol {
+                code,
                 detail: format!(
-                    "{context}: acos-art session exited; stderr tail: {}",
+                    "{context}: {detail} (classified from {}); stderr tail: {}",
+                    crate::failure::session_exit_path(&self.artifacts).display(),
                     self.stderr_tail()
                 ),
-            }),
+                hint: None,
+                details: Some(serde_json::json!({"session_exit": facts})),
+            },
+            None => BackendError::Error {
+                code: acos_protocol::ErrorCode::Internal,
+                detail: format!("{context}: {detail}; stderr tail: {}", self.stderr_tail()),
+            },
         }
     }
 
@@ -666,36 +703,48 @@ impl ArtSession {
     /// reply for one case only: a delivered input whose action legitimately
     /// produced no pixel change. The guest reports the delivery evidence
     /// (`gesture` acks) in the same reply it uses to refuse the frame.
+    ///
+    /// A failure reply carries the mapped protocol code, its class/retryability
+    /// and the raw reply in `details.reply` (W46).
     fn command_raw(
         &mut self,
         request: serde_json::Value,
-    ) -> Result<serde_json::Value, (ErrorCode, serde_json::Value, String)> {
+    ) -> Result<serde_json::Value, acos_protocol::ProtocolError> {
+        let artifacts = self.artifacts.clone();
         let stdin = self.stdin.as_mut().ok_or_else(|| {
-            (
+            acos_protocol::ProtocolError::new(
                 ErrorCode::Internal,
-                serde_json::Value::Null,
-                "the ART session stdin is closed".to_string(),
+                "the ART session stdin is closed",
+            )
+            .with_hint(
+                "The session was already shut down (close/shutdown/drop). Do not send commands \
+                 to a closed session; start a new one.",
             )
         })?;
         let line = request.to_string();
         if let Err(error) = writeln!(stdin, "{line}").and_then(|_| stdin.flush()) {
-            return Err((
-                ErrorCode::Internal,
-                serde_json::Value::Null,
+            let code = if crate::failure::is_disk_full(&error) {
+                ErrorCode::HostDiskFull
+            } else {
+                ErrorCode::Internal
+            };
+            return Err(acos_protocol::ProtocolError::new(
+                code,
                 format!("cannot write to acos-art: {error}"),
             ));
         }
         let timeout = self.timeout;
-        let reply = self.read_line(timeout, "command").map_err(|error| {
-            let code = error.code();
-            let detail = error.to_protocol_error().message;
-            (code, serde_json::Value::Null, detail)
-        })?;
+        let reply = self
+            .read_line(timeout, "command")
+            .map_err(|error| error.to_protocol_error())?;
         let reply: serde_json::Value = serde_json::from_str(&reply).map_err(|error| {
-            (
+            acos_protocol::ProtocolError::new(
                 ErrorCode::Internal,
-                serde_json::Value::Null,
                 format!("acos-art reply is not JSON: {error}"),
+            )
+            .with_hint(
+                "The line-JSON protocol is broken (a guest or harness wrote a non-JSON line). \
+                 Capture the session's stderr tail and report the harness bug.",
             )
         })?;
         if reply.get("ok").and_then(|v| v.as_bool()) != Some(true) {
@@ -706,20 +755,19 @@ impl ArtSession {
             let message = reply
                 .get("error")
                 .and_then(|v| v.as_str())
-                .unwrap_or("acos-art session command failed")
-                .to_string();
-            let code = ErrorCode::from_str_opt(code).unwrap_or(ErrorCode::Internal);
-            return Err((code, reply, message));
+                .unwrap_or("acos-art session command failed");
+            let mut error = crate::failure::art_error(code, message, &artifacts);
+            if let Some(object) = error.details.as_mut().and_then(|d| d.as_object_mut()) {
+                object.insert("reply".to_string(), reply.clone());
+            }
+            return Err(error);
         }
         Ok(reply)
     }
 
     fn command(&mut self, request: serde_json::Value) -> Result<serde_json::Value, BackendError> {
         self.command_raw(request)
-            .map_err(|(code, _, message)| BackendError::Error {
-                code,
-                detail: format!("acos-art: {code}: {message}"),
-            })
+            .map_err(BackendError::from_protocol)
     }
 
     /// Send one input command. A guest reply that refuses the frame but carries
@@ -749,7 +797,17 @@ impl ArtSession {
                 self.last_input = Some(delivery(&reply, visual_change));
                 Ok(())
             }
-            Err((ErrorCode::NoFreshFrame, reply, _message)) if reply.get("gesture").is_some() => {
+            Err(error) if error.code == ErrorCode::NoFreshFrame => {
+                // Recover the guest's delivery evidence from the structured reply.
+                let reply = error
+                    .details
+                    .as_ref()
+                    .and_then(|details| details.get("reply"))
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
+                if reply.get("gesture").is_none() {
+                    return Err(BackendError::from_protocol(error));
+                }
                 if std::env::var_os("ACOS_ART_SETTLE_MODE").as_deref() == Some("guest-only".as_ref())
                 {
                     // Diagnostic: the pre-W34 behaviour (one recovery capture,
@@ -773,10 +831,7 @@ impl ArtSession {
                 }
                 self.settle_after_input(&reply, context)
             }
-            Err((code, _, message)) => Err(BackendError::Error {
-                code,
-                detail: format!("acos-art: {code}: {message}"),
-            }),
+            Err(error) => Err(BackendError::from_protocol(error)),
         }
     }
 
@@ -1059,7 +1114,7 @@ impl ArtSession {
             }
         }
         if !report.survivors.is_empty() {
-            return Err(BackendError::Error {
+            return Err(BackendError::Protocol {
                 code: acos_protocol::ErrorCode::Internal,
                 detail: format!(
                     "PROCESS_TREE_DIRTY: {} process(es) still alive in session group {:?}: {:?}",
@@ -1067,6 +1122,16 @@ impl ArtSession {
                     report.process_group,
                     report.survivors
                 ),
+                hint: Some(
+                    "The session's process group still has live processes after SIGKILL and a \
+                     2 s grace window. Do not start another session until the PIDs are gone; \
+                     inspect /proc and report the harness bug."
+                        .to_string(),
+                ),
+                details: Some(serde_json::json!({
+                    "process_group": report.process_group,
+                    "survivors": report.survivors,
+                })),
             });
         }
         self.write_timing(started.elapsed().as_millis() as u64);

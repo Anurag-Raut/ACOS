@@ -267,11 +267,16 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                     EngineBackend::session(Box::new(session))
                 }
                 Err(error) => {
+                    let mut protocol = error.to_protocol_error();
+                    // W46: a session that refused to start still leaves its own
+                    // record (full disk, seccomp, panic). Put those facts in the
+                    // envelope instead of only a detail string.
+                    crate::failure::attach_session_exit(&mut protocol, &artifacts);
                     let envelope = Envelope::failure(
                         request_id,
                         ProtocolBackend::AcosNative,
                         Fidelity::StaticAnalysis,
-                        error.to_protocol_error(),
+                        protocol,
                         Metrics::wall_ms(0),
                     );
                     return finish(&envelope, &args, &artifacts);
@@ -284,6 +289,11 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     let session_caps = backend.session_capabilities();
     let mut guarded = crate::trust::TrustGuard::new(Box::new(backend), trust);
     let mut envelope = acos_verify::verify(&request, &mut guarded);
+    // W46: tear the session down *before* annotating, so the launcher's own
+    // `session-exit.json` exists when the verdict artifacts are written. The
+    // record is evidence for a pass as well as for a failure (a clean run ends
+    // with guest_exit=0), and a caller that keeps only the artifacts keeps it.
+    drop(guarded);
     annotate(
         &mut envelope,
         &args,
@@ -346,6 +356,13 @@ pub(crate) fn annotate(
         "engine_report": artifacts.join("engine.json").display().to_string(),
     });
     let provenance = crate::provenance::run_evidence(trust);
+    // W46: the session's own exit record belongs in the verdict artifacts, not
+    // only in the engine's frames directory. A future death is then classified
+    // from the verdict a caller already keeps.
+    let session_exit = crate::failure::read_session_exit(artifacts);
+    let session_exit_summary = session_exit
+        .as_ref()
+        .map(|doc| crate::failure::session_exit_summary(doc, artifacts));
     let timing = step_timing(&verdict, session_boot_ms);    let engine_block = serde_json::json!({
         "engine": engine.as_str(),
         "mode": mode.as_str(),
@@ -354,6 +371,7 @@ pub(crate) fn annotate(
         "unsupported_steps": unsupported_steps,
         "evidence": evidence,
         "timing": timing,
+        "session_exit": session_exit_summary,
         "commands": caps.map(|caps| serde_json::json!({
             "supported": caps.names(),
             "missing": caps.missing(),
@@ -368,32 +386,75 @@ pub(crate) fn annotate(
             engine_block["unsupported_steps"].clone(),
         );
         object.insert("evidence".to_string(), engine_block["evidence"].clone());
+        if let Some(summary) = &session_exit_summary {
+            object.insert("session_exit".to_string(), summary.clone());
+        }
     }
     crate::provenance::annotate_verdict(&mut verdict, trust);
 
     let preview_downgrade = mode == Mode::Preview && crate::engine::preview_downgrade(&mut verdict);
     // Evidence files: the annotated verdict (engine/mode fields are additive) and
-    // a compact engine report. Never fail the verdict over a write error.
-    if std::fs::create_dir_all(artifacts).is_ok() {
-        let _ = std::fs::write(
-            artifacts.join(acos_protocol::artifacts::VERDICT_JSON),
-            serde_json::to_string_pretty(&verdict).unwrap_or_default(),
-        );
-        let _ = std::fs::write(
-            artifacts.join("engine.json"),
-            serde_json::to_string_pretty(&serde_json::json!({
-                "request_id": envelope.request_id(),
-                "engine": engine_block,
-                "verdict_status": verdict.get("verdict"),
-                "provenance_rule": provenance["rule"].clone(),
-            }))
-            .unwrap_or_default(),
-        );
+    // a compact engine report. A write that fails for lack of host space is a
+    // structured, retryable HOST_DISK_FULL — never a silent pass and never a
+    // panic with an empty stderr (W43: nine such runs in the ENOSPC window).
+    let mut write_error: Option<(std::io::Error, PathBuf)> = None;
+    if let Err(error) = std::fs::create_dir_all(artifacts) {
+        write_error = Some((error, artifacts.to_path_buf()));
+    }
+    if write_error.is_none() {
+        let verdict_path = artifacts.join(acos_protocol::artifacts::VERDICT_JSON);
+        match serde_json::to_string_pretty(&verdict) {
+            Ok(text) => {
+                if let Err(error) = crate::failure::write_artifact(&verdict_path, text.as_bytes()) {
+                    write_error = Some((error, verdict_path));
+                }
+            }
+            Err(error) => {
+                write_error = Some((
+                    std::io::Error::other(format!("serialize verdict: {error}")),
+                    verdict_path,
+                ));
+            }
+        }
+    }
+    if write_error.is_none() {
+        let engine_path = artifacts.join("engine.json");
+        let body = serde_json::json!({
+            "request_id": envelope.request_id(),
+            "engine": engine_block,
+            "verdict_status": verdict.get("verdict"),
+            "provenance_rule": provenance["rule"].clone(),
+        });
+        match serde_json::to_string_pretty(&body) {
+            Ok(text) => {
+                if let Err(error) = crate::failure::write_artifact(&engine_path, text.as_bytes()) {
+                    write_error = Some((error, engine_path));
+                }
+            }
+            Err(error) => {
+                write_error = Some((
+                    std::io::Error::other(format!("serialize engine report: {error}")),
+                    engine_path,
+                ));
+            }
+        }
+    }
+    if write_error.is_none() {
         crate::provenance::annotate_step_artifacts(&verdict, artifacts, trust);
     }
     let mut annotated_result = result;
     annotated_result["verdict"] = verdict;
-    if preview_downgrade {
+    if let Some((error, path)) = write_error {
+        let protocol = crate::failure::write_failure(&error, &path);
+        *envelope = Envelope::failure(
+            envelope.request_id().to_string(),
+            envelope.backend(),
+            envelope.fidelity(),
+            protocol,
+            envelope.metrics(),
+        )
+        .with_value_result(annotated_result);
+    } else if preview_downgrade {
         let failure = Envelope::failure(
             new_request_id(),
             envelope.backend(),
@@ -462,6 +523,16 @@ fn finish(envelope: &Envelope, args: &VerifyArgs, artifacts: &Path) -> ExitCode 
         print_json(envelope);
     } else {
         print_summary(envelope, artifacts);
+    }
+    if !envelope.status().is_pass() {
+        // Always name the failure on stderr too: a caller that captures only
+        // stderr must still see the code (W43: rc 101 with empty stderr).
+        if let Some(error) = envelope.error() {
+            eprintln!(
+                "verify: {} ({}): {} [class={}, retryable={}]",
+                error.code, error.class, error.message, error.class, error.retryable
+            );
+        }
     }
     if envelope.status().is_pass() {
         ExitCode::SUCCESS

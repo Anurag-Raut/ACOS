@@ -1,0 +1,79 @@
+{
+  "request_id": "req_3f3f63_18e731613dc6deab",
+  "ok": true,
+  "status": "pass",
+  "engine": "art",
+  "mode": "live",
+  "verdict": "pass",
+  "steps": [
+    {
+      "index": 0,
+      "step": "launch",
+      "status": "pass"
+    },
+    {
+      "index": 1,
+      "step": "wait_for",
+      "status": "pass"
+    },
+    {
+      "index": 2,
+      "step": "assert_text",
+      "status": "pass"
+    },
+    {
+      "index": 3,
+      "step": "assert_text",
+      "status": "pass"
+    },
+    {
+      "index": 4,
+      "step": "tap",
+      "status": "pass"
+    },
+    {
+      "index": 5,
+      "step": "assert_text",
+      "status": "pass"
+    },
+    {
+      "index": 6,
+      "step": "capture",
+      "status": "pass"
+    },
+    {
+      "index": 7,
+      "step": "tap",
+      "status": "pass"
+    },
+    {
+      "index": 8,
+      "step": "assert_text",
+      "status": "pass"
+    },
+    {
+      "index": 9,
+      "step": "tap",
+      "status": "pass"
+    },
+    {
+      "index": 10,
+      "step": "assert_text",
+      "status": "pass"
+    }
+  ],
+  "session_exit": {
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=108MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p4145005-i8389089.scope)",
+    "code": null,
+    "disk_free_bytes": 167854395392,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": ".cache/w46-counter/artifacts/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "artifacts": ".cache/w46-counter/artifacts"
+}

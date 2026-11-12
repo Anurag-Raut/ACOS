@@ -217,7 +217,10 @@ fn daemon_failure(request_id: &str, message: String) -> Envelope {
         request_id,
         ProtocolBackend::AcosNative,
         Fidelity::NativeRuntime,
-        ProtocolError::new(ErrorCode::Internal, message),
+        ProtocolError::new(ErrorCode::Internal, message).with_hint(
+            "The session daemon could not be started or answered with a broken response. \
+             Check ACOS_NO_DAEMON / the daemon log; this is a harness failure, not app behaviour.",
+        ),
         Metrics::wall_ms(0),
     )
 }
@@ -370,6 +373,12 @@ pub fn session_error_envelope(request_id: &str, err: &SessionError) -> Envelope 
     let mut error = ProtocolError::new(code, err.message.clone());
     if let Some(hint) = acos_runtime::session::session_error_hint(err.code, &err.details) {
         error = error.with_hint(hint);
+    } else if ErrorCode::from_str_opt(&err.code).is_none() {
+        error = error.with_hint(format!(
+            "The runtime reported `{}`, which is not in the registered taxonomy. Register it \
+             in acos_protocol::ErrorCode; until then this is a named harness gap, not app behaviour.",
+            err.code
+        ));
     }
     if !err.details.is_empty() {
         error = error.with_details(details_json(&err.details));

@@ -149,6 +149,10 @@ pub fn verify_with_clock(
                     ErrorCode::Internal,
                     format!("verify produced status `{}` without a failure object", verdict.verdict),
                 )
+                .with_hint(
+                    "Runner invariant violated: a non-pass verdict must carry a failure object. \
+                     Fix the executor; never synthesize a pass.",
+                )
             });
         Envelope::failure(
             request_id,
@@ -172,7 +176,11 @@ pub fn verify_with_clock(
             response.verdict.request_id.clone(),
             backend.protocol_backend(),
             response.verdict.fidelity,
-            ProtocolError::new(ErrorCode::Internal, format!("cannot serialize verdict: {error}")),
+            ProtocolError::new(ErrorCode::Internal, format!("cannot serialize verdict: {error}"))
+                .with_hint(
+                    "The verdict type serialized to invalid JSON (a runner type bug). Capture the \
+                     scenario/artifacts and report it; the run is not a pass.",
+                ),
             metrics,
         ),
     }
@@ -193,6 +201,10 @@ fn error_envelope(request_id: &str, backend: &dyn Backend, error: VerifyError) -
         }
         VerifyError::ArtifactIo { path, detail } => {
             ProtocolError::new(ErrorCode::ArtifactsInvalid, detail.clone())
+                .with_details(serde_json::json!({"path": path}))
+        }
+        VerifyError::DiskFull { path, detail } => {
+            ProtocolError::new(ErrorCode::HostDiskFull, detail.clone())
                 .with_details(serde_json::json!({"path": path}))
         }
         VerifyError::Backend(backend_error) => backend_error.to_protocol_error(),

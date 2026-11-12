@@ -1,0 +1,46 @@
+# W46 INTERNAL producer audit (Thu Nov 12 04:24:45 AM UTC 2026)
+
+## acos-cli
+crates/acos-cli/src/bench.rs:270:                Err(msg) => fail(&request_id, ErrorCode::Internal, &msg, wall_ms, args.json),
+crates/acos-cli/src/bench.rs:314:        Self::new(ErrorCode::Internal, message)
+crates/acos-cli/src/engine/art.rs:1118:                code: acos_protocol::ErrorCode::Internal,
+crates/acos-cli/src/engine/art.rs:607:                code: acos_protocol::ErrorCode::Internal,
+crates/acos-cli/src/engine/art.rs:696:                code: acos_protocol::ErrorCode::Internal,
+crates/acos-cli/src/engine/art.rs:716:                ErrorCode::Internal,
+crates/acos-cli/src/engine/art.rs:729:                ErrorCode::Internal
+crates/acos-cli/src/engine/art.rs:742:                ErrorCode::Internal,
+crates/acos-cli/src/engine/mod.rs:547:                code: ErrorCode::Internal,
+crates/acos-cli/src/failure.rs:157:        Some(ErrorCode::Internal) | None => {
+crates/acos-cli/src/failure.rs:158:            classify_facts_by_process(&doc).unwrap_or(ErrorCode::Internal)
+crates/acos-cli/src/failure.rs:168:    if code == ErrorCode::Internal && outcome == "ok" {
+crates/acos-cli/src/failure.rs:266:    if error.code == ErrorCode::Internal {
+crates/acos-cli/src/failure.rs:66:        | "INTERNAL" => ErrorCode::Internal,
+crates/acos-cli/src/failure.rs:68:        _ => ErrorCode::Internal,
+crates/acos-cli/src/failure.rs:78:    ) && map_art_code(code) != ErrorCode::Internal
+crates/acos-cli/src/frame_diff.rs:212:            ProtocolError::new(ErrorCode::Internal, "frame-diff result serialization")
+crates/acos-cli/src/launch.rs:220:        ProtocolError::new(ErrorCode::Internal, message).with_hint(
+crates/acos-cli/src/launch.rs:400:    ErrorCode::from_str_opt(code).unwrap_or(ErrorCode::Internal)
+crates/acos-cli/src/session.rs:106:            let envelope = fail(&new_request_id(), ErrorCode::Internal, e, json!({}));
+crates/acos-cli/src/session.rs:83:                ErrorCode::Internal,
+
+## acos-verify
+crates/acos-verify/src/executor.rs:1203:        ErrorCode::Internal,
+crates/acos-verify/src/executor.rs:399:                .unwrap_or(ErrorCode::Internal);
+crates/acos-verify/src/executor.rs:405:                    ProtocolError::new(ErrorCode::Internal, format!("step {} failed", step.kind()))
+crates/acos-verify/src/executor.rs:572:                    ErrorCode::Internal,
+crates/acos-verify/src/executor.rs:579:                    code: ErrorCode::Internal,
+crates/acos-verify/src/executor.rs:589:                    ErrorCode::Internal,
+crates/acos-verify/src/executor.rs:597:                    code: ErrorCode::Internal,
+crates/acos-verify/src/manifest.rs:45:        code: ErrorCode::from_str_opt(e.code()).unwrap_or(ErrorCode::Internal),
+crates/acos-verify/src/manifest.rs:49:        code: ErrorCode::from_str_opt(e.code()).unwrap_or(ErrorCode::Internal),
+crates/acos-verify/src/native.rs:278:            code: ErrorCode::Internal,
+crates/acos-verify/src/native.rs:284:                code: ErrorCode::Internal,
+crates/acos-verify/src/native.rs:292:    let code = ErrorCode::from_str_opt(error.code).unwrap_or(ErrorCode::Internal);
+crates/acos-verify/src/native.rs:316:    let code = ErrorCode::from_str_opt(&blocker.code).unwrap_or(ErrorCode::Internal);
+crates/acos-verify/src/native.rs:398:    let code = ErrorCode::from_str_opt(error.code).unwrap_or(ErrorCode::Internal);
+crates/acos-verify/src/reference.rs:113:            code: ErrorCode::Internal,
+crates/acos-verify/src/reference.rs:117:            code: ErrorCode::Internal,
+crates/acos-verify/src/reference.rs:148:            code: ErrorCode::Internal,
+crates/acos-verify/src/reference.rs:199:                code: ErrorCode::Internal,
+crates/acos-verify/src/verify.rs:149:                    ErrorCode::Internal,
+crates/acos-verify/src/verify.rs:179:            ProtocolError::new(ErrorCode::Internal, format!("cannot serialize verdict: {error}"))

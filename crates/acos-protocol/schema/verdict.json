@@ -214,6 +214,53 @@
         }
       ]
     },
+    "ErrorClass": {
+      "description": "Who owns a failure: the app, the harness, the host, or a missing capability.\n\nThis is the classification the advisor's failure taxonomy requires (§10: `class ∈ {assertion, app_crash, unsupported, harness, infra_timeout, host_guard}`). It is derived from [`ErrorCode`] so a code can never serialize without a class.",
+      "oneOf": [
+        {
+          "description": "An assertion ran and did not hold (the app is wrong, or the expected evidence is wrong). Not retryable without changing the check.",
+          "enum": [
+            "assertion"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The app crashed or stopped responding.",
+          "enum": [
+            "app_crash"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The engine/host cannot provide the required capability. Never a pass; choose another route or report it.",
+          "enum": [
+            "unsupported"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The harness itself failed (parse/serialization/protocol/invariant bug), or a failure that needs triage before it can be attributed.",
+          "enum": [
+            "harness"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A wall/CPU/log wait deadline elapsed.",
+          "enum": [
+            "infra_timeout"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A host resource guard fired (disk, memory, RAM guard, declared budget).",
+          "enum": [
+            "host_guard"
+          ],
+          "type": "string"
+        }
+      ]
+    },
     "ErrorCode": {
       "description": "A stable, machine-readable ACOS error code.\n\nThe serde representation is the exact `SCREAMING_SNAKE_CASE` string that agents branch on. Codes are additive: a code is never renamed or re-used for a different meaning.",
       "oneOf": [
@@ -841,6 +888,41 @@
           "type": "string"
         },
         {
+          "description": "The host scratch filesystem refused a write (ENOSPC/EDQUOT) or has less free space than the configured minimum. A host condition, never app behaviour; retrying after freeing space is safe.",
+          "enum": [
+            "HOST_DISK_FULL"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The launcher (or another ACOS harness process) panicked. A harness bug: the panic message and the stage are evidence, not an app failure.",
+          "enum": [
+            "HOST_PANIC"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "A host memory ceiling (launcher watchdog, cgroup limit, memcg OOM) was hit. Reduce concurrency or run on a host with more headroom; retry is safe once memory is available.",
+          "enum": [
+            "HOST_MEMORY_LIMIT"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The guest seccomp filter (and its proof) could not be installed. The host kernel/configuration cannot provide the isolation layer, so guest code is refused (fail closed). Distinct from `LANDLOCK_UNAVAILABLE`.",
+          "enum": [
+            "SECCOMP_UNAVAILABLE"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The guest process ended before the requested lifecycle stage completed. Carries the guest exit code, terminating signal and stage; inspect them to separate an app crash from a host condition.",
+          "enum": [
+            "GUEST_EXITED"
+          ],
+          "type": "string"
+        },
+        {
           "description": "ACOS itself failed (distinct from an app crash).",
           "enum": [
             "INTERNAL"
@@ -977,8 +1059,16 @@
       ]
     },
     "ProtocolError": {
-      "description": "A structured error: stable code, human message, next action, retryability.",
+      "description": "A structured error: stable code, human message, next action, retryability, and the failure class derived from the code.\n\nDeserialization fills `hint`, `retryable` and `class` from the code when a producer omitted them, so an older envelope can never decode to a code with the wrong owner.",
       "properties": {
+        "class": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ErrorClass"
+            }
+          ],
+          "description": "Who owns the failure (app, harness, host, unsupported capability). Derived from `code` on construction and on deserialization."
+        },
         "code": {
           "allOf": [
             {
@@ -1004,6 +1094,7 @@
         }
       },
       "required": [
+        "class",
         "code",
         "hint",
         "message",

@@ -228,9 +228,96 @@ pub enum ErrorCode {
     /// Strict rendering mode escalated an otherwise-recordable fidelity loss.
     RenderStrict,
 
+    // ---- host / harness conditions (W46) ----------------------------------
+    /// The host scratch filesystem refused a write (ENOSPC/EDQUOT) or has less
+    /// free space than the configured minimum. A host condition, never app
+    /// behaviour; retrying after freeing space is safe.
+    HostDiskFull,
+    /// The launcher (or another ACOS harness process) panicked. A harness bug:
+    /// the panic message and the stage are evidence, not an app failure.
+    HostPanic,
+    /// A host memory ceiling (launcher watchdog, cgroup limit, memcg OOM) was
+    /// hit. Reduce concurrency or run on a host with more headroom; retry is
+    /// safe once memory is available.
+    HostMemoryLimit,
+    /// The guest seccomp filter (and its proof) could not be installed. The
+    /// host kernel/configuration cannot provide the isolation layer, so guest
+    /// code is refused (fail closed). Distinct from `LANDLOCK_UNAVAILABLE`.
+    SeccompUnavailable,
+    /// The guest process ended before the requested lifecycle stage completed.
+    /// Carries the guest exit code, terminating signal and stage; inspect them
+    /// to separate an app crash from a host condition.
+    GuestExited,
+
     // ---- harness ----------------------------------------------------------
     /// ACOS itself failed (distinct from an app crash).
     Internal,
+}
+
+/// Who owns a failure: the app, the harness, the host, or a missing capability.
+///
+/// This is the classification the advisor's failure taxonomy requires (§10:
+/// `class ∈ {assertion, app_crash, unsupported, harness, infra_timeout,
+/// host_guard}`). It is derived from [`ErrorCode`] so a code can never serialize
+/// without a class.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorClass {
+    /// An assertion ran and did not hold (the app is wrong, or the expected
+    /// evidence is wrong). Not retryable without changing the check.
+    Assertion,
+    /// The app crashed or stopped responding.
+    AppCrash,
+    /// The engine/host cannot provide the required capability. Never a pass;
+    /// choose another route or report it.
+    Unsupported,
+    /// The harness itself failed (parse/serialization/protocol/invariant bug),
+    /// or a failure that needs triage before it can be attributed.
+    Harness,
+    /// A wall/CPU/log wait deadline elapsed.
+    InfraTimeout,
+    /// A host resource guard fired (disk, memory, RAM guard, declared budget).
+    HostGuard,
+}
+
+impl ErrorClass {
+    /// The exact wire string.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            ErrorClass::Assertion => "assertion",
+            ErrorClass::AppCrash => "app_crash",
+            ErrorClass::Unsupported => "unsupported",
+            ErrorClass::Harness => "harness",
+            ErrorClass::InfraTimeout => "infra_timeout",
+            ErrorClass::HostGuard => "host_guard",
+        }
+    }
+
+    /// Every class, in stable order.
+    pub const fn all() -> [ErrorClass; 6] {
+        [
+            ErrorClass::Assertion,
+            ErrorClass::AppCrash,
+            ErrorClass::Unsupported,
+            ErrorClass::Harness,
+            ErrorClass::InfraTimeout,
+            ErrorClass::HostGuard,
+        ]
+    }
+}
+
+impl Default for ErrorClass {
+    fn default() -> Self {
+        ErrorClass::Harness
+    }
+}
+
+impl std::fmt::Display for ErrorClass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 impl ErrorCode {
@@ -326,6 +413,11 @@ impl ErrorCode {
             ErrorCode::RenderDecode => "RENDER_DECODE",
             ErrorCode::RenderIo => "RENDER_IO",
             ErrorCode::RenderStrict => "RENDER_STRICT",
+            ErrorCode::HostDiskFull => "HOST_DISK_FULL",
+            ErrorCode::HostPanic => "HOST_PANIC",
+            ErrorCode::HostMemoryLimit => "HOST_MEMORY_LIMIT",
+            ErrorCode::SeccompUnavailable => "SECCOMP_UNAVAILABLE",
+            ErrorCode::GuestExited => "GUEST_EXITED",
             ErrorCode::Internal => "INTERNAL",
         }
     }
@@ -540,6 +632,21 @@ impl ErrorCode {
             ErrorCode::RenderStrict => {
                 "Strict rendering rejected a fidelity loss. Fix the unsupported draw operation or relax strict mode explicitly."
             }
+            ErrorCode::HostDiskFull => {
+                "The host scratch filesystem is full (or below ACOS_ART_MIN_DISK_MB). This is a host condition, not app behaviour: free space under .cache/ (old frames, run data), or point --artifacts/ACOS_ART_DATA at a filesystem with room, then retry the same request."
+            }
+            ErrorCode::HostPanic => {
+                "An ACOS harness process panicked. Do not treat this as app behaviour; read error.details.session_exit (stage, panic message) and the stderr tail, report the harness bug, and retry only after it is fixed."
+            }
+            ErrorCode::HostMemoryLimit => {
+                "A host memory ceiling was hit (launcher watchdog, cgroup limit or memcg OOM). Reduce N/concurrency or run on a host with more MemAvailable, then retry; do not lower the guest limit silently."
+            }
+            ErrorCode::SeccompUnavailable => {
+                "The guest seccomp filter could not be installed or proven (`OK guard=active` absent). Guest code is refused (fail closed): fix the host seccomp configuration (or the filter), then retry. This is not an app failure."
+            }
+            ErrorCode::GuestExited => {
+                "The guest process ended before the requested stage. Read error.details.session_exit for guest_exit, guest_signal, stage and the guest's own ACOSLAUNCH crash line: exit 126/signal 31 with a guard ERR is a host isolation condition; a guest SIGSEGV/abort or a fatal ART log is an app crash. Do not retry unchanged until the cause is named."
+            }
             ErrorCode::Internal => {
                 "ACOS harness failure, not app behaviour. Capture request/scenario/artifacts and report it; do not count it as a pass."
             }
@@ -563,7 +670,66 @@ impl ErrorCode {
                 | ErrorCode::RenderIo
                 | ErrorCode::NativeIoError
                 | ErrorCode::ApkIo
+                | ErrorCode::HostDiskFull
+                | ErrorCode::HostMemoryLimit
         )
+    }
+
+    /// Who owns this failure (app, harness, host, missing capability).
+    pub const fn class(self) -> ErrorClass {
+        match self {
+            // A capability the engine/host cannot provide. Never a pass.
+            ErrorCode::UnsupportedAndroidApi
+            | ErrorCode::UnsupportedJavaApi
+            | ErrorCode::UnsupportedBytecode
+            | ErrorCode::UnsupportedNativeSymbol
+            | ErrorCode::NeedsRealDevice
+            | ErrorCode::RequiresGms
+            | ErrorCode::WrongAbi
+            | ErrorCode::UnsupportedAbi
+            | ErrorCode::NoDisplay
+            | ErrorCode::NoText
+            | ErrorCode::UnsupportedRelocation
+            | ErrorCode::RenderUnsupportedOp
+            | ErrorCode::UnsupportedBackend
+            | ErrorCode::UnsupportedRn
+            | ErrorCode::UnsupportedRnSetup
+            | ErrorCode::UnsupportedRnDriver
+            | ErrorCode::UnsupportedRnNoRenderer
+            | ErrorCode::UnsupportedRnKey
+            | ErrorCode::UnsupportedRnText
+            | ErrorCode::UnsupportedRnNoTarget
+            | ErrorCode::UnsupportedAssertion
+            | ErrorCode::IsolationUnavailable
+            | ErrorCode::IsolationUnsatisfied
+            | ErrorCode::ConfinementUnavailable
+            | ErrorCode::LandlockUnavailable
+            | ErrorCode::SeccompUnavailable
+            | ErrorCode::UntrustedApkNotCertified => ErrorClass::Unsupported,
+
+            // The app is wrong, or the evidence check is.
+            ErrorCode::JavaException
+            | ErrorCode::AppCrashed
+            | ErrorCode::AppNotResponding => ErrorClass::AppCrash,
+            ErrorCode::AssertionFailed
+            | ErrorCode::ElementNotFound
+            | ErrorCode::TreeTruncated
+            | ErrorCode::InsufficientHostEvidence => ErrorClass::Assertion,
+
+            // Deadlines.
+            ErrorCode::Timeout | ErrorCode::NoFreshFrame => ErrorClass::InfraTimeout,
+
+            // Host resource guards.
+            ErrorCode::RamGuard
+            | ErrorCode::RamAbort
+            | ErrorCode::ResourceLimit
+            | ErrorCode::HostDiskFull
+            | ErrorCode::HostMemoryLimit => ErrorClass::HostGuard,
+
+            // Harness/parse/protocol/invariant failures and codes that need
+            // triage before they can be attributed (GuestExited, HostPanic).
+            _ => ErrorClass::Harness,
+        }
     }
 
     /// Parse a wire code. Returns `None` for codes this build does not know.
@@ -595,6 +761,9 @@ impl ErrorCode {
             | ErrorCode::IsolationUnsatisfied
             | ErrorCode::ConfinementUnavailable
             | ErrorCode::LandlockUnavailable
+            | ErrorCode::SeccompUnavailable
+            | ErrorCode::HostDiskFull
+            | ErrorCode::HostMemoryLimit
             | ErrorCode::UntrustedApkNotCertified => Status::Blocked,
             ErrorCode::UnsupportedAndroidApi
             | ErrorCode::UnsupportedJavaApi
@@ -646,11 +815,19 @@ impl std::str::FromStr for ErrorCode {
 #[error("unknown ACOS error code: {0}")]
 pub struct UnknownErrorCode(pub String);
 
-/// A structured error: stable code, human message, next action, retryability.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+/// A structured error: stable code, human message, next action, retryability,
+/// and the failure class derived from the code.
+///
+/// Deserialization fills `hint`, `retryable` and `class` from the code when a
+/// producer omitted them, so an older envelope can never decode to a code with
+/// the wrong owner.
+#[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
 pub struct ProtocolError {
     /// The stable machine code.
     pub code: ErrorCode,
+    /// Who owns the failure (app, harness, host, unsupported capability).
+    /// Derived from `code` on construction and on deserialization.
+    pub class: ErrorClass,
     /// Human-readable detail (may change; never branch on it).
     pub message: String,
     /// What the agent should do next. Filled from [`ErrorCode::hint`] by default.
@@ -662,11 +839,41 @@ pub struct ProtocolError {
     pub details: Option<Value>,
 }
 
+impl<'de> Deserialize<'de> for ProtocolError {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Wire {
+            code: ErrorCode,
+            #[serde(default)]
+            message: Option<String>,
+            #[serde(default)]
+            hint: Option<String>,
+            #[serde(default)]
+            retryable: Option<bool>,
+            #[serde(default)]
+            details: Option<Value>,
+        }
+        let wire = Wire::deserialize(deserializer)?;
+        Ok(ProtocolError {
+            code: wire.code,
+            class: wire.code.class(),
+            message: wire.message.unwrap_or_default(),
+            hint: wire.hint.unwrap_or_else(|| wire.code.hint().to_string()),
+            retryable: wire.retryable.unwrap_or_else(|| wire.code.retryable()),
+            details: wire.details,
+        })
+    }
+}
+
 impl ProtocolError {
-    /// Build an error with the code's default hint/retryability.
+    /// Build an error with the code's default hint/retryability/class.
     pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
         ProtocolError {
             code,
+            class: code.class(),
             message: message.into(),
             hint: code.hint().to_string(),
             retryable: code.retryable(),
@@ -783,6 +990,11 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::RenderDecode,
     ErrorCode::RenderIo,
     ErrorCode::RenderStrict,
+    ErrorCode::HostDiskFull,
+    ErrorCode::HostPanic,
+    ErrorCode::HostMemoryLimit,
+    ErrorCode::SeccompUnavailable,
+    ErrorCode::GuestExited,
     ErrorCode::Internal,
 ];
 
@@ -849,6 +1061,12 @@ pub const EXISTING_CRATE_CODES: &[&str] = &[
     "RENDER_DECODE",
     "RENDER_IO",
     "RENDER_STRICT",
+    // acos-art (harness/launch outcome codes consumed by acos-cli, W46)
+    "HOST_DISK_FULL",
+    "HOST_PANIC",
+    "HOST_MEMORY_LIMIT",
+    "SECCOMP_UNAVAILABLE",
+    "GUEST_EXITED",
 ];
 
 #[cfg(test)]
@@ -876,6 +1094,46 @@ mod tests {
                 .unwrap_or_else(|| panic!("existing crate code {name} is not in ErrorCode"));
             assert_eq!(code.as_str(), *name);
         }
+    }
+
+    #[test]
+    fn every_code_has_a_class_and_the_new_host_codes_are_registered() {
+        for &code in ALL_ERROR_CODES {
+            let class = code.class();
+            assert!(
+                ErrorClass::all().contains(&class),
+                "{} has an out-of-set class {class}",
+                code
+            );
+            let err = ProtocolError::new(code, "x");
+            assert_eq!(err.class, class, "{}", code);
+            let json = serde_json::to_value(&err).unwrap();
+            assert_eq!(json["class"], class.as_str(), "{}", code);
+        }
+        assert_eq!(ErrorCode::HostDiskFull.retryable(), true);
+        assert_eq!(ErrorCode::HostDiskFull.class(), ErrorClass::HostGuard);
+        assert_eq!(ErrorCode::HostPanic.retryable(), false);
+        assert_eq!(ErrorCode::HostPanic.class(), ErrorClass::Harness);
+        assert_eq!(ErrorCode::HostMemoryLimit.retryable(), true);
+        assert_eq!(ErrorCode::SeccompUnavailable.class(), ErrorClass::Unsupported);
+        assert_eq!(ErrorCode::GuestExited.class(), ErrorClass::Harness);
+        assert_eq!(ErrorCode::HostDiskFull.as_str(), "HOST_DISK_FULL");
+        assert_eq!(ErrorCode::HostPanic.as_str(), "HOST_PANIC");
+        assert_eq!(ErrorCode::HostMemoryLimit.as_str(), "HOST_MEMORY_LIMIT");
+        assert_eq!(ErrorCode::SeccompUnavailable.as_str(), "SECCOMP_UNAVAILABLE");
+        assert_eq!(ErrorCode::GuestExited.as_str(), "GUEST_EXITED");
+    }
+
+    #[test]
+    fn deserialization_derives_class_and_defaults_from_the_code() {
+        let err: ProtocolError = serde_json::from_value(serde_json::json!({
+            "code": "HOST_DISK_FULL",
+            "message": "no space"
+        }))
+        .expect("an envelope without hint/class still decodes");
+        assert_eq!(err.class, ErrorClass::HostGuard);
+        assert!(err.retryable, "HOST_DISK_FULL is retryable");
+        assert!(!err.hint.is_empty());
     }
 
     #[test]

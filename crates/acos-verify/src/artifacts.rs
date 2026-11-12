@@ -30,18 +30,53 @@ use serde::Serialize;
 use crate::backend::LogRecord;
 use crate::error::VerifyError;
 
+/// Is this I/O error the host filesystem refusing a write (ENOSPC 28,
+/// EDQUOT 122)? Those are host conditions, never app behaviour (W46).
+pub fn io_is_disk_full(error: &std::io::Error) -> bool {
+    matches!(error.raw_os_error(), Some(28) | Some(122))
+}
+
+/// Test seam: inject an ENOSPC on the next artifact write.
+///
+/// Set `ACOS_FAULT_INJECT_WRITE=ENOSPC`. It is honoured only when
+/// `ACOS_FAULT_INJECT_ALLOW=1` is also set, so a stray environment variable can
+/// never change a real verdict.
+pub fn fault_inject_disk_full() -> bool {
+    std::env::var("ACOS_FAULT_INJECT_WRITE").as_deref() == Ok("ENOSPC")
+        && std::env::var("ACOS_FAULT_INJECT_ALLOW").as_deref() == Ok("1")
+}
+
+fn artifact_error(path: &str, error: &std::io::Error) -> VerifyError {
+    if io_is_disk_full(error) || fault_inject_disk_full() {
+        VerifyError::DiskFull {
+            path: path.to_string(),
+            detail: error.to_string(),
+        }
+    } else {
+        VerifyError::ArtifactIo {
+            path: path.to_string(),
+            detail: error.to_string(),
+        }
+    }
+}
+
+fn injected_enospc(path: &str) -> Option<VerifyError> {
+    if fault_inject_disk_full() {
+        let error = std::io::Error::from_raw_os_error(28);
+        return Some(artifact_error(path, &error));
+    }
+    None
+}
+
 fn write_bytes(dir: &Path, relative: &str, bytes: &[u8]) -> Result<(), VerifyError> {
     let path = dir.join(relative);
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| VerifyError::ArtifactIo {
-            path: relative.to_string(),
-            detail: e.to_string(),
-        })?;
+        std::fs::create_dir_all(parent).map_err(|e| artifact_error(relative, &e))?;
     }
-    std::fs::write(&path, bytes).map_err(|e| VerifyError::ArtifactIo {
-        path: relative.to_string(),
-        detail: e.to_string(),
-    })
+    if let Some(error) = injected_enospc(relative) {
+        return Err(error);
+    }
+    std::fs::write(&path, bytes).map_err(|e| artifact_error(relative, &e))
 }
 
 fn write_json<T: Serialize>(dir: &Path, relative: &str, value: &T) -> Result<(), VerifyError> {
@@ -56,10 +91,7 @@ fn write_json<T: Serialize>(dir: &Path, relative: &str, value: &T) -> Result<(),
 pub fn prepare(dir: &Path) -> Result<(), VerifyError> {
     for sub in ["steps", "frames", "tree", "logs"] {
         let path = dir.join(sub);
-        std::fs::create_dir_all(&path).map_err(|e| VerifyError::ArtifactIo {
-            path: sub.to_string(),
-            detail: e.to_string(),
-        })?;
+        std::fs::create_dir_all(&path).map_err(|e| artifact_error(sub, &e))?;
     }
     Ok(())
 }

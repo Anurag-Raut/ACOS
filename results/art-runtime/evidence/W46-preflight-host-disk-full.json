@@ -1,0 +1,36 @@
+{
+  "request_id": "req_3f69a5_18e73191d517ae61",
+  "ok": false,
+  "status": "blocked",
+  "backend": "acos-native",
+  "fidelity": "static-analysis",
+  "capabilities_used": [],
+  "error": {
+    "code": "HOST_DISK_FULL",
+    "class": "host_guard",
+    "message": "acos-art: HOST_DISK_FULL: the scratch filesystem has 167519272960 bytes free, below ACOS_ART_MIN_DISK_MB=99999999 MiB",
+    "hint": "The host scratch filesystem is full (or below ACOS_ART_MIN_DISK_MB). This is a host condition, not app behaviour: free space under .cache/ (old frames, run data), or point --artifacts/ACOS_ART_DATA at a filesystem with room, then retry the same request.",
+    "retryable": true,
+    "details": {
+      "art_code": "HOST_DISK_FULL",
+      "session_exit": {
+        "cgroup": null,
+        "code": "HOST_DISK_FULL",
+        "disk_free_bytes": 167519272960,
+        "guest_crash": null,
+        "guest_exit": null,
+        "guest_signal": null,
+        "outcome": "unsupported",
+        "panic": null,
+        "path": ".cache/w46-preflight/artifacts/art-frames/session-exit.json",
+        "retryable": true,
+        "stage": null
+      },
+      "session_exit_path": ".cache/w46-preflight/artifacts/art-frames/session-exit.json",
+      "stderr_tail": "acos-art: guards rss_max=2048MiB rlimit_data=2560MiB stream_cap=8MiB log_cap=50000\nacos-art: build-cache HIT ea881911630d /home/Qui/Projects/acos/.cache/art/build-cache/ea881911630dc7d5cc628ac753667067d6b96f618dcc0512b6507c7051ae3fc6 (1 file(s), tree)\nacos-art: build-cache HIT 7186b7a7f804 /home/Qui/Projects/acos/.cache/art/build-cache/7186b7a7f8049073080714d2e7d9e6d961b218ba304eb8d740e7fcbac3bec699\nacos-art: build-cache HIT 6d04660b823b /home/Qui/Projects/acos/.cache/art/build-cache/6d04660b823b256210d6d08a43149371391c59cf97810ba7c52957fc5d922433\nacos-art: build-cache HIT 6b1a5f698439 /home/Qui/Projects/acos/.cache/art/build-cache/6b1a5f69843990e89dd9edcd17bd81651829684f4e186b37b1cd3b063edca4b4\nacos-art: build-cache HIT 0968d8ddbf99 /home/Qui/Projects/acos/.cache/art/build-cache/0968d8ddbf992df42d4a8a2d34fbe1ed8f64f1ea091a98d7e3cdc257d656aa1d\nacos-art: build-cache HIT 713c2119f282 /home/Qui/Projects/acos/.cache/art/build-cache/713c2119f282fa6dd731b5a80cc7ea817e0429a014b69916a143cbd5dceb589a\nacos-art: build-cache HIT e0dfcc372ec3 /home/Qui/Projects/acos/.cache/art/build-cache/e0dfcc372ec363a8719c370bdabd267f1ccaea6c7209cb0752033f66b98a5bb2 (2 file(s), tree)\nacos-art: launch: static overlays: 1 applied (0 idmaps generated, 1 from the image cache, 1084 B)"
+    }
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}

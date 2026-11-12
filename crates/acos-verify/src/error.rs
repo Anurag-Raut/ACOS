@@ -22,6 +22,15 @@ pub enum VerifyError {
         /// Underlying detail.
         detail: String,
     },
+    /// The host filesystem refused an artifact write (ENOSPC/EDQUOT) or is
+    /// below the configured minimum. A host condition, not a verdict failure.
+    #[error("host disk full while writing `{path}`: {detail}")]
+    DiskFull {
+        /// Path that failed.
+        path: String,
+        /// Underlying detail.
+        detail: String,
+    },
     /// The backend failed before the first step (for example loading the APK).
     #[error(transparent)]
     Backend(#[from] BackendError),
@@ -35,6 +44,7 @@ impl VerifyError {
                 ErrorCode::InvalidScenario
             }
             VerifyError::ArtifactIo { .. } => ErrorCode::ArtifactsInvalid,
+            VerifyError::DiskFull { .. } => ErrorCode::HostDiskFull,
             VerifyError::Backend(error) => error.code(),
         }
     }

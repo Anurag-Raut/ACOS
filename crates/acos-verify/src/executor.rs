@@ -403,6 +403,10 @@ pub fn run_scenario(
                 summary: format!("step {index} ({}) {}", step.kind(), exec.status),
                 error: exec.error.clone().unwrap_or_else(|| {
                     ProtocolError::new(ErrorCode::Internal, format!("step {} failed", step.kind()))
+                        .with_hint(
+                            "A failing step carried no structured error. Fix the executor; this \
+                             is a runner bug, never app behaviour.",
+                        )
                 }),
             });
         }
@@ -1507,7 +1511,7 @@ fn eval_screenshot(
                 detail: Some(detail.clone()),
             },
             BackendError::Error {
-                code: ErrorCode::Internal,
+                code: ErrorCode::RenderDecode,
                 detail,
             },
         ),
@@ -1571,7 +1575,7 @@ fn eval_region(
                     detail: Some(detail.clone()),
                 },
                 BackendError::Error {
-                    code: ErrorCode::Internal,
+                    code: ErrorCode::RenderDecode,
                     detail,
                 },
             );

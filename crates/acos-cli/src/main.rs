@@ -8,6 +8,7 @@ mod bench_pool;
 mod doctor;
 mod engine;
 mod bench_sessions;
+mod failure;
 mod frame_diff;
 mod launch;
 mod native_inventory;
@@ -160,32 +161,47 @@ const FIDELITY: &str = "static-analysis";
 const BACKEND: &str = "acos-native";
 
 fn main() -> ExitCode {
+    failure::install_panic_hook();
     // Confined native session child: parse and confine before any thread (the
     // daemon re-execs `acos --confined-child --rw … --ro …`).
     if let Some(profile) = serve::confined_child_profile() {
         return serve::run_confined_child(profile);
     }
-    let cli = Cli::parse();
-    match cli.command {
-        Command::Inspect(args) => inspect(args),
-        Command::RunDex(args) => run_dex(args),
-        Command::Launch(args) => launch::run(args),
-        Command::Observe(args) => session::observe(args),
-        Command::Tap(args) => session::tap(args),
-        Command::Key(args) => session::key(args),
-        Command::Swipe(args) => session::swipe(args),
-        Command::Scroll(args) => session::scroll(args),
-        Command::Type(args) => session::session(session::SessionCommand::Text(args)),
-        Command::Logs(args) => session::logs(args),
-        Command::Serve(args) => serve::run(args),
-        Command::Session { command } => session::session(command),
-        Command::Verify(args) => verify::run(args),
-        Command::FrameDiff(args) => frame_diff::run(args),
-        Command::Parity(args) => parity::run(args),
-        Command::Bench(args) => bench::run(args),
-        Command::NativeInventory(args) => native_inventory::run(args),
-        Command::SandboxProbe => sandbox_probe::run(),
-        Command::Doctor(args) => doctor::run(args),
+    // A harness panic must still produce a structured HOST_PANIC envelope and a
+    // normal nonzero exit, never rc 101 with empty stderr (W43 saw nine of
+    // those during the ENOSPC window).
+    let dispatch = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // Test seam: prove the panic hook + exit path without a real bug.
+        if std::env::var("ACOS_FAULT_INJECT").as_deref() == Ok("panic") {
+            panic!("injected panic (W46 test seam)");
+        }
+        let cli = Cli::parse();
+        match cli.command {
+            Command::Inspect(args) => inspect(args),
+            Command::RunDex(args) => run_dex(args),
+            Command::Launch(args) => launch::run(args),
+            Command::Observe(args) => session::observe(args),
+            Command::Tap(args) => session::tap(args),
+            Command::Key(args) => session::key(args),
+            Command::Swipe(args) => session::swipe(args),
+            Command::Scroll(args) => session::scroll(args),
+            Command::Type(args) => session::session(session::SessionCommand::Text(args)),
+            Command::Logs(args) => session::logs(args),
+            Command::Serve(args) => serve::run(args),
+            Command::Session { command } => session::session(command),
+            Command::Verify(args) => verify::run(args),
+            Command::FrameDiff(args) => frame_diff::run(args),
+            Command::Parity(args) => parity::run(args),
+            Command::Bench(args) => bench::run(args),
+            Command::NativeInventory(args) => native_inventory::run(args),
+            Command::SandboxProbe => sandbox_probe::run(),
+            Command::Doctor(args) => doctor::run(args),
+        }
+    }));
+    match dispatch {
+        Ok(code) => code,
+        // The hook already wrote the HOST_PANIC envelope to stderr.
+        Err(_) => ExitCode::FAILURE,
     }
 }
 

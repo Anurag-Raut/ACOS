@@ -108,9 +108,15 @@ pub fn run(args: FrameDiffArgs) -> ExitCode {
             match diff::heatmap_png(&reference, &candidate, args.threshold) {
                 Ok(png) => {
                     if let Err(e) = std::fs::write(path, &png) {
+                        // A full host disk is a host condition, not a harness bug.
+                        let code = if crate::failure::is_disk_full(&e) {
+                            ErrorCode::HostDiskFull
+                        } else {
+                            ErrorCode::RenderIo
+                        };
                         return fail(
                             &request_id,
-                            ErrorCode::Internal,
+                            code,
                             format!("writing heatmap {}: {e}", path.display()),
                             started,
                             args.json,
@@ -203,7 +209,11 @@ fn attach(
             request_id.to_string(),
             ProtocolBackend::AcosNative,
             Fidelity::NativeRuntime,
-            ProtocolError::new(ErrorCode::Internal, "frame-diff result serialization"),
+            ProtocolError::new(ErrorCode::Internal, "frame-diff result serialization")
+                .with_hint(
+                    "The frame-diff result failed to serialize (a harness type bug). Capture the \
+                     inputs and report it; do not treat it as an image verdict.",
+                ),
             metrics,
         ),
     }
@@ -230,7 +240,7 @@ fn parse_mask(s: &str) -> Result<[u32; 4], String> {
 
 fn load(path: &PathBuf) -> Result<image::DecodedImage, (ErrorCode, String)> {
     let bytes = std::fs::read(path)
-        .map_err(|e| (ErrorCode::Internal, format!("reading {}: {e}", path.display())))?;
+        .map_err(|e| (ErrorCode::RenderIo, format!("reading {}: {e}", path.display())))?;
     image::decode(&bytes)
         .map_err(|e| (ErrorCode::RenderInvalidArgument, format!("{}: {e}", path.display())))
 }

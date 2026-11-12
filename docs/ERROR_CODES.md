@@ -111,7 +111,12 @@ single ELF whose `e_machine` the in-process loader cannot map.
 | `RENDER_DECODE` | An image could not be decoded. | acos-render | 1 |
 | `RENDER_IO` | Renderer I/O failed. | acos-render | 1 |
 | `RENDER_STRICT` | Strict rendering mode escalated an otherwise-recordable fidelity loss. | acos-render | 1 |
-| `INTERNAL` | ACOS itself failed (distinct from an app crash). | acos-cli / harness | 1 |
+| `HOST_DISK_FULL` | The host scratch filesystem refused a write (ENOSPC/EDQUOT) or has less free space than `ACOS_ART_MIN_DISK_MB`. Class `host_guard`, **retryable**: free space under `.cache/` (old frames/run data) or move `--artifacts`/`ACOS_ART_DATA`, then retry. | acos-art / acos-cli / acos-verify | 1 / 2 |
+| `HOST_PANIC` | An ACOS harness process panicked. Class `harness`, not retryable; `error.details.session_exit` carries the stage and panic message. The CLI catches the panic, emits this envelope on stderr and exits 1 (never 101 with empty stderr). | acos-art / acos-cli | 1 / 2 |
+| `HOST_MEMORY_LIMIT` | A host memory ceiling was hit (launcher watchdog, cgroup limit, memcg OOM). Class `host_guard`, **retryable** after reducing N/concurrency or freeing memory. | acos-art / acos-cli | 1 / 2 |
+| `SECCOMP_UNAVAILABLE` | The guest seccomp filter could not be built, installed or proven (`OK guard=active` absent). Class `unsupported`, not retryable; guest code is refused (fail closed). Distinct from `LANDLOCK_UNAVAILABLE`. | acos-art / acos-cli | 1 / 2 |
+| `GUEST_EXITED` | The guest process ended before the requested lifecycle stage. Class `harness` (needs triage), not retryable. `error.details.session_exit` carries `guest_exit`, `guest_signal`, `stage` and the guest's own `ACOSLAUNCH` crash line; a SIGSYS/exit-126 with a guard `ERR` re-classifies to `SECCOMP_UNAVAILABLE`, and a SIGSEGV/ABRT re-classifies to `APP_CRASHED`. | acos-art / acos-cli | 1 / 2 |
+| `INTERNAL` | ACOS itself failed (distinct from an app crash). Class `harness`. Only genuine harness defects and unregistered producer codes (the hint names the code). | acos-cli / harness | 1 |
 
 ## Codes outside the protocol enum
 
@@ -123,10 +128,33 @@ match the string. `acos-art` exits 2 for all of them.
 | Code | Meaning | Component | Exit |
 |---|---|---|---|
 | `MEMORY_CGROUP_UNAVAILABLE` | The fail-closed memory/pids cgroup could not be created. | acos-art | 2 |
-| `SECCOMP_UNAVAILABLE` | The guest seccomp filter could not be built, installed, or proven (`OK guard=active` absent). | acos-art | 2 |
-| `LANDLOCK_UNAVAILABLE` | The guest Landlock ruleset could not be assembled, applied, or proven. | acos-art | 2 |
-| `UNSUPPORTED_SYSCALL` | The guest guard observed a denied syscall during a run (structured run result). | acos-art | 1 |
+| `UNSUPPORTED_SYSCALL` | The guest guard observed a denied syscall during a run (structured run result; the protocol code is `SECCOMP_UNAVAILABLE`). | acos-art | 1 |
 | `ARM64_UNAVAILABLE` | The arm64 qemu transport (qemu, bionic sysroot, or guard) could not be assembled. | acos-arm64 | 1 |
+
+## Failure class and the ART code mapping (W46)
+
+`ProtocolError` carries `class` next to `code`/`retryable`/`hint`. The class is
+derived from the code (`ErrorCode::class()`), always serialized, and restored
+from the code on deserialization, so a code can never serialize with the wrong
+owner. Values:
+
+| `class` | Owner | Examples |
+|---|---|---|
+| `assertion` | The check or the app's observed behaviour | `ASSERTION_FAILED`, `ELEMENT_NOT_FOUND`, `TREE_TRUNCATED` |
+| `app_crash` | The app process | `APP_CRASHED`, `JAVA_EXCEPTION`, `APP_NOT_RESPONDING` |
+| `unsupported` | A capability the engine/host cannot provide (never a pass) | every `UNSUPPORTED_*`, `SECCOMP_UNAVAILABLE`, `LANDLOCK_UNAVAILABLE` |
+| `harness` | The ACOS harness itself, or a failure that still needs triage | `INTERNAL`, `HOST_PANIC`, `GUEST_EXITED` |
+| `infra_timeout` | A wall/CPU/log deadline | `TIMEOUT`, `NO_FRESH_FRAME` |
+| `host_guard` | A host resource guard | `HOST_DISK_FULL`, `HOST_MEMORY_LIMIT`, `RAM_GUARD`, `RESOURCE_LIMIT` |
+
+`acos-cli` maps every launch/reply code from `acos-art` and every fact in
+`<artifacts>/art-frames/session-exit.json` (`art_code`, `stage`, `guest_exit`,
+`guest_signal`, `guest_crash`, `cgroup`, `disk_free_bytes`, `panic`) through one
+table (`crates/acos-cli/src/failure.rs`). A lost session is classified from the
+record before the generic `INTERNAL: session exited` is used; an art code that
+is not in the table becomes `INTERNAL` **with a hint naming that code** (a named
+harness gap). `session-exit.json` is surfaced in `verdict.json` and
+`engine.json` (`session_exit`) and in failure `error.details.session_exit`.
 
 ### Engine capability notes (W22)
 
@@ -148,7 +176,9 @@ match the string. `acos-art` exits 2 for all of them.
   app's own Reset control, and the engine's frame/log sequences stay monotonic
   across the relaunch so post-reset evidence is provably newer.
 
-Adding a new code: add the `ErrorCode` variant + `as_str` + hint +
-`ALL_ERROR_CODES` (and `default_status` if it is not `error`), regenerate the
-schemas (`UPDATE_SCHEMA=1 cargo test -p acos-protocol schemas_are_up_to_date`),
-then add one row here.
+Adding a new code: add the `ErrorCode` variant + `as_str` + hint + `class()` +
+`ALL_ERROR_CODES` (and `default_status`/`retryable` if not the defaults),
+regenerate the schemas (`UPDATE_SCHEMA=1 cargo test -p acos-protocol
+schemas_are_up_to_date`), add one row here, and (for an `acos-art` code) add the
+string to the explicit table in `crates/acos-cli/src/failure.rs` and to
+`EXISTING_CRATE_CODES` so the coverage test enforces it.

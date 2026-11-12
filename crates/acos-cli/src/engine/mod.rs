@@ -543,13 +543,22 @@ impl EngineBackend {
         let png = observed.png().to_vec();
         let ObservedFrame { tree, .. } = observed;
         if tree.frame.frame_seq != seq {
-            return Err(BackendError::Error {
+            return Err(BackendError::Protocol {
                 code: ErrorCode::Internal,
                 detail: format!(
                     "unbound observation: tree frame_seq {} but capture frame_seq {}; a tree and \
                      its pixels must come from one completed traversal",
                     tree.frame.frame_seq, seq
                 ),
+                hint: Some(
+                    "Backend defect: a UI tree and its PNG must describe the same completed \
+                     frame/traversal. Fix the engine; never weaken the evidence binding."
+                        .to_string(),
+                ),
+                details: Some(serde_json::json!({
+                    "tree_frame_seq": tree.frame.frame_seq,
+                    "capture_frame_seq": seq,
+                })),
             });
         }
         let mut tree = tree;
