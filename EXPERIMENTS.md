@@ -542,7 +542,7 @@ viewBox defect and an insets defect — MEASURED (two defects open)
 
 ## E5.3 — K2/R2: notification channel parcels and get-channel queries — MEASURED (accepted)
 
-- **Date / commit:** 2026-11-12 `3484c3b`, correction `e3d0c47`.
+- **Date / commit:** 2026-11-12 `3484c3b`, correction `e3d0c47`, dispatch fallback `fab6f64`.
 - **Agent / bottleneck:** K2; 6/42 apps (14 %) were rejected at
   `INotificationManager.createNotificationChannels`.
 - **Baseline:** `IllegalArgumentException: bad request for …createNotificationChannels`
