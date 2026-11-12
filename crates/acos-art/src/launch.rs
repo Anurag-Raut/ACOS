@@ -803,7 +803,22 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     // inside its own cgroup/namespaces and waits for the zygote child that
     // connects to its sockets. `/system/bin/sleep` is the sysroot's own toybox
     // applet, so nothing is downloaded or fabricated.
+    // Z5 (research seam, `ACOS_ZYGOTE_NO_STUB=1`, OFF by default): the same
+    // foreign-guest session with **no guest-side tombstone at all** — the
+    // per-session liveness token is a bare host `sleep` that carries no bwrap,
+    // no mount view and no `LD_PRELOAD` (Z4 §6.1: the 9.4 MiB/session stub is a
+    // research artefact, a product would wait on an `Option<Child>` plus a
+    // session-owned liveness source). Only meaningful together with
+    // `ACOS_ZYGOTE_SESSION`, so the production path cannot reach it.
+    let no_stub = session_dir.is_some()
+        && zygote_app.is_none()
+        && std::env::var_os("ACOS_ZYGOTE_NO_STUB").is_some();
     let cmd = match (&session_dir, &zygote_app) {
+        (Some(_), None) if no_stub => {
+            let mut c = Command::new("/bin/sleep");
+            c.arg("1800");
+            c
+        }
         (Some(_), None) => sb.command("/system/bin/sleep", &["1800".to_string()])?,
         _ => sb.command(dalvik, &argv)?,
     };
