@@ -1,0 +1,31 @@
+# NEGATIVE (expected fail): assert_visible on a warm-mounted off-screen page.
+#
+# GR2 W4 was a *false pass*: the Gaten pager's next page was attached at
+# x = +displayWidth and every node there reported visible:true, so
+# `wait_for {text: contains "Accuracy"}` passed in 13 ms on content the user
+# could not see. This scenario pins the failure side of the fix: "Hidden" is in
+# the tree but not visible to the user, so assert_visible must fail with
+# ELEMENT_OFFSCREEN (naming the node's bounds and empty visible rect) — never
+# pass. Must produce status=fail.
+version: 1
+name: negative-offscreen-pager-visible
+description: >-
+  assert_visible on the off-screen page's "Hidden" text must fail with
+  ELEMENT_OFFSCREEN (the node is present, attached and View.VISIBLE, but the
+  user cannot see it). A pass here is the GR2 W4 false pass.
+app: fixtures/build/apps/offscreen-pager.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+steps:
+  - launch:
+      activity: dev.acos.fixtures.offscreenpager/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {exact: Page one}}
+      timeout_ms: 15000
+  - assert_visible:
+      selector: {text: {exact: Hidden}}

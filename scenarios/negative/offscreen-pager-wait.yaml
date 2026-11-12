@@ -1,0 +1,29 @@
+# NEGATIVE (expected fail): `wait_for` on a warm-mounted off-screen page.
+#
+# This is the exact Gaten GR2 W4 false pass: `wait_for {text: contains
+# "Accuracy"}` matched the pager's next page at x = +displayWidth in 13 ms.
+# Here the same shape is pinned: "Hidden" is present in the tree but not visible
+# to the user, so wait_for must keep polling and fail as a structured TIMEOUT
+# that names the off-screen match (bounds + empty visible rect) — never a pass.
+version: 1
+name: negative-offscreen-pager-wait
+description: >-
+  wait_for on the off-screen page's "Hidden" text must fail: the selector
+  matches only user-visible nodes, and the only matching node is off screen.
+app: fixtures/build/apps/offscreen-pager.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+steps:
+  - launch:
+      activity: dev.acos.fixtures.offscreenpager/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {exact: Page one}}
+      timeout_ms: 15000
+  - wait_for:
+      selector: {text: {exact: Hidden}}
+      timeout_ms: 1000

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Offscreen Pager</string>
+    <string name="page_one">Page one</string>
+    <string name="page_two">Page two</string>
+    <string name="hidden">Hidden</string>
+    <string name="next">Next</string>
+    <string name="back">Back</string>
+</resources>
