@@ -221,7 +221,8 @@ fn valid_heap_size(text: &str) -> bool {
     if t.is_empty() || !t.as_bytes()[0].is_ascii_digit() {
         return false;
     }
-    t.bytes().all(|b| b.is_ascii_digit() || matches!(b, b'k' | b'K' | b'm' | b'M' | b'g' | b'G'))
+    t.bytes()
+        .all(|b| b.is_ascii_digit() || matches!(b, b'k' | b'K' | b'm' | b'M' | b'g' | b'G'))
 }
 
 fn heap_size_argv(var: &str, raw: Option<std::ffi::OsString>) -> Result<Option<String>> {
