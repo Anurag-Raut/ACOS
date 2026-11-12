@@ -1,0 +1,18 @@
+# Where the full FrontEnd compile stops (one line per TU), host clang++ -std=c++20 -fsyntax-only,
+# -I libui/libgui/libutils/libcutils/libbase + the 18 stub headers from 04-probe-build.txt
+# (run from .cache/sb-spike so the stub include dir resolves)
+
+--- FrontEnd/RequestedLayerState.cpp
+../aosp/native/services/surfaceflinger/FrontEnd/RequestedLayerState.cpp:27:10: fatal error: 'scheduler/Fps.h' file not found
+--- FrontEnd/LayerHierarchy.cpp
+/home/Qui/Projects/acos/.cache/aosp/native/include/binder/unique_fd.h:24:22: error: no member named 'borrowed_fd' in namespace 'android::base'
+/home/Qui/Projects/acos/.cache/aosp/native/include/gui/LayerMetadata.h:57:10: error: no template named 'optional' in namespace 'std'
+/home/Qui/Projects/acos/.cache/aosp/native/libs/ui/include/ui/LayerStack.h:21:10: fatal error: 'ftl/cast.h' file not found
+--- FrontEnd/LayerSnapshotBuilder.cpp
+../aosp/native/services/surfaceflinger/FrontEnd/LayerSnapshotBuilder.cpp:25:10: fatal error: 'ftl/small_map.h' file not found
+--- FrontEnd/LayerLifecycleManager.cpp
+../aosp/native/services/surfaceflinger/FrontEnd/RequestedLayerState.h:19:10: fatal error: 'aidl/android/hardware/graphics/composer3/Composition.h' file not found
+--- FrontEnd/TransactionHandler.cpp
+/home/Qui/Projects/acos/.cache/aosp/native/include/layerproto/TransactionProto.h:22:10: fatal error: 'perfetto/config/android/surfaceflinger_transactions_config.pbzero.h' file not found
+--- FrontEnd/LayerSnapshot.cpp
+/home/Qui/Projects/acos/.cache/aosp/native/services/surfaceflinger/CompositionEngine/include/compositionengine/LayerFECompositionState.h:21:10: fatal error: 'android/gui/CachingHint.h' file not found
