@@ -730,6 +730,141 @@ def test_scope_sampler_discovers_guest_sibling_and_ignores_flatpak():
               > den["scope_runner_formula"]["gib_min"])
 
 
+def test_concurrent_shared_data_evidence_is_owner_filtered():
+    """TEETH: under N>1 one ACOS_ART_DATA is shared by every run.
+
+    A sampler must only charge cgroup evidence written by ITS launcher (a
+    descendant); another concurrent run's `<pid>-<seq>/cgroup` is not ours. If
+    the filter is removed, each sampler charges the other run's guest and the
+    denominator double counts.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        cg_root = Path(d) / "cgroup"
+        proc_root = Path(d) / "proc"
+        data = Path(d) / "data"
+        mine_guest = "/guest.slice/run-p101-i1.scope"
+        other_guest = "/guest.slice/run-p900-i1.scope"
+        job_rel = "/job.slice/run-p100-i1.scope"
+        _fake_scope(cg_root, job_rel, anon=10, pids=[100])
+        _fake_scope(cg_root, mine_guest, anon=10, pids=[101])
+        _fake_scope(cg_root, other_guest, anon=90, pids=[900])
+        # One shared data tree: our launcher pid 101, another run's pid 900.
+        (data / "runs" / "101-0").mkdir(parents=True)
+        (data / "runs" / "101-0" / "cgroup").write_text("0::" + mine_guest + "\n")
+        (data / "runs" / "900-0").mkdir(parents=True)
+        (data / "runs" / "900-0" / "cgroup").write_text("0::" + other_guest + "\n")
+        _fake_proc(proc_root, 100, 1, "python3", job_rel)
+        _fake_proc(proc_root, 101, 100, "acos-art", mine_guest)
+        _fake_proc(proc_root, 900, 1, "acos-art", other_guest)
+        sampler = bl.ScopeSampler(cg_root / job_rel.lstrip("/"), interval=0.02,
+                                  info_dirs=[data], pss_every=0,
+                                  proc_root=proc_root, cgroup_root=cg_root,
+                                  root_pid=100)
+        sampler.start()
+        time.sleep(0.06)
+        sampler.closing_sample()
+        sampler.stop_event.set()
+        sampler.join(timeout=5)
+        guests = sampler.guest_cgroups()
+        check("shared-data: own guest evidence charged",
+              any(g.endswith(mine_guest.lstrip("/")) for g in guests), repr(guests))
+        check("shared-data: other concurrent run's guest NOT charged",
+              not any("run-p900" in g for g in guests), repr(guests))
+
+
+def test_host_scope_monitor_union_excludes_self_and_foreign():
+    """TEETH: the host-level alternative discovers all jobs+guests independently."""
+    with tempfile.TemporaryDirectory() as d:
+        cg_root = Path(d) / "cgroup"
+        proc_root = Path(d) / "proc"
+        self_rel = "/suite.slice/run-p100.scope"
+        job1 = "/job.slice/run-p101-i1.scope"
+        guest1 = "/guest.slice/run-p102-i1.scope"
+        job2 = "/job.slice/run-p103-i1.scope"
+        guest2 = "/guest.slice/run-p104-i1.scope"
+        foreign = "/flatpak/run-p900.scope"
+        _fake_scope(cg_root, self_rel, anon=1, pids=[100])
+        _fake_scope(cg_root, job1, anon=10, shmem=1, pids=[101])
+        _fake_scope(cg_root, guest1, anon=20, shmem=2, pids=[102])
+        _fake_scope(cg_root, job2, anon=30, shmem=3, pids=[103])
+        _fake_scope(cg_root, guest2, anon=40, shmem=4, pids=[104])
+        _fake_scope(cg_root, foreign, anon=900, pids=[900])
+        _fake_proc(proc_root, 100, 1, "python3", self_rel)
+        _fake_proc(proc_root, 101, 100, "python3", job1)
+        _fake_proc(proc_root, 102, 101, "bwrap", guest1)
+        _fake_proc(proc_root, 103, 100, "python3", job2)
+        _fake_proc(proc_root, 104, 103, "bwrap", guest2)
+        _fake_proc(proc_root, 900, 1, "bwrap", foreign)
+        registry = Path(d) / "registry"
+        registry.mkdir()
+        job3 = "/job.slice/run-p105-i1.scope"
+        _fake_scope(cg_root, job3, anon=50, shmem=5, pids=[])
+        (registry / "T99-good-1.job").write_text(str(cg_root / job3.lstrip("/")))
+        mon = bl.HostScopeMonitor(self_job=cg_root / self_rel.lstrip("/"),
+                                  interval=0.02, discover_every=1,
+                                  proc_root=proc_root, cgroup_root=cg_root,
+                                  root_pid=100, registry_dirs=[registry])
+        found = mon.discover()
+        names = {str(c) for c in found}
+        check("host monitor finds both job scopes",
+              str(cg_root / job1.lstrip("/")) in names
+              and str(cg_root / job2.lstrip("/")) in names, repr(names))
+        check("host monitor finds both guest scopes",
+              str(cg_root / guest1.lstrip("/")) in names
+              and str(cg_root / guest2.lstrip("/")) in names, repr(names))
+        check("host monitor excludes the suite's own cgroup",
+              str(cg_root / self_rel.lstrip("/")) not in names, repr(names))
+        check("host monitor excludes a foreign flatpak scope",
+              str(cg_root / foreign.lstrip("/")) not in names, repr(names))
+        check("host monitor picks up a registered job scope before its process appears",
+              str(cg_root / job3.lstrip("/")) in names, repr(names))
+        mon.sample_once()
+        row = mon.samples[-1]
+        close("host sample sums anon+shmem of all job+guest scopes",
+              row["bytes"] / MIB, 10 + 1 + 20 + 2 + 30 + 3 + 40 + 4 + 50 + 5, 1e-6)
+        eq("host sample lists 5 measured scopes", len(row["cgroups"]), 5)
+
+
+def test_scope_agreement_noise_rule():
+    a = bl.scope_agreement(1.000, 1.000, tolerance=0.05)
+    check("identical integrals agree", a["within_noise"], repr(a))
+    close("exact agreement rel diff is 0", a["rel_diff_pct"], 0.0)
+    b = bl.scope_agreement(1.000, 1.030, tolerance=0.05)
+    check("3 % difference is within 5 % noise", b["within_noise"], repr(b))
+    c = bl.scope_agreement(1.000, 1.200, tolerance=0.05)
+    check("20 % difference is NOT within noise", not c["within_noise"], repr(c))
+    d = bl.scope_agreement(1.000, 1.050, sampler_overhead=0.020, tolerance=0.05)
+    close("sampler charge is subtracted from the host figure",
+          d["host_gib_min"], 1.030, 1e-9)
+    check("host-minus-sampler within noise", d["within_noise"], repr(d))
+    e = bl.scope_agreement(None, 1.0)
+    check("missing per-run sum is not an agreement", not e["within_noise"], repr(e))
+
+
+def test_concurrent_per_run_sum_equals_host_integral():
+    """The two denominators are the same quantity for overlapping runs."""
+    mib = MIB
+    run_a = [{"t": 0.0, "bytes": 100 * mib, "stat": {"anon": 100 * mib, "shmem": 0}},
+             {"t": 10.0, "bytes": 100 * mib, "stat": {"anon": 100 * mib, "shmem": 0}}]
+    run_b = [{"t": 5.0, "bytes": 200 * mib, "stat": {"anon": 200 * mib, "shmem": 0}},
+             {"t": 15.0, "bytes": 200 * mib, "stat": {"anon": 200 * mib, "shmem": 0}}]
+    host = [{"t": 0.0, "bytes": 100 * mib, "stat": {"anon": 100 * mib, "shmem": 0}},
+            {"t": 5.0, "bytes": 100 * mib, "stat": {"anon": 100 * mib, "shmem": 0}},
+            {"t": 5.0, "bytes": 300 * mib, "stat": {"anon": 300 * mib, "shmem": 0}},
+            {"t": 10.0, "bytes": 300 * mib, "stat": {"anon": 300 * mib, "shmem": 0}},
+            {"t": 10.0, "bytes": 200 * mib, "stat": {"anon": 200 * mib, "shmem": 0}},
+            {"t": 15.0, "bytes": 200 * mib, "stat": {"anon": 200 * mib, "shmem": 0}}]
+    a = bl.stat_key_integral(run_a, bl.PRIMARY_KEYS)
+    b = bl.stat_key_integral(run_b, bl.PRIMARY_KEYS)
+    h = bl.stat_key_integral(host, bl.PRIMARY_KEYS)
+    close("run A integral", a, 100 * 10 / 1024.0 / 60.0, 1e-12)
+    close("run B integral", b, 200 * 10 / 1024.0 / 60.0, 1e-12)
+    close("sum of per-run integrals", a + b, 3000 / 1024.0 / 60.0, 1e-12)
+    close("host-level integral equals it", h, a + b, 1e-12)
+    close("host vs per-run rel diff is zero",
+          bl.scope_agreement(a + b, h)["rel_diff_pct"], 0.0, 1e-9)
+
+
 def test_guest_evidence_file_route():
     with tempfile.TemporaryDirectory() as d:
         cg_root = Path(d) / "cgroup"

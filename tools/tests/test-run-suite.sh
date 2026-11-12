@@ -53,7 +53,7 @@ py() { # count the inner PASS/FAIL lines so the suite totals are honest
 # --------------------------------------------------------------------------- #
 cat >"$TMP/bin/acos" <<'EOS'
 #!/usr/bin/env python3
-import json, os, sys, time
+import json, os, subprocess, sys, time
 args = sys.argv[1:]
 art = scen = None
 i = 0
@@ -93,7 +93,20 @@ with open(os.path.join(art, "tree.json"), "w") as f:
     json.dump({"nodes": [{"text": "0"}]}, f)
 with open(os.path.join(art, "frame0.png"), "wb") as f:
     f.write(b"p" * (1 << 20))
-time.sleep(0.2)
+sleep_s = float(os.environ.get("FAKE_ACOS_SLEEP", "0.2"))
+guest = None
+if os.environ.get("FAKE_ACOS_GUEST") == "1":
+    # A real sibling cgroup scope, so the host monitor and the per-run sampler
+    # both have an independent guest to find (the concurrency cross-check).
+    code = ("import time\nb=bytearray(48<<20)\n"
+            "for i in range(0,len(b),4096): b[i]=1\ntime.sleep(%f)" % (sleep_s + 0.1))
+    guest = subprocess.Popen(
+        ["systemd-run", "--user", "--scope", "-q", "-p", "MemoryMax=512M",
+         "--", sys.executable, "-c", code],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+time.sleep(sleep_s)
+if guest is not None:
+    guest.wait()
 del buf
 sys.exit(0 if verdict == "pass" else 1)
 EOS
@@ -148,6 +161,41 @@ data = {"schema": "acos-scope-sample/1", "rc": rc, "wall_s": dur,
         "denominators": den}
 with open(out, "w") as f:
     json.dump(data, f)
+sys.exit(rc)
+EOS
+
+# --------------------------------------------------------------------------- #
+# mutant sampler: delegate to the real one, then DROP one guest scope from the
+# primary denominator for selected concurrent runs (case F). The host-level
+# integral still sees the guest, so the cross-check must catch it.
+# --------------------------------------------------------------------------- #
+cat >"$TMP/bin/drop-guest-sampler.py" <<EOS
+#!/usr/bin/env python3
+import json, os, subprocess, sys
+REAL = "$ROOT/tools/benchlib.py"
+prefix = os.environ.get("DROP_GUEST_LABEL_PREFIX", "T01")
+args = sys.argv[1:]
+out = label = None
+for i, a in enumerate(args):
+    if a == "--out":
+        out = args[i + 1]
+    elif a == "--label":
+        label = args[i + 1]
+rc = subprocess.call([sys.executable, "-I", REAL] + args)
+if out and os.path.exists(out) and label and label.startswith(prefix):
+    with open(out) as f:
+        data = json.load(f)
+    den = data.get("denominators") or {}
+    for key in ("primary", "resident", "job_all_incl_file"):
+        e = den.get(key) or {}
+        for k in ("gib_min", "gib_min_excl_sampler"):
+            if e.get(k) is not None:
+                e[k] = e[k] * 0.45          # pretend the guest was never found
+    scope = den.get("scope") or {}
+    scope["guest_cgroups"] = []
+    scope["scope_count"] = 1
+    with open(out, "w") as f:
+        json.dump(data, f)
 sys.exit(rc)
 EOS
 
@@ -278,6 +326,77 @@ ck("D not gate eligible as a pass", m["above_legacy_bar"] is False)
 PY
 grep -q "SCOPE DEFECT" "$TMP/d.log" && echo "PASS D stderr names the scope defect" \
     && PASSES=$((PASSES + 1)) || { echo "FAIL D stderr names the scope defect"; FAILURES=$((FAILURES + 1)); }
+
+# --------------------------------------------------------------------------- #
+# E. concurrency 2: two runs at once, each its own guarded scope and sampler;
+#    the independent host-level integral must agree with the per-run sum.
+# --------------------------------------------------------------------------- #
+echo "--- case E: --concurrency 2, clean, host-level cross-check"
+mkdir -p "$TMP/artdata"
+ACOS_ART_DATA="$TMP/artdata" FAKE_ACOS_SLEEP=0.8 FAKE_ACOS_GUEST=1 \
+    ONLY="T01,T02" run_suite "$TMP/e.json" --concurrency 2 --interval 0.02 \
+    >"$TMP/e.log" 2>&1
+RC_E=$?
+check "E exit 0 (concurrent clean run accepted)" "$([ "$RC_E" = "0" ] && echo 1 || echo 0)" "rc=$RC_E"
+py "$TMP/e.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+m = d["m11"]
+rounds = d.get("concurrent_rounds") or []
+agree = m.get("host_level_alternative") or {}
+def ck(n, c, x=""):
+    print(("PASS " if c else "FAIL ") + n + ("" if c else " -- " + str(x)))
+ck("E n_concurrent is 2", m["n_concurrent"] == 2 and d["n_concurrent"] == 2, m["n_concurrent"])
+ck("E N=2 is not gate eligible", m["gate_eligible"] is False, m["gate_eligible_reason"])
+ck("E one concurrent round recorded", len(rounds) == 1 and rounds[0]["runs"] == 4, rounds)
+ck("E four distinct fresh scopes", m["scope_check"]["ok"] is True and
+   m["scope_check"]["distinct_scopes"] == 4, m["scope_check"])
+ck("E per-run primary > 0", (agree.get("per_run_sum_gib_min") or 0) > 0, agree)
+ck("E host-level integral > 0", (agree.get("host_gib_min") or 0) > 0, agree)
+ck("E host-level integral agrees within noise", agree.get("within_noise") is True, agree)
+ck("E all rounds agree", agree.get("all_rounds_within_noise") is True, agree)
+ck("E guest scopes discovered in the concurrent runs",
+   all((r["mem"]["guest_scope_count"] or 0) >= 1
+       for t in d["tasks"] for k in ("good", "wrong")
+       for r in (t.get(k) or {}).get("runs") or []),
+   [r["mem"]["guest_scope_count"] for t in d["tasks"] for k in ("good", "wrong")
+    for r in (t.get(k) or {}).get("runs") or []])
+ck("E primary remains the only gate denominator",
+   m["denominators"]["primary"]["gate_uses"] is True and
+   all(m["denominators"][k]["gate_uses"] is False
+       for k in ("resident", "job_all_incl_file", "scope_runner_formula")))
+PY
+
+# --------------------------------------------------------------------------- #
+# F. mutant: drop ONE concurrent run's guest scope -> host cross-check catches it
+# --------------------------------------------------------------------------- #
+echo "--- case F: mutant drops concurrent guest scopes"
+ACOS_ART_DATA="$TMP/artdata" FAKE_ACOS_SLEEP=0.8 FAKE_ACOS_GUEST=1 \
+    DROP_GUEST_LABEL_PREFIX=T01 ONLY="T01,T02" run_suite "$TMP/f.json" \
+    --concurrency 2 --interval 0.02 --sampler "$TMP/bin/drop-guest-sampler.py" \
+    >"$TMP/f.log" 2>&1
+RC_F=$?
+check "F exit 1 (host cross-check rejects the dropped guest)" \
+    "$([ "$RC_F" = "1" ] && echo 1 || echo 0)" "rc=$RC_F"
+py "$TMP/f.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+m = d["m11"]
+a = m.get("host_level_alternative") or {}
+def ck(n, c, x=""):
+    print(("PASS " if c else "FAIL ") + n + ("" if c else " -- " + str(x)))
+ck("F host cross-check present", bool(a), a)
+ck("F host and per-run sums DISAGREE", a.get("within_noise") is False, a)
+ck("F per-run sum is below the host integral",
+   (a.get("per_run_sum_gib_min") or 0) < (a.get("host_gib_min") or 0), a)
+ck("F verdict is SCOPE_MISMATCH", m["verdict_vs_bar"] == "SCOPE_MISMATCH",
+   m["verdict_vs_bar"])
+ck("F not a gate-eligible pass", m["gate_eligible"] is False, m["gate_eligible_reason"])
+ck("F the untampered label still has its guest",
+   any((r["mem"]["guest_scope_count"] or 0) >= 1
+       for t in d["tasks"] if t["id"] == "T02"
+       for k in ("good", "wrong") for r in (t.get(k) or {}).get("runs") or []))
+PY
 
 echo
 echo "$PASSES passed, $FAILURES failed (scratch $TMP)"

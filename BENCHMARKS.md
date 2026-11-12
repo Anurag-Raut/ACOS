@@ -7,7 +7,10 @@ measured**. §9.1 (W160-A) and §9.7 (W165-A) are the earlier tables and
 measurement notes and are retained as history; their M8/M10/M11 rows are stale.
 §8.x is the wave-by-wave history that led there. The legacy baseline below is copied from
 the frozen ACVM repo and is a *reference*, not an ACOS result; nothing outside
-§9 may be used as an ACOS speed claim.
+§9 may be used as an ACOS speed claim. **The ART D2 table is §12** (W39 rows plus the
+W52 M11 row); its latest M11 row is **NOT_COMPARABLE** to the legacy-derived 24.4 bar,
+so §12 has **0 PASS, 1 NOISY, 5 NOT_COMPARABLE, 5 NOT_MEASURED** and no ART D2 PASS is
+claimed. §9.8 remains the Rust-VM table.
 
 Rules borrowed from the legacy engine are cited in
 `docs/reference/ACVM_INVENTORY.md` §5.
@@ -1881,6 +1884,14 @@ cohort membership); harness `tools/art-runtime/bench-d2.sh` (uses `tools/benchli
 its M9 reason text was corrected in W39 because the W33 compiler-storm sentence no longer
 applies).
 
+**W52 update (M11 measured at N=10).** The M11 row is filled from
+`results/bench/suite-W52-r4.json` (release, N=10, 3 rounds, 66 fresh scopes):
+**M11 62.84 tasks/GiB·min, CI95 45.45–98.60, round spread 13.459 %, 11/11 good pass,
+11/11 wrong fail with declared code, false_pass 0**. Its primary denominator is
+anon+shmem job+guest; an independent host-level union integral agrees within noise
+(4.495 %). The 24.4 bar is **not derivable from anon+shmem/warm legacy inputs**
+(§12.1), so the row is **NOT_COMPARABLE**, not a D2 PASS. W45's N=1 row is 67.81.
+
 **Method record**
 
 ```yaml
@@ -1918,10 +1929,10 @@ rules: spread=(p95-p5)/p50; >15% => NOISY, never PASS; noise=max(spread,5%); TIE
 | M8 | Action -> state latency | 1358.5 ms | 16 | 1353.00..1375.00 | 4.0% | cold-process / WALL_MS | not published | WALL_MS / warm | no | **NOT_MEASURED** | legacy row missing (NOT_MEASURED = not pass) capability verified on ART (16/20 runs pass all steps, tap Increment 0->1 bound to a fresh frame), but the legacy ACVM never published a scalar action->state value, so the D2 comparison is NOT_MEASURED (BENCHMARKS.md 9.8 called it a capability pass, not a ratio). |
 | M9 | Concurrent workloads | 103.52 MiB/session (cgroup peak) | 50 | 102.98..103.81 | 5.2% | cold-process / CGROUP_MEMORY_CURRENT | not published | CGROUP_MEMORY_CURRENT / warm | no | **NOT_MEASURED** | legacy row missing (NOT_MEASURED = not pass) NOT MEASURED as a D2 row: legacy M9 is a scorecard (N=5 plus 10 virtual displays), not a scalar of this type; ACOS correctness here is N=10 50/50 and N=20 84/100 passes, but independent state with a distinct count k per session is not implemented, and the legacy-comparable workset column does not exist. 16 of 150 sessions failed; the structured error of each failure is in the run JSON, and a failure is never re-labelled as app behaviour. cgroup peak per session is reported, never compared to legacy anon+shmem. 4 sample(s) recorded a failed host gate (loadavg1 > 4 or MemAvailable < 30 GiB) and are excluded from the verdict |
 | M10 | End-to-end verify wall | 2253.0 ms | 3 | 389.00..4537.00 | 165.7% | cold-process / WALL_MS | 19000.00 ms | WALL_MS / warm | no | **NOT_COMPARABLE** | state mismatch: cold-process vs warm NOT COMPARABLE on scope/state: ACOS value is `acos verify --engine art` on prebuilt fixture APKs (no build/install stage) inside a cold process; legacy ~19 s is the U2 dev loop build->install->launch->assert->evidence->reset->cleanup (install-bound, warm). Suite: 3/3 good tasks pass; a wall on a failing task is still a cost sample, never a pass. 3 sample(s) recorded a failed host gate (loadavg1 > 4 or MemAvailable < 30 GiB) and are excluded from the verdict measured spread 165.7% > 15%: this row is noisy and cannot PASS |
-| M11 | Verified tasks / GiB-minute (north star) | not measured | 0 | n/a | n/a | cold-process / RATIO | not published | RATIO / warm | no | **NOT_MEASURED** | ACOS row missing (NOT_MEASURED = not pass) legacy row missing (NOT_MEASURED = not pass) NOT MEASURED: M11 = verified_good / Σ job_gib_min over the T01-T12 suite at N=10 concurrent, 3 rounds, with per-job cgroup memory.current integrals. This run's suite is N=1 (one job per acquisition) and records wall only, and the N=10 cohorts here run the counter scenario, not the suite; no denominator of the defined kind exists yet (W30 owns the N=10 suite runner). Legacy never published M11. Formula is implemented in benchlib.sample_integral; nothing is estimated. |
+| M11 | Verified tasks / GiB-minute (north star) | **62.84** (N=10; N=1 67.81) | 66 runs / 3 rounds | 45.45..98.60 | 13.46 % | cold-process / CGROUP_ANON_SHMEM per-task integral | **24.4** | mixed: workset core + `memory.current` marginal + warm install wall | **no** | **NOT_COMPARABLE** | ACOS row measured: `results/bench/suite-W52-r4.json`, release, N=10 x 3 rounds, 66 distinct fresh scopes, false_pass 0; primary = anon+shmem of job+every guest cgroup, 100 ms + closing sample, sampler's same-type charge subtracted; host-level union integral agrees 4.495 %. CI low 45.45 > 25.62, so the numeric rule would pass, but the legacy bar's own inputs are NOT anon+shmem warm: 206.0 MiB W1 bare core is **workset** (203.4 anon / 285.7 current), 112.1 MiB marginal is **`memory.current`** (paired ws 99.3), and 19 s is the **install-bound portion** (74–81 %) of a warm dev loop. A mixed-type/state bar cannot gate this row => NOT_COMPARABLE, never PASS. Detail and flake list: `results/art-runtime/W52.md`; N=1 (W45) 67.81 CI 47.91–110.28. |
 
-**Verdict counts: 0 PASS, 1 NOISY (M3), 4 NOT_COMPARABLE (M2, M5, M7, M10), 6
-NOT_MEASURED (M1, M4, M6, M8, M9, M11), 0 TIE/FAIL, false passes 0.** The JSON validates
+**Verdict counts: 0 PASS, 1 NOISY (M3), 5 NOT_COMPARABLE (M2, M5, M7, M10, M11), 5
+NOT_MEASURED (M1, M4, M6, M8, M9), 0 TIE/FAIL, false passes 0.** The JSON validates
 (`bench-d2: validation ok`). No NOT_COMPARABLE or NOT_MEASURED row is a win. **This run
 has no PASS at all**: M3 (cold start -> first correct frame) measured 265.5 ms
 (first-frame component 235-260 ms in every sample) but its composite spread is 75.7 %,
@@ -1929,6 +1940,50 @@ because `timer_overhead_ms` (engine-timer wall minus step durations, i.e. sessio
 close/teardown) spiked up to 4534 ms on two samples while four other agents' ART runs and
 suite tasks shared the host. Per §11.2 a noisy row can never PASS, so it is reported
 NOISY rather than repeating W33's PASS at a luckier moment.
+
+### 12.1 M11 — verified tasks per GiB·minute, N=1 and N=10 (W45, W52)
+
+Both rows use the same denominator contract: cgroup `memory.stat` **anon+shmem** of the
+job **plus every guest** cgroup, 100 ms samples and a closing sample, sampler's
+`RssAnon+RssShmem` × window subtracted, page cache excluded; `false_pass > 0` zeroes M11.
+The N=10 runner (`tools/run-suite.sh --concurrency 10`) also reports the alternative
+"host-level integral over the same window, all job + guest cgroups", discovered
+independently of the per-run samplers, and rejects the run when the two disagree beyond
+the 5 % noise floor (`SCOPE_MISMATCH`).
+
+| row | N | rounds | runs/scopes | M11 | 95 % CI | round M11 / spread | good / wrong | false_pass | verdict |
+|---|---:|---:|---|---:|---|---|---|---:|---|
+| W45 `suite-W45-r2e.json` | 1 | 2 | 44 / 44 | **67.81** | 47.91–110.28 | 67.43 / 68.20, 1.14 % | 11/11, 11/11 | 0 | vs 24.4 numeric PASS, bar NOT_COMPARABLE |
+| W52 `suite-W52-r4.json` | 10 | 3 | 66 / 66 | **62.84** | 45.45–98.60 | 58.00 / 64.72 / 66.46, 13.459 % | 11/11, 11/11 | 0 | **NOT_COMPARABLE** (numeric CI low 45.45 > 25.62) |
+
+W52 method record: release binaries built at git HEAD
+`5b722ac7badc3adb65e0fbc29bf7269bb37c2ea9` (05:04:07Z), `acos` sha256
+`2fb5813bc123655958a1795f5b21f17488a3d6117a6c59cca9799d77fd5f537f`, `acos-art` sha256
+`75d7b448ae431e855d5fd945926e4ffd57852cfc3be3871d7b4986d3b38acffb`; host gate at start
+loadavg1 2.46, MemAvailable 41.87 GiB; 05:30:13Z–05:30:53Z; per-round denominator mean
+0.175044 GiB·min; host-level vs per-run 4.495 % (rounds 4.964 / 4.367 / 4.089 %);
+peer denominators (not gates): resident 60.41, `memory.current` 39.84, job-only 72.41.
+
+**Bar comparability (checked, not assumed).** The 24.4 bar in
+`results/art-runtime/ADVISOR-benchmarks-top10.md` item 3 is
+`((206/10) + 112.1)/1024 × (19/60) = 0.0410 GiB·min/task`. The named legacy rows
+(BENCHMARKS §3, `docs/reference/ACVM_INVENTORY.md` §2) are **not** anon+shmem warm:
+206.0 MiB is the W1 diet **workset** (203.4 anon / 285.7 `memory.current`), 112.1 MiB is
+**`memory.current`** (paired ws 99.3), and 19 s is the **`adb install -r` portion
+(74–81 %)** of the warm U2 dev loop, not a whole-task wall. The bar is a mixed
+type/state construction, so the M11 row is **NOT_COMPARABLE**; the numeric ratio
+62.84 / 24.4 = 2.58× (CI low 1.77×) is reported for information only, never as a D2
+PASS. No pure anon+shmem/warm legacy M11 bound exists in the record.
+
+**Flakes seen during W52 (rejected attempts, kept as evidence).** r1: T09-wrong r3
+`GUEST_EXITED` (status 126) at `reset`, task_ok 10/11, round 3 inflated → spread 25.5 %
+NOISY. r2: T01–T06 good+wrong r3 all `GUEST_KILLED_BY_SIGNAL` (signal 9, ~150 ms,
+peak 7 MiB, `oom_kills: 0`) with `utc_ms` within 3 ms of each other, plus
+`INTERNAL: cannot write to acos-art: Broken pipe` at `assert_log` (T07-wrong, T12-wrong)
+and `INTERNAL: acos-art session exited` at `tap` (T10-good) — another agent's debug ART
+run was live in that window (user journal 05:23:19–22). r3: correctness clean but round 2
+was 1.4× slower under other agents' CPU load → spread 35.5 % NOISY. r4 is the accepted
+record with no flakes. Full detail: `results/art-runtime/W52.md`.
 
 **Honest notes on this run (do not read them as a W39 regression)**
 

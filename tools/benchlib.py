@@ -1178,7 +1178,35 @@ def _ppid_map(proc_root):
             continue
     return ppid
 
-def descendant_cgroups(root_pid, job, proc_root=None, cgroup_root=None):
+def _is_descendant(pid, root_pid, ppid):
+    """True when ``pid``'s ppid chain reaches ``root_pid``."""
+    hops = 0
+    while pid and hops < 64:
+        if pid == root_pid:
+            return True
+        pid = ppid.get(pid)
+        hops += 1
+    return False
+
+
+def _run_owner_pid(evidence_path):
+    """Owner pid of a launcher run dir (`<data>/runs/<pid>-<seq>/cgroup`).
+
+    Under concurrency every run shares one `ACOS_ART_DATA`, so one sampler's
+    evidence scan sees every run's `<pid>-<seq>/cgroup`. The directory prefix is
+    the launcher pid; a run whose launcher is not a descendant of this sampler
+    belongs to another concurrent job and must not be charged here. A path that
+    does not follow the launcher naming scheme (unit-test fixtures) is accepted.
+    """
+    name = Path(evidence_path).parent.name
+    head, sep, _ = name.partition("-")
+    if sep and head.isdigit():
+        return int(head)
+    return None
+
+
+def descendant_cgroups(root_pid, job, proc_root=None, cgroup_root=None,
+                       ppid_map=None):
     """Cgroups of our descendants that live outside the job cgroup.
 
     This is the fallback for a launcher that has not written its `<run>/cgroup`
@@ -1187,17 +1215,11 @@ def descendant_cgroups(root_pid, job, proc_root=None, cgroup_root=None):
     """
     proc_root = Path(proc_root or PROC_ROOT)
     cgroup_root = Path(cgroup_root or CGROUP_ROOT)
-    ppid = _ppid_map(proc_root)
+    ppid = ppid_map if ppid_map is not None else _ppid_map(proc_root)
     job = Path(job) if job is not None else None
 
     def is_descendant(pid):
-        hops = 0
-        while pid and hops < 64:
-            if pid == root_pid:
-                return True
-            pid = ppid.get(pid)
-            hops += 1
-        return False
+        return _is_descendant(pid, root_pid, ppid)
 
     found = set()
     for p in Path(proc_root).iterdir():
@@ -1280,11 +1302,19 @@ class ScopeSampler(threading.Thread):
     # -- discovery -------------------------------------------------------- #
     def discover(self):
         found = set()
+        ppid = _ppid_map(self.proc_root)
         for d in self.info_dirs:
             if not d.exists():
                 continue
             try:
                 for p in d.rglob("cgroup"):
+                    owner = _run_owner_pid(p)
+                    if owner is not None and not _is_descendant(owner, self.root_pid,
+                                                                 ppid):
+                        # Another concurrent run's evidence file under the shared
+                        # ACOS_ART_DATA: charging it here would double count the
+                        # guest (W52 concurrency defect).
+                        continue
                     cg = cgroup_from_info_file(p, self.cgroup_root)
                     if cg is not None and cg != self.job and cg.exists():
                         found.add(cg)
@@ -1292,7 +1322,8 @@ class ScopeSampler(threading.Thread):
                 continue
         found |= descendant_cgroups(self.root_pid, self.job,
                                     proc_root=self.proc_root,
-                                    cgroup_root=self.cgroup_root)
+                                    cgroup_root=self.cgroup_root,
+                                    ppid_map=ppid)
         self.discovered |= found
         return found
 
@@ -1344,6 +1375,143 @@ class ScopeSampler(threading.Thread):
     def closing_sample(self):
         """One sample after the child exits, so teardown has two points."""
         return self.sample_once()
+
+
+# --------------------------------------------------------------------------- #
+# Host-level cross-check (W52): the union of every concurrent job + guest scope
+# --------------------------------------------------------------------------- #
+
+class HostScopeMonitor(threading.Thread):
+    """Samples the union of all job and guest scopes of a concurrent window.
+
+    It runs in the suite process (outside every job scope) and discovers the
+    scopes independently of the per-run samplers: a descendant-cgroup scan from
+    the suite pid finds the guarded job scopes and the launcher's sibling guest
+    scopes. That independence is what makes it a real cross-check of the per-run
+    denominators -- a run whose sampler drops a guest scope still shows up here.
+
+    The suite's own cgroup (``self_job``) is excluded, so the monitor charges
+    only the jobs under test. Its own sampling cost lives in the suite cgroup,
+    outside the measured set.
+    """
+
+    def __init__(self, *, self_job=None, interval=0.1, discover_every=2,
+                 proc_root=None, cgroup_root=None, root_pid=None,
+                 registry_dirs=(), stop_event=None):
+        super().__init__(daemon=True)
+        self.self_job = Path(self_job) if self_job is not None else None
+        self.interval = float(interval)
+        self.discover_every = max(1, int(discover_every))
+        self.proc_root = Path(proc_root or PROC_ROOT)
+        self.cgroup_root = Path(cgroup_root or CGROUP_ROOT)
+        self.root_pid = int(root_pid or os.getpid())
+        self.stop_event = stop_event or threading.Event()
+        self.registry_dirs = [Path(d) for d in registry_dirs if d]
+        self.known = set()
+        self.samples = []          # [{"t", "bytes", "stat", "cgroups"}]
+        self.ticks = 0
+
+    def _registry_jobs(self):
+        """Job scopes announced by the per-run samplers before they spawn.
+
+        This only closes the discovery gap for the JOB cgroup (the sampler
+        writes it at t=0). Guest scopes are still found independently through
+        the process tree, so a mutated sampler that drops a guest is caught.
+        """
+        found = set()
+        for d in self.registry_dirs:
+            try:
+                for p in Path(d).glob("*.job"):
+                    try:
+                        rel = p.read_text().strip()
+                    except OSError:
+                        continue
+                    if not rel:
+                        continue
+                    cg = Path(rel)
+                    if cg.exists() and cg != self.self_job:
+                        found.add(cg)
+            except OSError:
+                continue
+        return found
+
+    def discover(self):
+        found = descendant_cgroups(self.root_pid, self.self_job,
+                                   proc_root=self.proc_root,
+                                   cgroup_root=self.cgroup_root)
+        found |= self._registry_jobs()
+        found = {c for c in found if c.exists() and c != self.self_job}
+        self.known |= found
+        self.known = {c for c in self.known if c.exists()}
+        return found
+
+    def sample_once(self):
+        t = time.time()
+        self.ticks += 1
+        if self.ticks == 1 or self.ticks % self.discover_every == 0:
+            self.discover()
+        anon = shmem = 0
+        active = []
+        for cg in sorted(self.known):
+            st = read_memstat(cg, PRIMARY_KEYS)
+            if st is None:
+                continue
+            anon += st.get("anon", 0)
+            shmem += st.get("shmem", 0)
+            active.append(str(cg))
+        self.samples.append({"t": t, "bytes": anon + shmem,
+                             "stat": {"anon": anon, "shmem": shmem},
+                             "cgroups": active})
+        return t
+
+    def run(self):
+        while not self.stop_event.is_set():
+            t0 = time.time()
+            self.sample_once()
+            left = self.interval - (time.time() - t0)
+            if left > 0:
+                self.stop_event.wait(left)
+
+    def closing_sample(self):
+        return self.sample_once()
+
+    def integral(self):
+        """Integral of the summed anon+shmem over the sampled window, GiB.min."""
+        return stat_key_integral(self.samples, PRIMARY_KEYS)
+
+    def peak(self):
+        vals = [s["bytes"] for s in self.samples]
+        return max(vals) if vals else None
+
+
+def scope_agreement(per_run_sum, host_gib_min, *, sampler_overhead=0.0,
+                    tolerance=MIN_NOISE):
+    """Compare the sum of per-run integrals with the host-level integral.
+
+    Both cover the same wall window; ``host_gib_min`` is the raw host figure and
+    ``sampler_overhead`` is the sum of the per-run sampler charges (which the
+    per-run denominators already subtract, so the fair comparison is
+    host - overhead). A relative difference above the noise tolerance means the
+    two do not measure the same set of scopes (e.g. a dropped guest scope) and
+    the row must not be accepted as a measurement.
+    """
+    host = None if host_gib_min is None else max(0.0, float(host_gib_min) -
+                                                 float(sampler_overhead or 0.0))
+    rel = None
+    if per_run_sum and host is not None:
+        rel = abs(host - float(per_run_sum)) / float(per_run_sum)
+    return {
+        "per_run_sum_gib_min": _round(per_run_sum),
+        "host_gib_min_raw": _round(host_gib_min),
+        "sampler_overhead_gib_min": _round(sampler_overhead),
+        "host_gib_min": _round(host),
+        "rel_diff_pct": None if rel is None else round(100.0 * rel, 3),
+        "tolerance": float(tolerance),
+        "within_noise": bool(rel is not None and rel <= float(tolerance)),
+        "note": "per-run sum = Σ primary (anon+shmem, sampler excluded) of every "
+                "run in the window; host = an independent union of all job+guest "
+                "scopes over the same window, minus the same sampler charge",
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -1701,7 +1869,7 @@ def sample_scope(argv):
     the caller can read the verdict envelope without interleaving.
     """
     opts = {"out": None, "interval": MEMORY_SAMPLE_MS / 1000.0, "label": None,
-            "info_dirs": []}
+            "info_dirs": [], "register_dir": None}
     cmd = []
     i = 0
     while i < len(argv):
@@ -1709,7 +1877,7 @@ def sample_scope(argv):
         if a == "--":
             cmd = argv[i + 1:]
             break
-        if a in ("--out", "--interval", "--label", "--info-dir"):
+        if a in ("--out", "--interval", "--label", "--info-dir", "--register-dir"):
             if i + 1 >= len(argv):
                 print("benchlib sample-scope: %s needs a value" % a, file=sys.stderr)
                 return 2
@@ -1733,6 +1901,14 @@ def sample_scope(argv):
         return 2
     out.parent.mkdir(parents=True, exist_ok=True)
     job = cgroup_path()
+    if job is not None and opts.get("register_dir"):
+        reg = Path(opts["register_dir"])
+        try:
+            reg.mkdir(parents=True, exist_ok=True)
+            (reg / ("%s-%d.job" % ((opts.get("label") or "run"), os.getpid()))).write_text(
+                str(job))
+        except OSError:
+            pass
     stop = threading.Event()
     sampler = ScopeSampler(job, interval=opts["interval"],
                            info_dirs=opts["info_dirs"], stop_event=stop)

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # run-suite.sh -- run the frozen agent-task suite T01-T12 (scenarios/suite/) on
-# the real ART engine, one variant at a time, and write
+# the real ART engine, sequentially or N variant runs at once, and write
 # results/bench/suite-<UTCstamp>.json.
 #
 # Correctness contract (advisor item 2):
@@ -22,14 +22,24 @@
 #     cgroup AND every guest cgroup `acos-art` creates (a sibling scope, W41 1.1)
 #     every 100 ms, with a closing sample after the child exits.
 #   * PRIMARY DENOMINATOR = cgroup `memory.stat` anon+shmem, job+guest, sampler
-#     excluded. It is the same type as the legacy numbers the 24.4 bar was
-#     derived from, so it is the ONLY number the bar is evaluated on.
+#     excluded. It is the ONLY number the bar is evaluated on. NOTE (W52): the
+#     24.4 bar's own inputs are NOT all this type (206 MiB anon+shmem core +
+#     112.1 MiB memory.current marginal + a 19 s warm dev-loop wall), so the
+#     cross-type comparison is reported NOT_COMPARABLE; see BENCHMARKS.md 12.
 #   * Also recorded, each labelled `gate_uses: false`: `resident`
 #     (anon+shmem+kernel), `job_all_incl_file` (memory.current, includes page
 #     cache), `scope_runner_formula` (the pre-W45 job-scope-only number) and
 #     `infra_file_cache` (shared read-only page cache, reported separately and
 #     never charged to a task).
-#   * The sampler's own RSS x window is subtracted from every denominator.
+#   * The sampler's own anon+shmem x window is subtracted from every denominator.
+#   * W52 --concurrency N: up to N variant runs at once, each in its OWN fresh
+#     guarded scope with its own sampler (the W45 contract is unchanged). The
+#     shared ACOS_ART_DATA evidence tree is filtered by launcher-pid ownership so
+#     one run never charges another's guest. Denominator = the sum of the
+#     per-run integrals over the same wall window. In parallel, an independent
+#     host-level monitor discovers every job + guest cgroup of the window from
+#     the suite's process tree and integrates their union; the two must agree
+#     within the 5 % noise floor or the run is rejected as SCOPE_MISMATCH.
 #   * Per-run artifact dirs are pruned after the summary JSON is written unless
 #     --keep-artifacts (the host disk filled during W41). Passing runs keep a
 #     small evidence subset (verdict/engine/session-timing/mem + files <= 32 KiB);
@@ -45,19 +55,25 @@
 #     ((206 MiB core / 10) + 112.1 MiB marginal) / 1024 * (19 s / 60)
 #       = 0.0410 GiB*min/task  =>  24.4 tasks/GiB*min (legacy-derived-bound)
 #     ACOS must exceed 24.4 * (1 + noise); noise = max(spread, 5 %).
-# This runner executes N=1 by default, so its M11 is labelled gate_eligible=false
-# (the gateable N=10 x 3-round number comes from the bench-session suite). The
-# CI is a bootstrap over tasks (both numerator and denominator recomputed).
+# This runner executes N=1 by default, so its M11 is labelled gate_eligible=false.
+# --concurrency 10 --rounds 3 makes the row gate eligible (subject to the scope
+# check, false_pass 0 and the host-level cross-check). The CI is a bootstrap over
+# tasks (both numerator and denominator recomputed).
 #
 # Usage (mandated form; the whole suite inside one host-wide ART lock):
-#   tools/art-runtime/run-exclusive.sh --task W45 -- \
-#     tools/guarded.sh --mem 8G --time 1800 -- tools/run-suite.sh --rounds 2
+#   tools/art-runtime/run-exclusive.sh --task W52 -- \
+#     tools/guarded.sh --mem 16G --time 2400 -- tools/run-suite.sh \
+#       --rounds 3 --concurrency 10 --acos .cache/w52-target/release/acos \
+#       --acos-art .cache/w52-target/release/acos-art --out results/bench/suite-W52.json
 #
-# Standalone use (the script then wraps every variant in run-exclusive.sh itself,
-# still one ART job at a time):
-#   tools/run-suite.sh [--rounds N] [--only T01,T02] [--acos PATH]
-#                      [--acos-art PATH] [--out FILE] [--timeout S] [--mem 8G]
-#                      [--no-host-gate] [--keep-artifacts]
+# Standalone sequential use (the script then wraps every variant in
+# run-exclusive.sh itself, still one ART job at a time):
+#   tools/run-suite.sh [--rounds N] [--concurrency N] [--only T01,T02]
+#                      [--acos PATH] [--acos-art PATH] [--out FILE]
+#                      [--timeout S] [--mem 8G] [--no-host-gate]
+#                      [--keep-artifacts]
+# Concurrency > 1 must run inside one run-exclusive.sh acquisition (set
+# ACOS_ART_DATA); the lock is per suite, not per run.
 #
 # Exit: 0 = all expressible variants behaved as declared (UNSUPPORTED recorded);
 #       1 = false pass, wrong-variant mismatch, a correct variant failed, or the
@@ -76,7 +92,9 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import yaml
@@ -106,13 +124,15 @@ def parse_args(argv):
     opts = {"rounds": 1, "only": None, "acos": None, "acos_art": None,
             "out": None, "host_gate": True, "timeout": 180, "mem": "8G",
             "keep_artifacts": False, "artifacts": str(DEFAULT_ARTIFACT_DIR),
-            "sampler": str(ROOT / "tools/benchlib.py"),
+            "sampler": str(ROOT / "tools/benchlib.py"), "concurrency": 1,
             "interval": benchlib.MEMORY_SAMPLE_MS / 1000.0}
     i = 0
     while i < len(argv):
         a = argv[i]
         if a == "--rounds":
             i += 1; opts["rounds"] = int(argv[i])
+        elif a == "--concurrency":
+            i += 1; opts["concurrency"] = int(argv[i])
         elif a == "--only":
             i += 1; opts["only"] = {t.strip() for t in argv[i].split(",") if t.strip()}
         elif a == "--acos":
@@ -136,9 +156,9 @@ def parse_args(argv):
         elif a == "--keep-artifacts":
             opts["keep_artifacts"] = True
         elif a in ("-h", "--help"):
-            print("run-suite.sh [--rounds N] [--only T01,T02] [--acos PATH] "
-                  "[--acos-art PATH] [--out FILE] [--timeout S] [--mem 8G] "
-                  "[--artifacts DIR] [--sampler PATH] [--interval S] "
+            print("run-suite.sh [--rounds N] [--concurrency N] [--only T01,T02] "
+                  "[--acos PATH] [--acos-art PATH] [--out FILE] [--timeout S] "
+                  "[--mem 8G] [--artifacts DIR] [--sampler PATH] [--interval S] "
                   "[--no-host-gate] [--keep-artifacts]")
             raise SystemExit(0)
         else:
@@ -146,6 +166,8 @@ def parse_args(argv):
         i += 1
     if not (0.02 <= opts["interval"] <= 5.0):
         die("--interval must be 0.02..5.0 s")
+    if not (1 <= opts["concurrency"] <= 32):
+        die("--concurrency must be 1..32")
     return opts
 
 def sha256(path):
@@ -158,12 +180,13 @@ def sha256(path):
 # --------------------------------------------------------------------------- #
 # one measured variant run: fresh guarded scope + in-scope sampler
 # --------------------------------------------------------------------------- #
-def run_measured(cmd, env, mem_json, opts, label, inside_lock):
+def run_measured(cmd, env, mem_json, opts, label, inside_lock, register_dir=None):
     """Run `cmd` in its own guarded scope, sampled by benchlib sample-scope.
 
     Returns the sampler's JSON (or {} when no measurement was produced) plus the
     command's stdout/stderr and rc. Every run gets a NEW scope: guarded.sh is
-    invoked per run, never once for the suite.
+    invoked per run, never once for the suite. ``register_dir`` is the suite's
+    per-round job-scope registry the host-level monitor reads (W52).
     """
     mem_json.parent.mkdir(parents=True, exist_ok=True)
     info_dirs = [str(mem_json.parent)]
@@ -173,6 +196,7 @@ def run_measured(cmd, env, mem_json, opts, label, inside_lock):
                     "--out", str(mem_json), "--interval", str(opts["interval"]),
                     "--label", label]
                    + [x for d in info_dirs for x in ("--info-dir", d)]
+                   + (["--register-dir", str(register_dir)] if register_dir else [])
                    + ["--"] + cmd)
     wrapped = [str(ROOT / "tools/guarded.sh"), "--mem", opts["mem"], "--time",
                str(opts["timeout"]), "--"] + sampler_cmd
@@ -263,7 +287,14 @@ def verdict_error(verdict_obj, envelope):
                 "message": err.get("message"), "step": None, "step_index": None}
     return None
 
-def run_variant(task, kind, spec, opts, env, stamp_s, inside_lock, acos_bin):
+def run_round(task, kind, spec, opts, env, stamp_s, inside_lock, acos_bin, rnd):
+    """One measured variant run (one round) in its own fresh guarded scope.
+
+    Safe to call concurrently: every call owns a unique artifact dir, its own
+    sampler, and its own guarded scope. The only shared state is `ACOS_ART_DATA`
+    (the run lock's scratch dir), which the sampler filters by launcher-pid
+    ownership so another concurrent run's cgroup evidence is never charged here.
+    """
     scenario_rel = spec["scenario"]
     scenario = SUITE_DIR / scenario_rel
     if not scenario.exists():
@@ -273,62 +304,72 @@ def run_variant(task, kind, spec, opts, env, stamp_s, inside_lock, acos_bin):
     acos_art = opts["acos_art"] or env.get("ACOS_ART_BIN") or str(ROOT / "target/debug/acos-art")
     env = dict(env)
     env["ACOS_ART_BIN"] = acos_art
-    runs = []
-    for rnd in range(1, opts["rounds"] + 1):
-        run_dir = artifacts / f"r{rnd}"
-        run_dir.mkdir(parents=True, exist_ok=True)
-        mem_json = run_dir / "mem.json"
-        cmd = [acos_bin, "verify", str(scenario), "--engine", "art", "--json",
-               "--artifacts", str(run_dir)]
-        label = f"{task['id']}-{kind}"
-        measured = run_measured(cmd, env, mem_json, opts, label, inside_lock)
-        envelope = {}
+    run_dir = artifacts / f"r{rnd}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    mem_json = run_dir / "mem.json"
+    cmd = [acos_bin, "verify", str(scenario), "--engine", "art", "--json",
+           "--artifacts", str(run_dir)]
+    label = f"{task['id']}-{kind}"
+    register_dir = None
+    if opts["concurrency"] > 1:
+        register_dir = (Path(opts["artifacts"]) / stamp_s / "_registry" / f"r{rnd}")
+        register_dir.mkdir(parents=True, exist_ok=True)
+    measured = run_measured(cmd, env, mem_json, opts, label, inside_lock,
+                            register_dir=register_dir)
+    envelope = {}
+    try:
+        envelope = json.loads(measured["stdout"])
+    except json.JSONDecodeError:
+        pass
+    verdict_file = run_dir / "verdict.json"
+    verdict_obj = {}
+    if verdict_file.exists():
         try:
-            envelope = json.loads(measured["stdout"])
+            verdict_obj = json.loads(verdict_file.read_text())
         except json.JSONDecodeError:
-            pass
-        verdict_file = run_dir / "verdict.json"
-        verdict_obj = {}
-        if verdict_file.exists():
-            try:
-                verdict_obj = json.loads(verdict_file.read_text())
-            except json.JSONDecodeError:
-                verdict_obj = {}
-        verdict = verdict_obj.get("verdict")
-        if verdict is None:
-            # No verdict file: the run died before an evidence bundle (crash,
-            # guard, unsupported engine start). Use the envelope status.
-            verdict = envelope.get("status", "error")
-        error = verdict_error(verdict_obj, envelope)
-        # `wall_ms` is the verdict/executor wall the suite has always reported.
-        # The process wall (guest spawn -> clean shutdown) is recorded next to
-        # it, and `engine.json.timing` carries the per-step attribution.
-        effective_wall = (verdict_obj.get("resources") or {}).get("wall_ms",
-                                                                  measured["wall_ms"])
-        engine_timing = None
-        engine_file = run_dir / "engine.json"
-        if engine_file.exists():
-            try:
-                engine_report = json.loads(engine_file.read_text())
-                engine_timing = (engine_report.get("engine") or {}).get("timing") \
-                    or engine_report.get("timing")
-            except (json.JSONDecodeError, OSError):
-                engine_timing = None
-        mem = mem_block(measured["data"])
-        runs.append({
-            "round": rnd,
-            "rc": measured["rc"],
-            "verdict": verdict,
-            "error": error,
-            "wall_ms": effective_wall,
-            "process_wall_ms": measured["wall_ms"],
-            "engine_timing": engine_timing,
-            "mem": mem,
-            "artifacts": str(run_dir),
-            "stderr_tail": (measured["stderr_tail"] or "")[-1200:]
-                           if (measured["rc"] not in (0, 1) or not measured["data"])
-                           else None,
-        })
+            verdict_obj = {}
+    verdict = verdict_obj.get("verdict")
+    if verdict is None:
+        # No verdict file: the run died before an evidence bundle (crash,
+        # guard, unsupported engine start). Use the envelope status.
+        verdict = envelope.get("status", "error")
+    error = verdict_error(verdict_obj, envelope)
+    # `wall_ms` is the verdict/executor wall the suite has always reported.
+    # The process wall (guest spawn -> clean shutdown) is recorded next to
+    # it, and `engine.json.timing` carries the per-step attribution.
+    effective_wall = (verdict_obj.get("resources") or {}).get("wall_ms",
+                                                              measured["wall_ms"])
+    engine_timing = None
+    engine_file = run_dir / "engine.json"
+    if engine_file.exists():
+        try:
+            engine_report = json.loads(engine_file.read_text())
+            engine_timing = (engine_report.get("engine") or {}).get("timing") \
+                or engine_report.get("timing")
+        except (json.JSONDecodeError, OSError):
+            engine_timing = None
+    mem = mem_block(measured["data"])
+    return {
+        "round": rnd,
+        "rc": measured["rc"],
+        "verdict": verdict,
+        "error": error,
+        "wall_ms": effective_wall,
+        "process_wall_ms": measured["wall_ms"],
+        "engine_timing": engine_timing,
+        "mem": mem,
+        "artifacts": str(run_dir),
+        "stderr_tail": (measured["stderr_tail"] or "")[-1200:]
+                       if (measured["rc"] not in (0, 1) or not measured["data"])
+                       else None,
+    }
+
+
+def variant_record(task, kind, spec, runs):
+    """Aggregate one variant's rounds into the suite record (unchanged shape)."""
+    scenario_rel = spec["scenario"]
+    scenario = SUITE_DIR / scenario_rel
+    runs = sorted(runs, key=lambda r: r.get("round") or 0)
     walls = [r["wall_ms"] or 0 for r in runs]
     process_walls = [r["process_wall_ms"] or 0 for r in runs]
     peaks = [r["mem"]["peak_mib_all_cgroups"] for r in runs
@@ -371,6 +412,13 @@ def run_variant(task, kind, spec, opts, env, stamp_s, inside_lock, acos_bin):
         },
     }
 
+
+def run_variant(task, kind, spec, opts, env, stamp_s, inside_lock, acos_bin):
+    """Sequential path (--concurrency 1): every round of one variant in turn."""
+    runs = [run_round(task, kind, spec, opts, env, stamp_s, inside_lock, acos_bin, rnd)
+            for rnd in range(1, opts["rounds"] + 1)]
+    return variant_record(task, kind, spec, runs)
+
 # --------------------------------------------------------------------------- #
 # aggregation
 # --------------------------------------------------------------------------- #
@@ -395,6 +443,14 @@ def verified_map(active):
     for t in active:
         good = t.get("good") or {}
         out[t["id"]] = (good.get("verdict") == "pass")
+    return out
+
+def round_verified_map(active, rnd):
+    """Per-round numerator: the good twin passed in THAT round."""
+    out = {}
+    for t in active:
+        run = run_for(t, "good", rnd)
+        out[t["id"]] = bool(run and run.get("verdict") == "pass")
     return out
 
 def task_costs(active, field, rnd=None):
@@ -423,7 +479,8 @@ def denominators_block(active, rounds, false_pass):
         per_round = []
         for rnd in range(1, rounds + 1):
             per_round.append(benchlib.m11_denominator(
-                task_costs(active, field, rnd), verified_map(active), bar=LEGACY_BAR))
+                task_costs(active, field, rnd), round_verified_map(active, rnd),
+                bar=LEGACY_BAR))
         head = benchlib.m11_denominator(task_costs(active, field), verified_map(active),
                                         bar=LEGACY_BAR)
         round_m11 = [x["m11_tasks_per_gib_min"] for x in per_round
@@ -434,9 +491,14 @@ def denominators_block(active, rounds, false_pass):
             head["zeroed_by_false_pass"] = True
         head["per_round"] = per_round
         head["round_m11"] = round_m11
+        head["m11_median"] = (benchlib.percentile(round_m11, 50)
+                              if round_m11 else None)
         head["round_spread_pct"] = (
             round(100.0 * (max(round_m11) - min(round_m11)) / head["m11_tasks_per_gib_min"], 3)
             if len(round_m11) >= 2 and head["m11_tasks_per_gib_min"] else None)
+        head["ci95_low_above_required"] = bool(
+            head.get("ci95_low") is not None
+            and head["ci95_low"] >= head["required_tasks_per_gib_min"])
         out[key] = {
             "name": label,
             "metric_type": metric_type,
@@ -481,6 +543,9 @@ def main():
             die(f"{task['id']}: prebuilt fixture APK missing: {apk} (do not rebuild fixtures for the suite)")
 
     inside_lock = bool(os.environ.get("ACOS_ART_DATA"))
+    if opts["concurrency"] > 1 and not inside_lock:
+        die("--concurrency > 1 requires one suite-level ART lock: run under "
+            "tools/art-runtime/run-exclusive.sh (it sets ACOS_ART_DATA)")
     gate = benchlib.host_gate(ROOT, check_lock=not inside_lock) if opts["host_gate"] else None
     contaminated = bool(gate and not gate["ok"])
     if contaminated:
@@ -499,6 +564,8 @@ def main():
           f"inside_lock={inside_lock}, fresh_scope_per_variant=guarded.sh, "
           f"sampler={opts['sampler']}, stamp={stamp_s}")
     task_records = []
+    rec_by_id = {}
+    active_tasks = []
     for task in tasks:
         rec = {
             "id": task["id"],
@@ -515,19 +582,23 @@ def main():
         }
         if task.get("apk"):
             rec["apk_sha256_actual"] = sha256(ROOT / task["apk"])
+        task_records.append(rec)
+        rec_by_id[task["id"]] = rec
         if task.get("status") == "UNSUPPORTED":
             rec.update({"verdict": "unsupported", "error": {"code": "UNSUPPORTED_EXPRESSION",
                         "message": task.get("reason") or "not expressible in the scenario format"},
                         "wall_ms": 0, "task_ok": True, "false_pass": False,
                         "good": None, "wrong": None})
-            task_records.append(rec)
             print(f"{task['id']:4s} UNSUPPORTED  {rec['error']['code']}")
             continue
-        good = run_variant(task, "good", {**task["good"], "expected": task["good"].get("expected", "pass"),
-                                         "error": task["good"].get("error")},
-                           opts, env, stamp_s, inside_lock, acos_bin)
-        wrong = run_variant(task, "wrong", task["wrong"], opts, env, stamp_s,
-                            inside_lock, acos_bin)
+        active_tasks.append(task)
+
+    def good_spec(task):
+        return {**task["good"], "expected": task["good"].get("expected", "pass"),
+                "error": task["good"].get("error")}
+
+    def finish_task(task, good, wrong):
+        rec = rec_by_id[task["id"]]
         task_ok = bool(good["task_ok"] and wrong["task_ok"])
         rec.update({
             "verdict": "pass" if task_ok else "fail",
@@ -539,7 +610,6 @@ def main():
             "good": good,
             "wrong": wrong,
         })
-        task_records.append(rec)
         g_mem = good["mem"]["primary_anon_shmem_gib_min"]
         w_mem = wrong["mem"]["primary_anon_shmem_gib_min"]
         print(f"{task['id']:4s} good={good['verdict']:<11s} "
@@ -549,6 +619,84 @@ def main():
               f"{good['wall_ms'] + wrong['wall_ms']} ms  "
               f"mem={_fmt(g_mem)}+{_fmt(w_mem)} GiB.min  "
               f"guest_scopes={good['mem']['guest_scope_count']}/{wrong['mem']['guest_scope_count']}")
+
+    host_rounds = []
+    if opts["concurrency"] == 1:
+        for task in active_tasks:
+            good = run_variant(task, "good", good_spec(task), opts, env, stamp_s,
+                               inside_lock, acos_bin)
+            wrong = run_variant(task, "wrong", task["wrong"], opts, env, stamp_s,
+                                inside_lock, acos_bin)
+            finish_task(task, good, wrong)
+    else:
+        runs_by = {(t["id"], k): [] for t in active_tasks for k in ("good", "wrong")}
+        for rnd in range(1, opts["rounds"] + 1):
+            round_started = utc_now()
+            round_t0 = time.time()
+            monitor = benchlib.HostScopeMonitor(
+                self_job=benchlib.cgroup_path(), interval=opts["interval"],
+                discover_every=1,
+                registry_dirs=[Path(opts["artifacts"]) / stamp_s / "_registry" / f"r{rnd}"])
+            monitor.start()
+            jobs = []
+            for task in active_tasks:
+                jobs.append((task, "good", good_spec(task)))
+                jobs.append((task, "wrong", task["wrong"]))
+            outcomes = []
+            with ThreadPoolExecutor(max_workers=opts["concurrency"]) as pool:
+                futures = {pool.submit(run_round, task, kind, spec, opts, env, stamp_s,
+                                       inside_lock, acos_bin, rnd): (task, kind)
+                           for task, kind, spec in jobs}
+                for fut in as_completed(futures):
+                    task, kind = futures[fut]
+                    outcomes.append((task, kind, fut.result()))
+            monitor.closing_sample()
+            monitor.stop_event.set()
+            monitor.join(timeout=5)
+            round_finish = utc_now()
+            round_wall = time.time() - round_t0
+            for task, kind, run in outcomes:
+                runs_by[(task["id"], kind)].append(run)
+            per_run = sum(r["mem"]["primary_anon_shmem_gib_min"] or 0.0
+                          for _, _, r in outcomes)
+            overhead = sum(r["mem"]["sampler_overhead_gib_min"] or 0.0
+                           for _, _, r in outcomes)
+            host_raw = monitor.integral()
+            agree = benchlib.scope_agreement(per_run, host_raw,
+                                             sampler_overhead=overhead, tolerance=NOISE)
+            verified_round = sum(1 for t, k, r in outcomes
+                                 if k == "good" and r["verdict"] == "pass")
+            seen_scopes = set()
+            max_active = 0
+            for s in monitor.samples:
+                seen_scopes.update(s["cgroups"])
+                max_active = max(max_active, len(s["cgroups"]))
+            host_rounds.append({
+                "round": rnd,
+                "utc_start": round_started,
+                "utc_finish": round_finish,
+                "wall_s": round(round_wall, 3),
+                "runs": len(outcomes),
+                "concurrency": opts["concurrency"],
+                "verified_good": verified_round,
+                "scope_agreement": agree,
+                "host_samples": len(monitor.samples),
+                "host_discovered_scopes": len(seen_scopes),
+                "host_max_active_scopes": max_active,
+                "host_peak_mib": (round(monitor.peak() / benchlib.MIB, 3)
+                                  if monitor.peak() is not None else None),
+                "m11": (verified_round / per_run) if per_run else None,
+            })
+            print(f"round {rnd}: {len(outcomes)} runs at N={opts['concurrency']} in "
+                  f"{round_wall:.1f}s, verified_good={verified_round}, "
+                  f"per_run={_fmt(per_run)} host={_fmt(agree['host_gib_min'])} GiB.min "
+                  f"(diff {agree['rel_diff_pct']}% vs {agree['tolerance'] * 100:.0f}% tol)")
+        for task in active_tasks:
+            good = variant_record(task, "good", good_spec(task),
+                                  runs_by[(task["id"], "good")])
+            wrong = variant_record(task, "wrong", task["wrong"],
+                                   runs_by[(task["id"], "wrong")])
+            finish_task(task, good, wrong)
 
     # ---- summary / gates ---------------------------------------------------
     active = [t for t in task_records if t["status"] != "UNSUPPORTED"]
@@ -597,9 +745,61 @@ def main():
                   if r["mem"]["infra_file_cache_gib_min"] is not None]
     if infra_vals:
         infra_total = benchlib._round(sum(infra_vals) / max(1, opts["rounds"]))
+
+    # W52 host-level cross-check: the alternative denominator over the same
+    # concurrent windows, discovered independently of the per-run samplers.
+    agreement_overall = None
+    if host_rounds:
+        per_run = sum(r["scope_agreement"]["per_run_sum_gib_min"] or 0.0
+                      for r in host_rounds)
+        host_raw = sum(r["scope_agreement"]["host_gib_min_raw"] or 0.0
+                       for r in host_rounds)
+        overhead = sum(r["scope_agreement"]["sampler_overhead_gib_min"] or 0.0
+                       for r in host_rounds)
+        agreement_overall = benchlib.scope_agreement(
+            per_run, host_raw, sampler_overhead=overhead, tolerance=NOISE)
+        agreement_overall["rounds"] = len(host_rounds)
+        agreement_overall["all_rounds_within_noise"] = all(
+            r["scope_agreement"]["within_noise"] for r in host_rounds)
+        agreement_overall["ok"] = bool(agreement_overall["within_noise"]
+                                       and agreement_overall["all_rounds_within_noise"])
+        agreement_overall["per_round"] = [r["scope_agreement"] for r in host_rounds]
+
+    spread_ok = (primary.get("round_spread_pct") is None
+                 or primary["round_spread_pct"] <= 15.0)
+    agreement_ok = agreement_overall is None or bool(agreement_overall["ok"])
+    gate_eligible = bool(opts["concurrency"] == 10 and opts["rounds"] >= 3
+                         and primary["m11_tasks_per_gib_min"] is not None
+                         and scope_check["ok"] and not contaminated
+                         and false_pass == 0 and agreement_ok and spread_ok)
+    gate_reasons = []
+    if opts["concurrency"] != 10:
+        gate_reasons.append("N=%d (gate requires N=10)" % opts["concurrency"])
+    if opts["rounds"] < 3:
+        gate_reasons.append("rounds=%d (gate requires 3)" % opts["rounds"])
+    if contaminated:
+        gate_reasons.append("host gate failed")
+    if not scope_check["ok"]:
+        gate_reasons.append("scope check failed")
+    if false_pass:
+        gate_reasons.append("false pass > 0")
+    if not agreement_ok:
+        gate_reasons.append("host-level/per-run integrals disagree beyond noise")
+    if not spread_ok:
+        gate_reasons.append("round spread > 15 %")
+
     verdict = "INVALID_SCOPE"
     if scope_check["ok"] and primary["m11_tasks_per_gib_min"] is not None:
-        verdict = "PASS" if primary["passes_bar"] else "FAIL"
+        if false_pass:
+            verdict = "FAIL"
+        elif not spread_ok:
+            verdict = "NOISY"
+        elif not agreement_ok:
+            verdict = "SCOPE_MISMATCH"
+        elif primary.get("ci95_low_above_required"):
+            verdict = "PASS"
+        else:
+            verdict = "FAIL"
     m11_block = {
         "formula": "M11 = verified_tasks / sum(primary anon+shmem GiB.min); primary = "
                    "job cgroup + every guest cgroup memory.stat (anon+shmem), 100 ms "
@@ -609,37 +809,52 @@ def main():
         "legacy_derived_bar_tasks_per_gib_min": LEGACY_BAR,
         "legacy_derivation": "((206 MiB / 10) + 112.1 MiB) / 1024 * (19 s / 60) "
                              "= 0.0410 GiB*min/task => 24.4 tasks/GiB*min",
+        "legacy_bar_inputs": {
+            "core": "206.0 MiB, legacy W1 diet bare core, cgroup anon+shmem, settled 60 s",
+            "marginal": "112.1 MiB, legacy N=5->10 marginal, cgroup memory.current, warm",
+            "wall": "19 s, legacy U2 dev-loop wall (build->install->...), warm/install-bound",
+            "types_mixed": True,
+            "comparable_with_anon_shmem_primary": False,
+        },
         "noise": NOISE,
         "required_tasks_per_gib_min": round(LEGACY_BAR * (1 + NOISE), 4),
         "verified_tasks": good_pass,
         "false_pass_count": false_pass,
         "false_pass_zeroes_m11": bool(false_pass),
         "m11_tasks_per_gib_min": primary["m11_tasks_per_gib_min"],
+        "m11_median": primary.get("m11_median"),
         "gib_min": primary["gib_min"],
         "ci95_low": primary["ci95_low"],
         "ci95_high": primary["ci95_high"],
         "ci95_width_pct": primary["ci95_width_pct"],
+        "ci95_low_above_required": primary.get("ci95_low_above_required"),
         "rounds": opts["rounds"],
         "round_m11": primary["round_m11"],
         "round_spread_pct": primary["round_spread_pct"],
+        "round_spread_ok": spread_ok,
         "above_legacy_bar": primary["passes_bar"],
         "verdict_vs_bar": verdict,
+        "verdict_rule": "PASS only if the CI95 low >= bar*(1+noise), the round spread "
+                        "<= 15 %, the scope check passes, false_pass is 0 and the "
+                        "host-level/per-run integrals agree within noise",
         "denominators": denoms,
+        "host_level_alternative": agreement_overall,
+        "n_concurrent": opts["concurrency"],
+        "gate_eligible": gate_eligible,
+        "gate_eligible_reason": ("; ".join(gate_reasons) if gate_reasons else
+                                 "N=10 x 3 rounds, release, scope check ok, no false "
+                                 "pass, host cross-check within noise"),
         "infra_file_cache_gib_min": infra_total,
         "infra_file_cache_note": "shared read-only page cache (file - shmem) across the "
                                  "same runs; reported separately and never charged to a task",
         "scope_check": scope_check,
-        "n_concurrent": 1,
-        "gate_eligible": False,
-        "gate_eligible_reason": "W45 correctness run: N=1 (the gateable N=10 x 3-round "
-                                "number comes from the bench-session suite). Costs and CI "
-                                "are still recorded with the decided denominator.",
         "note": "Only the primary anon+shmem number is compared with the 24.4 bar. "
                 "resident/job_all/scope_runner_formula are reported with gate_uses=false.",
     }
     provenance = benchlib.provenance(
         ROOT, binaries=[acos_bin, acos_art], profile=None, gate=gate, engine="art",
-        extra={"suite": index.get("suite"), "stamp": stamp_s})
+        extra={"suite": index.get("suite"), "stamp": stamp_s,
+               "n_concurrent": opts["concurrency"]})
     result = {
         "schema": "acos-suite/2",
         "suite": index.get("suite"),
@@ -647,8 +862,9 @@ def main():
         "utc_start": started,
         "utc_finish": utc_now(),
         "engine": "art",
-        "n_concurrent": 1,
+        "n_concurrent": opts["concurrency"],
         "rounds": opts["rounds"],
+        "concurrent_rounds": host_rounds,
         "inside_exclusive_lock": inside_lock,
         "host_gate": gate,
         "provenance": provenance,
@@ -664,6 +880,10 @@ def main():
             "primary_denominator": "anon+shmem",
             "infra_file_cache_charged": False,
             "artifacts_kept": bool(opts["keep_artifacts"]),
+            "concurrency": opts["concurrency"],
+            "concurrent_scopes": "one guarded scope per run, N runs at once",
+            "host_level_cross_check": ("independent union of all job+guest cgroups over "
+                                       "each concurrent window" if host_rounds else None),
         },
         "tasks": task_records,
         "summary": summary,
@@ -709,7 +929,17 @@ def main():
     print(f"M11(primary anon+shmem)={_fmt(primary['m11_tasks_per_gib_min'])} tasks/GiB.min "
           f"gib_min={_fmt(primary['gib_min'])} "
           f"ci95={_fmt(primary['ci95_low'])}..{_fmt(primary['ci95_high'])} "
-          f"bar={LEGACY_BAR} verdict={verdict}")
+          f"bar={LEGACY_BAR} verdict={verdict} gate_eligible={gate_eligible}")
+    print(f"  n_concurrent={opts['concurrency']} rounds={opts['rounds']} "
+          f"round_m11={primary['round_m11']} spread={primary['round_spread_pct']}% "
+          f"ci_low_above_required={primary.get('ci95_low_above_required')}")
+    if agreement_overall is not None:
+        print(f"  host-level cross-check: per_run={_fmt(agreement_overall['per_run_sum_gib_min'])} "
+              f"host={_fmt(agreement_overall['host_gib_min'])} GiB.min "
+              f"diff={agreement_overall['rel_diff_pct']}% "
+              f"tol={agreement_overall['tolerance'] * 100:.0f}% "
+              f"agree={agreement_overall['within_noise']} "
+              f"all_rounds={agreement_overall['all_rounds_within_noise']}")
     for key, blk in denoms.items():
         mm = blk["m11"]
         print(f"  {key:22s} {blk['name']:48s} gib_min={_fmt(mm['gib_min'])} "
@@ -726,11 +956,13 @@ def main():
           f"kept={result['artifacts']['kept_bytes'] / (1 << 20):.1f} MiB")
     print(f"wrote {out}")
     if (false_pass > 0 or good_fail > 0 or summary["task_ok_count"] != len(active)
-            or not scope_check["ok"]):
-        print("run-suite: NOT ACCEPTED (see tasks[] and m11.scope_check)", file=sys.stderr)
+            or not scope_check["ok"] or not agreement_ok):
+        print("run-suite: NOT ACCEPTED (see tasks[], m11.scope_check, "
+              "m11.host_level_alternative)", file=sys.stderr)
         raise SystemExit(1)
     print("run-suite: ACCEPTED (all expressible correct variants pass; all wrong variants "
-          "fail with the declared code; one fresh scope per variant)")
+          "fail with the declared code; one fresh scope per variant; host-level integral "
+          "agrees with the per-run sum)")
     raise SystemExit(0)
 
 def _fmt(v):
