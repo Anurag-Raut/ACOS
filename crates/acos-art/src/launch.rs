@@ -699,6 +699,17 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     let cap = stream_cap_from_env();
     let (otx, orx) = mpsc::channel::<(u8, TailBuffer)>();
     let probe_state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
+    // W59: one trace sink for the whole interactive session. The guest's looper
+    // lines and the host's tap markers share `started`, so the two clocks are
+    // directly comparable (both are the same CLOCK_MONOTONIC on this host).
+    if interactive {
+        if let Some(path) = std::env::var_os("ACOS_ART_INPUT_TRACE") {
+            let path = PathBuf::from(path);
+            if let Some(sink) = TraceSink::open(&path, started) {
+                probe_state.lock().unwrap_or_else(|e| e.into_inner()).trace = Some(sink);
+            }
+        }
+    }
     let out_pipe = child.stdout.take().expect("piped stdout");
     let otx2 = otx.clone();
     let probe_for_out = Arc::clone(&probe_state);
@@ -1147,6 +1158,54 @@ struct ProbeState {
     /// Probe lines that were not valid JSON; counted, never silent (W36 found
     /// the two-root separator bug this way).
     bad_probe_lines: u64,
+    /// W59: optional latency trace sink (`ACOS_ART_INPUT_TRACE=<path>`). The
+    /// guest's own stdout (its `ACOSLAUNCH TRACE` looper lines) and the host's
+    /// input publish/ack markers are written here with one monotonic clock, so
+    /// a slow tap can be attributed to a guest stage instead of guessed. Off
+    /// unless the variable names a file; no reply changes.
+    trace: Option<TraceSink>,
+}
+
+/// W59 latency trace: `elapsed_us tag text` per line, written under one lock
+/// with the same `Instant` base as the session spawn.
+struct TraceSink {
+    file: std::fs::File,
+    start: std::time::Instant,
+    pid: u32,
+}
+
+impl TraceSink {
+    fn open(path: &std::path::Path, start: std::time::Instant) -> Option<Self> {
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .ok()?;
+        Some(TraceSink {
+            file,
+            start,
+            pid: std::process::id(),
+        })
+    }
+
+    fn line(&mut self, tag: &str, text: &str) {
+        use std::io::Write;
+        let _ = writeln!(
+            self.file,
+            "{:>9}us pid={} {} {}",
+            self.start.elapsed().as_micros(),
+            self.pid,
+            tag,
+            text
+        );
+    }
+}
+
+fn trace_host(state: &Arc<std::sync::Mutex<ProbeState>>, text: &str) {
+    let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(trace) = state.trace.as_mut() {
+        trace.line("HOST", text);
+    }
 }
 
 fn host_ms() -> u64 {
@@ -1517,6 +1576,15 @@ fn drain_tee_lines<R: std::io::Read>(
             continue;
         };
         let trimmed = text.trim_end();
+        // W59: keep the guest's own timing evidence (its `ACOSLAUNCH TRACE`
+        // looper lines and stall dumps) next to the host's input markers. Only
+        // small, human-readable lines go in; probe JSON is already in the tree.
+        if trimmed.starts_with("ACOSLAUNCH ") || trimmed.starts_with("ACOSPROBE-STALL") {
+            let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(trace) = state.trace.as_mut() {
+                trace.line("GUEST", trimmed);
+            }
+        }
         if let Some(json) = trimmed.strip_prefix(LIVE_PROBE_PREFIX) {
             let parsed = serde_json::from_str::<serde_json::Value>(json);
             if let Err(e) = &parsed {
@@ -1777,6 +1845,10 @@ fn wait_for_settled_observation(
         }
         let generation = latest_generation(live);
         if generation > last_generation {
+            trace_host(
+                probe_state,
+                &format!("settle generation {last_generation}->{generation}"),
+            );
             last_generation = generation;
             last_change = Instant::now();
             last_change_ms = host_ms();
@@ -1805,6 +1877,14 @@ fn wait_for_settled_observation(
                 }
             };
             if pixels_changed {
+                trace_host(
+                    probe_state,
+                    &format!(
+                        "settle ready gen={generation} probe_seq={} quiet_ms={}",
+                        probe.as_ref().map(|p| p.seq).unwrap_or(0),
+                        last_change.elapsed().as_millis()
+                    ),
+                );
                 return SettleEnd::Settled(Settled {
                     probe: probe.expect("probe checked above"),
                     generation,
@@ -2198,6 +2278,17 @@ fn interactive_serve(
                 };
                 let p0 = latest_probe(probe_state).map(|p| p.seq).unwrap_or(0);
                 let g0 = latest_generation(live);
+                // W59: the guest's ack is the end of the host-visible input
+                // phase; the looper lines the guest printed in between are the
+                // stages. Both are stamped on the same monotonic base.
+                let injection_started = Instant::now();
+                trace_host(
+                    probe_state,
+                    &format!(
+                        "{cmd} publish_begin x={x} y={y} ack_wait_ms={}",
+                        ack_wait.as_millis()
+                    ),
+                );
                 let injected = match (cmd, key_code) {
                     ("tap", _) => live.input.tap(x, y, ack_wait),
                     ("type_text", _) => live
@@ -2207,7 +2298,22 @@ fn interactive_serve(
                     _ => unreachable!(),
                 };
                 let injected = match injected {
-                    Ok(injected) => injected,
+                    Ok(injected) => {
+                        trace_host(
+                            probe_state,
+                            &format!(
+                                "{cmd} acks_returned total_ms={} seqs={:?} acks={:?}",
+                                injection_started.elapsed().as_millis(),
+                                injected.seqs,
+                                injected
+                                    .acks
+                                    .iter()
+                                    .map(|a| (a.seq, a.handled, a.latency_us))
+                                    .collect::<Vec<_>>()
+                            ),
+                        );
+                        injected
+                    }
                     Err(error) => {
                         let reply = serde_json::json!({
                             "ok": false, "cmd": cmd, "code": "INPUT_UNAVAILABLE",
@@ -2288,6 +2394,14 @@ fn interactive_serve(
                         });
                     }
                 };
+                trace_host(
+                    probe_state,
+                    &format!(
+                        "{cmd} settle_done after_ms={} settled={}",
+                        injection_started.elapsed().as_millis(),
+                        settled_probe.is_some()
+                    ),
+                );
                 if settled_probe.is_none() {
                     let reply = serde_json::json!({
                         "ok": false, "cmd": cmd, "code": "NO_FRESH_FRAME",
@@ -2916,6 +3030,7 @@ mod probe_line_tests {
                 guest_launch: self.guest_launch.clone(),
                 oversized_lines: self.oversized_lines,
                 bad_probe_lines: self.bad_probe_lines,
+                trace: None,
             }
         }
     }
