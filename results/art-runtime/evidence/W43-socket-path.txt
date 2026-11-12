@@ -1,0 +1,22 @@
+# W43: `acos-art: io: socket path too long` (W41 report) reproduced and fixed
+#
+# AF_UNIX sun_path is 108 bytes. Every socket lived under the caller's --data
+# dir, and run-exclusive.sh derives that from the task name:
+#   .cache/art-locks/data-<task>-<pid>/runs/<pid>-<seq>/sock/acos-launch.sock
+#
+# BEFORE (release binary 2026-11-12T03:36:48Z, HEAD aa413a0 + W43 launch/logd):
+#   $ tools/art-runtime/run-exclusive.sh --task W43-long-task-name-23 -- \
+#       tools/guarded.sh --mem 8G --time 300 -- acos verify --scenario \
+#       scenarios/v2-art-counter.yaml --apk fixtures/build/apps/counter.apk \
+#       --engine art --artifacts .cache/w43-repro/longname --json
+#   -> status error, code INTERNAL, stderr tail ends: "acos-art: io: socket path too long"
+#   (the caller can only report `INTERNAL: acos-art session exited`)
+#
+# AFTER (same command, binary 2026-11-12T03:49:30Z with ShortSocketDir):
+#   --task W43-long-task-name-23                      -> status pass
+#   --task W43-a-very-long-task-name-that-is-64-...   -> status pass
+#
+# Sockets are now bound in /run/user/<uid>/acos-art-<pid>-<seq>/ (fallback
+# <repo>/.cache/art-sock/<pid>-<seq>/), independent of task name and --data
+# length; the sandbox still binds them at the same guest paths
+# (/dev/socket, /data/acos-launch.sock). Directory removed on drop.

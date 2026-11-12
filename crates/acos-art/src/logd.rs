@@ -128,6 +128,11 @@ pub struct Logd {
     stats: Arc<Mutex<LogStats>>,
     first_dropped: Arc<Mutex<Option<LogEntry>>>,
     stop: Arc<AtomicBool>,
+    /// W43: a connected handle used to *wake* the reader out of its 100 ms
+    /// `recv` timeout. Without it, `finish_capped` waited out the current
+    /// timeout on every launch: the teardown split measured 90 ms of the
+    /// 110 ms guest-exit -> teardown wall in exactly that join.
+    wake: UnixDatagram,
     handle: Option<JoinHandle<()>>,
     received: u64,
 }
@@ -150,6 +155,11 @@ impl Logd {
         let stats = Arc::new(Mutex::new(LogStats { cap, ..LogStats::default() }));
         let first_dropped: Arc<Mutex<Option<LogEntry>>> = Arc::new(Mutex::new(None));
         let stop = Arc::new(AtomicBool::new(false));
+        // A separate unconnected socket that can send to `path`; a zero-length
+        // datagram is the wake token (it parses as no entry, so nothing is
+        // fabricated).
+        let wake = UnixDatagram::unbound()?;
+        wake.connect(&path)?;
         let e = Arc::clone(&entries);
         let st = Arc::clone(&stats);
         let fd = Arc::clone(&first_dropped);
@@ -159,8 +169,17 @@ impl Logd {
             let mut buf = vec![0u8; 4096];
             let mut draining = false;
             loop {
+                // A stop request shortens the blocking window; the wake
+                // datagram below makes this immediate in the normal case.
+                if s.load(Ordering::Relaxed) {
+                    draining = true;
+                    let _ = sock.set_read_timeout(Some(Duration::from_millis(5)));
+                }
                 match sock.recv(&mut buf) {
                     Ok(n) => {
+                        if draining && n == 0 {
+                            break; // the wake token: nothing left to drain
+                        }
                         if let Some(entry) = parse_frame(&buf[..n]) {
                             let mut v = e.lock().unwrap();
                             let mut s = st.lock().unwrap();
@@ -204,10 +223,6 @@ impl Logd {
                         if draining {
                             break;
                         }
-                        if s.load(Ordering::Relaxed) {
-                            draining = true;
-                            let _ = sock.set_read_timeout(Some(Duration::from_millis(5)));
-                        }
                     }
                     Err(_) => break,
                 }
@@ -219,6 +234,7 @@ impl Logd {
             stats,
             first_dropped,
             stop,
+            wake,
             handle: Some(handle),
             received: 0,
         })
@@ -239,6 +255,8 @@ impl Logd {
     /// Stop the thread and return the retained entries **and** the accounting.
     pub fn finish_capped(mut self) -> LogBatch {
         self.stop.store(true, Ordering::Relaxed);
+        // Wake the reader now instead of waiting out its 100 ms idle timeout.
+        let _ = self.wake.send(&[]);
         if let Some(h) = self.handle.take() {
             let _ = h.join();
         }
@@ -379,6 +397,25 @@ mod tests {
         assert_eq!(batch.stats.total, batch.stats.kept as u64 + batch.stats.dropped);
         assert!(batch.stats.dropped > 0, "a spammer must trip the cap: {:?}", batch.stats);
         assert!(batch.first_dropped.is_some(), "the first dropped entry is kept as a sample");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stopping_an_idle_sink_does_not_wait_out_the_read_timeout() {
+        // W43 teardown split: guest-exit -> teardown was 110 ms p50 and 90 ms of
+        // it was this join waiting out the reader's 100 ms idle `recv` timeout.
+        // The wake datagram makes the stop prompt; without it this test fails.
+        let dir = std::env::temp_dir().join(format!("acos-art-logd-stop-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let logd = Logd::start_with_cap(&dir, 16).unwrap();
+        let t = std::time::Instant::now();
+        let batch = logd.finish_capped();
+        let elapsed = t.elapsed();
+        assert!(batch.entries.is_empty(), "an idle sink keeps no entries");
+        assert!(
+            elapsed < Duration::from_millis(80),
+            "stopping an idle sink took {elapsed:?}: the 100 ms idle timeout was not woken"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

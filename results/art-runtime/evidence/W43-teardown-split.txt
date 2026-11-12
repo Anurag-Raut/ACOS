@@ -1,0 +1,30 @@
+# W43 teardown split: guest-exit -> teardown, 10 launches (counter.apk, release,
+# .cache/w43-wt-target, N=1 reps=10, ACOS_ART_STAGE_TIMING=1)
+# Raw: .cache/w43-repro/teardown/rep-*/s0/session-stderr.log (pruned after parse)
+#
+# BEFORE the W43 logd wake (binary built 2026-11-12T03:34Z, 20 sessions, load):
+#   guest-exit            p50 5410 ms
+#   teardown-streams      p50 5420 ms   (streams 10 ms)
+#   teardown-logd         p50 5510 ms   (logd join 90 ms  <-- the avoidable part)
+#   teardown-peer         p50 5510 ms   (peer 0 ms)
+#   teardown              p50 5510 ms   (markers 0 ms)
+#   guest-exit -> teardown total: 100 ms (W39 measured 110 ms p50)
+#
+# AFTER (binary built 2026-11-12T03:36:48Z, 10 launches, idle host):
+#   guest-spawned         p50 30 ms
+#   guest-exit            p50 5065 ms
+#   teardown-streams      p50 5070 ms
+#   teardown-logd         p50 5075 ms
+#   teardown-peer         p50 5075 ms
+#   teardown              p50 5075 ms
+#   teardown-evidence     p50 5075 ms
+#
+#   guest-exit -> streams            p50 0 ms   max 10
+#   streams -> logd                  p50 10 ms  max 10
+#   logd -> peer                     p50 0 ms   max 0
+#   guest-exit -> evidence (total)   p50 10 ms  max 20
+#
+# Root cause of the 90 ms: Logd's reader blocks in recv() with a 100 ms idle
+# read timeout; finish_capped() set the stop flag and then joined, so every
+# launch waited out the current timeout. W43 sends a zero-length wake datagram
+# and shortens the timeout once the stop flag is seen (logd.rs).

@@ -282,13 +282,44 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     fs::create_dir_all(run.dir("app-data").join(&package))?;
     let out = opts.out.clone().unwrap_or_else(|| staging.clone());
     fs::create_dir_all(&out)?;
+    // W43: a full scratch disk is a host condition and a structured, retryable
+    // refusal *before* any guest starts (the 2026-11-12 03:23Z ENOSPC window
+    // produced `exit status: 1` guests, `INTERNAL: cannot write the C1 capture`
+    // and a caller-side panic instead).
+    {
+        let free = disk_free_bytes(&out);
+        let min = env_u64("ACOS_ART_MIN_DISK_MB", 512) * 1024 * 1024;
+        if disk_full_for_run(free, min) {
+            let free = free.unwrap_or(0);
+            let result = disk_full_result(opts, &package, free, min);
+            write_session_exit(&out, &result, None);
+            // An interactive caller waits for a *ready line*: refusing without
+            // one would look like a dead session (`INTERNAL`) to it. Name the
+            // host condition on the protocol instead.
+            if std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some() {
+                protocol_write(&serde_json::json!({
+                    "ok": false, "cmd": "ready", "code": "HOST_DISK_FULL",
+                    "retryable": true,
+                    "error": format!(
+                        "the scratch filesystem has {free} bytes free, below ACOS_ART_MIN_DISK_MB={} MiB",
+                        min / 1024 / 1024
+                    ),
+                }));
+            }
+            return Ok(result);
+        }
+    }
+    install_session_panic_hook(&out);
 
     crate::Props::android34().write(&root.data.join(crate::props::PROPS_FILE))?;
-    let logd = Logd::start(&run.dir("socket")).map_err(Error::Io)?;
+    // W43: sockets live in a short runtime dir, never under the caller's data
+    // path (a long `--data`/task name must not turn into a bind() failure).
+    let sockets = ShortSocketDir::new().map_err(Error::Io)?;
+    let logd = Logd::start(&sockets.0).map_err(Error::Io)?;
     crate::stage("props-logd");
 
     // --- peer (in-process, real ServiceHost) -------------------------------
-    let sock = run.dir("sock").join("acos-launch.sock");
+    let sock = sockets.0.join("peer.sock");
     let _ = fs::remove_file(&sock);
     let listener = listen(&sock.to_string_lossy()).map_err(Error::Io)?;
     // A guest that dies before connecting (fail-closed guard, SIGSYS audit)
@@ -554,7 +585,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         "/data/libacoshw.so",
     );
     sb.ro_bind(&driver, "/data/lib/libacos_binder_driver.so");
-    sb.rw_bind(run.dir("socket"), "/dev/socket");
+    sb.rw_bind(&sockets.0, "/dev/socket");
     // The importer socket is the only writable file the peer needs in /data.
     sb.rw_bind(&sock, "/data/acos-launch.sock");
     sb.env(
@@ -762,7 +793,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         cgroup.kill();
     }
     let wall_ms = started.elapsed().as_millis() as u64;
-    crate::stage("guest-exit");
+    note_stage("guest-exit");
 
     let mut stdout_buf = TailBuffer::with_cap(cap);
     let mut stderr_buf = TailBuffer::with_cap(cap);
@@ -775,7 +806,9 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     }
     let _ = out_thread.join();
     let _ = err_thread.join();
+    note_stage("teardown-streams");
     let batch = logd.finish_capped();
+    note_stage("teardown-logd");
     let log_stats = batch.stats;
     let log_first_dropped = batch.first_dropped.clone();
     let logs = batch.entries;
@@ -787,6 +820,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     let summary = match rx.recv_timeout(Duration::from_secs(2)) {
         Ok(s) => {
             let _ = peer_thread.join();
+            note_stage("teardown-peer");
             s
         }
         Err(_) => {
@@ -972,7 +1006,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
             summary.resource_limits
         ));
     }
-    let result = LaunchResult {
+    let mut result = LaunchResult {
         outcome,
         code,
         apk: opts.apk.display().to_string(),
@@ -1023,9 +1057,22 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         log_stats.summary(),
         summary.resource_limits
     );
+    // W43: the guest's own structured crash line (`ACOSLAUNCH {"outcome":"crash",…}`)
+    // is the first error of a guest that died before/after its first frame. It
+    // used to be lost with the caller's 4 KiB stderr tail.
+    let guest_crash = probe_state
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .guest_launch
+        .clone();
+    if let Some(crash) = &guest_crash {
+        result.notes.push(format!("guest: {crash}"));
+    }
     for note in &result.notes {
         eprintln!("acos-art: {note}");
     }
+    note_stage("teardown-evidence");
+    write_session_exit(&out, &result, guest_crash.as_deref());
     Ok(result)
 }
 
@@ -1078,6 +1125,9 @@ struct ProbeState {
     /// and its ordinal, plus lines dropped for exceeding the line cap.
     probe_error: Option<serde_json::Value>,
     probe_errors: u64,
+    /// W43: the last `ACOSLAUNCH {…}` line the guest printed (its own structured
+    /// outcome/crash), kept so a guest death is classified instead of opaque.
+    guest_launch: Option<String>,
     oversized_lines: u64,
     /// Probe lines that were not valid JSON; counted, never silent (W36 found
     /// the two-root separator bug this way).
@@ -1096,6 +1146,213 @@ fn env_u64(name: &str, default: u64) -> u64 {
         .ok()
         .and_then(|v| v.trim().parse().ok())
         .unwrap_or(default)
+}
+
+// ---------------------------------------------------------------- W43: exit evidence
+//
+// Two harness failure classes were indistinguishable from app behaviour:
+//
+// * a full scratch disk surfaced as `INTERNAL: acos-art session exited` in the
+//   caller (or as a caller-side Rust panic with no stderr at all), and
+// * a session that ended mid-command left no record of *why* it ended.
+//
+// A full disk is a **host** condition: it must be a structured, retryable
+// `HOST_DISK_FULL` before the guest starts (preflight) and at the capture write
+// (mid-session). Every launch now also writes `session-exit.json` next to its
+// frames: guest exit/signal, the last stage marker, the guest's own
+// `ACOSLAUNCH {…}` crash line, the cgroup/guard notes and the free space.
+
+/// Free bytes on the filesystem holding `path` (`statvfs`). `None` when the
+/// answer cannot be read: a missing answer must never refuse a run by itself.
+pub fn disk_free_bytes(path: &Path) -> Option<u64> {
+    use std::os::unix::ffi::OsStrExt;
+    let c = std::ffi::CString::new(path.as_os_str().as_bytes()).ok()?;
+    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statvfs(c.as_ptr(), &mut st) } != 0 {
+        return None;
+    }
+    Some((st.f_bavail as u64).saturating_mul(st.f_frsize as u64))
+}
+
+/// Is this `io::Error` the scratch filesystem refusing a write (ENOSPC 28,
+/// EDQUOT 122)? Those are host conditions, never guest behaviour.
+pub fn is_disk_full(error: &std::io::Error) -> bool {
+    matches!(error.raw_os_error(), Some(28) | Some(122))
+}
+
+/// Should a run be refused for lack of scratch space? A free-space answer that
+/// could not be read (`None`) never refuses a run by itself.
+#[must_use]
+pub fn disk_full_for_run(free: Option<u64>, min_bytes: u64) -> bool {
+    matches!(free, Some(f) if f < min_bytes)
+}
+
+/// The last stage marker this process passed, so a panic or an abrupt exit names
+/// the stage instead of only "session exited".
+static LAST_STAGE: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+fn note_stage(name: &str) {
+    crate::stage(name);
+    if let Ok(mut slot) = LAST_STAGE.lock() {
+        *slot = Some(name.to_string());
+    }
+}
+
+fn last_stage() -> Option<String> {
+    LAST_STAGE.lock().ok().and_then(|g| g.clone())
+}
+
+/// One self-describing record per launch, written next to the frames. Never
+/// fatal: the record is evidence, not a gate.
+fn write_session_exit(out: &Path, result: &LaunchResult, guest_crash: Option<&str>) {
+    let disk_full = result.code.as_deref() == Some("HOST_DISK_FULL");
+    let doc = serde_json::json!({
+        "utc_ms": host_ms(),
+        "route": "launch",
+        "outcome": result.outcome,
+        "code": result.code,
+        "retryable": disk_full,
+        "guest_exit": result.guest_exit,
+        "guest_signal": result.guest_signal,
+        "wall_ms": result.wall_ms,
+        "application_created": result.application_created,
+        "activity_resumed": result.activity_launched,
+        "stage": last_stage(),
+        "guest_crash": guest_crash,
+        "disk_free_bytes": disk_free_bytes(out),
+        "cgroup": result.notes.iter().find(|n| n.starts_with("cgroup:")),
+        "logd": result.notes.iter().find(|n| n.starts_with("logd:")),
+        "stdout_tail_last": result.stdout.lines().rev().find(|l| !l.trim().is_empty()),
+        "stderr_tail_last": result.stderr.lines().rev().find(|l| !l.trim().is_empty()),
+    });
+    let _ = fs::create_dir_all(out);
+    let _ = fs::write(
+        out.join("session-exit.json"),
+        serde_json::to_vec_pretty(&doc).unwrap_or_default(),
+    );
+}
+
+/// A panic inside the launcher is a harness bug and must leave a record with the
+/// stage it died in (a caller that only sees EOF otherwise reports `INTERNAL`).
+fn install_session_panic_hook(out: &Path) {
+    let out = out.to_path_buf();
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let doc = serde_json::json!({
+            "utc_ms": host_ms(),
+            "route": "launch",
+            "outcome": "crash",
+            "code": "HOST_PANIC",
+            "retryable": false,
+            "stage": last_stage(),
+            "panic": info.to_string(),
+            "disk_free_bytes": disk_free_bytes(&out),
+        });
+        let _ = fs::create_dir_all(&out);
+        let _ = fs::write(
+            out.join("session-exit.json"),
+            serde_json::to_vec_pretty(&doc).unwrap_or_default(),
+        );
+        // A caller blocked on a command reply must get a structured line, not
+        // an EOF it can only report as `INTERNAL: session exited`.
+        if std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some() {
+            protocol_write(&serde_json::json!({
+                "ok": false, "cmd": "session", "code": "HOST_PANIC", "retryable": false,
+                "error": format!("the launcher panicked (stage {:?}): {}", last_stage(), info),
+            }));
+        }
+        previous(info);
+    }));
+}
+
+/// W43: AF_UNIX `sun_path` is 108 bytes and every socket used to live under the
+/// caller's `--data` dir, which `run-exclusive.sh` derives from the task name
+/// (`data-<task>-<pid>`). A task name of 17+ characters pushed the peer socket
+/// past `SUN_LEN` and `bind()` failed with `io: socket path too long` **before
+/// the guest started** — the caller could only report
+/// `INTERNAL: acos-art session exited` (W41 evidence
+/// `results/art-runtime/evidence/W41-socket-path-too-long.txt`).
+///
+/// The sockets are host-side only: the sandbox binds them to fixed guest paths
+/// (`/dev/socket`, `/data/acos-launch.sock`), so their host location is free.
+/// They are bound in a short runtime dir instead, independent of the task name
+/// and of the `--data` path length:
+/// `/run/user/<uid>/acos-art-<pid>-<seq>/`, falling back to
+/// `<repo>/.cache/art-sock/<pid>-<seq>/`. The directory is removed on drop.
+struct ShortSocketDir(PathBuf);
+
+impl ShortSocketDir {
+    fn new() -> std::io::Result<Self> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        let id = format!("{}-{}", std::process::id(), SEQ.fetch_add(1, Ordering::Relaxed));
+        let uid = unsafe { libc::getuid() };
+        let runtime = PathBuf::from(format!("/run/user/{uid}"));
+        let mut candidates = Vec::new();
+        if runtime.is_dir() {
+            candidates.push(runtime.join(format!("acos-art-{id}")));
+        }
+        if let Ok(root) = crate::repo_root() {
+            candidates.push(root.join(".cache/art-sock").join(&id));
+        }
+        candidates.push(PathBuf::from(format!("/dev/shm/acos-art-{id}")));
+        let mut last = None;
+        for dir in candidates {
+            match fs::create_dir_all(&dir) {
+                Ok(()) => return Ok(Self(dir)),
+                Err(e) => last = Some(e),
+            }
+        }
+        Err(last.unwrap_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::NotFound, "no short socket dir available")
+        }))
+    }
+}
+
+impl Drop for ShortSocketDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+/// The structured refusal for a scratch disk that cannot hold this run's frames.
+fn disk_full_result(opts: &LaunchOpts, package: &str, free: u64, min: u64) -> LaunchResult {
+    LaunchResult {
+        outcome: Outcome::Unsupported,
+        code: Some("HOST_DISK_FULL".to_string()),
+        apk: opts.apk.display().to_string(),
+        package: package.to_string(),
+        until: opts.until.clone(),
+        application_created: false,
+        activity_launched: false,
+        guest_exit: None,
+        guest_signal: None,
+        wall_ms: 0,
+        activity: None,
+        activity_target: None,
+        timeout_ms: None,
+        application_marker: None,
+        activity_marker: None,
+        looper_trace: Vec::new(),
+        bind_application: BindDelivery {
+            request_bytes: None,
+            delivered: false,
+            app_thread_wire: None,
+            code: acos_binder_peer::peer::BIND_APPLICATION_CODE,
+        },
+        service_calls: Vec::new(),
+        unsupported: Vec::new(),
+        stdout: String::new(),
+        stderr: String::new(),
+        logs: Vec::new(),
+        notes: vec![format!(
+            "HOST_DISK_FULL: {free} bytes free on the scratch filesystem, below \
+             ACOS_ART_MIN_DISK_MB={} MiB; refusing to start a guest whose frames cannot be \
+             written (retryable=true)",
+            min / 1024 / 1024
+        )],
+        marker: None,
+    }
 }
 
 fn latest_probe(state: &Arc<std::sync::Mutex<ProbeState>>) -> Option<ProbeSample> {
@@ -1286,6 +1543,9 @@ fn drain_tee_lines<R: std::io::Read>(
                 }
                 state.probe_error = Some(value);
             }
+        } else if trimmed.starts_with("ACOSLAUNCH {") {
+            let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+            state.guest_launch = Some(trimmed.chars().take(600).collect());
         } else if let Some(json) = trimmed.strip_prefix(UNSUPPORTED_PREFIX) {
             if let Ok(value) = serde_json::from_str::<serde_json::Value>(json) {
                 let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -2040,8 +2300,12 @@ fn interactive_serve(
                         continue;
                     }
                     Err(error) => {
+                        // W43: a full disk is a host condition, not an app or
+                        // engine bug: name it and mark it retryable.
+                        let code = if is_disk_full(&error) { "HOST_DISK_FULL" } else { "INTERNAL" };
                         let reply = serde_json::json!({
-                            "ok": false, "cmd": cmd, "code": "INTERNAL",
+                            "ok": false, "cmd": cmd, "code": code,
+                            "retryable": is_disk_full(&error),
                             "error": format!("cannot write the C1 capture: {error}"),
                         });
                         protocol_write(&reply);
@@ -2628,6 +2892,7 @@ mod probe_line_tests {
                 unsupported_seq: self.unsupported_seq,
                 probe_error: self.probe_error.clone(),
                 probe_errors: self.probe_errors,
+                guest_launch: self.guest_launch.clone(),
                 oversized_lines: self.oversized_lines,
                 bad_probe_lines: self.bad_probe_lines,
             }
