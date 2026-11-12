@@ -65,11 +65,13 @@ pub struct VerifyArgs {
 
     /// Treat this run as an untrusted APK.
     ///
-    /// Untrusted runs are refused with `UNTRUSTED_APK_NOT_CERTIFIED` unless the
-    /// labelled test override `ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1` is set. When
-    /// allowed for a test, tree-only assertions fail closed with
-    /// `INSUFFICIENT_HOST_EVIDENCE`; host-observed region/screenshot assertions
-    /// still run. Equivalent to a scenario `trust: untrusted`.
+    /// Untrusted is an explicit opt-in and is allowed by product policy
+    /// (`docs/SANDBOX_CERTIFICATION.md` §8.8), because the sandbox is
+    /// CERTIFIED-WITH-LIMITS (§8.6, limits in §8.7). In this mode tree-only and
+    /// log-only assertions fail closed with `INSUFFICIENT_HOST_EVIDENCE`;
+    /// host-observed region/screenshot assertions and host-injected input still
+    /// run. `ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1` is accepted but redundant.
+    /// Equivalent to a scenario `trust: untrusted`.
     #[arg(long)]
     pub untrusted: bool,
 
@@ -100,18 +102,25 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                 ProtocolError::new(ErrorCode::InvalidScenario, detail),
                 Metrics::wall_ms(0),
             );
-            return finish(&envelope, &args, &artifacts);
+            // The run was never classified; the envelope still carries the
+            // certification record (`trust: unresolved`).
+            return finish_run(&envelope, &args, &artifacts, None);
         }
     };
-    if trust == crate::trust::Trust::Untrusted && !crate::trust::untrusted_allowed_by_env() {
+    // Product policy (docs/SANDBOX_CERTIFICATION.md §8.8): untrusted is opt-in
+    // and allowed while `CERTIFICATION` says the sandbox is certified with
+    // limits. The historical test override is accepted and redundant. Only a
+    // future downgrade (`Certification::NotCertified`) produces
+    // `UNTRUSTED_APK_NOT_CERTIFIED` again.
+    if let Some(refusal) = crate::trust::untrusted_gate(trust, crate::trust::CERTIFICATION) {
         let envelope = Envelope::failure(
             request_id,
             ProtocolBackend::AcosNative,
             Fidelity::StaticAnalysis,
-            crate::trust::refusal_error(trust),
+            refusal,
             Metrics::wall_ms(0),
         );
-        return finish(&envelope, &args, &artifacts);
+        return finish_run(&envelope, &args, &artifacts, Some(trust));
     }
 
     let Some(engine) = Engine::parse(&args.engine) else {
@@ -127,7 +136,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
             .with_details(serde_json::json!({"field": "engine", "value": args.engine})),
             Metrics::wall_ms(0),
         );
-        return finish(&envelope, &args, &artifacts);
+        return finish_run(&envelope, &args, &artifacts, Some(trust));
     };
     if engine == Engine::Art && args.reference.is_some() {
         let envelope = Envelope::failure(
@@ -142,7 +151,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
             .with_details(serde_json::json!({"field": "engine", "value": "art"})),
             Metrics::wall_ms(0),
         );
-        return finish(&envelope, &args, &artifacts);
+        return finish_run(&envelope, &args, &artifacts, Some(trust));
     }
     if engine == Engine::Art && crate::native_launch::native_requested(args.native) {
         let envelope = Envelope::failure(
@@ -157,7 +166,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
             .with_details(serde_json::json!({"field": "engine", "value": "art"})),
             Metrics::wall_ms(0),
         );
-        return finish(&envelope, &args, &artifacts);
+        return finish_run(&envelope, &args, &artifacts, Some(trust));
     }
 
     let required_fidelity = match args.required_fidelity.as_deref() {
@@ -177,7 +186,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                     .with_details(serde_json::json!({"field": "required_fidelity", "value": value})),
                     Metrics::wall_ms(0),
                 );
-                return finish(&envelope, &args, &artifacts);
+                return finish_run(&envelope, &args, &artifacts, Some(trust));
             }
         },
     };
@@ -208,7 +217,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                     code,
                     Metrics::wall_ms(0),
                 );
-                return finish(&envelope, &args, &artifacts);
+                return finish_run(&envelope, &args, &artifacts, Some(trust));
             }
         };
         // The verifier must still be able to write its evidence directory, so
@@ -229,7 +238,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                 .with_details(serde_json::json!({"capability": "native-loader"})),
                 Metrics::wall_ms(0),
             );
-            return finish(&envelope, &args, &artifacts);
+            return finish_run(&envelope, &args, &artifacts, Some(trust));
         }
     }
 
@@ -258,7 +267,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                         code,
                         Metrics::wall_ms(0),
                     );
-                    return finish(&envelope, &args, &artifacts);
+                    return finish_run(&envelope, &args, &artifacts, Some(trust));
                 }
             };
             match crate::engine::art::ArtSession::start(&apk, &artifacts) {
@@ -279,7 +288,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                         protocol,
                         Metrics::wall_ms(0),
                     );
-                    return finish(&envelope, &args, &artifacts);
+                    return finish_run(&envelope, &args, &artifacts, Some(trust));
                 }
             }
         }
@@ -304,7 +313,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         &artifacts,
         session_boot_ms,
     );
-    finish(&envelope, &args, &artifacts)
+    finish_run(&envelope, &args, &artifacts, Some(trust))
 }
 
 /// Put the engine choice and mode into the JSON verdict, enforce that preview is
@@ -516,6 +525,19 @@ fn step_timing(verdict: &serde_json::Value, session_boot_ms: Option<u64>) -> ser
                  unattributed_ms is verdict wall that no step timer covered \
                  (wait-for-log polling before a step starts, evidence writes)",
     })
+}
+
+fn finish_run(
+    envelope: &Envelope,
+    args: &VerifyArgs,
+    artifacts: &Path,
+    trust: Option<crate::trust::Trust>,
+) -> ExitCode {
+    finish(
+        &crate::trust::stamp_envelope(envelope, trust),
+        args,
+        artifacts,
+    )
 }
 
 fn finish(envelope: &Envelope, args: &VerifyArgs, artifacts: &Path) -> ExitCode {

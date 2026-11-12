@@ -8,9 +8,10 @@
 //! * **guest-asserted** — the guest reported it: the View tree, lifecycle and
 //!   launch markers, input acknowledgments, and logs.
 //!
-//! A label is recorded on the run (`trust`, `evidence_provenance`) and on every
-//! step (`steps[].provenance`), so no reader has to infer where a claim came
-//! from. On an untrusted run a guest-asserted item never justifies a pass.
+//! A label is recorded on the run (`trust`, `certification`,
+//! `evidence_provenance`) and on every step (`steps[].provenance`), so no reader
+//! has to infer where a claim came from. On an untrusted run a guest-asserted
+//! item never justifies a pass.
 
 use serde_json::{json, Value};
 
@@ -21,11 +22,13 @@ pub const HOST_OBSERVED: &str = "host-observed";
 /// The provenance string for guest-asserted evidence.
 pub const GUEST_ASSERTED: &str = "guest-asserted";
 
-/// The run-level provenance map and trust label.
+/// The run-level provenance map, trust label and certification record.
 pub fn run_evidence(trust: Trust) -> Value {
-    json!({
-        "trust": trust.as_str(),
-        "evidence_provenance": {
+    let mut evidence = crate::trust::certification_evidence(Some(trust));
+    let object = evidence.as_object_mut().expect("object");
+    object.insert(
+        "evidence_provenance".to_string(),
+        json!({
             "static_manifest": HOST_OBSERVED,
             "frames": HOST_OBSERVED,
             "host_input": HOST_OBSERVED,
@@ -36,13 +39,17 @@ pub fn run_evidence(trust: Trust) -> Value {
             "input_acks": GUEST_ASSERTED,
             "logs": GUEST_ASSERTED,
             "crash_reports": GUEST_ASSERTED
-        },
-        "rule": if trust == Trust::Untrusted {
+        }),
+    );
+    object.insert(
+        "rule".to_string(),
+        json!(if trust == Trust::Untrusted {
             "untrusted run: only host-observed evidence may justify a pass; tree-only assertions fail closed with INSUFFICIENT_HOST_EVIDENCE"
         } else {
             "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded"
-        },
-    })
+        }),
+    );
+    evidence
 }
 
 /// Per-step provenance for a step kind.
@@ -72,13 +79,25 @@ pub fn step_provenance(kind: &str) -> Value {
     }
 }
 
-/// Insert trust and provenance into the annotated verdict.
+/// Insert trust, certification and provenance into the annotated verdict.
 pub fn annotate_verdict(verdict: &mut Value, trust: Trust) {
     let Some(object) = verdict.as_object_mut() else {
         return;
     };
     let run = run_evidence(trust);
     object.insert("trust".to_string(), json!(trust.as_str()));
+    object.insert(
+        "certification".to_string(),
+        run["certification"].clone(),
+    );
+    object.insert(
+        "certification_limits".to_string(),
+        run["certification_limits"].clone(),
+    );
+    object.insert(
+        "certification_policy".to_string(),
+        run["certification_policy"].clone(),
+    );
     object.insert(
         "evidence_provenance".to_string(),
         run["evidence_provenance"].clone(),
@@ -134,6 +153,11 @@ pub fn annotate_step_artifacts(verdict: &Value, artifacts: &std::path::Path, tru
         };
         if let Some(object) = value.as_object_mut() {
             object.insert("trust".to_string(), json!(trust.as_str()));
+            object.insert(
+                "certification".to_string(),
+                json!(crate::trust::CERTIFICATION.label()),
+            );
+            object.insert("certification_limits".to_string(), crate::trust::limits_pointer());
             object.insert("provenance".to_string(), step_provenance(kind));
         }
         let _ = std::fs::write(
@@ -168,6 +192,11 @@ mod tests {
         });
         annotate_verdict(&mut verdict, Trust::Untrusted);
         assert_eq!(verdict["trust"], "untrusted");
+        assert_eq!(verdict["certification"], "certified-with-limits");
+        assert_eq!(
+            verdict["certification_limits"]["doc"],
+            crate::trust::LIMITS_DOC
+        );
         assert_eq!(
             verdict["steps"][0]["provenance"]["launch_markers"],
             GUEST_ASSERTED

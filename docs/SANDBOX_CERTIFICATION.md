@@ -13,8 +13,11 @@ Evidence: `results/art-runtime/S7.md` (threat table, tests, teeth, ledger).
 Tests: `crates/acos-services/tests/sandbox_c1.rs` (new), plus S5/S6.
 Start/end stamps for the S7 work: see §6.
 
-> This document is a **recommendation to the owner**. It does not enable
-> untrusted APKs, and nothing in this repo does.
+> This document started as a **recommendation to the owner**. The owner's
+> 2026-11-12 decision (recorded in §8.8) adopts the CERTIFIED-WITH-LIMITS
+> verdict as product policy: untrusted APKs are **opt-in** (`--untrusted` or a
+> scenario `trust: untrusted`) and trusted stays the default. The limits in §8.7
+> are the contract of that opt-in.
 
 ## 1. Overall verdict
 
@@ -29,8 +32,9 @@ markers / acks / logs can never justify an untrusted pass (host-observed pixels
 or input must corroborate), a frame fd may be an anonymous unlinked file rather
 than strictly `memfd` (§4.1), OCR is absent, and the 16-layer composite
 worst-case was not constructed (caps are enforced; hostile sessions measured
-67–80 MiB). The product path still refuses untrusted APKs by default; enabling
-them is an owner decision, not something this document does.
+67–80 MiB). Since 2026-11-12 product policy is **opt-in untrusted** (§8.8):
+untrusted runs are allowed when the caller asks for one explicitly, and trusted
+stays the default.
 
 | # | surface | verdict | basis |
 |---|---|---|---|
@@ -233,7 +237,7 @@ Chosen path: **A with stricter pass semantics** (B optional, C deferred, D as co
 - A pass for an untrusted APK needs host-controlled evidence that independently satisfies the assertion: C1 pixels (reference/region match, OCR with uncertainty), host-injected input, host-observed binder transactions. "Pixels changed" never substitutes for "expected text appeared". Tree-only assertions on untrusted runs return an insufficient-evidence result (fail closed).
 - A per-run nonce is an accident tripwire only; it is not a security boundary (the app shares the probe's process).
 - Stale text above: the sizeCompatScale cap landed in e55b3ec.
-- Planned work (S8, after W15/W16 free `engine/art.rs`): provenance field on every evidence item (host-observed | guest-asserted), fail-closed rules for untrusted runs, a pixel/region assertion, live hostile fixture (forged probe/marker lines, hostile parcels), then re-certify. Untrusted APKs stay disabled until all section 5 gates pass. **Implemented in S8 — see §8.** The product path is still not certified; only the labelled test override (`ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1`) can run the hostile fixture.
+- Planned work (S8, after W15/W16 free `engine/art.rs`): provenance field on every evidence item (host-observed | guest-asserted), fail-closed rules for untrusted runs, a pixel/region assertion, live hostile fixture (forged probe/marker lines, hostile parcels), then re-certify. Untrusted APKs stay disabled until all section 5 gates pass. **Implemented in S8 — see §8.** At S8 time the product path was not certified and only the labelled test override (`ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1`) could run the hostile fixture; **superseded by §8.8**, which allows an explicit opt-in without any env var.
 
 ## 8. S8 — verdict-integrity implementation (2026-11-11)
 
@@ -392,11 +396,55 @@ These are declared limits, not open gates; every one is labelled in evidence.
    construction was not run; measured hostile sessions peaked at 67–80 MiB.
 5. **Binder transactions** — labelled `host-observed` at run level, not yet
    surfaced as a per-step artifact.
-6. **Product path** — untrusted APKs are still refused by default with
-   `UNTRUSTED_APK_NOT_CERTIFIED` unless the test-only
-   `ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1` override is set. Enabling them in the
-   product is an owner decision; this re-audit removes the technical gate-1
-   blocker but does not change the default.
+6. **Product path** — at the time of this re-audit untrusted APKs were still
+   refused by default with `UNTRUSTED_APK_NOT_CERTIFIED` unless the test-only
+   `ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1` override was set. **Changed on
+   2026-11-12 by the owner's opt-in policy (§8.8):** an explicit `--untrusted`
+   is allowed with no env var, and the refusal is only reachable through a
+   certification downgrade.
 
 Residuals already accepted in earlier sections remain as described in §4.1,
 §4.3, §4.5 and §8.5.
+
+### 8.8 Product policy: opt-in untrusted (2026-11-12, owner decision)
+
+**Decision.** The owner chose on 2026-11-12 that untrusted APKs are **opt-in
+only**. They are *allowed* in the product — the sandbox verdict is
+CERTIFIED-WITH-LIMITS (§8.6) — but never reached automatically.
+
+Rules, as implemented in `crates/acos-cli/src/trust.rs` and
+`crates/acos-cli/src/verify.rs`:
+
+1. **Explicit opt-in only.** `acos verify --untrusted` or a scenario
+   `trust: untrusted` marks a run untrusted, and it now runs **with no
+   environment variable**. There is no auto-detection of APK origin.
+2. **Trusted is the default.** A run without the flag and without the scenario
+   key is trusted (our own fixtures), exactly as before.
+3. **Verdict integrity is unchanged.** In untrusted mode only host-observed
+   evidence may justify a pass. Tree-only, log-only and marker-only assertions
+   fail closed with `INSUFFICIENT_HOST_EVIDENCE` (§8.7 item 1);
+   `assert_region` / `assert_screenshot` / host-injected input still run. The
+   guard is `TrustGuard` in `trust.rs` and was not weakened by this policy.
+4. **Every verdict and envelope is labelled** with `trust`,
+   `certification: "certified-with-limits"`, a `certification_limits` pointer
+   (`docs/SANDBOX_CERTIFICATION.md` §8.7) and a `certification_policy` pointer
+   (this section). Step artifacts carry `trust`/`certification` too.
+5. **The test override is a redundant alias.** `ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1`
+   is still accepted and recorded, so existing hostile tests and scripts keep
+   working unchanged; it gates nothing.
+6. **`UNTRUSTED_APK_NOT_CERTIFIED` stays registered** (`acos-protocol`) and is
+   produced by exactly one function, `trust::untrusted_gate`, only when the
+   const flag `trust::CERTIFICATION` is a downgrade
+   (`Certification::NotCertified`). Today it is
+   `Certification::CertifiedWithLimits`, so the code is unreachable; the unit
+   test `certification_downgrade_restores_the_refusal` in `trust.rs` proves the
+   flag flips the behaviour.
+
+Consequences for readers of evidence: a pass on an untrusted run is a
+**host-pixel / host-input** pass, never a tree or log claim; an
+`INSUFFICIENT_HOST_EVIDENCE` failure means the run was allowed but the evidence
+class was not, not that ACOS refused to run the APK. Tests:
+`crates/acos-cli/tests/w51_untrusted_policy.rs` (allowed without env var,
+tree-only fail-closed, trusted default unchanged, alias redundant),
+`crates/acos-cli/tests/sandbox_s8.rs` and `w44_trust.rs`. Live evidence:
+`results/art-runtime/W51.md`.

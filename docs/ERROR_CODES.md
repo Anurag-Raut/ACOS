@@ -86,7 +86,7 @@ single ELF whose `e_machine` the in-process loader cannot map.
 | `ELEMENT_NOT_FOUND` | A selector matched no node (the tree was complete). | acos-runtime / acos-verify | 1 |
 | `TREE_TRUNCATED` | A selector matched nothing in a tree the probe reported as truncated (`UiTree.truncated`, any window). Non-pass, non-retryable; the hint names the node budget. Never `ELEMENT_NOT_FOUND`. | acos-verify / acos-cli | 1 |
 | `STALE_REF` | A UI node reference is no longer valid. | acos-runtime | 1 |
-| `INSUFFICIENT_HOST_EVIDENCE` | A guest-asserted channel was asked to justify a pass on an untrusted APK run: the UI tree (`UNTRUSTED_TREE_ASSERTION`), the guest log (`UNTRUSTED_LOG_ASSERTION`, an `assert_log` step), or crash reports. Fail closed and require host-observed evidence. | acos-cli / acos-verify | 1 |
+| `INSUFFICIENT_HOST_EVIDENCE` | A guest-asserted channel was asked to justify a pass on an untrusted APK run: the UI tree (`UNTRUSTED_TREE_ASSERTION`), the guest log (`UNTRUSTED_LOG_ASSERTION`, an `assert_log` step), or crash reports. Fail closed and require host-observed evidence. The run itself is allowed (untrusted is an explicit opt-in); only the evidence class is refused. | acos-cli / acos-verify | 1 |
 | `UNSUPPORTED_ASSERTION` | The requested assertion kind has no implementation in this build (for example `assert_region.text_ocr` with no OCR engine). | acos-verify | 1 |
 | `SESSION_NOT_FOUND` | The requested session does not exist (or was already destroyed). | acos-runtime / MCP | 1 |
 | `SESSION_BUSY` | The session is busy with another request. | acos-runtime / MCP | 1 |
@@ -98,7 +98,7 @@ single ELF whose `e_machine` the in-process loader cannot map.
 | `RAM_ABORT` | Execution was aborted by the RAM guard. | acos-runtime / acos-art | 1 / 2 |
 | `TIMEOUT` | The operation exceeded its wall/CPU budget. `wait_for` also uses it when its live-tree condition is never satisfied by `timeout_ms`; the failure details carry `timeout_ms`, `elapsed_ms`, `polls`, and `last_frame_seq`. | acos-runtime / acos-art / acos-verify | 1 / 2 |
 | `RESOURCE_LIMIT` | A declared resource budget was exhausted. | acos-runtime / acos-art | 1 / 2 |
-| `UNTRUSTED_APK_NOT_CERTIFIED` | An untrusted APK run was requested while the product path is not certified for untrusted APKs; only the labelled hostile-fixture test override may run it. | acos-cli | 1 |
+| `UNTRUSTED_APK_NOT_CERTIFIED` | Reserved for a **certification downgrade**. An explicit `--untrusted` / `trust: untrusted` is allowed today (sandbox verdict CERTIFIED-WITH-LIMITS, product policy `docs/SANDBOX_CERTIFICATION.md` §8.8), so this code is unreachable in a normal build. It is produced by `trust::untrusted_gate` only when the const flag `trust::CERTIFICATION` is `Certification::NotCertified`; `ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1` is an accepted but redundant alias and no longer bypasses anything. | acos-cli | 1 |
 | `INVALID_SCENARIO` | The scenario is structurally or semantically invalid. | acos-verify | 1 |
 | `INVALID_ARGUMENT` | A request argument is invalid. | acos-cli / MCP | 1 |
 | `UNSAFE_PATH` | An artifact path was rejected (escape, absolute path, symlink, ...). | acos-cli / acos-protocol | 1 |
@@ -162,6 +162,12 @@ harness gap). `session-exit.json` is surfaced in `verdict.json` and
   are genuinely absent: `environment` (`set_*` steps) and `input.rotate`. Logs,
   reset, key/back, `type_text` (including `clear: true`) and crash reports are
   implemented; a missing one is still a named capability, never a fallback.
+* Every `verify` verdict and envelope carries `trust` (`trusted` / `untrusted`,
+  or `unresolved` when the scenario's `trust:` value is invalid),
+  `certification: "certified-with-limits"`, `certification_limits`
+  (`{"doc": "docs/SANDBOX_CERTIFICATION.md", "section": "§8.7"}`) and
+  `certification_policy` (§8.8). Step artifacts carry `trust` and
+  `certification` as well.
 * `assert_log` on the ART engine reads the guest's own logd sink
   (`logd`/logcat). Its provenance is **guest-asserted**, recorded as
   `steps[].provenance.logs = "guest-asserted"`; an untrusted run refuses the

@@ -208,26 +208,42 @@ fn launch() -> &'static str {
     "  - launch:\n      activity: dev.acos.fixtures.counter/.MainActivity\n"
 }
 
+// W51 changed these two tests. They used to assert the S8 policy (an untrusted
+// run is refused with UNTRUSTED_APK_NOT_CERTIFIED unless the test override is
+// set). The owner's 2026-11-12 decision makes untrusted an explicit opt-in that
+// is allowed without any env var (docs/SANDBOX_CERTIFICATION.md §8.8), so they
+// now assert the new policy: the run starts, is labelled, and only guest-asserted
+// evidence still fails closed.
 #[test]
-fn untrusted_run_without_the_test_override_is_refused_before_art_starts() {
+fn untrusted_run_without_the_test_override_is_allowed_and_labelled() {
     let scenario = format!(
         "{}steps:\n{}  - assert_text:\n      selector: {{id: count}}\n      text: {{exact: \"0\"}}\n",
         header("trust: untrusted\n"),
         launch()
     );
-    let run = run_scenario("untrusted-refused", &scenario, "", false);
-    assert!(!run.output.status.success(), "a refused run must not pass");
+    let run = run_scenario("untrusted-optin", &scenario, "", false);
     let envelope = envelope(&run);
-    assert_eq!(envelope["status"], "blocked");
-    assert_eq!(envelope["error"]["code"], "UNTRUSTED_APK_NOT_CERTIFIED");
-    assert!(
-        !run.marker.exists(),
-        "the ART session must not start for a refused untrusted run"
+    assert_ne!(
+        envelope["error"]["code"], "UNTRUSTED_APK_NOT_CERTIFIED",
+        "the product no longer refuses an explicit untrusted opt-in: {envelope}"
     );
+    assert!(
+        run.marker.exists(),
+        "the ART session must start for an opt-in untrusted run"
+    );
+    let verdict = load_verdict(&run);
+    assert_eq!(verdict["trust"], "untrusted");
+    assert_eq!(verdict["certification"], "certified-with-limits");
+    assert_eq!(verdict["certification_limits"]["doc"], "docs/SANDBOX_CERTIFICATION.md");
+    assert_eq!(verdict["certification_limits"]["section"], "§8.7");
+    // The tree stays guest-asserted: the run is allowed, the claim is not.
+    assert_eq!(verdict["steps"][1]["error"]["code"], "INSUFFICIENT_HOST_EVIDENCE");
+    assert_eq!(envelope["result"]["trust"], "untrusted");
+    assert_eq!(envelope["result"]["certification"], "certified-with-limits");
 }
 
 #[test]
-fn untrusted_flag_also_refuses_without_the_override() {
+fn untrusted_flag_is_allowed_without_the_override() {
     let scenario = format!(
         "{}steps:\n{}  - assert_text:\n      selector: {{id: count}}\n      text: {{exact: \"0\"}}\n",
         header(""),
@@ -238,6 +254,7 @@ fn untrusted_flag_also_refuses_without_the_override() {
     let artifacts = dir.join("artifacts");
     let out = dir.join("frames");
     std::fs::create_dir_all(&out).unwrap();
+    let marker = dir.join("session-started");
     let scenario_path = dir.join("scenario.yaml");
     std::fs::write(&scenario_path, scenario).unwrap();
     let apk = workspace().join("fixtures/build/apps/counter.apk");
@@ -246,6 +263,7 @@ fn untrusted_flag_also_refuses_without_the_override() {
         .env("ACOS_NO_DAEMON", "1")
         .env("ACOS_ART_BIN", &script)
         .env("FAKE_ART_OUT", &out)
+        .env("FAKE_ART_MARKER", &marker)
         .env_remove("ACOS_ALLOW_UNTRUSTED_FOR_TESTS")
         .args([
             "verify",
@@ -262,10 +280,21 @@ fn untrusted_flag_also_refuses_without_the_override() {
         ])
         .output()
         .expect("run acos verify");
-    assert!(!output.status.success());
     let envelope: Value =
         serde_json::from_str(&String::from_utf8_lossy(&output.stdout)).expect("envelope");
-    assert_eq!(envelope["error"]["code"], "UNTRUSTED_APK_NOT_CERTIFIED");
+    assert_ne!(
+        envelope["error"]["code"], "UNTRUSTED_APK_NOT_CERTIFIED",
+        "--untrusted is allowed without any env var: {envelope}"
+    );
+    assert!(marker.exists(), "the ART session must start");
+    assert!(!output.status.success(), "a tree-only step still fails closed");
+    assert_eq!(envelope["result"]["trust"], "untrusted");
+    assert_eq!(envelope["result"]["certification"], "certified-with-limits");
+    let verdict: Value = serde_json::from_str(
+        &std::fs::read_to_string(artifacts.join("verdict.json")).expect("verdict"),
+    )
+    .expect("verdict json");
+    assert_eq!(verdict["steps"][1]["error"]["code"], "INSUFFICIENT_HOST_EVIDENCE");
 }
 
 #[test]
