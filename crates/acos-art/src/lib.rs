@@ -243,11 +243,19 @@ impl ArtRoot {
         static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let id = format!("{}-{seq}", std::process::id());
+        let path = self.runs_dir().join(&id);
+        self.run_dir_at(&path, tag)
+    }
+
+    /// Z4 (research seam, off by default): build the same per-run root at an
+    /// explicit path and leave it in place on drop. Only `launch.rs`'s
+    /// `ACOS_ZYGOTE_SESSION` path calls this; every production caller still
+    /// goes through [`ArtRoot::new_run_dir`]. See results/art-runtime/Z4.md.
+    pub fn run_dir_at(&self, path: &Path, tag: &str) -> Result<RunDir> {
         let label: String = tag
             .chars()
             .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
             .collect();
-        let path = self.runs_dir().join(&id);
         for d in [
             "dalvik-cache/x86_64",
             "misc/apexdata/com.android.art/dalvik-cache/x86_64",
@@ -270,8 +278,9 @@ impl ArtRoot {
             path.join("owner"),
             format!("pid={}\nstart={}\ntag={}\n", std::process::id(), start, label),
         )?;
-        let keep = std::env::var_os("ACOS_ART_KEEP_RUN").is_some();
-        Ok(RunDir { path, keep })
+        let keep = std::env::var_os("ACOS_ART_KEEP_RUN").is_some()
+            || std::env::var_os("ACOS_ZYGOTE_SESSION").is_some();
+        Ok(RunDir { path: path.to_path_buf(), keep })
     }
 
     /// Remove run dirs that have no live owner pid and are older than the TTL
