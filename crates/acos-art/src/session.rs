@@ -324,30 +324,17 @@ pub fn parse_protocol_line(line: &str) -> Option<serde_json::Value> {
     serde_json::from_str(body).ok()
 }
 
-/// The manifest's launcher activity class name, from `aapt2 dump badging`
-/// (`launchable-activity: name='…'`). Nothing per-app is hardcoded here.
+/// The manifest's launcher component (`PackageParser` rules: `<activity>` or
+/// `<activity-alias>` with MAIN/LAUNCHER). Nothing per-app is hardcoded here.
 pub fn apk_activity(apk: &Path) -> Result<String> {
-    let sdk = super::app::android_sdk()?;
-    let aapt2 = super::app::find_tool(&sdk, "aapt2")?;
-    let out = Command::new(&aapt2).arg("dump").arg("badging").arg(apk).output()?;
-    let text = String::from_utf8_lossy(&out.stdout).to_string();
-    if !out.status.success() {
-        return Err(Error::Tool(format!(
-            "aapt2 could not read {}: {}",
-            apk.display(),
-            String::from_utf8_lossy(&out.stderr).trim()
-        )));
-    }
-    text.lines()
-        .find_map(|l| l.strip_prefix("launchable-activity:"))
-        .and_then(|l| l.split("name='").nth(1))
-        .and_then(|l| l.split('\'').next())
-        .map(str::to_string)
-        .filter(|s| !s.is_empty())
-        .ok_or_else(|| {
+    acos_services::manifest_resolve::launcher_activity(apk)
+        .map(|l| l.component)
+        .map_err(|e| {
             Error::Tool(format!(
-                "{} declares no MAIN/LAUNCHER activity (pass --activity)",
-                apk.display()
+                "{}: {} ({}; resolved from AndroidManifest.xml, not aapt2 badging)",
+                apk.display(),
+                e,
+                e.code()
             ))
         })
 }

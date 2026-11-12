@@ -72,6 +72,14 @@ public final class LaunchMain {
     /** Static-RRO overlay idmaps (`/data/overlay/<name>.idmap`, `,`-separated). */
     static String sOverlayIdmaps = "";
     /**
+     * W27: the alias target (`ActivityInfo.targetActivity`). Empty for a plain
+     * activity; when set, `ActivityThread.performLaunchActivity` replaces the
+     * intent's alias component with this class before instantiating it.
+     */
+    static String sTargetActivity = "";
+    /** W27: effective `Activity.mResumed` wait (`ACOSLAUNCH_RESUME_MS`). */
+    static long sResumeMs = 12000L;
+    /**
      * Frame-probe progress: `-1` = probe disabled, otherwise the number of
      * completed `doFrame` callbacks. The watcher waits for this before sending
      * the activity transaction so the probe evidence is not cut short by the
@@ -113,6 +121,20 @@ public final class LaunchMain {
             sActivityLabelRes = parseIntOrZero(args[10]);
         }
         if (args.length > 11 && args[11] != null) sActivityLabelText = args[11];
+        if (args.length > 12 && args[12] != null) sTargetActivity = args[12];
+        // W27: the resume budget is configurable. The host picks a documented
+        // default from the APK shape and forwards it; an explicit value from
+        // the environment is clammped to a sane deadline.
+        try {
+            String resume = System.getenv("ACOSLAUNCH_RESUME_MS");
+            if (resume != null && resume.trim().length() > 0) {
+                long ms = Long.parseLong(resume.trim());
+                if (ms >= 1000L && ms <= 600000L) sResumeMs = ms;
+            }
+        } catch (Throwable ignored) {
+        }
+        System.out.println("ACOSLAUNCH MARK resume-budget ms=" + sResumeMs);
+        System.out.flush();
         try {
             run(t0);
         } catch (Throwable t) {
@@ -269,6 +291,14 @@ public final class LaunchMain {
         // proof that the real `handleBindApplication` / `TransactionExecutor` ran
         // to completion on the main thread.
         installLooperTrace();
+        // W27 item 3: a second-Activity start currently reaches
+        // IActivityTaskManager.startActivity, whose Intent parcelable codec is
+        // owned by another component and rejects the request. Rather than let
+        // the binder exception kill the guest (W22's "guest ended after the
+        // gesture"), install a guest-side guard that returns START_SUCCESS and
+        // publishes a structured UNSUPPORTED_ANDROID_API marker naming the call.
+        // The app keeps running; no state is fabricated.
+        installStartActivityGuard();
 
         // The bindApplication H message is already posted; run the real main
         // looper. The watcher acts as the AMS side of the protocol: it waits for
@@ -526,6 +556,8 @@ public final class LaunchMain {
                         if (pendingSince == 0) {
                             pendingSince = now;
                         } else if (now - pendingSince > 2000) {
+                            System.err.println("ACOSPROBE-STALL-DETECT pending_ms=" + (now - pendingSince));
+                            System.err.flush();
                             dumpMainStack();
                             pendingSince = now;
                         }
@@ -572,7 +604,9 @@ public final class LaunchMain {
                 b.append(" | ").append(f);
             }
             System.out.println(b);
+            System.err.println(b);
             System.out.flush();
+            System.err.flush();
         } catch (Throwable ignored) {
         }
     }
@@ -581,22 +615,130 @@ public final class LaunchMain {
         Object window = activity.getClass().getMethod("getWindow").invoke(activity);
         Object decor = window.getClass().getMethod("getDecorView").invoke(window);
         if (!(decor instanceof View)) return;
-        StringBuilder nodes = new StringBuilder(1536);
-        int[] budget = new int[]{160};
-        try {
-            appendViewJson((View) decor, nodes, budget);
-        } catch (Throwable ignored) {
-            return;
+        // W27 item 4: the live tree is a *window* forest, not just the Activity
+        // decor. AlertDialog/PopupWindow/Menu roots are separate windows in
+        // WindowManagerGlobal; on a device uiautomator sees them. Walk
+        // `getWindowViews()` in AOSP list order (oldest/bottom first, newest/top
+        // last) and put the Activity decor first so existing selectors see the
+        // same main-window nodes before any dialog duplicate. Every node carries
+        // a `window` label and screen bounds (`bounds_on_screen`).
+        java.util.List<View> roots = windowViews();
+        if (roots == null || roots.isEmpty()) {
+            roots = java.util.Collections.singletonList((View) decor);
         }
-        StringBuilder j = new StringBuilder(2048);
+        StringBuilder nodes = new StringBuilder(2048);
+        StringBuilder windows = new StringBuilder(256);
+        int z = 0;
+        boolean sawMain = false;
+        for (View root : roots) {
+            if (root == null) continue;
+            String label;
+            if (root == decor) {
+                label = "main";
+                sawMain = true;
+            } else {
+                label = windowLabel(root, z);
+            }
+            if (windows.length() > 0) windows.append(',');
+            windows.append("{\"z\":").append(z)
+                    .append(",\"window\":\"").append(jesc(label)).append("\"}");
+            int[] budget = new int[]{160};
+            try {
+                appendViewJson(root, nodes, budget, label);
+            } catch (Throwable ignored) {
+                // A probe must never disturb the app; skip one bad window.
+            }
+            z++;
+        }
+        if (!sawMain) {
+            // The Activity decor was not in mViews (window not attached yet):
+            // keep the old single-window sample rather than an empty tree.
+            int[] budget = new int[]{160};
+            try {
+                appendViewJson((View) decor, nodes, budget, "main");
+            } catch (Throwable ignored) {
+                return;
+            }
+        }
+        StringBuilder j = new StringBuilder(nodes.length() + 512);
         j.append("ACOSPROBE {\"seq\":").append(seq)
                 .append(",\"time\":").append(System.currentTimeMillis())
+                .append(",\"windows\":[").append(windows).append("]")
                 .append(",\"tree\":{\"nodes\":[").append(nodes).append("]}}");
         System.out.println(j);
         System.out.flush();
     }
 
-    static void appendViewJson(View v, StringBuilder out, int[] budget) {
+    /** All attached root views, via the stock WindowManagerGlobal API. */
+    static java.util.List<View> windowViews() {
+        try {
+            Class<?> wmg = Class.forName("android.view.WindowManagerGlobal");
+            Object instance = wmg.getMethod("getInstance").invoke(null);
+            Object views = null;
+            Throwable first = null;
+            try {
+                views = wmg.getMethod("getWindowViews").invoke(instance);
+            } catch (Throwable t) {
+                first = t;
+            }
+            if (!(views instanceof java.util.List)) {
+                // The image's WindowManagerGlobal keeps the z-ordered roots in
+                // the private `mViews` list (mViews/mRoots/mParams are parallel).
+                // Reading it is the same read-only reflection used for every
+                // other private framework field on this path.
+                try {
+                    views = get(instance, "mViews");
+                } catch (Throwable t) {
+                    if (!sProbeWindowsLogged) {
+                        sProbeWindowsLogged = true;
+                        System.out.println("ACOSLAUNCH MARK window-views-unavailable first="
+                                + first + " second=" + t);
+                    }
+                }
+            }
+            if (views instanceof java.util.List) {
+                @SuppressWarnings("unchecked")
+                java.util.List<Object> raw = (java.util.List<Object>) views;
+                java.util.List<View> out = new java.util.ArrayList<>();
+                for (Object v : raw) if (v instanceof View) out.add((View) v);
+                if (!sProbeWindowsLogged) {
+                    sProbeWindowsLogged = true;
+                    System.out.println("ACOSLAUNCH MARK window-views count=" + out.size());
+                }
+                return out;
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    static volatile boolean sProbeWindowsLogged;
+
+    /** A stable window label from ViewRootImpl's own LayoutParams (read-only). */
+    static String windowLabel(View root, int z) {
+        String title = "";
+        Object type = null;
+        try {
+            java.lang.reflect.Method m = Class.forName("android.view.View")
+                    .getMethod("getViewRootImpl");
+            Object vr = m.invoke(root);
+            if (vr != null) {
+                Object attrs = get(vr, "mWindowAttributes");
+                if (attrs != null) {
+                    Object t = get(attrs, "title");
+                    if (t != null) title = t.toString();
+                    type = get(attrs, "type");
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        if (title == null || title.length() == 0) {
+            title = "window-" + (type == null ? "?" : type);
+        }
+        return title + "#" + z;
+    }
+
+    static void appendViewJson(View v, StringBuilder out, int[] budget, String window) {
         if (budget[0]-- <= 0) return;
         int[] loc = new int[2];
         try {
@@ -690,6 +832,7 @@ public final class LaunchMain {
                 .append(",\"text\":\"").append(jesc(text)).append('"')
                 .append(",\"hint\":\"").append(jesc(hint)).append('"')
                 .append(",\"content_description\":\"").append(jesc(contentDescription)).append('"')
+                .append(",\"window\":\"").append(jesc(window)).append('"')
                 .append(",\"bounds\":\"[").append(loc[0]).append(',').append(loc[1])
                 .append("][").append(loc[0] + v.getWidth()).append(',')
                 .append(loc[1] + v.getHeight()).append("]\"")
@@ -711,7 +854,7 @@ public final class LaunchMain {
                 View child = g.getChildAt(i);
                 if (child == null) continue;
                 StringBuilder one = new StringBuilder();
-                appendViewJson(child, one, budget);
+                appendViewJson(child, one, budget, window);
                 if (one.length() == 0) continue;
                 if (!first) kids.append(',');
                 kids.append(one);
@@ -743,6 +886,76 @@ public final class LaunchMain {
     static volatile boolean sActivityResumed;
     /** The framework printed `<<<<< Finished` for the BIND_APPLICATION message. */
     static volatile boolean sBindFinished;
+
+    /**
+     * W27 item 3: replace the cached `IActivityTaskManager` service with a
+     * dynamic proxy whose `startActivity*` methods are answered locally.
+     *
+     * <p>The proxy delegates every other method to the real binder, so the
+     * launch path is untouched. `startActivity` returns
+     * {@code ActivityManager.START_SUCCESS} after printing one
+     * {@code ACOSUNSUPPORTED} line; the host turns that line into a structured
+     * {@code UNSUPPORTED_ANDROID_API} step result instead of the guest dying.
+     * This is a documented capability gap, not a fake second Activity: no
+     * ActivityRecord, lifecycle callback or window is invented.
+     */
+    static void installStartActivityGuard() {
+        try {
+            Class<?> atm = Class.forName("android.app.ActivityTaskManager");
+            java.lang.reflect.Field singletonField = atm.getDeclaredField("IActivityTaskManagerSingleton");
+            singletonField.setAccessible(true);
+            Object singleton = singletonField.get(null);
+            java.lang.reflect.Field instanceField = findField(singleton.getClass(), "mInstance");
+            instanceField.setAccessible(true);
+            Object real = instanceField.get(singleton);
+            if (real == null) {
+                real = atm.getMethod("getService").invoke(null);
+            }
+            Class<?> iface = Class.forName("android.app.IActivityTaskManager");
+            final Object delegate = real;
+            Object proxy = java.lang.reflect.Proxy.newProxyInstance(
+                    iface.getClassLoader(), new Class<?>[]{iface},
+                    new java.lang.reflect.InvocationHandler() {
+                        @Override
+                        public Object invoke(Object p, java.lang.reflect.Method m, Object[] a) throws Throwable {
+                            String n = m.getName();
+                            if (n.startsWith("startActivity") || n.startsWith("startActivities")) {
+                                String call = "android.app.IActivityTaskManager." + n;
+                                System.out.println("ACOSUNSUPPORTED {\"code\":\"UNSUPPORTED_ANDROID_API\","
+                                        + "\"call\":\"" + esc(call) + "\","
+                                        + "\"detail\":\"second-Activity Intent launch is not implemented; "
+                                        + "the guest stayed alive and no Activity was fabricated\"}");
+                                System.out.flush();
+                                Class<?> rt = m.getReturnType();
+                                if (rt == int.class) return 0; // ActivityManager.START_SUCCESS
+                                if (rt == boolean.class) return Boolean.TRUE;
+                                return null;
+                            }
+                            try {
+                                return m.invoke(delegate, a);
+                            } catch (java.lang.reflect.InvocationTargetException e) {
+                                throw e.getCause() == null ? e : e.getCause();
+                            }
+                        }
+                    });
+            instanceField.set(singleton, proxy);
+            System.out.println("ACOSLAUNCH MARK start-activity-guard installed call=android.app.IActivityTaskManager");
+        } catch (Throwable t) {
+            System.out.println("ACOSLAUNCH MARK start-activity-guard unavailable " + t);
+        }
+        System.out.flush();
+    }
+
+    /** Walk a class and its superclasses for a field (Singleton.mInstance). */
+    static java.lang.reflect.Field findField(Class<?> cls, String name) throws NoSuchFieldException {
+        for (Class<?> c = cls; c != null; c = c.getSuperclass()) {
+            try {
+                return c.getDeclaredField(name);
+            } catch (NoSuchFieldException ignored) {
+            }
+        }
+        throw new NoSuchFieldException(name);
+    }
 
     /** `Looper.setMessageLogging`: the framework's own message trace. */
     static void installLooperTrace() {
@@ -847,7 +1060,7 @@ public final class LaunchMain {
             return;
         }
         System.out.flush();
-        long adeadline = System.currentTimeMillis() + 12000;
+        long adeadline = System.currentTimeMillis() + sResumeMs;
         while (System.currentTimeMillis() < adeadline) {
             Object activity = resumedActivity(thread);
             if (activity != null) {
@@ -899,10 +1112,10 @@ public final class LaunchMain {
             }
             Thread.sleep(5);
         }
-        System.out.println("ACOSLAUNCH MARK watchdog: activity not resumed");
+        System.out.println("ACOSLAUNCH MARK watchdog: activity not resumed timeout_ms=" + sResumeMs);
         dumpActivityState(thread, at);
         write(new File(sOut, "activity-not-resumed.marker"),
-                "package=" + sPkg + "\nactivity=" + sActivity + "\n");
+                "package=" + sPkg + "\nactivity=" + sActivity + "\ntimeout_ms=" + sResumeMs + "\n");
         quit();
     }
 
@@ -924,6 +1137,7 @@ public final class LaunchMain {
                 + "\ncalled=" + get(activity, "mCalled")
                 + "\nstopped=" + get(activity, "mStopped")
                 + "\nwindow=" + get(activity, "mWindow")
+                + "\ntimeout_ms=" + sResumeMs
                 + (note == null ? "" : "\n" + note) + "\n";
         write(new File(sOut, "activity-resumed.marker"), am);
         return am;
@@ -1543,7 +1757,7 @@ public final class LaunchMain {
         setFieldForce(cls, ai, "name", sActivity);
         setFieldForce(cls, ai, "packageName", sPkg);
         setFieldForce(cls, ai, "taskAffinity", sPkg);
-        setFieldForce(cls, ai, "targetActivity", null);
+        setFieldForce(cls, ai, "targetActivity", sTargetActivity.isEmpty() ? null : sTargetActivity);
         setFieldForce(cls, ai, "permission", null);
         setFieldForce(cls, ai, "launchMode", 0);
         setFieldForce(cls, ai, "theme", sAppTheme); // manifest theme; 0 = platform default

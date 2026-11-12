@@ -1,0 +1,58 @@
+# W27 item 4: the live tree probe must include dialog windows.
+#
+# `dialog-menu` shows an AlertDialog from a button. Before W27 the probe walked
+# only the Activity decor, so `android:id/message` (and the buttons) were in a
+# separate `WindowManagerGlobal` root view and invisible to every selector.
+# This scenario taps the app's own button, asserts the dialog's message/button
+# text from the *live* tree, taps OK, and asserts the app's status line changed.
+version: 1
+name: w27-dialog-window
+description: >-
+  Dialog window in the live tree: launch dialog-menu on real ART, tap Show
+  dialog, assert android:id/message and the OK button from the dialog window,
+  tap OK, and require the Activity's status text to become "Dialog confirmed".
+app: fixtures/build/apps/dialog-menu.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.dialogmenu/.MainActivity
+      clear_state: true
+  - assert_text:
+      selector: {id: dialog}
+      text: {exact: "Show dialog"}
+  - tap:
+      selector: {id: dialog}
+  - assert_log:
+      tag: AcosDialog
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^dialog_shown$'
+  - assert_text:
+      selector: {id: message}
+      text: {exact: "Are you sure?"}
+  - assert_text:
+      selector: {id: button1}
+      text: {exact: "OK"}
+  - tap:
+      selector: {id: button1}
+  - assert_text:
+      selector: {id: status}
+      text: {exact: "Dialog confirmed"}
+  - assert_no_crash: {}

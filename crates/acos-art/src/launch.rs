@@ -101,9 +101,16 @@ pub struct LaunchResult {
     pub guest_signal: Option<i32>,
     /// Wall time from spawning the guest to observing its end (or timeout).
     pub wall_ms: u64,
-    /// The APK's launcher activity (`aapt2 dump badging`), the class the
-    /// `LaunchActivityItem` names.
+    /// The APK's launcher component (`PackageParser` rules: `<activity>` or
+    /// `<activity-alias>` with MAIN/LAUNCHER), the component the
+    /// `LaunchActivityItem` intent names.
     pub activity: Option<String>,
+    /// `ActivityInfo.targetActivity` when the launcher entry is an alias (the
+    /// class the framework actually instantiates). `None` for a plain activity.
+    pub activity_target: Option<String>,
+    /// Effective `Activity.mResumed` wait the guest used (W27).
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
     /// The `application-created` marker, verbatim (real framework state).
     pub application_marker: Option<String>,
     /// The activity lifecycle marker, verbatim.
@@ -213,9 +220,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
             );
         }
         acos_services::native_libs::NativeLibInstall::UnsupportedAbi { available, message } => {
-            eprintln!(
-                "acos-art: launch: UNSUPPORTED_ABI available={available:?}: {message}"
-            );
+            eprintln!("acos-art: launch: UNSUPPORTED_ABI available={available:?}: {message}");
         }
         acos_services::native_libs::NativeLibInstall::None => {}
     }
@@ -331,7 +336,10 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
                 libc::close(listener);
                 // A 100 ms receive timeout lets `serve` notice `stop` without
                 // changing the frame protocol; a live guest simply continues.
-                let tv = libc::timeval { tv_sec: 0, tv_usec: 100_000 };
+                let tv = libc::timeval {
+                    tv_sec: 0,
+                    tv_usec: 100_000,
+                };
                 libc::setsockopt(
                     client,
                     libc::SOL_SOCKET,
@@ -385,11 +393,16 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     });
 
     // --- guest -------------------------------------------------------------
-    let activity = if opts.until == "activity-resumed" {
+    let launcher = if opts.until == "activity-resumed" {
         Some(apk_launcher_activity(&opts.apk)?)
     } else {
         None
     };
+    let activity = launcher.as_ref().map(|l| l.component.clone());
+    let activity_target = launcher
+        .as_ref()
+        .and_then(|l| l.target.clone())
+        .unwrap_or_default();
     // W24: `PackageParser`'s label fields, which the guest copies into
     // `ApplicationInfo.labelRes`/`nonLocalizedLabel` and
     // `ActivityInfo.labelRes`/`nonLocalizedLabel`. Stock
@@ -399,9 +412,36 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     // (`dev.acos.fixtures.counter.MainActivity` instead of `Counter`).
     let labels = acos_services::pms::manifest_labels(&opts.apk)
         .map_err(|e| Error::Layout(format!("manifest labels: {e}")))?;
-    let activity_label = activity
-        .as_deref()
-        .map(|name| labels.activity(name))
+    // W27 item 2: the resume budget is configurable. The default comes from the
+    // APK shape (multidex / large native closure -> 45 s, ordinary app -> 12 s,
+    // see `acos_services::manifest_resolve::launch_budget`); an explicit
+    // `ACOSLAUNCH_RESUME_MS` in the caller's environment always wins.
+    let budget = acos_services::manifest_resolve::launch_budget(&opts.apk).unwrap_or(
+        acos_services::manifest_resolve::LaunchBudget {
+            dex_count: 0,
+            native_bytes: 0,
+            resume_ms: acos_services::manifest_resolve::RESUME_MS_BASE,
+        },
+    );
+    let resume_ms = std::env::var("ACOSLAUNCH_RESUME_MS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|v| *v >= 1000)
+        .unwrap_or(budget.resume_ms);
+    eprintln!(
+        "acos-art: launch: resume budget={resume_ms}ms (dex={} native_bytes={} default={}ms){}",
+        budget.dex_count,
+        budget.native_bytes,
+        budget.resume_ms,
+        if resume_ms == budget.resume_ms {
+            ""
+        } else {
+            " (ACOSLAUNCH_RESUME_MS)"
+        }
+    );
+    let activity_label = launcher
+        .as_ref()
+        .map(|l| l.label.clone())
         .unwrap_or_default();
     let argv: Vec<String> = vec![
         "-cp".into(),
@@ -422,6 +462,8 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         labels.application.literal.clone().unwrap_or_default(),
         activity_label.res.to_string(),
         activity_label.literal.clone().unwrap_or_default(),
+        // W27: the alias's targetActivity (empty for a plain activity).
+        activity_target.clone(),
     ];
     crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();
@@ -435,7 +477,10 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         acos_services::native_libs::GUEST_NATIVE_LIB_ROOT,
     );
     sb.ro_bind(&substrate, "/data/app/libacosart.so");
-    sb.ro_bind(&root.sysroot.join("shim/libacoshw.so"), "/data/libacoshw.so");
+    sb.ro_bind(
+        &root.sysroot.join("shim/libacoshw.so"),
+        "/data/libacoshw.so",
+    );
     sb.ro_bind(&driver, "/data/lib/libacos_binder_driver.so");
     sb.rw_bind(run.dir("socket"), "/dev/socket");
     // The importer socket is the only writable file the peer needs in /data.
@@ -446,6 +491,7 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     );
     sb.env("ACOSART_LOAD", "libandroid_runtime.so");
     sb.env("E3G_SOCK", "/data/acos-launch.sock");
+    sb.env("ACOSLAUNCH_RESUME_MS", &resume_ms.to_string());
     if std::env::var_os("E3G_DEBUG").is_some() {
         sb.env("E3G_DEBUG", "1");
     }
@@ -493,23 +539,39 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         |c| {
             unsafe {
                 c.pre_exec(move || {
-            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0);
-            let core = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
-            libc::setrlimit(libc::RLIMIT_CORE, &core);
-            let nofile = libc::rlimit { rlim_cur: 4096, rlim_max: 4096 };
-            libc::setrlimit(libc::RLIMIT_NOFILE, &nofile);
-            // The launcher's memory backstops bound acos-art, never ART.
-            crate::watchdog::relax_child_limits();
-            // init.rc: setrlimit nice 40 40 (host best-effort; see watchdog).
-            crate::watchdog::apply_init_rlimit_nice();
-            Ok(())
+                    libc::prctl(
+                        libc::PR_SET_PDEATHSIG,
+                        libc::SIGKILL as libc::c_ulong,
+                        0,
+                        0,
+                        0,
+                    );
+                    let core = libc::rlimit {
+                        rlim_cur: 0,
+                        rlim_max: 0,
+                    };
+                    libc::setrlimit(libc::RLIMIT_CORE, &core);
+                    let nofile = libc::rlimit {
+                        rlim_cur: 4096,
+                        rlim_max: 4096,
+                    };
+                    libc::setrlimit(libc::RLIMIT_NOFILE, &nofile);
+                    // The launcher's memory backstops bound acos-art, never ART.
+                    crate::watchdog::relax_child_limits();
+                    // init.rc: setrlimit nice 40 40 (host best-effort; see watchdog).
+                    crate::watchdog::apply_init_rlimit_nice();
+                    Ok(())
                 });
             }
             c.process_group(0);
             if std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some() {
-                c.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+                c.stdin(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
             } else {
-                c.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+                c.stdin(Stdio::null())
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped());
             }
         },
     )?;
@@ -665,7 +727,9 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     let mut looper_trace: Vec<String> = Vec::new();
     let mut pending = false;
     for line in stdout.lines() {
-        let Some(line) = line.strip_prefix("ACOSLAUNCH TRACE ") else { continue };
+        let Some(line) = line.strip_prefix("ACOSLAUNCH TRACE ") else {
+            continue;
+        };
         if line.starts_with(">>>>> Dispatching") && line.contains("android.app.ActivityThread") {
             pending = line.ends_with(": 110") || line.ends_with(": 159");
             if pending {
@@ -705,66 +769,55 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     let activity_wanted = opts.until == "activity-resumed";
     // A watchdog kill is a host resource outcome, not a guest crash.
     let host_over_limit = dog.as_ref().and_then(|d| d.trip());
-    let (mut outcome, mut code) = if application_created
-        && guest_ok
-        && (!activity_wanted || activity_resumed)
-    {
-        (Outcome::Ok, None)
-    } else if timed_out {
-        // The guest never reached its milestone within the budget: a distinct
-        // outcome, not "still running".
-        (Outcome::Timeout, Some("TIMEOUT".to_string()))
-    } else if guest_signal.is_some() {
-        // A guest killed by the guard/Landlock (fail closed), the audit filter
-        // or the kernel is reported by signal, even when a milestone marker
-        // was already written.
-        (Outcome::Crash, Some("GUEST_KILLED_BY_SIGNAL".to_string()))
-    } else if guest_exit.is_some()
-        && application_created
-        && activity_resumed
-        && (activity_wanted || !guest_ok)
-    {
-        // The requested lifecycle milestone was reached (the marker is written
-        // from `Activity.mResumed`), but the guest then failed: the *next*
-        // blocker, reported rather than folded into "not resumed".
-        (
-            Outcome::Crash,
-            Some("GUEST_EXIT_AFTER_RESUME".to_string()),
-        )
-    } else if guest_exit.is_some()
-        && application_created
-        && activity_wanted
-        && summary.txn_bytes.is_some()
-    {
-        // Application.onCreate ran; the activity step did not reach onResume.
-        (
-            Outcome::Crash,
-            Some("NO_ACTIVITY_RESUMED".to_string()),
-        )
-    } else if guest_exit.is_some() {
-        // The guest ended before the requested milestone. `guest_exit` carries
-        // the code; this is the distinct "guest exited early" outcome.
-        (Outcome::Crash, Some("GUEST_EXITED".to_string()))
-    } else if application_created {
-        (
-            Outcome::Crash,
-            Some("GUEST_EXIT".to_string()),
-        )
-    } else {
-        (
-            Outcome::Crash,
-            Some(
-                if summary.delivered {
-                    "NO_APPLICATION"
-                } else if summary.bind_bytes.is_none() {
-                    "NO_BIND_REQUEST"
-                } else {
-                    "BIND_NOT_DELIVERED"
-                }
-                .to_string(),
-            ),
-        )
-    };
+    let (mut outcome, mut code) =
+        if application_created && guest_ok && (!activity_wanted || activity_resumed) {
+            (Outcome::Ok, None)
+        } else if timed_out {
+            // The guest never reached its milestone within the budget: a distinct
+            // outcome, not "still running".
+            (Outcome::Timeout, Some("TIMEOUT".to_string()))
+        } else if guest_signal.is_some() {
+            // A guest killed by the guard/Landlock (fail closed), the audit filter
+            // or the kernel is reported by signal, even when a milestone marker
+            // was already written.
+            (Outcome::Crash, Some("GUEST_KILLED_BY_SIGNAL".to_string()))
+        } else if guest_exit.is_some()
+            && application_created
+            && activity_resumed
+            && (activity_wanted || !guest_ok)
+        {
+            // The requested lifecycle milestone was reached (the marker is written
+            // from `Activity.mResumed`), but the guest then failed: the *next*
+            // blocker, reported rather than folded into "not resumed".
+            (Outcome::Crash, Some("GUEST_EXIT_AFTER_RESUME".to_string()))
+        } else if guest_exit.is_some()
+            && application_created
+            && activity_wanted
+            && summary.txn_bytes.is_some()
+        {
+            // Application.onCreate ran; the activity step did not reach onResume.
+            (Outcome::Crash, Some("NO_ACTIVITY_RESUMED".to_string()))
+        } else if guest_exit.is_some() {
+            // The guest ended before the requested milestone. `guest_exit` carries
+            // the code; this is the distinct "guest exited early" outcome.
+            (Outcome::Crash, Some("GUEST_EXITED".to_string()))
+        } else if application_created {
+            (Outcome::Crash, Some("GUEST_EXIT".to_string()))
+        } else {
+            (
+                Outcome::Crash,
+                Some(
+                    if summary.delivered {
+                        "NO_APPLICATION"
+                    } else if summary.bind_bytes.is_none() {
+                        "NO_BIND_REQUEST"
+                    } else {
+                        "BIND_NOT_DELIVERED"
+                    }
+                    .to_string(),
+                ),
+            )
+        };
     // A session that reached `ready` and was closed by its caller has done what
     // it was asked: the process ending there is the session's own teardown.
     if interactive_clean && activity_resumed {
@@ -780,6 +833,16 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
             t.limit_bytes / 1024 / 1024
         );
     }
+    // W27: the guest writes the effective budget into its not-resumed marker.
+    // Surface it only on the outcome that waited for it.
+    let result_timeout = if code.as_deref() == Some("NO_ACTIVITY_RESUMED") {
+        activity_failed_marker
+            .as_deref()
+            .and_then(|m| marker_u64(m, "timeout_ms"))
+            .or(Some(resume_ms))
+    } else {
+        None
+    };
     // S5: memcg OOM and the seccomp proof, same contract as the `run` route.
     if cgroup.oom_kills() > 0 {
         outcome = Outcome::Unsupported;
@@ -841,6 +904,12 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         guest_signal,
         wall_ms,
         activity: activity.clone(),
+        activity_target: if activity_target.is_empty() {
+            None
+        } else {
+            Some(activity_target.clone())
+        },
+        timeout_ms: result_timeout,
         application_marker: marker.clone(),
         activity_marker: activity_marker
             .clone()
@@ -900,6 +969,8 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
 // reported next to it for the honest cross-check.
 
 const LIVE_PROBE_PREFIX: &str = "ACOSPROBE ";
+/// W27 item 3: the guest's guest-side `startActivity` guard marker.
+const UNSUPPORTED_PREFIX: &str = "ACOSUNSUPPORTED ";
 const LIVE_PROBE_LINE_CAP: usize = 128 * 1024;
 const CAPTURE_SOURCE: &str = "acos-c1-buffer";
 
@@ -913,6 +984,11 @@ struct ProbeSample {
 #[derive(Default)]
 struct ProbeState {
     latest: Option<ProbeSample>,
+    /// The newest `ACOSUNSUPPORTED {…}` marker (guest-asserted).
+    unsupported: Option<serde_json::Value>,
+    /// Monotonic marker count, so a stale marker is not attributed to a later
+    /// gesture.
+    unsupported_seq: u64,
 }
 
 fn host_ms() -> u64 {
@@ -935,6 +1011,14 @@ fn latest_probe(state: &Arc<std::sync::Mutex<ProbeState>>) -> Option<ProbeSample
         .unwrap_or_else(|e| e.into_inner())
         .latest
         .clone()
+}
+
+/// The newest guest `ACOSUNSUPPORTED` marker and its ordinal.
+fn latest_unsupported(
+    state: &Arc<std::sync::Mutex<ProbeState>>,
+) -> (u64, Option<serde_json::Value>) {
+    let state = state.lock().unwrap_or_else(|e| e.into_inner());
+    (state.unsupported_seq, state.unsupported.clone())
 }
 
 /// Diagnostic (`ACOSLAUNCH_GUEST_STDERR_FILE`): drain a guest stream into the
@@ -988,18 +1072,15 @@ fn drain_stdout_lines<R: std::io::Read>(
                 let ended = line.ends_with(b"\n");
                 if at_line_start {
                     if let Ok(text) = std::str::from_utf8(&line) {
-                        if let Some(json) = text.trim_end().strip_prefix(LIVE_PROBE_PREFIX) {
+                        let trimmed = text.trim_end();
+                        if let Some(json) = trimmed.strip_prefix(LIVE_PROBE_PREFIX) {
                             if let Ok(value) = serde_json::from_str::<serde_json::Value>(json) {
                                 let seq = value.get("seq").and_then(|v| v.as_u64());
                                 let tree = value.get("tree");
                                 if let (Some(seq), Some(tree)) = (seq, tree) {
-                                    let mut state =
-                                        state.lock().unwrap_or_else(|e| e.into_inner());
-                                    let newer = state
-                                        .latest
-                                        .as_ref()
-                                        .map(|p| p.seq < seq)
-                                        .unwrap_or(true);
+                                    let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+                                    let newer =
+                                        state.latest.as_ref().map(|p| p.seq < seq).unwrap_or(true);
                                     if newer {
                                         state.latest = Some(ProbeSample {
                                             seq,
@@ -1008,6 +1089,12 @@ fn drain_stdout_lines<R: std::io::Read>(
                                         });
                                     }
                                 }
+                            }
+                        } else if let Some(json) = trimmed.strip_prefix(UNSUPPORTED_PREFIX) {
+                            if let Ok(value) = serde_json::from_str::<serde_json::Value>(json) {
+                                let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+                                state.unsupported = Some(value);
+                                state.unsupported_seq += 1;
                             }
                         }
                     }
@@ -1165,8 +1252,13 @@ struct Settled {
 
 enum SettleEnd {
     Settled(Settled),
-    Timeout { generation: u64, probe_seq: u64 },
+    Timeout {
+        generation: u64,
+        probe_seq: u64,
+    },
     GuestExited(std::process::ExitStatus),
+    /// The guest's `startActivity` guard fired during this gesture (W27).
+    Unsupported(serde_json::Value),
 }
 
 /// Wait until the newest C1 frame and the newest in-guest tree sample describe
@@ -1199,7 +1291,15 @@ fn wait_for_settled_observation(
     let mut last_generation = min_generation;
     let mut last_change = Instant::now();
     let mut last_change_ms = host_ms();
+    let (unsupported_baseline, _) = latest_unsupported(probe_state);
     loop {
+        // A structured guest marker is more informative than the generic
+        // "no fresh frame" timeout, and it is the only honest result for an
+        // Android API the launcher does not implement yet.
+        let (unsupported_seq, marker) = latest_unsupported(probe_state);
+        if unsupported_seq > unsupported_baseline {
+            return SettleEnd::Unsupported(marker.unwrap_or(serde_json::Value::Null));
+        }
         match child.try_wait() {
             Ok(Some(status)) => return SettleEnd::GuestExited(status),
             _ => {}
@@ -1216,7 +1316,10 @@ fn wait_for_settled_observation(
             .map(|p| p.at_ms >= last_change_ms)
             .unwrap_or(false);
         if generation > min_generation
-            && probe.as_ref().map(|p| p.seq > min_probe_seq).unwrap_or(false)
+            && probe
+                .as_ref()
+                .map(|p| p.seq > min_probe_seq)
+                .unwrap_or(false)
             && last_change.elapsed() >= quiet
             && probe_after
         {
@@ -1279,7 +1382,10 @@ fn interactive_serve(
             protocol_write(&reply);
             evidence.push(reply);
             write_session_evidence(out, &evidence);
-            return Ok(SessionEnd { status: Some(status), clean: false });
+            return Ok(SessionEnd {
+                status: Some(status),
+                clean: false,
+            });
         }
         if let Some(d) = dog {
             if d.trip().is_some() {
@@ -1291,7 +1397,10 @@ fn interactive_serve(
                 protocol_write(&reply);
                 evidence.push(reply);
                 write_session_evidence(out, &evidence);
-                return Ok(SessionEnd { status: None, clean: false });
+                return Ok(SessionEnd {
+                    status: None,
+                    clean: false,
+                });
             }
         }
         cgroup.sample();
@@ -1315,7 +1424,10 @@ fn interactive_serve(
             protocol_write(&reply);
             evidence.push(reply);
             write_session_evidence(out, &evidence);
-            return Ok(SessionEnd { status: None, clean: false });
+            return Ok(SessionEnd {
+                status: None,
+                clean: false,
+            });
         }
         std::thread::sleep(Duration::from_millis(10));
     }
@@ -1370,7 +1482,8 @@ fn interactive_serve(
         }
     });
 
-    let session_deadline = Instant::now() + Duration::from_secs(env_u64("ACOSLAUNCH_SESSION_SECS", 900));
+    let session_deadline =
+        Instant::now() + Duration::from_secs(env_u64("ACOSLAUNCH_SESSION_SECS", 900));
     let ack_wait = Duration::from_millis(env_u64("ACOS_INPUT_ACK_MS", 2500));
     let frame_wait = Duration::from_secs(env_u64("ACOSLAUNCH_FRAME_WAIT_SECS", 15));
     let clean: bool;
@@ -1389,7 +1502,10 @@ fn interactive_serve(
                     protocol_write(&reply);
                     evidence.push(reply);
                     write_session_evidence(out, &evidence);
-                    return Ok(SessionEnd { status: Some(status), clean: false });
+                    return Ok(SessionEnd {
+                        status: Some(status),
+                        clean: false,
+                    });
                 }
                 if let Some(d) = dog {
                     if d.trip().is_some() {
@@ -1401,7 +1517,10 @@ fn interactive_serve(
                         protocol_write(&reply);
                         evidence.push(reply);
                         write_session_evidence(out, &evidence);
-                        return Ok(SessionEnd { status: None, clean: false });
+                        return Ok(SessionEnd {
+                            status: None,
+                            clean: false,
+                        });
                     }
                 }
                 if Instant::now() >= session_deadline {
@@ -1413,7 +1532,10 @@ fn interactive_serve(
                     protocol_write(&reply);
                     evidence.push(reply);
                     write_session_evidence(out, &evidence);
-                    return Ok(SessionEnd { status: None, clean: false });
+                    return Ok(SessionEnd {
+                        status: None,
+                        clean: false,
+                    });
                 }
                 cgroup.sample();
                 continue;
@@ -1458,18 +1580,20 @@ fn interactive_serve(
                 );
                 let probe = match settled {
                     SettleEnd::Settled(settled) => settled.probe,
-                    SettleEnd::Timeout { .. } => match latest_probe(probe_state) {
-                        Some(probe) => probe,
-                        None => {
-                            let reply = serde_json::json!({
-                                "ok": false, "cmd": "tree", "code": "NO_TEXT",
-                                "error": "the in-guest tree probe has produced no sample",
-                            });
-                            protocol_write(&reply);
-                            evidence.push(reply);
-                            continue;
+                    SettleEnd::Timeout { .. } | SettleEnd::Unsupported(_) => {
+                        match latest_probe(probe_state) {
+                            Some(probe) => probe,
+                            None => {
+                                let reply = serde_json::json!({
+                                    "ok": false, "cmd": "tree", "code": "NO_TEXT",
+                                    "error": "the in-guest tree probe has produced no sample",
+                                });
+                                protocol_write(&reply);
+                                evidence.push(reply);
+                                continue;
+                            }
                         }
-                    },
+                    }
                     SettleEnd::GuestExited(status) => {
                         let reply = serde_json::json!({
                             "ok": false, "cmd": "tree", "code": "GUEST_EXITED",
@@ -1478,7 +1602,10 @@ fn interactive_serve(
                         protocol_write(&reply);
                         evidence.push(reply);
                         write_session_evidence(out, &evidence);
-                        return Ok(SessionEnd { status: Some(status), clean: false });
+                        return Ok(SessionEnd {
+                            status: Some(status),
+                            clean: false,
+                        });
                     }
                 };
                 match capture_c1(live, frames_dir, &mut captures) {
@@ -1620,6 +1747,7 @@ fn interactive_serve(
                         continue;
                     }
                 };
+                let (u_baseline, _) = latest_unsupported(probe_state);
                 let settled = wait_for_settled_observation(
                     child,
                     cgroup,
@@ -1640,7 +1768,39 @@ fn interactive_serve(
                         generation,
                         probe_seq,
                     } => (None, generation, probe_seq),
+                    SettleEnd::Unsupported(marker) => {
+                        let reply = serde_json::json!({
+                            "ok": false, "cmd": cmd, "code": "UNSUPPORTED_ANDROID_API",
+                            "error": format!(
+                                "the app called {} and the launcher has no multi-Activity path; the guest stayed alive and no Activity was fabricated",
+                                marker.get("call").and_then(|v| v.as_str()).unwrap_or("startActivity")
+                            ),
+                            "unsupported": marker,
+                            "gesture": {"seqs": injected.seqs, "token": format!("{:#x}", injected.token.0)},
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                        continue;
+                    }
                     SettleEnd::GuestExited(status) => {
+                        // Prefer a structured marker that arrived in the same
+                        // tick the guest died.
+                        let (seq, marker) = latest_unsupported(probe_state);
+                        if seq > u_baseline {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": cmd, "code": "UNSUPPORTED_ANDROID_API",
+                                "error": format!(
+                                    "the app called {} and the launcher has no multi-Activity path",
+                                    marker.as_ref().and_then(|m| m.get("call")).and_then(|v| v.as_str())
+                                        .unwrap_or("startActivity")
+                                ),
+                                "unsupported": marker,
+                                "gesture": {"seqs": injected.seqs, "token": format!("{:#x}", injected.token.0)},
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                            continue;
+                        }
                         let reply = serde_json::json!({
                             "ok": false, "cmd": cmd, "code": "GUEST_EXITED",
                             "error": format!(
@@ -1651,7 +1811,10 @@ fn interactive_serve(
                         protocol_write(&reply);
                         evidence.push(reply);
                         write_session_evidence(out, &evidence);
-                        return Ok(SessionEnd { status: Some(status), clean: false });
+                        return Ok(SessionEnd {
+                            status: Some(status),
+                            clean: false,
+                        });
                     }
                 };
                 if settled_probe.is_none() {
@@ -1989,7 +2152,9 @@ fn build_driver(root: &ArtRoot) -> Result<PathBuf> {
     }
     let stamp = dir.join("binder_driver.hash");
     if out.is_file()
-        && fs::read_to_string(&stamp).map(|s| s.trim() == hash.to_string()).unwrap_or(false)
+        && fs::read_to_string(&stamp)
+            .map(|s| s.trim() == hash.to_string())
+            .unwrap_or(false)
     {
         return Ok(out);
     }
@@ -2044,7 +2209,9 @@ fn build_launch_guest(root: &ArtRoot) -> Result<PathBuf> {
     let stamp = out_dir.join(".hash");
     let dex = out_dir.join("classes.dex");
     if dex.is_file()
-        && fs::read_to_string(&stamp).map(|s| s.trim() == hash.to_string()).unwrap_or(false)
+        && fs::read_to_string(&stamp)
+            .map(|s| s.trim() == hash.to_string())
+            .unwrap_or(false)
     {
         return Ok(dex);
     }
@@ -2118,7 +2285,9 @@ fn android_sdk() -> Result<PathBuf> {
             return Ok(p);
         }
     }
-    Err(Error::Tool("no Android SDK found (set ANDROID_SDK_ROOT)".into()))
+    Err(Error::Tool(
+        "no Android SDK found (set ANDROID_SDK_ROOT)".into(),
+    ))
 }
 
 fn find_tool(sdk: &Path, name: &str) -> Result<PathBuf> {
@@ -2132,12 +2301,16 @@ fn find_tool(sdk: &Path, name: &str) -> Result<PathBuf> {
             return Ok(p);
         }
     }
-    Err(Error::Tool(format!("no {name} under {}/build-tools", sdk.display())))
+    Err(Error::Tool(format!(
+        "no {name} under {}/build-tools",
+        sdk.display()
+    )))
 }
 
 fn ndk_clang() -> Result<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
-    if let Some(p) = std::env::var_os("ANDROID_NDK_HOME").or_else(|| std::env::var_os("ANDROID_NDK_ROOT"))
+    if let Some(p) =
+        std::env::var_os("ANDROID_NDK_HOME").or_else(|| std::env::var_os("ANDROID_NDK_ROOT"))
     {
         roots.push(PathBuf::from(p));
     }
@@ -2151,7 +2324,10 @@ fn ndk_clang() -> Result<PathBuf> {
     }
     for r in roots {
         let dir = r.join("toolchains/llvm/prebuilt/linux-x86_64/bin");
-        for target in ["x86_64-linux-android34-clang", "x86_64-linux-android33-clang"] {
+        for target in [
+            "x86_64-linux-android34-clang",
+            "x86_64-linux-android33-clang",
+        ] {
             let p = dir.join(target);
             if p.is_file() {
                 return Ok(p);
@@ -2166,32 +2342,25 @@ fn ndk_clang() -> Result<PathBuf> {
     ))
 }
 
-/// The APK's launcher activity, from `aapt2 dump badging`
-/// (`launchable-activity: name='…'`). The class `LaunchActivityItem` names.
-fn apk_launcher_activity(apk: &Path) -> Result<String> {
-    let sdk = android_sdk()?;
-    let aapt2 = find_tool(&sdk, "aapt2")?;
-    let out = Command::new(&aapt2).arg("dump").arg("badging").arg(apk).output()?;
-    if !out.status.success() {
-        return Err(Error::Tool(format!(
-            "aapt2 could not read {}: {}",
-            apk.display(),
-            String::from_utf8_lossy(&out.stderr).trim()
-        )));
-    }
-    let text = String::from_utf8_lossy(&out.stdout);
-    let class = text
-        .lines()
-        .find_map(|l| l.strip_prefix("launchable-activity:"))
-        .and_then(|l| l.split("name='").nth(1))
-        .and_then(|l| l.split('\'').next())
-        .map(str::to_string);
-    class.ok_or_else(|| {
+/// The APK's launcher component, from the parsed manifest (`PackageParser`
+/// rules: `<activity>` or `<activity-alias>` with MAIN/LAUNCHER).
+fn apk_launcher_activity(apk: &Path) -> Result<acos_services::manifest_resolve::LauncherActivity> {
+    acos_services::manifest_resolve::launcher_activity(apk).map_err(|e| {
         Error::Tool(format!(
-            "{} declares no launchable activity (aapt2 dump badging)",
-            apk.display()
+            "{}: {} ({}; resolved from AndroidManifest.xml, not aapt2 badging)",
+            apk.display(),
+            e,
+            e.code()
         ))
     })
+}
+
+/// Read `key=value` from a marker file's lines.
+fn marker_u64(marker: &str, key: &str) -> Option<u64> {
+    marker
+        .lines()
+        .find_map(|l| l.strip_prefix(key)?.strip_prefix('='))
+        .and_then(|v| v.trim().parse().ok())
 }
 
 fn tail(s: &str, max: usize) -> String {

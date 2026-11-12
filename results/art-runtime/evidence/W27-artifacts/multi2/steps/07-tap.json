@@ -1,0 +1,26 @@
+{
+  "assertions": [],
+  "duration_ms": 489,
+  "error": {
+    "code": "UNSUPPORTED_ANDROID_API",
+    "hint": "Inspect the exact API in details.api/details.at; avoid it, guard it with a version/feature check, or mark the task unsupported. Never count it as a pass.",
+    "message": "acos-art: UNSUPPORTED_ANDROID_API: the app called android.app.IActivityTaskManager.startActivity and the launcher has no multi-Activity path; the guest stayed alive and no Activity was fabricated",
+    "retryable": false
+  },
+  "evidence": [
+    {
+      "kind": "step",
+      "path": "steps/07-tap.json"
+    }
+  ],
+  "index": 7,
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "status": "unsupported",
+  "step": "tap",
+  "trust": "trusted"
+}

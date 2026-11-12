@@ -1,0 +1,9 @@
+v2-counter	pass	rc=0
+w19-form-behavior	pass	rc=0
+w22-counter-reset	pass	rc=0
+w22-counter-log	pass	rc=0
+w23-rn-tap	pass	rc=0
+w24-counter-labels	pass	rc=0
+native-hello	pass	rc=0
+two-activity	pass	rc=0
+dialog-menu	pass	rc=0

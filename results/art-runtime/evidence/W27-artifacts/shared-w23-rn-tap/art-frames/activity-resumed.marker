@@ -1,0 +1,8 @@
+package=dev.acos.fixtures.rnhello
+activity=dev.acos.fixtures.rnhello.MainActivity
+lifecycle=onCreate,onStart,onResume
+resumed=true
+called=true
+stopped=false
+window=com.android.internal.policy.PhoneWindow@df73f2c
+timeout_ms=12000
