@@ -1,0 +1,6311 @@
+{
+ "child_pids": [],
+ "cold": {
+  "exec_to_main_ms": [],
+  "exec_to_ready_ms": [],
+  "work_ms": []
+ },
+ "fork_to_post_fork_ms": [
+  1
+ ],
+ "fork_to_ready_ms": [
+  14
+ ],
+ "gc_lines": [
+  "gc pid=8 n=5 ms=[1,1,1,1,1] gc_requested=5 heap_used_kb=20597 heap_total_kb=26725 max_kb=524288 threads=7"
+ ],
+ "hold_ms": 9000,
+ "late_fork": [
+  "late_fork child=24 threads=6"
+ ],
+ "log": "/home/Qui/Projects/acos/.cache/z1/logs/run-n1.log",
+ "n": 1,
+ "parent_pid": 1251412,
+ "preload_limit": 800,
+ "raw_smaps_file": "results/art-runtime/Z1-N1.json.smaps",
+ "reap_lines": [
+  "reaped child=8 wait4_ret=-10 (failed)",
+  "late_fork_reaped child=24 wait4_ret=-10 (failed)"
+ ],
+ "snapshot": {
+  "1251395": {
+   "cmdline": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-dr",
+   "groups": {
+    "boot_image": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    },
+    "dalvik_all_anon": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    },
+    "dalvik_main_space": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    },
+    "dalvik_region_space": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    },
+    "dalvik_zygote_space": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    },
+    "zygote_flag": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    }
+   },
+   "mappings": {
+    "boot_image": 0,
+    "dalvik_all_anon": 0,
+    "dalvik_main_space": 0,
+    "dalvik_region_space": 0,
+    "dalvik_zygote_space": 0,
+    "zygote_flag": 0
+   },
+   "names": {
+    "": {
+     "Private_Dirty": 12,
+     "Pss": 26,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/etc/ld.so.cache": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 256,
+     "Shared_Clean": 256
+    },
+    "/usr/bin/bwrap": {
+     "Private_Dirty": 4,
+     "Pss": 50,
+     "Rss": 84,
+     "Shared_Clean": 64
+    },
+    "/usr/lib/ld-linux-x86-64.so.2": {
+     "Private_Dirty": 0,
+     "Pss": 7,
+     "Rss": 256,
+     "Shared_Clean": 244
+    },
+    "/usr/lib/libc.so.6": {
+     "Private_Dirty": 8,
+     "Pss": 27,
+     "Rss": 1512,
+     "Shared_Clean": 1488
+    },
+    "/usr/lib/libcap.so.2.78": {
+     "Private_Dirty": 0,
+     "Pss": 44,
+     "Rss": 48,
+     "Shared_Clean": 0
+    },
+    "/usr/lib/libgcc_s.so.1": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 104,
+     "Shared_Clean": 96
+    },
+    "[heap]": {
+     "Private_Dirty": 16,
+     "Pss": 16,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "[stack]": {
+     "Private_Dirty": 12,
+     "Pss": 20,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "[vdso]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 8,
+     "Shared_Clean": 8
+    },
+    "[vsyscall]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[vvar]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[vvar_vclock]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    }
+   },
+   "rollup": {
+    "Private_Clean": 52,
+    "Private_Dirty": 52,
+    "Pss": 201,
+    "Rss": 2352,
+    "Shared_Clean": 2156,
+    "Shared_Dirty": 92,
+    "Swap": 0
+   }
+  },
+  "1251411": {
+   "cmdline": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-dr",
+   "groups": {
+    "boot_image": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    },
+    "dalvik_all_anon": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    },
+    "dalvik_main_space": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    },
+    "dalvik_region_space": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    },
+    "dalvik_zygote_space": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    },
+    "zygote_flag": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    }
+   },
+   "mappings": {
+    "boot_image": 0,
+    "dalvik_all_anon": 0,
+    "dalvik_main_space": 0,
+    "dalvik_region_space": 0,
+    "dalvik_zygote_space": 0,
+    "zygote_flag": 0
+   },
+   "names": {
+    "": {
+     "Private_Dirty": 12,
+     "Pss": 26,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/etc/ld.so.cache": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/usr/bin/bwrap": {
+     "Private_Dirty": 4,
+     "Pss": 38,
+     "Rss": 72,
+     "Shared_Clean": 64
+    },
+    "/usr/lib/ld-linux-x86-64.so.2": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/usr/lib/libc.so.6": {
+     "Private_Dirty": 8,
+     "Pss": 23,
+     "Rss": 1156,
+     "Shared_Clean": 1132
+    },
+    "/usr/lib/libcap.so.2.78": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/usr/lib/libgcc_s.so.1": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "[heap]": {
+     "Private_Dirty": 20,
+     "Pss": 20,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "[stack]": {
+     "Private_Dirty": 12,
+     "Pss": 20,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "[vdso]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[vsyscall]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[vvar]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[vvar_vclock]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    }
+   },
+   "rollup": {
+    "Private_Clean": 0,
+    "Private_Dirty": 56,
+    "Pss": 142,
+    "Rss": 1344,
+    "Shared_Clean": 1196,
+    "Shared_Dirty": 92,
+    "Swap": 0
+   }
+  },
+  "1251412": {
+   "cmdline": "/system/apex/com.android.art/bin/dalvikvm64 -Ximage:/apex/com.android.art/bootimg/boot.art -Xmx512m -Xms8m -Xzygote -Xhi",
+   "groups": {
+    "boot_image": {
+     "Private_Dirty": 44,
+     "Pss": 27466,
+     "Rss": 50432,
+     "Shared_Clean": 2808,
+     "Shared_Dirty": 43124,
+     "Shared_Hugetlb": 0
+    },
+    "dalvik_all_anon": {
+     "Private_Dirty": 1296,
+     "Pss": 27480,
+     "Rss": 53664,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 52368,
+     "Shared_Hugetlb": 0
+    },
+    "dalvik_main_space": {
+     "Private_Dirty": 32,
+     "Pss": 32,
+     "Rss": 32,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    },
+    "dalvik_region_space": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    },
+    "dalvik_zygote_space": {
+     "Private_Dirty": 16,
+     "Pss": 24,
+     "Rss": 32,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 16,
+     "Shared_Hugetlb": 0
+    },
+    "zygote_flag": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    }
+   },
+   "mappings": {
+    "boot_image": 870,
+    "dalvik_all_anon": 570,
+    "dalvik_main_space": 20,
+    "dalvik_region_space": 10,
+    "dalvik_zygote_space": 10,
+    "zygote_flag": 0
+   },
+   "names": {
+    "": {
+     "Private_Dirty": 0,
+     "Pss": 1024,
+     "Rss": 2048,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.adservices/javalib/framework-adservices.jar": {
+     "Private_Dirty": 0,
+     "Pss": 200,
+     "Rss": 200,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.adservices/javalib/framework-sdksandbox.jar": {
+     "Private_Dirty": 0,
+     "Pss": 36,
+     "Rss": 68,
+     "Shared_Clean": 64
+    },
+    "/apex/com.android.appsearch/javalib/framework-appsearch.jar": {
+     "Private_Dirty": 0,
+     "Pss": 140,
+     "Rss": 140,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-android.net.ipsec.ike.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-android.net.ipsec.ike.oat": {
+     "Private_Dirty": 0,
+     "Pss": 114,
+     "Rss": 116,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-android.net.ipsec.ike.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 20,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-apache-xml.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-apache-xml.oat": {
+     "Private_Dirty": 0,
+     "Pss": 82,
+     "Rss": 84,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-apache-xml.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 20,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-bouncycastle.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-bouncycastle.oat": {
+     "Private_Dirty": 0,
+     "Pss": 98,
+     "Rss": 100,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-bouncycastle.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 36,
+     "Rss": 36,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-conscrypt.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-conscrypt.oat": {
+     "Private_Dirty": 0,
+     "Pss": 126,
+     "Rss": 128,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-conscrypt.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-core-icu4j.art": {
+     "Private_Dirty": 0,
+     "Pss": 16,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-core-icu4j.oat": {
+     "Private_Dirty": 0,
+     "Pss": 932,
+     "Rss": 964,
+     "Shared_Clean": 60
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-core-icu4j.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 36,
+     "Rss": 36,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-core-libart.art": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 4
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-core-libart.oat": {
+     "Private_Dirty": 0,
+     "Pss": 298,
+     "Rss": 528,
+     "Shared_Clean": 456
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-core-libart.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 12
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-ext.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-ext.oat": {
+     "Private_Dirty": 0,
+     "Pss": 74,
+     "Rss": 76,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-ext.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-adservices.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-adservices.oat": {
+     "Private_Dirty": 0,
+     "Pss": 86,
+     "Rss": 88,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-adservices.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-appsearch.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-appsearch.oat": {
+     "Private_Dirty": 0,
+     "Pss": 110,
+     "Rss": 112,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-appsearch.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-bluetooth.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-bluetooth.oat": {
+     "Private_Dirty": 0,
+     "Pss": 122,
+     "Rss": 124,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-bluetooth.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 16,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-configinfrastructure.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-configinfrastructure.oat": {
+     "Private_Dirty": 0,
+     "Pss": 18,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-configinfrastructure.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-connectivity-t.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-connectivity-t.oat": {
+     "Private_Dirty": 0,
+     "Pss": 110,
+     "Rss": 112,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-connectivity-t.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-connectivity.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-connectivity.oat": {
+     "Private_Dirty": 0,
+     "Pss": 134,
+     "Rss": 136,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-connectivity.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 28,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-devicelock.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-devicelock.oat": {
+     "Private_Dirty": 0,
+     "Pss": 18,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-devicelock.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-graphics.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-graphics.oat": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-graphics.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-healthfitness.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-healthfitness.oat": {
+     "Private_Dirty": 0,
+     "Pss": 126,
+     "Rss": 128,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-healthfitness.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 16,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-mediaprovider.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-mediaprovider.oat": {
+     "Private_Dirty": 0,
+     "Pss": 34,
+     "Rss": 36,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-mediaprovider.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-ondevicepersonalization.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-ondevicepersonalization.oat": {
+     "Private_Dirty": 0,
+     "Pss": 54,
+     "Rss": 56,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-ondevicepersonalization.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-permission-s.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-permission-s.oat": {
+     "Private_Dirty": 0,
+     "Pss": 90,
+     "Rss": 92,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-permission-s.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-permission.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-permission.oat": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-permission.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-scheduling.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-scheduling.oat": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-scheduling.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-sdkextensions.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-sdkextensions.oat": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-sdkextensions.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-sdksandbox.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-sdksandbox.oat": {
+     "Private_Dirty": 0,
+     "Pss": 38,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-sdksandbox.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-statsd.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-statsd.oat": {
+     "Private_Dirty": 0,
+     "Pss": 54,
+     "Rss": 56,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-statsd.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-tethering.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-tethering.oat": {
+     "Private_Dirty": 0,
+     "Pss": 38,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-tethering.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-uwb.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-uwb.oat": {
+     "Private_Dirty": 0,
+     "Pss": 62,
+     "Rss": 64,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-uwb.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-virtualization.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-virtualization.oat": {
+     "Private_Dirty": 0,
+     "Pss": 42,
+     "Rss": 44,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-virtualization.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-wifi.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-wifi.oat": {
+     "Private_Dirty": 0,
+     "Pss": 126,
+     "Rss": 128,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-wifi.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 16,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework.oat": {
+     "Private_Dirty": 0,
+     "Pss": 162,
+     "Rss": 164,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 440,
+     "Rss": 440,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-ims-common.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-ims-common.oat": {
+     "Private_Dirty": 0,
+     "Pss": 94,
+     "Rss": 96,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-ims-common.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-okhttp.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-okhttp.oat": {
+     "Private_Dirty": 0,
+     "Pss": 106,
+     "Rss": 108,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-okhttp.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-telephony-common.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-telephony-common.oat": {
+     "Private_Dirty": 0,
+     "Pss": 126,
+     "Rss": 128,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-telephony-common.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 56,
+     "Rss": 56,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-updatable-media.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-updatable-media.oat": {
+     "Private_Dirty": 0,
+     "Pss": 102,
+     "Rss": 104,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-updatable-media.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 16,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-voip-common.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-voip-common.oat": {
+     "Private_Dirty": 0,
+     "Pss": 118,
+     "Rss": 120,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-voip-common.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 20,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot.art": {
+     "Private_Dirty": 0,
+     "Pss": 16,
+     "Rss": 32,
+     "Shared_Clean": 32
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2528,
+     "Rss": 3652,
+     "Shared_Clean": 2244
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 54,
+     "Rss": 76,
+     "Shared_Clean": 44
+    },
+    "/apex/com.android.art/javalib/apache-xml.jar": {
+     "Private_Dirty": 0,
+     "Pss": 226,
+     "Rss": 348,
+     "Shared_Clean": 244
+    },
+    "/apex/com.android.art/javalib/bouncycastle.jar": {
+     "Private_Dirty": 0,
+     "Pss": 176,
+     "Rss": 272,
+     "Shared_Clean": 192
+    },
+    "/apex/com.android.art/javalib/core-libart.jar": {
+     "Private_Dirty": 0,
+     "Pss": 274,
+     "Rss": 444,
+     "Shared_Clean": 340
+    },
+    "/apex/com.android.art/javalib/core-oj.jar": {
+     "Private_Dirty": 0,
+     "Pss": 2316,
+     "Rss": 2892,
+     "Shared_Clean": 1152
+    },
+    "/apex/com.android.art/javalib/okhttp.jar": {
+     "Private_Dirty": 0,
+     "Pss": 134,
+     "Rss": 204,
+     "Shared_Clean": 140
+    },
+    "/apex/com.android.art/lib64/libandroidio.so": {
+     "Private_Dirty": 4,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 8
+    },
+    "/apex/com.android.art/lib64/libart-compiler.so": {
+     "Private_Dirty": 0,
+     "Pss": 604,
+     "Rss": 1048,
+     "Shared_Clean": 808
+    },
+    "/apex/com.android.art/lib64/libart.so": {
+     "Private_Dirty": 4,
+     "Pss": 3850,
+     "Rss": 6360,
+     "Shared_Clean": 4940
+    },
+    "/apex/com.android.art/lib64/libartbase.so": {
+     "Private_Dirty": 0,
+     "Pss": 180,
+     "Rss": 320,
+     "Shared_Clean": 264
+    },
+    "/apex/com.android.art/lib64/libartpalette.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 20,
+     "Shared_Clean": 8
+    },
+    "/apex/com.android.art/lib64/libdexfile.so": {
+     "Private_Dirty": 0,
+     "Pss": 118,
+     "Rss": 236,
+     "Shared_Clean": 224
+    },
+    "/apex/com.android.art/lib64/libexpat.so": {
+     "Private_Dirty": 0,
+     "Pss": 32,
+     "Rss": 36,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/lib64/libjavacore.so": {
+     "Private_Dirty": 4,
+     "Pss": 156,
+     "Rss": 244,
+     "Shared_Clean": 164
+    },
+    "/apex/com.android.art/lib64/liblz4.so": {
+     "Private_Dirty": 0,
+     "Pss": 104,
+     "Rss": 108,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/lib64/liblzma.so": {
+     "Private_Dirty": 0,
+     "Pss": 40,
+     "Rss": 44,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/lib64/libnativebridge.so": {
+     "Private_Dirty": 0,
+     "Pss": 20,
+     "Rss": 28,
+     "Shared_Clean": 8
+    },
+    "/apex/com.android.art/lib64/libnativehelper.so": {
+     "Private_Dirty": 4,
+     "Pss": 20,
+     "Rss": 32,
+     "Shared_Clean": 16
+    },
+    "/apex/com.android.art/lib64/libnativeloader.so": {
+     "Private_Dirty": 0,
+     "Pss": 160,
+     "Rss": 168,
+     "Shared_Clean": 8
+    },
+    "/apex/com.android.art/lib64/libopenjdk.so": {
+     "Private_Dirty": 0,
+     "Pss": 174,
+     "Rss": 240,
+     "Shared_Clean": 116
+    },
+    "/apex/com.android.art/lib64/libopenjdkjvm.so": {
+     "Private_Dirty": 0,
+     "Pss": 24,
+     "Rss": 40,
+     "Shared_Clean": 20
+    },
+    "/apex/com.android.art/lib64/libprofile.so": {
+     "Private_Dirty": 0,
+     "Pss": 88,
+     "Rss": 92,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/lib64/libsigchain.so": {
+     "Private_Dirty": 0,
+     "Pss": 28,
+     "Rss": 36,
+     "Shared_Clean": 8
+    },
+    "/apex/com.android.art/lib64/libunwindstack.so": {
+     "Private_Dirty": 0,
+     "Pss": 200,
+     "Rss": 220,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.btservices/javalib/framework-bluetooth.jar": {
+     "Private_Dirty": 0,
+     "Pss": 248,
+     "Rss": 248,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.conscrypt/javalib/conscrypt.jar": {
+     "Private_Dirty": 0,
+     "Pss": 200,
+     "Rss": 200,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.devicelock/javalib/framework-devicelock.jar": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 28,
+     "Shared_Clean": 28
+    },
+    "/apex/com.android.healthfitness/javalib/framework-healthfitness.jar": {
+     "Private_Dirty": 0,
+     "Pss": 260,
+     "Rss": 324,
+     "Shared_Clean": 128
+    },
+    "/apex/com.android.i18n/etc/icu/icudt72l.dat": {
+     "Private_Dirty": 0,
+     "Pss": 176,
+     "Rss": 176,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.i18n/javalib/core-icu4j.jar": {
+     "Private_Dirty": 0,
+     "Pss": 1226,
+     "Rss": 1352,
+     "Shared_Clean": 252
+    },
+    "/apex/com.android.i18n/lib64/libandroidicu.so": {
+     "Private_Dirty": 0,
+     "Pss": 24,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.i18n/lib64/libicu.so": {
+     "Private_Dirty": 0,
+     "Pss": 60,
+     "Rss": 68,
+     "Shared_Clean": 8
+    },
+    "/apex/com.android.i18n/lib64/libicu_jni.so": {
+     "Private_Dirty": 0,
+     "Pss": 40,
+     "Rss": 84,
+     "Shared_Clean": 72
+    },
+    "/apex/com.android.i18n/lib64/libicui18n.so": {
+     "Private_Dirty": 0,
+     "Pss": 930,
+     "Rss": 972,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.i18n/lib64/libicuuc.so": {
+     "Private_Dirty": 0,
+     "Pss": 924,
+     "Rss": 1144,
+     "Shared_Clean": 348
+    },
+    "/apex/com.android.ipsec/javalib/android.net.ipsec.ike.jar": {
+     "Private_Dirty": 0,
+     "Pss": 268,
+     "Rss": 364,
+     "Shared_Clean": 192
+    },
+    "/apex/com.android.media/javalib/updatable-media.jar": {
+     "Private_Dirty": 0,
+     "Pss": 208,
+     "Rss": 272,
+     "Shared_Clean": 128
+    },
+    "/apex/com.android.mediaprovider/javalib/framework-mediaprovider.jar": {
+     "Private_Dirty": 0,
+     "Pss": 48,
+     "Rss": 80,
+     "Shared_Clean": 64
+    },
+    "/apex/com.android.os.statsd/javalib/framework-statsd.jar": {
+     "Private_Dirty": 0,
+     "Pss": 96,
+     "Rss": 96,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.os.statsd/lib64/libstatssocket.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.permission/javalib/framework-permission-s.jar": {
+     "Private_Dirty": 0,
+     "Pss": 104,
+     "Rss": 168,
+     "Shared_Clean": 128
+    },
+    "/apex/com.android.permission/javalib/framework-permission.jar": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 4
+    },
+    "/apex/com.android.runtime/bin/linker64": {
+     "Private_Dirty": 4,
+     "Pss": 870,
+     "Rss": 936,
+     "Shared_Clean": 88
+    },
+    "/apex/com.android.runtime/lib64/bionic/libc.so": {
+     "Private_Dirty": 0,
+     "Pss": 464,
+     "Rss": 840,
+     "Shared_Clean": 728
+    },
+    "/apex/com.android.runtime/lib64/bionic/libdl.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 8
+    },
+    "/apex/com.android.runtime/lib64/bionic/libdl_android.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 8
+    },
+    "/apex/com.android.runtime/lib64/bionic/libm.so": {
+     "Private_Dirty": 0,
+     "Pss": 104,
+     "Rss": 108,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.scheduling/javalib/framework-scheduling.jar": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 16
+    },
+    "/apex/com.android.sdkext/javalib/framework-sdkextensions.jar": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.tethering/javalib/framework-connectivity-t.jar": {
+     "Private_Dirty": 0,
+     "Pss": 204,
+     "Rss": 204,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.tethering/javalib/framework-connectivity.jar": {
+     "Private_Dirty": 0,
+     "Pss": 304,
+     "Rss": 400,
+     "Shared_Clean": 192
+    },
+    "/apex/com.android.tethering/javalib/framework-tethering.jar": {
+     "Private_Dirty": 0,
+     "Pss": 68,
+     "Rss": 68,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.uwb/javalib/framework-uwb.jar": {
+     "Private_Dirty": 0,
+     "Pss": 84,
+     "Rss": 136,
+     "Shared_Clean": 104
+    },
+    "/apex/com.android.virt/javalib/framework-virtualization.jar": {
+     "Private_Dirty": 0,
+     "Pss": 48,
+     "Rss": 80,
+     "Shared_Clean": 64
+    },
+    "/apex/com.android.wifi/javalib/framework-wifi.jar": {
+     "Private_Dirty": 0,
+     "Pss": 244,
+     "Rss": 308,
+     "Shared_Clean": 128
+    },
+    "/apex/com.google.android.configinfrastructure/javalib/framework-configinfrastructure.jar": {
+     "Private_Dirty": 0,
+     "Pss": 96,
+     "Rss": 128,
+     "Shared_Clean": 64
+    },
+    "/apex/com.google.android.ondevicepersonalization/javalib/framework-ondevicepersonalization.jar": {
+     "Private_Dirty": 0,
+     "Pss": 164,
+     "Rss": 164,
+     "Shared_Clean": 0
+    },
+    "/apex/sharedlibs/lib64/libbase.so/a5cce001552a532d111a59af51bbb6cc5e93475522f033f9807fa5f8ad346840deb8c6475491b3425ed7ef34094fb412761afd70b2205820f67d8a4c71c39832/libbase.so": {
+     "Private_Dirty": 0,
+     "Pss": 198,
+     "Rss": 228,
+     "Shared_Clean": 48
+    },
+    "/apex/sharedlibs/lib64/libc++.so/bdb4b81337c003ef4ed7bf093ed61675650aa8a45e36ed5ef9e6a41f9f598616e9a7644a51b37d2f939e669f75ae64032f6e8137738202f72e221c99497a5604/libc++.so": {
+     "Private_Dirty": 0,
+     "Pss": 386,
+     "Rss": 584,
+     "Shared_Clean": 364
+    },
+    "/apex/sharedlibs/lib64/libcrypto.so/f66da077c8b2938f361c7f3b302052e28c435918e8c8d6629acc4cca4b682ca2879fecd9f64835b4ab53e686952b469ff5c72de00b8d580842904674fb53dae6/libcrypto.so": {
+     "Private_Dirty": 0,
+     "Pss": 1030,
+     "Rss": 1064,
+     "Shared_Clean": 0
+    },
+    "/data/app/classes.dex": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/data/shim/libartshim.so": {
+     "Private_Dirty": 4,
+     "Pss": 14,
+     "Rss": 24,
+     "Shared_Clean": 0
+    },
+    "/data/shim/libz1fork.so": {
+     "Private_Dirty": 8,
+     "Pss": 10,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/memfd:jit-zygote-cache (deleted)": {
+     "Private_Dirty": 8,
+     "Pss": 16,
+     "Rss": 24,
+     "Shared_Clean": 0
+    },
+    "/system/apex/com.android.art/bin/dalvikvm64": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 20,
+     "Shared_Clean": 8
+    },
+    "/system/framework/ext.jar": {
+     "Private_Dirty": 0,
+     "Pss": 84,
+     "Rss": 148,
+     "Shared_Clean": 128
+    },
+    "/system/framework/framework-graphics.jar": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/framework/framework.jar": {
+     "Private_Dirty": 0,
+     "Pss": 4404,
+     "Rss": 4612,
+     "Shared_Clean": 416
+    },
+    "/system/framework/ims-common.jar": {
+     "Private_Dirty": 0,
+     "Pss": 260,
+     "Rss": 260,
+     "Shared_Clean": 0
+    },
+    "/system/framework/telephony-common.jar": {
+     "Private_Dirty": 0,
+     "Pss": 448,
+     "Rss": 544,
+     "Shared_Clean": 192
+    },
+    "/system/framework/voip-common.jar": {
+     "Private_Dirty": 0,
+     "Pss": 276,
+     "Rss": 276,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/aaudio-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 74,
+     "Rss": 84,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.camera.common@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.camera.device@3.2.so": {
+     "Private_Dirty": 0,
+     "Pss": 220,
+     "Rss": 236,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.cas.native@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 92,
+     "Rss": 104,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.cas@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 232,
+     "Rss": 244,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.common-V2-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.common.fmq-V1-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.configstore-utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.configstore@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 140,
+     "Rss": 152,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.configstore@1.1.so": {
+     "Private_Dirty": 0,
+     "Pss": 108,
+     "Rss": 120,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.drm-V1-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 164,
+     "Rss": 172,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.drm@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 334,
+     "Rss": 352,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.drm@1.1.so": {
+     "Private_Dirty": 0,
+     "Pss": 278,
+     "Rss": 296,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.drm@1.2.so": {
+     "Private_Dirty": 0,
+     "Pss": 346,
+     "Rss": 368,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.drm@1.3.so": {
+     "Private_Dirty": 0,
+     "Pss": 140,
+     "Rss": 152,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.drm@1.4.so": {
+     "Private_Dirty": 0,
+     "Pss": 352,
+     "Rss": 372,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.allocator-V2-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 42,
+     "Rss": 52,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.graphics.allocator@2.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 86,
+     "Rss": 96,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.graphics.allocator@3.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 86,
+     "Rss": 96,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.graphics.allocator@4.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 80,
+     "Rss": 92,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.graphics.bufferqueue@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 242,
+     "Rss": 252,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.bufferqueue@2.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 190,
+     "Rss": 200,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.common-V4-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 16,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.common@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.common@1.1.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.common@1.2.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.composer3-V2-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 200,
+     "Rss": 212,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.graphics.mapper@2.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 98,
+     "Rss": 108,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.graphics.mapper@2.1.so": {
+     "Private_Dirty": 0,
+     "Pss": 102,
+     "Rss": 112,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.graphics.mapper@3.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 112,
+     "Rss": 124,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.graphics.mapper@4.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 148,
+     "Rss": 160,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.media.bufferpool2-V1-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 86,
+     "Rss": 96,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.media.bufferpool@2.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 194,
+     "Rss": 212,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.media.c2@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 530,
+     "Rss": 552,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.media.c2@1.1.so": {
+     "Private_Dirty": 0,
+     "Pss": 170,
+     "Rss": 180,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.media.c2@1.2.so": {
+     "Private_Dirty": 0,
+     "Pss": 176,
+     "Rss": 192,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.media.omx@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 388,
+     "Rss": 412,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.media@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.memtrack-V1-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 34,
+     "Rss": 44,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.memtrack@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 78,
+     "Rss": 88,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.power-V4-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 56,
+     "Rss": 68,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.power-V4-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 54,
+     "Rss": 64,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.power@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 90,
+     "Rss": 100,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.power@1.1.so": {
+     "Private_Dirty": 0,
+     "Pss": 94,
+     "Rss": 104,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.power@1.2.so": {
+     "Private_Dirty": 0,
+     "Pss": 94,
+     "Rss": 104,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.power@1.3.so": {
+     "Private_Dirty": 0,
+     "Pss": 100,
+     "Rss": 112,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hardware.renderscript@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 296,
+     "Rss": 308,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hidl.allocator@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 84,
+     "Rss": 96,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hidl.memory.token@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 76,
+     "Rss": 88,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hidl.memory@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 134,
+     "Rss": 148,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hidl.safe_union@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hidl.token@1.0-utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 24,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.hidl.token@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 88,
+     "Rss": 100,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/android.media.audio.common.types-V2-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 46,
+     "Rss": 52,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.system.suspend-V1-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 38,
+     "Rss": 48,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/audioclient-types-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 28,
+     "Rss": 32,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/audioflinger-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 148,
+     "Rss": 168,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/audiopolicy-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 156,
+     "Rss": 168,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/audiopolicy-types-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 16,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/av-types-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/capture_state_listener-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 34,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/effect-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 60,
+     "Rss": 68,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/framework-permission-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 34,
+     "Rss": 44,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/heapprofd_client_api.so": {
+     "Private_Dirty": 0,
+     "Pss": 22,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/lib-platform-compat-native-api.so": {
+     "Private_Dirty": 0,
+     "Pss": 30,
+     "Rss": 40,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libEGL.so": {
+     "Private_Dirty": 0,
+     "Pss": 186,
+     "Rss": 200,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libETC1.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libGLESv1_CM.so": {
+     "Private_Dirty": 0,
+     "Pss": 26,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libGLESv2.so": {
+     "Private_Dirty": 0,
+     "Pss": 66,
+     "Rss": 68,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libGLESv3.so": {
+     "Private_Dirty": 0,
+     "Pss": 66,
+     "Rss": 68,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libOpenMAXAL.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libOpenSLES.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libPlatformProperties.so": {
+     "Private_Dirty": 0,
+     "Pss": 56,
+     "Rss": 60,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libRS.so": {
+     "Private_Dirty": 0,
+     "Pss": 72,
+     "Rss": 80,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libSurfaceFlingerProp.so": {
+     "Private_Dirty": 0,
+     "Pss": 44,
+     "Rss": 48,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libaaudio.so": {
+     "Private_Dirty": 0,
+     "Pss": 18,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libaaudio_internal.so": {
+     "Private_Dirty": 0,
+     "Pss": 172,
+     "Rss": 188,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libactivitymanager_aidl.so": {
+     "Private_Dirty": 0,
+     "Pss": 40,
+     "Rss": 52,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libamidi.so": {
+     "Private_Dirty": 0,
+     "Pss": 34,
+     "Rss": 44,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libandroid.so": {
+     "Private_Dirty": 0,
+     "Pss": 150,
+     "Rss": 160,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libandroid_net.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libandroid_runtime.so": {
+     "Private_Dirty": 0,
+     "Pss": 1344,
+     "Rss": 1412,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libandroid_runtime_lazy.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libandroidfw.so": {
+     "Private_Dirty": 0,
+     "Pss": 440,
+     "Rss": 448,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libappfuse.so": {
+     "Private_Dirty": 0,
+     "Pss": 44,
+     "Rss": 48,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libartpalette-system.so": {
+     "Private_Dirty": 0,
+     "Pss": 22,
+     "Rss": 48,
+     "Shared_Clean": 36
+    },
+    "/system/lib64/libaudio_aidl_conversion_common_cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 72,
+     "Rss": 80,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libaudioclient.so": {
+     "Private_Dirty": 0,
+     "Pss": 344,
+     "Rss": 372,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libaudioclient_aidl_conversion.so": {
+     "Private_Dirty": 0,
+     "Pss": 72,
+     "Rss": 80,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libaudiofoundation.so": {
+     "Private_Dirty": 0,
+     "Pss": 156,
+     "Rss": 164,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libaudiomanager.so": {
+     "Private_Dirty": 0,
+     "Pss": 20,
+     "Rss": 28,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libaudiopolicy.so": {
+     "Private_Dirty": 0,
+     "Pss": 32,
+     "Rss": 36,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libaudioutils.so": {
+     "Private_Dirty": 0,
+     "Pss": 68,
+     "Rss": 72,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libbase.so": {
+     "Private_Dirty": 0,
+     "Pss": 152,
+     "Rss": 296,
+     "Shared_Clean": 264
+    },
+    "/system/lib64/libbattery.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libbinder.so": {
+     "Private_Dirty": 0,
+     "Pss": 700,
+     "Rss": 732,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libbinder_ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 106,
+     "Rss": 116,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libbpf_bcc.so": {
+     "Private_Dirty": 0,
+     "Pss": 26,
+     "Rss": 32,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libbpf_minimal.so": {
+     "Private_Dirty": 0,
+     "Pss": 22,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libc++.so": {
+     "Private_Dirty": 0,
+     "Pss": 574,
+     "Rss": 1136,
+     "Shared_Clean": 928
+    },
+    "/system/lib64/libcamera2ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 152,
+     "Rss": 160,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcamera_client.so": {
+     "Private_Dirty": 0,
+     "Pss": 286,
+     "Rss": 316,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcamera_metadata.so": {
+     "Private_Dirty": 0,
+     "Pss": 32,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcgrouprc.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcodec2.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcodec2_client.so": {
+     "Private_Dirty": 0,
+     "Pss": 66,
+     "Rss": 72,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcodec2_hidl_client@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 36,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcodec2_hidl_client@1.1.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcodec2_hidl_client@1.2.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcodec2_vndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 400,
+     "Rss": 412,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcrypto.so": {
+     "Private_Dirty": 0,
+     "Pss": 1002,
+     "Rss": 1036,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcutils.so": {
+     "Private_Dirty": 0,
+     "Pss": 80,
+     "Rss": 100,
+     "Shared_Clean": 24
+    },
+    "/system/lib64/libdataloader.so": {
+     "Private_Dirty": 0,
+     "Pss": 28,
+     "Rss": 32,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libdatasource.so": {
+     "Private_Dirty": 0,
+     "Pss": 144,
+     "Rss": 152,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libdebuggerd_client.so": {
+     "Private_Dirty": 0,
+     "Pss": 24,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libdmabufheap.so": {
+     "Private_Dirty": 0,
+     "Pss": 46,
+     "Rss": 52,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libdng_sdk.so": {
+     "Private_Dirty": 0,
+     "Pss": 308,
+     "Rss": 324,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libexpat.so": {
+     "Private_Dirty": 0,
+     "Pss": 32,
+     "Rss": 36,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libfmq.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libft2.so": {
+     "Private_Dirty": 0,
+     "Pss": 76,
+     "Rss": 88,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libgralloctypes.so": {
+     "Private_Dirty": 0,
+     "Pss": 80,
+     "Rss": 88,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libgraphicsenv.so": {
+     "Private_Dirty": 0,
+     "Pss": 54,
+     "Rss": 64,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libgui.so": {
+     "Private_Dirty": 0,
+     "Pss": 972,
+     "Rss": 1048,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libhardware.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libhardware_legacy.so": {
+     "Private_Dirty": 0,
+     "Pss": 26,
+     "Rss": 36,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libharfbuzz_ng.so": {
+     "Private_Dirty": 0,
+     "Pss": 70,
+     "Rss": 76,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libheif.so": {
+     "Private_Dirty": 0,
+     "Pss": 24,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libhidlallocatorutils.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libhidlbase.so": {
+     "Private_Dirty": 0,
+     "Pss": 672,
+     "Rss": 700,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libhidlmemory.so": {
+     "Private_Dirty": 0,
+     "Pss": 22,
+     "Rss": 32,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libhwui.so": {
+     "Private_Dirty": 0,
+     "Pss": 994,
+     "Rss": 1084,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libimage_io.so": {
+     "Private_Dirty": 0,
+     "Pss": 110,
+     "Rss": 116,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libimg_utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 108,
+     "Rss": 116,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libincfs.so": {
+     "Private_Dirty": 0,
+     "Pss": 68,
+     "Rss": 72,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libinput.so": {
+     "Private_Dirty": 0,
+     "Pss": 548,
+     "Rss": 572,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libion.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libjnigraphics.so": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libjpeg.so": {
+     "Private_Dirty": 0,
+     "Pss": 54,
+     "Rss": 60,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libjpegdecoder.so": {
+     "Private_Dirty": 0,
+     "Pss": 24,
+     "Rss": 32,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libjpegencoder.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/liblog.so": {
+     "Private_Dirty": 4,
+     "Pss": 36,
+     "Rss": 72,
+     "Shared_Clean": 64
+    },
+    "/system/lib64/liblzma.so": {
+     "Private_Dirty": 0,
+     "Pss": 24,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmedia.so": {
+     "Private_Dirty": 0,
+     "Pss": 342,
+     "Rss": 384,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmedia_codeclist.so": {
+     "Private_Dirty": 0,
+     "Pss": 58,
+     "Rss": 64,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmedia_helper.so": {
+     "Private_Dirty": 0,
+     "Pss": 60,
+     "Rss": 64,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmedia_jni_utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmedia_omx.so": {
+     "Private_Dirty": 0,
+     "Pss": 164,
+     "Rss": 180,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmedia_omx_client.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmediadrm.so": {
+     "Private_Dirty": 0,
+     "Pss": 514,
+     "Rss": 528,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmediadrmmetrics_lite.so": {
+     "Private_Dirty": 0,
+     "Pss": 50,
+     "Rss": 56,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmediametrics.so": {
+     "Private_Dirty": 0,
+     "Pss": 74,
+     "Rss": 80,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmediandk.so": {
+     "Private_Dirty": 0,
+     "Pss": 184,
+     "Rss": 192,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmediandk_utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmediautils.so": {
+     "Private_Dirty": 0,
+     "Pss": 252,
+     "Rss": 268,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmeminfo.so": {
+     "Private_Dirty": 0,
+     "Pss": 90,
+     "Rss": 96,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmemtrack.so": {
+     "Private_Dirty": 0,
+     "Pss": 16,
+     "Rss": 24,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libmemunreachable.so": {
+     "Private_Dirty": 0,
+     "Pss": 144,
+     "Rss": 156,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libminikin.so": {
+     "Private_Dirty": 0,
+     "Pss": 70,
+     "Rss": 76,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libnativebridge_lazy.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libnativedisplay.so": {
+     "Private_Dirty": 0,
+     "Pss": 62,
+     "Rss": 68,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libnativeloader_lazy.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libnativewindow.so": {
+     "Private_Dirty": 0,
+     "Pss": 20,
+     "Rss": 24,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libnblog.so": {
+     "Private_Dirty": 0,
+     "Pss": 178,
+     "Rss": 184,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libnetd_client.so": {
+     "Private_Dirty": 0,
+     "Pss": 34,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libnetdutils.so": {
+     "Private_Dirty": 0,
+     "Pss": 98,
+     "Rss": 104,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libpackagelistparser.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libpcre2.so": {
+     "Private_Dirty": 0,
+     "Pss": 52,
+     "Rss": 56,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libpdfium.so": {
+     "Private_Dirty": 0,
+     "Pss": 100,
+     "Rss": 136,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libpermission.so": {
+     "Private_Dirty": 0,
+     "Pss": 70,
+     "Rss": 84,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libpiex.so": {
+     "Private_Dirty": 0,
+     "Pss": 32,
+     "Rss": 36,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libpng.so": {
+     "Private_Dirty": 0,
+     "Pss": 66,
+     "Rss": 68,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libpowermanager.so": {
+     "Private_Dirty": 0,
+     "Pss": 166,
+     "Rss": 184,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libprocessgroup.so": {
+     "Private_Dirty": 0,
+     "Pss": 194,
+     "Rss": 200,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libprocinfo.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libprotobuf-cpp-lite.so": {
+     "Private_Dirty": 0,
+     "Pss": 302,
+     "Rss": 308,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libselinux.so": {
+     "Private_Dirty": 0,
+     "Pss": 102,
+     "Rss": 108,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libsensor.so": {
+     "Private_Dirty": 0,
+     "Pss": 92,
+     "Rss": 104,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libsfplugin_ccodec.so": {
+     "Private_Dirty": 0,
+     "Pss": 288,
+     "Rss": 304,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libsfplugin_ccodec_utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 238,
+     "Rss": 248,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libshmemcompat.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libshmemutil.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libspeexresampler.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libsqlite.so": {
+     "Private_Dirty": 0,
+     "Pss": 78,
+     "Rss": 92,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright.so": {
+     "Private_Dirty": 0,
+     "Pss": 530,
+     "Rss": 564,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_aidl_bufferpool2.so": {
+     "Private_Dirty": 0,
+     "Pss": 166,
+     "Rss": 172,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_bufferpool@2.0.1.so": {
+     "Private_Dirty": 0,
+     "Pss": 164,
+     "Rss": 172,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_bufferqueue_helper.so": {
+     "Private_Dirty": 0,
+     "Pss": 36,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_codecbase.so": {
+     "Private_Dirty": 0,
+     "Pss": 24,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_foundation.so": {
+     "Private_Dirty": 0,
+     "Pss": 206,
+     "Rss": 212,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_framecapture_utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 196,
+     "Rss": 204,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_http_support.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_omx.so": {
+     "Private_Dirty": 0,
+     "Pss": 122,
+     "Rss": 136,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_omx_utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_surface_utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_xmlparser.so": {
+     "Private_Dirty": 0,
+     "Pss": 36,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstdc++.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libsync.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libtimeinstate.so": {
+     "Private_Dirty": 0,
+     "Pss": 52,
+     "Rss": 56,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libtinyxml2.so": {
+     "Private_Dirty": 0,
+     "Pss": 46,
+     "Rss": 52,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libtombstoned_client.so": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libui.so": {
+     "Private_Dirty": 0,
+     "Pss": 300,
+     "Rss": 308,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libultrahdr.so": {
+     "Private_Dirty": 0,
+     "Pss": 102,
+     "Rss": 108,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libunwindstack.so": {
+     "Private_Dirty": 0,
+     "Pss": 188,
+     "Rss": 208,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libusbhost.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libutils.so": {
+     "Private_Dirty": 0,
+     "Pss": 116,
+     "Rss": 124,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libutilscallstack.so": {
+     "Private_Dirty": 0,
+     "Pss": 18,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libvintf.so": {
+     "Private_Dirty": 0,
+     "Pss": 296,
+     "Rss": 308,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libvndksupport.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libvulkan.so": {
+     "Private_Dirty": 0,
+     "Pss": 156,
+     "Rss": 164,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libwebviewchromium_plat_support.so": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libwilhelm.so": {
+     "Private_Dirty": 0,
+     "Pss": 194,
+     "Rss": 208,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libxml2.so": {
+     "Private_Dirty": 0,
+     "Pss": 148,
+     "Rss": 160,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libz.so": {
+     "Private_Dirty": 0,
+     "Pss": 104,
+     "Rss": 112,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/libziparchive.so": {
+     "Private_Dirty": 0,
+     "Pss": 38,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/mediametricsservice-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 34,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/packagemanager_aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 60,
+     "Rss": 72,
+     "Shared_Clean": 8
+    },
+    "/system/lib64/server_configurable_flags.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/shared-file-region-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/spatializer-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 94,
+     "Rss": 104,
+     "Shared_Clean": 0
+    },
+    "[anon:.bss]": {
+     "Private_Dirty": 52,
+     "Pss": 174,
+     "Rss": 296,
+     "Shared_Clean": 0
+    },
+    "[anon:AllocatorRingBuffer]": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:arc4random data]": {
+     "Private_Dirty": 4,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "[anon:atexit handlers]": {
+     "Private_Dirty": 0,
+     "Pss": 20,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "[anon:bionic_alloc_lob]": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:bionic_alloc_small_objects]": {
+     "Private_Dirty": 0,
+     "Pss": 62,
+     "Rss": 124,
+     "Shared_Clean": 0
+    },
+    "[anon:cfi shadow]": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 24,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-android.net.ipsec.ike.art]": {
+     "Private_Dirty": 0,
+     "Pss": 222,
+     "Rss": 444,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-apache-xml.art]": {
+     "Private_Dirty": 0,
+     "Pss": 782,
+     "Rss": 1564,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-bouncycastle.art]": {
+     "Private_Dirty": 0,
+     "Pss": 514,
+     "Rss": 1028,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-conscrypt.art]": {
+     "Private_Dirty": 0,
+     "Pss": 158,
+     "Rss": 316,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-core-icu4j.art]": {
+     "Private_Dirty": 0,
+     "Pss": 852,
+     "Rss": 1704,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-core-libart.art]": {
+     "Private_Dirty": 16,
+     "Pss": 222,
+     "Rss": 428,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-ext.art]": {
+     "Private_Dirty": 0,
+     "Pss": 66,
+     "Rss": 132,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-adservices.art]": {
+     "Private_Dirty": 0,
+     "Pss": 196,
+     "Rss": 392,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-appsearch.art]": {
+     "Private_Dirty": 0,
+     "Pss": 66,
+     "Rss": 132,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-bluetooth.art]": {
+     "Private_Dirty": 0,
+     "Pss": 418,
+     "Rss": 836,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-configinfrastructure.art]": {
+     "Private_Dirty": 0,
+     "Pss": 100,
+     "Rss": 200,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-connectivity-t.art]": {
+     "Private_Dirty": 0,
+     "Pss": 168,
+     "Rss": 336,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-connectivity.art]": {
+     "Private_Dirty": 0,
+     "Pss": 542,
+     "Rss": 1084,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-devicelock.art]": {
+     "Private_Dirty": 0,
+     "Pss": 20,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-graphics.art]": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-healthfitness.art]": {
+     "Private_Dirty": 0,
+     "Pss": 214,
+     "Rss": 428,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-mediaprovider.art]": {
+     "Private_Dirty": 0,
+     "Pss": 28,
+     "Rss": 56,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-ondevicepersonalization.art]": {
+     "Private_Dirty": 0,
+     "Pss": 94,
+     "Rss": 188,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-permission-s.art]": {
+     "Private_Dirty": 0,
+     "Pss": 94,
+     "Rss": 188,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-permission.art]": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-scheduling.art]": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-sdkextensions.art]": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-sdksandbox.art]": {
+     "Private_Dirty": 0,
+     "Pss": 30,
+     "Rss": 60,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-statsd.art]": {
+     "Private_Dirty": 0,
+     "Pss": 36,
+     "Rss": 72,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-tethering.art]": {
+     "Private_Dirty": 0,
+     "Pss": 34,
+     "Rss": 68,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-uwb.art]": {
+     "Private_Dirty": 0,
+     "Pss": 62,
+     "Rss": 124,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-virtualization.art]": {
+     "Private_Dirty": 0,
+     "Pss": 28,
+     "Rss": 56,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-wifi.art]": {
+     "Private_Dirty": 0,
+     "Pss": 454,
+     "Rss": 908,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework.art]": {
+     "Private_Dirty": 0,
+     "Pss": 15616,
+     "Rss": 31232,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-ims-common.art]": {
+     "Private_Dirty": 0,
+     "Pss": 198,
+     "Rss": 396,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-okhttp.art]": {
+     "Private_Dirty": 0,
+     "Pss": 138,
+     "Rss": 276,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-telephony-common.art]": {
+     "Private_Dirty": 0,
+     "Pss": 1396,
+     "Rss": 2792,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-updatable-media.art]": {
+     "Private_Dirty": 0,
+     "Pss": 320,
+     "Rss": 640,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-voip-common.art]": {
+     "Private_Dirty": 0,
+     "Pss": 362,
+     "Rss": 724,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot.art]": {
+     "Private_Dirty": 28,
+     "Pss": 2270,
+     "Rss": 4512,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-LinearAlloc]": {
+     "Private_Dirty": 32,
+     "Pss": 84,
+     "Rss": 136,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-Sentinel fault page]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-allocation stack]": {
+     "Private_Dirty": 4,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-allocspace non moving space live-bitmap 1]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-allocspace non moving space mark-bitmap 1]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-allocspace zygote / non moving space live-bitmap 0]": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-allocspace zygote / non moving space mark-bitmap 0]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-card table]": {
+     "Private_Dirty": 1140,
+     "Pss": 1594,
+     "Rss": 2048,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-concurrent copying gc mark stack]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-concurrent copying sweep array free buffer]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-indirect ref table]": {
+     "Private_Dirty": 8,
+     "Pss": 8,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-large live objects]": {
+     "Private_Dirty": 4,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-large marked objects]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-large object space allocation]": {
+     "Private_Dirty": 12,
+     "Pss": 12,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-live stack]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-local ref table]": {
+     "Private_Dirty": 4,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-main space (region space)]": {
+     "Private_Dirty": 28,
+     "Pss": 28,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-mark stack]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-mod union bitmap]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-non moving space]": {
+     "Private_Dirty": 4,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-non-moving-space inter region ref bitmap]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-rb copying gc mark stack]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-region space live bitmap]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-region-space inter region ref bitmap]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-thread local mark stack]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-zygote space]": {
+     "Private_Dirty": 16,
+     "Pss": 24,
+     "Rss": 32,
+     "Shared_Clean": 0
+    },
+    "[anon:linker_alloc]": {
+     "Private_Dirty": 0,
+     "Pss": 146,
+     "Rss": 292,
+     "Shared_Clean": 0
+    },
+    "[anon:scudo:primary]": {
+     "Private_Dirty": 456,
+     "Pss": 838,
+     "Rss": 1220,
+     "Shared_Clean": 0
+    },
+    "[anon:scudo:primary_reserve]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:scudo:secondary]": {
+     "Private_Dirty": 4,
+     "Pss": 132,
+     "Rss": 260,
+     "Shared_Clean": 0
+    },
+    "[anon:stack_and_tls:10]": {
+     "Private_Dirty": 12,
+     "Pss": 12,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "[anon:stack_and_tls:11]": {
+     "Private_Dirty": 12,
+     "Pss": 12,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "[anon:stack_and_tls:12]": {
+     "Private_Dirty": 12,
+     "Pss": 12,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "[anon:stack_and_tls:13]": {
+     "Private_Dirty": 12,
+     "Pss": 12,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "[anon:stack_and_tls:9]": {
+     "Private_Dirty": 12,
+     "Pss": 12,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "[anon:stack_and_tls:main]": {
+     "Private_Dirty": 8,
+     "Pss": 8,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "[anon:thread signal stack]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon_shmem:dalvik-zygote-jit-code-cache]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[stack]": {
+     "Private_Dirty": 16,
+     "Pss": 22,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "[vdso]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 8,
+     "Shared_Clean": 8
+    },
+    "[vsyscall]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[vvar]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 4,
+     "Shared_Clean": 4
+    },
+    "[vvar_vclock]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    }
+   },
+   "rollup": {
+    "Private_Clean": 47296,
+    "Private_Dirty": 1940,
+    "Pss": 88253,
+    "Rss": 127436,
+    "Shared_Clean": 17220,
+    "Shared_Dirty": 60980,
+    "Swap": 0
+   }
+  },
+  "1251431": {
+   "cmdline": "/system/apex/com.android.art/bin/dalvikvm64 -Ximage:/apex/com.android.art/bootimg/boot.art -Xmx512m -Xms8m -Xzygote -Xhi",
+   "groups": {
+    "boot_image": {
+     "Private_Dirty": 44,
+     "Pss": 23086,
+     "Rss": 46052,
+     "Shared_Clean": 2808,
+     "Shared_Dirty": 43124,
+     "Shared_Hugetlb": 0
+    },
+    "dalvik_all_anon": {
+     "Private_Dirty": 2436,
+     "Pss": 28620,
+     "Rss": 54804,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 52368,
+     "Shared_Hugetlb": 0
+    },
+    "dalvik_main_space": {
+     "Private_Dirty": 44,
+     "Pss": 44,
+     "Rss": 44,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    },
+    "dalvik_region_space": {
+     "Private_Dirty": 2040,
+     "Pss": 2040,
+     "Rss": 2040,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    },
+    "dalvik_zygote_space": {
+     "Private_Dirty": 16,
+     "Pss": 24,
+     "Rss": 32,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 16,
+     "Shared_Hugetlb": 0
+    },
+    "zygote_flag": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0,
+     "Shared_Dirty": 0,
+     "Shared_Hugetlb": 0
+    }
+   },
+   "mappings": {
+    "boot_image": 870,
+    "dalvik_all_anon": 600,
+    "dalvik_main_space": 20,
+    "dalvik_region_space": 10,
+    "dalvik_zygote_space": 10,
+    "zygote_flag": 0
+   },
+   "names": {
+    "": {
+     "Private_Dirty": 0,
+     "Pss": 1024,
+     "Rss": 2048,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.adservices/javalib/framework-adservices.jar": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.adservices/javalib/framework-sdksandbox.jar": {
+     "Private_Dirty": 0,
+     "Pss": 32,
+     "Rss": 64,
+     "Shared_Clean": 64
+    },
+    "/apex/com.android.appsearch/javalib/framework-appsearch.jar": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-android.net.ipsec.ike.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-android.net.ipsec.ike.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-android.net.ipsec.ike.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-apache-xml.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-apache-xml.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-apache-xml.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-bouncycastle.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-bouncycastle.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-bouncycastle.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-conscrypt.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-conscrypt.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-conscrypt.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-core-icu4j.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-core-icu4j.oat": {
+     "Private_Dirty": 0,
+     "Pss": 32,
+     "Rss": 64,
+     "Shared_Clean": 60
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-core-icu4j.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-core-libart.art": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 4
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-core-libart.oat": {
+     "Private_Dirty": 0,
+     "Pss": 306,
+     "Rss": 536,
+     "Shared_Clean": 456
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-core-libart.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 12
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-ext.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-ext.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-ext.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-adservices.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-adservices.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-adservices.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-appsearch.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-appsearch.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-appsearch.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-bluetooth.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-bluetooth.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-bluetooth.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-configinfrastructure.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-configinfrastructure.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-configinfrastructure.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-connectivity-t.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-connectivity-t.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-connectivity-t.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-connectivity.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-connectivity.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-connectivity.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-devicelock.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-devicelock.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-devicelock.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-graphics.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-graphics.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-graphics.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-healthfitness.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-healthfitness.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-healthfitness.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-mediaprovider.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-mediaprovider.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-mediaprovider.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-ondevicepersonalization.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-ondevicepersonalization.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-ondevicepersonalization.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-permission-s.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-permission-s.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-permission-s.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-permission.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-permission.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-permission.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-scheduling.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-scheduling.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-scheduling.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-sdkextensions.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-sdkextensions.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-sdkextensions.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-sdksandbox.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-sdksandbox.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-sdksandbox.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-statsd.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-statsd.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-statsd.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-tethering.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-tethering.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-tethering.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-uwb.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-uwb.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-uwb.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-virtualization.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-virtualization.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-virtualization.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-wifi.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-wifi.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework-wifi.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-framework.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-ims-common.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-ims-common.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-ims-common.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-okhttp.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-okhttp.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-okhttp.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-telephony-common.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-telephony-common.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-telephony-common.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-updatable-media.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-updatable-media.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-updatable-media.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-voip-common.art": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-voip-common.oat": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot-voip-common.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot.art": {
+     "Private_Dirty": 0,
+     "Pss": 16,
+     "Rss": 32,
+     "Shared_Clean": 32
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot.oat": {
+     "Private_Dirty": 0,
+     "Pss": 1124,
+     "Rss": 2248,
+     "Shared_Clean": 2244
+    },
+    "/apex/com.android.art/bootimg/x86_64/boot.vdex": {
+     "Private_Dirty": 0,
+     "Pss": 22,
+     "Rss": 44,
+     "Shared_Clean": 44
+    },
+    "/apex/com.android.art/javalib/apache-xml.jar": {
+     "Private_Dirty": 0,
+     "Pss": 122,
+     "Rss": 244,
+     "Shared_Clean": 244
+    },
+    "/apex/com.android.art/javalib/bouncycastle.jar": {
+     "Private_Dirty": 0,
+     "Pss": 132,
+     "Rss": 228,
+     "Shared_Clean": 192
+    },
+    "/apex/com.android.art/javalib/core-libart.jar": {
+     "Private_Dirty": 0,
+     "Pss": 170,
+     "Rss": 340,
+     "Shared_Clean": 340
+    },
+    "/apex/com.android.art/javalib/core-oj.jar": {
+     "Private_Dirty": 0,
+     "Pss": 576,
+     "Rss": 1152,
+     "Shared_Clean": 1152
+    },
+    "/apex/com.android.art/javalib/okhttp.jar": {
+     "Private_Dirty": 0,
+     "Pss": 70,
+     "Rss": 140,
+     "Shared_Clean": 140
+    },
+    "/apex/com.android.art/lib64/libandroidio.so": {
+     "Private_Dirty": 4,
+     "Pss": 7,
+     "Rss": 12,
+     "Shared_Clean": 4
+    },
+    "/apex/com.android.art/lib64/libart-compiler.so": {
+     "Private_Dirty": 0,
+     "Pss": 444,
+     "Rss": 888,
+     "Shared_Clean": 808
+    },
+    "/apex/com.android.art/lib64/libart.so": {
+     "Private_Dirty": 4,
+     "Pss": 2514,
+     "Rss": 5024,
+     "Shared_Clean": 4940
+    },
+    "/apex/com.android.art/lib64/libartbase.so": {
+     "Private_Dirty": 0,
+     "Pss": 140,
+     "Rss": 280,
+     "Shared_Clean": 264
+    },
+    "/apex/com.android.art/lib64/libartpalette.so": {
+     "Private_Dirty": 0,
+     "Pss": 5,
+     "Rss": 12,
+     "Shared_Clean": 4
+    },
+    "/apex/com.android.art/lib64/libdexfile.so": {
+     "Private_Dirty": 0,
+     "Pss": 118,
+     "Rss": 236,
+     "Shared_Clean": 224
+    },
+    "/apex/com.android.art/lib64/libexpat.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/lib64/libjavacore.so": {
+     "Private_Dirty": 4,
+     "Pss": 92,
+     "Rss": 180,
+     "Shared_Clean": 164
+    },
+    "/apex/com.android.art/lib64/liblz4.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/lib64/liblzma.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/lib64/libnativebridge.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/lib64/libnativehelper.so": {
+     "Private_Dirty": 4,
+     "Pss": 11,
+     "Rss": 20,
+     "Shared_Clean": 12
+    },
+    "/apex/com.android.art/lib64/libnativeloader.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/lib64/libopenjdk.so": {
+     "Private_Dirty": 0,
+     "Pss": 62,
+     "Rss": 124,
+     "Shared_Clean": 108
+    },
+    "/apex/com.android.art/lib64/libopenjdkjvm.so": {
+     "Private_Dirty": 0,
+     "Pss": 11,
+     "Rss": 24,
+     "Shared_Clean": 16
+    },
+    "/apex/com.android.art/lib64/libprofile.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/lib64/libsigchain.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.art/lib64/libunwindstack.so": {
+     "Private_Dirty": 0,
+     "Pss": 20,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.btservices/javalib/framework-bluetooth.jar": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.conscrypt/javalib/conscrypt.jar": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.devicelock/javalib/framework-devicelock.jar": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 28,
+     "Shared_Clean": 28
+    },
+    "/apex/com.android.healthfitness/javalib/framework-healthfitness.jar": {
+     "Private_Dirty": 0,
+     "Pss": 64,
+     "Rss": 128,
+     "Shared_Clean": 128
+    },
+    "/apex/com.android.i18n/etc/icu/icudt72l.dat": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.i18n/javalib/core-icu4j.jar": {
+     "Private_Dirty": 0,
+     "Pss": 126,
+     "Rss": 252,
+     "Shared_Clean": 252
+    },
+    "/apex/com.android.i18n/lib64/libandroidicu.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.i18n/lib64/libicu.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.i18n/lib64/libicu_jni.so": {
+     "Private_Dirty": 0,
+     "Pss": 40,
+     "Rss": 84,
+     "Shared_Clean": 72
+    },
+    "/apex/com.android.i18n/lib64/libicui18n.so": {
+     "Private_Dirty": 0,
+     "Pss": 42,
+     "Rss": 84,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.i18n/lib64/libicuuc.so": {
+     "Private_Dirty": 0,
+     "Pss": 260,
+     "Rss": 480,
+     "Shared_Clean": 348
+    },
+    "/apex/com.android.ipsec/javalib/android.net.ipsec.ike.jar": {
+     "Private_Dirty": 0,
+     "Pss": 96,
+     "Rss": 192,
+     "Shared_Clean": 192
+    },
+    "/apex/com.android.media/javalib/updatable-media.jar": {
+     "Private_Dirty": 0,
+     "Pss": 64,
+     "Rss": 128,
+     "Shared_Clean": 128
+    },
+    "/apex/com.android.mediaprovider/javalib/framework-mediaprovider.jar": {
+     "Private_Dirty": 0,
+     "Pss": 32,
+     "Rss": 64,
+     "Shared_Clean": 64
+    },
+    "/apex/com.android.os.statsd/javalib/framework-statsd.jar": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.os.statsd/lib64/libstatssocket.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.permission/javalib/framework-permission-s.jar": {
+     "Private_Dirty": 0,
+     "Pss": 64,
+     "Rss": 128,
+     "Shared_Clean": 128
+    },
+    "/apex/com.android.permission/javalib/framework-permission.jar": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 4
+    },
+    "/apex/com.android.runtime/bin/linker64": {
+     "Private_Dirty": 4,
+     "Pss": 70,
+     "Rss": 136,
+     "Shared_Clean": 88
+    },
+    "/apex/com.android.runtime/lib64/bionic/libc.so": {
+     "Private_Dirty": 0,
+     "Pss": 376,
+     "Rss": 752,
+     "Shared_Clean": 728
+    },
+    "/apex/com.android.runtime/lib64/bionic/libdl.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.runtime/lib64/bionic/libdl_android.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.runtime/lib64/bionic/libm.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.scheduling/javalib/framework-scheduling.jar": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 16
+    },
+    "/apex/com.android.sdkext/javalib/framework-sdkextensions.jar": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.tethering/javalib/framework-connectivity-t.jar": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.tethering/javalib/framework-connectivity.jar": {
+     "Private_Dirty": 0,
+     "Pss": 96,
+     "Rss": 192,
+     "Shared_Clean": 192
+    },
+    "/apex/com.android.tethering/javalib/framework-tethering.jar": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/com.android.uwb/javalib/framework-uwb.jar": {
+     "Private_Dirty": 0,
+     "Pss": 52,
+     "Rss": 104,
+     "Shared_Clean": 104
+    },
+    "/apex/com.android.virt/javalib/framework-virtualization.jar": {
+     "Private_Dirty": 0,
+     "Pss": 32,
+     "Rss": 64,
+     "Shared_Clean": 64
+    },
+    "/apex/com.android.wifi/javalib/framework-wifi.jar": {
+     "Private_Dirty": 0,
+     "Pss": 64,
+     "Rss": 128,
+     "Shared_Clean": 128
+    },
+    "/apex/com.google.android.configinfrastructure/javalib/framework-configinfrastructure.jar": {
+     "Private_Dirty": 0,
+     "Pss": 32,
+     "Rss": 64,
+     "Shared_Clean": 64
+    },
+    "/apex/com.google.android.ondevicepersonalization/javalib/framework-ondevicepersonalization.jar": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/apex/sharedlibs/lib64/libbase.so/a5cce001552a532d111a59af51bbb6cc5e93475522f033f9807fa5f8ad346840deb8c6475491b3425ed7ef34094fb412761afd70b2205820f67d8a4c71c39832/libbase.so": {
+     "Private_Dirty": 0,
+     "Pss": 30,
+     "Rss": 60,
+     "Shared_Clean": 48
+    },
+    "/apex/sharedlibs/lib64/libc++.so/bdb4b81337c003ef4ed7bf093ed61675650aa8a45e36ed5ef9e6a41f9f598616e9a7644a51b37d2f939e669f75ae64032f6e8137738202f72e221c99497a5604/libc++.so": {
+     "Private_Dirty": 0,
+     "Pss": 198,
+     "Rss": 396,
+     "Shared_Clean": 364
+    },
+    "/apex/sharedlibs/lib64/libcrypto.so/f66da077c8b2938f361c7f3b302052e28c435918e8c8d6629acc4cca4b682ca2879fecd9f64835b4ab53e686952b469ff5c72de00b8d580842904674fb53dae6/libcrypto.so": {
+     "Private_Dirty": 0,
+     "Pss": 34,
+     "Rss": 68,
+     "Shared_Clean": 0
+    },
+    "/data/app/classes.dex": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/data/shim/libartshim.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/data/shim/libz1fork.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/memfd:jit-cache (deleted)": {
+     "Private_Dirty": 16,
+     "Pss": 16,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/memfd:jit-zygote-cache (deleted)": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/system/apex/com.android.art/bin/dalvikvm64": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/framework/ext.jar": {
+     "Private_Dirty": 0,
+     "Pss": 68,
+     "Rss": 132,
+     "Shared_Clean": 128
+    },
+    "/system/framework/framework-graphics.jar": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/system/framework/framework.jar": {
+     "Private_Dirty": 0,
+     "Pss": 192,
+     "Rss": 384,
+     "Shared_Clean": 384
+    },
+    "/system/framework/ims-common.jar": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/system/framework/telephony-common.jar": {
+     "Private_Dirty": 0,
+     "Pss": 96,
+     "Rss": 192,
+     "Shared_Clean": 192
+    },
+    "/system/framework/voip-common.jar": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/aaudio-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.camera.common@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.camera.device@3.2.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 24,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.cas.native@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.cas@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 24,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.common-V2-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.common.fmq-V1-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.configstore-utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.configstore@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.configstore@1.1.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.drm-V1-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.drm@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 18,
+     "Rss": 36,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.drm@1.1.so": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.drm@1.2.so": {
+     "Private_Dirty": 0,
+     "Pss": 22,
+     "Rss": 44,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.drm@1.3.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 24,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.drm@1.4.so": {
+     "Private_Dirty": 0,
+     "Pss": 20,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.allocator-V2-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.allocator@2.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.allocator@3.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.allocator@4.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.bufferqueue@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.bufferqueue@2.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.common-V4-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.common@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.common@1.1.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.common@1.2.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.composer3-V2-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.mapper@2.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.mapper@2.1.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.mapper@3.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.graphics.mapper@4.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.media.bufferpool2-V1-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.media.bufferpool@2.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.media.c2@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 22,
+     "Rss": 44,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.media.c2@1.1.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.media.c2@1.2.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 24,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.media.omx@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 20,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.media@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.memtrack-V1-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.memtrack@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.power-V4-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.power-V4-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.power@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.power@1.1.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.power@1.2.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.power@1.3.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hardware.renderscript@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 24,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hidl.allocator@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hidl.memory.token@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hidl.memory@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hidl.safe_union@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hidl.token@1.0-utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.hidl.token@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.media.audio.common.types-V2-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/android.system.suspend-V1-ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/audioclient-types-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/audioflinger-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 20,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/audiopolicy-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 24,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/audiopolicy-types-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/av-types-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/capture_state_listener-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/effect-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/framework-permission-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/heapprofd_client_api.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/lib-platform-compat-native-api.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libEGL.so": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libETC1.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libGLESv1_CM.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libGLESv2.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libGLESv3.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libOpenMAXAL.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libOpenSLES.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libPlatformProperties.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libRS.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libSurfaceFlingerProp.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libaaudio.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libaaudio_internal.so": {
+     "Private_Dirty": 0,
+     "Pss": 16,
+     "Rss": 32,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libactivitymanager_aidl.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libamidi.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libandroid.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libandroid_net.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libandroid_runtime.so": {
+     "Private_Dirty": 0,
+     "Pss": 68,
+     "Rss": 136,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libandroid_runtime_lazy.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libandroidfw.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libappfuse.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libartpalette-system.so": {
+     "Private_Dirty": 0,
+     "Pss": 22,
+     "Rss": 48,
+     "Shared_Clean": 36
+    },
+    "/system/lib64/libaudio_aidl_conversion_common_cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libaudioclient.so": {
+     "Private_Dirty": 0,
+     "Pss": 28,
+     "Rss": 56,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libaudioclient_aidl_conversion.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libaudiofoundation.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libaudiomanager.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libaudiopolicy.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libaudioutils.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libbase.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 24,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libbattery.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libbinder.so": {
+     "Private_Dirty": 0,
+     "Pss": 32,
+     "Rss": 64,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libbinder_ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libbpf_bcc.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libbpf_minimal.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libc++.so": {
+     "Private_Dirty": 0,
+     "Pss": 97,
+     "Rss": 320,
+     "Shared_Clean": 256
+    },
+    "/system/lib64/libcamera2ndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcamera_client.so": {
+     "Private_Dirty": 0,
+     "Pss": 30,
+     "Rss": 60,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcamera_metadata.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcgrouprc.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcodec2.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcodec2_client.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcodec2_hidl_client@1.0.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcodec2_hidl_client@1.1.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcodec2_hidl_client@1.2.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcodec2_vndk.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 24,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcrypto.so": {
+     "Private_Dirty": 0,
+     "Pss": 34,
+     "Rss": 68,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libcutils.so": {
+     "Private_Dirty": 0,
+     "Pss": 16,
+     "Rss": 32,
+     "Shared_Clean": 16
+    },
+    "/system/lib64/libdataloader.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libdatasource.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libdebuggerd_client.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libdmabufheap.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libdng_sdk.so": {
+     "Private_Dirty": 0,
+     "Pss": 16,
+     "Rss": 32,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libexpat.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libfmq.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libft2.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 24,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libgralloctypes.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libgraphicsenv.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libgui.so": {
+     "Private_Dirty": 0,
+     "Pss": 76,
+     "Rss": 152,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libhardware.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libhardware_legacy.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libharfbuzz_ng.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libheif.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libhidlallocatorutils.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libhidlbase.so": {
+     "Private_Dirty": 0,
+     "Pss": 28,
+     "Rss": 56,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libhidlmemory.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libhwui.so": {
+     "Private_Dirty": 0,
+     "Pss": 90,
+     "Rss": 180,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libimage_io.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libimg_utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libincfs.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libinput.so": {
+     "Private_Dirty": 0,
+     "Pss": 24,
+     "Rss": 48,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libion.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libjnigraphics.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libjpeg.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libjpegdecoder.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libjpegencoder.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/liblog.so": {
+     "Private_Dirty": 4,
+     "Pss": 36,
+     "Rss": 72,
+     "Shared_Clean": 64
+    },
+    "/system/lib64/liblzma.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmedia.so": {
+     "Private_Dirty": 0,
+     "Pss": 42,
+     "Rss": 84,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmedia_codeclist.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmedia_helper.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmedia_jni_utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmedia_omx.so": {
+     "Private_Dirty": 0,
+     "Pss": 16,
+     "Rss": 32,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmedia_omx_client.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmediadrm.so": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmediadrmmetrics_lite.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmediametrics.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmediandk.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmediandk_utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmediautils.so": {
+     "Private_Dirty": 0,
+     "Pss": 16,
+     "Rss": 32,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmeminfo.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmemtrack.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libmemunreachable.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libminikin.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libnativebridge_lazy.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libnativedisplay.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libnativeloader_lazy.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libnativewindow.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libnblog.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libnetd_client.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libnetdutils.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libpackagelistparser.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libpcre2.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libpdfium.so": {
+     "Private_Dirty": 0,
+     "Pss": 36,
+     "Rss": 72,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libpermission.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libpiex.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libpng.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libpowermanager.so": {
+     "Private_Dirty": 0,
+     "Pss": 18,
+     "Rss": 36,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libprocessgroup.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libprocinfo.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libprotobuf-cpp-lite.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libselinux.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libsensor.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libsfplugin_ccodec.so": {
+     "Private_Dirty": 0,
+     "Pss": 16,
+     "Rss": 32,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libsfplugin_ccodec_utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libshmemcompat.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libshmemutil.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libspeexresampler.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libsqlite.so": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright.so": {
+     "Private_Dirty": 0,
+     "Pss": 34,
+     "Rss": 68,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_aidl_bufferpool2.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_bufferpool@2.0.1.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_bufferqueue_helper.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_codecbase.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_foundation.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_framecapture_utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_http_support.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_omx.so": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_omx_utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_surface_utils.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstagefright_xmlparser.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libstdc++.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libsync.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libtimeinstate.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libtinyxml2.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libtombstoned_client.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libui.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libultrahdr.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libunwindstack.so": {
+     "Private_Dirty": 0,
+     "Pss": 20,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libusbhost.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libutils.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libutilscallstack.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libvintf.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 24,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libvndksupport.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libvulkan.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libwebviewchromium_plat_support.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libwilhelm.so": {
+     "Private_Dirty": 0,
+     "Pss": 14,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libxml2.so": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 24,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libz.so": {
+     "Private_Dirty": 0,
+     "Pss": 4,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/libziparchive.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/mediametricsservice-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/packagemanager_aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 8,
+     "Rss": 16,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/server_configurable_flags.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/shared-file-region-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "/system/lib64/spatializer-aidl-cpp.so": {
+     "Private_Dirty": 0,
+     "Pss": 10,
+     "Rss": 20,
+     "Shared_Clean": 0
+    },
+    "[anon:.bss]": {
+     "Private_Dirty": 52,
+     "Pss": 174,
+     "Rss": 296,
+     "Shared_Clean": 0
+    },
+    "[anon:AllocatorRingBuffer]": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:arc4random data]": {
+     "Private_Dirty": 4,
+     "Pss": 6,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "[anon:atexit handlers]": {
+     "Private_Dirty": 0,
+     "Pss": 20,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "[anon:bionic_alloc_lob]": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:bionic_alloc_small_objects]": {
+     "Private_Dirty": 0,
+     "Pss": 62,
+     "Rss": 124,
+     "Shared_Clean": 0
+    },
+    "[anon:cfi shadow]": {
+     "Private_Dirty": 0,
+     "Pss": 12,
+     "Rss": 24,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-android.net.ipsec.ike.art]": {
+     "Private_Dirty": 0,
+     "Pss": 222,
+     "Rss": 444,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-apache-xml.art]": {
+     "Private_Dirty": 0,
+     "Pss": 782,
+     "Rss": 1564,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-bouncycastle.art]": {
+     "Private_Dirty": 0,
+     "Pss": 514,
+     "Rss": 1028,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-conscrypt.art]": {
+     "Private_Dirty": 0,
+     "Pss": 158,
+     "Rss": 316,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-core-icu4j.art]": {
+     "Private_Dirty": 0,
+     "Pss": 852,
+     "Rss": 1704,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-core-libart.art]": {
+     "Private_Dirty": 16,
+     "Pss": 222,
+     "Rss": 428,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-ext.art]": {
+     "Private_Dirty": 0,
+     "Pss": 66,
+     "Rss": 132,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-adservices.art]": {
+     "Private_Dirty": 0,
+     "Pss": 196,
+     "Rss": 392,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-appsearch.art]": {
+     "Private_Dirty": 0,
+     "Pss": 66,
+     "Rss": 132,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-bluetooth.art]": {
+     "Private_Dirty": 0,
+     "Pss": 418,
+     "Rss": 836,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-configinfrastructure.art]": {
+     "Private_Dirty": 0,
+     "Pss": 100,
+     "Rss": 200,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-connectivity-t.art]": {
+     "Private_Dirty": 0,
+     "Pss": 168,
+     "Rss": 336,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-connectivity.art]": {
+     "Private_Dirty": 0,
+     "Pss": 542,
+     "Rss": 1084,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-devicelock.art]": {
+     "Private_Dirty": 0,
+     "Pss": 20,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-graphics.art]": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-healthfitness.art]": {
+     "Private_Dirty": 0,
+     "Pss": 214,
+     "Rss": 428,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-mediaprovider.art]": {
+     "Private_Dirty": 0,
+     "Pss": 28,
+     "Rss": 56,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-ondevicepersonalization.art]": {
+     "Private_Dirty": 0,
+     "Pss": 94,
+     "Rss": 188,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-permission-s.art]": {
+     "Private_Dirty": 0,
+     "Pss": 94,
+     "Rss": 188,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-permission.art]": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-scheduling.art]": {
+     "Private_Dirty": 0,
+     "Pss": 6,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-sdkextensions.art]": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-sdksandbox.art]": {
+     "Private_Dirty": 0,
+     "Pss": 30,
+     "Rss": 60,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-statsd.art]": {
+     "Private_Dirty": 0,
+     "Pss": 36,
+     "Rss": 72,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-tethering.art]": {
+     "Private_Dirty": 0,
+     "Pss": 34,
+     "Rss": 68,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-uwb.art]": {
+     "Private_Dirty": 0,
+     "Pss": 62,
+     "Rss": 124,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-virtualization.art]": {
+     "Private_Dirty": 0,
+     "Pss": 28,
+     "Rss": 56,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework-wifi.art]": {
+     "Private_Dirty": 0,
+     "Pss": 454,
+     "Rss": 908,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-framework.art]": {
+     "Private_Dirty": 0,
+     "Pss": 15616,
+     "Rss": 31232,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-ims-common.art]": {
+     "Private_Dirty": 0,
+     "Pss": 198,
+     "Rss": 396,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-okhttp.art]": {
+     "Private_Dirty": 0,
+     "Pss": 138,
+     "Rss": 276,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-telephony-common.art]": {
+     "Private_Dirty": 0,
+     "Pss": 1396,
+     "Rss": 2792,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-updatable-media.art]": {
+     "Private_Dirty": 0,
+     "Pss": 320,
+     "Rss": 640,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot-voip-common.art]": {
+     "Private_Dirty": 0,
+     "Pss": 362,
+     "Rss": 724,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-/apex/com.android.art/bootimg/boot.art]": {
+     "Private_Dirty": 28,
+     "Pss": 2270,
+     "Rss": 4512,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-LinearAlloc]": {
+     "Private_Dirty": 36,
+     "Pss": 88,
+     "Rss": 140,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-Sentinel fault page]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-allocation stack]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-allocspace non moving space live-bitmap 1]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-allocspace non moving space mark-bitmap 1]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-allocspace zygote / non moving space live-bitmap 0]": {
+     "Private_Dirty": 0,
+     "Pss": 2,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-allocspace zygote / non moving space mark-bitmap 0]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-card table]": {
+     "Private_Dirty": 48,
+     "Pss": 502,
+     "Rss": 956,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-concurrent copying gc mark stack]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-concurrent copying sweep array free buffer]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-indirect ref table]": {
+     "Private_Dirty": 8,
+     "Pss": 8,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-large live objects]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-large marked objects]": {
+     "Private_Dirty": 8,
+     "Pss": 8,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-large object space allocation]": {
+     "Private_Dirty": 176,
+     "Pss": 176,
+     "Rss": 176,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-live stack]": {
+     "Private_Dirty": 4,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-local ref table]": {
+     "Private_Dirty": 8,
+     "Pss": 8,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-main space (region space)]": {
+     "Private_Dirty": 40,
+     "Pss": 40,
+     "Rss": 40,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-mark stack]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-mod union bitmap]": {
+     "Private_Dirty": 4,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-non moving space]": {
+     "Private_Dirty": 4,
+     "Pss": 4,
+     "Rss": 4,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-non-moving-space inter region ref bitmap]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-rb copying gc mark stack]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-region space live bitmap]": {
+     "Private_Dirty": 2040,
+     "Pss": 2040,
+     "Rss": 2040,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-region-space inter region ref bitmap]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-thread local mark stack]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:dalvik-zygote space]": {
+     "Private_Dirty": 16,
+     "Pss": 24,
+     "Rss": 32,
+     "Shared_Clean": 0
+    },
+    "[anon:linker_alloc]": {
+     "Private_Dirty": 0,
+     "Pss": 146,
+     "Rss": 292,
+     "Shared_Clean": 0
+    },
+    "[anon:scudo:primary]": {
+     "Private_Dirty": 492,
+     "Pss": 874,
+     "Rss": 1256,
+     "Shared_Clean": 0
+    },
+    "[anon:scudo:primary_reserve]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon:scudo:secondary]": {
+     "Private_Dirty": 4,
+     "Pss": 132,
+     "Rss": 260,
+     "Shared_Clean": 0
+    },
+    "[anon:stack_and_tls:14]": {
+     "Private_Dirty": 12,
+     "Pss": 12,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "[anon:stack_and_tls:15]": {
+     "Private_Dirty": 12,
+     "Pss": 12,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "[anon:stack_and_tls:16]": {
+     "Private_Dirty": 12,
+     "Pss": 12,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "[anon:stack_and_tls:17]": {
+     "Private_Dirty": 12,
+     "Pss": 12,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "[anon:stack_and_tls:18]": {
+     "Private_Dirty": 12,
+     "Pss": 12,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "[anon:stack_and_tls:19]": {
+     "Private_Dirty": 12,
+     "Pss": 12,
+     "Rss": 12,
+     "Shared_Clean": 0
+    },
+    "[anon:stack_and_tls:main]": {
+     "Private_Dirty": 8,
+     "Pss": 8,
+     "Rss": 8,
+     "Shared_Clean": 0
+    },
+    "[anon:thread signal stack]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon_shmem:dalvik-jit-code-cache]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[anon_shmem:dalvik-zygote-jit-code-cache]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[stack]": {
+     "Private_Dirty": 16,
+     "Pss": 22,
+     "Rss": 28,
+     "Shared_Clean": 0
+    },
+    "[vdso]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 4,
+     "Shared_Clean": 4
+    },
+    "[vsyscall]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    },
+    "[vvar]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 4,
+     "Shared_Clean": 4
+    },
+    "[vvar_vclock]": {
+     "Private_Dirty": 0,
+     "Pss": 0,
+     "Rss": 0,
+     "Shared_Clean": 0
+    }
+   },
+   "rollup": {
+    "Private_Clean": 156,
+    "Private_Dirty": 3124,
+    "Pss": 41562,
+    "Rss": 79996,
+    "Shared_Clean": 15752,
+    "Shared_Dirty": 60964,
+    "Swap": 0
+   }
+  }
+ },
+ "static_check": {
+  "ihash_String": [
+   "142058083"
+  ],
+  "inherited": [
+   "42"
+  ],
+  "private": [
+   "1008",
+   "99024"
+  ],
+  "threads": [
+   "1",
+   "3",
+   "6",
+   "7"
+  ]
+ },
+ "thread_lines": [
+  "threads pid=8 n=4 contended=80000 expected=80000 ms=5 threads=7"
+ ]
+}
