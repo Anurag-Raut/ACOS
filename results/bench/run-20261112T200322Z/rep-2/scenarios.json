@@ -1,0 +1,249 @@
+{
+  "acos": "/home/Qui/Projects/acos/.cache/h6/target/release/acos",
+  "binary_sha256": "5d42c4f09ab14f37ab7b2eda89e241a1bf9a00f26c881d42e8658c329463d9fb",
+  "bundle_wall_s": 29.459,
+  "errors": [],
+  "host_after": {
+    "loadavg1": 0.59,
+    "loadavg15": 1.27,
+    "loadavg5": 0.97,
+    "mem_available_gib": 47.45,
+    "mem_available_mib": 48583.9,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-k2-tests.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/.paseo/worktrees/3oxa6xao/k2\nex",
+        "comm": "bash",
+        "pid": 2754573
+      },
+      {
+        "cmd": "bash /home/Qui/Projects/acos/tools/art-runtime/run-exclusive.sh --task WD-k2-tests -- /home/Qui/Projects/acos/tools/guarded.sh --mem 12G --time 2400 -- cargo te",
+        "comm": "bash",
+        "pid": 2755361
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/h2 && ACOS_BIN=/home/Qui/Projects/acos/.cache/h2-target/release/acos ACOS_ART_BIN=/home/Qui/Projects/acos/.c",
+        "comm": "bash",
+        "pid": 2781151
+      }
+    ],
+    "runnable": "1/2661",
+    "used_mib": 13324.8,
+    "used_pct": 21.52,
+    "utc": "2026-11-12T20:58:04+00:00"
+  },
+  "host_before": {
+    "loadavg1": 0.59,
+    "loadavg15": 1.27,
+    "loadavg5": 0.97,
+    "mem_available_gib": 47.45,
+    "mem_available_mib": 48583.9,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && cat > .cache/wd-k2-tests.sh <<'EOF'\n#!/usr/bin/env bash\nset -uo pipefail\ncd /home/Qui/.paseo/worktrees/3oxa6xao/k2\nex",
+        "comm": "bash",
+        "pid": 2754573
+      },
+      {
+        "cmd": "bash /home/Qui/Projects/acos/tools/art-runtime/run-exclusive.sh --task WD-k2-tests -- /home/Qui/Projects/acos/tools/guarded.sh --mem 12G --time 2400 -- cargo te",
+        "comm": "bash",
+        "pid": 2755361
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/h2 && ACOS_BIN=/home/Qui/Projects/acos/.cache/h2-target/release/acos ACOS_ART_BIN=/home/Qui/Projects/acos/.c",
+        "comm": "bash",
+        "pid": 2781151
+      }
+    ],
+    "runnable": "1/2661",
+    "used_mib": 13324.8,
+    "used_pct": 21.52,
+    "utc": "2026-11-12T20:58:04+00:00"
+  },
+  "ok": true,
+  "phase": "scenarios",
+  "samples": {
+    "p11_scenarios_failed": {
+      "bad": 0,
+      "extra": [
+        {
+          "scenarios": 12
+        }
+      ],
+      "median": 0.0,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.0,
+        "n": 1,
+        "p5": 0.0,
+        "p50": 0.0,
+        "p95": 0.0,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "count",
+      "values": [
+        0.0
+      ]
+    }
+  },
+  "scenarios": [
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 7,
+      "rc": 0,
+      "scenario": "p11-activity",
+      "total": 7,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 4,
+      "rc": 0,
+      "scenario": "p11-anim",
+      "total": 4,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 4,
+      "rc": 0,
+      "scenario": "p11-background",
+      "total": 4,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 4,
+      "rc": 0,
+      "scenario": "p11-chain",
+      "total": 4,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 5,
+      "rc": 0,
+      "scenario": "p11-delay1000",
+      "total": 5,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 4,
+      "rc": 0,
+      "scenario": "p11-delay200",
+      "total": 4,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 4,
+      "rc": 0,
+      "scenario": "p11-delay40",
+      "total": 4,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 6,
+      "rc": 0,
+      "scenario": "p11-dialog",
+      "total": 6,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 4,
+      "rc": 0,
+      "scenario": "p11-layout-transition",
+      "total": 4,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 4,
+      "rc": 0,
+      "scenario": "p11-list-smooth",
+      "total": 4,
+      "verdict": "pass"
+    },
+    {
+      "expectation": "non_pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 3,
+      "rc": 1,
+      "scenario": "p11-progress-timeout",
+      "total": 3,
+      "verdict": "error"
+    },
+    {
+      "expectation": "pass",
+      "failed_steps": 0,
+      "ok": true,
+      "passed": 13,
+      "rc": 0,
+      "scenario": "p11-rapid-taps",
+      "total": 13,
+      "verdict": "pass"
+    }
+  ],
+  "schema": "acos-bench-phase/2",
+  "utc": "2026-11-12T20:58:04+00:00"
+}

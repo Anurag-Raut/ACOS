@@ -1,0 +1,2716 @@
+{
+  "acos": "/home/Qui/Projects/acos/.cache/h6/target/release/acos",
+  "binary_sha256": "5d42c4f09ab14f37ab7b2eda89e241a1bf9a00f26c881d42e8658c329463d9fb",
+  "bundle_wall_s": 143.304,
+  "checks": {
+    "m4_fast": 20,
+    "m4_strict": 20,
+    "m5_good": 20,
+    "m7_fast_good": 20,
+    "m7_strict_good": 20,
+    "m8_counter_expected_count": "42",
+    "m8_counter_final_count": "42",
+    "m8_form_error_text": "Name is required",
+    "reference_md5": "39d1e4e3633d98d76b992edb4b250a78",
+    "teardown_lifecycles": [
+      "lifecycle"
+    ],
+    "teardown_verified": 44
+  },
+  "env": {
+    "ACOS_STRICT_SETTLE": "default"
+  },
+  "errors": [],
+  "host_after": {
+    "loadavg1": 1.27,
+    "loadavg15": 1.94,
+    "loadavg5": 2.29,
+    "mem_available_gib": 47.26,
+    "mem_available_mib": 48394.9,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && nohup setsid bash -c 'tools/art-runtime/run-exclusive.sh --task WD-main-tests -- tools/guarded.sh --mem 8G --time 240",
+        "comm": "bash",
+        "pid": 2647121
+      },
+      {
+        "cmd": "bash -c tools/art-runtime/run-exclusive.sh --task WD-main-tests -- tools/guarded.sh --mem 8G --time 2400 -- cargo test --release -p acos-cli -p acos-art -p acos",
+        "comm": "bash",
+        "pid": 2647123
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task WD-main-tests -- tools/guarded.sh --mem 8G --time 2400 -- cargo test --release -p acos-cli -p acos-art -p acos-se",
+        "comm": "bash",
+        "pid": 2647124
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/h2 && python3 - <<'PY'\np='research/h2/first_action.py'\ns=open(p).read()\ns=s.replace('''            gc = os.p",
+        "comm": "bash",
+        "pid": 2649310
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && cat > results/art-runtime/evidence/P12/p12_gates_on.sh <<'EOF'\n#!/usr/bin/env bash\n# P12 final gates ",
+        "comm": "bash",
+        "pid": 2653186
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 1800 -- results/art-runtime/evidence/P12/p12_gates_on.sh /home/Qui/Projec",
+        "comm": "bash",
+        "pid": 2653190
+      }
+    ],
+    "runnable": "1/2665",
+    "used_mib": 13513.8,
+    "used_pct": 21.83,
+    "utc": "2026-11-12T20:06:03+00:00"
+  },
+  "host_before": {
+    "loadavg1": 1.27,
+    "loadavg15": 1.94,
+    "loadavg5": 2.29,
+    "mem_available_gib": 47.26,
+    "mem_available_mib": 48394.9,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-quiet/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2016927
+      },
+      {
+        "cmd": "/home/Qui/Projects/acos/.cache/p11-target/release/acos serve --socket /home/Qui/Projects/acos/.cache/p11-scratch-event/serve.sock --engine art --idle-timeout 90",
+        "comm": "acos",
+        "pid": 2112986
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/Projects/acos && nohup setsid bash -c 'tools/art-runtime/run-exclusive.sh --task WD-main-tests -- tools/guarded.sh --mem 8G --time 240",
+        "comm": "bash",
+        "pid": 2647121
+      },
+      {
+        "cmd": "bash -c tools/art-runtime/run-exclusive.sh --task WD-main-tests -- tools/guarded.sh --mem 8G --time 2400 -- cargo test --release -p acos-cli -p acos-art -p acos",
+        "comm": "bash",
+        "pid": 2647123
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task WD-main-tests -- tools/guarded.sh --mem 8G --time 2400 -- cargo test --release -p acos-cli -p acos-art -p acos-se",
+        "comm": "bash",
+        "pid": 2647124
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/h2 && python3 - <<'PY'\np='research/h2/first_action.py'\ns=open(p).read()\ns=s.replace('''            gc = os.p",
+        "comm": "bash",
+        "pid": 2649310
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.paseo/worktrees/3oxa6xao/p12 && cat > results/art-runtime/evidence/P12/p12_gates_on.sh <<'EOF'\n#!/usr/bin/env bash\n# P12 final gates ",
+        "comm": "bash",
+        "pid": 2653186
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task P12 -- tools/guarded.sh --mem 8G --time 1800 -- results/art-runtime/evidence/P12/p12_gates_on.sh /home/Qui/Projec",
+        "comm": "bash",
+        "pid": 2653190
+      }
+    ],
+    "runnable": "1/2665",
+    "used_mib": 13513.8,
+    "used_pct": 21.83,
+    "utc": "2026-11-12T20:06:03+00:00"
+  },
+  "ok": true,
+  "phase": "latency",
+  "samples": {
+    "cpu_active_tap_strict_pct": {
+      "bad": 0,
+      "extra": [
+        {
+          "cpu_pct": 46.164,
+          "cpu_s": 9.24,
+          "pids": 5,
+          "seconds": 20.016,
+          "wake_pids": 5,
+          "wakeups": 3807,
+          "wakeups_per_s": 190.201
+        }
+      ],
+      "median": 46.164,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 46.164,
+        "mean": 46.164,
+        "median": 46.164,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 46.164,
+        "n": 1,
+        "p5": 46.164,
+        "p50": 46.164,
+        "p95": 46.164,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "% of one core",
+      "values": [
+        46.164
+      ]
+    },
+    "m4_launch_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "probe-fresh",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        }
+      ],
+      "median": 174.905,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 175.668,
+        "ci95_low": 174.4875,
+        "cv": 0.060857314819515375,
+        "max": 206.152,
+        "mean": 180.24475,
+        "median": 174.905,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 172.435,
+        "n": 20,
+        "p5": 172.9271,
+        "p50": 174.905,
+        "p95": 204.6567,
+        "resamples": 2000,
+        "spread": 0.18141047997484352,
+        "spread_pct": 18.141047997484353,
+        "stdev": 10.969211495314845
+      },
+      "unit": "ms",
+      "values": [
+        195.591,
+        193.277,
+        172.435,
+        175.34,
+        206.152,
+        189.606,
+        204.578,
+        174.76,
+        175.769,
+        174.632,
+        174.823,
+        174.987,
+        173.753,
+        174.456,
+        173.514,
+        175.001,
+        173.182,
+        175.567,
+        172.953,
+        174.519
+      ]
+    },
+    "m4_launch_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "bound": "strict-event",
+          "nodes": 12,
+          "settled": true,
+          "verify_ok": true
+        }
+      ],
+      "median": 309.0285,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 309.9835,
+        "ci95_low": 308.5155,
+        "cv": 0.041983795985110914,
+        "max": 357.614,
+        "mean": 313.4379,
+        "median": 309.0285,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 300.991,
+        "n": 20,
+        "p5": 303.89989999999995,
+        "p50": 309.0285,
+        "p95": 339.92215000000004,
+        "resamples": 2000,
+        "spread": 0.11656610959830598,
+        "spread_pct": 11.656610959830598,
+        "stdev": 13.159312847601598
+      },
+      "unit": "ms",
+      "values": [
+        300.991,
+        310.068,
+        308.264,
+        310.462,
+        304.053,
+        313.409,
+        309.758,
+        309.16,
+        308.867,
+        308.897,
+        308.23,
+        309.899,
+        309.613,
+        308.651,
+        308.864,
+        326.484,
+        338.991,
+        357.614,
+        308.103,
+        308.38
+      ]
+    },
+    "m5_screenshot_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        },
+        {
+          "png_bytes": 9545882
+        }
+      ],
+      "median": 24.9145,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 25.434,
+        "ci95_low": 24.755000000000003,
+        "cv": 0.021573989501444648,
+        "max": 26.18,
+        "mean": 25.11575,
+        "median": 24.9145,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 24.392,
+        "n": 20,
+        "p5": 24.4566,
+        "p50": 24.9145,
+        "p95": 26.05365,
+        "resamples": 2000,
+        "spread": 0.06410122619358202,
+        "spread_pct": 6.410122619358202,
+        "stdev": 0.5418469268209084
+      },
+      "unit": "ms",
+      "values": [
+        26.18,
+        25.543,
+        24.768,
+        24.46,
+        24.816,
+        24.553,
+        24.849,
+        24.392,
+        24.703,
+        24.899,
+        25.341,
+        25.434,
+        24.93,
+        25.0,
+        25.857,
+        25.749,
+        26.047,
+        25.426,
+        24.626,
+        24.742
+      ]
+    },
+    "m6_reset_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "probe-fresh"
+        }
+      ],
+      "median": 196.68349999999998,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 200.63,
+        "ci95_low": 195.096,
+        "cv": 0.0541736469385404,
+        "max": 212.626,
+        "mean": 197.20284999999998,
+        "median": 196.68349999999998,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 179.258,
+        "n": 20,
+        "p5": 180.62030000000001,
+        "p50": 196.68349999999998,
+        "p95": 211.9382,
+        "resamples": 2000,
+        "spread": 0.15922993031952343,
+        "spread_pct": 15.922993031952343,
+        "stdev": 10.68319757117394
+      },
+      "unit": "ms",
+      "values": [
+        180.692,
+        196.755,
+        200.181,
+        194.639,
+        180.771,
+        197.826,
+        211.517,
+        210.882,
+        193.144,
+        212.626,
+        210.105,
+        211.902,
+        179.258,
+        181.663,
+        195.553,
+        200.63,
+        196.525,
+        196.612,
+        197.035,
+        195.741
+      ]
+    },
+    "m6_reset_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        },
+        {
+          "after": "0",
+          "before": "1",
+          "bound": "strict-event"
+        }
+      ],
+      "median": 341.5925,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 344.895,
+        "ci95_low": 332.161,
+        "cv": 0.036970563192301124,
+        "max": 358.501,
+        "mean": 338.79735,
+        "median": 341.5925,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 315.286,
+        "n": 20,
+        "p5": 316.45925000000005,
+        "p50": 341.5925,
+        "p95": 357.64694999999995,
+        "resamples": 2000,
+        "spread": 0.12057553956834502,
+        "spread_pct": 12.057553956834502,
+        "stdev": 12.525528837559161
+      },
+      "unit": "ms",
+      "values": [
+        354.609,
+        322.806,
+        331.474,
+        332.848,
+        316.521,
+        344.895,
+        352.414,
+        342.077,
+        341.636,
+        358.501,
+        336.907,
+        335.982,
+        342.521,
+        342.102,
+        357.602,
+        341.549,
+        326.508,
+        315.286,
+        348.707,
+        331.002
+      ]
+    },
+    "m7_tree_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        }
+      ],
+      "median": 0.316,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 0.38049999999999995,
+        "ci95_low": 0.2995,
+        "cv": 0.2604705577903834,
+        "max": 0.592,
+        "mean": 0.3611,
+        "median": 0.316,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.276,
+        "n": 20,
+        "p5": 0.27980000000000005,
+        "p50": 0.316,
+        "p95": 0.54735,
+        "resamples": 2000,
+        "spread": 0.8466772151898733,
+        "spread_pct": 84.66772151898732,
+        "stdev": 0.09405591841810745
+      },
+      "unit": "ms",
+      "values": [
+        0.319,
+        0.303,
+        0.354,
+        0.429,
+        0.302,
+        0.276,
+        0.28,
+        0.297,
+        0.287,
+        0.348,
+        0.313,
+        0.283,
+        0.31,
+        0.545,
+        0.283,
+        0.354,
+        0.493,
+        0.407,
+        0.447,
+        0.592
+      ]
+    },
+    "m7_tree_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 12,
+          "truncated": false
+        }
+      ],
+      "median": 41.1055,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 41.1965,
+        "ci95_low": 41.054500000000004,
+        "cv": 0.002295258940018686,
+        "max": 41.287,
+        "mean": 41.1206,
+        "median": 41.1055,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 40.977,
+        "n": 20,
+        "p5": 41.00075,
+        "p50": 41.1055,
+        "p95": 41.266099999999994,
+        "resamples": 2000,
+        "spread": 0.0064553405262069066,
+        "spread_pct": 0.6455340526206906,
+        "stdev": 0.09438242476893238
+      },
+      "unit": "ms",
+      "values": [
+        41.287,
+        41.111,
+        41.118,
+        41.203,
+        41.103,
+        41.212,
+        41.261,
+        41.066,
+        40.977,
+        41.002,
+        41.043,
+        41.026,
+        41.039,
+        41.011,
+        41.104,
+        41.206,
+        41.19,
+        41.107,
+        41.081,
+        41.265
+      ]
+    },
+    "m8_tap_counter_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 16,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 22,
+          "frame_ms": 35
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 13,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 26,
+          "frame_ms": 35
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 17,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 23,
+          "frame_ms": 35
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 15,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 21,
+          "frame_ms": 36
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 13,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 19,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 25,
+          "frame_ms": 35
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 23,
+          "frame_ms": 36
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 14,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 21,
+          "frame_ms": 35
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 12,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 18,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 25,
+          "frame_ms": 35
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        }
+      ],
+      "median": 43.546499999999995,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 58.4995,
+        "ci95_low": 43.441500000000005,
+        "cv": 0.1558687736822707,
+        "max": 59.174,
+        "mean": 49.54085,
+        "median": 43.546499999999995,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 43.075,
+        "n": 20,
+        "p5": 43.10445,
+        "p50": 43.546499999999995,
+        "p95": 59.08755,
+        "resamples": 2000,
+        "spread": 0.36703523819365513,
+        "spread_pct": 36.703523819365515,
+        "stdev": 7.7218715366773205
+      },
+      "unit": "ms",
+      "values": [
+        43.381,
+        59.174,
+        43.204,
+        43.592,
+        58.896,
+        43.43,
+        58.079,
+        43.456,
+        58.997,
+        43.809,
+        43.453,
+        59.083,
+        43.319,
+        58.401,
+        43.075,
+        58.795,
+        43.501,
+        43.468,
+        58.598,
+        43.106
+      ]
+    },
+    "m8_tap_counter_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 928
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 56,
+          "frame_ms": 935
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 942
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 67,
+          "frame_ms": 928
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 931
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 56,
+          "frame_ms": 922
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 932
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 58,
+          "frame_ms": 921
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 942
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 68,
+          "frame_ms": 932
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 57,
+          "frame_ms": 918
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 930
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 57,
+          "frame_ms": 920
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 939
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 68,
+          "frame_ms": 929
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 924
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 929
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 929
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 67,
+          "frame_ms": 927
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 926
+        }
+      ],
+      "median": 952.3335,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 956.1775,
+        "ci95_low": 949.1565,
+        "cv": 0.007280961849556072,
+        "max": 966.379,
+        "mean": 953.03605,
+        "median": 952.3335,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 940.971,
+        "n": 20,
+        "p5": 943.5094,
+        "p50": 952.3335,
+        "p95": 965.04995,
+        "resamples": 2000,
+        "spread": 0.0226187044769505,
+        "spread_pct": 2.26187044769505,
+        "stdev": 6.939019121301613
+      },
+      "unit": "ms",
+      "values": [
+        951.535,
+        959.234,
+        964.98,
+        952.334,
+        956.288,
+        946.562,
+        956.239,
+        944.615,
+        966.379,
+        956.116,
+        940.971,
+        954.578,
+        943.643,
+        963.766,
+        953.014,
+        947.874,
+        952.333,
+        951.947,
+        949.397,
+        948.916
+      ]
+    },
+    "m8_tap_form_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 18,
+          "frame_ms": 21
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 21
+        }
+      ],
+      "median": 46.319,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 47.070499999999996,
+        "ci95_low": 45.29710000000001,
+        "cv": 0.03655714782164676,
+        "max": 48.424,
+        "mean": 46.12555,
+        "median": 46.319,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 43.353,
+        "n": 20,
+        "p5": 43.496449999999996,
+        "p50": 46.319,
+        "p95": 48.3309,
+        "resamples": 2000,
+        "spread": 0.10437293551242478,
+        "spread_pct": 10.437293551242478,
+        "stdev": 1.6862185497047588
+      },
+      "unit": "ms",
+      "values": [
+        44.958,
+        44.097,
+        46.445,
+        46.193,
+        47.797,
+        45.896,
+        48.326,
+        44.013,
+        43.504,
+        45.644,
+        46.586,
+        46.87,
+        46.902,
+        43.353,
+        45.847,
+        48.424,
+        43.963,
+        47.239,
+        48.321,
+        48.133
+      ]
+    },
+    "m8_tap_form_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 76,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 915
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 917
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 75,
+          "frame_ms": 915
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 917
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 915
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 917
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 915
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 916
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 917
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 917
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 916
+        }
+      ],
+      "median": 948.7835,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 949.098,
+        "ci95_low": 948.2605000000001,
+        "cv": 0.0011664963682788963,
+        "max": 950.061,
+        "mean": 948.5438,
+        "median": 948.7835,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 945.632,
+        "n": 20,
+        "p5": 946.05095,
+        "p50": 948.7835,
+        "p95": 949.7275500000001,
+        "resamples": 2000,
+        "spread": 0.0038750673889249984,
+        "spread_pct": 0.3875067388924998,
+        "stdev": 1.1064728978534637
+      },
+      "unit": "ms",
+      "values": [
+        945.632,
+        949.619,
+        948.505,
+        949.617,
+        949.189,
+        948.746,
+        948.026,
+        948.249,
+        948.616,
+        950.061,
+        947.828,
+        949.097,
+        947.937,
+        948.272,
+        949.71,
+        948.821,
+        948.841,
+        949.099,
+        948.938,
+        946.073
+      ]
+    },
+    "tap_ack_ms": {
+      "bad": 0,
+      "median": 5.0,
+      "n": 80,
+      "ok": 80,
+      "stats": {
+        "ci95_high": 5.0,
+        "ci95_low": 5.0,
+        "cv": 0.0,
+        "max": 5.0,
+        "mean": 5.0,
+        "median": 5.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 5.0,
+        "n": 80,
+        "p5": 5.0,
+        "p50": 5.0,
+        "p95": 5.0,
+        "resamples": 2000,
+        "spread": 0.0,
+        "spread_pct": 0.0,
+        "stdev": 0.0
+      },
+      "unit": "ms",
+      "values": [
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0
+      ]
+    },
+    "teardown_ms": {
+      "bad": 0,
+      "median": 12.0,
+      "n": 44,
+      "ok": 44,
+      "stats": {
+        "ci95_high": 12.0,
+        "ci95_low": 11.0,
+        "cv": 0.10217484920042195,
+        "max": 18.0,
+        "mean": 11.863636363636363,
+        "median": 12.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 10.0,
+        "n": 44,
+        "p5": 11.0,
+        "p50": 12.0,
+        "p95": 13.0,
+        "resamples": 2000,
+        "spread": 0.16666666666666666,
+        "spread_pct": 16.666666666666664,
+        "stdev": 1.2121652564231877
+      },
+      "unit": "ms",
+      "values": [
+        11.0,
+        12.0,
+        11.0,
+        13.0,
+        11.0,
+        11.0,
+        12.0,
+        12.0,
+        12.0,
+        12.0,
+        11.0,
+        11.0,
+        11.0,
+        12.0,
+        11.0,
+        13.0,
+        11.0,
+        12.0,
+        12.0,
+        12.0,
+        13.0,
+        12.0,
+        11.0,
+        13.0,
+        11.0,
+        13.0,
+        11.0,
+        10.0,
+        12.0,
+        11.0,
+        11.0,
+        12.0,
+        12.0,
+        12.0,
+        11.0,
+        12.0,
+        11.0,
+        12.0,
+        11.0,
+        12.0,
+        12.0,
+        13.0,
+        18.0,
+        13.0
+      ]
+    },
+    "teardown_wall_ms": {
+      "bad": 0,
+      "median": 16.694,
+      "n": 44,
+      "ok": 44,
+      "stats": {
+        "ci95_high": 17.18,
+        "ci95_low": 16.247,
+        "cv": 0.09114250748887111,
+        "max": 23.888,
+        "mean": 16.98118181818182,
+        "median": 16.694,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 15.026,
+        "n": 44,
+        "p5": 15.4026,
+        "p50": 16.694,
+        "p95": 19.1997,
+        "resamples": 2000,
+        "spread": 0.2274529771175273,
+        "spread_pct": 22.74529771175273,
+        "stdev": 1.5477074910335185
+      },
+      "unit": "ms",
+      "values": [
+        15.895,
+        16.417,
+        15.594,
+        17.184,
+        15.727,
+        15.378,
+        16.673,
+        16.93,
+        16.562,
+        17.015,
+        15.568,
+        15.792,
+        16.164,
+        16.441,
+        15.393,
+        20.006,
+        18.637,
+        16.61,
+        16.715,
+        15.457,
+        17.72,
+        18.023,
+        15.662,
+        18.633,
+        17.35,
+        19.299,
+        15.94,
+        15.026,
+        17.11,
+        16.247,
+        16.081,
+        17.18,
+        17.359,
+        17.227,
+        15.796,
+        17.137,
+        16.292,
+        17.183,
+        16.12,
+        17.473,
+        17.136,
+        18.594,
+        23.888,
+        18.538
+      ]
+    }
+  },
+  "schema": "acos-bench-phase/2",
+  "survivors": [],
+  "teardowns": [
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.895
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.417
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.594
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 13,
+      "verified": true,
+      "wall_ms": 17.184
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.727
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.378
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.673
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.93
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.562
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.015
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.568
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.792
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.164
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.441
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.393
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 13,
+      "verified": true,
+      "wall_ms": 20.006
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 18.637
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.61
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 16.715
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 15.457
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 13,
+      "verified": true,
+      "wall_ms": 17.72
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 18.023
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.662
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 13,
+      "verified": true,
+      "wall_ms": 18.633
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 17.35
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 13,
+      "verified": true,
+      "wall_ms": 19.299
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.94
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 10,
+      "verified": true,
+      "wall_ms": 15.026
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.11
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.247
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.081
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.18
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.359
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.227
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 15.796
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.137
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.292
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.183
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 11,
+      "verified": true,
+      "wall_ms": 16.12
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.473
+    },
+    {
+      "code": null,
+      "label": "m6-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 12,
+      "verified": true,
+      "wall_ms": 17.136
+    },
+    {
+      "code": null,
+      "label": "m6-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 13,
+      "verified": true,
+      "wall_ms": 18.594
+    },
+    {
+      "code": null,
+      "label": "m8-counter",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 18,
+      "verified": true,
+      "wall_ms": 23.888
+    },
+    {
+      "code": null,
+      "label": "m8-form",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 13,
+      "verified": true,
+      "wall_ms": 18.538
+    }
+  ],
+  "utc": "2026-11-12T20:06:03+00:00"
+}
