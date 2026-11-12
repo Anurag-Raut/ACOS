@@ -26,6 +26,12 @@ import threading
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# Z6: the release probe (1 Hz smaps + mapping attribution) lives next to this file
+# in research/zygote-proto/z6/. Imported lazily so the Z4 harness still runs
+# without that directory.
+Z6_DIR = os.path.join(os.path.dirname(HERE), "z6")
+if os.path.isdir(Z6_DIR) and Z6_DIR not in sys.path:
+    sys.path.insert(0, Z6_DIR)
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 CACHE = os.environ.get("ACOS_CACHE", "/home/Qui/Projects/acos/.cache")
 APK = os.path.join(REPO, "fixtures/build/apps/counter.apk")
@@ -249,7 +255,7 @@ def classify(pid):
         return "bwrap", comm
     if comm in ("sleep", "toybox") or "system/bin/sleep" in cmd:
         return "stub", comm
-    if "dalvikvm64" in cmd or comm.startswith("fixtures") or comm.startswith("dev.acos"):
+    if ("dalvikvm64" in cmd or comm.startswith(("fixtures", "ixtures", "dev.acos"))):
         return "guest", comm
     if comm == "acos-art" or "acos-art" in cmd:
         return "launcher", comm
@@ -296,20 +302,47 @@ def sample_memory(root, label):
             "private_clean": roll.get("Private_Clean", 0),
             "shared_dirty": roll.get("Shared_Dirty", 0),
             "shared_clean": roll.get("Shared_Clean", 0),
+            # Z6: the guarded scope sets memory.swap.max=0, so both must read 0.
+            "swap": roll.get("Swap", 0), "swap_pss": roll.get("SwapPss", 0),
         })
+    KEYS = ("rss", "pss", "private_dirty", "shared_dirty", "shared_clean",
+            "swap", "swap_pss")
     sums = {}
     for r in rows:
-        s = sums.setdefault(r["role"], {"n": 0, "rss": 0, "pss": 0, "private_dirty": 0,
-                                        "shared_dirty": 0, "shared_clean": 0})
+        s = sums.setdefault(r["role"], {"n": 0, **{k: 0 for k in KEYS}})
         s["n"] += 1
-        for k in ("rss", "pss", "private_dirty", "shared_dirty", "shared_clean"):
+        for k in KEYS:
             s[k] += r[k]
-    total = {k: sum(r[k] for r in rows) for k in
-             ("rss", "pss", "private_dirty", "shared_dirty", "shared_clean")}
+    total = {k: sum(r[k] for r in rows) for k in KEYS}
     guest_side = {k: sum(r[k] for r in rows if r["role"] in ("zygote", "guest", "sandbox"))
-                  for k in ("rss", "pss", "private_dirty", "shared_dirty", "shared_clean")}
+                  for k in KEYS}
+    # Z6: /sys/fs/cgroup evidence — the scope's swap ceiling and accounting, and
+    # the memory.events counters that would show OOM kills during the sample.
+    cgroups = {}
+    for r in rows:
+        path = r.get("cgroup") or ""
+        if "::" not in path:
+            continue
+        base = "/sys/fs/cgroup" + path.split("::", 1)[1]
+        if base in cgroups:
+            continue
+        ev = {}
+        for name in ("memory.swap.max", "memory.swap.current", "memory.max",
+                     "memory.current", "memory.oom.group", "pids.max", "pids.current"):
+            try:
+                ev[name] = open(os.path.join(base, name)).read().strip()
+            except OSError:
+                pass
+        try:
+            for line in open(os.path.join(base, "memory.events")):
+                k, _, v = line.partition(" ")
+                ev["events." + k] = v.strip()
+        except OSError:
+            pass
+        cgroups[base] = ev
     return {"label": label, "at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "processes": rows, "sum_by_role": sums, "total": total, "guest_side": guest_side}
+            "processes": rows, "sum_by_role": sums, "total": total, "guest_side": guest_side,
+            "cgroups": cgroups}
 
 
 def run_session(sess, tag, report, ready_timeout):
@@ -395,6 +428,14 @@ def main():
     ap.add_argument("--settle", type=float, default=0.5,
                     help="seconds to hold all N sessions after the last tap before the "
                          "memory sample (0.5 = Z4's method; 60 = D-M2's steady state)")
+    ap.add_argument("--samples", default="",
+                    help="Z6: comma-separated hold times (s after the last tap) at which "
+                         "the whole-tree memory snapshot is taken, e.g. 0.5,15,60. Overrides "
+                         "--settle; samples are cumulative in one run.")
+    ap.add_argument("--release-probe", type=float, default=0.0,
+                    help="Z6: seconds of 1 Hz per-process smaps sampling (with mapping "
+                         "attribution and guest log correlation) right after the last "
+                         "session's first frame, before the tap sequence. 0 = off.")
     args = ap.parse_args()
 
     root = os.path.abspath(args.out)
@@ -408,7 +449,10 @@ def main():
     report = {"mode": args.mode, "arm": args.label, "n": args.n, "sessions": {},
               "failures": [],
               "knobs": {k: os.environ.get(k) for k in (
-                  "ACOS_SHARED_BOOT_IMAGE", "ACOS_ZYGOTE_APP", "ACOS_ZYGOTE_NO_STUB")
+                  "ACOS_SHARED_BOOT_IMAGE", "ACOS_ZYGOTE_APP", "ACOS_ZYGOTE_NO_STUB",
+                  "ACOS_ART_HEAPSTARTSIZE", "ACOS_ART_HEAPGROWTHLIMIT",
+                  "ACOS_ART_HEAPSIZE", "ACOS_ART_HEAPMINFREE",
+                  "ACOS_ART_HEAPMAXFREE", "ACOS_ART_HEAPTARGETUTILIZATION")
                   if os.environ.get(k)},
               "started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     procs = {}
@@ -472,6 +516,46 @@ def main():
         finish(procs, sessions, report, args)
         return
 
+    # Z6: the release probe — 1 Hz per-process smaps + per-mapping attribution for
+    # 20 s of *idle* session time, started as soon as the last session has drawn
+    # its first frame (the tap sequence below has not run yet, so nothing the
+    # driver does can influence the drop).
+    if args.release_probe > 0:
+        import probe as z6_probe  # noqa: E402  (z6/ is on sys.path above)
+        seen = {k: 0 for k in range(args.n)}
+        dropped = {k: 0 for k in range(args.n)}
+
+        def collect_logs():
+            fresh = []
+            for k in range(args.n):
+                try:
+                    reply, _, _ = sessions[k].call({"cmd": "logs"})
+                except BaseException:
+                    continue
+                ents = reply.get("entries") or []
+                drop = reply.get("dropped") or 0
+                if drop != dropped[k]:
+                    seen[k] = 0
+                    dropped[k] = drop
+                for e in ents[seen[k]:]:
+                    msg = str(e.get("message", ""))
+                    if re.search(r"GC freed|heap trim|Using .*GC|concurrent copying|"
+                                 r"Zygote|trim", msg, re.I):
+                        fresh.append({"session": k, "prio": e.get("prio"),
+                                      "tag": e.get("tag"), "message": msg[:400]})
+                seen[k] = len(ents)
+            return fresh
+
+        print(f"[{args.label}-n{args.n}] release probe {args.release_probe:.0f}s", flush=True)
+        series = z6_probe.probe_series(os.getpid(), classify, args.release_probe,
+                                       log_fn=collect_logs)
+        report["release_probe"] = {
+            "seconds": args.release_probe,
+            "started_after": "all N sessions' first frame (before the tap sequence)",
+            "series": series,
+        }
+        print(f"[{args.label}-n{args.n}] release probe done, {len(series)} samples", flush=True)
+
     # The isolation sequence: tap K, require K==1 and every *untapped* session==0.
     for k in range(args.n):
         tap(sessions[k], report["sessions"][k])
@@ -529,13 +613,35 @@ def main():
     report["fork_to_ready_ms"] = {str(k): v for k, v in fork_ms.items() if isinstance(k, int)}
     report["fork_to_sandbox_ms"] = {str(k): v for k, v in (fork_ms.get("sandbox", {}) or {}).items()}
 
-    # Held-after-tap memory snapshot of this driver's whole process tree.
-    time.sleep(args.settle)
-    report["settle_s"] = args.settle
-    report["memory"] = sample_memory(os.getpid(), f"{args.mode}-n{args.n}")    # Z5 steady-state liveness: after a long settle, prove every session is still
+    # Held-after-tap memory snapshots of this driver's whole process tree.
+    # Z6: one run yields every requested time point (0.5, 15, 60 s), so a
+    # configuration's three numbers come from the same sessions and the same host
+    # minute instead of three runs.
+    times = sorted({float(t) for t in args.samples.split(",") if t.strip()}) \
+        if args.samples else [args.settle]
+    report["sample_times_s"] = times
+    samples = []
+    t0 = time.perf_counter()
+    for t in times:
+        wait = t - (time.perf_counter() - t0)
+        if wait > 0:
+            time.sleep(wait)
+        snap = sample_memory(os.getpid(), f"{args.mode}-n{args.n}-t{t:g}")
+        snap["t_s"] = t
+        snap["elapsed_s"] = round(time.perf_counter() - t0, 2)
+        samples.append(snap)
+        print(f"[{args.label}-n{args.n}] memory t={t:g}s elapsed={snap['elapsed_s']}s "
+              f"pss={snap['total']['pss'] / 1024:.1f}MiB"
+              f" pd={snap['total']['private_dirty'] / 1024:.1f}MiB"
+              f" swappss={snap['total']['swap_pss'] / 1024:.2f}MiB", flush=True)
+    report["memory_samples"] = samples
+    report["memory"] = samples[0]
+    report["settle_s"] = times[0]
+
+    # Z5 steady-state liveness: after a long settle, prove every session is still
     # interactive and still isolated *after* the memory sample (so the sample stays
     # an idle reading). A second tap must read 2 in that session only.
-    if args.settle >= 5:
+    if times[-1] >= 5:
         for k in range(args.n):
             tap(sessions[k], report["sessions"][k])
             got = read_count(sessions[k], report["sessions"][k], f"tree_after_settle_tap_{k}")
