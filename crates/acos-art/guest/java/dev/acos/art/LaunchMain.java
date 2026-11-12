@@ -183,7 +183,7 @@ public final class LaunchMain {
             Throwable u = unwrap(t);
             u.printStackTrace(System.out);
             System.out.println("ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"GUEST_ERROR\",\"message\":\""
-                    + esc(String.valueOf(u)) + "\"}");
+                    + esc(String.valueOf(u)) + "\"" + crashDetail(u) + "}");
             System.out.flush();
             System.exit(1);
         }
@@ -387,7 +387,8 @@ public final class LaunchMain {
             unwrap(fatal).printStackTrace(System.out);
             System.out.println("ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\","
                     + "\"activity_resumed\":" + resumed + ",\"message\":\""
-                    + esc(String.valueOf(unwrap(fatal))) + "\"}");
+                    + esc(String.valueOf(unwrap(fatal))) + "\""
+                    + crashDetail(unwrap(fatal)) + "}");
             System.out.flush();
             System.exit(1);
             return;
@@ -3328,7 +3329,50 @@ public final class LaunchMain {
     }
 
     static String esc(String s) {
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+        return s.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
+    }
+
+    /**
+     * R4 evidence: the fatal throwable's own stack plus every cause's class,
+     * message and stack. The one-line `message` names only the outermost
+     * wrapper ("Unable to create application …"), which hides the real first
+     * failing call that the cause carries.
+     */
+    static String crashDetail(Throwable t) {
+        Throwable u = unwrap(t);
+        StringBuilder b = new StringBuilder(1024);
+        b.append(",\"exception\":\"").append(esc(u.getClass().getName())).append("\"");
+        b.append(",\"stack\":").append(stackJson(u, 24));
+        b.append(",\"causes\":[");
+        Throwable c = u.getCause();
+        boolean first = true;
+        int guard = 0;
+        while (c != null && c != u && guard++ < 8) {
+            if (!first) b.append(',');
+            first = false;
+            b.append("{\"class\":\"").append(esc(c.getClass().getName()))
+                    .append("\",\"message\":\"").append(esc(String.valueOf(c.getMessage())))
+                    .append("\",\"stack\":").append(stackJson(c, 16)).append('}');
+            Throwable next = c.getCause();
+            if (next == c) break;
+            c = next;
+        }
+        b.append("]");
+        return b.toString();
+    }
+
+    static String stackJson(Throwable t, int max) {
+        StackTraceElement[] frames = t.getStackTrace();
+        StringBuilder b = new StringBuilder(256);
+        b.append('[');
+        int n = Math.min(frames.length, max);
+        for (int i = 0; i < n; i++) {
+            if (i > 0) b.append(',');
+            b.append('"').append(esc(String.valueOf(frames[i]))).append('"');
+        }
+        b.append(']');
+        return b.toString();
     }
 
     static void write(File f, String s) throws Exception {

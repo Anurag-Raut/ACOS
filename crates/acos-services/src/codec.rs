@@ -74,8 +74,76 @@ pub fn read_args_override(
         ("android.content.pm.IPackageManager", IPACKAGE_MANAGER_NOTIFY_DEX_LOAD) => {
             Ok(Some(read_notify_dex_load(parcel)?))
         }
+        // K2: `ParceledListSlice<NotificationChannel>` is the last argument of
+        // the notification create calls. Decode it with the real
+        // `NotificationChannel` codec when that codec can follow the image
+        // bytes (so the service can store the channels); if a field this image
+        // writes is not modelled, consume the slice opaquely and still let the
+        // service answer, exactly as a real NMS accepts the call.
+        ("android.app.INotificationManager", 30 | 31 | 32) => {
+            let decoded = acos_aidl::lookup(interface, code).and_then(|method| {
+                let mut probe = parcel.clone();
+                read_args(&mut probe, &method.args, interface, &method.name)
+                    .ok()
+                    .map(|values| (values, probe.data_position()))
+            });
+            if let Some((values, position)) = decoded {
+                parcel.set_data_position(position);
+                return Ok(Some(values));
+            }
+            let package = parcel.read_string16()?;
+            if code == 32 {
+                let uid = parcel.read_int32()?;
+                skip_remaining(parcel);
+                Ok(Some(vec![
+                    Value::Str(package),
+                    Value::Int(uid),
+                    Value::Skipped,
+                ]))
+            } else {
+                skip_remaining(parcel);
+                Ok(Some(vec![Value::Str(package), Value::Skipped]))
+            }
+        }
+        // K2: `setDynamicShortcuts`/`addDynamicShortcuts`/`updateShortcuts`
+        // carry a `ParceledListSlice<ShortcutInfo>` followed by the user id.
+        // The shortcut payload has no flat codec yet; consume it opaquely and
+        // keep the trailing user id so the service's answer stays complete.
+        ("android.content.pm.IShortcutService", 1 | 2 | 5) => {
+            let package = parcel.read_string16()?;
+            let remaining = parcel.remaining();
+            if remaining < 4 {
+                return Err(ServiceError::BadRequest {
+                    interface: interface.to_string(),
+                    method: format!("code {code}"),
+                    detail: "shortcut list leaves no room for the user id".into(),
+                });
+            }
+            let keep = parcel.data_position() + remaining - 4;
+            parcel.set_data_position(keep);
+            let user_id = parcel.read_int32()?;
+            Ok(Some(vec![
+                Value::Str(package),
+                Value::Skipped,
+                Value::Int(user_id),
+            ]))
+        }
+        // K2: `schedule(pkg, JobInfo)`/`enqueue(pkg, JobInfo, JobWorkItem)`
+        // end with the job payload. ACOS records the schedule and answers
+        // `RESULT_SUCCESS`; decoding `JobInfo`'s 30+ fields is not needed for
+        // that answer, so the payload is consumed opaquely.
+        ("android.app.job.IJobScheduler", 1 | 2) => {
+            let package = parcel.read_string16()?;
+            skip_remaining(parcel);
+            Ok(Some(vec![Value::Str(package), Value::Skipped]))
+        }
         _ => Ok(None),
     }
+}
+
+/// Consume the rest of the request without interpreting it.
+fn skip_remaining(parcel: &mut Parcel) {
+    parcel.set_data_position(parcel.data_size());
 }
 
 /// `notifyDexLoad(String loadingPackageName, in Map<String,String>
@@ -413,9 +481,21 @@ pub fn write_op(parcel: &mut Parcel, op: &WireOp, value: &Value) -> Result<()> {
                 }
             }
         }
-        WireOp::List { .. } | WireOp::Array { .. } | WireOp::Map { .. } => {
-            return Err(bad("dynamic list/map replies are not modelled"))
-        }
+        // An empty dynamic list/map is the honest "nothing there" reply for
+        // queries such as `IJobScheduler.getAllPendingJobs` and
+        // `getStartedJobs`: the wire form is only the `-1`/`0` count. A
+        // non-empty body still fails loudly because its element type is not in
+        // the decoded table.
+        WireOp::List { .. } | WireOp::Array { .. } => match value {
+            Value::List(None) => parcel.write_int32(-1),
+            Value::List(Some(items)) if items.is_empty() => parcel.write_int32(0),
+            _ => return Err(bad("dynamic list replies are only modelled empty")),
+        },
+        WireOp::Map { .. } => match value {
+            Value::Map(None) => parcel.write_int32(-1),
+            Value::Map(Some(entries)) if entries.is_empty() => parcel.write_int32(0),
+            _ => return Err(bad("dynamic map replies are only modelled empty")),
+        },
         WireOp::TypedArray { class } | WireOp::TypedList { class } => {
             let Some(values) = expect_list(value)? else {
                 parcel.write_int32(-1);
@@ -426,7 +506,16 @@ pub fn write_op(parcel: &mut Parcel, op: &WireOp, value: &Value) -> Result<()> {
                 let p = v
                     .as_parcelable()
                     .ok_or_else(|| bad(format!("expected {class} element")))?;
-                parcelable::write_payload(parcel, p)?;
+                // AIDL writes an array/list of parcelables with
+                // `writeTypedArray`/`writeTypedList`: a per-element presence
+                // marker before the payload (the same one the reader expects).
+                match p {
+                    crate::value::Parcelable::Null => parcel.write_int32(0),
+                    _ => {
+                        parcel.write_int32(1);
+                        parcelable::write_payload(parcel, p)?;
+                    }
+                }
             }
         }
         WireOp::Unknown { note } => return Err(bad(format!("undecoded wire op: {note}"))),

@@ -1809,6 +1809,37 @@ fn last_stage() -> Option<String> {
 
 /// One self-describing record per launch, written next to the frames. Never
 /// fatal: the record is evidence, not a gate.
+/// The structured fields of the guest's own crash line, when it printed one.
+///
+/// The line is `ACOSLAUNCH {json}`; the JSON already carries `outcome`, `code`,
+/// `message`, and (R4) `exception`/`stack`/`causes`. A guest from an older image
+/// without those keys simply yields the smaller object.
+fn guest_crash_detail(guest_crash: Option<&str>) -> Option<serde_json::Value> {
+    let json = guest_crash?.strip_prefix("ACOSLAUNCH ")?;
+    serde_json::from_str::<serde_json::Value>(json).ok()
+}
+
+/// Last `limit` logd entries, as `prio/tag/message` strings (oldest first).
+fn logd_tail(logs: &[crate::LogEntry], limit: usize) -> Vec<String> {
+    let start = logs.len().saturating_sub(limit);
+    logs[start..]
+        .iter()
+        .map(|e| format!("{}/{}: {}", e.priority_name(), e.tag, e.message))
+        .collect()
+}
+
+/// Last `limit` non-empty lines of a captured stream (oldest first).
+fn stdout_tail(text: &str, limit: usize) -> Vec<String> {
+    let mut lines: Vec<String> = text
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(str::to_string)
+        .collect();
+    let start = lines.len().saturating_sub(limit);
+    lines.drain(..start);
+    lines
+}
+
 fn write_session_exit(out: &Path, result: &LaunchResult, guest_crash: Option<&str>) {
     let disk_full = result.code.as_deref() == Some("HOST_DISK_FULL");
     let doc = serde_json::json!({
@@ -1824,6 +1855,17 @@ fn write_session_exit(out: &Path, result: &LaunchResult, guest_crash: Option<&st
         "activity_resumed": result.activity_launched,
         "stage": last_stage(),
         "guest_crash": guest_crash,
+        // R4: the guest's crash line carries its own `exception`, `stack` and
+        // `causes` (each cause with class, message and stack). Parsing it here
+        // keeps `guest_crash` byte-for-byte for existing readers while the
+        // structured fields are usable directly by an agent.
+        "guest_crash_detail": guest_crash_detail(guest_crash),
+        // R4: a guest that died without printing a crash line (native abort,
+        // `System.exit`, a kill) still has the framework's own logd trail and
+        // its last stdout/stderr lines. Bounded, newest last.
+        "logd_tail": logd_tail(&result.logs, 24),
+        "stdout_tail": stdout_tail(&result.stdout, 32),
+        "stderr_tail": stdout_tail(&result.stderr, 16),
         "disk_free_bytes": disk_free_bytes(out),
         // W48: which heap configuration this session ran with (the
         // `ACOS_ART_HEAP*` seam, resolved and validated before the guest).
@@ -2279,7 +2321,7 @@ fn drain_tee_lines<R: std::io::Read>(
             }
         } else if trimmed.starts_with("ACOSLAUNCH {") {
             let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
-            state.guest_launch = Some(trimmed.chars().take(600).collect());
+            state.guest_launch = Some(trimmed.chars().take(32 * 1024).collect());
         } else if let Some(json) = trimmed.strip_prefix(UNSUPPORTED_PREFIX) {
             if let Ok(value) = serde_json::from_str::<serde_json::Value>(json) {
                 let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -5106,6 +5148,43 @@ mod shared_boot_image_tests {
         assert!(text.contains("no x86_64/boot.art"), "got {text}");
         assert!(text.contains(ENV_SHARED_BOOT_IMAGE), "got {text}");
         std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+#[cfg(test)]
+mod crash_evidence_tests {
+    use super::*;
+
+    /// R4: the guest crash line's own JSON is what names the real failing call;
+    /// the host must not flatten it to the outer wrapper again.
+    #[test]
+    fn the_guest_crash_line_is_kept_and_parsed() {
+        let line = r#"ACOSLAUNCH {"outcome":"crash","code":"LOOPER_THREW","message":"RuntimeException: Unable to create application","exception":"java.lang.RuntimeException","stack":["android.app.Instrumentation.callApplicationOnCreate(Instrumentation.java:1287)"],"causes":[{"class":"org.koin.core.error.InstanceCreationException","message":"Could not create instance","stack":["x.y.Z.<init>(Z.java:1)"]}]}"#;
+        // The line itself is preserved (the K1 reader still keys on it) ...
+        let detail = guest_crash_detail(Some(line)).expect("the crash line parses");
+        assert_eq!(detail["code"], "LOOPER_THREW");
+        assert_eq!(
+            detail["causes"][0]["class"],
+            "org.koin.core.error.InstanceCreationException"
+        );
+        assert_eq!(detail["causes"][0]["stack"][0], "x.y.Z.<init>(Z.java:1)");
+        // ... and a line without the new fields, or no line at all, is not an error.
+        assert_eq!(
+            guest_crash_detail(Some(r#"ACOSLAUNCH {"outcome":"crash","code":"NO_APPLICATION"}"#))
+                .expect("old shape")
+                ["code"],
+            "NO_APPLICATION"
+        );
+        assert!(guest_crash_detail(None).is_none());
+        assert!(guest_crash_detail(Some("not a crash line")).is_none());
+    }
+
+    /// R4: a guest that died without a crash line still leaves a bounded trail.
+    #[test]
+    fn the_guest_stream_tail_is_bounded_and_ordered() {
+        let text = "a\n\n b\nc\nd\n";
+        assert_eq!(stdout_tail(text, 2), vec!["c".to_string(), "d".to_string()]);
+        assert!(stdout_tail("", 4).is_empty());
     }
 }
 
