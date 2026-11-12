@@ -38,6 +38,9 @@ use acos_wm::codec::{LayoutParams, SurfaceControlInfo};
 use acos_wm::display::DisplaySpec;
 use acos_wm::error::{Result as WmResult, WmError};
 use acos_wm::wms::{AddWindowResult, RelayoutResult, SessionId, WindowId, WindowManager};
+/// W47: the stock `Configuration.screenLayout` for the reference display;
+/// `acos-art` forwards it to the launch guest (`ACOSLAUNCH_SCREEN_LAYOUT`).
+pub use acos_wm::wms::REFERENCE_SCREEN_LAYOUT;
 
 use acos_aidl::MethodInfo;
 

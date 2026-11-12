@@ -1067,6 +1067,42 @@ pub fn reference_insets_controls(
     ])
 }
 
+/// `Configuration.screenLayout` for the measured portrait display.
+///
+/// AOSP does not leave the size/long bits undefined: `ResourcesManager`
+/// calls `Configuration.reduceScreenLayout(screenLayout, longSizeDp,
+/// shortSizeDp)` after it derives the dp bounds from the display metrics.
+/// For the API-34 reference (`ldltr nrml long`, 842x411 dp) that is
+/// `LAYOUTDIR_LTR | SIZE_NORMAL | LONG_YES` = `0x62`.
+///
+/// The old value `0x1a` had size nibble `0xa` (not a
+/// `SCREENLAYOUT_SIZE_*` constant), and the launch guest's bind configuration
+/// left the whole field at `0`. With no valid size qualifier,
+/// `ResTable_config::match` treated the `xlarge`-qualified resources as
+/// applicable, so `@dimen/dialog_min_width_minor` resolved to its `(xlarge)`
+/// `72%` instead of the default `95%` — a `WRAP_CONTENT` AlertDialog then
+/// measured 776 px instead of the stock 1024 px.
+#[must_use]
+pub const fn screen_layout_for_dp(long_size_dp: i32, short_size_dp: i32) -> i32 {
+    // `Configuration.reduceScreenLayout` (AOSP), low byte only: the
+    // `SCREENLAYOUT_COMPAT_NEEDED` bit never reaches `ResTable_config`.
+    let size = if long_size_dp < 470 {
+        0x01 // SIZE_SMALL
+    } else if long_size_dp >= 960 && short_size_dp >= 720 {
+        0x04 // SIZE_XLARGE
+    } else if long_size_dp >= 640 && short_size_dp >= 480 {
+        0x03 // SIZE_LARGE
+    } else {
+        0x02 // SIZE_NORMAL
+    };
+    let long = long_size_dp >= 470 && ((long_size_dp * 3) / 5) >= (short_size_dp - 1);
+    let long_bits = if long { 0x20 } else { 0x10 }; // LONG_YES / LONG_NO
+    0x40 /* LAYOUTDIR_LTR */ | size | long_bits
+}
+
+/// The reference display's `screenLayout` (`0x62`).
+pub const REFERENCE_SCREEN_LAYOUT: i32 = screen_layout_for_dp(842, 411);
+
 /// The `MergedConfiguration` matching the measured `overrideConfig`.
 #[must_use]
 pub fn reference_merged_configuration(display: &DisplaySpec) -> MergedConfiguration {
@@ -1083,7 +1119,7 @@ pub fn reference_merged_configuration(display: &DisplaySpec) -> MergedConfigurat
         navigation: 1,        // NAVIGATION_DPAD
         navigation_hidden: 1,
         orientation: 1,       // ORIENTATION_PORT
-        screen_layout: 0x1a,  // LONG|PORT|NOTOUCH? measured `port finger`
+        screen_layout: REFERENCE_SCREEN_LAYOUT, // ldltr nrml long (measured `display.txt`)
         color_mode: 0,        // HDR_UNDEFINED / sRGB
         ui_mode: 0x11,        // UI_MODE_TYPE_NORMAL | NIGHT_NO
         screen_width_dp: 411,
@@ -1122,6 +1158,33 @@ mod tests {
 
     fn app_params() -> LayoutParams {
         LayoutParams::application("dev.acos.fixtures.helloviews", "MainActivity")
+    }
+
+    /// W47: the configuration the WMS sends (and the launch guest applies)
+    /// must carry the stock screen-layout size/long bits. With them undefined
+    /// (`0x1a` here, `0x0` in the guest's bind config before the fix) the
+    /// resource matcher picked `values-xlarge` and
+    /// `dialog_min_width_minor` resolved to 72% instead of 95%.
+    #[test]
+    fn reference_screen_layout_is_normal_long_not_xlarge() {
+        assert_eq!(REFERENCE_SCREEN_LAYOUT, 0x62);
+        assert_eq!(REFERENCE_SCREEN_LAYOUT & 0x0f, 0x02, "SIZE_NORMAL");
+        assert_eq!(REFERENCE_SCREEN_LAYOUT & 0x30, 0x20, "LONG_YES");
+        assert_eq!(REFERENCE_SCREEN_LAYOUT & 0xc0, 0x40, "LAYOUTDIR_LTR");
+        assert_ne!(REFERENCE_SCREEN_LAYOUT & 0x0f, 0x04, "must not be SIZE_XLARGE");
+
+        // Negative check: the pre-fix values really are different. `0x1a` is
+        // not a valid size (0xa), and the guest's `0` is SIZE_UNDEFINED; both
+        // let the xlarge qualifier win, so neither can satisfy this test.
+        for pre_fix in [0x1a, 0x00] {
+            assert_ne!(pre_fix, REFERENCE_SCREEN_LAYOUT);
+            assert_ne!(pre_fix & 0x0f, 0x02, "pre-fix size nibble {pre_fix:#x}");
+        }
+
+        // AOSP thresholds, so the helper is not a one-value table.
+        assert_eq!(screen_layout_for_dp(400, 300) & 0x0f, 0x01); // SMALL
+        assert_eq!(screen_layout_for_dp(700, 500) & 0x0f, 0x03); // LARGE
+        assert_eq!(screen_layout_for_dp(1000, 800) & 0x0f, 0x04); // XLARGE
     }
 
     #[test]

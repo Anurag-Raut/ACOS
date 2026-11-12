@@ -1776,11 +1776,24 @@ public final class LaunchMain {
         }
     }
 
-    static byte[] buildBindApplicationRequest() throws Throwable {
-        ApplicationInfo ai = buildAppInfo();
-
-        Object providerList = providerList();
-
+    /**
+     * W47: the process launch `Configuration`, with the stock screen-layout
+     * bits.
+     *
+     * `ResourcesManager.applyConfigurationToResourcesLocked` hands this object
+     * to `AssetManager.nativeSetConfiguration`. Leaving `screenLayout` at its
+     * default `0` leaves the resource size qualifier undefined, and
+     * `ResTable_config::match` then accepts the `xlarge` variants:
+     * `@dimen/dialog_min_width_minor` resolves to its `(xlarge)` 72% instead
+     * of the default 95%. A `WRAP_CONTENT` AlertDialog therefore measures
+     * 776 px instead of the stock 1024 px (940 px content after insets).
+     *
+     * The value is the host's WMS reference configuration
+     * (`ACOSLAUNCH_SCREEN_LAYOUT`); the fallback is the measured
+     * `ldltr nrml long` for 411x842 dp. This is the framework's own
+     * `Configuration.reduceScreenLayout` outcome, not a per-window rule.
+     */
+    static Configuration displayConfiguration() {
         Configuration cfg = new Configuration();
         cfg.densityDpi = 420;
         cfg.screenWidthDp = 411;
@@ -1789,6 +1802,27 @@ public final class LaunchMain {
         cfg.orientation = Configuration.ORIENTATION_PORTRAIT;
         cfg.fontScale = 1.0f;
         cfg.setLocales(android.os.LocaleList.forLanguageTags("en-US"));
+        int layout = Configuration.SCREENLAYOUT_LAYOUTDIR_LTR
+                | Configuration.SCREENLAYOUT_SIZE_NORMAL
+                | Configuration.SCREENLAYOUT_LONG_YES;
+        String env = System.getenv("ACOSLAUNCH_SCREEN_LAYOUT");
+        if (env != null) {
+            try {
+                layout = Integer.decode(env.trim());
+            } catch (NumberFormatException e) {
+                System.out.println("ACOSLAUNCH MARK bad-screen-layout " + env);
+            }
+        }
+        cfg.screenLayout = layout;
+        return cfg;
+    }
+
+    static byte[] buildBindApplicationRequest() throws Throwable {
+        ApplicationInfo ai = buildAppInfo();
+
+        Object providerList = providerList();
+
+        Configuration cfg = displayConfiguration();
 
         Class<?> ci = Class.forName("android.content.res.CompatibilityInfo");
         Field df = ci.getDeclaredField("DEFAULT_COMPATIBILITY_INFO");
@@ -2082,14 +2116,7 @@ public final class LaunchMain {
 
     /** The current and override `Configuration` a launch item carries. */
     static Configuration[] currentAndOverrideConfig(Object app) throws Throwable {
-        Configuration base = new Configuration();
-        base.densityDpi = 420;
-        base.screenWidthDp = 411;
-        base.screenHeightDp = 842;
-        base.smallestScreenWidthDp = 411;
-        base.orientation = Configuration.ORIENTATION_PORTRAIT;
-        base.fontScale = 1.0f;
-        base.setLocales(android.os.LocaleList.forLanguageTags("en-US"));
+        Configuration base = displayConfiguration();
         Configuration curConfig = new Configuration(base);
         try {
             android.content.Context baseCtx = (android.content.Context) get(app, "mBase");

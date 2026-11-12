@@ -595,6 +595,15 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     sb.env("ACOSART_LOAD", "libandroid_runtime.so");
     sb.env("E3G_SOCK", "/data/acos-launch.sock");
     sb.env("ACOSLAUNCH_RESUME_MS", &resume_ms.to_string());
+    // W47: the guest's bind/launch Configuration must carry the same
+    // screen-layout size/long bits as the WMS `MergedConfiguration`.
+    // Without them (`screenLayout` left at 0) `ResTable_config` selected the
+    // `values-xlarge` dimens (dialog_min_width_minor 72% instead of 95%), so a
+    // WRAP_CONTENT dialog measured 776 px instead of the stock 1024 px.
+    sb.env(
+        "ACOSLAUNCH_SCREEN_LAYOUT",
+        &acos_services::wms::REFERENCE_SCREEN_LAYOUT.to_string(),
+    );
     if std::env::var_os("E3G_DEBUG").is_some() {
         sb.env("E3G_DEBUG", "1");
     }

@@ -1,0 +1,8 @@
+form-validation	pass	scenarios/form-validation.yaml	rc=0	start=2026-11-12T04:31:57.872Z	wall_ms=25687	failed=-
+v2-counter	pass	scenarios/v2-art-counter.yaml	rc=0	start=2026-11-12T04:32:31.316Z	wall_ms=7650	failed=-
+two-activity	pass	scenarios/w15-two-activity.yaml	rc=0	start=2026-11-12T04:32:46.806Z	wall_ms=542	failed=-
+dialog-menu	pass	scenarios/w15-dialog-menu.yaml	rc=0	start=2026-11-12T04:33:29.326Z	wall_ms=532	failed=-
+w27-dialog-window	pass	scenarios/w27-dialog-window.yaml	rc=0	start=2026-11-12T04:33:30.603Z	wall_ms=3979	failed=-
+w38-multi-activity	pass	scenarios/w38-multi-activity.yaml	rc=0	start=2026-11-12T04:33:35.362Z	wall_ms=9309	failed=-
+w42-back-frame	pass	scenarios/w42-back-frame.yaml	rc=0	start=2026-11-12T04:33:48.971Z	wall_ms=12237	failed=-
+form-validation-confirm	pass	scenarios/form-validation.yaml	rc=0	start=2026-11-12T04:37:41.023Z	wall_ms=25691	failed=-
