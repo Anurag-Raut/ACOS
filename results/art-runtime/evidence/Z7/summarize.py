@@ -89,8 +89,10 @@ def loop_rows():
             "latency_ms": d.get("task_latency_ms"),
             "exits_clean_rounds": sum(1 for r in d.get("rounds") or []
                                       if r.get("exits_clean")),
-            "zygote_alive_after_close_rounds": sum(
-                1 for r in d.get("rounds") or [] if r.get("zygote_alive_after_close")),
+            # The loop runs checked the guest-namespace pid written in
+            # sessions/zygote.pid, so that field is not a host liveness fact.
+            # The authoritative teardown result is cycles_n5 below.
+            "zygote_alive_after_close": "NOT_TRACKED_IN_LOOP",
             "failures": d.get("failures"),
         }
     return out
@@ -179,7 +181,7 @@ def main():
             f"PSS-GiB-min={r['pss_gib_min']} peak={r['pss_peak_mib']}MiB "
             f"p50={lat.get('p50')}ms p95={lat.get('p95')}ms "
             f"net={r['tasks_per_gib_min_net']} exits_clean={r['exits_clean_rounds']}/{r['rounds']} "
-            f"zygote_alive={r['zygote_alive_after_close_rounds']}/{r['rounds']}")
+            f"zygote_liveness=see_cycles_n5")
     lines.append("")
     lines.append("CYCLES N=5 (20 fixed launch->verify->reset rounds per arm)")
     for arm in ARMS:

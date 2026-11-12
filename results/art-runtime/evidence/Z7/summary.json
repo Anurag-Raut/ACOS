@@ -1032,7 +1032,7 @@
    "verdict": "pass",
    "verified_tasks": 210,
    "wall_s": 323.05,
-   "zygote_alive_after_close_rounds": 0
+   "zygote_alive_after_close": "NOT_TRACKED_IN_LOOP"
   },
   "ap": {
    "exits_clean_rounds": 21,
@@ -1056,7 +1056,7 @@
    "verdict": "pass",
    "verified_tasks": 210,
    "wall_s": 321.9,
-   "zygote_alive_after_close_rounds": 0
+   "zygote_alive_after_close": "NOT_TRACKED_IN_LOOP"
   },
   "c": {
    "exits_clean_rounds": 0,
@@ -1080,7 +1080,7 @@
    "verdict": "pass",
    "verified_tasks": 160,
    "wall_s": 319.86,
-   "zygote_alive_after_close_rounds": 16
+   "zygote_alive_after_close": "NOT_TRACKED_IN_LOOP"
   },
   "cp": {
    "exits_clean_rounds": 0,
@@ -1104,7 +1104,7 @@
    "verdict": "pass",
    "verified_tasks": 160,
    "wall_s": 318.67,
-   "zygote_alive_after_close_rounds": 16
+   "zygote_alive_after_close": "NOT_TRACKED_IN_LOOP"
   }
  },
  "savings": {

@@ -22,10 +22,10 @@ n10 t15: a: vs_a=+0.0 vs_ap=-45.7 | ap: vs_a=+31.4 vs_ap=+0.0 | c: vs_a=+58.1 vs
 n10 t60: a: vs_a=+0.0 vs_ap=-51.5 | ap: vs_a=+34.0 vs_ap=+0.0 | c: vs_a=+60.4 vs_ap=+40.0 | cp: vs_a=+59.0 vs_ap=+37.8
 
 LOOP N=10 (P5-style round: fresh launch per task)
-a  tasks=210 wall=323.05s rounds=21 tasks/min=39.0 tasks/GiB-min(PSS)=45.0 PSS-GiB-min=4.66781 peak=955.6MiB p50=9040.7ms p95=15065.8ms net=44.3 exits_clean=21/21 zygote_alive=0/21
-ap tasks=210 wall=321.9s rounds=21 tasks/min=39.14 tasks/GiB-min(PSS)=67.7 PSS-GiB-min=3.10187 peak=889.7MiB p50=8846.0ms p95=15059.8ms net=65.2 exits_clean=21/21 zygote_alive=0/21
-c  tasks=160 wall=319.86s rounds=16 tasks/min=30.01 tasks/GiB-min(PSS)=70.5 PSS-GiB-min=2.26807 peak=693.4MiB p50=9902.8ms p95=16350.8ms net=67.5 exits_clean=0/16 zygote_alive=16/16
-cp tasks=160 wall=318.67s rounds=16 tasks/min=30.13 tasks/GiB-min(PSS)=103.6 PSS-GiB-min=1.54442 peak=624.8MiB p50=9610.1ms p95=16177.2ms net=98.0 exits_clean=0/16 zygote_alive=16/16
+a  tasks=210 wall=323.05s rounds=21 tasks/min=39.0 tasks/GiB-min(PSS)=45.0 PSS-GiB-min=4.66781 peak=955.6MiB p50=9040.7ms p95=15065.8ms net=44.3 exits_clean=21/21 zygote_liveness=see_cycles_n5
+ap tasks=210 wall=321.9s rounds=21 tasks/min=39.14 tasks/GiB-min(PSS)=67.7 PSS-GiB-min=3.10187 peak=889.7MiB p50=8846.0ms p95=15059.8ms net=65.2 exits_clean=21/21 zygote_liveness=see_cycles_n5
+c  tasks=160 wall=319.86s rounds=16 tasks/min=30.01 tasks/GiB-min(PSS)=70.5 PSS-GiB-min=2.26807 peak=693.4MiB p50=9902.8ms p95=16350.8ms net=67.5 exits_clean=0/16 zygote_liveness=see_cycles_n5
+cp tasks=160 wall=318.67s rounds=16 tasks/min=30.13 tasks/GiB-min(PSS)=103.6 PSS-GiB-min=1.54442 peak=624.8MiB p50=9610.1ms p95=16177.2ms net=98.0 exits_clean=0/16 zygote_liveness=see_cycles_n5
 
 CYCLES N=5 (20 fixed launch->verify->reset rounds per arm)
 a  rounds=20 tasks=100 wall=162.36s tasks/GiB-min(PSS)=74.7 exits_clean=20/20 zygote_alive_after_close=0 zygote_fds=None threads=None rss_kib_range=None
