@@ -1,0 +1,28 @@
+LIFETIME whole-system SumPss (MiB, median of reps; [min,max])
+n arm age0.5 age2 age5 age15 age60
+5 a  508.3[491.3,525.3] 509.4[490.9,528.0] 516.9[500.5,533.3] 513.9[495.3,532.5] 540.8[518.0,563.5]
+5 ap 381.1[375.0,387.3] 382.5[376.8,388.1] 382.8[376.7,388.8] 385.2[378.3,392.1] 390.3[383.6,397.0]
+5 c  414.1[408.8,419.4] 424.4[419.1,429.7] 424.8[419.5,430.1] 282.9[277.6,288.1] 282.6[277.3,287.8]
+5 cp 278.4[273.1,283.6] 278.6[273.4,283.9] 289.6[284.4,294.9] 287.5[282.3,292.7] 290.9[285.6,296.1]
+10 a  900.6[893.5,907.8] 903.9[896.2,911.5] 925.1[917.4,932.8] 904.0[894.5,913.6] 956.8[949.5,964.1]
+10 ap 613.3[610.1,616.5] 617.3[613.4,621.3] 617.2[613.8,620.7] 619.4[617.1,621.6] 630.7[627.9,633.5]
+10 c  654.5[650.6,658.3] 657.4[651.5,663.2] 658.5[652.6,664.3] 378.6[377.8,379.5] 378.5[377.7,379.3]
+10 cp 364.8[359.1,370.4] 372.6[364.3,380.9] 388.0[382.4,393.6] 383.8[378.3,389.2] 390.8[385.0,396.5]
+
+SAVINGS % (positive = less memory than the baseline)
+n5 t0.5: a: vs_a=+0.0 vs_ap=-33.4 | ap: vs_a=+25.0 vs_ap=+0.0 | c: vs_a=+18.5 vs_ap=-8.7 | cp: vs_a=+45.2 vs_ap=+26.9
+n5 t2: a: vs_a=+0.0 vs_ap=-33.2 | ap: vs_a=+24.9 vs_ap=+0.0 | c: vs_a=+16.7 vs_ap=-11.0 | cp: vs_a=+45.3 vs_ap=+27.2
+n5 t5: a: vs_a=+0.0 vs_ap=-35.0 | ap: vs_a=+25.9 vs_ap=+0.0 | c: vs_a=+17.8 vs_ap=-11.0 | cp: vs_a=+44.0 vs_ap=+24.3
+n5 t15: a: vs_a=+0.0 vs_ap=-33.4 | ap: vs_a=+25.0 vs_ap=+0.0 | c: vs_a=+45.0 vs_ap=+26.6 | cp: vs_a=+44.1 vs_ap=+25.4
+n5 t60: a: vs_a=+0.0 vs_ap=-38.6 | ap: vs_a=+27.8 vs_ap=+0.0 | c: vs_a=+47.7 vs_ap=+27.6 | cp: vs_a=+46.2 vs_ap=+25.5
+n10 t0.5: a: vs_a=+0.0 vs_ap=-46.8 | ap: vs_a=+31.9 vs_ap=+0.0 | c: vs_a=+27.3 vs_ap=-6.7 | cp: vs_a=+59.5 vs_ap=+40.5
+n10 t2: a: vs_a=+0.0 vs_ap=-46.4 | ap: vs_a=+31.7 vs_ap=+0.0 | c: vs_a=+27.3 vs_ap=-6.5 | cp: vs_a=+58.8 vs_ap=+39.6
+n10 t5: a: vs_a=+0.0 vs_ap=-49.9 | ap: vs_a=+33.3 vs_ap=+0.0 | c: vs_a=+28.8 vs_ap=-6.7 | cp: vs_a=+58.1 vs_ap=+37.1
+n10 t15: a: vs_a=+0.0 vs_ap=-45.9 | ap: vs_a=+31.5 vs_ap=+0.0 | c: vs_a=+58.1 vs_ap=+38.9 | cp: vs_a=+57.5 vs_ap=+38.0
+n10 t60: a: vs_a=+0.0 vs_ap=-51.7 | ap: vs_a=+34.1 vs_ap=+0.0 | c: vs_a=+60.4 vs_ap=+40.0 | cp: vs_a=+59.2 vs_ap=+38.0
+
+LOOP N=10 (P5-style round: fresh launch per task)
+a  tasks=210 wall=323.05s rounds=21 tasks/min=39.0 tasks/GiB-min(PSS)=45.0 PSS-GiB-min=4.66781 peak=955.6MiB p50=9040.7ms p95=15065.8ms net=44.3 exits_clean=21/21 zygote_alive=0/21
+ap tasks=210 wall=321.9s rounds=21 tasks/min=39.14 tasks/GiB-min(PSS)=67.7 PSS-GiB-min=3.10187 peak=889.7MiB p50=8846.0ms p95=15059.8ms net=65.2 exits_clean=21/21 zygote_alive=0/21
+c  tasks=160 wall=319.86s rounds=16 tasks/min=30.01 tasks/GiB-min(PSS)=70.5 PSS-GiB-min=2.26807 peak=693.4MiB p50=9902.8ms p95=16350.8ms net=67.5 exits_clean=0/16 zygote_alive=16/16
+cp tasks=160 wall=318.67s rounds=16 tasks/min=30.13 tasks/GiB-min(PSS)=103.6 PSS-GiB-min=1.54442 peak=624.8MiB p50=9610.1ms p95=16177.2ms net=98.0 exits_clean=0/16 zygote_alive=16/16

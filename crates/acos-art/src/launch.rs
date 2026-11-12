@@ -194,6 +194,75 @@ fn resolve_shared_boot_image(raw: Option<std::ffi::OsString>) -> Result<Option<P
     }
 }
 
+/// Z7 (research seam, all OFF by default): real ART heap options, plumbed into
+/// the `dalvikvm64` argv instead of only the served `dalvik.vm.*` property table.
+///
+/// W48's `ACOS_ART_HEAP*` seam changes what the guest *reads* as a property;
+/// `dalvikvm64` never turns those properties into runtime options (Z6 §5.6), so
+/// they cannot change the heap. These three variables are the argv form ART
+/// actually parses at startup (`dalvikvm` main -> `Runtime::ParseOptions`), and
+/// unset means the argv is byte-for-byte what it was before this seam.
+pub const ENV_ART_XMS: &str = "ACOS_ART_XMS";
+pub const ENV_ART_XMX: &str = "ACOS_ART_XMX";
+pub const ENV_ART_HEAP_TARGET_UTILIZATION: &str = "ACOS_ART_HEAP_TARGET_UTILIZATION";
+
+/// Z7: forward the guest-side post-first-frame release hook. Right after its
+/// first live frame the guest asks ART for a collection
+/// (`System.gc()` then `VMRuntime.requestConcurrentGC()`; on this image only
+/// the latter collects) and optionally `VMRuntime.trimHeap()`, instead of
+/// waiting for the post-fork `ReduceTargetFootprintTask` schedule (+2 s/+10 s).
+/// `ACOS_ART_GC_DELAY_MS` delays that request. Unset = inert.
+pub const ENV_ART_GC_AFTER_FIRST_FRAME: &str = "ACOS_ART_GC_AFTER_FIRST_FRAME";
+pub const ENV_ART_TRIM_AFTER_FIRST_FRAME: &str = "ACOS_ART_TRIM_AFTER_FIRST_FRAME";
+pub const ENV_ART_GC_DELAY_MS: &str = "ACOS_ART_GC_DELAY_MS";
+
+fn valid_heap_size(text: &str) -> bool {
+    let t = text.trim();
+    if t.is_empty() || !t.as_bytes()[0].is_ascii_digit() {
+        return false;
+    }
+    t.bytes().all(|b| b.is_ascii_digit() || matches!(b, b'k' | b'K' | b'm' | b'M' | b'g' | b'G'))
+}
+
+fn heap_size_argv(var: &str, raw: Option<std::ffi::OsString>) -> Result<Option<String>> {
+    let Some(raw) = raw else { return Ok(None) };
+    let value = raw.to_string_lossy().to_string();
+    if valid_heap_size(&value) {
+        Ok(Some(value.trim().to_string()))
+    } else {
+        Err(Error::Layout(format!(
+            "{var}={value}: expected a size like 8m or 512m (unset it for the default heap)"
+        )))
+    }
+}
+
+/// Z7: the argv form of the three heap knobs (`-Xms`, `-Xmx`,
+/// `-XX:HeapTargetUtilization=`). Empty unless the caller sets a variable.
+fn resolve_heap_argv() -> Result<Vec<String>> {
+    let mut out = Vec::new();
+    if let Some(v) = heap_size_argv(ENV_ART_XMS, std::env::var_os(ENV_ART_XMS))? {
+        out.push(format!("-Xms{v}"));
+    }
+    if let Some(v) = heap_size_argv(ENV_ART_XMX, std::env::var_os(ENV_ART_XMX))? {
+        out.push(format!("-Xmx{v}"));
+    }
+    if let Some(raw) = std::env::var_os(ENV_ART_HEAP_TARGET_UTILIZATION) {
+        let value = raw.to_string_lossy().to_string();
+        let parsed = value.trim().parse::<f64>().ok();
+        match parsed {
+            Some(u) if u > 0.0 && u <= 1.0 => {
+                out.push(format!("-XX:HeapTargetUtilization={}", value.trim()))
+            }
+            _ => {
+                return Err(Error::Layout(format!(
+                    "{ENV_ART_HEAP_TARGET_UTILIZATION}={value}: expected a ratio in (0, 1]"
+                )))
+            }
+        }
+    }
+    Ok(out)
+}
+
 /// The session-independent paths built once by the ZM2 host template.
 ///
 /// With `ACOS_HOST_ZYGOTE_PLAN` unset these are local values, so the production
@@ -717,6 +786,15 @@ pub(crate) fn launch_session(
             dir.display()
         );
     }
+    // Z7: real ART heap options (OFF by default; empty unless a knob is set).
+    let heap_argv = resolve_heap_argv()?;
+    if !heap_argv.is_empty() {
+        eprintln!(
+            "acos-art: launch: ART heap argv {:?} (Z7 real-heap seam)",
+            heap_argv
+        );
+        argv.extend(heap_argv.iter().cloned());
+    }
     // Options before the `-cp <dex> <class>` triple (the Z3 seam keeps them).
     let image_prefix = argv.len();
     argv.extend(vec![
@@ -862,6 +940,13 @@ pub(crate) fn launch_session(
     }
     if std::env::var_os("ACOSLAUNCH_PROBE").is_some() {
         sb.env("ACOSLAUNCH_PROBE", "1");
+    }
+    // Z7: the guest-side post-first-frame release hook (OFF by default).
+    for knob in [ENV_ART_GC_AFTER_FIRST_FRAME, ENV_ART_TRIM_AFTER_FIRST_FRAME,
+                 ENV_ART_GC_DELAY_MS] {
+        if let Ok(v) = std::env::var(knob) {
+            sb.env(knob, &v);
+        }
     }
     // W5: keep the guest's main looper alive for N ms after `activity-resumed`
     // so the first traversal's draw (lockCanvas -> queueBuffer -> BLAST) can be
