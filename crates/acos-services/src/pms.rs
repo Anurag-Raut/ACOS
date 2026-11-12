@@ -987,7 +987,11 @@ impl PmsState {
                     read_permission: permission.clone(),
                     write_permission: permission.clone(),
                     exported,
-                    grant_uri_permissions: false,
+                    // `androidx.core.content.FileProvider.attachInfo` throws
+                    // `SecurityException("Provider must grant uri permissions")`
+                    // when the provider is exported and this manifest bit is
+                    // absent; it is `android:grantUriPermissions`, default false.
+                    grant_uri_permissions: c.grant_uri_permissions.unwrap_or(false),
                     init_order: 0,
                 });
             }

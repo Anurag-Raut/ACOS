@@ -1047,6 +1047,61 @@ pub(crate) fn launch_session(
     if std::env::var_os("E3G_DEBUG").is_some() {
         sb.env("E3G_DEBUG", "1");
     }
+    // K3c: the app's own `<provider>` declarations for the bind request's
+    // `ProviderInfoList`. A real `AMS.generateApplicationProvidersLocked`
+    // queries `queryContentProviders(processName, uid, …)`, so a provider whose
+    // `android:process` names another process is *not* in this process's list;
+    // the same filter is applied here from the APK's parsed manifest (the host
+    // `PackageParser` equivalent, `pms::PmsState`). The framework's
+    // `ActivityThread.installContentProviders` then creates them, which is the
+    // stock order (after `attachBaseContext`, before `Application.onCreate`).
+    let provider_spec = installed.as_ref().map_or_else(String::new, |state| {
+        let mut seen: Vec<(&str, Vec<&str>)> = Vec::new();
+        for p in &state.providers {
+            if p.process_name != state.app.process_name {
+                continue;
+            }
+            match seen.iter_mut().find(|(class, _)| *class == p.name) {
+                // One `ProviderInfo` per `<provider>`, authorities joined with
+                // `;` exactly as `PackageParser` writes them.
+                Some((_, authorities)) => authorities.push(&p.authority),
+                None => seen.push((&p.name, vec![&p.authority])),
+            }
+        }
+        seen.iter()
+            .map(|(class, authorities)| {
+                let read = state
+                    .providers
+                    .iter()
+                    .find(|p| p.name == *class)
+                    .map_or("", |p| p.read_permission.as_str());
+                let exported = state
+                    .providers
+                    .iter()
+                    .find(|p| p.name == *class)
+                    .is_some_and(|p| p.exported);
+                let grant_uri = state
+                    .providers
+                    .iter()
+                    .find(|p| p.name == *class)
+                    .is_some_and(|p| p.grant_uri_permissions);
+                format!(
+                    "{class}|{}|{read}|{}|{}",
+                    authorities.join(";"),
+                    u8::from(exported),
+                    u8::from(grant_uri)
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    });
+    if !provider_spec.is_empty() {
+        eprintln!(
+            "acos-art: launch: app providers {} (bind ProviderInfoList; framework installContentProviders)",
+            provider_spec.lines().count()
+        );
+        sb.env("ACOSLAUNCH_PROVIDERS", &provider_spec);
+    }
     if std::env::var_os("ACOSLAUNCH_PROBE").is_some() {
         sb.env("ACOSLAUNCH_PROBE", "1");
     }

@@ -2322,6 +2322,14 @@ pub fn read_bundle(parcel: &mut Parcel) -> Result<Option<Bundle>> {
     if length < 0 {
         return Ok(None);
     }
+    // `BaseBundle.writeToParcelInner`'s "special case for empty bundles":
+    // a bundle with no entries writes a single `0` length and no magic/payload
+    // (the framework's own `EMPTY_PARCEL` fast path writes the same `0`). It is
+    // an **empty bundle**, not null. K3c hit this: every `ProviderInfo` the
+    // framework writes in `publishContentProviders` carries an empty `metaData`.
+    if length == 0 {
+        return Ok(Some(Bundle::new()));
+    }
     // Android 14 `BaseBundle` writes a `BUNDLE_MAGIC` header after the length.
     let magic = parcel.read_int32()?;
     if magic as u32 != BUNDLE_MAGIC {
@@ -2715,6 +2723,11 @@ pub fn write_bundle(parcel: &mut Parcel, bundle: Option<&Bundle>) -> Result<()> 
     match bundle {
         None => {
             parcel.write_int32(-1);
+            Ok(())
+        }
+        Some(b) if b.is_empty() => {
+            // `BaseBundle.writeToParcelInner`: an empty bundle is one `0` int.
+            parcel.write_int32(0);
             Ok(())
         }
         Some(b) => {
