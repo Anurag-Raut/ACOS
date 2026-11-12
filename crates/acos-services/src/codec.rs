@@ -74,8 +74,68 @@ pub fn read_args_override(
         ("android.content.pm.IPackageManager", IPACKAGE_MANAGER_NOTIFY_DEX_LOAD) => {
             Ok(Some(read_notify_dex_load(parcel)?))
         }
+        // K2: `ParceledListSlice<NotificationChannel>` is the last argument of
+        // the notification create calls. Its element codec depends on
+        // `NotificationChannel(Parcel)`, which is decoded by the service; the
+        // dispatcher only needs to consume the slice so the service can answer
+        // "accepted" instead of rejecting the request at decode time.
+        ("android.app.INotificationManager", 30 | 31) => {
+            let package = parcel.read_string16()?;
+            skip_remaining(parcel);
+            Ok(Some(vec![
+                Value::Str(package),
+                Value::Skipped,
+            ]))
+        }
+        ("android.app.INotificationManager", 32) => {
+            let package = parcel.read_string16()?;
+            let uid = parcel.read_int32()?;
+            skip_remaining(parcel);
+            Ok(Some(vec![
+                Value::Str(package),
+                Value::Int(uid),
+                Value::Skipped,
+            ]))
+        }
+        // K2: `setDynamicShortcuts`/`addDynamicShortcuts`/`updateShortcuts`
+        // carry a `ParceledListSlice<ShortcutInfo>` followed by the user id.
+        // The shortcut payload has no flat codec yet; consume it opaquely and
+        // keep the trailing user id so the service's answer stays complete.
+        ("android.content.pm.IShortcutService", 1 | 2 | 5) => {
+            let package = parcel.read_string16()?;
+            let remaining = parcel.remaining();
+            if remaining < 4 {
+                return Err(ServiceError::BadRequest {
+                    interface: interface.to_string(),
+                    method: format!("code {code}"),
+                    detail: "shortcut list leaves no room for the user id".into(),
+                });
+            }
+            let keep = parcel.data_position() + remaining - 4;
+            parcel.set_data_position(keep);
+            let user_id = parcel.read_int32()?;
+            Ok(Some(vec![
+                Value::Str(package),
+                Value::Skipped,
+                Value::Int(user_id),
+            ]))
+        }
+        // K2: `schedule(pkg, JobInfo)`/`enqueue(pkg, JobInfo, JobWorkItem)`
+        // end with the job payload. ACOS records the schedule and answers
+        // `RESULT_SUCCESS`; decoding `JobInfo`'s 30+ fields is not needed for
+        // that answer, so the payload is consumed opaquely.
+        ("android.app.job.IJobScheduler", 1 | 2) => {
+            let package = parcel.read_string16()?;
+            skip_remaining(parcel);
+            Ok(Some(vec![Value::Str(package), Value::Skipped]))
+        }
         _ => Ok(None),
     }
+}
+
+/// Consume the rest of the request without interpreting it.
+fn skip_remaining(parcel: &mut Parcel) {
+    parcel.set_data_position(parcel.data_size());
 }
 
 /// `notifyDexLoad(String loadingPackageName, in Map<String,String>
