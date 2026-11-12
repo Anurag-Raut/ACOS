@@ -1,0 +1,70 @@
+# W24: the live-guest title and button-case regressions, pinned.
+#
+# Two fidelity gaps W18 measured on the live ART guest (not the host renderer):
+#   * the ActionBar title was the component FQN instead of the manifest label
+#     (`android:label="@string/app_name"` -> `Counter`), because the guest's
+#     `ApplicationInfo`/`ActivityInfo` carried no `labelRes`;
+#   * Material buttons rendered ALL CAPS (`INCREMENT`) because the guest did not
+#     load the image's immutable framework RROs, so
+#     `config_buttonTextAllCaps` stayed at the base `true`; the all-caps label
+#     also pushed the wrap-content button past the 88 dp minimum (268 px instead
+#     of 231 px at 420 dpi).
+#
+# The W24 "before" tree (evidence/W24-counter/tree-1-before.json) fails these
+# assertions on both counts: title text `dev.acos.fixtures.counter.MainActivity`
+# and `id/inc` bounds [42,368,310,494] (268 px, all-caps). It never edits app code.
+version: 1
+name: w24-counter-labels
+description: >-
+  Launch counter on real ART and verify the manifest application label is the
+  ActionBar title and that the buttons are mixed case at the 88 dp minimum
+  width (the framework RROs are applied), with the count still live.
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - ui.offscreen
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.counter/.MainActivity
+      clear_state: true
+
+  # `ActivityInfo.loadLabel` -> the application label ("Counter"), not the FQN.
+  - assert_text:
+      selector: {text: {exact: Counter}}
+      text: {exact: Counter}
+      bounds: [42, 166, 231, 237]
+
+  # Mixed case (config_buttonTextAllCaps=false from the product RRO) and the
+  # 88 dp minimum width: 231 px at 420 dpi is 88 dp * 2.625.
+  - assert_text:
+      selector: {id: inc}
+      text: {exact: Increment}
+      bounds: [42, 368, 273, 494]
+  - assert_text:
+      selector: {id: reset}
+      text: {exact: Reset}
+      bounds: [42, 494, 273, 620]
+
+  # The app is still live (the label/theme fixes change no behaviour).
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "0"}
+  - tap:
+      selector: {id: inc}
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "1"}

@@ -234,6 +234,22 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         .filter(|name| !name.is_empty());
     let application_theme = installed.as_ref().map_or(0, |state| state.app.theme);
 
+    // W24: the image's **static RROs** for `framework-res`, applied through the
+    // same stock path `render-app`/the session already use (P2c/W18 #2). The
+    // device's `AssetManager.createSystemAssetsInZygoteLocked` loads every
+    // immutable overlay idmap under `/system/framework/framework-res.apk`; the
+    // base image's `framework-res.apk` alone says
+    // `config_buttonTextAllCaps=true`, while the product RRO
+    // (`PixelConfigOverlayCommon`) says `false`. Without this the live guest
+    // renders `INCREMENT` where the phone renders `Increment`. The idmaps are
+    // generated once by the image's own `/system/bin/idmap2` and land in
+    // `<data>/overlay`, which a run already sees read-only at `/data/overlay`.
+    let mut overlay_diags = Vec::new();
+    let overlays = crate::app::provision_overlays(root, &mut overlay_diags)?;
+    for d in &overlay_diags {
+        eprintln!("acos-art: launch: {d}");
+    }
+
     let staging = run.dir("out").join("launch");
     fs::create_dir_all(&staging)?;
     for stale in [
@@ -374,6 +390,19 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     } else {
         None
     };
+    // W24: `PackageParser`'s label fields, which the guest copies into
+    // `ApplicationInfo.labelRes`/`nonLocalizedLabel` and
+    // `ActivityInfo.labelRes`/`nonLocalizedLabel`. Stock
+    // `ActivityThread.performLaunchActivity` titles the window with
+    // `activityInfo.loadLabel(pm)`; with both fields unset that walk ends at
+    // `ActivityInfo.name` (the component FQN), which is what W18 #1 measured
+    // (`dev.acos.fixtures.counter.MainActivity` instead of `Counter`).
+    let labels = acos_services::pms::manifest_labels(&opts.apk)
+        .map_err(|e| Error::Layout(format!("manifest labels: {e}")))?;
+    let activity_label = activity
+        .as_deref()
+        .map(|name| labels.activity(name))
+        .unwrap_or_default();
     let argv: Vec<String> = vec![
         "-cp".into(),
         "/data/app/launch-guest/classes.dex".into(),
@@ -385,6 +414,14 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         activity.clone().unwrap_or_default(),
         application_class.clone().unwrap_or_default(),
         application_theme.to_string(),
+        // W24: static-RRO idmap paths (`,`-separated, empty = none) and the
+        // manifest label fields (`res` then literal, for the application and
+        // the launched activity).
+        overlays.guest_arg(),
+        labels.application.res.to_string(),
+        labels.application.literal.clone().unwrap_or_default(),
+        activity_label.res.to_string(),
+        activity_label.literal.clone().unwrap_or_default(),
     ];
     crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();

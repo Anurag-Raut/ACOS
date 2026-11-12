@@ -805,6 +805,106 @@ impl FeatureTable {
     }
 }
 
+// ------------------------------------------------------------ manifest labels
+
+/// A `PackageItemInfo` label exactly as `PackageParser` stores it.
+///
+/// The framework never resolves a label to text at install time: it keeps the
+/// two fields `PackageItemInfo.loadLabel` reads — `nonLocalizedLabel` for a
+/// literal `android:label` string and `labelRes` for `android:label="@string/x"
+/// (the two are mutually exclusive; `labelRes` is 0 when a literal was given).
+/// Stock `ActivityThread.performLaunchActivity` then calls
+/// `r.activityInfo.loadLabel(pm)` for the window title, which walks
+/// activity label -> application label -> component name. A guest that leaves
+/// both fields unset therefore shows the component FQN as the ActionBar title.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LabelSpec {
+    /// `PackageItemInfo.labelRes` (0 = no resource label).
+    pub res: i32,
+    /// `PackageItemInfo.nonLocalizedLabel` (a literal `android:label` value).
+    pub literal: Option<String>,
+}
+
+impl LabelSpec {
+    /// `ParsingPackageUtils.parseBaseApplication`/`parseActivity` semantics:
+    /// a literal string wins and clears the resource id; otherwise the
+    /// resource reference is kept; neither leaves both unset.
+    #[must_use]
+    pub fn from_parts(literal: Option<&String>, res: Option<u32>) -> Self {
+        match (literal, res) {
+            (Some(text), _) => Self {
+                res: 0,
+                literal: Some(text.clone()),
+            },
+            (None, Some(id)) => Self {
+                res: id as i32,
+                literal: None,
+            },
+            (None, None) => Self::default(),
+        }
+    }
+
+    /// True when the component has no label of its own, so `loadLabel` falls
+    /// through to `applicationInfo.loadLabel(pm)`.
+    #[must_use]
+    pub fn is_unset(&self) -> bool {
+        self.res == 0 && self.literal.is_none()
+    }
+}
+
+/// `PackageParser`'s label values for an APK: the application plus every
+/// declared activity (fully-qualified class name).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ManifestLabels {
+    /// `<application android:label>`.
+    pub application: LabelSpec,
+    /// `(fully-qualified activity class, <activity android:label>)`, declaration
+    /// order. An activity without its own label has an unset [`LabelSpec`].
+    pub activities: Vec<(String, LabelSpec)>,
+}
+
+impl ManifestLabels {
+    /// The label spec for a fully-qualified activity name, or an unset spec when
+    /// the APK does not declare it (stock falls back to the application label).
+    #[must_use]
+    pub fn activity(&self, fq_name: &str) -> LabelSpec {
+        self.activities
+            .iter()
+            .find(|(name, _)| name == fq_name)
+            .map(|(_, spec)| spec.clone())
+            .unwrap_or_default()
+    }
+}
+
+/// Read the label specs `PackageParser` would write into `ApplicationInfo` and
+/// `ActivityInfo` for an APK. The manifest is the same one [`PmsState`] installs.
+pub fn manifest_labels(apk: impl AsRef<Path>) -> Result<ManifestLabels> {
+    let path = apk.as_ref();
+    let apk = acos_apk::Apk::open(path)
+        .map_err(|e| ServiceError::Internal(format!("open {}: {e}", path.display())))?;
+    let manifest = apk
+        .manifest()
+        .map_err(|e| ServiceError::Internal(format!("manifest: {e}")))?;
+    let application = LabelSpec::from_parts(
+        manifest.application.label.as_ref(),
+        manifest.application.label_ref,
+    );
+    let activities = manifest
+        .activities
+        .iter()
+        .map(|c| {
+            (
+                acos_apk::manifest::fq_name(&manifest.package, &c.name),
+                LabelSpec::from_parts(c.label.as_ref(), c.label_ref),
+            )
+        })
+        .collect();
+    Ok(ManifestLabels {
+        application,
+        activities,
+    })
+}
+
 /// The mini-PMS state.
 #[derive(Debug)]
 pub struct PmsState {
@@ -1370,5 +1470,50 @@ mod tests {
             .find(|s| s.name == "dev.acos.fixtures.svcprovider.EchoService")
             .expect("fixture service declared in the manifest");
         assert!(!service.exported, "the fixture service is not exported");
+    }
+
+    /// `PackageParser` keeps a literal `android:label` in `nonLocalizedLabel`
+    /// (and leaves `labelRes` 0), and a resource label in `labelRes` with no
+    /// literal. `ActivityInfo.loadLabel` walks activity -> application ->
+    /// component name, so an activity without its own label must be "unset"
+    /// (not a copy of the application label, and never the class name).
+    #[test]
+    fn label_specs_follow_package_parser() {
+        let literal = "Literal Name".to_string();
+        assert_eq!(
+            LabelSpec::from_parts(Some(&literal), Some(0x7f0f0001)),
+            LabelSpec {
+                res: 0,
+                literal: Some(literal.clone()),
+            },
+            "a literal label wins and clears labelRes"
+        );
+        assert_eq!(
+            LabelSpec::from_parts(None, Some(0x7f0f0001)),
+            LabelSpec {
+                res: 0x7f0f0001,
+                literal: None,
+            }
+        );
+        let unset = LabelSpec::from_parts(None, None);
+        assert!(unset.is_unset(), "no label attribute leaves both fields unset");
+        assert!(!LabelSpec::from_parts(None, Some(1)).is_unset());
+
+        let labels = ManifestLabels {
+            application: LabelSpec {
+                res: 0x7f0f0002,
+                literal: None,
+            },
+            activities: vec![
+                ("pkg.WithLabel".into(), LabelSpec::from_parts(Some(&literal), None)),
+                ("pkg.NoLabel".into(), LabelSpec::default()),
+            ],
+        };
+        assert_eq!(labels.activity("pkg.WithLabel").literal.as_deref(), Some("Literal Name"));
+        assert!(labels.activity("pkg.NoLabel").is_unset());
+        assert!(
+            labels.activity("pkg.NotDeclared").is_unset(),
+            "an unknown activity must not inherit another component's label"
+        );
     }
 }

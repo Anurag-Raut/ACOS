@@ -1,0 +1,197 @@
+{
+ "ssim": {
+  "before": {
+   "acos_frame": ".cache/w24/base/counter/frames/1.png",
+   "acos_size": [
+    1080,
+    2209
+   ],
+   "aligned": {
+    "ssim": 0.9650599171252761,
+    "mad": 3.2319362708113273
+   },
+   "content_only": {
+    "ssim": 0.9865613631478737,
+    "mad": 1.6247355138843984
+   },
+   "density_normalised": {
+    "ssim": 0.9637013897682443,
+    "mad": 3.2914911483333147
+   },
+   "action_bar_modal_rgb": [
+    25,
+    28,
+    30
+   ],
+   "action_bar_modal_share": 0.9074,
+   "action_bar_mean_rgb": [
+    40.9,
+    43.7,
+    45.5
+   ],
+   "phone_action_bar_modal_rgb": [
+    24,
+    28,
+    31
+   ],
+   "phone_action_bar_modal_share": 0.986,
+   "phone_action_bar_mean_rgb": [
+    26.3,
+    30.3,
+    33.2
+   ]
+  },
+  "after": {
+   "acos_frame": ".cache/w24/after-counter/frames/1.png",
+   "acos_size": [
+    1080,
+    2209
+   ],
+   "aligned": {
+    "ssim": 0.9778046261359109,
+    "mad": 2.2721979109032073
+   },
+   "content_only": {
+    "ssim": 0.9872873943265591,
+    "mad": 1.4986169486654453
+   },
+   "density_normalised": {
+    "ssim": 0.976817219349824,
+    "mad": 2.310329808186175
+   },
+   "action_bar_modal_rgb": [
+    25,
+    28,
+    30
+   ],
+   "action_bar_modal_share": 0.9808,
+   "action_bar_mean_rgb": [
+    28.3,
+    31.3,
+    33.3
+   ],
+   "phone_action_bar_modal_rgb": [
+    24,
+    28,
+    31
+   ],
+   "phone_action_bar_modal_share": 0.986,
+   "phone_action_bar_mean_rgb": [
+    26.3,
+    30.3,
+    33.2
+   ]
+  }
+ },
+ "comparison_vs_phone_reference": "results/art-runtime/evidence/W18-phone-reference/w175a-phone-before.png (W175-A, moto g35, 1080x2400 @400dpi, display capture; ACOS window row 0 = phone row 108)",
+ "phone_action_bar": {
+  "modal_rgb": [
+   24,
+   28,
+   31
+  ],
+  "modal_share": 0.986,
+  "mean_rgb": [
+   26.3,
+   30.3,
+   33.2
+  ]
+ },
+ "action_bar_title_ink_bright": {
+  "before": {
+   "bbox": [
+    44,
+    54,
+    950,
+    104
+   ],
+   "w": 907,
+   "h": 51,
+   "pixels": 13129
+  },
+  "after": {
+   "bbox": [
+    44,
+    56,
+    229,
+    94
+   ],
+   "w": 186,
+   "h": 39,
+   "pixels": 2779
+  },
+  "phone": {
+   "bbox": [
+    43,
+    55,
+    219,
+    90
+   ],
+   "w": 177,
+   "h": 36,
+   "pixels": 1772
+  }
+ },
+ "button_label_ink_dark": {
+  "inc_before_INCREMENT": {
+   "w": 201,
+   "h": 28,
+   "pixels": 2873
+  },
+  "inc_after_Increment": {
+   "w": 162,
+   "h": 28,
+   "pixels": 1545
+  },
+  "reset_before_RESET": {
+   "w": 107,
+   "h": 28,
+   "pixels": 1511
+  },
+  "reset_after_Reset": {
+   "w": 90,
+   "h": 28,
+   "pixels": 985
+  },
+  "note": "window-space crops of the C1 frame (the probe tree reports display space, +128 px); threshold grey<190, content background is 240"
+ },
+ "button_bounds_from_live_tree_px_at_420": {
+  "inc_before": [
+   42,
+   368,
+   310,
+   494
+  ],
+  "inc_after": [
+   42,
+   368,
+   273,
+   494
+  ],
+  "reset_before": [
+   42,
+   494,
+   273,
+   620
+  ],
+  "reset_after": [
+   42,
+   494,
+   273,
+   620
+  ],
+  "reference_todo_list_add_at_420": [
+   42,
+   435,
+   273,
+   561
+  ],
+  "phone_inc_at_400": [
+   40,
+   334,
+   262,
+   454
+  ],
+  "phone_88dp_min_width_at_420": 231
+ }
+}

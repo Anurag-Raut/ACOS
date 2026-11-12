@@ -61,6 +61,16 @@ public final class LaunchMain {
     /** `<application android:theme>` resource id; 0 = platform default. */
     static int sAppTheme;
     static volatile boolean sApplicationCreated;
+    /** `<application android:label>` resource id (0 = none). */
+    static int sAppLabelRes;
+    /** `<application android:label>` literal string (empty = none). */
+    static String sAppLabelText = "";
+    /** The launched `<activity android:label>` resource id (0 = none). */
+    static int sActivityLabelRes;
+    /** The launched `<activity android:label>` literal string (empty = none). */
+    static String sActivityLabelText = "";
+    /** Static-RRO overlay idmaps (`/data/overlay/<name>.idmap`, `,`-separated). */
+    static String sOverlayIdmaps = "";
     /**
      * Frame-probe progress: `-1` = probe disabled, otherwise the number of
      * completed `doFrame` callbacks. The watcher waits for this before sending
@@ -92,6 +102,17 @@ public final class LaunchMain {
                 sAppTheme = 0;
             }
         }
+        // W24: static-RRO idmaps plus the manifest label fields
+        // `PackageParser` writes into ApplicationInfo/ActivityInfo.
+        if (args.length > 7 && args[7] != null) sOverlayIdmaps = args[7];
+        if (args.length > 8 && args[8] != null && args[8].length() > 0) {
+            sAppLabelRes = parseIntOrZero(args[8]);
+        }
+        if (args.length > 9 && args[9] != null) sAppLabelText = args[9];
+        if (args.length > 10 && args[10] != null && args[10].length() > 0) {
+            sActivityLabelRes = parseIntOrZero(args[10]);
+        }
+        if (args.length > 11 && args[11] != null) sActivityLabelText = args[11];
         try {
             run(t0);
         } catch (Throwable t) {
@@ -101,6 +122,88 @@ public final class LaunchMain {
                     + esc(String.valueOf(u)) + "\"}");
             System.out.flush();
             System.exit(1);
+        }
+    }
+
+    static int parseIntOrZero(String s) {
+        try {
+            return Integer.parseInt(s.trim());
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    /**
+     * W24: apply the image's **immutable** framework RROs the way
+     * `AssetManager.createSystemAssetsInZygoteLocked` does on a device.
+     *
+     * <p>The zygote path loads `framework-res.apk` plus one
+     * `ApkAssets.loadOverlayFromPath(idmap, PROPERTY_SYSTEM)` per immutable
+     * overlay idmap reported by `OverlayConfig` (framework static overlays are
+     * always on; nothing here is a switch). The ACOS sysroot has no
+     * `/product/overlay`, so `OverlayConfig` finds nothing and the system
+     * AssetManager would hold the un-overlaid `framework-res.apk` — whose
+     * `config_buttonTextAllCaps` is `true`, against the product RRO's `false`
+     * (W18 #2). {@code acos-art} generates the idmaps with the image's own
+     * `/system/bin/idmap2` and binds them at `/data/overlay`; this method adds
+     * them to the *system* asset list, which {@code AssetManager.Builder} then
+     * copies into every app {@code Resources} (it always starts with
+     * `getSystem().getApkAssets()`).
+     *
+     * <p>Everything used here is stock framework code — `ApkAssets`,
+     * `AssetManager.getApkAssets`, `setApkAssets` — no ACOS resource code and no
+     * hardcoded attribute. An unusable idmap is reported and skipped, never
+     * faked.
+     */
+    static void applySystemOverlays() {
+        if (sOverlayIdmaps.isEmpty()) {
+            System.out.println("ACOSLAUNCH MARK overlays none (no static RRO idmap supplied)");
+            return;
+        }
+        try {
+            Class<?> amc = android.content.res.AssetManager.class;
+            Class<?> aac = Class.forName("android.content.res.ApkAssets");
+            int systemFlag = 0x1;
+            try {
+                java.lang.reflect.Field f = aac.getDeclaredField("PROPERTY_SYSTEM");
+                f.setAccessible(true);
+                systemFlag = f.getInt(null);
+            } catch (Throwable ignored) {
+            }
+            Object system = amc.getMethod("getSystem").invoke(null);
+            Object[] base = (Object[]) amc.getMethod("getApkAssets").invoke(system);
+            java.lang.reflect.Method loadOverlay = null;
+            for (java.lang.reflect.Method m : aac.getDeclaredMethods()) {
+                if (!m.getName().equals("loadOverlayFromPath")) continue;
+                Class<?>[] p = m.getParameterTypes();
+                if (p.length == 2 && p[0] == String.class && p[1] == int.class) {
+                    loadOverlay = m;
+                    break;
+                }
+            }
+            if (loadOverlay == null) throw new NoSuchMethodException("ApkAssets.loadOverlayFromPath(String,int)");
+            loadOverlay.setAccessible(true);
+            java.util.List<Object> all = new java.util.ArrayList<>();
+            for (Object a : base) all.add(a);
+            int loaded = 0;
+            for (String idmap : sOverlayIdmaps.split(",")) {
+                if (idmap.isEmpty()) continue;
+                try {
+                    all.add(loadOverlay.invoke(null, idmap, systemFlag));
+                    loaded++;
+                } catch (Throwable t) {
+                    System.out.println("ACOSLAUNCH MARK overlay-skipped " + idmap + " " + unwrap(t));
+                }
+            }
+            Object[] array = all.toArray(new Object[0]);
+            Object typed = java.lang.reflect.Array.newInstance(aac, array.length);
+            for (int i = 0; i < array.length; i++) java.lang.reflect.Array.set(typed, i, array[i]);
+            amc.getMethod("setApkAssets", typed.getClass(), boolean.class)
+                    .invoke(system, typed, Boolean.TRUE);
+            System.out.println("ACOSLAUNCH MARK overlays applied=" + loaded + " base=" + base.length
+                    + " total=" + array.length + " idmaps=" + sOverlayIdmaps);
+        } catch (Throwable t) {
+            System.out.println("ACOSLAUNCH MARK overlays failed " + unwrap(t));
         }
     }
 
@@ -119,6 +222,8 @@ public final class LaunchMain {
         int runtime = initAndroidRuntime(sPkg);
         if (runtime < 0) throw new IllegalStateException("initAndroidRuntime -> " + runtime);
         System.out.println("ACOSLAUNCH MARK android-runtime ready rc=" + runtime);
+        // W24: the device's static RROs, before any framework `Resources` exists.
+        applySystemOverlays();
         int looper = Nat.startBinderLooper();
         if (looper != 1) throw new IllegalStateException("startBinderLooper -> " + looper);
         System.out.println("ACOSLAUNCH MARK binder-looper started");
@@ -1035,6 +1140,17 @@ public final class LaunchMain {
                 // (IDisplayManager.getOverlaySupport) even when the reply is
                 // null; the CREATOR field reference runs <clinit>.
                 "register_android_hardware_OverlayProperties",
+                // W25: a React Native app's ReactActivityDelegate builds the
+                // dev-support manager inside Activity.onCreate, and its shake
+                // detector asks for SENSOR_SERVICE: SystemSensorManager.<init>
+                // (line 148 on API 34) calls nativeClassInit(). The image's
+                // libandroid_runtime exports
+                // `register_android_hardware_SensorManager`; without it the
+                // first third-party Activity dies with
+                // `UnsatisfiedLinkError: No implementation found for void
+                // android.hardware.SystemSensorManager.nativeClassInit()`
+                // (Gaten, w25-gaten-launch).
+                "register_android_hardware_SensorManager",
                 "register_com_android_internal_util_VirtualRefBasePtr",
         };
         String[] graphics = {"register_android_graphics_classes"};
@@ -1165,6 +1281,11 @@ public final class LaunchMain {
         // `android.app.Application` (the platform default), which is what the
         // guest ran for every APK before this line existed.
         if (!sAppClass.isEmpty()) ai.className = sAppClass;
+        // W24: `PackageParser`'s `android:label` fields. `ApplicationInfo.loadLabel`
+        // reads `nonLocalizedLabel` first, then `labelRes`; with both unset the
+        // activity title walk ends at `ActivityInfo.name` (W18 #1).
+        ai.labelRes = sAppLabelRes;
+        if (!sAppLabelText.isEmpty()) ai.nonLocalizedLabel = sAppLabelText;
         // W17: the manifest's `android:theme`, the resource `PackageParser`
         // copies into the activity's `ActivityInfo.theme`; AppCompat activities
         // abort without it (`Theme.AppCompat` check in createSubDecor).
@@ -1426,6 +1547,12 @@ public final class LaunchMain {
         setFieldForce(cls, ai, "permission", null);
         setFieldForce(cls, ai, "launchMode", 0);
         setFieldForce(cls, ai, "theme", sAppTheme); // manifest theme; 0 = platform default
+        // W24: the activity's own `android:label` (unset when the manifest has
+        // none, so `loadLabel` falls through to the application label exactly
+        // as stock `ActivityInfo.loadLabel` does).
+        setFieldForce(cls, ai, "labelRes", sActivityLabelRes);
+        setFieldForce(cls, ai, "nonLocalizedLabel",
+                sActivityLabelText.isEmpty() ? null : sActivityLabelText);
         setFieldForce(cls, ai, "flags", 0);          // no FLAG_HARDWARE_ACCELERATED
         setFieldForce(cls, ai, "screenOrientation", -1);
         setFieldForce(cls, ai, "configChanges", 0);

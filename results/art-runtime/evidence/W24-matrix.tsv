@@ -1,0 +1,26 @@
+counter-v2	pass	live	11	None:		
+w15-dialog-menu	pass	live	3	None:		
+w15-dialogs-menus	pass	live	3	None:		
+w15-fragments-nav	pass	live	3	None:		
+w15-list-adapter	pass	live	3	None:		
+w15-list-scroll	pass	live	2	None:		
+w15-todo-dogfood	pass	live	4	None:		
+w15-widget-gallery	pass	live	3	None:		
+w15-sqlite-crud	pass	live	2	None:		
+w15-canvas-shapes	pass	live	2	None:		
+w15-two-activity	pass	live	3	None:		
+w16-text-input	pass	live	7	None:		
+w15-text-input	pass	live	5	None:		
+w15-native-hostile	pass	live	2	None:		
+w17-form-hint	pass	live	4	None:		
+w17-todo-hint	pass	live	4	None:		
+w17-multi-hint	pass	live	3	None:		
+w17-hello-views-hint	pass	live	5	None:		
+w19-form-behavior	pass	live	8	None:		
+w19-probe-widgets	pass	live	9	None:		
+w19-probe-content-desc	pass	live	3	None:		
+w21-native-hello	pass	live	2	None:		
+w21-hello-jni	pass	live	10	None:		
+w23-rn-hello-tap	pass	live	6	None:		
+todo-list	fail	live	13	12:tap	ASSERTION_FAILED	tap did not change state in both (the UI tree did not change)
+hello-jni	pass	live	13	None:		
