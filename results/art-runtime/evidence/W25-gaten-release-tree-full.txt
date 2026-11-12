@@ -1,0 +1,161 @@
+# W25 live in-guest tree (all nodes). class | text | content_desc | [L,T,R,B] | clickable
+com.android.internal.policy.DecorView |  |  | [0, 128, 1080, 2337] | False
+  android.widget.LinearLayout |  |  | [0, 128, 1080, 2337] | False
+    android.view.ViewStub |  |  | [0, 128, 0, 128] | False
+    android.widget.FrameLayout |  |  | [0, 128, 1080, 2337] | False
+      androidx.appcompat.widget.FitWindowsLinearLayout |  |  | [0, 128, 1080, 2337] | False
+        androidx.appcompat.widget.ViewStubCompat |  |  | [0, 128, 0, 128] | False
+        androidx.appcompat.widget.ContentFrameLayout |  |  | [0, 128, 1080, 2337] | False
+          v4.z |  |  | [0, 128, 1080, 2337] | False
+            o7.q |  |  | [0, 128, 1080, 2337] | False
+              Y7.d |  |  | [0, 128, 1080, 2337] | False
+                g7.b |  |  | [0, 128, 1080, 2337] | False
+                  W4.g |  |  | [0, 128, 1080, 2337] | False
+                  W4.g |  |  | [0, 128, 1080, 2337] | False
+                    j7.m |  |  | [0, 128, 1080, 2337] | False
+                      Q0.c0 |  |  | [0, 128, 1080, 2337] | False
+                        Q0.v |  |  | [0, 128, 1080, 2337] | False
+                          Q0.T |  |  | [0, 128, 1080, 2337] | False
+                            o1.w |  |  | [0, 128, 1080, 2337] | False
+                              android.widget.FrameLayout |  |  | [0, 128, 1080, 2337] | False
+                                W4.g |  |  | [0, 128, 1080, 2337] | False
+                                  W4.g |  |  | [0, 128, 1080, 2337] | False
+                                    s7.F |  |  | [0, 128, 1080, 2337] | False
+                                      V7.e |  |  | [0, 128, 1080, 2337] | False
+                                        s7.p |  |  | [0, 128, 1080, 2337] | False
+                                          s7.u |  |  | [0, 128, 1080, 2337] | False
+                                            Y7.h |  |  | [0, 128, 1080, 2337] | False
+                                              W4.g |  |  | [0, 128, 1080, 509] | False
+                                                S4.d | Gaten |  | [57, 188, 1023, 288] | False
+                                                W4.g |  |  | [58, 341, 1022, 477] | False
+                                                  W4.g |  |  | [58, 341, 1022, 477] | False
+                                                    W4.g |  |  | [58, 341, 1022, 477] | False
+                                                      com.horcrux.svg.SvgView |  |  | [103, 383, 156, 435] | False
+                                                        com.horcrux.svg.z |  |  | [103, 383, 103, 383] | False
+                                                          com.horcrux.svg.b |  |  | [112, 391, 141, 420] | False
+                                                          com.horcrux.svg.H |  |  | [138, 417, 149, 429] | False
+                                                      U4.g | 猫, ねこ, neko... | Search Japanese dictionary | [189, 351, 978, 467] | True
+                                              P4.r |  |  | [0, 509, 1080, 2337] | False
+                                                W4.g |  |  | [0, 509, 1080, 2246] | False
+                                                  W4.g |  |  | [58, 509, 1022, 2039] | False
+                                                    W4.g |  |  | [58, 509, 1022, 2039] | False
+                                                      W4.g |  |  | [58, 572, 1022, 941] | False
+                                                      com.horcrux.svg.SvgView |  |  | [58, 591, 121, 664] | False
+                                                        com.horcrux.svg.z |  |  | [58, 591, 58, 591] | False
+                                                          com.horcrux.svg.H |  |  | [62, 593, 117, 664] | False
+                                                          com.horcrux.svg.H |  |  | [70, 629, 102, 664] | False
+                                                      S4.d | Daily streak | Daily streak. Anki study days follow your collection's rollover. | [150, 601, 764, 654] | False
+                                                      S4.d | 0 |  | [992, 572, 1023, 630] | False
+                                                      S4.d | days |  | [951, 637, 1023, 682] | False
+                                                      W4.g |  | Anki Mon: study activity unknown | [58, 735, 196, 880] | False
+                                                        com.horcrux.svg.SvgView |  |  | [89, 735, 165, 811] | False
+                                                          com.horcrux.svg.z |  |  | [89, 735, 89, 735] | False
+                                                            com.horcrux.svg.b |  |  | [90, 736, 164, 810] | False
+                                                            com.horcrux.svg.b |  |  | [120, 766, 134, 780] | False
+                                                        S4.d | Mon |  | [92, 832, 161, 880] | False
+                                                      W4.g |  | Anki Tue: study activity unknown | [196, 735, 333, 880] | False
+                                                        com.horcrux.svg.SvgView |  |  | [227, 735, 303, 811] | False
+                                                          com.horcrux.svg.z |  |  | [227, 735, 227, 735] | False
+                                                            com.horcrux.svg.b |  |  | [228, 736, 302, 810] | False
+                                                            com.horcrux.svg.b |  |  | [258, 766, 272, 780] | False
+                                                        S4.d | Tue |  | [235, 832, 293, 880] | False
+                                                      W4.g |  | Anki Wed: study activity unknown | [334, 735, 472, 880] | False
+                                                        com.horcrux.svg.SvgView |  |  | [365, 735, 441, 811] | False
+                                                          com.horcrux.svg.z |  |  | [365, 735, 365, 735] | False
+                                                            com.horcrux.svg.b |  |  | [366, 736, 440, 810] | False
+                                                            com.horcrux.svg.b |  |  | [396, 766, 410, 780] | False
+                                                        S4.d | Wed |  | [367, 832, 437, 880] | False
+                                                      W4.g |  | Anki Thu: study activity unknown, today | [471, 735, 609, 880] | False
+                                                        com.horcrux.svg.SvgView |  |  | [502, 735, 578, 811] | False
+                                                          com.horcrux.svg.z |  |  | [502, 735, 502, 735] | False
+                                                            com.horcrux.svg.b |  |  | [503, 736, 577, 810] | False
+                                                            com.horcrux.svg.b |  |  | [533, 766, 547, 780] | False
+                                                        S4.d | Thu |  | [509, 832, 570, 880] | False
+                                                      W4.g |  | Anki Fri: upcoming | [609, 735, 747, 880] | False
+                                                        com.horcrux.svg.SvgView |  |  | [640, 735, 716, 811] | False
+                                                          com.horcrux.svg.z |  |  | [640, 735, 640, 735] | False
+                                                            com.horcrux.svg.b |  |  | [641, 736, 715, 810] | False
+                                                            com.horcrux.svg.b |  |  | [671, 766, 685, 780] | False
+                                                        S4.d | Fri |  | [657, 832, 697, 880] | False
+                                                      W4.g |  | Anki Sat: upcoming | [747, 735, 884, 880] | False
+                                                        com.horcrux.svg.SvgView |  |  | [778, 735, 854, 811] | False
+                                                          com.horcrux.svg.z |  |  | [778, 735, 778, 735] | False
+                                                            com.horcrux.svg.b |  |  | [779, 736, 853, 810] | False
+                                                            com.horcrux.svg.b |  |  | [809, 766, 823, 780] | False
+                                                        S4.d | Sat |  | [790, 832, 841, 880] | False
+                                                      W4.g |  | Anki Sun: upcoming | [885, 735, 1023, 880] | False
+                                                        com.horcrux.svg.SvgView |  |  | [916, 735, 992, 811] | False
+                                                          com.horcrux.svg.z |  |  | [916, 735, 916, 735] | False
+                                                            com.horcrux.svg.b |  |  | [917, 736, 991, 810] | False
+                                                            com.horcrux.svg.b |  |  | [947, 766, 961, 780] | False
+                                                        S4.d | Sun |  | [923, 832, 983, 880] | False
+                                                      W4.g |  | Anki, Not connected, Open Anki | [58, 962, 1022, 1143] | True
+                                                        W4.g |  |  | [58, 962, 1022, 1143] | False
+                                                        W4.g |  |  | [58, 1003, 155, 1101] | False
+                                                          com.horcrux.svg.SvgView |  |  | [70, 1015, 143, 1089] | False
+                                                            com.horcrux.svg.z |  |  | [70, 1015, 70, 1015] | False
+                                                              com.horcrux.svg.H |  |  | [76, 1024, 137, 1066] | False
+                                                              com.horcrux.svg.H |  |  | [76, 1045, 137, 1075] | False
+                                                              com.horcrux.svg.H |  |  | [76, 1056, 137, 1087] | False
+                                                              com.horcrux.svg.H |  |  | [114, 1020, 136, 1040] | False
+                                                        S4.d | Anki |  | [187, 997, 766, 1050] | False
+                                                        W4.g |  |  | [187, 1076, 203, 1092] | False
+                                                        S4.d | Not connected |  | [213, 1061, 437, 1106] | False
+                                                        S4.d | Open Anki |  | [796, 1027, 957, 1075] | False
+                                                        com.horcrux.svg.SvgView |  |  | [975, 1027, 1022, 1075] | False
+                                                          com.horcrux.svg.z |  |  | [975, 1027, 975, 1027] | False
+                                                            com.horcrux.svg.H |  |  | [990, 1039, 1006, 1063] | False
+                                                      W4.g |  | WaniKani, Not connected, Connect | [58, 1143, 1022, 1324] | True
+                                                        W4.g |  |  | [58, 1143, 1022, 1324] | False
+                                                        W4.g |  |  | [58, 1184, 155, 1281] | False
+                                                          com.horcrux.svg.SvgView |  |  | [70, 1196, 143, 1270] | False
+                                                            com.horcrux.svg.z |  |  | [70, 1196, 70, 1196] | False
+                                                              com.horcrux.svg.H |  |  | [76, 1212, 137, 1222] | False
+                                                              com.horcrux.svg.H |  |  | [85, 1223, 128, 1231] | False
+                                                              com.horcrux.svg.H |  |  | [90, 1228, 123, 1263] | False
+                                                              com.horcrux.svg.H |  |  | [83, 1244, 130, 1252] | False
+                                                              com.horcrux.svg.H |  |  | [81, 1201, 137, 1220] | False
+                                                        S4.d | WaniKani |  | [187, 1178, 796, 1231] | False
+                                                        W4.g |  |  | [187, 1257, 203, 1273] | False
+                                                        S4.d | Not connected |  | [213, 1242, 437, 1287] | False
+                                                        S4.d | Connect |  | [826, 1208, 957, 1256] | False
+                                                        com.horcrux.svg.SvgView |  |  | [975, 1208, 1022, 1255] | False
+                                                          com.horcrux.svg.z |  |  | [975, 1208, 975, 1208] | False
+                                                            com.horcrux.svg.H |  |  | [990, 1219, 1006, 1244] | False
+                                                      S4.d | Recently looked up |  | [58, 1420, 1024, 1478] | False
+                                                      W4.g |  | No recent searches found | [58, 1539, 1022, 2039] | False
+                                                        W4.g |  |  | [94, 1539, 986, 1928] | False
+                                                          com.horcrux.svg.SvgView |  |  | [94, 1539, 986, 1928] | False
+                                                            com.horcrux.svg.z |  |  | [94, 1539, 94, 1539] | False
+                                                              com.horcrux.svg.g |  |  | [369, 1869, 711, 1891] | False
+                                                              com.horcrux.svg.z |  |  | [94, 1539, 986, 1928] | False
+                                                                com.horcrux.svg.H |  |  | [387, 1683, 693, 1860] | False
+                                                                com.horcrux.svg.H |  |  | [408, 1704, 672, 1755] | False
+                                                                com.horcrux.svg.H |  |  | [387, 1754, 693, 1860] | False
+                                                                com.horcrux.svg.H |  |  | [508, 1830, 572, 1831] | False
+                                                              com.horcrux.svg.b |  |  | [482, 1576, 598, 1692] | False
+                                                              com.horcrux.svg.z |  |  | [94, 1539, 986, 1928] | False
+                                                                com.horcrux.svg.H |  |  | [490, 1578, 595, 1689] | False
+                                                                com.horcrux.svg.H |  |  | [487, 1604, 561, 1650] | False
+                                                              com.horcrux.svg.b |  |  | [503, 1597, 577, 1671] | False
+                                                              com.horcrux.svg.H |  |  | [495, 1544, 585, 1653] | False
+                                                              com.horcrux.svg.b |  |  | [340, 1691, 362, 1713] | False
+                                                              com.horcrux.svg.b |  |  | [724, 1784, 739, 1798] | False
+                                                              com.horcrux.svg.H |  |  | [718, 1644, 745, 1671] | False
+                                                        S4.d | No recent searches found |  | [337, 1959, 742, 2007] | False
+                                          s7.K |  |  | [0, 128, 1080, 128] | False
+                                        j6.f |  |  | [0, 128, 1080, 128] | False
+                            o1.w |  |  | [1080, 128, 2160, 2337] | False
+                              android.widget.FrameLayout |  |  | [1080, 128, 2160, 2337] | False
+                                W4.g |  |  | [1080, 128, 2160, 2337] | False
+                                  W4.g |  |  | [1080, 128, 2160, 2337] | False
+                                    s7.F |  |  | [1080, 128, 2160, 2337] | False
+                                      V7.e |  |  | [1080, 128, 2160, 2337] | False
+                                        s7.p |  |  | [1080, 128, 2160, 2337] | False
+                                          s7.u |  |  | [1080, 128, 2160, 2337] | False
+                                            W4.g |  |  | [1080, 128, 2160, 2337] | False
+                                            P4.r |  |  | [1080, 128, 2160, 2337] | False
+                                              W4.g |  |  | [1080, 128, 2160, 2199] | False
+                                                S4.d | Analytics |  | [1138, 170, 1936, 286] | False
+                                                S4.d | Reading the numbers… |  | [1138, 296, 1936, 341] | False
+                                                W4.g |  | Refresh the numbers | [1977, 193, 2103, 319] | True

@@ -1,0 +1,54 @@
+# W25: does a real third-party RN app accept input on real ART?
+#
+# Companion to `w25-gaten-launch.yaml`. The launch row proves the first live
+# frame and live tree; this row proves the input path reaches the app's own
+# view. The target is the search field of the Gaten home screen
+# (`content_desc: "Search Japanese dictionary"`, live bounds
+# [189,351,978,467], centre (583,409) in display space, taken from the tree the
+# launch row dumped — nothing is hardcoded from a screenshot).
+#
+# A focus tap is the safest real interaction here: it opens no other app
+# (the "Open Anki" row would start AnkiDroid), performs no network call and no
+# login ("Connect" for WaniKani would), and it is the exact shape of action that
+# W15's freshness rule used to reject when the pixels do not change.
+version: 1
+name: w25-gaten-tap
+description: >-
+  Launch Gaten (release x86_64) on real ART, wait for its home screen text, tap
+  the search field at its live bounds and capture the frame the tap produced.
+  No network, no login, no text entry.
+app: .cache/gaten/gaten-x86_64-release.apk
+engine: native-preferred
+fallback: report-only
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 2048
+  wall_ms: 300000
+steps:
+  - launch:
+      activity: com.gaten.app/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {text: {exact: "Recently looked up"}}
+      timeout_ms: 60000
+
+  - tap:
+      x: 583
+      y: 409
+
+  - capture:
+      name: gaten-after-search-tap
+      format: png
+      fresh: true

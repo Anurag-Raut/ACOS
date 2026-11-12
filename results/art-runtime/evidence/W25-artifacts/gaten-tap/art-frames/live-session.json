@@ -1,0 +1,87 @@
+{
+  "capture_label": "screenshots are ACOS C1 buffer captures (compositor-client stored buffers), not device captures",
+  "capture_source": "acos-c1-buffer",
+  "protocol": "acos-art launch --interactive (ACOSLAUNCH_INTERACTIVE=1)",
+  "steps": [
+    {
+      "activity": "com.gaten.app.MainActivity",
+      "buffer_generation": 5,
+      "capture_source": "acos-c1-buffer",
+      "cmd": "ready",
+      "density": 420,
+      "height": 2209,
+      "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
+      "ok": true,
+      "package": "com.gaten.app",
+      "probe_seq": 1,
+      "width": 1080
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 181,
+      "ok": true,
+      "total": 181
+    },
+    {
+      "buffer_generation": 9,
+      "cmd": "tree",
+      "frame_number": 5,
+      "frame_seq": 1,
+      "ok": true,
+      "png": "results/art-runtime/evidence/W25-artifacts/gaten-tap/art-frames/live-frames/acos-c1-layer6-frame-5-g9-c1.png",
+      "probe_seq": 33
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 181,
+      "ok": true,
+      "total": 181
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 181,
+      "ok": true,
+      "total": 181
+    },
+    {
+      "buffer_generation": 52,
+      "cmd": "tap",
+      "frame_number": 48,
+      "frame_seq": 2,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png": "results/art-runtime/evidence/W25-artifacts/gaten-tap/art-frames/live-frames/acos-c1-layer6-frame-48-g52-c2.png",
+      "probe_seq": 58,
+      "x": 583.0,
+      "y": 281.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 186,
+      "ok": true,
+      "total": 186
+    },
+    {
+      "buffer_generation": 53,
+      "cmd": "tree",
+      "frame_number": 49,
+      "frame_seq": 3,
+      "ok": true,
+      "png": "results/art-runtime/evidence/W25-artifacts/gaten-tap/art-frames/live-frames/acos-c1-layer6-frame-49-g53-c3.png",
+      "probe_seq": 70
+    },
+    {
+      "capture_source": "acos-c1-buffer",
+      "cmd": "close",
+      "frame_seq": 3,
+      "ok": true
+    }
+  ]
+}

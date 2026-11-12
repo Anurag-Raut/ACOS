@@ -1,0 +1,7 @@
+package=com.gaten.app
+activity=com.gaten.app.MainActivity
+lifecycle=onCreate,onStart,onResume
+resumed=true
+called=true
+stopped=false
+window=com.android.internal.policy.PhoneWindow@2cac0d1

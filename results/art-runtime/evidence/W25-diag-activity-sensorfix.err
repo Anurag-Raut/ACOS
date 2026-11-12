@@ -1,0 +1,35 @@
+acos-art: guards rss_max=2048MiB rlimit_data=2560MiB stream_cap=8MiB log_cap=50000
+/home/Qui/Projects/acos/.cache/art-locks/data-W25-3190114/shim/artshim.c:95:13: warning: unused function 'sys6' [-Wunused-function]
+   95 | static long sys6(long n, long a, long b, long c, long d, long e, long f) {
+      |             ^~~~
+/home/Qui/Projects/acos/.cache/art-locks/data-W25-3190114/shim/artshim.c:111:13: warning: unused function 'sb_putn' [-Wunused-function]
+  111 | static void sb_putn(struct sbuf *s, const char *p, usize n) { while (n--) sb_putc(s, *p++); }
+      |             ^~~~~~~
+2 warnings generated.
+acos-art: launch: native libs installed=23 dir=/home/Qui/Projects/acos/.cache/art-locks/data-W25-3190114/runs/3190468-0/app-lib guest=/data/app-lib/x86_64
+acos-art: launch: guest RLIMIT_NICE 0 < init.rc 40: Process.setThreadPriority(THREAD_PRIORITY_DISPLAY) will throw SecurityException (start the runner with a stock nice limit >= 24 / CAP_SYS_RESOURCE in the initial userns)
+acos-binder-peer: launch bindApplication request stashed (1292 bytes)
+acos-binder-peer: launch reply template stashed for android.hardware.display.IDisplayManager code 1 (232 bytes, framework-marshalled)
+acos-binder-peer: launch reply template stashed for android.content.pm.IPackageManager code 9 (632 bytes, framework-marshalled)
+acos-binder-peer: launch reply template stashed for android.content.pm.IPackageManager code 44 (376 bytes, framework-marshalled)
+acos-binder-peer: delivering bindApplication (1292 bytes, code 5) to java binder wire=1
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: UNSUPPORTED_ANDROID_API {"code":106,"descriptor":"android.content.pm.IPackageManager","error":"SERVICE_BAD_REQUEST","kind":"UNSUPPORTED_ANDROID_API","message":"bad request for android.content.pm.IPackageManager::notifyDexLoad: arg 3 (Str16): parcel underflow: need 13107296 byte(s) at 124, have 128","method":"notifyDexLoad"}
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.content.pm.IPackageManager.getApplicationInfo answered from a framework-marshalled reply (632 bytes)
+acos-binder-peer: UNSUPPORTED_ANDROID_API {"code":101,"descriptor":"android.app.IActivityManager","error":"SERVICE_BAD_REQUEST","kind":"UNSUPPORTED_ANDROID_API","message":"bad request for android.app.IActivityManager::handleApplicationWtf: arg 3 (TypedObject(android.app.ApplicationErrorReport$ParcelableCrashInfo, nullable=true)): no parcelable codec for android.app.ApplicationErrorReport$ParcelableCrashInfo","method":"handleApplicationWtf"}
+acos-binder-peer: launch ClientTransaction request stashed (2020 bytes, framework-marshalled)
+acos-binder-peer: delivering ClientTransaction (2020 bytes, IApplicationThread.scheduleTransaction code 54) to java binder wire=1
+acos-binder-peer: android.content.pm.IPackageManager.getApplicationInfo answered from a framework-marshalled reply (632 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-binder-peer: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (232 bytes)
+acos-art: launch wall=12249ms until=activity-resumed application_created=true activity_resumed=false txn=Some(2020)/true reverse_replies=2 reverse_failed=0 logd=91 (logd: 91 entries) peer_resource_limits=0
+acos-art: cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=148MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3190772-i7395585.scope)
+acos-art: seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0
+acos-art: logd: 91 entries

@@ -1,0 +1,60 @@
+# W25: the first real third-party app through `acos verify --engine art`.
+#
+# Gaten (com.gaten, v0.1.0, debug x86_64 split APK, 197 MiB) is the owner's own
+# React Native 0.86 / Hermes app: 23 x86_64 .so files (onnxruntime, ML Kit OCR,
+# libreactnative, libhermesvm, reanimated/worklets, Fresco image pipeline),
+# 31 dex files (75 MiB, Compose + AndroidX + GMS + RN), and 160 MiB of SQLite
+# assets. It is the honest "does a real app work?" row, not a fixture.
+#
+# This scenario deliberately does the minimum a launch verification can do:
+#   * launch the React activity (`com.gaten.app.MainActivity`; the manifest's
+#     launcher entry is an activity-alias -> LauncherActivity, which only
+#     startActivity()s MainActivity, so the target here is the real screen and
+#     not a redirect we would have to model first),
+#   * wait for the first live frame / first live tree (the launch step itself
+#     blocks until the engine has a live frame; the explicit `wait_for` binds
+#     the traversal that proves a tree exists),
+#   * a fresh C1 capture, plus the tree dumps the runner always writes.
+#
+# No network, no login, no permissions, no taps: the question is only how far
+# the launch path gets and what the FIRST error is.
+#
+# `expectation: pass` is intentional: this row must not be able to "pass" by
+# accident. A truthful partial (fail/unsupported/timeout) is the expected
+# outcome today and is reported as such (`notes` says so), never hidden.
+version: 1
+name: w25-gaten-launch
+description: >-
+  Launch Gaten (com.gaten, RN 0.86 + Hermes + Compose + ML Kit, debug x86_64)
+  on real ART: wait for the first live frame and tree, capture a fresh C1
+  buffer. No network, no login, no input.
+app: .cache/gaten/gaten-x86_64-debug.apk
+engine: native-preferred
+fallback: report-only
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 2048
+  wall_ms: 300000
+steps:
+  - launch:
+      activity: com.gaten.app/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {class: android.widget.FrameLayout}
+      timeout_ms: 60000
+
+  - capture:
+      name: gaten-first-frame
+      format: png
+      fresh: true

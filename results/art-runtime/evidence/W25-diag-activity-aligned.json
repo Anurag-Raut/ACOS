@@ -1,0 +1,647 @@
+{
+  "outcome": "crash",
+  "code": "NO_ACTIVITY_RESUMED",
+  "apk": ".cache/gaten/gaten-x86_64-debug-launcherpatch-aligned.apk",
+  "package": "com.gaten",
+  "until": "activity-resumed",
+  "application_created": true,
+  "activity_launched": false,
+  "guest_exit": 0,
+  "guest_signal": null,
+  "wall_ms": 12278,
+  "activity": "com.gaten.app.MainActivity",
+  "application_marker": "package=com.gaten\napplication=com.gaten.app.MainApplication\napplication_classloader_is_apk=true\napplication_base=com.gaten//data/app/gaten-x86_64-debug-launcherpatch-aligned.apk\ninstrumentation=android.app.Instrumentation\ninstrumentation_source=framework (bind request instrumentationName=null)\nsourceDir=/data/app/gaten-x86_64-debug-launcherpatch-aligned.apk\n",
+  "activity_marker": "package=com.gaten\nactivity=com.gaten.app.MainActivity\n",
+  "looper_trace": [
+    ">>>>> Dispatching to Handler (android.app.ActivityThread$H) {def2a61} null: 110",
+    "<<<<< Finished to Handler (android.app.ActivityThread$H) {def2a61} null",
+    ">>>>> Dispatching to Handler (android.app.ActivityThread$H) {def2a61} null: 159"
+  ],
+  "bind_application": {
+    "request_bytes": 1324,
+    "delivered": true,
+    "app_thread_wire": 1,
+    "code": 5
+  },
+  "service_calls": [
+    {
+      "descriptor": "android.app.IActivityManager",
+      "code": 25,
+      "method": "attachApplication"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 41,
+      "method": "getPreferredWideGamutColorSpaceId"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 55,
+      "method": "getOverlaySupport"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.os.INetworkManagementService",
+      "code": 42,
+      "method": "setUidCleartextNetworkPolicy"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 106,
+      "method": "notifyDexLoad"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.app.IActivityManager",
+      "code": 9,
+      "method": "checkPermission"
+    },
+    {
+      "descriptor": "android.net.IConnectivityManager",
+      "code": 32,
+      "method": "getProxyForNetwork"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 20,
+      "method": "getPackagesForUid"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 9,
+      "method": "getApplicationInfo"
+    },
+    {
+      "descriptor": "android.app.IGameManagerService",
+      "code": 4,
+      "method": "isAngleEnabled"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 100,
+      "method": "hasSystemFeature"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 100,
+      "method": "hasSystemFeature"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 100,
+      "method": "hasSystemFeature"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 100,
+      "method": "hasSystemFeature"
+    },
+    {
+      "descriptor": "android.app.IActivityManager",
+      "code": 101,
+      "method": "handleApplicationWtf"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 3,
+      "method": "getPackageInfo"
+    },
+    {
+      "descriptor": "android.app.IActivityManager",
+      "code": 9,
+      "method": "checkPermission"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 9,
+      "method": "getApplicationInfo"
+    },
+    {
+      "descriptor": "android.app.IActivityManager",
+      "code": 26,
+      "method": "finishAttachApplication"
+    },
+    {
+      "descriptor": "android.view.contentcapture.IContentCaptureManager",
+      "code": 12,
+      "method": "registerContentCaptureOptionsCallback"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.view.IWindowManager",
+      "code": 42,
+      "method": "getCurrentAnimatorScale"
+    },
+    {
+      "descriptor": "android.view.IWindowManager",
+      "code": 5,
+      "method": "useBLAST"
+    },
+    {
+      "descriptor": "android.app.IActivityTaskManager",
+      "code": 18,
+      "method": "getActivityClientController"
+    },
+    {
+      "descriptor": "android.app.IActivityClientController",
+      "code": 21,
+      "method": "getDisplayId"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 100,
+      "method": "hasSystemFeature"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 14,
+      "method": "getServiceInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.app.IActivityManager",
+      "code": 30,
+      "method": "getContentProvider"
+    },
+    {
+      "descriptor": "android.content.IContentProvider",
+      "code": 21,
+      "method": "call"
+    },
+    {
+      "descriptor": "android.content.IContentProvider",
+      "code": 21,
+      "method": "call"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 100,
+      "method": "hasSystemFeature"
+    },
+    {
+      "descriptor": "android.app.IActivityClientController",
+      "code": 43,
+      "method": "setTaskDescription"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 11,
+      "method": "getActivityInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 11,
+      "method": "getActivityInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.hardware.display.IDisplayManager",
+      "code": 1,
+      "method": "getDisplayInfo"
+    },
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 100,
+      "method": "hasSystemFeature"
+    },
+    {
+      "descriptor": "android.view.IWindowManager",
+      "code": 73,
+      "method": "hasNavigationBar"
+    },
+    {
+      "descriptor": "android.view.accessibility.IAccessibilityManager",
+      "code": 3,
+      "method": "addClient"
+    },
+    {
+      "descriptor": "android.view.accessibility.IAccessibilityManager",
+      "code": 19,
+      "method": "getRecommendedTimeoutMillis"
+    },
+    {
+      "descriptor": "android.view.accessibility.IAccessibilityManager",
+      "code": 25,
+      "method": "getFocusStrokeWidth"
+    },
+    {
+      "descriptor": "android.view.accessibility.IAccessibilityManager",
+      "code": 26,
+      "method": "getFocusColor"
+    },
+    {
+      "descriptor": "android.app.IActivityClientController",
+      "code": 43,
+      "method": "setTaskDescription"
+    },
+    {
+      "descriptor": "android.app.IActivityClientController",
+      "code": 43,
+      "method": "setTaskDescription"
+    },
+    {
+      "descriptor": "android.os.IUserManager",
+      "code": 75,
+      "method": "isUserUnlockingOrUnlocked"
+    }
+  ],
+  "unsupported": [
+    {
+      "descriptor": "android.content.pm.IPackageManager",
+      "code": 106,
+      "method": "notifyDexLoad",
+      "error": "SERVICE_BAD_REQUEST"
+    },
+    {
+      "descriptor": "android.app.IActivityManager",
+      "code": 101,
+      "method": "handleApplicationWtf",
+      "error": "SERVICE_BAD_REQUEST"
+    }
+  ],
+  "stdout": "…MainActivity@bac1a18 paused=false stopped=false\nACOSLAUNCH MARK   resumed=false called=true finished=false window=com.android.internal.policy.PhoneWindow@a680480\nACOSLAUNCH THREAD Jit thread pool worker thread 0 RUNNABLE\nACOSLAUNCH THREAD main RUNNABLE\nACOSLAUNCH   at android.hardware.SystemSensorManager.nativeCreate(Native Method)\nACOSLAUNCH   at android.hardware.SystemSensorManager.<init>(SystemSensorManager.java:156)\nACOSLAUNCH   at android.app.SystemServiceRegistry$42.createService(SystemServiceRegistry.java:644)\nACOSLAUNCH   at android.app.SystemServiceRegistry$42.createService(SystemServiceRegistry.java:640)\nACOSLAUNCH   at android.app.SystemServiceRegistry$CachedServiceFetcher.getService(SystemServiceRegistry.java:1971)\nACOSLAUNCH   at android.app.SystemServiceRegistry.getSystemService(SystemServiceRegistry.java:1645)\nACOSLAUNCH   at android.app.ContextImpl.getSystemService(ContextImpl.java:2212)\nACOSLAUNCH   at android.content.ContextWrapper.getSystemService(ContextWrapper.java:934)\nACOSLAUNCH   at com.facebook.react.devsupport.DevSupportManagerBase.startShakeDetector(DevSupportManagerBase.kt:929)\nACOSLAUNCH   at com.facebook.react.devsupport.DevSupportManagerBase.reload(DevSupportManagerBase.kt:949)\nACOSLAUNCH   at com.facebook.react.devsupport.DevSupportManagerBase.reloadSettings(DevSupportManagerBase.kt:724)\nACOSLAUNCH   at com.facebook.react.devsupport.DevSupportManagerBase.setDevSupportEnabled(DevSupportManagerBase.kt:132)\nACOSLAUNCH THREAD HeapTaskDaemon WAITING\nACOSLAUNCH THREAD FinalizerDaemon WAITING\nACOSLAUNCH   at java.lang.Object.wait(Native Method)\nACOSLAUNCH   at java.lang.Object.wait(Object.java:386)\nACOSLAUNCH   at java.lang.ref.ReferenceQueue.remove(ReferenceQueue.java:210)\nACOSLAUNCH   at java.lang.ref.ReferenceQueue.remove(ReferenceQueue.java:231)\nACOSLAUNCH   at java.lang.Daemons$FinalizerDaemon.runInternal(Daemons.java:309)\nACOSLAUNCH   at java.lang.Daemons$Daemon.run(Daemons.java:145)\nACOSLAUNCH   at java.lang.Thread.run(Thread.java:1012)\nACOSLAUNCH THREAD Signal Catcher WAITING\nACOSLAUNCH THREAD ReferenceQueueDaemon WAITING\nACOSLAUNCH   at java.lang.Object.wait(Native Method)\nACOSLAUNCH   at java.lang.Object.wait(Object.java:386)\nACOSLAUNCH   at java.lang.Object.wait(Object.java:524)\nACOSLAUNCH   at java.lang.Daemons$ReferenceQueueDaemon.runInternal(Daemons.java:239)\nACOSLAUNCH   at java.lang.Daemons$Daemon.run(Daemons.java:145)\nACOSLAUNCH   at java.lang.Thread.run(Thread.java:1012)\nACOSLAUNCH THREAD acos-launch-watcher RUNNABLE\nACOSLAUNCH   at dalvik.system.VMStack.getThreadStackTrace(Native Method)\nACOSLAUNCH   at java.lang.Thread.getStackTrace(Thread.java:1841)\nACOSLAUNCH   at java.lang.Thread.getAllStackTraces(Thread.java:1909)\nACOSLAUNCH   at dev.acos.art.LaunchMain.dumpThreads(LaunchMain.java:893)\nACOSLAUNCH   at dev.acos.art.LaunchMain.dumpActivityState(LaunchMain.java:888)\nACOSLAUNCH   at dev.acos.art.LaunchMain.watch(LaunchMain.java:798)\nACOSLAUNCH   at dev.acos.art.LaunchMain$3.run(LaunchMain.java:671)\nACOSLAUNCH   at java.lang.Thread.run(Thread.java:1012)\nACOSLAUNCH THREAD FinalizerWatchdogDaemon TIMED_WAITING\nACOSLAUNCH   at java.lang.Thread.sleep(Native Method)\nACOSLAUNCH   at java.lang.Thread.sleep(Thread.java:450)\nACOSLAUNCH   at java.lang.Thread.sleep(Thread.java:355)\nACOSLAUNCH   at java.lang.Daemons$FinalizerWatchdogDaemon.sleepForNanos(Daemons.java:481)\nACOSLAUNCH   at java.lang.Daemons$FinalizerWatchdogDaemon.waitForProgress(Daemons.java:527)\nACOSLAUNCH   at java.lang.Daemons$FinalizerWatchdogDaemon.runInternal(Daemons.java:412)\nACOSLAUNCH   at java.lang.Daemons$Daemon.run(Daemons.java:145)\nACOSLAUNCH   at java.lang.Thread.run(Thread.java:1012)\nACOSLAUNCH THREAD Thread-1 RUNNABLE\nACOSLAUNCH THREAD HybridData DestructorThread WAITING\nACOSLAUNCH   at java.lang.Object.wait(Native Method)\nACOSLAUNCH   at java.lang.Object.wait(Object.java:386)\nACOSLAUNCH   at java.lang.ref.ReferenceQueue.remove(ReferenceQueue.java:210)\nACOSLAUNCH   at java.lang.ref.ReferenceQueue.remove(ReferenceQueue.java:231)\nACOSLAUNCH   at com.facebook.jni.DestructorThread$1.run(DestructorThread.java:77)\n",
+  "stderr": "ACOSART[render]: dlopen(libandroid_runtime.so) ok @0xf66fcd0b4c862037 (default namespace, RTLD_GLOBAL)\nACOSHWC[gralloc]: software gralloc shim loaded (1 fd / 9 ints)\n",
+  "logs": [
+    {
+      "prio": 6,
+      "tag": "cutils-trace",
+      "message": "Error opening trace file: Permission denied (13)"
+    },
+    {
+      "prio": 4,
+      "tag": "",
+      "message": "Using CollectorTypeCC GC."
+    },
+    {
+      "prio": 3,
+      "tag": "nativeloader",
+      "message": "InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so"
+    },
+    {
+      "prio": 3,
+      "tag": "",
+      "message": "I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat"
+    },
+    {
+      "prio": 5,
+      "tag": "ziparchive",
+      "message": "Unable to open '/data/app/launch-guest/classes.dm': No such file or directory"
+    },
+    {
+      "prio": 5,
+      "tag": "ziparchive",
+      "message": "Unable to open '/data/app/launch-guest/classes.dm': No such file or directory"
+    },
+    {
+      "prio": 4,
+      "tag": "nativeloader",
+      "message": "InitApexLibraries skipped: No such file or directory"
+    },
+    {
+      "prio": 3,
+      "tag": "nativeloader",
+      "message": "InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so"
+    },
+    {
+      "prio": 3,
+      "tag": "nativeloader",
+      "message": "Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand"
+    },
+    {
+      "prio": 3,
+      "tag": "nativeloader",
+      "message": "InitExtendedPublicLibraries: "
+    },
+    {
+      "prio": 4,
+      "tag": "nativeloader",
+      "message": "InitVendorPublicLibraries skipped: No such file or directory"
+    },
+    {
+      "prio": 3,
+      "tag": "nativeloader",
+      "message": "InitProductPublicLibraries: "
+    },
+    {
+      "prio": 6,
+      "tag": "ProcessState",
+      "message": "Binder driver /dev/binder is unavailable. Using /dev/binder instead."
+    },
+    {
+      "prio": 3,
+      "tag": "CompatibilityChangeReporter",
+      "message": "Compat change id reported: 171979766; UID 1000; state: ENABLED"
+    },
+    {
+      "prio": 3,
+      "tag": "CompatibilityChangeReporter",
+      "message": "Compat change id reported: 242716250; UID 1000; state: ENABLED"
+    },
+    {
+      "prio": 4,
+      "tag": "Typeface",
+      "message": "Preloading /system/fonts/Roboto-Regular.ttf"
+    },
+    {
+      "prio": 4,
+      "tag": "Typeface",
+      "message": "Preloading /system/fonts/RobotoStatic-Regular.ttf"
+    },
+    {
+      "prio": 3,
+      "tag": "CompatibilityChangeReporter",
+      "message": "Compat change id reported: 247079863; UID 1000; state: ENABLED"
+    },
+    {
+      "prio": 5,
+      "tag": "ziparchive",
+      "message": "Unable to open '/data/app/gaten-x86_64-debug-launcherpatch-aligned.dm': No such file or directory"
+    },
+    {
+      "prio": 5,
+      "tag": "ziparchive",
+      "message": "Unable to open '/data/app/gaten-x86_64-debug-launcherpatch-aligned.dm': No such file or directory"
+    },
+    {
+      "prio": 3,
+      "tag": "nativeloader",
+      "message": "Configuring clns-2 for other apk /data/app/gaten-x86_64-debug-launcherpatch-aligned.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/com.gaten"
+    },
+    {
+      "prio": 2,
+      "tag": "GraphicsEnvironment",
+      "message": "Currently set values for:"
+    },
+    {
+      "prio": 2,
+      "tag": "GraphicsEnvironment",
+      "message": "  angle_gl_driver_selection_pkgs=[]"
+    },
+    {
+      "prio": 2,
+      "tag": "GraphicsEnvironment",
+      "message": "  angle_gl_driver_selection_values=[]"
+    },
+    {
+      "prio": 2,
+      "tag": "GraphicsEnvironment",
+      "message": "ANGLE GameManagerService for com.gaten: false"
+    },
+    {
+      "prio": 2,
+      "tag": "GraphicsEnvironment",
+      "message": "com.gaten is not listed in per-application setting"
+    },
+    {
+      "prio": 2,
+      "tag": "GraphicsEnvironment",
+      "message": "Neither updatable production driver nor prerelease driver is supported."
+    },
+    {
+      "prio": 6,
+      "tag": "SystemServiceRegistry",
+      "message": "No service published for: netstats\nandroid.os.ServiceManager$ServiceNotFoundException: No service published for: netstats\n\tat android.os.ServiceManager.getServiceOrThrow(ServiceManager.java:166)\n\tat android.app.SystemServiceRegistry$139.createService(SystemServiceRegistry.java:1872)\n\tat android.app.SystemServiceRegistry$CachedServiceFetcher.getService(SystemServiceRegistry.java:1971)\n\tat android.app.SystemServiceRegistry.getSystemService(SystemServiceRegistry.java:1645)\n\tat android.app.ContextImpl.getSystemService(ContextImpl.java:2212)\n\tat android.content.Context.getSystemService(Context.java:4420)\n\tat android.net.TrafficStats.init(TrafficStats.java:216)\n\tat android.app.ActivityThread.handleBindApplication(ActivityThread.java:6921)\n\tat android.app.ActivityThread.-$$Nest$mhandleBindApplication(Unknown Source:0)\n\tat android.app.ActivityThread$H.handleMessage(ActivityThread.java:2236)\n\tat android.os.Handler.dispatchMessage(Handler.java:106)\n\tat android.os.Looper.loopOnce(Looper.java:205)\n\tat android.os.Looper.loop(Looper.java:294)\n\tat dev.acos.art.LaunchMain.run(LaunchMain.java:192)\n\tat dev.acos.art.LaunchMain.main(LaunchMain.java:96)\n"
+    },
+    {
+      "prio": 6,
+      "tag": "AndroidRuntime",
+      "message": "Error reporting WTF\njava.lang.IllegalArgumentException: bad request for android.app.IActivityManager::handleApplicationWtf: arg 3 (TypedObject(android.app.ApplicationErrorReport$ParcelableCrashInfo, nullable=true)): no parcelable codec for android.app.ApplicationErrorReport$ParcelableCrashInfo\n\tat android.os.Parcel.createExceptionOrNull(Parcel.java:3061)\n\tat android.os.Parcel.createException(Parcel.java:3041)\n\tat android.os.Parcel.readException(Parcel.java:3024)\n\tat android.os.Parcel.readException(Parcel.java:2966)\n\tat android.app.IActivityManager$Stub$Proxy.handleApplicationWtf(IActivityManager.java:7248)\n\tat com.android.internal.os.RuntimeInit.wtf(RuntimeInit.java:407)\n\tat android.util.Log$1.onTerribleFailure(Log.java:129)\n\tat android.util.Log.wtf(Log.java:337)\n\tat android.util.Log.wtf(Log.java:326)\n\tat android.app.SystemServiceRegistry.onServiceNotFound(SystemServiceRegistry.java:2046)\n\tat android.app.SystemServiceRegistry$CachedServiceFetcher.getService(SystemServiceRegistry.java:1975)\n\tat android.app.SystemServiceRegistry.getSystemService(SystemServiceRegistry.java:1645)\n\tat android.app.ContextImpl.getSystemService(ContextImpl.java:2212)\n\tat android.content.Context.getSystemService(Context.java:4420)\n\tat android.net.TrafficStats.init(TrafficStats.java:216)\n\tat android.app.ActivityThread.handleBindApplication(ActivityThread.java:6921)\n\tat android.app.ActivityThread.-$$Nest$mhandleBindApplication(Unknown Source:0)\n\tat android.app.ActivityThread$H.handleMessage(ActivityThread.java:2236)\n\tat android.os.Handler.dispatchMessage(Handler.java:106)\n\tat android.os.Looper.loopOnce(Looper.java:205)\n\tat android.os.Looper.loop(Looper.java:294)\n\tat dev.acos.art.LaunchMain.run(LaunchMain.java:192)\n\tat dev.acos.art.LaunchMain.main(LaunchMain.java:96)\n"
+    },
+    {
+      "prio": 6,
+      "tag": "AndroidRuntime",
+      "message": "Original WTF:\nandroid.util.Log$TerribleFailure: No service published for: netstats\n\tat android.util.Log.wtf(Log.java:332)\n\tat android.util.Log.wtf(Log.java:326)\n\tat android.app.SystemServiceRegistry.onServiceNotFound(SystemServiceRegistry.java:2046)\n\tat android.app.SystemServiceRegistry$CachedServiceFetcher.getService(SystemServiceRegistry.java:1975)\n\tat android.app.SystemServiceRegistry.getSystemService(SystemServiceRegistry.java:1645)\n\tat android.app.ContextImpl.getSystemService(ContextImpl.java:2212)\n\tat android.content.Context.getSystemService(Context.java:4420)\n\tat android.net.TrafficStats.init(TrafficStats.java:216)\n\tat android.app.ActivityThread.handleBindApplication(ActivityThread.java:6921)\n\tat android.app.ActivityThread.-$$Nest$mhandleBindApplication(Unknown Source:0)\n\tat android.app.ActivityThread$H.handleMessage(ActivityThread.java:2236)\n\tat android.os.Handler.dispatchMessage(Handler.java:106)\n\tat android.os.Looper.loopOnce(Looper.java:205)\n\tat android.os.Looper.loop(Looper.java:294)\n\tat dev.acos.art.LaunchMain.run(LaunchMain.java:192)\n\tat dev.acos.art.LaunchMain.main(LaunchMain.java:96)\nCaused by: android.os.ServiceManager$ServiceNotFoundException: No service published for: netstats\n\tat android.os.ServiceManager.getServiceOrThrow(ServiceManager.java:166)\n\tat android.app.SystemServiceRegistry$139.createService(SystemServiceRegistry.java:1872)\n\tat android.app.SystemServiceRegistry$CachedServiceFetcher.getService(SystemServiceRegistry.java:1971)\n\t... 12 more\n"
+    },
+    {
+      "prio": 6,
+      "tag": "TrafficStats",
+      "message": "TrafficStats not initialized, uid=1000"
+    },
+    {
+      "prio": 4,
+      "tag": "",
+      "message": "WaitForGcToComplete blocked ClassLinker on Background for 5.780ms"
+    },
+    {
+      "prio": 5,
+      "tag": "SoLoader",
+      "message": "Initializing SoLoader: 0"
+    },
+    {
+      "prio": 5,
+      "tag": "SoLoader",
+      "message": "Recording new base apk path: /data/app/gaten-x86_64-debug-launcherpatch-aligned.apk\nPreviously recorded 0 base apk paths."
+    },
+    {
+      "prio": 4,
+      "tag": "SoLoader",
+      "message": "Preparing SO source: DirectorySoSource[root = /vendor/lib64 flags = 2]"
+    },
+    {
+      "prio": 4,
+      "tag": "SoLoader",
+      "message": "Preparing SO source: DirectorySoSource[root = /system/lib64 flags = 2]"
+    },
+    {
+      "prio": 4,
+      "tag": "SoLoader",
+      "message": "Preparing SO source: DirectApkSoSource[root = [/data/app/gaten-x86_64-debug-launcherpatch-aligned.apk!/lib/x86_64]]"
+    },
+    {
+      "prio": 4,
+      "tag": "SoLoader",
+      "message": "Preparing SO source: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]"
+    },
+    {
+      "prio": 4,
+      "tag": "SoLoader",
+      "message": "init finish: 4 SO sources prepared"
+    },
+    {
+      "prio": 5,
+      "tag": "SoLoader",
+      "message": "SoLoader initialized: 8"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Entering merged library JNI_OnLoad.\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing 13 pre-merged libs (including stub)\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libfabricjni_so.  onload_func: 5204a530\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreact_devsupportjni_so.  onload_func: 52296110\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreact_featureflagsjni_so.  onload_func: 522a89a0\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreact_newarchdefaults_so.  onload_func: 52351560\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreact_tracingjni_so.  onload_func: 52653bb0\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreactnativeblob_so.  onload_func: 52666b00\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreactnativejni_so.  onload_func: 52689d70\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libreactnativejni_common_so.  onload_func: 5268f860\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register librninstance_so.  onload_func: 5270c590\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libturbomodulejsijni_so.  onload_func: 5286f3b0\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libuimanagerjni_so.  onload_func: 52885780\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libyoga_so.  onload_func: 52894780\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "About to register 12 actual methods.\n"
+    },
+    {
+      "prio": 3,
+      "tag": "AppCompatDelegate",
+      "message": "Checking for metadata for AppLocalesMetadataHolderService : Service not found"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Entering merged library JNI_OnLoad.\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing 4 pre-merged libs (including stub)\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libhermes_executor_so.  onload_func: 38ef56e0\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libhermesinstancejni_so.  onload_func: 38f21b60\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "Preparing to register libjsijniprofiler_so.  onload_func: 38f23900\n"
+    },
+    {
+      "prio": 3,
+      "tag": "jni_lib_merge",
+      "message": "About to register 3 actual methods.\n"
+    },
+    {
+      "prio": 4,
+      "tag": "ServiceManagerCppClient",
+      "message": "Waiting for service 'sensorservice' on '/dev/binder'..."
+    },
+    {
+      "prio": 5,
+      "tag": "ServiceManagerCppClient",
+      "message": "Service sensorservice didn't start. Returning NULL"
+    },
+    {
+      "prio": 4,
+      "tag": "ServiceManagerCppClient",
+      "message": "Waiting for service 'sensorservice' on '/dev/binder'..."
+    },
+    {
+      "prio": 5,
+      "tag": "ServiceManagerCppClient",
+      "message": "Service sensorservice didn't start. Returning NULL"
+    },
+    {
+      "prio": 4,
+      "tag": "",
+      "message": "System.exit called, status: 0"
+    }
+  ],
+  "notes": [
+    "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=93MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3194597-i7403820.scope)",
+    "seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0",
+    "logd: 67 entries"
+  ],
+  "marker": "package=com.gaten\napplication=com.gaten.app.MainApplication\napplication_classloader_is_apk=true\napplication_base=com.gaten//data/app/gaten-x86_64-debug-launcherpatch-aligned.apk\ninstrumentation=android.app.Instrumentation\ninstrumentation_source=framework (bind request instrumentationName=null)\nsourceDir=/data/app/gaten-x86_64-debug-launcherpatch-aligned.apk\n"
+}
