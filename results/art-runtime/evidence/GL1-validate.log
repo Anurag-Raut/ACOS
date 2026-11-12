@@ -1,0 +1,24 @@
+===== tests (gl1_kept_session)
+running 4 tests
+test a_guest_that_never_ends_is_killed_after_the_bounded_grace ... thread-heavy with a 0 ms grace: destroy 12 ms (reported teardown_ms 6, path "killed")
+ok
+test a_kept_session_survives_the_launching_client ... ok
+test a_sigkilled_daemon_takes_its_guests_with_it ... live guests before SIGKILL: [2449090]
+guests gone 0 ms after the daemon SIGKILL
+ok
+test explicit_destruction_is_bounded_and_leaves_nothing_behind ... counter.apk: destroy 16 ms (reported teardown_ms 11, path "lifecycle")
+thread-heavy.apk: destroy 17 ms (reported teardown_ms 12, path "lifecycle")
+ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.63s
+tests_rc=0
+===== gates (acos verify --engine art)
+scenario               rc     steps
+v2-art-counter         0      verdict=pass pass=11 fail=0 steps=11
+w22-counter-reset      0      verdict=pass pass=9 fail=0 steps=9
+w54-dialog-pixels      0      verdict=pass pass=14 fail=0 steps=14
+w42-back-frame         0      verdict=pass pass=17 fail=0 steps=17
+w15-dialog-menu        0      verdict=pass pass=3 fail=0 steps=3
+T03-render-good        0      verdict=pass pass=5 fail=0 steps=5
+T03-render-wrong       1      verdict=fail pass=2 fail=1 steps=3
+===== leftover check
+done

@@ -191,7 +191,7 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # AlertDialog) and settle-lab (P11: animations, delayed/chained updates,
 # dialogs, Activity transition, ListView scroll, infinite progress,
 # LayoutTransition, rapid taps).
-for app in counter todo-list multi-activity form-validation settle-lab; do
+for app in counter todo-list multi-activity form-validation settle-lab thread-heavy; do
     build_apk "$app"
 done
 

@@ -553,15 +553,29 @@ impl ServeEngine {
                 .remove(id);
             let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
             let report = session.teardown();
+            // GL1: name the destruction path and prove the *session*, not just
+            // the spawned process group, is gone. `lifecycle` = the guest ended
+            // by itself after the close (onPause/onStop/onDestroy delivered and
+            // returned); `killed` = the bounded grace expired and the tree was
+            // killed, which is what Android's AMS does to a process whose
+            // threads never exit. Neither path waits for app threads.
+            let (path, teardown_ms) = session
+                .last_teardown()
+                .map(|(path, ms)| (path.as_str(), ms))
+                .unwrap_or(("unknown", 0));
+            let leftovers = session.session_leftovers();
             let (ok, detail) = match report {
                 Ok(report) => {
-                    let clean = report.is_clean();
+                    let clean = report.is_clean() && leftovers.is_empty();
                     (
                         clean,
                         json!({
                             "process_group": report.process_group,
                             "survivors": report.survivors,
                             "verified": report.verified,
+                            "lifecycle": path,
+                            "teardown_ms": teardown_ms,
+                            "session_leftovers": leftovers,
                         }),
                     )
                 }

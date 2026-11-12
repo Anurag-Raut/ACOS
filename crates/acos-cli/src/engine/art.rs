@@ -179,6 +179,36 @@ pub struct ArtSession {
     /// P9: whether that reset's tree request also captures a PNG.
     reset_pixels: bool,
     closed: bool,
+    /// GL1: how the last explicit destruction of this session ended
+    /// (orderly activity lifecycle vs. killed after the bounded grace) and how
+    /// long it took. Reported by `acos_destroy`; never guessed.
+    last_teardown: Option<(TeardownPath, u64)>,
+}
+
+/// How an explicit session destruction ended (GL1).
+///
+/// Android separates the two: it delivers `onPause`/`onStop`/`onDestroy` and
+/// then `Process.killProcess` — it never *joins* the app's threads (a React
+/// Native process has many that never exit). ACOS names the same split, so a
+/// `GUEST_EXITED` after a stop can be told apart from a stop that had to kill.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TeardownPath {
+    /// The guest ended by itself after the `close` command, inside the grace
+    /// window: it received its activity lifecycle and exited.
+    Lifecycle,
+    /// The grace expired and the session's process tree was killed. The
+    /// lifecycle may have been delivered but not completed; nothing waits for
+    /// app threads.
+    Killed,
+}
+
+impl TeardownPath {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            TeardownPath::Lifecycle => "lifecycle",
+            TeardownPath::Killed => "killed",
+        }
+    }
 }
 
 /// Host-observed phases of one input command (W55 latency decomposition).
@@ -797,6 +827,68 @@ fn state_changed(baseline: Option<&(String, u64)>, current: Option<&CachedFrame>
     }
 }
 
+/// The one thread that is allowed to be the *parent thread* of a guest.
+///
+/// GL1: `PR_SET_PDEATHSIG` (set in [`ArtSession::start`]'s `pre_exec`) is
+/// delivered when the parent **thread** exits, not when the parent process
+/// exits — `PR_SET_PDEATHSIG` is per-thread state inherited across `fork`, and
+/// the kernel signals the child from `exit_notify()` of the exiting task. The
+/// daemon created ART sessions on the *per-connection* thread (`serve.rs`), so a
+/// kept guest (`acos launch --keep`) was SIGKILLed the instant the launching
+/// client disconnected: `acos session status/tap/observe` from another process
+/// then answered `GUEST_EXITED` (signal 9). Spawning through this thread makes
+/// the parent thread live exactly as long as the process, so the death signal
+/// still means "the `acos` process really died" and nothing weaker.
+///
+/// The thread is created once per process and never exits; a guest whose parent
+/// thread is gone would be killed by the kernel (that is the guarantee we are
+/// keeping), so "never exits" is not an optimisation, it is the contract.
+mod spawner {
+    use std::process::{Child, Command};
+    use std::sync::mpsc::channel;
+    use std::sync::OnceLock;
+
+    type Job = Box<dyn FnOnce() + Send + 'static>;
+
+    fn job_sender() -> &'static std::sync::mpsc::Sender<Job> {
+        static SENDER: OnceLock<std::sync::mpsc::Sender<Job>> = OnceLock::new();
+        SENDER.get_or_init(|| {
+            let (sender, receiver) = channel::<Job>();
+            std::thread::Builder::new()
+                .name("acos-guest-spawner".to_string())
+                .spawn(move || {
+                    // `SENDER` is a process-lifetime static, so this receiver
+                    // never sees a disconnect: the thread outlives every call.
+                    while let Ok(job) = receiver.recv() {
+                        job();
+                    }
+                })
+                .expect("spawn the acos-guest-spawner thread");
+            sender
+        })
+    }
+
+    /// `Command::spawn` executed on the long-lived spawner thread.
+    ///
+    /// The child's parent *thread* is therefore the spawner, not whichever
+    /// thread (per-connection, CLI, verify) asked for it. Everything else about
+    /// the spawn — the process group, the `pre_exec` hooks and their
+    /// `PR_SET_PDEATHSIG` — is unchanged.
+    pub fn spawn(command: Command) -> std::io::Result<Child> {
+        let (reply_tx, reply_rx) = channel::<std::io::Result<Child>>();
+        let job: Job = Box::new(move || {
+            let mut command = command;
+            let _ = reply_tx.send(command.spawn());
+        });
+        job_sender()
+            .send(job)
+            .map_err(|_| std::io::Error::other("the acos-guest-spawner thread is gone"))?;
+        reply_rx
+            .recv()
+            .map_err(|_| std::io::Error::other("the acos-guest-spawner thread did not answer"))?
+    }
+}
+
 /// Host milliseconds since the Unix epoch.
 fn now_unix_ms() -> u64 {
     std::time::SystemTime::now()
@@ -918,6 +1010,12 @@ impl ArtSession {
         // carries the same signal (app.rs), so the whole tree goes. This is a
         // backstop, not the teardown path: `close`/`teardown` still reap the
         // process group and prove it empty.
+        //
+        // GL1: the signal is per parent **thread**, so the spawn itself is
+        // handed to the process-lifetime `spawner` thread below. Spawning on
+        // the caller's thread made the daemon's per-connection thread the
+        // parent, and a kept session died the moment its launching client
+        // disconnected.
         unsafe {
             command.pre_exec(|| {
                 libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0);
@@ -925,7 +1023,9 @@ impl ArtSession {
             });
         }
         let spawned_at = Instant::now();
-        let mut child = command.spawn().map_err(|error| BackendError::Unsupported {
+        // GL1: spawned from the long-lived spawner thread, so `PDEATHSIG` above
+        // fires when this *process* dies, not when the calling thread ends.
+        let mut child = spawner::spawn(command).map_err(|error| BackendError::Unsupported {
             capability: "engine.art".into(),
             detail: format!(
                 "cannot spawn {} ({}): {error}. Install/build acos-art or set ACOS_ART_BIN",
@@ -1028,6 +1128,7 @@ impl ArtSession {
             reset_settle: "strict",
             reset_pixels: true,
             closed: false,
+            last_teardown: None,
         };
         // The ready line is the protocol's first reply. If the session dies
         // before it, there is no live frame at all: say so by name and keep the
@@ -2015,8 +2116,23 @@ impl ArtSession {
             let _ = stdin.flush();
         }
         self.stdin = None;
-        let deadline = Instant::now() + Duration::from_secs(10);
+        // GL1: explicit destruction is **bounded**. The guest's own `close`
+        // handler delivers the activity lifecycle (onPause/onStop/onDestroy)
+        // and then ends its process, which normally takes ~10 ms (measured:
+        // counter p50 18 ms, `thread-heavy` p50 18 ms end to end). An app whose
+        // threads never exit must not be waited for: Android's AMS does not
+        // join them either, it SIGKILLs the process after the lifecycle. So the
+        // grace below bounds the *lifecycle*, never the app's threads: a guest
+        // still alive afterwards is killed with its whole process tree, and the
+        // reply says which path was taken (`lifecycle` vs `killed`).
+        let grace = Duration::from_millis(teardown_grace_ms());
+        let deadline = Instant::now() + grace;
         let exited = self.wait_for_exit(deadline);
+        let path = if exited {
+            TeardownPath::Lifecycle
+        } else {
+            TeardownPath::Killed
+        };
         let exit_ms = started.elapsed().as_millis() as u64;
         // Teardown guarantee: the whole process group is gone, not just the
         // direct child. A child the guest forked is killed here too; a survivor
@@ -2082,13 +2198,33 @@ impl ArtSession {
         dm6_trace(serde_json::json!({
             "event": "stop",
             "process_group": self.process_group,
+            "path": path.as_str(),
             "exit_ms": exit_ms,
             "stop_ms": started.elapsed().as_millis() as u64,
             "reaped_before_deadline": exited,
             "unix_ms": now_unix_ms(),
         }));
+        self.last_teardown = Some((path, started.elapsed().as_millis() as u64));
         self.write_timing(started.elapsed().as_millis() as u64);
         Ok(())
+    }
+
+    /// GL1: how the last explicit destruction ended and how long it took.
+    ///
+    /// `acos_destroy` reports it so a caller can tell an orderly lifecycle
+    /// (`lifecycle`) from a bounded kill (`killed`) without inspecting logs.
+    pub fn last_teardown(&self) -> Option<(TeardownPath, u64)> {
+        self.last_teardown
+    }
+
+    /// GL1: processes that still name this session's artifacts directory on
+    /// their command line (the `acos-art` launcher and anything it left).
+    ///
+    /// The process-group proof above only covers the group the engine spawned;
+    /// this is the *session*-wide check the destroy reply reports, so a leftover
+    /// launcher from the same session cannot be missed.
+    pub fn session_leftovers(&self) -> Vec<u32> {
+        processes_mentioning(&self.artifacts)
     }
 
     /// Whether no process is left in the session's process group, asked of the
@@ -2842,6 +2978,69 @@ pub(crate) fn processes_in_group(group: i32) -> Vec<u32> {
     pids
 }
 
+/// GL1: how long a guest gets to finish its activity lifecycle after the
+/// explicit `close`, in milliseconds.
+///
+/// Android's own bound is `ActivityManagerService`'s stop timeout, which is
+/// seconds — far more than a device needs. Measured on this host, a guest's own
+/// `close` (lifecycle + process exit) returns in ~10 ms for both the `counter`
+/// fixture and the thread-heavy one, so 300 ms is ~30x the observed cost and
+/// still keeps `acos_destroy` under the 500 ms "feels instant" bound. Anything
+/// slower is an app that is not going to finish on its own (`PR_SET_PDEATHSIG`
+/// find, `Thread.join` of non-daemon threads), and waiting longer cannot help.
+const DEFAULT_TEARDOWN_GRACE_MS: u64 = 300;
+
+fn teardown_grace_ms() -> u64 {
+    std::env::var("ACOS_ART_TEARDOWN_GRACE_MS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(DEFAULT_TEARDOWN_GRACE_MS)
+}
+
+/// Live (non-zombie) processes whose command line names `dir`.
+///
+/// The process-group proof is scoped to the group the engine spawned; this is
+/// the wider check the destroy reply reports (a launcher left behind by the
+/// same session is named on its own command line: `--out <dir>/art-frames`).
+fn processes_mentioning(dir: &Path) -> Vec<u32> {
+    let needle = dir.display().to_string();
+    let mut pids = Vec::new();
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return pids;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(pid) = name.to_str().and_then(|name| name.parse::<u32>().ok()) else {
+            continue;
+        };
+        let Ok(raw) = std::fs::read(entry.path().join("cmdline")) else {
+            continue;
+        };
+        if raw.is_empty() {
+            continue;
+        }
+        let cmdline = String::from_utf8_lossy(&raw).replace('\0', " ");
+        if !cmdline.contains("acos-art") || !cmdline.contains(&needle) {
+            continue;
+        }
+        // A zombie is not running code; init/the subreaper still reaps it.
+        let state = std::fs::read_to_string(entry.path().join("status"))
+            .ok()
+            .and_then(|status| {
+                status
+                    .lines()
+                    .find(|line| line.starts_with("State:"))
+                    .and_then(|line| line.split_whitespace().nth(1).map(str::to_string))
+            });
+        if state.as_deref() == Some("Z") {
+            continue;
+        }
+        pids.push(pid);
+    }
+    pids.sort_unstable();
+    pids
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3311,6 +3510,52 @@ mod tests {
     fn keycodes_cover_the_art_protocol() {
         assert_eq!(key_code("back"), 4);
         assert_eq!(key_code("enter"), 66);
+    }
+
+    /// GL1: a guest must not die when the *thread that asked for it* exits.
+    ///
+    /// `PR_SET_PDEATHSIG` is delivered on the death of the parent **thread**.
+    /// The daemon creates sessions on the per-connection thread, so spawning
+    /// there made a kept guest SIGKILL itself as soon as the launching client
+    /// disconnected. This reproduces the daemon's shape without any guest: a
+    /// throwaway thread asks for a child with the same `pre_exec`, then exits;
+    /// the child must still be running afterwards (and it must be gone when the
+    /// process dies, which is what the real daemon-SIGKILL test asserts).
+    #[test]
+    fn a_child_spawned_through_the_spawner_survives_the_asking_thread() {
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut command = Command::new("/bin/sleep");
+            command
+                .arg("30")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .process_group(0);
+            unsafe {
+                command.pre_exec(|| {
+                    libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0);
+                    Ok(())
+                });
+            }
+            let _ = tx.send(spawner::spawn(command).map(|child| child.id()));
+        });
+        let pid = rx
+            .recv()
+            .expect("the asking thread answers")
+            .expect("the spawner starts the child") as i32;
+        // The asking thread is long gone now; the child must still be alive.
+        std::thread::sleep(Duration::from_millis(400));
+        // SAFETY: signal 0 only performs the existence/permission check.
+        let alive = unsafe { libc::kill(pid, 0) == 0 };
+        // SAFETY: the child leads its own group (`process_group(0)`).
+        unsafe {
+            libc::kill(-pid, libc::SIGKILL);
+        }
+        assert!(
+            alive,
+            "the child was killed with the thread that asked for it (GL1 regression)"
+        );
     }
 
     /// The teardown guarantee is a real scan of the whole process group: a
