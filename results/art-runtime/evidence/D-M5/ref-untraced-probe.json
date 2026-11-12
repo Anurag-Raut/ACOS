@@ -1,0 +1,2938 @@
+{
+  "schema": "acos-dm5-probe/1",
+  "binary": ".cache/dm5-wt-target/release/acos",
+  "samples": 24,
+  "warmup": 2,
+  "trace": false,
+  "argv": [
+    ".cache/dm5-wt-target/release/acos",
+    "serve",
+    "--socket",
+    ".cache/dm5/runref/serve.sock",
+    "--engine",
+    "art",
+    "--idle-timeout",
+    "900",
+    "--max-sessions",
+    "8"
+  ],
+  "serve_pid": 1038734,
+  "samples_raw": [
+    {
+      "t0": 1794468093249861,
+      "t1": 1794468093249871,
+      "t2": 1794468093353795,
+      "t3": 1794468093353801,
+      "request_bytes": 178,
+      "reply_bytes": 1038,
+      "wall_ms": 103.94,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:33.352Z",
+            "frame_seq": 2,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 1,
+            "width": 1080
+          },
+          "last_frame_seq": 2,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 2,
+            "path": ".cache/dm5/runref/screens/m5-000.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 1,
+              "guest_command_ms": 100
+            },
+            "total_ms": 103
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": true,
+      "path": ".cache/dm5/runref/screens/m5-000.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468093353938,
+      "t1": 1794468093353944,
+      "t2": 1794468093456153,
+      "t3": 1794468093456158,
+      "request_bytes": 178,
+      "reply_bytes": 1037,
+      "wall_ms": 102.22,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:33.455Z",
+            "frame_seq": 3,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 2,
+            "width": 1080
+          },
+          "last_frame_seq": 3,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 3,
+            "path": ".cache/dm5/runref/screens/m5-001.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 1,
+              "guest_command_ms": 99
+            },
+            "total_ms": 102
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": true,
+      "path": ".cache/dm5/runref/screens/m5-001.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468093456281,
+      "t1": 1794468093456287,
+      "t2": 1794468093538717,
+      "t3": 1794468093538723,
+      "request_bytes": 178,
+      "reply_bytes": 1036,
+      "wall_ms": 82.442,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:33.537Z",
+            "frame_seq": 4,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 3,
+            "width": 1080
+          },
+          "last_frame_seq": 4,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 4,
+            "path": ".cache/dm5/runref/screens/m5-002.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 81
+            },
+            "total_ms": 82
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-002.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468093538828,
+      "t1": 1794468093538833,
+      "t2": 1794468093617804,
+      "t3": 1794468093617808,
+      "request_bytes": 178,
+      "reply_bytes": 1036,
+      "wall_ms": 78.98,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:33.616Z",
+            "frame_seq": 5,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 4,
+            "width": 1080
+          },
+          "last_frame_seq": 5,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 5,
+            "path": ".cache/dm5/runref/screens/m5-003.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 77
+            },
+            "total_ms": 78
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-003.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468093617915,
+      "t1": 1794468093617919,
+      "t2": 1794468093698226,
+      "t3": 1794468093698232,
+      "request_bytes": 178,
+      "reply_bytes": 1036,
+      "wall_ms": 80.317,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:33.697Z",
+            "frame_seq": 6,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 5,
+            "width": 1080
+          },
+          "last_frame_seq": 6,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 6,
+            "path": ".cache/dm5/runref/screens/m5-004.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 78
+            },
+            "total_ms": 80
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-004.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468093698347,
+      "t1": 1794468093698352,
+      "t2": 1794468093779238,
+      "t3": 1794468093779245,
+      "request_bytes": 178,
+      "reply_bytes": 1036,
+      "wall_ms": 80.898,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:33.778Z",
+            "frame_seq": 7,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 6,
+            "width": 1080
+          },
+          "last_frame_seq": 7,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 7,
+            "path": ".cache/dm5/runref/screens/m5-005.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 79
+            },
+            "total_ms": 80
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-005.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468093779358,
+      "t1": 1794468093779363,
+      "t2": 1794468093858361,
+      "t3": 1794468093858367,
+      "request_bytes": 178,
+      "reply_bytes": 1036,
+      "wall_ms": 79.009,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:33.857Z",
+            "frame_seq": 8,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 7,
+            "width": 1080
+          },
+          "last_frame_seq": 8,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 8,
+            "path": ".cache/dm5/runref/screens/m5-006.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 77
+            },
+            "total_ms": 78
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-006.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468093858474,
+      "t1": 1794468093858479,
+      "t2": 1794468093939757,
+      "t3": 1794468093939762,
+      "request_bytes": 179,
+      "reply_bytes": 1037,
+      "wall_ms": 81.288,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:33.938Z",
+            "frame_seq": 9,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 8,
+            "width": 1080
+          },
+          "last_frame_seq": 9,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 9,
+            "path": ".cache/dm5/runref/screens/m5-007.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 80
+            },
+            "total_ms": 81
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-007.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468093939873,
+      "t1": 1794468093939878,
+      "t2": 1794468094020195,
+      "t3": 1794468094020201,
+      "request_bytes": 179,
+      "reply_bytes": 1040,
+      "wall_ms": 80.328,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:34.019Z",
+            "frame_seq": 10,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 9,
+            "width": 1080
+          },
+          "last_frame_seq": 10,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 10,
+            "path": ".cache/dm5/runref/screens/m5-008.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 79
+            },
+            "total_ms": 80
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-008.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468094020347,
+      "t1": 1794468094020355,
+      "t2": 1794468094099648,
+      "t3": 1794468094099653,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 79.306,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:34.098Z",
+            "frame_seq": 11,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 10,
+            "width": 1080
+          },
+          "last_frame_seq": 11,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 11,
+            "path": ".cache/dm5/runref/screens/m5-009.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 77
+            },
+            "total_ms": 79
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-009.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468094099779,
+      "t1": 1794468094099785,
+      "t2": 1794468094179709,
+      "t3": 1794468094179713,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 79.934,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:34.178Z",
+            "frame_seq": 12,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 11,
+            "width": 1080
+          },
+          "last_frame_seq": 12,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 12,
+            "path": ".cache/dm5/runref/screens/m5-010.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 78
+            },
+            "total_ms": 79
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-010.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468094179822,
+      "t1": 1794468094179827,
+      "t2": 1794468094260818,
+      "t3": 1794468094260824,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 81.002,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:34.260Z",
+            "frame_seq": 13,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 12,
+            "width": 1080
+          },
+          "last_frame_seq": 13,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 13,
+            "path": ".cache/dm5/runref/screens/m5-011.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 79
+            },
+            "total_ms": 80
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-011.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468094260942,
+      "t1": 1794468094260948,
+      "t2": 1794468094340906,
+      "t3": 1794468094340910,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 79.968,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:34.339Z",
+            "frame_seq": 14,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 13,
+            "width": 1080
+          },
+          "last_frame_seq": 14,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 14,
+            "path": ".cache/dm5/runref/screens/m5-012.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 78
+            },
+            "total_ms": 79
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-012.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468094341010,
+      "t1": 1794468094341015,
+      "t2": 1794468094420782,
+      "t3": 1794468094420787,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 79.777,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:34.419Z",
+            "frame_seq": 15,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 14,
+            "width": 1080
+          },
+          "last_frame_seq": 15,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 15,
+            "path": ".cache/dm5/runref/screens/m5-013.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 78
+            },
+            "total_ms": 79
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-013.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468094420896,
+      "t1": 1794468094420901,
+      "t2": 1794468094502356,
+      "t3": 1794468094502362,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 81.466,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:34.501Z",
+            "frame_seq": 16,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 15,
+            "width": 1080
+          },
+          "last_frame_seq": 16,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 16,
+            "path": ".cache/dm5/runref/screens/m5-014.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 80
+            },
+            "total_ms": 81
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-014.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468094502471,
+      "t1": 1794468094502475,
+      "t2": 1794468094582501,
+      "t3": 1794468094582506,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 80.035,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:34.581Z",
+            "frame_seq": 17,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 16,
+            "width": 1080
+          },
+          "last_frame_seq": 17,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 17,
+            "path": ".cache/dm5/runref/screens/m5-015.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 78
+            },
+            "total_ms": 79
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-015.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468094582616,
+      "t1": 1794468094582621,
+      "t2": 1794468094662088,
+      "t3": 1794468094662093,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 79.477,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:34.661Z",
+            "frame_seq": 18,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 17,
+            "width": 1080
+          },
+          "last_frame_seq": 18,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 18,
+            "path": ".cache/dm5/runref/screens/m5-016.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 78
+            },
+            "total_ms": 79
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-016.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468094662196,
+      "t1": 1794468094662200,
+      "t2": 1794468094741718,
+      "t3": 1794468094741722,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 79.526,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:34.740Z",
+            "frame_seq": 19,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 18,
+            "width": 1080
+          },
+          "last_frame_seq": 19,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 19,
+            "path": ".cache/dm5/runref/screens/m5-017.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 78
+            },
+            "total_ms": 79
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-017.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468094741832,
+      "t1": 1794468094741838,
+      "t2": 1794468094821698,
+      "t3": 1794468094821703,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 79.871,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:34.820Z",
+            "frame_seq": 20,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 19,
+            "width": 1080
+          },
+          "last_frame_seq": 20,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 20,
+            "path": ".cache/dm5/runref/screens/m5-018.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 78
+            },
+            "total_ms": 79
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-018.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468094821810,
+      "t1": 1794468094821815,
+      "t2": 1794468094902310,
+      "t3": 1794468094902316,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 80.506,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:34.901Z",
+            "frame_seq": 21,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 20,
+            "width": 1080
+          },
+          "last_frame_seq": 21,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 21,
+            "path": ".cache/dm5/runref/screens/m5-019.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 79
+            },
+            "total_ms": 80
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-019.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468094902426,
+      "t1": 1794468094902432,
+      "t2": 1794468094982565,
+      "t3": 1794468094982570,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 80.144,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:34.981Z",
+            "frame_seq": 22,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 21,
+            "width": 1080
+          },
+          "last_frame_seq": 22,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 22,
+            "path": ".cache/dm5/runref/screens/m5-020.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 78
+            },
+            "total_ms": 80
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-020.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468094982674,
+      "t1": 1794468094982678,
+      "t2": 1794468095063012,
+      "t3": 1794468095063017,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 80.343,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:35.062Z",
+            "frame_seq": 23,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 22,
+            "width": 1080
+          },
+          "last_frame_seq": 23,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 23,
+            "path": ".cache/dm5/runref/screens/m5-021.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 78
+            },
+            "total_ms": 80
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-021.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468095063126,
+      "t1": 1794468095063131,
+      "t2": 1794468095143539,
+      "t3": 1794468095143544,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 80.418,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:35.142Z",
+            "frame_seq": 24,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 23,
+            "width": 1080
+          },
+          "last_frame_seq": 24,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 24,
+            "path": ".cache/dm5/runref/screens/m5-022.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 79
+            },
+            "total_ms": 80
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-022.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468095143651,
+      "t1": 1794468095143656,
+      "t2": 1794468095223172,
+      "t3": 1794468095223176,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 79.525,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:35.222Z",
+            "frame_seq": 25,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 24,
+            "width": 1080
+          },
+          "last_frame_seq": 25,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 25,
+            "path": ".cache/dm5/runref/screens/m5-023.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 78
+            },
+            "total_ms": 79
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-023.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468095223274,
+      "t1": 1794468095223279,
+      "t2": 1794468095302253,
+      "t3": 1794468095302257,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 78.983,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:35.301Z",
+            "frame_seq": 26,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 25,
+            "width": 1080
+          },
+          "last_frame_seq": 26,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 26,
+            "path": ".cache/dm5/runref/screens/m5-024.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 77
+            },
+            "total_ms": 78
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-024.png",
+      "png_on_disk": 9545882
+    },
+    {
+      "t0": 1794468095302354,
+      "t1": 1794468095302359,
+      "t2": 1794468095382599,
+      "t3": 1794468095382604,
+      "request_bytes": 179,
+      "reply_bytes": 1041,
+      "wall_ms": 80.25,
+      "envelope": {
+        "backend": "acos-native",
+        "capabilities_used": [
+          "ui.frame",
+          "ui.screenshot"
+        ],
+        "fidelity": "art-reference",
+        "metrics": {
+          "wall_ms": 0
+        },
+        "ok": true,
+        "request_id": "dm5",
+        "result": {
+          "engine": "art",
+          "engine_frozen": false,
+          "evidence": {
+            "frame": "host-observed",
+            "input_acks": "guest-asserted",
+            "logs": "guest-asserted",
+            "state_change": "host-observed",
+            "tree": "guest-asserted"
+          },
+          "evidence_label": "host-pixel",
+          "frame": {
+            "bytes": 9545882,
+            "captured_at": "2026-11-12T07:21:35.381Z",
+            "frame_seq": 27,
+            "height": 2209,
+            "md5": "39d1e4e3633d98d76b992edb4b250a78",
+            "meaningful": true,
+            "previous_seq": 26,
+            "width": 1080
+          },
+          "last_frame_seq": 27,
+          "package": "dev.acos.fixtures.counter",
+          "screenshot": {
+            "bytes": 9545882,
+            "frame_seq": 27,
+            "path": ".cache/dm5/runref/screens/m5-025.png"
+          },
+          "session_id": "s_dm5",
+          "stage_reached": "first_frame",
+          "timing": {
+            "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+            "read": {
+              "absorb_ms": 0,
+              "guest_command_ms": 78
+            },
+            "total_ms": 80
+          },
+          "trust": "trusted"
+        },
+        "session_id": "s_dm5",
+        "status": "pass"
+      },
+      "warmup": false,
+      "path": ".cache/dm5/runref/screens/m5-025.png",
+      "png_on_disk": 9545882
+    }
+  ],
+  "ok": true,
+  "trace_events": 0,
+  "rows": [
+    {
+      "warmup": true,
+      "wall_ms": 103.94,
+      "ok": true,
+      "frame_seq": 2,
+      "previous_seq": 1,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1038,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 1,
+          "guest_command_ms": 100
+        },
+        "total_ms": 103
+      },
+      "phases_us": {
+        "client_write": 10,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 6,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": true,
+      "wall_ms": 102.22,
+      "ok": true,
+      "frame_seq": 3,
+      "previous_seq": 2,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1037,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 1,
+          "guest_command_ms": 99
+        },
+        "total_ms": 102
+      },
+      "phases_us": {
+        "client_write": 6,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 5,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 82.442,
+      "ok": true,
+      "frame_seq": 4,
+      "previous_seq": 3,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1036,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 81
+        },
+        "total_ms": 82
+      },
+      "phases_us": {
+        "client_write": 6,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 6,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 78.98,
+      "ok": true,
+      "frame_seq": 5,
+      "previous_seq": 4,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1036,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 77
+        },
+        "total_ms": 78
+      },
+      "phases_us": {
+        "client_write": 5,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 4,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 80.317,
+      "ok": true,
+      "frame_seq": 6,
+      "previous_seq": 5,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1036,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 78
+        },
+        "total_ms": 80
+      },
+      "phases_us": {
+        "client_write": 4,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 6,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 80.898,
+      "ok": true,
+      "frame_seq": 7,
+      "previous_seq": 6,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1036,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 79
+        },
+        "total_ms": 80
+      },
+      "phases_us": {
+        "client_write": 5,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 7,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 79.009,
+      "ok": true,
+      "frame_seq": 8,
+      "previous_seq": 7,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1036,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 77
+        },
+        "total_ms": 78
+      },
+      "phases_us": {
+        "client_write": 5,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 6,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 81.288,
+      "ok": true,
+      "frame_seq": 9,
+      "previous_seq": 8,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1037,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 80
+        },
+        "total_ms": 81
+      },
+      "phases_us": {
+        "client_write": 5,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 5,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 80.328,
+      "ok": true,
+      "frame_seq": 10,
+      "previous_seq": 9,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1040,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 79
+        },
+        "total_ms": 80
+      },
+      "phases_us": {
+        "client_write": 5,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 6,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 79.306,
+      "ok": true,
+      "frame_seq": 11,
+      "previous_seq": 10,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 77
+        },
+        "total_ms": 79
+      },
+      "phases_us": {
+        "client_write": 8,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 5,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 79.934,
+      "ok": true,
+      "frame_seq": 12,
+      "previous_seq": 11,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 78
+        },
+        "total_ms": 79
+      },
+      "phases_us": {
+        "client_write": 6,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 4,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 81.002,
+      "ok": true,
+      "frame_seq": 13,
+      "previous_seq": 12,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 79
+        },
+        "total_ms": 80
+      },
+      "phases_us": {
+        "client_write": 5,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 6,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 79.968,
+      "ok": true,
+      "frame_seq": 14,
+      "previous_seq": 13,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 78
+        },
+        "total_ms": 79
+      },
+      "phases_us": {
+        "client_write": 6,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 4,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 79.777,
+      "ok": true,
+      "frame_seq": 15,
+      "previous_seq": 14,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 78
+        },
+        "total_ms": 79
+      },
+      "phases_us": {
+        "client_write": 5,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 5,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 81.466,
+      "ok": true,
+      "frame_seq": 16,
+      "previous_seq": 15,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 80
+        },
+        "total_ms": 81
+      },
+      "phases_us": {
+        "client_write": 5,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 6,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 80.035,
+      "ok": true,
+      "frame_seq": 17,
+      "previous_seq": 16,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 78
+        },
+        "total_ms": 79
+      },
+      "phases_us": {
+        "client_write": 4,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 5,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 79.477,
+      "ok": true,
+      "frame_seq": 18,
+      "previous_seq": 17,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 78
+        },
+        "total_ms": 79
+      },
+      "phases_us": {
+        "client_write": 5,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 5,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 79.526,
+      "ok": true,
+      "frame_seq": 19,
+      "previous_seq": 18,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 78
+        },
+        "total_ms": 79
+      },
+      "phases_us": {
+        "client_write": 4,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 4,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 79.871,
+      "ok": true,
+      "frame_seq": 20,
+      "previous_seq": 19,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 78
+        },
+        "total_ms": 79
+      },
+      "phases_us": {
+        "client_write": 6,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 5,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 80.506,
+      "ok": true,
+      "frame_seq": 21,
+      "previous_seq": 20,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 79
+        },
+        "total_ms": 80
+      },
+      "phases_us": {
+        "client_write": 5,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 6,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 80.144,
+      "ok": true,
+      "frame_seq": 22,
+      "previous_seq": 21,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 78
+        },
+        "total_ms": 80
+      },
+      "phases_us": {
+        "client_write": 6,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 5,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 80.343,
+      "ok": true,
+      "frame_seq": 23,
+      "previous_seq": 22,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 78
+        },
+        "total_ms": 80
+      },
+      "phases_us": {
+        "client_write": 4,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 5,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 80.418,
+      "ok": true,
+      "frame_seq": 24,
+      "previous_seq": 23,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 79
+        },
+        "total_ms": 80
+      },
+      "phases_us": {
+        "client_write": 5,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 5,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 79.525,
+      "ok": true,
+      "frame_seq": 25,
+      "previous_seq": 24,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 78
+        },
+        "total_ms": 79
+      },
+      "phases_us": {
+        "client_write": 5,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 4,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 78.983,
+      "ok": true,
+      "frame_seq": 26,
+      "previous_seq": 25,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 77
+        },
+        "total_ms": 78
+      },
+      "phases_us": {
+        "client_write": 5,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 4,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    },
+    {
+      "warmup": false,
+      "wall_ms": 80.25,
+      "ok": true,
+      "frame_seq": 27,
+      "previous_seq": 26,
+      "fresh": true,
+      "png_bytes": 9545882,
+      "reply_bytes": 1041,
+      "timing": {
+        "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+        "read": {
+          "absorb_ms": 0,
+          "guest_command_ms": 78
+        },
+        "total_ms": 80
+      },
+      "phases_us": {
+        "client_write": 5,
+        "serve_read": null,
+        "serve_dispatch": null,
+        "art_roundtrip": null,
+        "art_composite": null,
+        "c1_total": null,
+        "c1_kernel": null,
+        "c1_memfd_read": null,
+        "c1_blend": null,
+        "c1_fnv_hash": null,
+        "c1_canvas_alloc": null,
+        "art_encode": null,
+        "art_png_write": null,
+        "art_md5": null,
+        "png_read": null,
+        "shot_write": null,
+        "serve_reply": null,
+        "client_read": 5,
+        "encode_filter": null,
+        "encode_stored": null,
+        "encode_adler32": null,
+        "encode_idat_chunk": null,
+        "encode_crc32_idat": null,
+        "art_ipc_remainder": null
+      },
+      "trace_events": []
+    }
+  ]
+}

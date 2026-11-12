@@ -44,7 +44,7 @@ use serde_json::{json, Value};
 
 use crate::trust::Trust;
 
-use super::art::{ArtSession, GuestExit};
+use super::art::{m5_now_us, m5_trace, ArtSession, GuestExit};
 use super::{Engine, SessionBackend};
 
 /// The engine label every ART reply carries.
@@ -1079,10 +1079,18 @@ fn observe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError
                 detail: format!("cannot create {}: {error}", parent.display()),
             })?;
         }
+        let t_write = m5_now_us();
         std::fs::write(&path, &frame.png).map_err(|error| BackendError::Error {
             code: ErrorCode::RenderIo,
             detail: format!("cannot write {}: {error}", path.display()),
         })?;
+        let t_done = m5_now_us();
+        m5_trace(
+            "cli.serve_shot_write",
+            t_write,
+            t_done,
+            &format!("png_bytes={}", frame.png.len()),
+        );
         result["screenshot"] = json!({
             "path": path.display().to_string(),
             "bytes": frame.png.len(),

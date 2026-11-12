@@ -1690,6 +1690,7 @@ fn capture_c1(
     dir: &Path,
     seq: &mut u64,
 ) -> std::io::Result<Option<Capture>> {
+    let t_capture = m5_now_us();
     let frame = {
         let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
         state.capture_latest()
@@ -1697,7 +1698,11 @@ fn capture_c1(
     let Some(frame) = frame else {
         return Ok(None);
     };
+    let t_encode = m5_now_us();
+    m5_trace("art.capture_composite", t_capture, t_encode, "");
     let png = encode_png_rgba(frame.width, frame.height, frame.stride, &frame.rgba);
+    let t_write = m5_now_us();
+    m5_trace("art.png_encode", t_encode, t_write, &format!("png_bytes={}", png.len()));
     fs::create_dir_all(dir)?;
     *seq += 1;
     let path = dir.join(format!(
@@ -1705,7 +1710,12 @@ fn capture_c1(
         frame.layer_id, frame.frame_number, frame.generation, *seq
     ));
     fs::write(&path, &png)?;
+    let t_md5 = m5_now_us();
+    m5_trace("art.png_write", t_write, t_md5, "");
     let md5 = md5_hex_file(&path).unwrap_or_else(|| format!("{:016x}", frame.fnv1a));
+    let t_end = m5_now_us();
+    m5_trace("art.md5_file", t_md5, t_end, "");
+    m5_trace("art.capture_total", t_capture, t_end, "");
     Ok(Some(Capture {
         seq: *seq,
         generation: frame.generation,
@@ -1729,6 +1739,45 @@ fn latest_generation(live: &acos_services::registry::LiveHandles) -> u64 {
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .latest_generation()
+}
+
+/// D-M5: microseconds since the Unix epoch (realtime), so a phase measured in
+/// `acos-art` lines up with the serve-side and client-side clocks.
+fn m5_now_us() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_micros())
+        .unwrap_or(0)
+}
+
+/// D-M5: env-gated per-phase trace for one screenshot capture.
+///
+/// `DM5_TRACE=<path>` appends one line per phase to that file (append-only,
+/// opened once); unset means no work at all. Trace only: no behaviour change.
+fn m5_trace(event: &str, t0: u128, t1: u128, extra: &str) {
+    use std::io::Write;
+    static SINK: std::sync::OnceLock<Option<std::sync::Mutex<std::fs::File>>> =
+        std::sync::OnceLock::new();
+    let sink = SINK.get_or_init(|| {
+        std::env::var_os("DM5_TRACE").and_then(|path| {
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .ok()
+        })
+        .map(std::sync::Mutex::new)
+    });
+    if let Some(file) = sink {
+        if let Ok(mut file) = file.lock() {
+            let _ = writeln!(
+                file,
+                "DM5TRACE proc=art ev={event} t_us={t1} dur_us={} {extra}",
+                t1.saturating_sub(t0)
+            );
+            let _ = file.flush();
+        }
+    }
 }
 
 fn protocol_write(value: &serde_json::Value) {
@@ -2547,6 +2596,7 @@ fn interactive_serve(
 // deflate blocks, real CRC32/Adler-32. Deterministic and byte-checkable.
 
 fn encode_png_rgba(width: u32, height: u32, stride: u32, rgba: &[u8]) -> Vec<u8> {
+    let t0 = m5_now_us();
     let row = (width as usize).saturating_mul(4);
     let stride_bytes = (stride as usize).saturating_mul(4);
     let mut filtered = Vec::with_capacity((row + 1).saturating_mul(height as usize));
@@ -2560,6 +2610,8 @@ fn encode_png_rgba(width: u32, height: u32, stride: u32, rgba: &[u8]) -> Vec<u8>
             filtered.resize(filtered.len() + row, 0);
         }
     }
+    let t_filter = m5_now_us();
+    m5_trace("art.encode_filter", t0, t_filter, "");
     let mut out = Vec::with_capacity(filtered.len() + 1024);
     out.extend_from_slice(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
     let mut ihdr = Vec::with_capacity(13);
@@ -2580,9 +2632,16 @@ fn encode_png_rgba(width: u32, height: u32, stride: u32, rgba: &[u8]) -> Vec<u8>
         zlib.extend_from_slice(&filtered[offset..offset + len]);
         offset += len;
     }
+    let t_stored = m5_now_us();
+    m5_trace("art.encode_stored", t_filter, t_stored, "");
     zlib.extend_from_slice(&adler32(&filtered).to_be_bytes());
+    let t_adler = m5_now_us();
+    m5_trace("art.encode_adler32", t_stored, t_adler, "");
     png_chunk(&mut out, b"IDAT", &zlib);
+    let t_idat = m5_now_us();
+    m5_trace("art.encode_idat_chunk", t_adler, t_idat, "");
     png_chunk(&mut out, b"IEND", &[]);
+    m5_trace("art.encode_total", t0, m5_now_us(), "");
     out
 }
 
@@ -2593,7 +2652,16 @@ fn png_chunk(out: &mut Vec<u8>, kind: &[u8; 4], body: &[u8]) {
     let mut crc_input = Vec::with_capacity(4 + body.len());
     crc_input.extend_from_slice(kind);
     crc_input.extend_from_slice(body);
-    out.extend_from_slice(&crc32(&crc_input).to_be_bytes());
+    let t_crc = m5_now_us();
+    let crc = crc32(&crc_input);
+    let label = String::from_utf8_lossy(kind).to_string();
+    m5_trace(
+        "art.encode_crc32",
+        t_crc,
+        m5_now_us(),
+        &format!("chunk={label} body_bytes={}", body.len()),
+    );
+    out.extend_from_slice(&crc.to_be_bytes());
 }
 
 fn crc32(data: &[u8]) -> u32 {

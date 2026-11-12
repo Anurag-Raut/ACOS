@@ -1,0 +1,124 @@
+diff --git a/crates/acos-services/src/surface_client.rs b/crates/acos-services/src/surface_client.rs
+index eb1d76b..1dce696 100644
+--- a/crates/acos-services/src/surface_client.rs
++++ b/crates/acos-services/src/surface_client.rs
+@@ -975,6 +975,8 @@ impl SurfaceState {
+         // live surface sets a display rotation, so `rotation_flags` is 0
+         // (`transformToDisplayInverse` therefore has no display swap), and the
+         // display viewport is `self.display` (the app area, W58).
++        let dm5_start = std::time::Instant::now();
++        let dm5_kernel_start = std::time::Instant::now();
+         let rows = self.kernel_rows();
+         let inputs: Vec<LayerIn> = rows.iter().map(|row| row.input).collect();
+         let snapshots = acos_sfgeom::compute(
+@@ -986,6 +988,8 @@ impl SurfaceState {
+             },
+         );
+ 
++        dm5_trace("c1.kernel_rows+sfgeom", dm5_kernel_start.elapsed().as_micros(),
++                  &format!("layers={}", rows.len()));
+         let mut placed: Vec<Placed<'_>> = Vec::new();
+         for (row, snapshot) in rows.iter().zip(snapshots) {
+             let Some(buffer) = row.buffer else {
+@@ -1155,7 +1159,12 @@ impl SurfaceState {
+                 list.join(" + ")
+             );
+         }
++        let dm5_canvas_start = std::time::Instant::now();
+         let mut canvas = vec![0u8; row * height as usize];
++        let dm5_canvas_us = dm5_canvas_start.elapsed().as_micros();
++        let mut dm5_read_us = 0u128;
++        let mut dm5_blend_us = 0u128;
++        let dm5_alloc_us = dm5_canvas_us;
+         let (top_layer, top_buffer) = {
+             let last = placed.last().expect("non-empty");
+             (
+@@ -1174,9 +1183,11 @@ impl SurfaceState {
+             if p.row.dim_amount > 0.0 && drawn > 0 {
+                 dim_canvas(&mut canvas, p.row.dim_amount.clamp(0.0, 1.0));
+             }
++            let dm5_read_start = std::time::Instant::now();
+             let pixels = read_buffer_pixels(buffer).ok_or(CompositeError::Unreadable {
+                 layer_id: p.row.record.layer_id,
+             })?;
++            dm5_read_us += dm5_read_start.elapsed().as_micros();
+             if p.row.record.buffer_transform & 4 != 0 && std::env::var_os("ACOSC1_TRACE").is_some()
+             {
+                 // Known B1b gap: a 90-degree buffer rotation is carried by the
+@@ -1196,10 +1207,22 @@ impl SurfaceState {
+                 dst_h: (p.dest.3 - p.dest.1).max(0) as u32,
+                 alpha: (p.snapshot.alpha.clamp(0.0, 1.0) * 255.0).round() as u32,
+             };
++            let dm5_blend_start = std::time::Instant::now();
+             blend_layer(&mut canvas, row, width, height, &pixels, buffer, &spec);
++            dm5_blend_us += dm5_blend_start.elapsed().as_micros();
+             drawn += 1;
+         }
++        let dm5_hash_start = std::time::Instant::now();
+         let (fnv1a, non_zero_pixels) = hash_pixels(&canvas);
++        dm5_trace("c1.fnv_hash", dm5_hash_start.elapsed().as_micros(), "path=composite");
++        dm5_trace("c1.memfd_read", dm5_read_us, &format!("path=composite layers={drawn}"));
++        dm5_trace("c1.blend", dm5_blend_us, &format!("path=composite layers={drawn}"));
++        dm5_trace("c1.canvas_alloc", dm5_alloc_us, &format!("path=composite"));
++        dm5_trace(
++            "c1.total",
++            dm5_start.elapsed().as_micros(),
++            &format!("path=composite layers={drawn} w={width} h={height}"),
++        );
+         Ok(FrameCapture {
+             layer_id: top_layer,
+             layer_name: format!("composite({drawn})"),
+@@ -1224,9 +1247,13 @@ impl SurfaceState {
+ 
+     /// The pre-W35 capture: one layer's stored buffer, read in full.
+     fn capture_layer(layer: &LayerRecord, buffer: &LatestBuffer) -> Option<FrameCapture> {
++        let t_read = std::time::Instant::now();
+         let pixels = read_buffer_pixels(buffer)?;
++        dm5_trace("c1.memfd_read", t_read.elapsed().as_micros(), "path=passthrough");
+         let row = buffer.row_bytes();
++        let t_hash = std::time::Instant::now();
+         let (fnv1a, non_zero_pixels) = hash_pixels(&pixels);
++        dm5_trace("c1.fnv_hash", t_hash.elapsed().as_micros(), "path=passthrough");
+         Some(FrameCapture {
+             layer_id: layer.layer_id,
+             layer_name: layer.name.clone(),
+@@ -2355,6 +2382,39 @@ fn read_buffer_pixels(buffer: &LatestBuffer) -> Option<Vec<u8>> {
+ }
+ 
+ /// FNV-1a over the pixels plus the count of pixels with any non-zero byte.
++/// D-M5 (trace-only, `surface_client.rs` patch used in a throwaway worktree):
++/// microseconds on the realtime clock so a C1 sub-phase lines up with the
++/// serve/launcher trace. Inert unless `DM5_TRACE` names a file.
++fn dm5_trace(event: &str, dur_us: u128, extra: &str) {
++    use std::io::Write;
++    static SINK: std::sync::OnceLock<Option<std::sync::Mutex<std::fs::File>>> =
++        std::sync::OnceLock::new();
++    let sink = SINK.get_or_init(|| {
++        std::env::var_os("DM5_TRACE")
++            .and_then(|path| {
++                std::fs::OpenOptions::new()
++                    .create(true)
++                    .append(true)
++                    .open(path)
++                    .ok()
++            })
++            .map(std::sync::Mutex::new)
++    });
++    if let Some(file) = sink {
++        if let Ok(mut file) = file.lock() {
++            let t_us = std::time::SystemTime::now()
++                .duration_since(std::time::UNIX_EPOCH)
++                .map(|d| d.as_micros())
++                .unwrap_or(0);
++            let _ = writeln!(
++                file,
++                "DM5TRACE proc=c1 ev={event} t_us={t_us} dur_us={dur_us} {extra}"
++            );
++            let _ = file.flush();
++        }
++    }
++}
++
+ fn hash_pixels(pixels: &[u8]) -> (u64, usize) {
+     let mut hash = 0xcbf2_9ce4_8422_2325u64;
+     let mut non_zero = 0usize;

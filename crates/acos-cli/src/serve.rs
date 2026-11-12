@@ -40,6 +40,7 @@ use acos_protocol::ResourceBudget;
 use acos_runtime::session::SessionOptions;
 use serde_json::{json, Value};
 
+use crate::engine::art::{m5_now_us, m5_trace};
 use crate::engine::serve::{parse_engine_flag, ServeEngine};
 
 /// Arguments for `acos serve`.
@@ -247,6 +248,7 @@ fn handle_connection(stream: UnixStream, engine: &ServeEngine) {
         Err(_) => return,
     };
     let mut reader = BufReader::new(stream);
+    let mut last_write = m5_now_us();
     loop {
         let mut line = String::new();
         let n = match reader.read_line(&mut line) {
@@ -259,7 +261,21 @@ fn handle_connection(stream: UnixStream, engine: &ServeEngine) {
         if line.trim().is_empty() {
             continue;
         }
+        let t_read = m5_now_us();
+        m5_trace(
+            "cli.serve_request_read",
+            last_write,
+            t_read,
+            &format!("request_bytes={n}"),
+        );
         let response = handle_request(&line, engine);
+        let t_dispatch = m5_now_us();
+        m5_trace(
+            "cli.serve_dispatch",
+            t_read,
+            t_dispatch,
+            &format!("request_bytes={n}"),
+        );
         let mut payload = match serde_json::to_string(&response) {
             Ok(payload) => payload,
             Err(_) => continue,
@@ -269,6 +285,13 @@ fn handle_connection(stream: UnixStream, engine: &ServeEngine) {
             break;
         }
         let _ = writer.flush();
+        last_write = m5_now_us();
+        m5_trace(
+            "cli.serve_reply_write",
+            t_dispatch,
+            last_write,
+            &format!("reply_bytes={}", payload.len()),
+        );
     }
 }
 

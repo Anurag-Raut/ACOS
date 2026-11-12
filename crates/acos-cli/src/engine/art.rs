@@ -1013,6 +1013,8 @@ impl ArtSession {
         }
         let stdin = self.stdin.as_mut().expect("checked above");
         let line = request.to_string();
+        let cmd = request.get("cmd").and_then(|v| v.as_str()).unwrap_or("?").to_string();
+        let t_write = m5_now_us();
         if let Err(error) = writeln!(stdin, "{line}").and_then(|_| stdin.flush()) {
             if crate::failure::is_disk_full(&error) {
                 return Err(acos_protocol::ProtocolError::new(
@@ -1029,10 +1031,25 @@ impl ArtSession {
                 .session_lost_mut("command", &detail)
                 .to_protocol_error());
         }
+        let t_written = m5_now_us();
+        m5_trace(
+            "cli.art_cmd_write",
+            t_write,
+            t_written,
+            &format!("cmd={cmd} bytes={}", line.len()),
+        );
         let timeout = self.timeout;
         let reply = self
             .read_line(timeout, "command")
             .map_err(|error| error.to_protocol_error())?;
+        let t_reply = m5_now_us();
+        m5_trace("cli.art_cmd_wait", t_written, t_reply, &format!("cmd={cmd}"));
+        m5_trace(
+            "cli.art_cmd_roundtrip",
+            t_write,
+            t_reply,
+            &format!("cmd={cmd} reply_bytes={}", reply.len()),
+        );
         let reply: serde_json::Value = serde_json::from_str(&reply).map_err(|error| {
             acos_protocol::ProtocolError::new(
                 ErrorCode::Internal,
@@ -1692,8 +1709,16 @@ impl SessionBackend for ArtSession {
             return Err(stale_frame(previous, seq, "screenshot"));
         }
         let absorb_started = Instant::now();
+        let t_read = m5_now_us();
         let png = read_png(Path::new(png_path))?;
         phase.absorb_ms = absorb_started.elapsed().as_millis() as u64;
+        let t_read_done = m5_now_us();
+        m5_trace(
+            "cli.png_read",
+            t_read,
+            t_read_done,
+            &format!("png_bytes={}", png.len()),
+        );
         self.last_phase = Some(phase);
         if png.is_empty() {
             return Err(live_frame_unavailable(
@@ -1952,6 +1977,45 @@ fn log_records_from_reply(
         });
     }
     records
+}
+
+/// D-M5: microseconds since the Unix epoch (realtime). Shared by the serve and
+/// engine timers so one screenshot's phases line up on one clock.
+pub(crate) fn m5_now_us() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_micros())
+        .unwrap_or(0)
+}
+
+/// D-M5: env-gated per-phase trace for one screenshot.
+///
+/// `DM5_TRACE=<path>` appends one line per phase to that file (append-only,
+/// opened once); unset means no work at all. Trace only: no behaviour change.
+pub(crate) fn m5_trace(event: &str, t0: u128, t1: u128, extra: &str) {
+    use std::io::Write;
+    static SINK: std::sync::OnceLock<Option<std::sync::Mutex<std::fs::File>>> =
+        std::sync::OnceLock::new();
+    let sink = SINK.get_or_init(|| {
+        std::env::var_os("DM5_TRACE").and_then(|path| {
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .ok()
+        })
+        .map(std::sync::Mutex::new)
+    });
+    if let Some(file) = sink {
+        if let Ok(mut file) = file.lock() {
+            let _ = writeln!(
+                file,
+                "DM5TRACE proc=cli ev={event} t_us={t1} dur_us={} {extra}",
+                t1.saturating_sub(t0)
+            );
+            let _ = file.flush();
+        }
+    }
 }
 
 fn resolve_binary() -> Result<PathBuf, BackendError> {
