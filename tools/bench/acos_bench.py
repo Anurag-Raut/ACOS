@@ -11,6 +11,8 @@ One phase per invocation, always inside
   --phase loop1       full P5 agent loop at N=1 (reuses P5's harness)
   --phase loop5       full P5 agent loop at N=5
   --phase loop10      full P5 agent loop at N=10 (16G guarded arm)
+  --phase loop20      full P5 agent loop at N=20 (24G guarded arm, S3)
+  --phase loop30      full P5 agent loop at N=30 (24G guarded arm, S3 ceiling probe)
   --phase cold        M3 cold start (page cache evicted per rep; reuses P7)
   --phase p11         P11 settle-lab false passes (reuses P11's harness)
   --phase scenarios   scenarios/p11-*.yaml sweep through `acos verify`
@@ -293,6 +295,60 @@ METRICS = {
                   "(label-matched with M1/M2; excludes page cache charged to the "
                   "cgroup, which is file cache read by whichever phase ran first)",
     },
+    "loop_n20_ms": {
+        "metric": "agent loop", "label": "full agent loop latency, N=20",
+        "unit": "ms/task", "category": "latency", "direction": "lower",
+        "method": "same P5 loop with 20 concurrent sessions in one serve",
+    },
+    "loop_n20_verified_rate": {
+        "metric": "agent loop", "label": "verified task rate, N=20",
+        "unit": "fraction", "category": "throughput", "direction": "higher",
+        "method": "verified tasks / measured tasks, 20 concurrent sessions",
+    },
+    "loop_n20_tasks_per_s": {
+        "metric": "agent loop", "label": "verified tasks/s, N=20",
+        "unit": "tasks/s", "category": "throughput", "direction": "higher",
+        "method": "verified tasks / cohort wall, 20 concurrent sessions",
+    },
+    "loop_n20_tasks_per_gib_min": {
+        "metric": "agent loop", "label": "verified tasks/GiB-min, N=20",
+        "unit": "tasks/GiB-min", "category": "throughput", "direction": "higher",
+        "method": "verified tasks / cgroup GiB-min integral, 20 concurrent sessions",
+    },
+    "loop_n20_tasks_per_gib_min_net": {
+        "metric": "agent loop", "label": "verified tasks/GiB-min, N=20 (anon+shmem)",
+        "unit": "tasks/GiB-min", "category": "throughput", "direction": "higher",
+        "method": "verified tasks / integral of the job's cgroup anon+shmem only "
+                  "(label-matched with M1/M2; excludes page cache charged to the "
+                  "cgroup, which is file cache read by whichever phase ran first)",
+    },
+    "loop_n30_ms": {
+        "metric": "agent loop", "label": "full agent loop latency, N=30",
+        "unit": "ms/task", "category": "latency", "direction": "lower",
+        "method": "same P5 loop with 30 concurrent sessions in one serve",
+    },
+    "loop_n30_verified_rate": {
+        "metric": "agent loop", "label": "verified task rate, N=30",
+        "unit": "fraction", "category": "throughput", "direction": "higher",
+        "method": "verified tasks / measured tasks, 30 concurrent sessions",
+    },
+    "loop_n30_tasks_per_s": {
+        "metric": "agent loop", "label": "verified tasks/s, N=30",
+        "unit": "tasks/s", "category": "throughput", "direction": "higher",
+        "method": "verified tasks / cohort wall, 30 concurrent sessions",
+    },
+    "loop_n30_tasks_per_gib_min": {
+        "metric": "agent loop", "label": "verified tasks/GiB-min, N=30",
+        "unit": "tasks/GiB-min", "category": "throughput", "direction": "higher",
+        "method": "verified tasks / cgroup GiB-min integral, 30 concurrent sessions",
+    },
+    "loop_n30_tasks_per_gib_min_net": {
+        "metric": "agent loop", "label": "verified tasks/GiB-min, N=30 (anon+shmem)",
+        "unit": "tasks/GiB-min", "category": "throughput", "direction": "higher",
+        "method": "verified tasks / integral of the job's cgroup anon+shmem only "
+                  "(label-matched with M1/M2; excludes page cache charged to the "
+                  "cgroup, which is file cache read by whichever phase ran first)",
+    },
     "cpu_idle_n1_pct": {
         "metric": "CPU", "label": "idle CPU, N=1",
         "unit": "% of one core", "category": "cpu", "direction": "lower",
@@ -546,6 +602,111 @@ def memory_snapshot(serve_pid, sampler):
         "sessions": len(sessions),
         "session_pss_mib": round(sum(r["pss_mib"] for r in sessions), 3),
     }
+
+
+def host_cpu_times(path="/proc/stat"):
+    """Host-wide CPU counters (S3 cohort load record; any-users aggregate)."""
+    try:
+        parts = Path(path).read_text().splitlines()[0].split()[1:]
+        vals = [int(x) for x in parts]
+    except (OSError, ValueError, IndexError):
+        return None
+    idle = vals[3] + (vals[4] if len(vals) > 4 else 0)
+    return {"total": sum(vals), "idle": idle}
+
+
+def host_cpu_delta(before, after):
+    if not before or not after:
+        return None
+    dt = after["total"] - before["total"]
+    di = after["idle"] - before["idle"]
+    if dt <= 0:
+        return None
+    return {"busy_pct": round(100.0 * (dt - di) / dt, 3), "ticks": dt}
+
+
+def loop_cohort_stats(doc, captured, cpu0, cpu1, n):
+    """S3: the per-cell block that the merged doc does not carry.
+
+    p50/p90/p95 per task (from the P5 per-task loop_ms), per-session
+    anon+shmem and sum Pss sampled during the cohort, and the host CPU%.
+    """
+    tasks = [t for t in (doc.get("tasks") or [])
+             if t.get("verdict") != "warmup"]
+    vals = [t["loop_ms"] for t in tasks if t.get("loop_ms") is not None]
+    st = benchlib.stats(vals)
+    out = {
+        "n_tasks": len(vals),
+        "ms_p50": st.get("p50"),
+        "ms_p90": benchlib.percentile(vals, 90) if vals else None,
+        "ms_p95": st.get("p95"),
+        "ms_max": st.get("max"),
+        "host_cpu_pct": host_cpu_delta(cpu0, cpu1),
+        "job_cgroup": captured.get("job_cgroup"),
+        "memory": doc.get("memory"),
+        "throughput": doc.get("throughput"),
+    }
+    sampler = captured.get("sampler")
+    rows = getattr(sampler, "pss_rows", []) if sampler is not None else []
+    samples = getattr(sampler, "samples", []) if sampler is not None else []
+    # Restrict the memory statistics to the measured cohort. Before the barrier
+    # the sessions do not exist yet, and a phase-wide median would divide the
+    # pre-cohort zero samples into the per-session number.
+    steps = [st for t in tasks for st in (t.get("steps") or {}).values()
+             if st.get("t0_us") and st.get("t1_us")]
+    window = ((min(st["t0_us"] for st in steps) / 1e6,
+               max(st["t1_us"] for st in steps) / 1e6) if steps else None)
+    out["cohort_window_utc_s"] = window
+    if window:
+        rows = [r for r in rows if window[0] <= r.get("t", 0) <= window[1]]
+        samples = [r for r in samples
+                   if window[0] <= r.get("t", 0) <= window[1]]
+
+    def series(items, key):
+        return [r[key] for r in items if r.get(key) is not None]
+
+    for key, label, items in (
+            ("sum_pss_mib", "sum_pss_mib", rows),
+            ("session_pss_mib", "session_pss_mib", rows),
+            ("net_anon_shmem_mib", "net_anon_shmem_mib", samples)):
+        xs = series(items, key)
+        if xs:
+            out[label] = {
+                "median_mib": round(statistics.median(xs), 3),
+                "max_mib": round(max(xs), 3),
+                "samples": len(xs),
+            }
+    seen = series(rows, "sessions")
+    if seen:
+        out["sessions_seen"] = {"median": statistics.median(seen),
+                                "max": max(seen)}
+    # The compact per-sample series: a later analysis never has to re-run ART.
+    out["pss_series"] = [
+        {"t": round(r["t"], 2),
+         "sum_pss_mib": round(r["sum_pss_mib"], 1) if r.get("sum_pss_mib") is not None else None,
+         "session_pss_mib": round(r["session_pss_mib"], 1) if r.get("session_pss_mib") is not None else None,
+         "sessions": r.get("sessions")}
+        for r in rows]
+    out["anon_series"] = [
+        {"t": round(r["t"], 2),
+         "net_anon_shmem_mib": round(r["net_anon_shmem_mib"], 1)
+         if r.get("net_anon_shmem_mib") is not None else None,
+         "job_memory_current_mib": round(r["job_memory_current_mib"], 1)
+         if r.get("job_memory_current_mib") is not None else None}
+        for r in samples]
+    if out.get("session_pss_mib"):
+        out["session_pss_per_session_mib"] = round(
+            out["session_pss_mib"]["median_mib"] / n, 3)
+        out["session_pss_peak_per_session_mib"] = round(
+            out["session_pss_mib"]["max_mib"] / n, 3)
+    if out.get("net_anon_shmem_mib"):
+        out["net_anon_shmem_per_session_mib"] = round(
+            out["net_anon_shmem_mib"]["median_mib"] / n, 3)
+    if doc.get("memory"):
+        peak = doc["memory"].get("net_anon_shmem_peak_mib")
+        out["anon_shmem_peak_per_session_mib"] = (
+            round(peak / n, 3) if peak else None)
+    return out
 
 
 def tree_of(value):
@@ -1065,6 +1226,40 @@ def phase_loop(args):
     try:
         p5 = load_module("h6_p5_loop", P5_LOOP)
         p5.APK = COUNTER
+        # S3: keep a handle on the serve daemon so the per-cell record can carry
+        # per-session sum-Pss and anon+shmem (the P5 sampler alone has no Pss).
+        captured = {}
+        base_serve = p5.Serve
+
+        class CaptureServe(base_serve):
+            def __init__(self, *a, **kw):
+                super().__init__(*a, **kw)
+                captured["serve_pid"] = int(self.proc.pid)
+                cg = benchlib.cgroup_path(self.proc.pid)
+                captured["job_cgroup"] = str(cg) if cg else None
+
+        class PssSampler(p5.WarmSampler):
+            def __init__(self, *a, **kw):
+                super().__init__(*a, **kw)
+                self.pss_rows = []
+                captured["sampler"] = self
+
+            def sample_once(self):
+                row = super().sample_once()
+                # 1 Hz: each snapshot walks smaps_rollup of the serve tree.
+                if self.ticks % 10 == 1 and captured.get("serve_pid"):
+                    try:
+                        snap = memory_snapshot(captured["serve_pid"], self)
+                        snap["t"] = row["t"]
+                        self.pss_rows.append(snap)
+                    except Exception as exc:  # noqa: BLE001
+                        self.errors.append("pss: %s: %s"
+                                           % (type(exc).__name__, exc))
+                return row
+
+        p5.Serve = CaptureServe
+        p5.WarmSampler = PssSampler
+        cpu0 = host_cpu_times()
         # The P5 harness builds its own launch arguments; give every launch in
         # the loop the bench's animation arm (H14). Wrapping the runner keeps the
         # harness untouched and leaves the arm visible in every phase doc.
@@ -1080,6 +1275,8 @@ def phase_loop(args):
                 "--loops", str(loops), "--warmup", "1"]
         rc = p5.main(argv)
         doc = json.loads(out_json.read_text())
+        cpu1 = host_cpu_times()
+        cohort = loop_cohort_stats(doc, captured, cpu0, cpu1, args.n)
         measured = doc.get("measured_tasks") or 0
         verified = doc.get("verified") or 0
         if doc.get("false_pass"):
@@ -1097,7 +1294,8 @@ def phase_loop(args):
             bool(measured and verified == measured), {"verified": verified,
                                                       "measured": measured})
         add(samples, "loop_n%d_ms" % args.n, loop_stats.get("p50"), bool(doc.get("ok")),
-            {"p95": loop_stats.get("p95"), "n": loop_stats.get("n"),
+            {"p90": cohort.get("ms_p90"), "p95": loop_stats.get("p95"),
+             "n": loop_stats.get("n"),
              "verified": doc.get("verified"),
              "measured": doc.get("measured_tasks"),
              "false_pass": doc.get("false_pass")})
@@ -1119,7 +1317,8 @@ def phase_loop(args):
         "schema": "acos-bench-phase/2", "phase": "loop%d" % args.n, "utc": utc(),
         "acos": args.acos, "binary_sha256": benchlib.sha256_file(args.acos),
         "host_before": host_now(), "host_after": host_now(),
-        "samples": samples, "p5": {k: doc.get(k) for k in
+        "samples": samples, "cohort": cohort,
+        "p5": {k: doc.get(k) for k in
                                    ("verified", "measured_tasks", "false_pass",
                                     "throughput", "memory", "loop_total",
                                     "loop_wall_total", "loop", "failed_tasks")},
@@ -1439,7 +1638,8 @@ def merge(args):
                      "phases": phases, "meta": meta})
     # Pool the raw values per metric; keep each rep's p50 for the threshold.
     pooled = {}
-    LOOP_NET = {"loop1": 1, "loop5": 5, "loop10": 10}
+    LOOP_NET = {"loop1": 1, "loop5": 5, "loop10": 10, "loop20": 20,
+                "loop30": 30}
     for rep in reps:
         for phase in rep["phases"].values():
             # The anon+shmem tasks/GiB-min variant lives in the P5 document's
@@ -1493,7 +1693,7 @@ def merge(args):
         for name, phase in rep["phases"].items():
             group = group_of.get(name, {})
             ok_flag = bool(phase.get("ok"))
-            if name in ("loop1", "loop5", "loop10"):
+            if name in ("loop1", "loop5", "loop10", "loop20", "loop30"):
                 p5 = phase.get("p5") or {}
                 ok_flag = (not p5.get("false_pass")) and bool(p5.get("measured_tasks"))
             phase_rows.append({
@@ -1696,6 +1896,7 @@ def run_bundle(args):
     handlers = {
         "latency": phase_latency, "memory": phase_memory,
         "loop1": phase_loop, "loop5": phase_loop, "loop10": phase_loop,
+        "loop20": phase_loop, "loop30": phase_loop,
         "cold": phase_cold, "p11": phase_p11,
         "scenarios": phase_scenarios,
     }
@@ -1719,6 +1920,10 @@ def run_bundle(args):
             sub.n = 5
         elif phase == "loop10":
             sub.n = 10
+        elif phase == "loop20":
+            sub.n = 20
+        elif phase == "loop30":
+            sub.n = 30
         t0 = time.time()
         try:
             doc = handlers[phase](sub)
@@ -1746,7 +1951,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--phase", choices=["latency", "memory", "loop1", "loop5",
-                                        "loop10", "cold", "p11", "scenarios"])
+                                        "loop10", "loop20", "loop30", "cold",
+                                        "p11", "scenarios"])
     ap.add_argument("--bundle", default="",
                     help="comma-separated phases run in one lock acquisition")
     ap.add_argument("--acos", default=str(REPO / "target/release/acos"))
@@ -1786,11 +1992,13 @@ def main(argv=None):
     handler = {
         "latency": phase_latency, "memory": phase_memory,
         "loop1": phase_loop, "loop5": phase_loop, "loop10": phase_loop,
+        "loop20": phase_loop, "loop30": phase_loop,
         "cold": phase_cold, "p11": phase_p11,
         "scenarios": phase_scenarios,
     }[args.phase]
-    if args.phase in ("loop1", "loop5", "loop10"):
-        args.n = {"loop1": 1, "loop5": 5, "loop10": 10}[args.phase]
+    if args.phase in ("loop1", "loop5", "loop10", "loop20", "loop30"):
+        args.n = {"loop1": 1, "loop5": 5, "loop10": 10, "loop20": 20,
+                  "loop30": 30}[args.phase]
     doc = handler(args)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

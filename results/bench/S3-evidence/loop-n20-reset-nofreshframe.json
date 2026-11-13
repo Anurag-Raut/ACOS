@@ -1,0 +1,120 @@
+{
+ "source": ".cache/s3/repro2/n20-r2.json",
+ "env": {
+  "n": 20,
+  "host_before": {
+   "mem_total_mib": 61908.7,
+   "mem_available_mib": 49051.5,
+   "mem_total_gib": 60.46,
+   "mem_available_gib": 47.9,
+   "used_mib": 12857.2,
+   "used_pct": 20.77,
+   "loadavg1": 8.8,
+   "loadavg5": 6.74,
+   "loadavg15": 4.88,
+   "runnable": "1/2873"
+  },
+  "binary_sha256": "a90b839d565b22d13f808a92b5c1032be9e0c98f0d8f930a450a6b9a265da729"
+ },
+ "tasks": [
+  {
+   "agent": 3,
+   "index": 300003,
+   "session_id": "p5_n20-a3",
+   "utc": "2026-11-13T00:56:45+00:00",
+   "verdict": "fail",
+   "checks": {
+    "launch_ok": true,
+    "inspect_ok": true,
+    "tap_ok": true,
+    "observe_tree_ok": true,
+    "observe_png_ok": true,
+    "assert_ok": true,
+    "reset_ok": false
+   },
+   "steps": {
+    "launch": {
+     "ms": 0.295,
+     "ok": true,
+     "status": "pass",
+     "error": null,
+     "error_message": null,
+     "t0_us": 1794531344668787,
+     "t1_us": 1794531344669163
+    },
+    "inspect": {
+     "ms": 41.248,
+     "ok": true,
+     "status": "pass",
+     "error": null,
+     "error_message": null,
+     "t0_us": 1794531344672047,
+     "t1_us": 1794531344713377
+    },
+    "tap": {
+     "ms": 925.844,
+     "ok": true,
+     "status": "pass",
+     "error": null,
+     "error_message": null,
+     "t0_us": 1794531344716103,
+     "t1_us": 1794531345642081
+    },
+    "observe_tree": {
+     "ms": 40.987,
+     "ok": true,
+     "status": "pass",
+     "error": null,
+     "error_message": null,
+     "t0_us": 1794531345646794,
+     "t1_us": 1794531345687841
+    },
+    "observe_png": {
+     "ms": 32.892,
+     "ok": true,
+     "status": "pass",
+     "error": null,
+     "error_message": null,
+     "t0_us": 1794531345703466,
+     "t1_us": 1794531345736414
+    },
+    "assert": {
+     "ms": 41.407,
+     "ok": true,
+     "status": "pass",
+     "error": null,
+     "error_message": null,
+     "t0_us": 1794531345739295,
+     "t1_us": 1794531345780800
+    },
+    "reset": {
+     "ms": 60048.148,
+     "ok": false,
+     "status": "error",
+     "error": "NO_FRESH_FRAME",
+     "error_message": "LIVE_FRAME_UNAVAILABLE: acos-art: NO_LIVE_FRAME: no live frame within 60s: activity_resumed=true probe=true c1_generation=0",
+     "t0_us": 1794531345783352,
+     "t1_us": 1794531405831550
+    }
+   }
+  }
+ ],
+ "session_artifacts_p5_n20-a3": {
+  "activity-resumed.marker": "package=dev.acos.fixtures.counter\nactivity=dev.acos.fixtures.counter.MainActivity\nlifecycle=onCreate,onStart,onResume\nresumed=true\ncalled=true\nstopped=false\nwindow=com.android.internal.policy.PhoneWindow@1e2fce3\ntimeout_ms=12000\nresume_ready=first-traversal\n",
+  "application-created.marker": "package=dev.acos.fixtures.counter\napplication=android.app.Application\napplication_classloader_is_apk=true\napplication_base=dev.acos.fixtures.counter//data/app/counter.apk\ninstrumentation=android.app.Instrumentation\ninstrumentation_source=framework (bind request instrumentationName=null)\napp_flags=0x10800046\napp_flags_source=manifest\nsourceDir=/data/app/counter.apk\n",
+  "session-timing.json": {
+   "guest_frame_wait_secs": 3,
+   "input_settles": {
+    "guest": 2,
+    "recovered": 0,
+    "recovered_changed": 0,
+    "recovered_no_change": 0,
+    "recovery_budget_hit": 0,
+    "recovery_ms": 0,
+    "recovery_polls": 0
+   },
+   "session_start_ms": 390,
+   "shutdown_ms": 10
+  }
+ }
+}

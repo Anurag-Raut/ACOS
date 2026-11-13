@@ -18,8 +18,10 @@
 #   AND Pss, both labelled); M3 cold start; M4 warm launch strict+fast; M5
 #   screenshot; M6 reset strict+fast; M7 UI tree strict+fast; M8 tap->settled
 #   strict+fast (counter + form); tap ack; GL1 acos_destroy teardown_ms; the
-#   full P5 agent loop at N=1, N=5 (default) and N=10 (--phases loop10) (latency,
-#   tasks/s, tasks/GiB-min); idle CPU% and wakeups/s at N=1/5/10 over a 60 s window plus active CPU during the
+#   full P5 agent loop at N=1, N=5 (default), N=10 (--phases loop10) and
+#   N=20/N=30 (--phases loop20,loop30 -- S3 scale cells, 24G guarded arm)
+#   (latency, tasks/s, tasks/GiB-min); idle CPU% and wakeups/s at N=1/5/10 over
+#   a 60 s window plus active CPU during the
 #   strict tap cohort; P11 settle-lab false passes (must be 0) and the
 #   scenarios/p11-*.yaml sweep.
 #
@@ -141,6 +143,7 @@ elif [ -n "$PHASES" ]; then
             loop1) p_mem="$OTHER_MEM"; p_time=240 ;;
             loop5) p_mem="$OTHER_MEM"; p_time=300 ;;
             loop10) p_mem="$MEM_PHASE_MEM"; p_time=600 ;;
+            loop20|loop30) p_mem="24G"; p_time=700 ;;
             cold) p_mem="$OTHER_MEM"; p_time=300 ;;
             p11) p_mem="$OTHER_MEM"; p_time=480 ;;
             scenarios) p_mem="$OTHER_MEM"; p_time=480 ;;
@@ -185,6 +188,8 @@ phase_time() {
         memory) echo 600 ;;
         loop1) echo 240 ;;
         loop5) echo 300 ;;
+        loop20) echo 700 ;;
+        loop30) echo 700 ;;
         cold) echo 300 ;;
         p11) echo 480 ;;
         scenarios) echo 480 ;;

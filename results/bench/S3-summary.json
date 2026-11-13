@@ -1,0 +1,1419 @@
+{
+ "schema": "acos-s3-summary/1",
+ "commit": "15849a5",
+ "branch": "scale-s3-n20",
+ "binary_sha256": "a90b839d565b22d13f808a92b5c1032be9e0c98f0d8f930a450a6b9a265da729",
+ "loop_cells": [
+  {
+   "animations": "on",
+   "n": 1,
+   "reps": [
+    {
+     "rep": 1,
+     "p50": 1437.84,
+     "p90": 1442.947,
+     "ms_p95": 1442.981,
+     "verified": 21,
+     "measured": 21,
+     "false_pass": 0,
+     "tasks_per_s": 0.6534,
+     "tasks_per_gib_min": 278.2559,
+     "tasks_per_gib_min_net": 897.6417,
+     "cohort_wall_s": 32.139,
+     "per_session_anon_peak_mib": 85.379,
+     "per_session_pss_mib": 176.683,
+     "sessions_seen": {
+      "max": 1,
+      "median": 1
+     },
+     "job_cgroup_peak_mib": 251.969,
+     "host_cpu_pct": 2.104,
+     "loadavg1": 1.66,
+     "mem_available_gib": 46.93,
+     "failures": []
+    },
+    {
+     "rep": 2,
+     "p50": 1439.03,
+     "p90": 1458.461,
+     "ms_p95": 1459.219,
+     "verified": 21,
+     "measured": 21,
+     "false_pass": 0,
+     "tasks_per_s": 0.652,
+     "tasks_per_gib_min": 278.1766,
+     "tasks_per_gib_min_net": 887.5809,
+     "cohort_wall_s": 32.208,
+     "per_session_anon_peak_mib": 87.016,
+     "per_session_pss_mib": 176.748,
+     "sessions_seen": {
+      "max": 1,
+      "median": 1
+     },
+     "job_cgroup_peak_mib": 253.359,
+     "host_cpu_pct": 1.772,
+     "loadavg1": 0.75,
+     "mem_available_gib": 47.08,
+     "failures": []
+    },
+    {
+     "rep": 3,
+     "p50": 1435.687,
+     "p90": 1451.934,
+     "ms_p95": 1459.071,
+     "verified": 21,
+     "measured": 21,
+     "false_pass": 0,
+     "tasks_per_s": 0.6539,
+     "tasks_per_gib_min": 279.8748,
+     "tasks_per_gib_min_net": 884.892,
+     "cohort_wall_s": 32.116,
+     "per_session_anon_peak_mib": 86.583,
+     "per_session_pss_mib": 186.412,
+     "sessions_seen": {
+      "max": 1,
+      "median": 1
+     },
+     "job_cgroup_peak_mib": 251.5,
+     "host_cpu_pct": 2.588,
+     "loadavg1": 1.24,
+     "mem_available_gib": 47.43,
+     "failures": []
+    }
+   ],
+   "median": {
+    "p50": 1437.84,
+    "p90": 1451.934,
+    "tasks_per_s": 0.653,
+    "tasks_per_gib_min": 278.256,
+    "tasks_per_gib_min_net": 887.581,
+    "per_session_anon_peak_mib": 86.583,
+    "per_session_pss_mib": 176.748,
+    "host_cpu_pct": 2.104,
+    "verified": 63,
+    "measured": 63
+   }
+  },
+  {
+   "animations": "on",
+   "n": 5,
+   "reps": [
+    {
+     "rep": 1,
+     "p50": 1423.323,
+     "p90": 1443.708,
+     "ms_p95": 1447.4404000000002,
+     "verified": 25,
+     "measured": 25,
+     "false_pass": 0,
+     "tasks_per_s": 2.6627,
+     "tasks_per_gib_min": 663.3857,
+     "tasks_per_gib_min_net": 817.7735,
+     "cohort_wall_s": 9.389,
+     "per_session_anon_peak_mib": 74.911,
+     "per_session_pss_mib": 73.425,
+     "sessions_seen": {
+      "max": 5,
+      "median": 5.0
+     },
+     "job_cgroup_peak_mib": 422.199,
+     "host_cpu_pct": 5.83,
+     "loadavg1": 2.07,
+     "mem_available_gib": 46.84,
+     "failures": []
+    },
+    {
+     "rep": 2,
+     "p50": 1422.55,
+     "p90": 1446.7064,
+     "ms_p95": 1448.7092,
+     "verified": 25,
+     "measured": 25,
+     "false_pass": 0,
+     "tasks_per_s": 2.681,
+     "tasks_per_gib_min": 659.5511,
+     "tasks_per_gib_min_net": 852.4836,
+     "cohort_wall_s": 9.325,
+     "per_session_anon_peak_mib": 76.902,
+     "per_session_pss_mib": 73.861,
+     "sessions_seen": {
+      "max": 5,
+      "median": 5.0
+     },
+     "job_cgroup_peak_mib": 423.191,
+     "host_cpu_pct": 5.747,
+     "loadavg1": 0.71,
+     "mem_available_gib": 46.98,
+     "failures": []
+    },
+    {
+     "rep": 3,
+     "p50": 1420.639,
+     "p90": 1440.1526,
+     "ms_p95": 1441.2026,
+     "verified": 25,
+     "measured": 25,
+     "false_pass": 0,
+     "tasks_per_s": 2.7013,
+     "tasks_per_gib_min": 669.706,
+     "tasks_per_gib_min_net": 847.8283,
+     "cohort_wall_s": 9.255,
+     "per_session_anon_peak_mib": 78.676,
+     "per_session_pss_mib": 76.183,
+     "sessions_seen": {
+      "max": 5,
+      "median": 5.0
+     },
+     "job_cgroup_peak_mib": 422.504,
+     "host_cpu_pct": 8.629,
+     "loadavg1": 1.28,
+     "mem_available_gib": 46.83,
+     "failures": []
+    }
+   ],
+   "median": {
+    "p50": 1422.55,
+    "p90": 1443.708,
+    "tasks_per_s": 2.681,
+    "tasks_per_gib_min": 663.386,
+    "tasks_per_gib_min_net": 847.828,
+    "per_session_anon_peak_mib": 76.902,
+    "per_session_pss_mib": 73.861,
+    "host_cpu_pct": 5.83,
+    "verified": 75,
+    "measured": 75
+   }
+  },
+  {
+   "animations": "on",
+   "n": 10,
+   "reps": [
+    {
+     "rep": 1,
+     "p50": 1443.857,
+     "p90": 1465.0258000000001,
+     "ms_p95": 1471.7590500000001,
+     "verified": 50,
+     "measured": 50,
+     "false_pass": 0,
+     "tasks_per_s": 4.9637,
+     "tasks_per_gib_min": 651.4179,
+     "tasks_per_gib_min_net": 721.2211,
+     "cohort_wall_s": 10.073,
+     "per_session_anon_peak_mib": 73.259,
+     "per_session_pss_mib": 60.988,
+     "sessions_seen": {
+      "max": 10,
+      "median": 10
+     },
+     "job_cgroup_peak_mib": 825.062,
+     "host_cpu_pct": 11.313,
+     "loadavg1": 2.78,
+     "mem_available_gib": 46.97,
+     "failures": []
+    },
+    {
+     "rep": 2,
+     "p50": 1445.7510000000002,
+     "p90": 1469.6178,
+     "ms_p95": 1474.66885,
+     "verified": 49,
+     "measured": 50,
+     "false_pass": 0,
+     "tasks_per_s": 4.9193,
+     "tasks_per_gib_min": 649.8407,
+     "tasks_per_gib_min_net": 697.1909,
+     "cohort_wall_s": 9.961,
+     "per_session_anon_peak_mib": 73.951,
+     "per_session_pss_mib": 62.346,
+     "sessions_seen": {
+      "max": 10,
+      "median": 10
+     },
+     "job_cgroup_peak_mib": 822.703,
+     "host_cpu_pct": 17.27,
+     "loadavg1": 1.56,
+     "mem_available_gib": 46.8,
+     "failures": [
+      {
+       "agent": 3,
+       "index": 300003,
+       "step": "reset",
+       "code": "GUEST_EXITED",
+       "ms": 133.367,
+       "message": ""
+      }
+     ]
+    },
+    {
+     "rep": 3,
+     "p50": 1441.9,
+     "p90": 1457.5092,
+     "ms_p95": 1463.0047,
+     "verified": 50,
+     "measured": 50,
+     "false_pass": 0,
+     "tasks_per_s": 5.0068,
+     "tasks_per_gib_min": 651.2017,
+     "tasks_per_gib_min_net": 776.0101,
+     "cohort_wall_s": 9.986,
+     "per_session_anon_peak_mib": 69.275,
+     "per_session_pss_mib": 63.1,
+     "sessions_seen": {
+      "max": 10,
+      "median": 10.0
+     },
+     "job_cgroup_peak_mib": 824.391,
+     "host_cpu_pct": 15.619,
+     "loadavg1": 2.41,
+     "mem_available_gib": 47.19,
+     "failures": []
+    }
+   ],
+   "median": {
+    "p50": 1443.857,
+    "p90": 1465.026,
+    "tasks_per_s": 4.964,
+    "tasks_per_gib_min": 651.202,
+    "tasks_per_gib_min_net": 721.221,
+    "per_session_anon_peak_mib": 73.259,
+    "per_session_pss_mib": 62.346,
+    "host_cpu_pct": 15.619,
+    "verified": 149,
+    "measured": 150
+   }
+  },
+  {
+   "animations": "on",
+   "n": 20,
+   "reps": [
+    {
+     "rep": 1,
+     "p50": 1479.2559999999999,
+     "p90": 2255.6348000000003,
+     "ms_p95": 2472.631999999999,
+     "verified": 100,
+     "measured": 100,
+     "false_pass": 0,
+     "tasks_per_s": 7.4053,
+     "tasks_per_gib_min": 471.9292,
+     "tasks_per_gib_min_net": 602.9965,
+     "cohort_wall_s": 13.504,
+     "per_session_anon_peak_mib": 72.613,
+     "per_session_pss_mib": 52.804,
+     "sessions_seen": {
+      "max": 20,
+      "median": 20.0
+     },
+     "job_cgroup_peak_mib": 1618.332,
+     "host_cpu_pct": 21.239,
+     "loadavg1": 3.52,
+     "mem_available_gib": 46.82,
+     "failures": []
+    },
+    {
+     "rep": 2,
+     "p50": 1460.3695,
+     "p90": 1501.7979,
+     "ms_p95": 1506.3123,
+     "verified": 98,
+     "measured": 100,
+     "false_pass": 0,
+     "tasks_per_s": 1.3557,
+     "tasks_per_gib_min": 56.0515,
+     "tasks_per_gib_min_net": 69.0073,
+     "cohort_wall_s": 72.286,
+     "per_session_anon_peak_mib": 72.454,
+     "per_session_pss_mib": 54.777,
+     "sessions_seen": {
+      "max": 20,
+      "median": 20.0
+     },
+     "job_cgroup_peak_mib": 1620.191,
+     "host_cpu_pct": 5.545,
+     "loadavg1": 1.13,
+     "mem_available_gib": 47.55,
+     "failures": [
+      {
+       "agent": 3,
+       "index": 300004,
+       "step": "reset",
+       "code": "NO_FRESH_FRAME",
+       "ms": 60039.176,
+       "message": ""
+      },
+      {
+       "agent": 13,
+       "index": 1300003,
+       "step": "reset",
+       "code": "GUEST_EXITED",
+       "ms": 197.863,
+       "message": ""
+      }
+     ]
+    },
+    {
+     "rep": 3,
+     "p50": 1458.04,
+     "p90": 1486.2605999999998,
+     "ms_p95": 1493.61735,
+     "verified": 100,
+     "measured": 100,
+     "false_pass": 0,
+     "tasks_per_s": 8.112,
+     "tasks_per_gib_min": 567.9913,
+     "tasks_per_gib_min_net": 682.2211,
+     "cohort_wall_s": 12.327,
+     "per_session_anon_peak_mib": 73.712,
+     "per_session_pss_mib": 52.493,
+     "sessions_seen": {
+      "max": 20,
+      "median": 20.0
+     },
+     "job_cgroup_peak_mib": 1617.609,
+     "host_cpu_pct": 26.401,
+     "loadavg1": 2.75,
+     "mem_available_gib": 46.75,
+     "failures": []
+    }
+   ],
+   "median": {
+    "p50": 1460.37,
+    "p90": 1501.798,
+    "tasks_per_s": 7.405,
+    "tasks_per_gib_min": 471.929,
+    "tasks_per_gib_min_net": 602.996,
+    "per_session_anon_peak_mib": 72.613,
+    "per_session_pss_mib": 52.804,
+    "host_cpu_pct": 21.239,
+    "verified": 298,
+    "measured": 300
+   }
+  },
+  {
+   "animations": "off",
+   "n": 1,
+   "reps": [
+    {
+     "rep": 1,
+     "p50": 496.421,
+     "p90": 522.353,
+     "ms_p95": 531.262,
+     "verified": 21,
+     "measured": 21,
+     "false_pass": 0,
+     "tasks_per_s": 1.8189,
+     "tasks_per_gib_min": 774.7367,
+     "tasks_per_gib_min_net": 5828.5834,
+     "cohort_wall_s": 11.546,
+     "per_session_anon_peak_mib": 78.601,
+     "per_session_pss_mib": 173.283,
+     "sessions_seen": {
+      "max": 1,
+      "median": 1
+     },
+     "job_cgroup_peak_mib": 251.578,
+     "host_cpu_pct": 6.523,
+     "loadavg1": 2.65,
+     "mem_available_gib": 46.84,
+     "failures": []
+    },
+    {
+     "rep": 2,
+     "p50": 490.461,
+     "p90": 515.511,
+     "ms_p95": 516.332,
+     "verified": 21,
+     "measured": 21,
+     "false_pass": 0,
+     "tasks_per_s": 1.8482,
+     "tasks_per_gib_min": 785.5763,
+     "tasks_per_gib_min_net": 10890.4323,
+     "cohort_wall_s": 11.362,
+     "per_session_anon_peak_mib": 80.833,
+     "per_session_pss_mib": 176.876,
+     "sessions_seen": {
+      "max": 1,
+      "median": 1
+     },
+     "job_cgroup_peak_mib": 252.074,
+     "host_cpu_pct": 2.316,
+     "loadavg1": 2.25,
+     "mem_available_gib": 46.87,
+     "failures": []
+    },
+    {
+     "rep": 3,
+     "p50": 498.317,
+     "p90": 517.372,
+     "ms_p95": 526.652,
+     "verified": 21,
+     "measured": 21,
+     "false_pass": 0,
+     "tasks_per_s": 1.8153,
+     "tasks_per_gib_min": 774.0252,
+     "tasks_per_gib_min_net": 5503.9521,
+     "cohort_wall_s": 11.568,
+     "per_session_anon_peak_mib": 81.207,
+     "per_session_pss_mib": 173.381,
+     "sessions_seen": {
+      "max": 1,
+      "median": 1
+     },
+     "job_cgroup_peak_mib": 251.809,
+     "host_cpu_pct": 6.441,
+     "loadavg1": 2.39,
+     "mem_available_gib": 46.84,
+     "failures": []
+    }
+   ],
+   "median": {
+    "p50": 496.421,
+    "p90": 517.372,
+    "tasks_per_s": 1.819,
+    "tasks_per_gib_min": 774.737,
+    "tasks_per_gib_min_net": 5828.583,
+    "per_session_anon_peak_mib": 80.833,
+    "per_session_pss_mib": 173.381,
+    "host_cpu_pct": 6.441,
+    "verified": 63,
+    "measured": 63
+   }
+  },
+  {
+   "animations": "off",
+   "n": 5,
+   "reps": [
+    {
+     "rep": 1,
+     "p50": 514.721,
+     "p90": 540.5554000000001,
+     "ms_p95": 541.1218,
+     "verified": 25,
+     "measured": 25,
+     "false_pass": 0,
+     "tasks_per_s": 6.6044,
+     "tasks_per_gib_min": 1611.6724,
+     "tasks_per_gib_min_net": 3543.0548,
+     "cohort_wall_s": 3.785,
+     "per_session_anon_peak_mib": 74.291,
+     "per_session_pss_mib": 72.865,
+     "sessions_seen": {
+      "max": 5,
+      "median": 5
+     },
+     "job_cgroup_peak_mib": 418.848,
+     "host_cpu_pct": 8.711,
+     "loadavg1": 2.65,
+     "mem_available_gib": 46.85,
+     "failures": []
+    },
+    {
+     "rep": 2,
+     "p50": 509.973,
+     "p90": 537.454,
+     "ms_p95": 545.0636,
+     "verified": 25,
+     "measured": 25,
+     "false_pass": 0,
+     "tasks_per_s": 6.6797,
+     "tasks_per_gib_min": 1704.0716,
+     "tasks_per_gib_min_net": 3584.5297,
+     "cohort_wall_s": 3.743,
+     "per_session_anon_peak_mib": 74.859,
+     "per_session_pss_mib": 76.943,
+     "sessions_seen": {
+      "max": 5,
+      "median": 5
+     },
+     "job_cgroup_peak_mib": 422.895,
+     "host_cpu_pct": 8.697,
+     "loadavg1": 2.25,
+     "mem_available_gib": 46.88,
+     "failures": []
+    },
+    {
+     "rep": 3,
+     "p50": 510.727,
+     "p90": 532.3016,
+     "ms_p95": 533.1020000000001,
+     "verified": 25,
+     "measured": 25,
+     "false_pass": 0,
+     "tasks_per_s": 6.7582,
+     "tasks_per_gib_min": 1713.825,
+     "tasks_per_gib_min_net": 3502.6068,
+     "cohort_wall_s": 3.699,
+     "per_session_anon_peak_mib": 78.579,
+     "per_session_pss_mib": 91.628,
+     "sessions_seen": {
+      "max": 5,
+      "median": 5
+     },
+     "job_cgroup_peak_mib": 420.922,
+     "host_cpu_pct": 8.794,
+     "loadavg1": 2.2,
+     "mem_available_gib": 46.89,
+     "failures": []
+    }
+   ],
+   "median": {
+    "p50": 510.727,
+    "p90": 537.454,
+    "tasks_per_s": 6.68,
+    "tasks_per_gib_min": 1704.072,
+    "tasks_per_gib_min_net": 3543.055,
+    "per_session_anon_peak_mib": 74.859,
+    "per_session_pss_mib": 76.943,
+    "host_cpu_pct": 8.711,
+    "verified": 75,
+    "measured": 75
+   }
+  },
+  {
+   "animations": "off",
+   "n": 10,
+   "reps": [
+    {
+     "rep": 1,
+     "p50": 519.246,
+     "p90": 540.6291,
+     "ms_p95": 548.4205,
+     "verified": 50,
+     "measured": 50,
+     "false_pass": 0,
+     "tasks_per_s": 11.2149,
+     "tasks_per_gib_min": 1520.3464,
+     "tasks_per_gib_min_net": 4227.2949,
+     "cohort_wall_s": 4.458,
+     "per_session_anon_peak_mib": 65.399,
+     "per_session_pss_mib": 58.94,
+     "sessions_seen": {
+      "max": 10,
+      "median": 10.0
+     },
+     "job_cgroup_peak_mib": 819.363,
+     "host_cpu_pct": 15.364,
+     "loadavg1": 2.67,
+     "mem_available_gib": 46.87,
+     "failures": []
+    },
+    {
+     "rep": 2,
+     "p50": 517.8235,
+     "p90": 536.3934,
+     "ms_p95": 547.41915,
+     "verified": 50,
+     "measured": 50,
+     "false_pass": 0,
+     "tasks_per_s": 11.5023,
+     "tasks_per_gib_min": 1548.0199,
+     "tasks_per_gib_min_net": 3046.531,
+     "cohort_wall_s": 4.347,
+     "per_session_anon_peak_mib": 74.164,
+     "per_session_pss_mib": 51.456,
+     "sessions_seen": {
+      "max": 10,
+      "median": 10.0
+     },
+     "job_cgroup_peak_mib": 817.566,
+     "host_cpu_pct": 15.271,
+     "loadavg1": 2.15,
+     "mem_available_gib": 46.9,
+     "failures": []
+    },
+    {
+     "rep": 3,
+     "p50": 770.0725,
+     "p90": 1192.8508000000002,
+     "ms_p95": 1204.2964499999998,
+     "verified": 50,
+     "measured": 50,
+     "false_pass": 0,
+     "tasks_per_s": 7.6857,
+     "tasks_per_gib_min": 881.3766,
+     "tasks_per_gib_min_net": 1555.0296,
+     "cohort_wall_s": 6.506,
+     "per_session_anon_peak_mib": 67.645,
+     "per_session_pss_mib": 62.959,
+     "sessions_seen": {
+      "max": 10,
+      "median": 10
+     },
+     "job_cgroup_peak_mib": 819.27,
+     "host_cpu_pct": 11.174,
+     "loadavg1": 2.41,
+     "mem_available_gib": 46.95,
+     "failures": []
+    }
+   ],
+   "median": {
+    "p50": 519.246,
+    "p90": 540.629,
+    "tasks_per_s": 11.215,
+    "tasks_per_gib_min": 1520.346,
+    "tasks_per_gib_min_net": 3046.531,
+    "per_session_anon_peak_mib": 67.645,
+    "per_session_pss_mib": 58.94,
+    "host_cpu_pct": 15.271,
+    "verified": 150,
+    "measured": 150
+   }
+  },
+  {
+   "animations": "off",
+   "n": 20,
+   "reps": [
+    {
+     "rep": 1,
+     "p50": 543.8395,
+     "p90": 575.3478,
+     "ms_p95": 589.7534499999999,
+     "verified": 100,
+     "measured": 100,
+     "false_pass": 0,
+     "tasks_per_s": 1.4567,
+     "tasks_per_gib_min": 403.0858,
+     "tasks_per_gib_min_net": 78.1762,
+     "cohort_wall_s": 68.65,
+     "per_session_anon_peak_mib": 64.58,
+     "per_session_pss_mib": 2.659,
+     "sessions_seen": {
+      "max": 20,
+      "median": 20.0
+     },
+     "job_cgroup_peak_mib": 1609.289,
+     "host_cpu_pct": 4.005,
+     "loadavg1": 3.28,
+     "mem_available_gib": 46.95,
+     "failures": []
+    },
+    {
+     "rep": 2,
+     "p50": 526.8165,
+     "p90": 557.6318,
+     "ms_p95": 563.597,
+     "verified": 100,
+     "measured": 100,
+     "false_pass": 0,
+     "tasks_per_s": 11.4317,
+     "tasks_per_gib_min": 787.7001,
+     "tasks_per_gib_min_net": 1706.7285,
+     "cohort_wall_s": 8.748,
+     "per_session_anon_peak_mib": 64.823,
+     "per_session_pss_mib": 0.0,
+     "sessions_seen": {
+      "max": 20,
+      "median": 19.0
+     },
+     "job_cgroup_peak_mib": 1610.254,
+     "host_cpu_pct": 18.101,
+     "loadavg1": 2.35,
+     "mem_available_gib": 47.01,
+     "failures": []
+    },
+    {
+     "rep": 3,
+     "p50": 580.685,
+     "p90": 1031.7482,
+     "ms_p95": 1130.4670499999997,
+     "verified": 100,
+     "measured": 100,
+     "false_pass": 0,
+     "tasks_per_s": 10.4906,
+     "tasks_per_gib_min": 711.7246,
+     "tasks_per_gib_min_net": 1414.1512,
+     "cohort_wall_s": 9.532,
+     "per_session_anon_peak_mib": 66.379,
+     "per_session_pss_mib": 51.45,
+     "sessions_seen": {
+      "max": 20,
+      "median": 20.0
+     },
+     "job_cgroup_peak_mib": 1608.938,
+     "host_cpu_pct": 17.296,
+     "loadavg1": 3.32,
+     "mem_available_gib": 46.93,
+     "failures": []
+    }
+   ],
+   "median": {
+    "p50": 543.84,
+    "p90": 575.348,
+    "tasks_per_s": 10.491,
+    "tasks_per_gib_min": 711.725,
+    "tasks_per_gib_min_net": 1414.151,
+    "per_session_anon_peak_mib": 64.823,
+    "per_session_pss_mib": 2.659,
+    "host_cpu_pct": 17.296,
+    "verified": 300,
+    "measured": 300
+   }
+  }
+ ],
+ "ceiling": [
+  {
+   "utc": "2026-11-13T00:46:50+00:00",
+   "animations": "on",
+   "n": 30,
+   "p50": 1540.377,
+   "p90": 2150.2671,
+   "verified": 150,
+   "measured": 150,
+   "false_pass": 0,
+   "tasks_per_s": 6.7939,
+   "tasks_per_gib_min": 306.7747,
+   "tasks_per_gib_min_net": 477.8902,
+   "per_session_anon_peak_mib": 63.773,
+   "per_session_pss_mib": 35.662,
+   "job_cgroup_peak_mib": 2391.566,
+   "host_cpu_pct": 23.598,
+   "loadavg1": 5.09,
+   "mem_available_gib": 46.98,
+   "failures": []
+  },
+  {
+   "utc": "2026-11-13T00:47:33+00:00",
+   "animations": "on",
+   "n": 30,
+   "p50": 1541.4975,
+   "p90": 1962.8618,
+   "verified": 150,
+   "measured": 150,
+   "false_pass": 0,
+   "tasks_per_s": 5.7769,
+   "tasks_per_gib_min": 237.4465,
+   "tasks_per_gib_min_net": 475.632,
+   "per_session_anon_peak_mib": 64.817,
+   "per_session_pss_mib": 22.133,
+   "job_cgroup_peak_mib": 2669.453,
+   "host_cpu_pct": 43.571,
+   "loadavg1": 10.48,
+   "mem_available_gib": 45.56,
+   "failures": []
+  },
+  {
+   "utc": "2026-11-13T00:48:18+00:00",
+   "animations": "on",
+   "n": 30,
+   "p50": 1534.0005,
+   "p90": 1613.1943,
+   "verified": 150,
+   "measured": 150,
+   "false_pass": 0,
+   "tasks_per_s": 6.3324,
+   "tasks_per_gib_min": 288.9513,
+   "tasks_per_gib_min_net": 428.0494,
+   "per_session_anon_peak_mib": 70.218,
+   "per_session_pss_mib": 26.288,
+   "job_cgroup_peak_mib": 2387.754,
+   "host_cpu_pct": 43.715,
+   "loadavg1": 11.52,
+   "mem_available_gib": 46.25,
+   "failures": []
+  },
+  {
+   "utc": "2026-11-13T00:48:55+00:00",
+   "animations": "off",
+   "n": 30,
+   "p50": 705.5705,
+   "p90": 2395.582,
+   "verified": 150,
+   "measured": 150,
+   "false_pass": 0,
+   "tasks_per_s": 6.8187,
+   "tasks_per_gib_min": 309.4374,
+   "tasks_per_gib_min_net": 440.7417,
+   "per_session_anon_peak_mib": 62.917,
+   "per_session_pss_mib": 37.556,
+   "job_cgroup_peak_mib": 2343.395,
+   "host_cpu_pct": 25.345,
+   "loadavg1": 13.02,
+   "mem_available_gib": 47.33,
+   "failures": []
+  }
+ ],
+ "compat": [
+  {
+   "n": 5,
+   "rep": 1,
+   "apps": 42,
+   "first_frame": 13,
+   "tree_ok": 13,
+   "launch_ms": {
+    "max": 1442.449,
+    "n": 13,
+    "p50": 549.456,
+    "p90": 1093.209
+   },
+   "tree_ms": {
+    "max": 2.555,
+    "n": 13,
+    "p50": 0.731,
+    "p90": 1.89
+   },
+   "tree_nodes": {
+    "max": 101,
+    "n": 13,
+    "p50": 26.0,
+    "p90": 72.2
+   },
+   "failure_classes": {
+    "GUEST_EXITED": 29
+   },
+   "host_cpu_pct": 18.295,
+   "loadavg1": 2.68,
+   "mem_available_gib": 47.37,
+   "wall_s": 8.041,
+   "first_frame_set": [
+    "com.beemdevelopment.aegis",
+    "com.github.muellerma.coffee",
+    "com.libreweatherrn",
+    "com.money.manager.ex",
+    "com.nononsenseapps.feeder",
+    "io.github.muntashirakon.AppManager",
+    "net.cozic.joplin",
+    "net.gsantner.markor",
+    "net.mullvad.mullvadvpn",
+    "org.billthefarmer.editor",
+    "org.jellyfin.mobile",
+    "org.kde.kdeconnect_tp",
+    "org.secuso.privacyfriendlynotes"
+   ],
+   "lost_vs_k3_n1": [],
+   "gained_vs_k3_n1": [
+    "com.libreweatherrn"
+   ],
+   "job_cgroup_peak_mib": 4860.039,
+   "per_session_pss_mib": 89.033
+  },
+  {
+   "n": 5,
+   "rep": 2,
+   "apps": 42,
+   "first_frame": 13,
+   "tree_ok": 13,
+   "launch_ms": {
+    "max": 1153.343,
+    "n": 13,
+    "p50": 547.624,
+    "p90": 1009.608
+   },
+   "tree_ms": {
+    "max": 12.814,
+    "n": 13,
+    "p50": 0.777,
+    "p90": 2.452
+   },
+   "tree_nodes": {
+    "max": 96,
+    "n": 13,
+    "p50": 26.0,
+    "p90": 72.2
+   },
+   "failure_classes": {
+    "GUEST_EXITED": 29
+   },
+   "host_cpu_pct": 14.553,
+   "loadavg1": 3.48,
+   "mem_available_gib": 47.82,
+   "wall_s": 6.819,
+   "first_frame_set": [
+    "com.beemdevelopment.aegis",
+    "com.github.muellerma.coffee",
+    "com.libreweatherrn",
+    "com.money.manager.ex",
+    "com.nononsenseapps.feeder",
+    "io.github.muntashirakon.AppManager",
+    "net.cozic.joplin",
+    "net.gsantner.markor",
+    "net.mullvad.mullvadvpn",
+    "org.billthefarmer.editor",
+    "org.jellyfin.mobile",
+    "org.kde.kdeconnect_tp",
+    "org.secuso.privacyfriendlynotes"
+   ],
+   "lost_vs_k3_n1": [],
+   "gained_vs_k3_n1": [
+    "com.libreweatherrn"
+   ],
+   "job_cgroup_peak_mib": 5299.77,
+   "per_session_pss_mib": 72.3
+  },
+  {
+   "n": 10,
+   "rep": 1,
+   "apps": 42,
+   "first_frame": 13,
+   "tree_ok": 13,
+   "launch_ms": {
+    "max": 1331.185,
+    "n": 13,
+    "p50": 602.843,
+    "p90": 1152.312
+   },
+   "tree_ms": {
+    "max": 16.183,
+    "n": 13,
+    "p50": 0.785,
+    "p90": 3.031
+   },
+   "tree_nodes": {
+    "max": 101,
+    "n": 13,
+    "p50": 26.0,
+    "p90": 72.2
+   },
+   "failure_classes": {
+    "GUEST_EXITED": 29
+   },
+   "host_cpu_pct": 23.563,
+   "loadavg1": 3.52,
+   "mem_available_gib": 47.63,
+   "wall_s": 4.856,
+   "first_frame_set": [
+    "com.beemdevelopment.aegis",
+    "com.github.muellerma.coffee",
+    "com.libreweatherrn",
+    "com.money.manager.ex",
+    "com.nononsenseapps.feeder",
+    "io.github.muntashirakon.AppManager",
+    "net.cozic.joplin",
+    "net.gsantner.markor",
+    "net.mullvad.mullvadvpn",
+    "org.billthefarmer.editor",
+    "org.jellyfin.mobile",
+    "org.kde.kdeconnect_tp",
+    "org.secuso.privacyfriendlynotes"
+   ],
+   "lost_vs_k3_n1": [],
+   "gained_vs_k3_n1": [
+    "com.libreweatherrn"
+   ],
+   "job_cgroup_peak_mib": 5807.844,
+   "per_session_pss_mib": 55.185
+  },
+  {
+   "n": 10,
+   "rep": 2,
+   "apps": 42,
+   "first_frame": 13,
+   "tree_ok": 13,
+   "launch_ms": {
+    "max": 1301.994,
+    "n": 13,
+    "p50": 592.539,
+    "p90": 1199.226
+   },
+   "tree_ms": {
+    "max": 3.003,
+    "n": 13,
+    "p50": 0.913,
+    "p90": 2.219
+   },
+   "tree_nodes": {
+    "max": 101,
+    "n": 13,
+    "p50": 26.0,
+    "p90": 72.2
+   },
+   "failure_classes": {
+    "GUEST_EXITED": 29
+   },
+   "host_cpu_pct": 16.915,
+   "loadavg1": 4.12,
+   "mem_available_gib": 47.46,
+   "wall_s": 6.712,
+   "first_frame_set": [
+    "com.beemdevelopment.aegis",
+    "com.github.muellerma.coffee",
+    "com.libreweatherrn",
+    "com.money.manager.ex",
+    "com.nononsenseapps.feeder",
+    "io.github.muntashirakon.AppManager",
+    "net.cozic.joplin",
+    "net.gsantner.markor",
+    "net.mullvad.mullvadvpn",
+    "org.billthefarmer.editor",
+    "org.jellyfin.mobile",
+    "org.kde.kdeconnect_tp",
+    "org.secuso.privacyfriendlynotes"
+   ],
+   "lost_vs_k3_n1": [],
+   "gained_vs_k3_n1": [
+    "com.libreweatherrn"
+   ],
+   "job_cgroup_peak_mib": 5930.094,
+   "per_session_pss_mib": 31.536
+  }
+ ],
+ "gaten": [
+  {
+   "n": 1,
+   "rep": 1,
+   "first_frame": 1,
+   "tree_ok": 1,
+   "launch_ms": {
+    "max": 866.794,
+    "n": 1,
+    "p50": 866.794,
+    "p90": 866.794
+   },
+   "tree_ms": {
+    "max": 0.251,
+    "n": 1,
+    "p50": 0.251,
+    "p90": 0.251
+   },
+   "tree_nodes": {
+    "max": 8,
+    "n": 1,
+    "p50": 8.0,
+    "p90": 8.0
+   },
+   "tree_nodes_after_delay": {
+    "max": 243,
+    "n": 1,
+    "p50": 243.0,
+    "p90": 243.0
+   },
+   "cohort_wall_s": 2.878,
+   "wall_s": 7.909,
+   "host_cpu_pct": 7.439,
+   "loadavg1": 2.58,
+   "mem_available_gib": 47.57,
+   "anon_shmem_mib": {
+    "max": 231.289,
+    "median": 187.369
+   },
+   "per_session_anon_shmem_mib": 187.369,
+   "per_session_pss_mib": 297.349,
+   "job_cgroup_peak_mib": 616.844,
+   "session_exits": 1,
+   "native_crashes": [],
+   "texts_after_delay": [
+    "Back",
+    "1 / 3",
+    "Look up Japanese anywhere",
+    "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+    "Study with Anki",
+    "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+    "Connect WaniKani",
+    "Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+    "Step 1 of 2, Turn on lookup mode, current",
+    "Turn on lookup mode",
+    "Android needs Gaten as an accessibility service.",
+    "Step 2 of 2, Choose text recognition, not started"
+   ]
+  },
+  {
+   "n": 1,
+   "rep": 2,
+   "first_frame": 1,
+   "tree_ok": 1,
+   "launch_ms": {
+    "max": 810.175,
+    "n": 1,
+    "p50": 810.175,
+    "p90": 810.175
+   },
+   "tree_ms": {
+    "max": 0.225,
+    "n": 1,
+    "p50": 0.225,
+    "p90": 0.225
+   },
+   "tree_nodes": {
+    "max": 8,
+    "n": 1,
+    "p50": 8.0,
+    "p90": 8.0
+   },
+   "tree_nodes_after_delay": {
+    "max": 243,
+    "n": 1,
+    "p50": 243.0,
+    "p90": 243.0
+   },
+   "cohort_wall_s": 2.83,
+   "wall_s": 7.862,
+   "host_cpu_pct": 16.038,
+   "loadavg1": 2.54,
+   "mem_available_gib": 47.11,
+   "anon_shmem_mib": {
+    "max": 231.414,
+    "median": 194.483
+   },
+   "per_session_anon_shmem_mib": 194.483,
+   "per_session_pss_mib": 295.515,
+   "job_cgroup_peak_mib": 617.773,
+   "session_exits": 1,
+   "native_crashes": [],
+   "texts_after_delay": [
+    "Back",
+    "1 / 3",
+    "Look up Japanese anywhere",
+    "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+    "Study with Anki",
+    "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+    "Connect WaniKani",
+    "Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+    "Step 1 of 2, Turn on lookup mode, current",
+    "Turn on lookup mode",
+    "Android needs Gaten as an accessibility service.",
+    "Step 2 of 2, Choose text recognition, not started"
+   ]
+  },
+  {
+   "n": 5,
+   "rep": 1,
+   "first_frame": 5,
+   "tree_ok": 5,
+   "launch_ms": {
+    "max": 1122.31,
+    "n": 5,
+    "p50": 1104.376,
+    "p90": 1121.937
+   },
+   "tree_ms": {
+    "max": 0.445,
+    "n": 5,
+    "p50": 0.298,
+    "p90": 0.407
+   },
+   "tree_nodes": {
+    "max": 8,
+    "n": 5,
+    "p50": 8.0,
+    "p90": 8.0
+   },
+   "tree_nodes_after_delay": {
+    "max": 243,
+    "n": 5,
+    "p50": 243.0,
+    "p90": 243.0
+   },
+   "cohort_wall_s": 3.149,
+   "wall_s": 8.321,
+   "host_cpu_pct": 28.423,
+   "loadavg1": 2.68,
+   "mem_available_gib": 47.23,
+   "anon_shmem_mib": {
+    "max": 954.641,
+    "median": 910.429
+   },
+   "per_session_anon_shmem_mib": 182.086,
+   "per_session_pss_mib": 183.453,
+   "job_cgroup_peak_mib": 1633.855,
+   "session_exits": 5,
+   "native_crashes": [],
+   "texts_after_delay": [
+    "Back",
+    "1 / 3",
+    "Look up Japanese anywhere",
+    "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+    "Study with Anki",
+    "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+    "Connect WaniKani",
+    "Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+    "Step 1 of 2, Turn on lookup mode, current",
+    "Turn on lookup mode",
+    "Android needs Gaten as an accessibility service.",
+    "Step 2 of 2, Choose text recognition, not started"
+   ]
+  },
+  {
+   "n": 5,
+   "rep": 2,
+   "first_frame": 5,
+   "tree_ok": 5,
+   "launch_ms": {
+    "max": 1053.564,
+    "n": 5,
+    "p50": 1006.822,
+    "p90": 1041.463
+   },
+   "tree_ms": {
+    "max": 0.326,
+    "n": 5,
+    "p50": 0.303,
+    "p90": 0.32
+   },
+   "tree_nodes": {
+    "max": 8,
+    "n": 5,
+    "p50": 8.0,
+    "p90": 8.0
+   },
+   "tree_nodes_after_delay": {
+    "max": 243,
+    "n": 5,
+    "p50": 243.0,
+    "p90": 243.0
+   },
+   "cohort_wall_s": 3.067,
+   "wall_s": 8.23,
+   "host_cpu_pct": 22.028,
+   "loadavg1": 3.56,
+   "mem_available_gib": 47.27,
+   "anon_shmem_mib": {
+    "max": 1011.507,
+    "median": 963.191
+   },
+   "per_session_anon_shmem_mib": 192.638,
+   "per_session_pss_mib": 198.578,
+   "job_cgroup_peak_mib": 1766.949,
+   "session_exits": 5,
+   "native_crashes": [],
+   "texts_after_delay": [
+    "Back",
+    "1 / 3",
+    "Look up Japanese anywhere",
+    "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+    "Study with Anki",
+    "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+    "Connect WaniKani",
+    "Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+    "Step 1 of 2, Turn on lookup mode, current",
+    "Turn on lookup mode",
+    "Android needs Gaten as an accessibility service.",
+    "Step 2 of 2, Choose text recognition, not started"
+   ]
+  },
+  {
+   "n": 10,
+   "rep": 1,
+   "first_frame": 10,
+   "tree_ok": 10,
+   "launch_ms": {
+    "max": 1513.746,
+    "n": 10,
+    "p50": 1430.603,
+    "p90": 1498.74
+   },
+   "tree_ms": {
+    "max": 0.525,
+    "n": 10,
+    "p50": 0.348,
+    "p90": 0.459
+   },
+   "tree_nodes": {
+    "max": 8,
+    "n": 10,
+    "p50": 8.0,
+    "p90": 8.0
+   },
+   "tree_nodes_after_delay": {
+    "max": 243,
+    "n": 10,
+    "p50": 243.0,
+    "p90": 243.0
+   },
+   "cohort_wall_s": 3.529,
+   "wall_s": 8.913,
+   "host_cpu_pct": 47.051,
+   "loadavg1": 3.91,
+   "mem_available_gib": 47.12,
+   "anon_shmem_mib": {
+    "max": 1941.75,
+    "median": 1845.505
+   },
+   "per_session_anon_shmem_mib": 184.55,
+   "per_session_pss_mib": 175.166,
+   "job_cgroup_peak_mib": 3660.336,
+   "session_exits": 10,
+   "native_crashes": [],
+   "texts_after_delay": [
+    "Back",
+    "1 / 3",
+    "Look up Japanese anywhere",
+    "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+    "Study with Anki",
+    "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+    "Connect WaniKani",
+    "Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+    "Step 1 of 2, Turn on lookup mode, current",
+    "Turn on lookup mode",
+    "Android needs Gaten as an accessibility service.",
+    "Step 2 of 2, Choose text recognition, not started"
+   ]
+  },
+  {
+   "n": 10,
+   "rep": 2,
+   "first_frame": 10,
+   "tree_ok": 10,
+   "launch_ms": {
+    "max": 1498.018,
+    "n": 10,
+    "p50": 1440.587,
+    "p90": 1484.118
+   },
+   "tree_ms": {
+    "max": 0.559,
+    "n": 10,
+    "p50": 0.36,
+    "p90": 0.452
+   },
+   "tree_nodes": {
+    "max": 8,
+    "n": 10,
+    "p50": 8.0,
+    "p90": 8.0
+   },
+   "tree_nodes_after_delay": {
+    "max": 243,
+    "n": 10,
+    "p50": 243.0,
+    "p90": 243.0
+   },
+   "cohort_wall_s": 3.512,
+   "wall_s": 8.874,
+   "host_cpu_pct": 47.335,
+   "loadavg1": 5.86,
+   "mem_available_gib": 47.05,
+   "anon_shmem_mib": {
+    "max": 2230.175,
+    "median": 1921.774
+   },
+   "per_session_anon_shmem_mib": 192.177,
+   "per_session_pss_mib": 181.585,
+   "job_cgroup_peak_mib": 4113.461,
+   "session_exits": 10,
+   "native_crashes": [],
+   "texts_after_delay": [
+    "Back",
+    "1 / 3",
+    "Look up Japanese anywhere",
+    "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+    "Study with Anki",
+    "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+    "Connect WaniKani",
+    "Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+    "Step 1 of 2, Turn on lookup mode, current",
+    "Turn on lookup mode",
+    "Android needs Gaten as an accessibility service.",
+    "Step 2 of 2, Choose text recognition, not started"
+   ]
+  }
+ ],
+ "compat_k3_n1_first_frame": {
+  "count": 12,
+  "set": [
+   "com.beemdevelopment.aegis",
+   "com.github.muellerma.coffee",
+   "com.money.manager.ex",
+   "com.nononsenseapps.feeder",
+   "io.github.muntashirakon.AppManager",
+   "net.cozic.joplin",
+   "net.gsantner.markor",
+   "net.mullvad.mullvadvpn",
+   "org.billthefarmer.editor",
+   "org.jellyfin.mobile",
+   "org.kde.kdeconnect_tp",
+   "org.secuso.privacyfriendlynotes"
+  ],
+  "p50_ms": 614.95,
+  "p90_ms": 1030.9
+ }
+}
