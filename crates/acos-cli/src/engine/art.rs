@@ -2547,6 +2547,10 @@ impl SessionBackend for ArtSession {
         self.tree_with_settle("strict")
     }
 
+    fn set_input_settle_mode(&mut self, fast: bool) {
+        self.settle_mode = if fast { "fast" } else { "strict" };
+    }
+
     fn frame(&mut self) -> Result<ObservedFrame, BackendError> {
         // `tree` re-traverses and publishes a new frame; its reply carries both
         // the tree and the PNG of that frame. The PNG bytes are loaded from the

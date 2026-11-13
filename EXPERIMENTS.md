@@ -1222,6 +1222,74 @@ PASS (1 documented false pass -> 0; one live Gaten false pass re-measured as a r
 - **Conclusion / next:** keep the loop at n≥100 to separate rare from fixed; every occurrence now
   arrives with a library + offset to bisect. `R2b` (`+1080 px`) and `R2c` (per-view canvas) untouched.
 
+## E13.7 — GR3: Gaten flows past Home on real ART (tabs, Settings, search/word, lesson gate) + the animating-screen/probe wake — PASS on the flows, the animation wall is honest and owner-decided
+
+- **Date / commit:** 2026-11-13; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/gr3`, branch
+  `gaten-gr3-flows`, off `main` `10778f9`.
+- **Question / goal:** GR1/GR2/E13.4 reached Home and Analytics. What is reachable next in the
+  owner's app, can scenarios assert real state there, and what is the lowest ACOS layer behind the
+  failures? (Orchestrator priority: the welcome screen never strictly settles; name what animates,
+  root-cause the `probe-floor` starvation, and propose — not implement — a verification-semantics
+  change for screens that animate forever.)
+- **Inputs / method:** the same read-only APK (`f344272`, sha256 `e04c7ffc…`), `.cache/gaten/src-dev`
+  read-only, one scenario per ART-lock invocation, `tools/guarded.sh --mem 8G`, scratch
+  `.cache/gr3/`, `animations: off` for functional flows. Five scenarios + five negative controls;
+  gates and crate tests under the same lock. No Gaten file was changed.
+- **Screen map (verified in tree/pixels):** onboarding welcome + 1/3 lookup, 2/3 Anki, 3/3
+  WaniKani; Home; Analytics; Settings hub + Lookup, Text recognition, Anki cards, WaniKani, Kanji
+  reference, Appearance (Theme System/Light/Dark, accents, Haptics/Sounds), About, Support sheet;
+  Home search idle/results/word details (Meanings, Other spellings, Example sentences, Add to
+  Anki); Review Anki opening/blocked/decks/card/rating; WaniKani connect/hub/review/lesson quiz.
+  Anki decks/cards and the WaniKani queue are **unreachable on this guest** (AnkiDroid not
+  installed, no token), so the scenario proves the gate, blocked state, connect form and text input
+  instead of faking a lesson.
+- **Result (measured):** `gaten-home` **14/14, 3/3 runs** after removing the assert on the launch
+  frame (a blank 1-node `first_frame` flake is recovered by the first strict tap's re-traversal).
+  `gaten-tabs` **5/6** (one `GUEST_EXITED` SIGSEGV, known R2a, evidence names libc/thread 2);
+  `gaten-settings` **3/3** (Theme Light -> Dark is proven by the hub's row changing to `Dark`);
+  `gaten-search` **3/3** (type `neko` -> result 猫 -> Word details -> back); `gaten-lesson`
+  **3/3** (Home Anki card -> “Anki is not installed”; WaniKani card -> connect form; typed dummy
+  token is the field's text). Negatives: all five `scenarios/negative/gaten-*-wrong.yaml` fail
+  `ASSERTION_FAILED` (0 false passes). Timing `gaten-tabs`: animations off 8.997 s wall p50, tap
+  p50 1307 ms; on 10.356 s / 1339 ms; host load1 2.2–8.9, RAM 13.1–15.3 GB/61.9 GB.
+- **Priority answers (a/b/c/d):**
+  - **(a) what animates:** `WelcomeScreen.tsx:249` `withRepeat(withTiming(10, 10 s))` — a Reanimated
+    timeline, unaffected by the three Android animator scales; `OnboardingFlow.tsx:156/1142/1157`
+    re-arms a 200 ms auto-advance retry while a page is unverified, inside the 256 ms strict
+    horizon, so the guest reports `queue` forever. Real phone: the same animation and retry run
+    invisibly; the page is not visually static.
+  - **(b) probe starvation:** the host strict-settle loop woke the guest every 20 ms and re-asked
+    even after a sample arrived. Under a 60 fps Reanimated loop that is ~50 full tree walks/s on the
+    main thread shared with the animation; the probe sample stops advancing (`probe-floor`,
+    `tree_age_ms` ~12 s). **Fix:** wake at 50 ms and only when the newest probe sequence has not
+    advanced since the previous request (`ACOS_STRICT_SETTLE_WAKE_MS`). A drawing screen uses its
+    own dirty samples; an idle screen still gets a wake. This removes the host flood; it does not
+    make an endlessly animating screen settle.
+  - **(c) semantics:** options + false-pass analysis in `results/gaten/GR3.md` §4.3: (1) stable
+    tree content ignoring frame generation; (2) region mask; (3) navigation-only fast input +
+    strict capture/assert elsewhere; (4) explicit non-settle assertion. Only (3) is implemented
+    here (scenario inputs may say `settle: fast`; assertions cannot). Owner decision needed for
+    (1)/(2)/(4); nothing was weakened.
+  - **(d) which screens settle:** Home, Analytics, Settings hub/pages, search results/word,
+    Anki blocked and WaniKani connect settle strictly; welcome and the three onboarding pages do
+    not.
+- **ACOS changes:** scenarios can request the API's existing fast input rule (`tap`/`type`/`key`
+  `settle: strict|fast`; protocol schema + executor + backend + `TrustGuard`); ART strict-settle
+  probe wake pacing (above). No settle/selector/visibility/assertion semantics changed.
+- **Fidelity / evidence:** `art-reference`, real ART guest, host-observed pixels. Evidence:
+  `results/gaten/GR3.md` (screen map, step table, timings, walls), `results/gaten/evidence/GR3/`
+  (21 captures: tabs, settings incl. dark, search results/word, Anki blocked, WaniKani connect and
+  typed token). Per-run JSON/tree/frames in `.cache/gr3/runs/` (gitignored).
+- **Regression / false pass:** 5/5 negative controls fail/`ASSERTION_FAILED`; all 8 positive gates
+  pass and `T03-render-wrong` fails as required; `cargo test --release --offline` green for
+  `acos-protocol`/`acos-verify`/`acos-art` and `acos-cli` with the same pre-existing
+  `serve_daemon` socket flake (passes standalone). `gaten-tabs`' one failure is `GUEST_EXITED`
+  (R2a), never a pass.
+- **Conclusion / next:** Gaten's post-Home product surface is now executable and asserted on real
+  ART; the onboarding animation wall is honest and instrumented. Remaining: owner decision on
+  animating-screen semantics; R2a/R2b first-paint + SIGSEGV root cause; a real lesson needs
+  AnkiDroid or a WaniKani account (data, not ACOS).
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
@@ -1259,6 +1327,7 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | Agent loop N=10/N=5, H2 default-on | **85.9 tasks/GiB-min** (off 55.7, +54.2 %) / **135.6** (off 98.8, +37.2 %); 1-min interleaved reps, 0 false passes | `perf-h2-early-gc` `54b9c33` | H2, E2.10 | 2026-11-13 | post-H6 (current main) |
 | Early-GC memory saving per session | **28.2–30.6 MiB ΣPss** at N=5/N=10 (27.1–32.5 %); 28.9–30.4 MiB at N=1 | H2 default `54b9c33` | H2, E2.10 | 2026-11-13 | post-H6 (current main) |
 | False passes | **0**, class closed at the root: selectors/asserts/taps match user-visible nodes only; off-screen-only match = `ELEMENT_OFFSCREEN` | `verify-v1-visibility` | V1, E13.4 | 2026-11-13 | V1 (current main) |
+| Gaten flows passing (real ART) | **gaten-home 14/14 3/3; gaten-tabs 5/6; gaten-settings 3/3; gaten-search 3/3; gaten-lesson 3/3** (animations off) | branch `gaten-gr3-flows` (off `main` `10778f9`) | GR3, E13.7 | 2026-11-13 | new row; one tab rep lost to the known R2a SIGSEGV; onboarding taps are `settle: fast` navigation, every claim after them strict |
 
 ## Backlog (optimization hypotheses; rank = impact × confidence ÷ (cost × risk))
 
@@ -1293,3 +1362,8 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | R2a | Gaten launch flake: SIGSEGV after first frame (~1/10). **Diagnosability done (E13.6):** the guest now reports fault addr / `si_code` / faulting thread / ART backtrace with mapped library + offset, keeps its run tree, and `session-exit.json.native_crash` reaches the agent; crash rate 1/10 → **0/40** but the root cause is still unnamed (not reproduced at n=40). Remaining: n≥100 to separate rare from fixed, then bisect the named library/offset | verified-launch stability | name the frame, then 10/10 | high (evidence path proven with a deterministic fault) | low | low | **diagnosability done; root cause open** (R3 §6) |
 | R2b | W6 `+1080 px` fragment offset: move `ACOSLAUNCH_GEOM_TRACE` to `application-created`, keep failing runs, n=20. Then a first-measure race vs a pager-translation source is decidable from `win_frame` vs `app_cfg` | layout correctness | catch + fix the root cause | medium | low | low | **next** (R2 §6) |
 | R2c | Per-view canvas for the ART guest without a GPU: opt-in per-view nested `Bitmap` canvas + blit (R2 §4.3) vs a `libhwui`-shim `RenderNode`/`HardwareRenderer` | SVG/wordmark fidelity | `canvasIsViewPx=true` | medium | medium/high | medium (draw cost 1.5–3×) | **owner decision** (R2 §4) |
+| G3a | **Scenario input could not request the API's existing fast navigation settle**, so every tap on Gaten's 200 ms-retry onboarding pages was a strict `queue` timeout. Fixed: `settle: fast` on scenario `tap`/`type`/`key`, forwarded through `TrustGuard`; assertions still reject fast | reachable owner flow | 3/3 after the fix | high | low | low | **done, E13.7/GR3** |
+| G3b | **Strict-settle probe wake over-driven the guest**: 20 ms host requests re-asked even after a sample arrived (~50 full tree walks/s under the 10 s Reanimated loop); likely the `probe-floor` starvation. Fixed to 50 ms and no re-ask until the probe sequence moves | probe liveness / tree age | no probe-floor at long n | medium | low | low | **fixed in code, E13.7; still prove at a 60 s pathological n** |
+| G3c | **First frame can be a 1-node blank tree** (old W6/R2a first-paint shape). An assert on the launch frame fails even though the app paints next; the strict first tap re-traverses and recovers it. Mitigated in scenarios (no launch-frame assert) | first-frame predicate / Gaten first paint | launch frame is the app's content | medium | medium | medium | **open, classified; R2a/R2b** |
+| G3d | **Gaten launch SIGSEGV still occurs** (1 of 6 `gaten-tabs` runs in GR3): `SIGSEGV code 2 (SEGV_ACCERR)`, thread 2 `com.gaten`, libc frame; R3 evidence path works | ART guest native fault | name the faulting frame, then 10/10 | high | low | low | **open, same as R2a (E13.6 evidence)** |
+| G3e | **No verification semantics for a screen that animates forever in a region that does not matter.** Options (stable tree content, region mask, navigation-only fast, explicit non-settle assertion) + false-pass analysis in `results/gaten/GR3.md` §4.3 | verify semantics | owner decision | — | — | — | **owner decision; do not weaken until then** |
