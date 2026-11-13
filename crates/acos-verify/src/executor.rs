@@ -747,10 +747,22 @@ fn execute_step(
             // initialiser only exists so the timeout branch can move it.
             #[allow(unused_assignments)]
             let mut last: Option<SessionObservation> = None;
+            // A poll whose strict settle timed out (the screen was still
+            // changing, e.g. an RN splash) is "not yet", not the step's
+            // verdict: keep polling until the wait_for deadline. Nothing an
+            // unsettled poll saw can satisfy the condition, so this is never
+            // more permissive; if the deadline expires while the screen is
+            // still unsettled, that settle TIMEOUT (with its evidence) is the
+            // step's result.
+            let mut unsettled: Option<BackendError> = None;
             loop {
                 polls += 1;
                 match backend.refresh() {
+                    Err(error) if is_settle_timeout(&error) => {
+                        unsettled = Some(error);
+                    }
                     Ok(observation) => {
+                        unsettled = None;
                         if let Some(failure) = observation_binding_error(backend.id(), &observation)
                         {
                             return failure;
@@ -775,6 +787,9 @@ fn execute_step(
                 }
                 let elapsed = started.elapsed();
                 if elapsed >= timeout {
+                    if let Some(error) = unsettled.take() {
+                        return StepExec::backend_error(&error, backend.id(), "wait_for");
+                    }
                     // A selector that matches only a node the user cannot see is
                     // the GR2 W4 false-pass class: say so by name (bounds and
                     // visible rect), instead of a bare timeout over "no match".
@@ -1294,6 +1309,17 @@ fn observation_binding_error(backend: &str, observation: &SessionObservation) ->
 }
 
 /// A blank/placeholder frame must never satisfy a UI or screenshot assertion.
+/// A strict-settle deadline that elapsed inside one observation (P12b's
+/// `settle_timeout_error`: code `TIMEOUT` with the guest's `settle` record in
+/// the details). Any other timeout or error is not this.
+fn is_settle_timeout(error: &BackendError) -> bool {
+    matches!(
+        error,
+        BackendError::Protocol { code: ErrorCode::Timeout, details: Some(details), .. }
+            if details.get("settle").is_some()
+    )
+}
+
 fn meaningful_error(observation: &SessionObservation) -> Option<StepExec> {
     if observation.frame.meaningful {
         return None;

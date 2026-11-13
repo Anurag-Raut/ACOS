@@ -726,6 +726,8 @@ struct WaitBackend {
     manifest: Option<ManifestInfo>,
     polls: u64,
     match_after: u64,
+    /// Polls `1..=unsettled_through` fail with P12's strict-settle TIMEOUT.
+    unsettled_through: u64,
 }
 
 impl WaitBackend {
@@ -734,6 +736,7 @@ impl WaitBackend {
             manifest: None,
             polls: 0,
             match_after,
+            unsettled_through: 0,
         }
     }
 
@@ -821,11 +824,32 @@ impl Backend for WaitBackend {
 
     fn refresh(&mut self) -> Result<SessionObservation, BackendError> {
         self.polls += 1;
+        if self.polls <= self.unsettled_through {
+            // The shape of `settle_timeout_error` (acos-cli engine): TIMEOUT
+            // with the guest's settle record in the details.
+            return Err(BackendError::Protocol {
+                code: acos_protocol::ErrorCode::Timeout,
+                detail: "wait_for: strict settle timed out (newer-store)".to_string(),
+                hint: None,
+                details: Some(serde_json::json!({
+                    "settle": {"settled": false, "bound": "timeout", "reason": "newer-store"},
+                    "context": "wait_for",
+                })),
+            });
+        }
         Ok(self.observation())
     }
 }
 
 fn run_wait_for(match_after: u64, timeout_ms: u64) -> (RunOutcome, u64) {
+    run_wait_for_unsettled(0, match_after, timeout_ms)
+}
+
+fn run_wait_for_unsettled(
+    unsettled_through: u64,
+    match_after: u64,
+    timeout_ms: u64,
+) -> (RunOutcome, u64) {
     let yaml = format!(
         r#"
 version: 1
@@ -842,6 +866,7 @@ steps:
     let scenario = Scenario::from_yaml_str(&yaml).expect("valid scenario");
     let artifacts = scratch("wait-for-teeth");
     let mut backend = WaitBackend::new(match_after);
+    backend.unsettled_through = unsettled_through;
     let options = RunOptions {
         apk: workspace().join("fixtures/build/apps/hello-views.apk"),
         scenario_path: workspace().join("scenarios/hello-views.yaml"),
@@ -901,6 +926,38 @@ fn wait_for_returns_as_soon_as_the_condition_appears() {
         "wait_for did not return early: {:?}",
         elapsed
     );
+}
+
+/// P12 integration bug (found on Gaten, whose RN splash keeps the screen
+/// changing): one poll's strict-settle timeout must not end a `wait_for` that
+/// still has time left. The unsettled polls are "not yet"; the condition is
+/// met only on a later, settled traversal.
+#[test]
+fn wait_for_keeps_polling_through_unsettled_polls() {
+    let (outcome, polls) = run_wait_for_unsettled(2, 3, 4000);
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Pass,
+        "two unsettled polls, match on poll 3: {:?}",
+        outcome.verdict.failure
+    );
+    assert_eq!(polls, 3);
+}
+
+/// ...and a screen that never settles is still a TIMEOUT at the wait_for
+/// deadline, carrying the settle evidence. Never a pass.
+#[test]
+fn wait_for_on_a_never_settling_screen_is_a_settle_timeout() {
+    let started = std::time::Instant::now();
+    let (outcome, polls) = run_wait_for_unsettled(u64::MAX, 1, 150);
+    assert_eq!(outcome.verdict.verdict, Status::Timeout);
+    assert!(!outcome.verdict.verdict.is_pass());
+    assert!(polls >= 2, "must keep polling until the deadline, got {polls}");
+    assert!(started.elapsed() >= std::time::Duration::from_millis(150));
+    let failure = outcome.verdict.failure.as_ref().expect("timeout failure");
+    assert_eq!(failure.error.code, acos_protocol::ErrorCode::Timeout);
+    let details = failure.error.details.as_ref().expect("settle evidence");
+    assert!(details.get("settle").is_some(), "{details}");
 }
 
 // ---------------------------------------------------------------------------
