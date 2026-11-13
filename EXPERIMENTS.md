@@ -1646,6 +1646,126 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   `gaten-home` continuous-animation capture is the other blocker: strict settle cannot bind the
   forever-looping welcome screen, and the main binary fails it too (R2's area).
 
+## E3.4 — S3: Stage 3 scale — agent loop at N=1…30, K1 compat and Gaten at concurrency — MEASURED (2 reset defects found)
+
+- **Experiment ID / name:** S3 — Stage 3 real-agent scale and compatibility (plan §7).
+- **Responsible agent:** S3 (worktree `scale-s3-n20`, off `main` `15849a5`); product code untouched.
+- **Bottleneck investigated:** the loop metrics stopped at N=10 (E3.2/E3.3) and H17 fixed N=10
+  reliability at 10 sessions. Stage 3 asks whether the *verified* loop, the 42-APK compat ladder and
+  Gaten hold at N=20/N=30 and at N=5/N=10 concurrency, and what the ceiling is. Two questions are
+  separate: does throughput scale (it should) and does anything break only under N (H17 showed it can).
+- **Baseline (p50):** E3.2/E3.3 current main: loop 1438.0 ms/task / 0.653 tasks·s⁻¹ with
+  283.5 (page-cache) / 905.3 (anon+shmem) tasks/GiB-min at N=1 and 1428.1 / 2.679 / 667.6 / 865.8 at
+  N=5; 1423.9 ms → 507–523 ms with animations off (E3.3); memory/session 64.96/65.22/65.59 MiB at
+  N=1/5/10; H17 N=10 600/600 verified, N=20 40/40 (2 tasks/session). Compat N=1 (K3): 12–13/42 first
+  frame, 12/42 tree, p50 647 ms / p90 1050 ms. Gaten was last exercised at N=1 only (GR1/GR2).
+- **Hypothesis + proposed solution:** (a) latency and per-session footprint are already flat in N, so
+  the loop should add throughput linearly up to RAM/cpu limits with 0 false passes; (b) the compat
+  funnel is per-app-wall bound, so N=5/N=10 must not lose an app that frames at N=1; (c) Gaten is the
+  RN stress case and must frame+tree at N=10 with no crash. Add `loop20`/`loop30` to the H6 bench on
+  the existing `loop10` pattern, record per-cell p90/per-session ΣPss/anon+shmem/host CPU, and add one
+  concurrency harness for the corpus and Gaten rather than hand-driving sessions.
+- **Implementation + commits:** tool only (rule: code changes limited to `tools/bench/**`).
+  `tools/bench/acos_bench.py`: `loop20`/`loop30` phases + `loop_n{20,30}_*` metrics; per-cell cohort
+  block (p50/p90/p95/max, host CPU%, host cgroup, per-session ΣPss and anon+shmem from a 1 Hz sampler
+  on the P5 serve tree, the raw per-sample series), no change to any existing metric. `tools/bench/acos-bench.sh`:
+  `loop20|loop30` groups (24G, 700 s). **new** `tools/bench/s3_scale.py`: `--mode compat` (42-APK
+  queue, N workers, launch→first frame→fast tree→destroy) and `--mode gaten` (N sessions behind a
+  barrier, fast settle, immediate + 2 s tree, 5 s held for the memory read, crash scan of
+  `session-exit.json`); reuses `d2_warm.Serve`, `WarmSampler`, `benchlib`. Results:
+  `results/bench/S3.md`, `results/bench/S3-summary.json`,
+  `results/bench/S3-evidence/loop-n20-reset-{nofreshframe,guestexited}.json`. Binary `acos` sha256
+  `a90b839d…` (release, real ART).
+- **Benchmark method + environment + host load:** 24 loop cells (N=1/5/10/20 × animations on/off × 3
+  reps, arms interleaved `on,off`/`off,on`/`on,off`), 4 N=30 ceiling reps (3 on, 1 off), 4 compat runs
+  (2 × N=5, 2 × N=10), 6 Gaten runs (2 × N=1/5/10), 1 P11/scenarios false-pass group, 2 failure
+  reproductions (11 P5 reps at N=20). One `run-exclusive.sh --task S3 -- tools/guarded.sh --mem 24G`
+  acquisition per cell, **lock hold (elapsed − queue) 8–151 s**, every acquisition < 10 min. Host:
+  Ryzen 9 9950X, 32 threads, 61,908 MiB; scratch `.cache/s3/**`, `ACOS_FONT_DIR` set, `ACOS_BOOT_DIR`
+  unset, no `/tmp`. **Interleaved with other agents** (recorded, not avoided): GR3 51 acquisitions,
+  K4 20, H15 20, MG6 16, MG5 15, W7 8, H13 3, MG4 3, K5 2 in the same window; queue waits 0–483 s;
+  every cell states its own load1 (loops 0.71–3.52; N=30 5.1–13.0; compat 2.7–4.1; Gaten 2.5–5.9) and
+  `MemAvailable` (45.6–48 GiB throughout, host used ≤ 24 %).
+- **Results, agent loop (medians of 3 reps; 0 false passes in every cell):**
+
+  | animations | N | verified/total | ms/task p50 / p90 | tasks/s | tasks/GiB-min cgroup / anon+shmem | anon+shmem/session (peak) | ΣPss/session | host CPU |
+  |---|---:|---:|---|---:|---|---:|---:|---:|
+  | on | 1 | 63/63 | 1437.8 / 1451.9 | 0.65 | 278.3 / 887.6 | 87 MiB | 177 MiB | 2.1 % |
+  | on | 5 | 75/75 | 1422.5 / 1443.7 | 2.68 | 663.4 / 847.8 | 77 MiB | 74 MiB | 5.8 % |
+  | on | 10 | 149/150 | 1443.9 / 1465.0 | 4.96 | 651.2 / 721.2 | 73 MiB | 62 MiB | 15.6 % |
+  | on | 20 | 298/300 | 1460.4 / 1501.8 | 7.41 | 471.9 / 603.0 | 73 MiB | 53 MiB | 21.2 % |
+  | off | 1 | 63/63 | 496.4 / 517.4 | 1.82 | 774.7 / 5828.6 † | 81 MiB | 173 MiB | 6.4 % |
+  | off | 5 | 75/75 | 510.7 / 537.5 | 6.68 | 1704.1 / 3543.1 † | 75 MiB | 77 MiB | 8.7 % |
+  | off | 10 | 150/150 | 519.2 / 540.6 | 11.21 | 1520.3 / 3046.5 † | 68 MiB | 59 MiB | 15.3 % |
+  | off | 20 | 300/300 | 543.8 / 575.3 | 10.49 | 711.7 / 1414.2 † | 65 MiB | n/m ‡ | 17.3 % |
+
+  Latency is flat in N (±1.3 % p50 at N=1…20 on; p90 +1.5…+3.5 %), throughput is linear
+  (0.65 → 7.41 tasks/s on, 11.4×), footprint is flat (73 MiB/session anon+shmem at N≥10; ΣPss/session
+  falls 177→53 MiB because Pss divides the shared image by its mapping count). Pooled **1173/1176
+  verified (99.74 %)** in the 24 cells. Off arm is 2.7–2.9× lower latency at every N.
+  † off-arm anon+shmem GiB-min is **inflated by the sampler** (1 s guest-scope discovery vs a ~0.5 s
+  guest lifetime): it is a tool defect (`S3c`), recorded rather than quoted. The sampling-independent
+  view is flat too: at the measured 65.6 MiB/session the steady rate `60/(p50_s × 0.0641)` is
+  651/658/648/641 tasks/GiB-min (on) at N=1/5/10/20 — **verified tasks per GiB is a constant of the
+  loop shape, not of N**; scale buys throughput linearly and costs linearly.
+  ‡ off N=20 ΣPss read 2.7 / 0.0 / 51.5 MiB/session across reps (sampler sees launchers between
+  resets, `S3c`); the on-arm 53 MiB read is the usable one.
+- **The ceiling — N=30 (largest probed; N=20 used < 50 % of host RAM, so the gate allowed it):**
+  **600/600 verified (100 %)**, 0 false passes over 4 reps (3 on, 1 off); p50 1534–1541 ms on
+  (706 off), p90 1613–2150 on (2396 off); 5.78–6.79 tasks/s on; **job cgroup peak 2.34–2.67 GiB**
+  (≈ 4 % of 61.9 GiB), host `MemAvailable` ≥ 45.6 GiB (host used 23–24 %, far under the 90 % rule),
+  no `oom_kill`. The ceiling is therefore **≥ N=30**, limited by latency stability at load1 10–13
+  and not by memory or correctness. N>30 was not probed (packet cap).
+- **K1 compat corpus at concurrency (42 APKs):** N=5 **13/42 first frame, 13/13 tree** in both clean
+  runs (p50 548–549 ms, p90 1010–1093; tree p50 0.73–0.78 ms, 26 nodes); N=10 **13/42 / 13/13**
+  (p50 593–603, p90 1152–1199; tree 0.79–0.91 ms, 26 nodes). Baseline K3 N=1: 12–13/42, p50 647,
+  p90 1050. **No app that frames at N=1 fails at N=5 or N=10**; the only differences are the known
+  per-app flickers (`com.libreweatherrn` frames in all runs; `org.wikipedia` framed in 2 of 4 N=10
+  runs and 0 N=5 runs — same app-level `exit 10` wall). Failure class is **only `GUEST_EXITED`**
+  (29/29 and 29/28/29 per run): the same per-app walls, no hang, no `native_crash`, no timeout.
+  Job cgroup peak 4.9–5.9 GiB (page cache of 200 MB APKs), host CPU 15–24 %.
+- **Gaten at scale (RN 0.86.3/Fabric/Hermes, fast observation, no strict assert):** **16/16 launches
+  reached first frame and tree** (2 reps at each N): p50 810–867 ms at N=1, 1007–1104 at N=5,
+  1431–1441 at N=10 (p90 1.48–1.50 s), CPU 7–16 / 22–28 / **47 %** of one core. The tree is the same
+  welcome screen at every N — 243 nodes, `Look up Japanese anywhere / Study with Anki / Connect
+  WaniKani / Turn on lookup mode` — while a tree read *immediately* after the first frame returns
+  8 nodes with no text at every N (the RN content mounts up to ~2 s later; that is per-app, not
+  scale). Memory: **182–194 MiB anon+shmem per session flat**, ΣPss/session 175–199 MiB at N≥5, job
+  cgroup peak 617 MiB (N=1) → 1.63–1.77 GiB (N=5) → 3.66–4.11 GiB (N=10; the per-session heap + the
+  per-run 115 MB staged APK's page cache). **0 native crashes** in 16 exits (all `outcome: ok`,
+  `stage: teardown-evidence`, `native_crash: null`) — the first Gaten crash-evidence record at scale.
+- **False-pass check:** loop `false_pass` **0** in all 28 cells (1 776 measured tasks, 1 773 verified;
+  the three losses are one reset step at N=10 and two at N=20, counted as failures); P11 settle lab
+  on the same binary **0 false passes** (12/12 cases, the progress case an honest `timeout`);
+  `scenarios/p11-*.yaml` **0/12 failed**. The compat/Gaten harnesses make no assertion, so nothing
+  they record can be a false pass.
+- **Defects found (new Backlog rows):** `S3a` reset relaunch **hangs with no live frame**
+  (`NO_FRESH_FRAME`/`LIVE_FRAME_UNAVAILABLE`, 60 048 ms, `activity_resumed=true probe=true
+  c1_generation=0`; 1/100 N=20 bench + 1/100 reproduced); `S3b` reset relaunch **guest exits 1 in
+  133–301 ms** (`GUEST_EXITED: … before its first live frame (status exit status: 1)`; 1/150 at N=10,
+  1/300 at N=20, 1/100 reproduced; no signal/native_crash record, guard line not retained → cause
+  open, H17's class must be ruled out); `S3c` **the bench's own anon+shmem/Pss sampler undercounts
+  churn** (1 s discovery vs sub-second guests; Pss sees launchers between resets). Evidence:
+  `results/bench/S3-evidence/`.
+- **Why it worked / what it found:** the loop scales: latency and footprint are flat to ±1.3 %/±1 MiB
+  per session from N=1 to N=30, so verified tasks/s grows 11.4× and the ceiling is set by host load
+  (latency p90) rather than memory. The compat ladder is per-app-wall bound and does not lose an app
+  at 5×/10× concurrency; Gaten's RN path frames and trees at 10× with no crash and flat per-session
+  memory. What did **not** survive are two rare reset/relaunch failures at N≥10 that H17's 600/600
+  did not sample: they are stochastic, appear as a 60 s no-frame hang and as an immediate exit 1, and
+  cost 2/300 tasks at N=20.
+- **Trade-offs / regressions:** none in the metrics (latency rows tie E3.2 within the same host-load
+  band; N=30 is 5–8 % slower p50 because the host was at load1 5–13). The two reset failures are the
+  regression to chase, not a metric change. The `S3c` finding corrects the *interpretation* of the
+  off-arm GiB-min (E3.3's 5–8.7× ratio is a denominator artifact; the true ratio is 2.7–2.9×).
+- **Follow-ups:** S3a (capture `c1_generation` + FrameStore state for the hanging relaunch),
+  S3b (retain the guard/`session-exit.json` line for exit 1), S3c (sampler: walk guest cgroups every
+  tick or on change; sample Pss per live session id), then re-run the N=20 on-arm cells to see whether
+  the rate goes from 99.3 % to 100 %, and probe N>30 only after a quiet-host pass.
+- **Fidelity / evidence:** `art-reference` (real ART, release), MEASURED, 0 false passes;
+  `results/bench/S3.md` (all tables, per-rep spreads, method, limits), `results/bench/S3-summary.json`,
+  `results/bench/S3-evidence/`, raw phase docs `.cache/s3/bench-run-*/`, `.cache/s3/logs/`.
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
@@ -1680,6 +1800,11 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | False passes | **0** — P11 0/105, scenarios 0/12 (negative control = honest `timeout`), loop 0; verified 63/63 (N=1) and 75/75 (N=5) | main `4958703` | B2, E3.2 | 2026-11-13 | H6's 1-in-75 strict-assert flake (H16) did not reproduce |
 | Agent loop N=10 reliability | **100 %: 600/600 verified over 12 reps** (load1 1.0–4.6), 0 false passes; 428/450 (95.1 %) before the fix (exit 1/126 torn Landlock plan, exit 135 SIGBUS on the truncated mapped APK) | `fix-h17-n10-reset` off main `84fc8bc`, 10 sessions / one serve | H17, E2.13 | 2026-11-13 | fixed two shared-input races (atomic publish + per-run APK); see E2.13 |
 | Compat first-frame rate (K1 corpus, real ART, N=1) | **17/42 (40.5 %)**; tree/screenshot 16/42 (38.1 %); tap 9/42 (21.4 %); `onCreate` completed **20/42** (47.6 %); first frame p50 **808 ms** / p90 **1269 ms** (K3 12/42, tap 7/42, 16/42, 647/1050 ms). Same binary with app providers off: 14/42 first frame, tap 8/42, 18/42, p50 546/p90 1043 ms — ON is >= OFF at every rung with zero per-app regressions, so ON is the default | K4 `compat-k4-metadata` (E5.8 K3d metadata+sourceDir, E5.9 K3e binder-driver refill) | K4/K3d–K3e, E5.8–E5.9 | 2026-11-13 |
+| Agent loop at N=20 | **1460.4 ms/task p50 / 1501.8 p90; 7.41 verified tasks/s; 471.9 (page cache) / 603.0 (anon+shmem) tasks/GiB-min; 73 MiB anon+shmem and 53 MiB ΣPss per session; 21.2 % of one core; 298/300 verified, 0 false passes** | `scale-s3-n20` off main `15849a5` (H2+P12+H17), 20 sessions / one serve, 3 reps, animations on | S3, E3.4 | 2026-11-13 | latency +1.6 % vs N=1 and throughput 11.4×; the 2 losses are the new reset defects S3a/S3b. See §1.2 for why the anon+shmem integral is a floor (S3c); at the measured 65.6 MiB/session the steady rate is 641 tasks/GiB-min |
+| Agent loop at N=20 (animations off, functional-check mode) | **543.8 ms/task p50 / 575.3 p90; 10.49 verified tasks/s; 711.7 / 1414.2 † tasks/GiB-min; 65 MiB/session anon+shmem; 300/300 verified, 0 false passes** | same branch, `--animations off` | S3, E3.4 | 2026-11-13 | 2.7× the on-arm throughput; † denominator undercount (S3c) — the sampling-independent ratio is 2.7× |
+| Scale ceiling (verified loop, largest N probed) | **N=30: 600/600 verified (100 %), 0 false passes**; p50 1534–1541 ms on, 5.78–6.79 tasks/s; **job cgroup peak 2.34–2.67 GiB (≈4 % of 61.9 GiB), host used 23–24 %**, no oom_kill | same branch, 24G guarded arm, 4 reps (3 on / 1 off), load1 5.1–13.0 | S3, E3.4 | 2026-11-13 | N=20 used < 50 % of RAM so N=30 was probed and passed; the ceiling is ≥ N=30 and is set by latency stability under external load, not memory. Reset defects S3a/S3b are stochastic (seen at N=10/20, not in this 600) |
+| Compat first-frame rate at concurrency (K1 corpus, 42 APKs) | **N=5: 13/42 (13/13 tree); N=10: 13/42 (13/13 tree), p50 593–603 ms / p90 1152–1199 ms** — same rung as N=1 (12–13/42, p50 647 / p90 1050); **no app lost vs N=1**, failure class only `GUEST_EXITED` | `scale-s3-n20` off main `15849a5`, real ART, `settle:fast`, 25 s first-frame budget, 2 runs per N | S3, E3.4 | 2026-11-13 | per-app walls, not concurrency: `com.libreweatherrn` (known K3 flicker) framed in every run; `org.wikipedia` flickers (2 of 4 N=10 runs, 0 N=5) at its app-level `exit 10` wall |
+| Gaten at N=10 (RN 0.86.3 / Fabric / Hermes, real ART) | **10/10 first frame, 10/10 tree (243 nodes), p50 1431–1441 ms / p90 1.48–1.50 s; 185–192 MiB anon+shmem and 175–182 MiB ΣPss per session; 47 % of one core; 0 native crashes in 16 exits over 2 reps** | `scale-s3-n20` off main `15849a5`, fast settle (welcome screen never strictly settles; GR3), 2 reps at N=1/5/10 | S3, E3.4 | 2026-11-13 | the per-session footprint is flat from N=1 (187–194 MiB) to N=10; first frame precedes the RN content by up to ~2 s (immediate tree = 8 nodes, +2 s = 243) |
 | Agent loop N=10 (Z7 method, fresh launch/task) | 45.0 tasks/GiB-min main; **67.7 with exec-path early GC** (seam, off by default → H2); 103.6 zygote+early GC (research, trusted only) | Z7 `zygote-z7-lifetime` | Z7, E2.8 | 2026-11-12 | post-H6 (current main) |
 | Agent loop N=10/N=5, H2 default-on | **85.9 tasks/GiB-min** (off 55.7, +54.2 %) / **135.6** (off 98.8, +37.2 %); 1-min interleaved reps, 0 false passes | `perf-h2-early-gc` `54b9c33` | H2, E2.10 | 2026-11-13 | post-H6 (current main) |
 | Early-GC memory saving per session | **28.2–30.6 MiB ΣPss** at N=5/N=10 (27.1–32.5 %); 28.9–30.4 MiB at N=1 | H2 default `54b9c33` | H2, E2.10 | 2026-11-13 | post-H6 (current main) |
@@ -1697,6 +1822,9 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 
 | ID | Hypothesis | Metric | Expected | Confidence | Cost | Risk | Status |
 |---|---|---|---|---|---|---|---|
+| S3a | **Reset relaunch can hang with no live frame (60 s).** `acos_reset` → relaunch → `NO_FRESH_FRAME`/`LIVE_FRAME_UNAVAILABLE` after 60 048 ms: `no live frame within 60s: activity_resumed=true probe=true c1_generation=0` (`crates/acos-art/src/launch.rs` startup-budget expiry). The guest resumed its Activity and the probe produced tree samples, but C1 stored no frame for 60 s, so the launcher killed it. 1/100 tasks at N=20 (bench r2-on) + 1/100 reproduced; one N=20 off rep also has a 60 s successful reset. Evidence `results/bench/S3-evidence/loop-n20-reset-nofreshframe.json` | loop verified rate at N≥10 | back to 100 % | high (reproduced, named path) | low (add C1/FrameStore state to the timeout record) | low | **open, found by S3 (E3.4)** |
+| S3b | **Reset relaunch guest exits 1 in 133–301 ms.** `GUEST_EXITED: the guest ended before its first live frame (status exit status: 1)`; 1/150 tasks at N=10, 1/300 at N=20, 1/100 reproduced. No signal, no `native_crash` record (R3 retention only fires on a crash signal) and the guard line was not kept, so the cause is unnamed; it is the symptom class H17 fixed (torn `<data>/seccomp/landlock.plan` or mapped APK), which must be ruled out first. Evidence `results/bench/S3-evidence/loop-n20-reset-guestexited.json` | loop verified rate at N≥10 | back to 100 % | high (reproduced) | low (retain guard/`session-exit.json` for exit 1, then re-read) | low | **open, found by S3 (E3.4)** |
+| S3c | **The bench's anon+shmem and Pss sampling undercounts churn.** `WarmSampler` rediscovers guest cgroups every 1 s, so guests that live < 1 s (every animations-off task, every short compat app) are missing from most samples: the anon+shmem GiB-min integral is inflated 5–10× on the off arm and ~1.4× on the on arm (E3.3's 5–8.7× off-arm ratio is this bias; the true ratio is 2.7–2.9×). `session_pss()` sums the serve's *current* children, so during a relaunch burst it sees launchers without guests (off N=20 read 2.7 / 0.0 / 51.5 MiB per session). | tasks/GiB-min, M2 | trustworthy GiB metric | high (measured both arms) | low (discover on change; Pss per session id) | low (metric only) | **open, found by S3 (E3.4)** |
 | H15 | **The reset/relaunch is the loop's next wall: 342 ms (24 %) with animations on, 245–343 ms (48 %) with animations off** — fresh ART boot + framework + Activity + strict bind, per task. Zygote/shared boot image (B3 `-Xnorelocate` −13.6 MiB/session measured) or a fast reset for non-asserting steps | M6, loop, tasks/GiB-min | −150–200 ms/task → −10…14 % loop (on), −30…40 % (off) | medium-high | medium | medium (fixed image address / ASLR, zygote F1) | **#1, was #3** |
 | H13 | **Memory per session (now 65–67 MiB with H2) is the GiB denominator.** B3's shared uncompressed image is implemented as `ACOS_ART_BOOT_IMAGE=lz4|shared-fixed|shared-aslr`; `shared-aslr` relocates once per serve (16-bit base) and saves 10–12 MiB/session at N=5/10 | M2, tasks/GiB-min | −10–12 MiB/session (shared image); zygote CoW still −25–60 % at N≥5 | high (shared image) / medium (zygote) | low (shared image) / medium | medium (fixed image address for `shared-fixed`; +3.6 s first launch) | **#1, implemented opt-in (E2.12); not default — owner decision. Next: offline relocator or zygote CoW** |
 | H14 | **Strict tap 956 ms with the framework press/elevation animator.** Adopted the P12 `animations:off` switch as the agent-facing functional-check mode: 7.34×/8.35× taps, 2.71–2.84× loop, 5–8.7× tasks/GiB-min (anon+shmem), 0 false passes. Defaults unchanged | M8, loop | measured | high | low | medium (verification semantics: fast never backs an assertion) | **done: mode available, E3.3; use it for functional checks** |
