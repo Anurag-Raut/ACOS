@@ -1766,6 +1766,67 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   `results/bench/S3.md` (all tables, per-rep spreads, method, limits), `results/bench/S3-summary.json`,
   `results/bench/S3-evidence/`, raw phase docs `.cache/s3/bench-run-*/`, `.cache/s3/logs/`.
 
+## E3.5 — S3c: the bench memory sampler's churn undercount — FIXED, metric corrected (PASS on the tool, off/on GiB-min ratio re-explained)
+
+- **Experiment ID / name:** S3c — trustworthy tasks/GiB-min for the agent loop (plan §7, backlog `S3c`).
+- **Responsible agent:** S3c (worktree `s3c`, branch `bench-s3c-sampler`, off `main` `5cae694`);
+  metric tooling only — no product code touched.
+- **Bottleneck investigated:** E3.4 §1.2 could not quote the off-arm GiB-min at all. `WarmSampler`
+  (d2_warm) re-walked `/proc` for guest cgroups once a second, so guests living < 1 s (every
+  animations-off task, every short compat app) were absent from most samples, and `session_pss()`
+  summed `acos serve`'s *current* children, so a relaunch burst read launchers without guests
+  (off N=20: 2.7 / 0.0 / 51.5 MiB per session).
+- **Baseline (p50):** main N=20 loop, off arm 530.8/534.6 ms/task, on arm 1467–1490 ms; published
+  denominators 1414.2 (off) / 603.0 (on) tasks·GiB⁻¹·min⁻¹ (anon+shmem) and 65 MiB/session, of which
+  only the footprint was trustworthy.
+- **Hypothesis + proposed solution:** the defect is discovery latency, not the poll rate — so discover
+  guest scopes **on creation** (one `listdir` of the slice the job scope lives in, ownership proved by
+  walking the new scope's own ppid chain; the 1 s `/proc` walk kept as a backstop), read the kernel's
+  monotone `memory.peak` per scope as a sampling-independent cross-check, and charge Pss **per session
+  id** (run-tree path in the guest's cmdline, `<ACOS_SERVE_ARTIFACTS>/<session>/…`) instead of per
+  current child. Report coverage and the sampler's own thread CPU beside every number.
+- **Implementation + commits:** `tools/benchlib.py` (`ChurnSampler` + `_pid_chain_hits`, `cgroup_procs`,
+  `thread_cpu_seconds`), `tools/bench/acos_bench.py` (`phase_loop` runs it *beside* the legacy sampler
+  and records `cohort.memory_s3c`; new metric `loop_n<N>_tasks_per_gib_min_net_s3c`),
+  `tools/tests/test-benchlib.py` (+4 tests, 232 pass). Commit on `bench-s3c-sampler`.
+- **Method + environment + host load:** N=20 agent loop, counter fixture, 1 warm-up + 5 measured tasks
+  per session, 20 sessions in one `acos serve`, real ART (`acos bench` release binary `7fb5e56064d3…`,
+  unchanged main build, so before/after is a **paired sampler** comparison in the *same* cohort window
+  rather than two campaigns). Host Ryzen 9 9950X, 32 threads, 61.9 GiB; one
+  `run-exclusive.sh --task s3c -- tools/guarded.sh --mem 8G --time 400` acquisition per rep;
+  load1 3.66–8.47, MemAvailable ≥ 44.4 GiB, host CPU 21.9–40.4 % (other agents K5h/S3AB held the lock).
+- **Before/after (N=20; GiB-min anon+shmem, before → after):**
+  off **1182.1–1225.6 → 553.5–557.0** tasks/GiB-min (0.0846–0.0816 → 0.1807–0.1795 GiB-min);
+  on **664.7–768.1 → 427.2–474.3** (0.1504–0.1302 → 0.2341–0.2108). Per-session memory:
+  before 2.75–43.8 MiB anon+shmem and 0.0–55.0 MiB ΣPss (a 16×/23× spread including a **0.0** reading);
+  after **66.5–68.9 MiB and 53.0–57.0 MiB in every rep, both arms** — matching E3.2's 65.6 MiB/session.
+  Coverage: **21 live guest scopes for 20 sessions, zero zero-guest ticks, 100 % of guests carry a
+  kernel `memory.peak`, median 17–33 ticks observed per guest**; the launch+reset step rule reads
+  141–155/200 and is an upper bound (a relaunch's old and new scope overlap). Correctness 500/500
+  verified, **0 false passes**. Sampler cost 8.1–8.2 % of one core in the final tuning (Pss 1 Hz,
+  `memory.peak` 2 Hz, `memory.stat` 10 Hz over ~21 scopes); the 20–37 % rows are an earlier
+  20 Hz/10 Hz-Pss tuning that was rejected.
+- **Result = accepted (tool) / needs-investigation (none).** The corrected metric is the one to quote.
+- **Why it worked / why the ratio moved:** the old denominator was too *small* (it counted the
+  daemon's ~83 MiB most of the time instead of the ~1.37 GiB actually resident), so published
+  tasks/GiB-min were 2.5× (off) and 1.3–1.4× (on) too high. The **2.7–2.9× sampling-independent
+  figure is the latency / per-busy-session ratio and it is confirmed exactly**: p50 ratio
+  `1489.8/534.6 = 2.79`, `1467.1/530.8 = 2.76`. The *cohort* GiB-min ratio is **1.23–1.30×**, and that
+  is correct too: at N=20 the denominator charges 20 resident sessions for the whole cohort while
+  throughput is relaunch-bound (both arms idle ~76 % of the cohort wall), so GiB-min at an equal
+  footprint (66.5–68.9 MiB both arms) must track throughput (8.87–9.20 vs 6.70–7.58 tasks/s =
+  1.17–1.37×). S3's before ratio (2.34×) was manufactured by the *unequal* undercount
+  (2.5× off vs 1.3× on), not by a property of the loop.
+- **Trade-offs / regressions:** the sampler costs ~8 % of one core at N=20 (it scales with live
+  scopes); its charge is subtracted from every sample but it is not zero. Two clean reps per arm
+  (not 3): the lock was shared and a third off rep was load-contaminated (off p50 1303 ms at load1
+  7.6 — reported, not used).
+- **Follow-ups:** make `s3_scale.py` use `ChurnSampler` for the compat/Gaten memory record (that
+  record still has the old bias); re-run E3.3's N=1/5/10 off cells with it to replace the 5239/3942/3798
+  rows (single-session cohorts, where the old bias was largest); consider an N=30 sampler-cost check.
+- **Fidelity / evidence:** real ART, MEASURED, 0 false passes; `results/bench/S3c.md` (tables,
+  coverage, sampler cost, limits); raw phase docs `.cache/s3c/loop-n20-*.json`; `tools/tests/test-benchlib.py`.
+
 ## E13.7 — GR3: Gaten flows past Home on real ART (tabs, Settings, search/word, lesson gate) + the animating-screen/probe wake — PASS on the flows, the animation wall is honest and owner-decided
 
 - **Date / commit:** 2026-11-13; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/gr3`, branch
@@ -1883,12 +1944,12 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | Idle CPU / wakeups | **0.647 / 2.77 / 5.28 %** of one core at N=1/5/10 (0.647/0.554/0.528 per session); **34.1 / 90.8 / 161.7** wakeups/s | main `4958703` | B2, E3.2 | 2026-11-13 | pre-H2 0.61/2.44/4.47 % — within the 21–38 % load-derived bands; wakeups unchanged |
 | Teardown | **12 ms** (`teardown_ms`, lifecycle) | main `4958703` | B2, E3.2 | 2026-11-13 | tie with GL1 12 ms (−33…−40 % vs 18–20) |
 | Agent loop (animations on) | **1421.9 ms/task; 0.658 tasks/s, 281.6 (page cache) / 891.7 (anon+shmem) tasks/GiB-min at N=1; 1424.6 ms, 2.699 tasks/s, 681.3 / 846.6 at N=5** (H15 binary, 3 reps, verified 1.000); main `4958703` measured 1437.6 / 1441.0 ms in the same H15 window | `perf-h15-reset` (H15) off main `1ce336b`; B2 row for main `4958703` | H15, E2.14 (B2, E3.2) | 2026-11-13 | H15 vs its own interleaved base: **−1.1 % latency at N=1 and N=5**; 0 false passes, verified rate 1.000 |
-| Agent loop (animations off, functional-check mode) | **507–523 ms/task, 1.79 tasks/s, 5239 tasks/GiB-min (anon+shmem) at N=1; 537 ms / 6.28 / 3942 at N=5; 530 ms / 10.22 / 3798 at N=10**; H15 re-measured 490.8 (base) / 501.7 (H15 binary) at N=1 and 518.3 / 516.9 at N=5 | main `4958703`, `--animations off` | H14, E3.3 (H15, E2.14) | 2026-11-13 | 2.71–2.84× latency, 5.8×/5.0×/8.7× anon+shmem tasks/GiB-min at N=1/5/10; loop becomes reset-bound (48 %); not a default change. H15's Δ is inside noise (±5 % threshold, overlapping rep ranges) |
+| Agent loop (animations off, functional-check mode) | **507–523 ms/task, 1.79 tasks/s, 5239 tasks/GiB-min (anon+shmem) at N=1; 537 ms / 6.28 / 3942 at N=5; 530 ms / 10.22 / 3798 at N=10**; H15 re-measured 490.8 (base) / 501.7 (H15 binary) at N=1 and 518.3 / 516.9 at N=5 | main `4958703`, `--animations off` | H14, E3.3 (H15, E2.14) | 2026-11-13 | 2.71–2.84× latency; the 5.8×/5.0×/8.7× anon+shmem tasks/GiB-min ratios at N=1/5/10 were the S3c denominator bias — corrected (E3.5) the *latency* ratio 2.76–2.79× holds and the cohort GiB-min ratio tracks throughput (1.23–1.30× at N=20); loop becomes reset-bound (48 %); not a default change. H15's Δ is inside noise (±5 % threshold, overlapping rep ranges) |
 | False passes | **0** — P11 0/105, scenarios 0/12 (negative control = honest `timeout`), loop 0; verified 63/63 (N=1) and 75/75 (N=5) | main `4958703` | B2, E3.2 | 2026-11-13 | H6's 1-in-75 strict-assert flake (H16) did not reproduce |
 | Agent loop N=10 reliability | **100 %: 600/600 verified over 12 reps** (load1 1.0–4.6), 0 false passes; 428/450 (95.1 %) before the fix (exit 1/126 torn Landlock plan, exit 135 SIGBUS on the truncated mapped APK) | `fix-h17-n10-reset` off main `84fc8bc`, 10 sessions / one serve | H17, E2.13 | 2026-11-13 | fixed two shared-input races (atomic publish + per-run APK); see E2.13 |
 | Compat first-frame rate (K1 corpus, real ART, N=1) | **17/42 (40.5 %)**; tree/screenshot 16/42 (38.1 %); tap 9/42 (21.4 %); `onCreate` completed **20/42** (47.6 %); first frame p50 **808 ms** / p90 **1269 ms** (K3 12/42, tap 7/42, 16/42, 647/1050 ms). Same binary with app providers off: 14/42 first frame, tap 8/42, 18/42, p50 546/p90 1043 ms — ON is >= OFF at every rung with zero per-app regressions, so ON is the default | K4 `compat-k4-metadata` (E5.8 K3d metadata+sourceDir, E5.9 K3e binder-driver refill) | K4/K3d–K3e, E5.8–E5.9 | 2026-11-13 |
-| Agent loop at N=20 | **1460.4 ms/task p50 / 1501.8 p90; 7.41 verified tasks/s; 471.9 (page cache) / 603.0 (anon+shmem) tasks/GiB-min; 73 MiB anon+shmem and 53 MiB ΣPss per session; 21.2 % of one core; 298/300 verified, 0 false passes** | `scale-s3-n20` off main `15849a5` (H2+P12+H17), 20 sessions / one serve, 3 reps, animations on | S3, E3.4 | 2026-11-13 | latency +1.6 % vs N=1 and throughput 11.4×; the 2 losses are the new reset defects S3a/S3b. See §1.2 for why the anon+shmem integral is a floor (S3c); at the measured 65.6 MiB/session the steady rate is 641 tasks/GiB-min |
-| Agent loop at N=20 (animations off, functional-check mode) | **543.8 ms/task p50 / 575.3 p90; 10.49 verified tasks/s; 711.7 / 1414.2 † tasks/GiB-min; 65 MiB/session anon+shmem; 300/300 verified, 0 false passes** | same branch, `--animations off` | S3, E3.4 | 2026-11-13 | 2.7× the on-arm throughput; † denominator undercount (S3c) — the sampling-independent ratio is 2.7× |
+| Agent loop at N=20 | **1460.4 ms/task p50 / 1501.8 p90; 7.41 verified tasks/s; 471.9 (page cache) / 603.0 (anon+shmem) tasks/GiB-min; 73 MiB anon+shmem and 53 MiB ΣPss per session; 21.2 % of one core; 298/300 verified, 0 false passes** | `scale-s3-n20` off main `15849a5` (H2+P12+H17), 20 sessions / one serve, 3 reps, animations on | S3, E3.4 | 2026-11-13 | latency +1.6 % vs N=1 and throughput 11.4×; the 2 losses are the new reset defects S3a/S3b. ‡ The **anon+shmem GiB-min is corrected (S3c/E3.5)**: 427–474 tasks/GiB-min (before 603–768), 66.7–68.1 MiB/session; at 65.6 MiB/session the per-busy-session rate stays 641 |
+| Agent loop at N=20 (animations off, functional-check mode) | **543.8 ms/task p50 / 575.3 p90; 10.49 verified tasks/s; 711.7 / 1414.2 † tasks/GiB-min; 65 MiB/session anon+shmem; 300/300 verified, 0 false passes** | same branch, `--animations off` | S3, E3.4 | 2026-11-13 | 2.7× the on-arm throughput. † The old denominator undercounted guests (S3c): corrected N=20 value **553.5–557.0 tasks/GiB-min** (before 1182–1226) and **66.5–68.9 MiB anon+shmem / 53.1–57.0 MiB ΣPss per session** with 0 zero readings (before 2.7–43.8 / 0.0–55.0); E3.5, `results/bench/S3c.md` |
 | Scale ceiling (verified loop, largest N probed) | **N=30: 600/600 verified (100 %), 0 false passes**; p50 1534–1541 ms on, 5.78–6.79 tasks/s; **job cgroup peak 2.34–2.67 GiB (≈4 % of 61.9 GiB), host used 23–24 %**, no oom_kill | same branch, 24G guarded arm, 4 reps (3 on / 1 off), load1 5.1–13.0 | S3, E3.4 | 2026-11-13 | N=20 used < 50 % of RAM so N=30 was probed and passed; the ceiling is ≥ N=30 and is set by latency stability under external load, not memory. Reset defects S3a/S3b are stochastic (seen at N=10/20, not in this 600) |
 | Compat first-frame rate at concurrency (K1 corpus, 42 APKs) | **N=5: 13/42 (13/13 tree); N=10: 13/42 (13/13 tree), p50 593–603 ms / p90 1152–1199 ms** — same rung as N=1 (12–13/42, p50 647 / p90 1050); **no app lost vs N=1**, failure class only `GUEST_EXITED` | `scale-s3-n20` off main `15849a5`, real ART, `settle:fast`, 25 s first-frame budget, 2 runs per N | S3, E3.4 | 2026-11-13 | per-app walls, not concurrency: `com.libreweatherrn` (known K3 flicker) framed in every run; `org.wikipedia` flickers (2 of 4 N=10 runs, 0 N=5) at its app-level `exit 10` wall |
 | Gaten at N=10 (RN 0.86.3 / Fabric / Hermes, real ART) | **10/10 first frame, 10/10 tree (243 nodes), p50 1431–1441 ms / p90 1.48–1.50 s; 185–192 MiB anon+shmem and 175–182 MiB ΣPss per session; 47 % of one core; 0 native crashes in 16 exits over 2 reps** | `scale-s3-n20` off main `15849a5`, fast settle (welcome screen never strictly settles; GR3), 2 reps at N=1/5/10 | S3, E3.4 | 2026-11-13 | the per-session footprint is flat from N=1 (187–194 MiB) to N=10; first frame precedes the RN content by up to ~2 s (immediate tree = 8 nodes, +2 s = 243) |

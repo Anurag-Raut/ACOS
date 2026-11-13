@@ -43,6 +43,7 @@ import os
 import random
 import re
 import shutil
+import statistics
 import subprocess
 import sys
 import threading
@@ -1380,6 +1381,412 @@ class ScopeSampler(threading.Thread):
     def closing_sample(self):
         """One sample after the child exits, so teardown has two points."""
         return self.sample_once()
+
+
+def thread_cpu_seconds(tid, proc_root=None):
+    """utime+stime of one thread (``/proc/self/task/<tid>/stat``), or None.
+
+    Used to price the sampler itself: ``ChurnSampler`` runs in its own thread, so
+    its CPU cost is separable from the harness threads that drive the loop.
+    """
+    proc_root = Path(proc_root or PROC_ROOT)
+    try:
+        # comm may contain spaces/parens: split on the LAST ')'.
+        fields = (proc_root / "self" / "task" / str(int(tid)) / "stat").read_text()
+        rest = fields.rsplit(")", 1)[1].split()
+        return (int(rest[11]) + int(rest[12])) / float(os.sysconf("SC_CLK_TCK"))
+    except (OSError, ValueError, IndexError, AttributeError):
+        return None
+
+
+# --------------------------------------------------------------------------- #
+# S3c: churn-safe accounting (guest scopes discovered on creation, not at 1 Hz)
+# --------------------------------------------------------------------------- #
+
+MiB = 1024.0 * 1024.0          # bytes per MiB (the S3c sampler's unit)
+CHURN_INTERVAL_S = 0.1          # 10 Hz: a 0.5 s guest is still seen ~5 times
+CHURN_PSS_EVERY = 20            # Pss (smaps_rollup) every 1 s (kept cheap)
+CHURN_SLOW_EVERY = 20           # full /proc walk once a second, as a backstop
+CHURN_MAX_PENDING = 8           # a scope that never proves ours is not ours
+
+
+def _pid_chain_hits(pid, root_pid, proc_root=None):
+    """True when ``pid``'s ppid chain reaches ``root_pid`` (no /proc-wide walk).
+
+    The S3c discovery path must not read all of /proc for every tick (that is
+    3000+ small reads): one scope arrives with one live pid, so the chain is
+    walked from *that* pid only.
+    """
+    proc_root = Path(proc_root or PROC_ROOT)
+    cur, hops = int(pid), 0
+    while cur and cur > 1 and hops < 64:
+        if cur == int(root_pid):
+            return True
+        try:
+            fields = (proc_root / str(cur) / "stat").read_text().rsplit(")", 1)[1].split()
+            cur = int(fields[1])
+        except (OSError, ValueError, IndexError):
+            return False
+        hops += 1
+    return False
+
+
+def cgroup_procs(cg):
+    """Pids in one cgroup's `cgroup.procs` (empty list on any error)."""
+    try:
+        text = (Path(cg) / "cgroup.procs").read_text()
+    except OSError:
+        return []
+    return [int(line.strip()) for line in text.splitlines() if line.strip().isdigit()]
+
+
+class ChurnSampler(threading.Thread):
+    """20 Hz job+guest sampler whose discovery keeps up with short-lived guests.
+
+    The S3c defect: ``WarmSampler`` re-walked /proc once a second, so a guest
+    that lives < 1 s (every animations-off task) was absent from most samples and
+    the anon+shmem integral missed it. This sampler discovers on *creation*: the
+    guests are transient systemd scopes created as siblings of the job scope, so
+    one ``listdir`` of that slice (a handful of names, no /proc walk) finds a new
+    scope within one tick; ownership is then proved by walking that scope's own
+    ppid chain to ``root_pid`` (a few reads, never a host-wide scan). The /proc
+    walk is kept as a 1 Hz backstop for scopes created outside that slice.
+
+    Everything is per-tick and continuous, so the integral closes a guest that
+    dies between two ticks by itself: the tick after its death already reads the
+    job-only value, i.e. a trapezoid down to zero. Per-scope records also keep
+    the kernel's own ``memory.peak``, which does not depend on the tick grid.
+    """
+
+    def __init__(self, job, *, interval=CHURN_INTERVAL_S, pss_every=CHURN_PSS_EVERY,
+                 slow_every=CHURN_SLOW_EVERY, scope_parent=None, artifacts=(),
+                 sampler_pid=None, proc_root=None, cgroup_root=None,
+                 root_pid=None, stop_event=None, max_pending=CHURN_MAX_PENDING):
+        super().__init__(daemon=True)
+        self.job = Path(job) if job is not None else None
+        self.interval = float(interval)
+        self.pss_every = max(1, int(pss_every))
+        self.slow_every = max(1, int(slow_every))
+        self.max_pending = max(1, int(max_pending))
+        self.proc_root = Path(proc_root or PROC_ROOT)
+        self.cgroup_root = Path(cgroup_root or CGROUP_ROOT)
+        self.artifacts = [str(Path(a)) for a in artifacts if a]
+        self.scope_parent = (Path(scope_parent) if scope_parent is not None
+                             else (self.job.parent if self.job else None))
+        self.sampler_pid = int(sampler_pid or os.getpid())
+        self.root_pid = int(root_pid or os.getpid())
+        self.stop_event = stop_event or threading.Event()
+        self.samples = []          # one row per tick (job + guests, same types)
+        self.scopes = {}           # str(cg) -> lifetime record
+        self.live = {}             # str(cg) -> Path
+        self.dead = set()
+        self.pending = {}          # str(cg) -> failed ownership proofs
+        self.blacklisted = set()   # scope dirs that never proved ours
+        self.errors = []
+        self.ticks = 0
+        self.births = 0
+        self.found_by = {"slice": 0, "proc_walk": 0}
+        self.tid = None
+        self.cpu_s = None
+        self._slow_ppid = None
+
+    # -- discovery -------------------------------------------------------- #
+    def _owned(self, cg):
+        """True when a pid in this scope is a ppid-descendant of root_pid."""
+        for pid in cgroup_procs(cg)[:8]:
+            if _pid_chain_hits(pid, self.root_pid, self.proc_root):
+                return True
+        return False
+
+    def admit(self, cg, how):
+        key = str(cg)
+        if key in self.live or key in self.dead:
+            return False
+        self.live[key] = Path(cg)
+        self.scopes[key] = {
+            "cgroup": key, "first_t": None, "last_t": None, "gone_t": None,
+            "ticks": 0, "anon_shmem_peak_mib": None, "memory_peak_mib": None,
+            "pss_peak_mib": None, "session": self._session_of(cg), "found_by": how,
+        }
+        self.births += 1
+        self.found_by[how] = self.found_by.get(how, 0) + 1
+        return True
+
+    def _session_of(self, cg):
+        """Session id of a guest scope, from a run tree path in its cmdline.
+
+        ``acos serve`` puts every session's run tree under
+        ``<artifacts>/<session_id>/`` (engine/serve.rs), so one cmdline read
+        attributes the scope to a session id -- which is what makes the Pss
+        figure per *session* instead of per current launcher child.
+        """
+        if not self.artifacts:
+            return None
+        for pid in cgroup_procs(cg)[:4]:
+            try:
+                cmd = (self.proc_root / str(pid) / "cmdline").read_bytes()
+            except OSError:
+                continue
+            text = cmd.replace(b"\0", b" ").decode("utf-8", "replace")
+            for root in self.artifacts:
+                idx = text.find(root)
+                if idx < 0:
+                    continue
+                rest = text[idx + len(root):].lstrip("/")
+                if rest:
+                    return rest.split("/", 1)[0]
+        return None
+
+    def discover_slice(self):
+        """One listdir of the slice the guest scopes are created in."""
+        if self.scope_parent is None:
+            return 0
+        try:
+            names = sorted(os.listdir(self.scope_parent))
+        except OSError as exc:
+            self.errors.append("listdir %s: %s" % (self.scope_parent, exc))
+            return 0
+        added = 0
+        for name in names:
+            key = str(self.scope_parent / name)
+            if key in self.live or key in self.dead or key in self.blacklisted:
+                continue
+            tries = self.pending.get(key, 0)
+            if tries >= self.max_pending:
+                self.blacklisted.add(key)
+                self.pending.pop(key, None)
+                continue
+            if self._owned(key):
+                self.pending.pop(key, None)
+                added += 1 if self.admit(key, "slice") else 0
+            else:
+                self.pending[key] = tries + 1
+        return added
+
+    def discover_walk(self):
+        """Backstop: the old 1 Hz /proc walk (scopes outside the slice)."""
+        try:
+            if self._slow_ppid is None:
+                self._slow_ppid = _ppid_map(self.proc_root)
+            found = descendant_cgroups(self.root_pid, self.job,
+                                       proc_root=self.proc_root,
+                                       cgroup_root=self.cgroup_root,
+                                       ppid_map=self._slow_ppid)
+            self._slow_ppid = None
+        except (OSError, ValueError) as exc:
+            self.errors.append("walk: %s" % exc)
+            return 0
+        added = 0
+        for cg in found:
+            added += 1 if self.admit(cg, "proc_walk") else 0
+        return added
+
+    # -- sampling --------------------------------------------------------- #
+    def _read_scope(self, cg, peak=True):
+        """(anon+shmem MiB, memory.current MiB, memory.peak MiB) or None.
+
+        ``peak=False`` skips the two extra reads: the 10 Hz integral only needs
+        memory.stat, and the kernel's monotone ``memory.peak`` is read 2 Hz.
+        """
+        st = read_memstat(cg, PRIMARY_KEYS)
+        if st is None:
+            return None
+        cur = read_cgroup_int(cg, "memory.current") if peak else None
+        pk = read_cgroup_int(cg, "memory.peak") if peak else None
+        peak = pk
+        return (round((st.get("anon", 0) + st.get("shmem", 0)) / MiB, 3),
+                round(cur / MiB, 3) if cur is not None else None,
+                round(peak / MiB, 3) if peak is not None else None)
+
+    def sample_once(self):
+        t = time.time()
+        self.ticks += 1
+        if self.ticks == 1:
+            self.tid = threading.get_native_id()
+        if self.ticks == 1 or self.ticks % self.slow_every == 0:
+            self.discover_walk()
+        self.discover_slice()
+        job_mib = job_cur = None
+        if self.job is not None:
+            st = read_memstat(self.job, PRIMARY_KEYS)
+            if st is not None:
+                job_mib = round((st.get("anon", 0) + st.get("shmem", 0)) / MiB, 3)
+            cur = read_cgroup_int(self.job, "memory.current")
+            job_cur = round(cur / MiB, 3) if cur is not None else None
+        guests = {}
+        guest_pss = 0.0
+        pss_seen = 0
+        do_pss = bool(self.pss_every) and self.ticks % self.pss_every == 0
+        peak_due = self.ticks % 5 == 0
+        for key in list(self.live):
+            rec = self.scopes[key]
+            got = self._read_scope(key, peak=peak_due)
+            if got is None:
+                rec["gone_t"] = t
+                self.dead.add(key)
+                del self.live[key]
+                continue
+            mib, cur, peak = got
+            guests[key] = mib
+            rec["ticks"] += 1
+            if rec["session"] is None and rec["ticks"] <= 12:
+                # The run tree path only appears in a cmdline once the guest
+                # (not just the scope shell) is exec'd: retry briefly.
+                rec["session"] = self._session_of(key)
+            if rec["first_t"] is None:
+                rec["first_t"] = t
+            rec["last_t"] = t
+            if peak is not None:
+                rec["memory_peak_mib"] = max(rec["memory_peak_mib"] or 0.0, peak)
+            # anon+shmem only: memory.current also carries page cache, which is
+            # charged to whichever scope read the image first (E3.2 4b) and is
+            # not this metric's type.
+            rec["anon_shmem_peak_mib"] = max(rec["anon_shmem_peak_mib"] or 0.0, mib)
+            if do_pss:
+                total = 0.0
+                seen = 0
+                for pid in cgroup_procs(key):
+                    row = pss_of(pid, self.proc_root)
+                    if row:
+                        total += row[1] / 1024.0
+                        seen += 1
+                if seen:
+                    guest_pss += total
+                    pss_seen += seen
+                    rec["pss_peak_mib"] = max(rec["pss_peak_mib"] or 0.0,
+                                              round(total, 3))
+        sampler = _anon_shmem_mib(self.sampler_pid, self.proc_root) or 0.0
+        guest_total = round(sum(guests.values()), 3)
+        net = round((job_mib or 0.0) + guest_total - sampler, 3)
+        row = {
+            "t": t, "job_anon_shmem_mib": job_mib,
+            "job_memory_current_mib": job_cur, "guests": guests,
+            "guest_anon_shmem_mib": guest_total, "guest_scopes": len(guests),
+            "guest_pss_mib": round(guest_pss, 3) if pss_seen else None,
+            "guest_pss_pids": pss_seen, "sampler_mib": sampler,
+            "net_anon_shmem_mib": net,
+        }
+        self.samples.append(row)
+        return row
+
+    def run(self):
+        cpu0 = thread_cpu_seconds(threading.get_native_id(), self.proc_root)
+        try:
+            while not self.stop_event.is_set():
+                t0 = time.time()
+                try:
+                    self.sample_once()
+                except Exception as exc:  # noqa: BLE001 -- never fake a row
+                    self.errors.append("%s: %s" % (type(exc).__name__, exc))
+                left = self.interval - (time.time() - t0)
+                if left > 0:
+                    self.stop_event.wait(left)
+                else:
+                    self.overruns = getattr(self, "overruns", 0) + 1
+        finally:
+            cpu1 = thread_cpu_seconds(threading.get_native_id(), self.proc_root)
+            if cpu0 is not None and cpu1 is not None:
+                self.cpu_s = round(cpu1 - cpu0, 4)
+
+    def stop(self):
+        self.stop_event.set()
+        self.join(timeout=5)
+
+    # -- derived readings -------------------------------------------------- #
+    def series(self, t_from=None, t_to=None):
+        return [r for r in self.samples
+                if (t_from is None or r["t"] >= t_from)
+                and (t_to is None or r["t"] <= t_to)]
+
+    def summary(self, t_from=None, t_to=None, sessions=None, expected_guests=None):
+        """Integrals + coverage for one window (all from this sampler's ticks)."""
+        rows = self.series(t_from, t_to)
+        out = {"samples": len(rows), "interval_s": self.interval}
+        if len(rows) >= 2:
+            out["net_anon_shmem_gib_min"] = round(sample_integral(
+                [{"t": r["t"], "bytes": r["net_anon_shmem_mib"] * MiB} for r in rows]), 6)
+            out["job_gib_min"] = round(sample_integral(
+                [{"t": r["t"], "bytes": (r["job_memory_current_mib"] or 0) * MiB}
+                 for r in rows]), 6)
+            # Per scope: the guest ramps from 0 at birth and back to 0 at death,
+            # so the integral of a boxcar seen at two ticks is the full interval,
+            # not the 2-tick trapezoid. Both ends are closed with a zero sample.
+            guest_int = 0.0
+            for cg in {cg for s in rows for cg in s["guests"]}:
+                series = [{"t": s["t"], "bytes": s["guests"][cg] * MiB}
+                          for s in rows if cg in s["guests"]]
+                rec = self.scopes.get(cg) or {}
+                if series:
+                    series.insert(0, {"t": series[0]["t"] - self.interval, "bytes": 0.0})
+                    if rec.get("gone_t"):
+                        series.append({"t": rec["gone_t"], "bytes": 0.0})
+                guest_int += sample_integral(series)
+            out["guest_anon_shmem_gib_min"] = round(guest_int, 6)
+        net = [r["net_anon_shmem_mib"] for r in rows]
+        job_only = [r["job_anon_shmem_mib"] for r in rows
+                    if r["job_anon_shmem_mib"] is not None]
+        guests = [r["guest_anon_shmem_mib"] for r in rows]
+        live = [r["guest_scopes"] for r in rows]
+        pss = [r["guest_pss_mib"] for r in rows if r["guest_pss_mib"] is not None]
+        if net:
+            out["net_anon_shmem_mib"] = {"median": round(statistics.median(net), 3),
+                                         "max": round(max(net), 3),
+                                         "min": round(min(net), 3)}
+        if job_only:
+            out["job_only_anon_shmem_mib"] = {"median": round(statistics.median(job_only), 3)}
+        if guests:
+            out["guest_anon_shmem_mib"] = {"median": round(statistics.median(guests), 3),
+                                           "max": round(max(guests), 3)}
+        if live:
+            out["guest_scopes_live"] = {"median": statistics.median(live),
+                                        "max": max(live),
+                                        "zero_ticks": sum(1 for v in live if v == 0)}
+            live_n = statistics.median([v for v in live if v]) if any(live) else None
+            if live_n and guests:
+                out["guest_anon_shmem_per_scope_mib"] = round(
+                    statistics.median(guests) / live_n, 3)
+        if pss:
+            out["guest_pss_mib"] = {"median": round(statistics.median(pss), 3),
+                                    "max": round(max(pss), 3), "samples": len(pss)}
+            if sessions:
+                out["per_session_pss_mib"] = round(statistics.median(pss) / sessions, 3)
+                out["per_session_pss_min_mib"] = round(min(pss) / sessions, 3)
+        if sessions and net:
+            out["net_anon_shmem_per_session_mib"] = round(
+                statistics.median(net) / sessions, 3)
+        # coverage: every scope admitted in the window, and how much of its life we saw
+        scopes = [r for r in self.scopes.values()
+                  if r["first_t"] is not None
+                  and (t_to is None or r["first_t"] <= t_to)]
+        ticks = [r["ticks"] for r in scopes]
+        out["guests_observed"] = len(scopes)
+        out["guests_with_peak"] = sum(1 for r in scopes if r["memory_peak_mib"])
+        if expected_guests:
+            out["guests_expected"] = int(expected_guests)
+            out["coverage"] = round(min(1.0, len(scopes) / float(expected_guests)), 4)
+        if ticks:
+            out["samples_per_guest"] = {"min": min(ticks),
+                                        "median": statistics.median(ticks),
+                                        "max": max(ticks)}
+            out["guests_sampled_once"] = sum(1 for v in ticks if v <= 1)
+        per_session = {}
+        for rec in scopes:
+            sid = rec.get("session")
+            if sid and rec.get("anon_shmem_peak_mib"):
+                per_session[sid] = max(per_session.get(sid, 0.0),
+                                       rec["anon_shmem_peak_mib"])
+        if per_session:
+            out["session_anon_shmem_peak_mib"] = {k: round(v, 3)
+                                                  for k, v in sorted(per_session.items())}
+        out["found_by"] = dict(self.found_by)
+        out["births"] = self.births
+        out["blacklisted_scope_dirs"] = len(self.blacklisted)
+        if self.cpu_s is not None:
+            wall = (rows[-1]["t"] - rows[0]["t"]) if len(rows) >= 2 else None
+            out["sampler_cpu_s"] = self.cpu_s
+            if wall:
+                out["sampler_cpu_pct"] = round(100.0 * self.cpu_s / wall, 4)
+        return out
 
 
 # --------------------------------------------------------------------------- #

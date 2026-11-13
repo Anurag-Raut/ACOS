@@ -967,6 +967,145 @@ def test_m11_ci_and_bar():
     close("m11 with one task", m3["m11_tasks_per_gib_min"], 1 / 0.01, 1e-9)
 
 
+class _FakeClock:
+    """Module-level stand-in for ``time`` so tick spacing is testable."""
+
+    def __init__(self, now=1000.0, step=0.05):
+        self.now = now
+        self.step = step
+
+    def time(self):
+        self.now += self.step
+        return self.now
+
+
+def test_churn_sampler_sees_short_guests():
+    """TEETH (S3c): a guest that lives 2 ticks must be in the integral.
+
+    The legacy sampler discovered on a 1 s cadence; here the /proc walk is
+    disabled (``slow_every`` huge) so only creation-time discovery can find the
+    guest. A mutant that returns to the 1 s cadence drops the guest entirely and
+    the integral falls back to the job-only value.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        slice_dir = Path(d) / "cg" / "app.slice"
+        job = _fake_scope(slice_dir, "job.scope", anon=20)
+        _fake_proc(Path(d) / "proc", 42, 1, "python3", "/app.slice/job.scope")
+        s = bl.ChurnSampler(job, scope_parent=slice_dir,
+                            proc_root=Path(d) / "proc", slow_every=10 ** 6,
+                            root_pid=42, sampler_pid=42)
+        saved = bl.time
+        clock = bl.time = _FakeClock(step=bl.CHURN_INTERVAL_S)
+        bl.time = clock
+        try:
+            s.sample_once()                   # tick 1: only the job scope
+            eq("job only while no guest exists", s.samples[-1]["guest_scopes"], 0)
+            _fake_scope(slice_dir, "run-7.scope", anon=50, pids=[70])
+            _fake_proc(Path(d) / "proc", 70, 42, "dalvikvm64",
+                       "/app.slice/run-7.scope", rss_mib=8.0)
+            s.sample_once()
+            eq("guest discovered on the tick after creation",
+               s.samples[-1]["guest_scopes"], 1)
+            eq("discovered through the slice, not the /proc walk",
+               s.found_by.get("slice"), 1)
+            close("guest charge is added", s.samples[-1]["guest_anon_shmem_mib"],
+                  50.0, 1e-9)
+            s.sample_once()
+            eq("still counted on the next tick", s.samples[-1]["guest_scopes"], 1)
+            with_guest = s.summary()["net_anon_shmem_gib_min"]
+            (slice_dir / "run-7.scope" / "memory.stat").unlink()   # guest dies
+            s.sample_once()
+            eq("gone scope dropped (closing sample = the next job-only tick)",
+               s.samples[-1]["guest_scopes"], 0)
+            eq("scope recorded as dead",
+               s.scopes[str(slice_dir / "run-7.scope")]["gone_t"] is not None, True)
+            summ = s.summary()
+        finally:
+            bl.time = saved
+        eq("guest counted in the integral", summ["guests_observed"], 1)
+        eq("guest got 2 ticks", summ["samples_per_guest"]["median"], 2.0)
+        # net = job(20) + guest(50) - sampler(8 MiB, anon only) over the window;
+        # the guest's own integral is 50 MiB over ~0.05 s of tick spacing.
+        expected = (50.0 / 1024.0) * (2 * bl.CHURN_INTERVAL_S) / 60.0
+        close("guest integral is the sampled trapezoid", summ["guest_anon_shmem_gib_min"],
+              expected, expected * 0.05)
+        check("the guest moved the reported integral", with_guest > 0, repr(with_guest))
+        check("guest part is a real share of the job+guest integral",
+              summ["guest_anon_shmem_gib_min"] > 0.3 * summ["net_anon_shmem_gib_min"],
+              repr(summ))
+
+
+def test_churn_sampler_rejects_foreign_scopes():
+    """A concurrent agent's guest scope in the same slice is never charged."""
+    with tempfile.TemporaryDirectory() as d:
+        slice_dir = Path(d) / "cg" / "app.slice"
+        job = _fake_scope(slice_dir, "job.scope", anon=20)
+        _fake_proc(Path(d) / "proc", 42, 1, "python3", "/app.slice/job.scope")
+        _fake_scope(slice_dir, "run-9.scope", anon=999, pids=[90])
+        _fake_proc(Path(d) / "proc", 90, 8, "dalvikvm64", "/app.slice/run-9.scope")
+        s = bl.ChurnSampler(job, scope_parent=slice_dir,
+                            proc_root=Path(d) / "proc", slow_every=10 ** 6,
+                            root_pid=42, sampler_pid=42, max_pending=2)
+        for _ in range(3):
+            s.sample_once()
+        eq("foreign scope never admitted", s.births, 0)
+        eq("foreign scope stays out of every sample", s.samples[-1]["guest_scopes"], 0)
+        check("foreign scope blacklisted after max_pending",
+              str(slice_dir / "run-9.scope") in s.blacklisted, repr(s.blacklisted))
+        check("no 999 MiB leak into the job reading",
+              s.samples[-1]["net_anon_shmem_mib"] < 100, repr(s.samples[-1]))
+
+
+def test_churn_sampler_pss_and_session_attribution():
+    """Pss is charged per session id (run tree path), never per launcher child."""
+    with tempfile.TemporaryDirectory() as d:
+        slice_dir = Path(d) / "cg" / "app.slice"
+        artifacts = str(Path(d) / "sessions")
+        job = _fake_scope(slice_dir, "job.scope", anon=20)
+        _fake_proc(Path(d) / "proc", 42, 1, "python3", "/app.slice/job.scope")
+        _fake_scope(slice_dir, "run-3.scope", anon=60, pids=[31])
+        p = _fake_proc(Path(d) / "proc", 31, 42, "dalvikvm64",
+                       "/app.slice/run-3.scope", rss_mib=64.0)
+        (p / "cmdline").write_bytes(
+            ("bwrap --bind %s/agent-7/run1/app /data/app\0" % artifacts).encode())
+        s = bl.ChurnSampler(job, scope_parent=slice_dir,
+                            proc_root=Path(d) / "proc", slow_every=10 ** 6,
+                            root_pid=42, sampler_pid=42, pss_every=1,
+                            artifacts=[artifacts])
+        s.sample_once()
+        row = s.samples[-1]
+        eq("session id read from the run tree path",
+           s.scopes[str(slice_dir / "run-3.scope")]["session"], "agent-7")
+        close("guest Pss sampled", row["guest_pss_mib"], 64.0, 1e-9)
+        summ = s.summary(sessions=20)
+        close("per-session Pss is not a zero reading",
+              summ["per_session_pss_mib"], 64.0 / 20, 1e-9)
+        eq("per-session attribution present",
+           list(summ["session_anon_shmem_peak_mib"]), ["agent-7"])
+
+
+def test_churn_sampler_coverage_counts_every_guest():
+    """Coverage = observed guest scopes / launch+reset steps, and it is reported."""
+    with tempfile.TemporaryDirectory() as d:
+        slice_dir = Path(d) / "cg" / "app.slice"
+        job = _fake_scope(slice_dir, "job.scope", anon=20)
+        _fake_proc(Path(d) / "proc", 42, 1, "python3", "/app.slice/job.scope")
+        s = bl.ChurnSampler(job, scope_parent=slice_dir,
+                            proc_root=Path(d) / "proc", slow_every=10 ** 6,
+                            root_pid=42, sampler_pid=42)
+        for i, pid in enumerate([70, 71]):
+            _fake_scope(slice_dir, "run-%d.scope" % i, anon=40, pids=[pid])
+            _fake_proc(Path(d) / "proc", pid, 42, "dalvikvm64",
+                       "/app.slice/run-%d.scope" % i)
+        s.sample_once()
+        summ = s.summary(expected_guests=2)
+        eq("both short guests observed", summ["guests_observed"], 2)
+        eq("full coverage when observed == expected", summ["coverage"], 1.0)
+        eq("missing guests show up as under-coverage",
+           s.summary(expected_guests=4)["coverage"], 0.5)
+        eq("samples per guest reported", summ["samples_per_guest"]["min"], 1)
+
+
 def test_sample_integral_forward_fill_guest():
     """A guest discovered late must be charged from its first sample only."""
     job = [{"t": 0, "bytes": 10, "stat": {"anon": 10}},

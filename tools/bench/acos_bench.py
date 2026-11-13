@@ -417,6 +417,20 @@ METRICS = {
     },
 }
 
+# S3c: the corrected (churn-safe) denominator. Same metric shape as
+# `_tasks_per_gib_min_net`, but the guest scopes are discovered on creation
+# (benchlib.ChurnSampler) instead of once a second.
+for _n in (1, 5, 10, 20, 30):
+    METRICS["loop_n%d_tasks_per_gib_min_net_s3c" % _n] = {
+        "metric": "agent loop",
+        "label": "verified tasks/GiB-min, N=%d (anon+shmem, S3c sampler)" % _n,
+        "unit": "tasks/GiB-min", "category": "throughput", "direction": "higher",
+        "method": "verified tasks / anon+shmem GiB-min integral over the cohort, "
+                  "sampled at 20 Hz with guest scopes discovered at creation "
+                  "(benchlib.ChurnSampler); unlike the 1 s-discovery sampler this "
+                  "one keeps every guest that lives < 1 s (S3c)",
+    }
+
 # Old leaderboard (EXPERIMENTS.md before H6) for the .md column. Values are the
 # published best p50 and are NOT re-measured here.
 PREVIOUS = {
@@ -661,6 +675,19 @@ def loop_cohort_stats(doc, captured, cpu0, cpu1, n):
         rows = [r for r in rows if window[0] <= r.get("t", 0) <= window[1]]
         samples = [r for r in samples
                    if window[0] <= r.get("t", 0) <= window[1]]
+    # S3c: the corrected (churn-safe) reading of the same cohort window.
+    churn = captured.get("churn")
+    if churn is not None and window:
+        expected = sum(1 for name, st in
+                       ((name, st) for t in tasks
+                        for name, st in (t.get("steps") or {}).items())
+                       if name in ("launch", "reset"))
+        out["memory_s3c"] = churn.summary(window[0], window[1], sessions=n,
+                                          expected_guests=expected)
+        out["memory_s3c"]["guests_expected_rule"] = (
+            "one guest scope per acos_launch and per acos_reset step in the window")
+        if churn.errors:
+            out["memory_s3c"]["errors"] = churn.errors[:5]
 
     def series(items, key):
         return [r[key] for r in items if r.get(key) is not None]
@@ -1237,6 +1264,15 @@ def phase_loop(args):
                 captured["serve_pid"] = int(self.proc.pid)
                 cg = benchlib.cgroup_path(self.proc.pid)
                 captured["job_cgroup"] = str(cg) if cg else None
+                # S3c: the corrected sampler runs beside the legacy one for the
+                # same cohort, so "before" and "after" are the same tasks on the
+                # same host window -- paired, not two separate campaigns.
+                if cg is not None:
+                    captured["churn"] = benchlib.ChurnSampler(
+                        cg, scope_parent=Path(cg).parent,
+                        artifacts=[str(Path(self.scratch) / "sessions")],
+                        root_pid=os.getpid())
+                    captured["churn"].start()
 
         class PssSampler(p5.WarmSampler):
             def __init__(self, *a, **kw):
@@ -1274,6 +1310,8 @@ def phase_loop(args):
                 "--scratch", str(scratch), "--n", str(args.n),
                 "--loops", str(loops), "--warmup", "1"]
         rc = p5.main(argv)
+        if captured.get("churn") is not None:
+            captured["churn"].stop()
         doc = json.loads(out_json.read_text())
         cpu1 = host_cpu_times()
         cohort = loop_cohort_stats(doc, captured, cpu0, cpu1, args.n)
@@ -1307,6 +1345,16 @@ def phase_loop(args):
             thr.get("verified_tasks_per_gib_min_net"), bool(doc.get("ok")),
             {k: thr.get(k) for k in ("verified_tasks_per_gib_min",
                                      "verified_tasks_per_gib_min_net")})
+        # S3c: the corrected denominator (churn-safe sampling). Recorded beside
+        # the legacy one, never instead of it.
+        s3c = cohort.get("memory_s3c") or {}
+        if s3c.get("net_anon_shmem_gib_min"):
+            add(samples, "loop_n%d_tasks_per_gib_min_net_s3c" % args.n,
+                (verified / s3c["net_anon_shmem_gib_min"] if measured else None),
+                bool(doc.get("ok")),
+                {k: s3c.get(k) for k in ("net_anon_shmem_gib_min", "coverage",
+                                         "guests_observed", "guests_expected",
+                                         "samples_per_guest", "sampler_cpu_pct")})
     except Exception as exc:  # noqa: BLE001
         errors.append("%s: %s" % (type(exc).__name__, exc))
     finally:
