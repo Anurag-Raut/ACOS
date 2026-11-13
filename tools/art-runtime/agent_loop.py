@@ -377,6 +377,9 @@ class Runner:
             "round_trips_to_verdict": to_verdict,
             "round_trips_to_first_terminal": terminal_at,
         }
+        # Per-task PNGs are samples, not an ever-growing corpus (S3ab: 28 GB).
+        row["screens_pruned"] = benchlib.prune_screens(
+            self.scratch / "screens", getattr(self.args, "keep_screens", 20))
         return row
 
     def evaluate_assert(self, cfg: dict, step: dict, value) -> str:
@@ -524,6 +527,8 @@ def main(argv=None):
                         help="exit 1 when any gate fails (default: report only)")
     parser.add_argument("--allow-dirty", action="store_true",
                         help="write a result even when provenance is not verdict eligible")
+    parser.add_argument("--keep-screens", type=int, default=20,
+                        help="max per-task PNG samples retained on disk (default 20)")
     args = parser.parse_args(argv)
 
     names = [a.strip() for a in args.apps.split(",") if a.strip()]

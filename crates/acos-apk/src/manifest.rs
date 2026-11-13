@@ -9,10 +9,16 @@ use crate::error::Result;
 pub const FLAG_DEBUGGABLE: i32 = 1 << 1;
 pub const FLAG_HAS_CODE: i32 = 1 << 2;
 pub const FLAG_ALLOW_TASK_REPARENTING: i32 = 1 << 5;
-pub const FLAG_TEST_ONLY: i32 = 1 << 8;
 pub const FLAG_ALLOW_CLEAR_USER_DATA: i32 = 1 << 6;
+pub const FLAG_TEST_ONLY: i32 = 1 << 8;
+pub const FLAG_SUPPORTS_SMALL_SCREENS: i32 = 1 << 9;
+pub const FLAG_SUPPORTS_NORMAL_SCREENS: i32 = 1 << 10;
+pub const FLAG_SUPPORTS_LARGE_SCREENS: i32 = 1 << 11;
+pub const FLAG_RESIZEABLE_FOR_SCREENS: i32 = 1 << 12;
+pub const FLAG_SUPPORTS_SCREEN_DENSITIES: i32 = 1 << 13;
 pub const FLAG_VM_SAFE_MODE: i32 = 1 << 14;
 pub const FLAG_ALLOW_BACKUP: i32 = 1 << 15;
+pub const FLAG_SUPPORTS_XLARGE_SCREENS: i32 = 1 << 19;
 pub const FLAG_LARGE_HEAP: i32 = 1 << 20;
 pub const FLAG_MULTIARCH: i32 = 1 << 21;
 pub const FLAG_SUPPORTS_RTL: i32 = 1 << 22;
@@ -80,6 +86,51 @@ pub struct MetaDataEntry {
     pub value: MetaDataValue,
 }
 
+/// One `<supports-screens>` attribute value for the accepted AXML forms.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SupportsScreensValue {
+    /// aapt2 writes an explicit `true` as `TYPE_INT_BOOLEAN` data `-1`; AOSP's
+    /// `v < 0` branch makes this bypass the targetSdk gates.
+    True,
+    /// aapt2 writes an explicit `false` as data `0`.
+    False,
+    /// An `@bool/...` reference. Stock `Resources.obtainAttributes` resolves
+    /// references through `AssetManager` before `getInteger` sees the value,
+    /// but ACOS has no `resources.arsc` handle in `Manifest::parse` /
+    /// `application_flags` (plumbing it needs `Apk::manifest` + PMS changes),
+    /// so this is recorded but the flag is conservatively left clear.
+    Reference(u32),
+}
+
+/// `<supports-screens>` attributes, as `PackageParser.parseBaseApkCommon` reads
+/// them (`.cache/aosp/base/core/java/android/content/pm/PackageParser.java`,
+/// tag android-14.0.0_r75: defaults `:1993-1998`, parsing `:2244-2274`, flag
+/// derivation `:2476-2503`).
+///
+/// AOSP starts every value at the "unknown" sentinel `1`, which is why `None`
+/// (absent) is not `false`: the stock condition is
+/// `v < 0 || (v > 0 && targetSdk >= gate)`, with gates DONUT (4) for
+/// small/large/resizeable/anyDensity and GINGERBREAD (9) for xlarge;
+/// `normalScreens` has no gate. Explicit `true` (`-1`) bypasses a gate and
+/// explicit `false` (`0`) clears the bit. Integer-typed attributes are
+/// malformed for these boolean declarations and are not modelled.
+///
+/// The parser's effective screen SDK is `targetSdkVersion`, which AOSP defaults
+/// to `minSdkVersion` inside `<uses-sdk>` and to `0` when `<uses-sdk>` is
+/// absent. [`Manifest::application_flags`] therefore uses
+/// `target_sdk.or(min_sdk).unwrap_or(0)`, not the API-34 fallback used by
+/// unrelated application attributes (`usesCleartextTraffic` etc.).
+#[derive(Debug, Clone, PartialEq, Default, serde::Serialize)]
+pub struct SupportsScreens {
+    pub small_screens: Option<SupportsScreensValue>,
+    pub normal_screens: Option<SupportsScreensValue>,
+    pub large_screens: Option<SupportsScreensValue>,
+    pub xlarge_screens: Option<SupportsScreensValue>,
+    pub resizeable: Option<SupportsScreensValue>,
+    pub any_density: Option<SupportsScreensValue>,
+}
+
 /// The `<application>` element's attributes.
 #[derive(Debug, Clone, PartialEq, Default, serde::Serialize)]
 pub struct ApplicationInfo {
@@ -104,6 +155,10 @@ pub struct ApplicationInfo {
     pub allow_task_reparenting: Option<bool>,
     pub test_only: Option<bool>,
     pub multi_arch: Option<bool>,
+    /// `<supports-screens>` is a `<manifest>` child, but AOSP stores the parsed
+    /// density/screen flags in `ApplicationInfo`; keeping it here also keeps
+    /// `ApplicationInfo`'s `Default` the single "all attributes absent" value.
+    pub supports_screens: SupportsScreens,
     pub theme: Option<u32>,
     pub process: Option<String>,
     /// `<meta-data>` children of `<application>`, in declaration order
@@ -215,6 +270,7 @@ impl Manifest {
         let mut uses_permissions = Vec::new();
         let mut uses_features = Vec::new();
         let mut application = ApplicationInfo::default();
+        let mut supports_screens = SupportsScreens::default();
 
         for child in &root.children {
             match child.name.as_str() {
@@ -240,6 +296,7 @@ impl Manifest {
                         });
                     }
                 }
+                "supports-screens" => parse_supports_screens(child, &mut supports_screens),
                 "application" => {
                     application = parse_application(child, &package);
                 }
@@ -257,6 +314,10 @@ impl Manifest {
                 ),
                 None => (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
             };
+
+        // `<supports-screens>` may appear before or after `<application>`; the
+        // typed model keeps the parsed group on `ApplicationInfo`.
+        application.supports_screens = supports_screens;
 
         Ok(Manifest {
             package,
@@ -368,6 +429,31 @@ impl Manifest {
         if app.is_game.unwrap_or(false) {
             flags |= FLAG_IS_GAME;
         }
+        // `<supports-screens>` (`PackageParser.parseBaseApkCommon` r75:2476-2503).
+        // Screen flags use the parser's effective target SDK
+        // (`targetSdkVersion`, defaulting to `minSdkVersion` inside
+        // `<uses-sdk>` and to 0 when `<uses-sdk>` is absent), NOT the API-34
+        // fallback used by unrelated application attributes above.
+        let screen_sdk = self.target_sdk.or(self.min_sdk).unwrap_or(0) as i32;
+        let screens = &app.supports_screens;
+        if screen_flag(screens.small_screens, screen_sdk, Some(4)) {
+            flags |= FLAG_SUPPORTS_SMALL_SCREENS;
+        }
+        if screen_flag(screens.normal_screens, screen_sdk, None) {
+            flags |= FLAG_SUPPORTS_NORMAL_SCREENS;
+        }
+        if screen_flag(screens.large_screens, screen_sdk, Some(4)) {
+            flags |= FLAG_SUPPORTS_LARGE_SCREENS;
+        }
+        if screen_flag(screens.xlarge_screens, screen_sdk, Some(9)) {
+            flags |= FLAG_SUPPORTS_XLARGE_SCREENS;
+        }
+        if screen_flag(screens.resizeable, screen_sdk, Some(4)) {
+            flags |= FLAG_RESIZEABLE_FOR_SCREENS;
+        }
+        if screen_flag(screens.any_density, screen_sdk, Some(4)) {
+            flags |= FLAG_SUPPORTS_SCREEN_DENSITIES;
+        }
         flags
     }
 
@@ -417,9 +503,62 @@ fn parse_application(app: &XmlNode, package: &str) -> ApplicationInfo {
         allow_task_reparenting: attr_bool(app, "allowTaskReparenting"),
         test_only: attr_bool(app, "testOnly"),
         multi_arch: attr_bool(app, "multiArch"),
+        supports_screens: SupportsScreens::default(),
         theme: attr_ref(app, "theme"),
         process: attr_string(app, "process"),
         meta_data: parse_meta_data(app),
+    }
+}
+
+/// `v < 0 || (v > 0 && sdk >= gate)`, with `getInteger`'s absent sentinel
+/// `1` for `None`. `gate == None` is the ungated `normalScreens != 0` case.
+/// An unresolved reference is conservative: keep the bit clear rather than
+/// granting density support the app did not literally ask for.
+fn screen_flag(value: Option<SupportsScreensValue>, screen_sdk: i32, gate: Option<i32>) -> bool {
+    let gated = gate.map_or(true, |threshold| screen_sdk >= threshold);
+    match value {
+        None => gated,
+        Some(SupportsScreensValue::True) => true,
+        Some(SupportsScreensValue::False) => false,
+        Some(SupportsScreensValue::Reference(_)) => false,
+    }
+}
+
+fn parse_supports_screens(node: &XmlNode, screens: &mut SupportsScreens) {
+    // `sa.getInteger(attr, current)` keeps the current value for an absent
+    // attribute, so later `<supports-screens>` tags merge into earlier ones
+    // instead of resetting the group.
+    if let Some(value) = parse_screen_value(node, "smallScreens") {
+        screens.small_screens = Some(value);
+    }
+    if let Some(value) = parse_screen_value(node, "normalScreens") {
+        screens.normal_screens = Some(value);
+    }
+    if let Some(value) = parse_screen_value(node, "largeScreens") {
+        screens.large_screens = Some(value);
+    }
+    if let Some(value) = parse_screen_value(node, "xlargeScreens") {
+        screens.xlarge_screens = Some(value);
+    }
+    if let Some(value) = parse_screen_value(node, "resizeable") {
+        screens.resizeable = Some(value);
+    }
+    if let Some(value) = parse_screen_value(node, "anyDensity") {
+        screens.any_density = Some(value);
+    }
+}
+
+/// Our AXML decoder collapses `TYPE_INT_BOOLEAN` to a bool, and aapt2 encodes
+/// `true` as `-1`, so `Boolean(true)` is the bypassing `True` state. Stock
+/// resolves `@bool` references before `getInteger`; ACOS has no resource table
+/// here, so references are recorded as unsupported rather than resolved.
+/// Malformed boolean input is likewise left unsupported.
+fn parse_screen_value(node: &XmlNode, name: &str) -> Option<SupportsScreensValue> {
+    match &node.attribute(name)?.value {
+        TypedValue::Boolean(true) => Some(SupportsScreensValue::True),
+        TypedValue::Boolean(false) => Some(SupportsScreensValue::False),
+        TypedValue::Reference(id) => Some(SupportsScreensValue::Reference(*id)),
+        _ => None,
     }
 }
 
@@ -674,6 +813,204 @@ mod tests {
                 )],
             ),
         }
+    }
+
+    /// A manifest with optional `<uses-sdk>` (min/target) and extra
+    /// `<manifest>` children (`<supports-screens>`).
+    fn document_with_sdk(
+        min_sdk: Option<i32>,
+        target_sdk: Option<i32>,
+        manifest_children: Vec<XmlNode>,
+    ) -> XmlDocument {
+        let mut children = Vec::new();
+        if min_sdk.is_some() || target_sdk.is_some() {
+            let mut attrs = Vec::new();
+            if let Some(api) = min_sdk {
+                attrs.push(attr("minSdkVersion", TypedValue::IntDec(api)));
+            }
+            if let Some(api) = target_sdk {
+                attrs.push(attr("targetSdkVersion", TypedValue::IntDec(api)));
+            }
+            children.push(node("uses-sdk", attrs, Vec::new()));
+        }
+        children.extend(manifest_children);
+        children.push(node(
+            "application",
+            vec![attr("name", TypedValue::String(".App".into()))],
+            Vec::new(),
+        ));
+        XmlDocument {
+            strings: Vec::new(),
+            resource_ids: Vec::new(),
+            root: node(
+                "manifest",
+                vec![attr("package", TypedValue::String("pkg".into()))],
+                children,
+            ),
+        }
+    }
+
+    fn document_with(target_sdk: Option<i32>, manifest_children: Vec<XmlNode>) -> XmlDocument {
+        document_with_sdk(None, target_sdk, manifest_children)
+    }
+
+    fn supports_screens(attributes: Vec<XmlAttribute>) -> XmlNode {
+        node("supports-screens", attributes, Vec::new())
+    }
+
+    const ALL_SCREEN_FLAGS: i32 = FLAG_SUPPORTS_SMALL_SCREENS
+        | FLAG_SUPPORTS_NORMAL_SCREENS
+        | FLAG_SUPPORTS_LARGE_SCREENS
+        | FLAG_RESIZEABLE_FOR_SCREENS
+        | FLAG_SUPPORTS_SCREEN_DENSITIES
+        | FLAG_SUPPORTS_XLARGE_SCREENS;
+
+    fn screen_flags(manifest: &Manifest) -> i32 {
+        manifest.application_flags() & ALL_SCREEN_FLAGS
+    }
+
+    /// `PackageParser.parseBaseApkCommon` (r75:1993-1998, 2476-2503) starts
+    /// every value at the "unknown" sentinel `1`. The screen effective SDK is
+    /// `targetSdkVersion`, defaulting to `minSdkVersion` inside `<uses-sdk>`
+    /// and to `0` when `<uses-sdk>` is absent; it must not inherit the API-34
+    /// fallback used by unrelated application attributes.
+    #[test]
+    fn supports_screens_absent_uses_screen_effective_sdk_defaults() {
+        let cases = [
+            // (min, target, expected) — no <uses-sdk> means SDK 0: only the
+            // ungated normalScreens default survives.
+            (None, None, FLAG_SUPPORTS_NORMAL_SCREENS),
+            (Some(3), None, FLAG_SUPPORTS_NORMAL_SCREENS),
+            (Some(4), None, ALL_SCREEN_FLAGS & !FLAG_SUPPORTS_XLARGE_SCREENS),
+            (Some(9), None, ALL_SCREEN_FLAGS),
+            (Some(26), Some(3), FLAG_SUPPORTS_NORMAL_SCREENS),
+            (None, Some(8), ALL_SCREEN_FLAGS & !FLAG_SUPPORTS_XLARGE_SCREENS),
+            (Some(26), Some(34), ALL_SCREEN_FLAGS),
+        ];
+        for (min_sdk, target_sdk, expected) in cases {
+            let doc = document_with_sdk(min_sdk, target_sdk, Vec::new());
+            let manifest = Manifest::parse(&doc).expect("manifest");
+            assert_eq!(
+                screen_flags(&manifest),
+                expected,
+                "minSdk {min_sdk:?}, targetSdk {target_sdk:?}"
+            );
+        }
+    }
+
+    /// Each explicit `false` clears exactly its own bit; all six false leave
+    /// the compatibility mask empty. This is how an app intentionally opts out
+    /// of a screen class or of density scaling (`anyDensity=false` is the
+    /// legacy mode `ActivityThread` reads).
+    #[test]
+    fn supports_screens_explicit_false_clears_only_its_flag() {
+        for (attribute, bit) in [
+            ("smallScreens", FLAG_SUPPORTS_SMALL_SCREENS),
+            ("normalScreens", FLAG_SUPPORTS_NORMAL_SCREENS),
+            ("largeScreens", FLAG_SUPPORTS_LARGE_SCREENS),
+            ("xlargeScreens", FLAG_SUPPORTS_XLARGE_SCREENS),
+            ("resizeable", FLAG_RESIZEABLE_FOR_SCREENS),
+            ("anyDensity", FLAG_SUPPORTS_SCREEN_DENSITIES),
+        ] {
+            let doc = document_with_sdk(
+                None,
+                Some(34),
+                vec![supports_screens(vec![attr(
+                    attribute,
+                    TypedValue::Boolean(false),
+                )])],
+            );
+            let manifest = Manifest::parse(&doc).expect("manifest");
+            assert_eq!(
+                screen_flags(&manifest),
+                ALL_SCREEN_FLAGS & !bit,
+                "{attribute}=false must clear only its bit"
+            );
+        }
+
+        let doc = document_with_sdk(
+            None,
+            Some(34),
+            vec![supports_screens(
+                [
+                    ("smallScreens", FLAG_SUPPORTS_SMALL_SCREENS),
+                    ("normalScreens", FLAG_SUPPORTS_NORMAL_SCREENS),
+                    ("largeScreens", FLAG_SUPPORTS_LARGE_SCREENS),
+                    ("xlargeScreens", FLAG_SUPPORTS_XLARGE_SCREENS),
+                    ("resizeable", FLAG_RESIZEABLE_FOR_SCREENS),
+                    ("anyDensity", FLAG_SUPPORTS_SCREEN_DENSITIES),
+                ]
+                .into_iter()
+                .map(|(name, _)| attr(name, TypedValue::Boolean(false)))
+                .collect(),
+            )],
+        );
+        let manifest = Manifest::parse(&doc).expect("manifest");
+        assert_eq!(screen_flags(&manifest), 0, "all six explicit false");
+    }
+
+    /// aapt2 stores an explicit `true` as `-1`, which hits AOSP's `v < 0`
+    /// branch and bypasses the DONUT/GINGERBREAD gates; an absent attribute
+    /// (`1`) does not.
+    #[test]
+    fn supports_screens_explicit_true_bypasses_target_sdk_gates() {
+        for (min_sdk, target_sdk) in [(None, None), (Some(1), Some(3)), (Some(26), Some(34))] {
+            let attrs = [
+                "smallScreens",
+                "normalScreens",
+                "largeScreens",
+                "xlargeScreens",
+                "resizeable",
+                "anyDensity",
+            ]
+            .into_iter()
+            .map(|name| attr(name, TypedValue::Boolean(true)))
+            .collect();
+            let doc = document_with_sdk(
+                min_sdk,
+                target_sdk,
+                vec![supports_screens(attrs)],
+            );
+            let manifest = Manifest::parse(&doc).expect("manifest");
+            assert_eq!(
+                screen_flags(&manifest),
+                ALL_SCREEN_FLAGS,
+                "minSdk {min_sdk:?}, targetSdk {target_sdk:?}: explicit true bypasses gates"
+            );
+        }
+    }
+
+    /// A resource reference is recorded but cannot be resolved: ACOS has no
+    /// `resources.arsc` handle in `Manifest::parse` / `application_flags`
+    /// (plumbing it needs `Apk::manifest` + PMS changes, deferred), so the
+    /// density bit stays clear rather than being granted by the
+    /// absent-attribute default. Stock resolves `@bool` before `getInteger`;
+    /// this under-grants `@bool/true` but matches `@bool/false`.
+    #[test]
+    fn supports_screens_reference_is_recorded_and_not_granted() {
+        let doc = document_with_sdk(
+            None,
+            Some(34),
+            vec![supports_screens(vec![attr(
+                "anyDensity",
+                TypedValue::Reference(0x7f05_0001),
+            )])],
+        );
+        let manifest = Manifest::parse(&doc).expect("manifest");
+        assert_eq!(
+            manifest.application.supports_screens.any_density,
+            Some(SupportsScreensValue::Reference(0x7f05_0001))
+        );
+        assert_eq!(
+            manifest.application_flags() & FLAG_SUPPORTS_SCREEN_DENSITIES,
+            0,
+            "an unresolved @bool reference must not grant density support"
+        );
+        assert_eq!(
+            screen_flags(&manifest),
+            ALL_SCREEN_FLAGS & !FLAG_SUPPORTS_SCREEN_DENSITIES,
+            "the other absent defaults are unaffected"
+        );
     }
 
     /// Every typed value kind `PackageParser.parseMetaData` stores, exactly as
