@@ -1103,7 +1103,12 @@ fn pp_can_morph(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     // is not, so this is a structural comparison, not a guess.
     let a = Handle::from_jlong(vm.arg_i64(ctx, 0));
     let b = Handle::from_jlong(vm.arg_i64(ctx, 1));
-    let ok = match (path_data().get(a), path_data().get(b)) {
+    // Lock once: `path_data()` returns a `MutexGuard`, so two calls in one
+    // expression (the old `(path_data().get(a), path_data().get(b))`) tried to
+    // take the same non-reentrant mutex twice and deadlocked on the first
+    // `CheckBox`/vector path morph query.
+    let table = path_data();
+    let ok = match (table.get(a), table.get(b)) {
         (Ok(pa), Ok(pb)) => can_morph(pa, pb),
         _ => false,
     };
