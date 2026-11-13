@@ -381,16 +381,18 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     let sdir = run.path().to_path_buf();
     let out_dir = run.dir("out");
 
-    // The APK lives under /data (bound read-write), as in render-app.
-    let app_dir = root.data.join("app");
-    fs::create_dir_all(&app_dir)?;
+    // H17: the APK is mapped by the guest, so this session stages its own copy in
+    // its private run root instead of rewriting the shared `<data>/app/<name>`
+    // (a concurrent launch truncated the mapped bytes and could serve another
+    // session's same-named APK).
     let apk_name = opts
         .apk
         .file_name()
         .map(|f| f.to_string_lossy().to_string())
         .unwrap_or_else(|| "app.apk".to_string());
-    let apk = app_dir.join(&apk_name);
-    fs::copy(&opts.apk, &apk)?;
+    let apk = sdir.join("app").join(&apk_name);
+    crate::app::stage_apk(&opts.apk, &apk)?;
+    crate::app::ensure_apk_mountpoint(&root.data, &apk_name, &opts.apk)?;
 
     let package = match &opts.package {
         Some(p) => p.clone(),
@@ -455,6 +457,8 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     sb.with_shim(false);
     sb.ro_bind(&art_shim, "/data/shim/libartshim.so");
     sb.ro_bind(&shim, "/data/app/libacosart.so");
+    // H17: this session's own APK shadows the shared `/data/app` entry.
+    sb.ro_bind(&apk, &format!("/data/app/{apk_name}"));
     sb.ro_bind(&root.sysroot.join("shim/libacoshw.so"), "/data/libacoshw.so");
     // The session dir is writable to the guest, but only this session's:
     // `/data/session/<id>` is the run root, `/data/session` itself is a plain

@@ -58,6 +58,46 @@ pub const DEFAULT_IMAGE_REL: &str = "system-images/android-34/google_apis/x86_64
 /// Host path of the embedded freestanding shim source.
 pub const SHIM_SOURCE: &str = include_str!("../shim/artshim.c");
 
+/// Publish `bytes` at `path` without ever truncating a file another process may
+/// be reading or **mapping**.
+///
+/// H17: every `acos-art` launch of a cohort shares one `--data` tree, and the
+/// guests read (or `mmap`) its shared inputs (`seccomp/landlock.plan`,
+/// `acos.properties`, `apex-info-list.xml`) while other launches rewrite them.
+/// `fs::write` is `O_TRUNC` + `write(2)`, so a concurrent reader could observe an
+/// empty or half-written file (the guard then exits 126 with
+/// `ERR landlock=plan-missing`) and a concurrent `mmap` could take `SIGBUS`.
+/// Writing a sibling temp file and `rename(2)`-ing it into place makes the
+/// replacement atomic: a reader keeps the old inode (complete) or gets the new
+/// one (complete), never a torn file. Identical bytes are left alone, so the
+/// common case does no I/O and the inode (and any live mapping) does not churn.
+pub fn publish_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    if fs::read(path).map(|old| old == bytes).unwrap_or(false) {
+        return Ok(());
+    }
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "artifact".to_string());
+    // Same directory, so the rename cannot cross a filesystem boundary. The
+    // dotted prefix keeps the temp out of the names readers look for.
+    let tmp = path.with_file_name(format!(
+        ".{name}.h17-{}-{}.tmp",
+        std::process::id(),
+        SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    fs::write(&tmp, bytes)?;
+    if let Err(e) = fs::rename(&tmp, path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(Error::Io(e));
+    }
+    Ok(())
+}
+
 /// Version marker of the synthesised `apex-info-list.xml` (bumped when the
 /// generated content changes, so a stale file is rewritten).
 const APEX_INFO_MARKER: &str = "<!-- acos-art apex-info-list v3 -->\n";
@@ -357,7 +397,9 @@ impl ArtRoot {
             ));
         }
         xml.push_str("</apex-info-list>\n");
-        fs::write(&out, xml)?;
+        // H17: shared inputs are read by every concurrent guest; never truncate
+        // one in place (see [`publish_atomic`]).
+        publish_atomic(&out, xml.as_bytes())?;
         Ok(())
     }
 
@@ -2012,6 +2054,114 @@ mod tests {
         );
         // Absent manifest: keep the host directory name.
         assert_eq!(apex_mount_name(&dir.join("nope"), "com.android.art"), "com.android.art");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // -- H17: shared inputs are published, never truncated in place --------- //
+
+    /// H17: a reader that already has the file open keeps the old, complete
+    /// inode. `fs::write` (the pre-H17 code) truncates that inode, which is how
+    /// a starting guest's Landlock plan appeared empty (`ERR landlock=plan-missing`,
+    /// exit 126) while another launch rewrote it.
+    #[test]
+    fn publish_atomic_never_truncates_a_live_reader() {
+        let dir = scratch_dir("publish-reader");
+        let path = dir.join("landlock.plan");
+        let old = vec![b'A'; 256 * 1024];
+        let new = vec![b'B'; 256 * 1024];
+        publish_atomic(&path, &old).expect("first publish");
+        // The reader opens the file (the guest's guard does exactly this).
+        let mut held = fs::File::open(&path).expect("open");
+        publish_atomic(&path, &new).expect("second publish");
+        let mut seen = Vec::new();
+        use std::io::Read;
+        held.read_to_end(&mut seen).expect("read the held fd");
+        assert_eq!(seen, old, "the open fd must still see the old file, complete");
+        assert_eq!(fs::read(&path).expect("path"), new, "a new open sees the new file");
+        // Identical bytes are a no-op (the inode does not churn).
+        use std::os::unix::fs::MetadataExt;
+        let inode_before = fs::metadata(&path).expect("meta").ino();
+        publish_atomic(&path, &new).expect("same publish");
+        assert_eq!(fs::metadata(&path).expect("meta").ino(), inode_before);
+        // No temp files are left behind.
+        let leftovers: Vec<_> = fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().contains(".tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "temp files left: {leftovers:?}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// H17: a concurrent reader only ever observes one of the two complete
+    /// payloads. With `fs::write` this test fails: a read can land between the
+    /// `O_TRUNC` and the write and see 0 or a partial file (the observed
+    /// `plan-missing` class, and a `SIGBUS` for an `mmap`ed file).
+    #[test]
+    fn publish_atomic_is_atomic_for_a_concurrent_reader() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+        let dir = scratch_dir("publish-race");
+        let path = dir.join("acos.properties");
+        let a = vec![b'a'; 64 * 1024];
+        let b = vec![b'b'; 64 * 1024];
+        publish_atomic(&path, &a).expect("seed");
+        let stop = Arc::new(AtomicBool::new(false));
+        let readers: Vec<_> = (0..2)
+            .map(|_| {
+                let path = path.clone();
+                let stop = Arc::clone(&stop);
+                let a = a.clone();
+                let b = b.clone();
+                std::thread::spawn(move || {
+                    let mut reads = 0usize;
+                    while !stop.load(Ordering::Relaxed) {
+                        let got = fs::read(&path).expect("read");
+                        assert!(
+                            got == a || got == b,
+                            "torn read: {} bytes ({} / {})",
+                            got.len(),
+                            a.len(),
+                            b.len()
+                        );
+                        reads += 1;
+                    }
+                    reads
+                })
+            })
+            .collect();
+        for i in 0..300 {
+            let payload = if i % 2 == 0 { &b } else { &a };
+            publish_atomic(&path, payload).expect("publish");
+        }
+        stop.store(true, Ordering::Relaxed);
+        let mut total = 0usize;
+        for r in readers {
+            total += r.join().expect("reader panicked (a torn read)");
+        }
+        assert!(total > 0, "the readers never ran");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// H17: staging an APK publishes a fresh copy; a guest that still has the
+    /// previous copy open (or mapped) is untouched.
+    #[test]
+    fn stage_apk_leaves_the_previous_copy_intact() {
+        use std::io::Read;
+        let dir = scratch_dir("stage-apk");
+        let from = dir.join("input.apk");
+        let to = dir.join("run/app/counter.apk");
+        let v1 = vec![b'1'; 128 * 1024];
+        let v2 = vec![b'2'; 128 * 1024];
+        fs::write(&from, &v1).unwrap();
+        crate::app::stage_apk(&from, &to).expect("stage v1");
+        let mut held = fs::File::open(&to).expect("open v1");
+        fs::write(&from, &v2).unwrap();
+        crate::app::stage_apk(&from, &to).expect("stage v2");
+        assert_eq!(fs::read(&to).unwrap(), v2);
+        let mut seen = Vec::new();
+        held.read_to_end(&mut seen).unwrap();
+        assert_eq!(seen, v1, "the open previous copy must stay complete");
         let _ = fs::remove_dir_all(&dir);
     }
 }

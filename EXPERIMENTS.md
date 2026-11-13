@@ -1222,6 +1222,80 @@ PASS (1 documented false pass -> 0; one live Gaten false pass re-measured as a r
 - **Conclusion / next:** keep the loop at n≥100 to separate rare from fixed; every occurrence now
   arrives with a library + offset to bisect. `R2b` (`+1080 px`) and `R2c` (per-view canvas) untouched.
 
+## E2.13 — H17: N=10 concurrent reset/relaunch reliability — two shared-input races (fixed) — MEASURED
+
+- **Experiment ID / name:** H17 — concurrent reset/relaunch at N=10 in the P5 agent loop.
+- **Responsible agent:** H17 (worktree `fix-h17-n10-reset`, off main `84fc8bc`).
+- **Bottleneck investigated:** with 10 sessions under one `acos serve`, the P5 verified loop lost tasks
+  with `steps.reset.error = GUEST_EXITED` and follow-on `tap`/`observe` `INTERNAL` (B2/E3.2–E3.3:
+  14–50/50 verified, 0 false passes). The idle 10-session memory phase was clean, so the fault was in
+  the concurrent launch/reset path, not capacity. A second symptom: under load1 10.4, 20/20 fast resets
+  returned an error in 0.009 ms (B2 §6 item 2).
+- **Baseline (p50):** loop10 verified rate 131/150 (87.3 %) at load1 7.3–8.5 and 148/150 (98.7 %) at
+  load1 2.6, animations on; 149/150 (99.3 %) animations off at load1 1.1; 0 false passes. Loop p50
+  1431–1487 ms/task (on), 520–531 ms (off).
+- **Hypothesis + proposed solution:** the failures are two instances of one class — a file shared by
+  every session of the cohort is rewritten in place (truncate + write) while another process reads or
+  maps it. (1) `<data>/seccomp/landlock.plan` is rewritten by *every* launch and read by the guard at
+  guest start; a torn read fails closed with exit 126/1 (`ERR landlock=plan-missing`). (2)
+  `<data>/app/<apk>` is `fs::copy`ed by every launch and `mmap`ed by ART/`AssetManager`; a truncate
+  under a live mapping is `SIGBUS` (exit 135 = 128+7 as reported by `systemd-run --scope`). Fix at the
+  publication layer: atomic temp+rename (no-op when unchanged) for the shared inputs, and a per-run
+  APK staged into the private run root and bound over `/data/app/<name>` (the shared path stays only
+  as a write-once mount point). The 0.009 ms reset error is the session table refusing
+  `SESSION_NOT_FOUND` after the harness ignored a failed launch — a correct refusal, not a distinct bug.
+- **Implementation + commits:** `acos-art`: `publish_atomic` (lib.rs) used by `landlock::write_plan`,
+  `Props::write`, `write_apex_info_list`; `app::stage_apk` + `ensure_apk_mountpoint` used by `launch`,
+  `render-app` and `session`; `session-exit.json` now carries `guard`/`notes` so a guard refusal names
+  its cause. `acos-cli`: trace-only dm6 events for spawn/stop/liveness (inert unless `DM6_RESET_TRACE`).
+  Three deterministic unit tests (held-reader, concurrent-reader, re-staged APK) fail on the pre-fix
+  code and pass after. Branch `fix-h17-n10-reset`.
+- **Benchmark method + environment + host load:** real ART, release (after build `5b06ab9f`), P5 loop (6 loops/agent, 1 warm-up,
+  50 measured tasks/rep, 3 reps/arm) in one `acos serve` per rep, one 16G `run-exclusive.sh` +
+  `guarded.sh` acquisition per arm; `ACOS_ART_KEEP_RUN=1` on the diagnostic reps only. Load1 per rep
+  recorded below; queue 3–205 s; every acquisition < 10 min.
+- **Before/after (verified tasks / measured, 0 false passes in every row):**
+
+  | arm | load1 | before (main) | after (fix) |
+  |---|---|---|---|
+  | on, quiet | 2.60 / 2.60 / 2.60 vs 1.05 / 1.68 / 1.66 | 49, 49, 50 = **148/150** | 50, 50, 50 = **150/150** |
+  | on, final build `5b06ab9f` | — vs 3.79 / 4.15 / 3.96 | — | 50, 50, 50 = **150/150** |
+  | on, loaded | 8.45 / 7.29 / 8.07 | 48, 50, 33 = **131/150** | not run at that load (no deliberate load generator) |
+  | off, quiet | 1.10 / 1.10 / 1.09 vs 1.40 / 2.07 / 1.98 | 50, 49, 50 = **149/150** | 50, 50, 50 = **150/150** |
+  | off, final build `5b06ab9f` | — vs 4.21 / 4.20 / 4.02 | — | 50, 50, 50 = **150/150** |
+
+  Pooled **428/450 (95.1 %) → 600/600 (100 %)** over 12 after-reps; all before-failures were exit 1/126
+  from the torn plan or exit 135 (SIGBUS) from the truncated mapped APK. Latency/throughput unchanged:
+  on 1426–1441 ms/task and 4.6–5.2 tasks/s (before 1431–1487, 4.8–5.2); off 533–535 ms and 11.3–11.5
+  tasks/s in two clean reps (before 520–531, 11.1–11.4); reset step p50 344–351 ms before/after.
+- **Result:** **fixed.** N=5 stays 75/75 (3 × 25, load1 2.9–3.5). N=20: **40/40 verified**, 0 false passes,
+  job cgroup `memory.current` peak 2186 MiB, guest anon+shmem peak 1329 MiB, host
+  `MemAvailable` 47.25 GiB of 60.5 (≈22 % used, well under the 90 % rule), no `oom_kill`. Gates:
+  v2-art-counter, w22-counter-reset, w54-dialog-pixels, w42-back-frame, w15-dialog-menu,
+  form-validation, v1-offscreen-pager, T03-render-good all pass; T03-render-wrong fails
+  `ASSERTION_FAILED` as required. P11 corpus: 0 false passes, 12/12 scenario expectations,
+  `p11-progress-timeout` 5/5 honest timeouts (non-pass). `cargo test --release --offline -p acos-cli
+  -p acos-art -p acos-verify`: 343 tests / 32 binaries, rc 0, no failures (serve_daemon flake not
+  seen). The M6 fast-reset cohort after the fix: **20/20 ok, p50 195 ms** (strict 20/20, 329 ms) — the
+  0.009 ms refusals do not reproduce; they were `SESSION_NOT_FOUND` after a launch the harness ignored.
+- **Why it worked:** the shared files are read-only *inputs* to every guest, so replacing them atomically
+  (temp + rename, skipped when unchanged) means a reader/mapper keeps a complete inode instead of
+  racing an `O_TRUNC`; giving each session its own APK removes the mapped-file truncation and the
+  same-name cross-session APK hazard at once, without changing the guest-visible path.
+- **Trade-offs / regressions:** none measured (latency identical within noise; the per-run APK adds one
+  small file copy per launch, replacing the shared copy it replaces). The high-load before rep is
+  load-confounded (no deliberate load generator was run, to avoid perturbing other agents); the
+  quiet-load comparison is matched and the mechanism is named by the exit codes and guard logs, not
+  only by the rate.
+- **Follow-ups:** `docs/ERROR_CODES.md` promises an exit-126-with-guard-`ERR` → `SECCOMP_UNAVAILABLE`
+  re-classification that the launch path only applies when the outcome is otherwise Ok; the record now
+  names the cause, but the re-classification is still worth doing. `acos_bench.py`'s M6 loop ignores
+  `launch()`'s result, which is how a failed launch surfaced as 20 fast reset refusals.
+- **Fidelity / evidence:** `art-reference` (real ART, release), MEASURED, 0 false passes;
+  `results/bench/H17.md`, `.cache/h17/loop-{diag-on,before-on-quiet,before-off,after-on,after-off,after-off2,n5-after,n20-after}/`,
+  `.cache/h17/{gates,corpus,latency,tests-full.log}`, kept guest run evidence
+  (`ERR landlock=plan-missing`, exit 135) under `.cache/h17/loop-*/guest-evidence/`.
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
@@ -1253,7 +1327,7 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | Agent loop (animations on) | **1423.9 ms/task; 0.653 tasks/s, 283.5 (page cache) / 905.3 (anon+shmem) tasks/GiB-min at N=1; 1428.1 ms, 2.679 tasks/s, 667.6 / 865.8 at N=5** | main `4958703` | B2, E3.2 | 2026-11-13 | latency tie with pre-H2; **anon+shmem GiB-min +45.7 % (N=1) / +49.8 % (N=5) from H2**, invisible in the page-cache denominator (+1.1 %/+0.5 %) |
 | Agent loop (animations off, functional-check mode) | **507–523 ms/task, 1.79 tasks/s, 5239 tasks/GiB-min (anon+shmem) at N=1; 537 ms / 6.28 / 3942 at N=5; 530 ms / 10.22 / 3798 at N=10** | main `4958703`, `--animations off` | H14, E3.3 | 2026-11-13 | 2.71–2.84× latency, 5.8×/5.0×/8.7× anon+shmem tasks/GiB-min at N=1/5/10; loop becomes reset-bound (48 %); not a default change |
 | False passes | **0** — P11 0/105, scenarios 0/12 (negative control = honest `timeout`), loop 0; verified 63/63 (N=1) and 75/75 (N=5) | main `4958703` | B2, E3.2 | 2026-11-13 | H6's 1-in-75 strict-assert flake (H16) did not reproduce |
-| Agent loop N=10 reliability | **not reliable yet**: 14–50/50 verified across five H14 arm runs, failures are `GUEST_EXITED` (0 false passes) | main `4958703`, 10 sessions / one serve | H14, E3.3 | 2026-11-13 | new row; see Backlog H17 |
+| Agent loop N=10 reliability | **100 %: 600/600 verified over 12 reps** (load1 1.0–4.6), 0 false passes; 428/450 (95.1 %) before the fix (exit 1/126 torn Landlock plan, exit 135 SIGBUS on the truncated mapped APK) | `fix-h17-n10-reset` off main `84fc8bc`, 10 sessions / one serve | H17, E2.13 | 2026-11-13 | fixed two shared-input races (atomic publish + per-run APK); see E2.13 |
 | Compat first-frame rate (K1 corpus, real ART, N=1) | **13/42 (31.0 %)**; tap 7/42 (16.7 %) — K3 measured with a 13/42 first frame in one run and 12/42 (the RN/WebView flicker) in the second, `onCreate` completed 15→**16/42**; first frame p50 647–652 ms / p90 1050–1115 ms (K2 581/1056) | K3 `9df9e71`,`40ffc61` (provider delivery measured but off) | K3/K3b–K3a, E5.5–E5.7 | 2026-11-13 |
 | Agent loop N=10 (Z7 method, fresh launch/task) | 45.0 tasks/GiB-min main; **67.7 with exec-path early GC** (seam, off by default → H2); 103.6 zygote+early GC (research, trusted only) | Z7 `zygote-z7-lifetime` | Z7, E2.8 | 2026-11-12 | post-H6 (current main) |
 | Agent loop N=10/N=5, H2 default-on | **85.9 tasks/GiB-min** (off 55.7, +54.2 %) / **135.6** (off 98.8, +37.2 %); 1-min interleaved reps, 0 false passes | `perf-h2-early-gc` `54b9c33` | H2, E2.10 | 2026-11-13 | post-H6 (current main) |
@@ -1273,7 +1347,7 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | H15 | **The reset/relaunch is the loop's next wall: 342 ms (24 %) with animations on, 245–343 ms (48 %) with animations off** — fresh ART boot + framework + Activity + strict bind, per task. Zygote/shared boot image (B3 `-Xnorelocate` −13.6 MiB/session measured) or a fast reset for non-asserting steps | M6, loop, tasks/GiB-min | −150–200 ms/task → −10…14 % loop (on), −30…40 % (off) | medium-high | medium | medium (fixed image address / ASLR, zygote F1) | **#1, was #3** |
 | H13 | **Memory per session is now 65 MiB anon+shmem, flat N=1/5/10.** Finish it: B3 shared uncompressed image (−13.6 MiB/session measured), then zygote CoW (Z6 −25–60 % at N≥5) | M2, tasks/GiB-min (anon+shmem) | −14 % (B3) … −25 % | high (B3) / medium (zygote) | low (B3 flag) / medium | medium | **#2, was #1** (H2 took the first 32 MiB) |
 | H14 | **Strict tap 956 ms with the framework press/elevation animator.** Adopted the P12 `animations:off` switch as the agent-facing functional-check mode: 7.34×/8.35× taps, 2.71–2.84× loop, 5–8.7× tasks/GiB-min (anon+shmem), 0 false passes. Defaults unchanged | M8, loop | measured | high | low | medium (verification semantics: fast never backs an assertion) | **done: mode available, E3.3; use it for functional checks** |
-| H17 | **N=10 verified loop is unreliable:** 14–50/50 verified across five H14 arms, all failures honest (`GUEST_EXITED` on reset/observe with 10 concurrent sessions in one serve), 0 false passes. The idle 10-session memory phase is clean, so it is the concurrent reset/relaunch path, not capacity | loop verified rate at N≥8 | 100 % | medium | low–medium | low | **new, needs-investigation** |
+| H17 | **N=10 verified loop: fixed.** Two shared-input races: `<data>/seccomp/landlock.plan` rewritten in place by every launch and read by the guard at start (`ERR landlock=plan-missing`, exit 126/1), and the shared `<data>/app/<apk>` truncated by `fs::copy` while ART had it mapped (SIGBUS, exit 135). Atomic `publish_atomic` + per-run APK. 428/450 → **600/600** verified over 12 after-reps, 0 false passes; N=5 75/75, N=20 40/40 | loop verified rate at N≥8 | 100 % | high | done | low | **done 2026-11-13, E2.13** |
 | H16 | **N=5 strict assert flake** (H6: 1/75). Not reproduced in B2 (63/63 N=1, 75/75 N=5, plus 150+ H14 tasks) | loop verified rate | — | low now | low | low | **not reproduced in B2** (H6 saw 1/75 at N=5: a strict post-tap count read that did not see the tap; false_pass stayed 0). Twelve B2/H14 loop cohorts, 0 failures of that shape; the N≥8 failure mode is H17 instead |
 | H9 | Form-validation N=5 under host load: 3/5 `:id/name` taps hit the 30 s bound (2/5 verified) **with early GC off and on**, 2/2 runs each; Z7 saw the same in a/a′/c′ | loop correctness | remove a pre-existing input/queue stall | high (reproduced) | medium | low | **resolved 2026-11-13, E2.11/L1**: not input or the looper — the pre-P12 pixel-unchanged guard (on by default) timed out focus taps with no pixel change/no C1 buffer. P12 guard-off default + `TrustGuard::refresh`: N=5 form 5/5 ×2 at 110–176 ms, guard-on reproduces 30 s (2/5). Evidence `results/art-runtime/evidence/L1/` |
 | H4 | Idle CPU **5.28 %** of one core and 161.7 wakeups/s at N=10 (0.53 %/session; wakeups ~16 s⁻¹/session at N≥5). Remove the 250 ms probe fallback and per-session timers | CPU, wakeups | lower wakeups; small at N=10 now | medium | low | low | queued (after H15) |

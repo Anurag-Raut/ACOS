@@ -472,15 +472,19 @@ pub(crate) fn launch_session(
     };
     crate::stage("run-dir");
 
-    let app_dir = root.data.join("app");
-    fs::create_dir_all(&app_dir)?;
+    // H17: the APK is an input every guest maps (ART mmaps the dex/resources), so
+    // it is staged into this session's private run root and bound over its guest
+    // path. Writing the shared `<data>/app/<name>` on every launch truncated the
+    // bytes other sessions' guests held mapped (SIGBUS) and let a same-named APK
+    // from one session reach another.
     let apk_name = opts
         .apk
         .file_name()
         .map(|f| f.to_string_lossy().to_string())
         .unwrap_or_else(|| "app.apk".to_string());
-    let apk = app_dir.join(&apk_name);
-    fs::copy(&opts.apk, &apk)?;
+    let apk = run.dir("app").join(&apk_name);
+    crate::app::stage_apk(&opts.apk, &apk)?;
+    crate::app::ensure_apk_mountpoint(&root.data, &apk_name, &opts.apk)?;
     let package = crate::app::apk_package(&opts.apk)?;
     crate::stage("apk-stage");
 
@@ -950,6 +954,8 @@ pub(crate) fn launch_session(
         acos_services::native_libs::GUEST_NATIVE_LIB_ROOT,
     );
     sb.ro_bind(&shims.substrate, "/data/app/libacosart.so");
+    // H17: this session's own APK shadows the shared `/data/app` entry.
+    sb.ro_bind(&apk, &format!("/data/app/{apk_name}"));
     sb.ro_bind(
         &root.sysroot.join("shim/libacoshw.so"),
         "/data/libacoshw.so",
@@ -2138,6 +2144,12 @@ fn write_session_exit(
         "heap": crate::props::effective_heap_json(),
         "cgroup": result.notes.iter().find(|n| n.starts_with("cgroup:")),
         "logd": result.notes.iter().find(|n| n.starts_with("logd:")),
+        // H17: a guest that exits 126 before its first frame is the guard
+        // failing closed, and the guard's own ERR line is the only statement of
+        // *why*. Keep it (and the other host notes) in the record the caller
+        // reads, instead of leaving an exit code with no cause.
+        "guard": result.notes.iter().find(|n| n.starts_with("seccomp:")).cloned(),
+        "notes": result.notes,
         "stdout_tail_last": result.stdout.lines().rev().find(|l| !l.trim().is_empty()),
         "stderr_tail_last": result.stderr.lines().rev().find(|l| !l.trim().is_empty()),
     });
