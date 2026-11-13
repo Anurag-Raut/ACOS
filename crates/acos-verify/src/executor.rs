@@ -17,7 +17,7 @@ use acos_protocol::assertion::{
 };
 use acos_protocol::commands::ResetScope;
 use acos_protocol::events::{Event, EventBody};
-use acos_protocol::scenario::{Expectation, Scenario, Step, StepRef};
+use acos_protocol::scenario::{Expectation, Scenario, Step, StepRef, StepSettle};
 use acos_protocol::ui::Bounds;
 use acos_protocol::verdict::{
     AppIdentity, ArtifactRef, FailureClassification, Reproducer, ResourceReport, ScenarioIdentity,
@@ -853,6 +853,7 @@ fn execute_step(
                 return StepExec::unsupported(Capability::Input, "the backend cannot deliver tap");
             }
             backend.set_settle_timeout(tap.settle_timeout_ms);
+            backend.set_input_settle(matches!(tap.settle, Some(StepSettle::Fast)));
             let action = InputAction::Tap {
                 selector: tap.selector.clone(),
                 x: tap.x,
@@ -866,6 +867,7 @@ fn execute_step(
                 return StepExec::unsupported(Capability::Input, "the backend cannot deliver type");
             }
             backend.set_settle_timeout(ty.settle_timeout_ms);
+            backend.set_input_settle(matches!(ty.settle, Some(StepSettle::Fast)));
             let action = InputAction::Type {
                 selector: ty.selector.clone(),
                 text: ty.text.clone(),
@@ -879,6 +881,7 @@ fn execute_step(
                 return StepExec::unsupported(Capability::Input, "the backend cannot deliver key");
             }
             backend.set_settle_timeout(key.settle_timeout_ms);
+            backend.set_input_settle(matches!(key.settle, Some(StepSettle::Fast)));
             input_step(
                 backend,
                 &InputAction::Key(key.key),

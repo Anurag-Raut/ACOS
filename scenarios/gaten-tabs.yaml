@@ -1,0 +1,48 @@
+# gaten-tabs: the three bottom tabs on Gaten's own MainActivity under real ART.
+#
+# Onboarding runs first because a fresh session has no saved step (the app's
+# SharedPreferences are per-run). Each fast tap is navigation only; the recorded
+# state change for every move is the wait_for/capture/assert that follows it.
+# Assertions run on a bound capture frame, never on the fast tap's reply.
+version: 1
+name: gaten-tabs
+description: >-
+  Home -> Analytics -> Settings -> Home on real ART, asserting each tab's own
+  visible content (Daily streak, Accuracy/Study activity, Screen lookup/About).
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: pass
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  # Strict first tap (waits through the welcome timeline); the Skip pages are
+  # navigation (`settle: fast`); Home is then proven strictly below.
+  - tap: {selector: {text: {contains: "Set up Gaten"}}, settle_timeout_ms: 5000}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - capture: {name: tabs-home, format: png, fresh: true}
+  - assert_text: {selector: {text: {contains: "Daily streak"}}, text: {contains: "Daily streak"}}
+  # Analytics. The tab pressable's own content_desc, never the duplicated label.
+  - tap: {selector: {content_desc: {exact: Analytics}}}
+  - wait_for: {selector: {text: {contains: "Study activity"}}, timeout_ms: 30000}
+  - capture: {name: tabs-analytics, format: png, fresh: true}
+  - assert_text: {selector: {text: {contains: "Accuracy"}}, text: {contains: "Accuracy"}}
+  - assert_text: {selector: {text: {contains: "Anki is not installed."}}, text: {contains: "Anki is not installed."}}
+  # Settings hub.
+  - tap: {selector: {content_desc: {exact: Settings}}}
+  - wait_for: {selector: {text: {contains: "Screen lookup"}}, timeout_ms: 30000}
+  - capture: {name: tabs-settings, format: png, fresh: true}
+  - assert_text: {selector: {text: {contains: "Screen lookup"}}, text: {contains: "Screen lookup"}}
+  - assert_text: {selector: {text: {contains: "Kanji reference"}}, text: {contains: "Kanji reference"}}
+  # Back to Home: the Home tab's own pressable.
+  - tap: {selector: {content_desc: {exact: Home}}}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - capture: {name: tabs-home-again, format: png, fresh: true}
+  - assert_text: {selector: {text: {contains: "Daily streak"}}, text: {contains: "Daily streak"}}

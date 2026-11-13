@@ -419,6 +419,20 @@ pub struct WaitForStep {
     pub require_visible: bool,
 }
 
+/// The settle rule an input step asks for. `strict` is the default and the
+/// only rule an assertion may use; `fast` is the navigation rule for a screen
+/// that never settles (a JS auto-advance timer, an endless animation). It is
+/// accepted only on input steps and is labelled in the step evidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum StepSettle {
+    /// Strict event settle (default).
+    #[default]
+    Strict,
+    /// Fast navigation settle (never assertion evidence).
+    Fast,
+}
+
 /// `tap`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct TapStep {
@@ -437,6 +451,9 @@ pub struct TapStep {
     /// P12b: strict/fast settle deadline for this tap (milliseconds).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settle_timeout_ms: Option<u64>,
+    /// Settle rule for this input (`strict` default, `fast` navigation).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle: Option<StepSettle>,
 }
 
 /// `type`.
@@ -453,6 +470,9 @@ pub struct TypeStep {
     /// P12b: strict/fast settle deadline for this type action (milliseconds).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settle_timeout_ms: Option<u64>,
+    /// Settle rule for this input (`strict` default, `fast` navigation).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle: Option<StepSettle>,
 }
 
 /// `key`.
@@ -463,6 +483,9 @@ pub struct KeyStep {
     /// P12b: strict/fast settle deadline for this key action (milliseconds).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settle_timeout_ms: Option<u64>,
+    /// Settle rule for this input (`strict` default, `fast` navigation).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle: Option<StepSettle>,
 }
 
 /// `rotate`.

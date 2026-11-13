@@ -1,0 +1,57 @@
+# gaten-lesson: the review/lesson gate on real ART.
+#
+# The real card/lesson flows need AnkiDroid or a WaniKani account, neither of
+# which exists on this guest (Anki is not installed; no token is stored). What is
+# reachable is the gate itself: Home's Anki card lands on the blocked review
+# page, and Home's WaniKani card lands on the connection form. Both are asserted
+# as real screens, and typing into the token field is proven by the Connect
+# action becoming enabled. The unreachable part is recorded in GR3.md as a data
+# wall, not faked.
+version: 1
+name: gaten-lesson
+description: >-
+  Home -> Anki review gate (blocked: Anki not installed) -> Home -> WaniKani
+  connection form -> token input enables Connect.
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: pass
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  - tap: {selector: {text: {contains: "Set up Gaten"}}, settle_timeout_ms: 5000}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - capture: {name: lesson-home, format: png, fresh: true}
+  # Home's Anki service card carries its own state in the accessible name.
+  - tap: {selector: {content_desc: {contains: "Anki, Not connected"}}, settle_timeout_ms: 8000}
+  - wait_for: {selector: {text: {exact: "Anki is not installed"}}, timeout_ms: 30000}
+  - capture: {name: lesson-anki-blocked, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "Anki is not installed"}}, text: {exact: "Anki is not installed"}}
+  - assert_text: {selector: {text: {exact: "Download Anki"}}, text: {exact: "Download Anki"}}
+  - back: {}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - capture: {name: lesson-home-again, format: png, fresh: true}
+  # Home's WaniKani card opens the connection form.
+  - tap: {selector: {content_desc: {contains: "WaniKani, Not connected"}}, settle_timeout_ms: 8000}
+  - wait_for: {selector: {text: {exact: "Connect WaniKani"}}, timeout_ms: 30000}
+  - capture: {name: lesson-wanikani-connect, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "Connect WaniKani"}}, text: {exact: "Connect WaniKani"}}
+  - assert_text: {selector: {text: {exact: "Personal access token"}}, text: {exact: "Personal access token"}}
+  # The form's own field and the Connect action.
+  - tap: {selector: {content_desc: {exact: "WaniKani personal access token"}}, settle_timeout_ms: 5000}
+  - type: {text: "not-a-real-token", settle: fast}
+  - capture: {name: lesson-token-entered, format: png, fresh: true}
+  # The typed value is the field's own state (the token is a dummy, not a
+  # secret). The guest's tree reports the entered text, not the placeholder.
+  - assert_text: {selector: {content_desc: {exact: "WaniKani personal access token"}}, text: {exact: "not-a-real-token"}}
+  - back: {}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - capture: {name: lesson-back-home, format: png, fresh: true}
+  - assert_text: {selector: {text: {contains: "Daily streak"}}, text: {contains: "Daily streak"}}

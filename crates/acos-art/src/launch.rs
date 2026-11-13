@@ -3207,6 +3207,17 @@ fn wait_for_event_settled(
     let (unsupported_baseline, _) = latest_unsupported(probe_state);
     let mut last_generation = min_generation;
     let mut last_wake = Instant::now();
+    // Host wake pacing. The guest already emits a sample on every dirty draw
+    // (P10), so asking it for another one every 20 ms while a screen animates
+    // only floods the main Looper with full tree walks; under Gaten's endless
+    // welcome timeline that is enough to starve the probe entirely (the
+    // `probe-floor` + 12 s `tree_age_ms` symptom). Wake only when the newest
+    // sample has not moved since the previous request, and at a lower cadence;
+    // an idle screen still gets a sample, a drawing one uses its own events.
+    let wake_ms = env_u64("ACOS_STRICT_SETTLE_WAKE_MS", 50);
+    let mut last_requested_seq = latest_probe(probe_state)
+        .map(|sample| sample.seq)
+        .unwrap_or(0);
     let mut candidate: Option<ProbeSample> = None;
     let mut candidate_since = Instant::now();
     let mut first_change_ms: Option<u64> = None;
@@ -3332,10 +3343,17 @@ fn wait_for_event_settled(
                 }
             }
         }
-        // An idle screen emits nothing; one wake per ~20 ms while a settle is
-        // waiting is enough to confirm the same draw without a poll cadence.
-        if last_wake.elapsed() >= Duration::from_millis(20) {
+        // An idle screen emits nothing, so a bounded wake keeps it observable;
+        // a drawing screen's own dirty events are the request. Never re-ask for
+        // a sample that already arrived since the last request.
+        let current_probe_seq = latest_probe(probe_state)
+            .map(|sample| sample.seq)
+            .unwrap_or(last_requested_seq);
+        if last_wake.elapsed() >= Duration::from_millis(wake_ms)
+            && current_probe_seq == last_requested_seq
+        {
             request_guest_probe(guest_stdin);
+            last_requested_seq = current_probe_seq;
             last_wake = Instant::now();
         }
         if Instant::now() >= deadline {

@@ -362,6 +362,10 @@ impl Backend for TrustGuard {
     fn set_settle_timeout(&mut self, timeout_ms: Option<u64>) {
         self.inner.set_settle_timeout(timeout_ms);
     }
+
+    fn set_input_settle(&mut self, fast: bool) {
+        self.inner.set_input_settle(fast);
+    }
 }
 
 #[cfg(test)]
