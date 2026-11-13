@@ -43,6 +43,8 @@ use crate::heap::{Handle, NULL};
 use crate::javabridge::JavaValue;
 use crate::vm::Vm;
 
+use acos_parcel::binder::BinderId;
+
 use super::parcel::with_store;
 
 /// `SurfaceControl.Transaction` visibility flag (`SurfaceControl.HIDDEN`).
@@ -529,10 +531,6 @@ fn parcel_native_ptr(vm: &mut Vm, obj: Handle) -> Option<u64> {
         Ok(JavaValue::Int(v)) => Some(v as u32 as u64),
         _ => None,
     }
-}
-
-fn write_i64_to_parcel(ph: u64, v: i64) {
-    let _ = with_store(|s| s.table.with_parcel(ph, |p| p.write_int64(v)));
 }
 
 fn write_bytes_to_parcel(ph: u64, bytes: &[u8]) {
@@ -1404,17 +1402,42 @@ fn native_read_transaction_from_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<
 fn native_write_to_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let handle = vm.arg_i64(ctx, 0) as u64;
     let parcel_obj = vm.arg_ref(ctx, 1);
-    let exists = STATE.with(|s| s.borrow().layers.contains_key(&handle));
-    if !exists {
+    let record = STATE.with(|s| s.borrow().layers.get(&handle).cloned());
+    let Some(record) = record else {
         return Err(stale_error(vm, handle));
-    }
+    };
     let Some(ph) = parcel_native_ptr(vm, parcel_obj) else {
         return Err(vm.throw_new(
             "Ljava/lang/IllegalStateException;",
             Some("nativeWriteToParcel: parcel has no mNativePtr"),
         ));
     };
-    write_i64_to_parcel(ph, handle as i64);
+    // `SurfaceControl.writeToParcel` already wrote `mName`, `mWidth`, `mHeight`
+    // and the native-object presence int; this is the libgui body
+    // (`SurfaceControl.cpp::writeToParcel`): client binder, handle binder,
+    // layerId, layerName, transformHint, width, height, format. The WMS Rust
+    // codec (`acos_wm::codec::SurfaceControlInfo`) writes the same layout, so
+    // one native reader serves both writers.
+    with_store(|s| {
+        s.table.with_parcel(ph, |p| {
+            let placeholder = BinderId(0x0100_0000 | (handle & 0xffff));
+            p.write_strong_binder_opt(Some(placeholder)); // client
+            p.write_strong_binder_opt(Some(placeholder)); // handle
+            p.write_int32(handle as i32); // layerId
+            p.write_string16(&record.name)?; // layerName
+            p.write_int32(record.transform_hint);
+            p.write_int32(record.width);
+            p.write_int32(record.height);
+            p.write_int32(1); // PIXEL_FORMAT_RGBA_8888
+            Ok::<(), acos_parcel::ParcelError>(())
+        })
+    })
+    .ok()
+    .and_then(Result::ok)
+    .ok_or_else(|| vm.throw_new(
+        "Ljava/lang/IllegalStateException;",
+        Some("nativeWriteToParcel: malformed parcel"),
+    ))?;
     Ok(())
 }
 
@@ -1426,7 +1449,27 @@ fn native_read_from_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             Some("nativeReadFromParcel: parcel has no mNativePtr"),
         ));
     };
-    let handle = with_store(|s| s.table.with_parcel(ph, |p| p.read_int64_lenient())).unwrap_or(0) as u64;
+    // Consume the **whole** libgui body, not just the handle: a short read left
+    // the enclosing `InsetsSourceControl$Array` / `addToDisplayAsUser` reply
+    // desynchronised by the leash's remaining bytes (the `bad array lengths`
+    // and `Parcel data not fully consumed` failures). The handle is `layerId`;
+    // the client/handle binders and the layer name are structural only.
+    let handle = with_store(|s| {
+        s.table.with_parcel(ph, |p| {
+            let _client = p.read_strong_binder()?;
+            let _layer = p.read_strong_binder()?;
+            let layer_id = p.read_int32()?;
+            let _layer_name = p.read_string16()?;
+            let _transform_hint = p.read_int32()?;
+            let _width = p.read_int32()?;
+            let _height = p.read_int32()?;
+            let _format = p.read_int32()?;
+            Ok::<u64, acos_parcel::ParcelError>(layer_id as u32 as u64)
+        })
+    })
+    .ok()
+    .and_then(Result::ok)
+    .unwrap_or(0);
     if handle == 0 {
         return Err(stale_error(vm, handle));
     }

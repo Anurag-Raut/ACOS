@@ -28,7 +28,7 @@ use acos_parcel::Parcel;
 use acos_render::{diff, image};
 use acos_vm::javabridge::JavaValue;
 use acos_vm::natives::binder::{install_transport, BinderDelivery, BinderTransport};
-use acos_vm::{CoreLib, Vm, VmError, VmOptions};
+use acos_vm::{CoreLib, HostGuard, Vm, VmError, VmOptions};
 
 /// A transport that answers every service lookup with `null` (the truthful
 /// answer for this VM-level test: no platform services are running).
@@ -477,6 +477,10 @@ fn run_harness(app: &str, layout: &str) -> Result<(), String> {
         Err(VmError::BootClasspathMissing(m)) => return Err(m),
         Err(e) => return Err(format!("Vm::new failed: {e}")),
     };
+    // A guest that never returns (e.g. a framework animator waiting on a vsync
+    // the VM-level harness cannot deliver) must fail loudly instead of hanging
+    // `cargo test` forever. 180 s is far above the slowest fixture scene.
+    vm.host = HostGuard::new(0, 180);
     install_transport(Box::new(NoServices));
     let framework_res = repo_root().join(".cache/boot/android-34/framework-res.apk");
     let mut argv = vec![
@@ -612,6 +616,7 @@ fn pipeline_generated_layouts_match_art_reference() {
             eprintln!("SKIP {}: missing fixture apk", scene.app);
             continue;
         }
+        eprintln!("RENDER-VIEWS scene {} start", scene.app);
         match run_harness(scene.app, scene.layout) {
             Ok(()) => {}
             Err(m) => {
@@ -628,6 +633,7 @@ fn pipeline_generated_layouts_match_art_reference() {
                 continue;
             }
         }
+        eprintln!("RENDER-VIEWS scene {} harness done", scene.app);
         let Some(frame) = acos_vm::natives::gfx_hwui::last_frame() else {
             eprintln!("PIPELINE-FAIL {}: HardwareRenderer submitted no frame", scene.app);
             continue;

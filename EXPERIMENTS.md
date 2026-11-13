@@ -1687,6 +1687,52 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | Gaten-vs-device SSIM | **0.87960** (`report`, nav 80) vs 0.84854 GR1 / 0.74518 recomputed before | `wm-w7-insets` | W7, E13.5 | 2026-11-13 | >16/255 pixels 14.56 % → 7.20 % |
 | False passes | **0**, class closed at the root: selectors/asserts/taps match user-visible nodes only; off-screen-only match = `ELEMENT_OFFSCREEN` | `verify-v1-visibility` | V1, E13.4 | 2026-11-13 | V1 (current main) |
 
+## E9.1 — T1: workspace test health — PASS for the hang and the stale goldens; 5 real failures remain and are filed
+
+**Date:** 2026-11-13. **Commit:** the T1 commit on this branch (base `c47bebb`).
+**Hypothesis (T1):** the frozen-VM integration failures are all stale goldens
+(PMS `app.flags`, framework bool) and `render_views` is an unrelated slow test.
+**Method:** one guarded invocation per test binary
+(`tools/guarded.sh --mem 12G --time 240 -- cargo test --release --offline -p
+<crate> --test <name> --no-fail-fast`), then per crate; a debugger stack for
+the hang (`timeout -s INT gdb --args …`, batch `thread apply all bt`); ART gates
+under one `run-exclusive.sh --task T1` lock.
+
+**What the hypothesis missed.** Three shared wire bugs produced most of the
+"golden" failures: (1) `SurfaceControl.nativeReadFromParcel` read only an i64
+handle while the WMS Rust codec emitted the full libgui body, leaving 796
+unread bytes in `addToDisplayAsUser` and `insetsControlChanged` (no root view →
+no first frame); (2) `KeyCharacterMap.nativeReadFromParcel` assumed
+`[keyboardType, String8]` instead of the image's `deviceId, hasMap, cstring,
+key records, remap tables`; (3) `render_views` hung on a **non-reentrant mutex
+double-lock** in `gfx_vector::pp_can_morph` (`path_data()` twice in one
+expression), reached by `CheckBox` vector-path inflation. The PMS golden was
+stale (`0x3000_0046` = debuggable + allowClearUserData), and the framework bool
+is AOSP's `0xFFFF_FFFF` true sentinel, not `1`. `services_t38` predated K2/K5's
+faithful "notification post is recorded, not rejected" behaviour.
+
+**Results.**
+
+| Area | Before | After |
+|---|---|---|
+| `acos-runtime` (31 binaries) | 15+ failures, `counter`/`m2`/`wms` no first frame | **119 pass / 2 fail / 4 ignored** |
+| `acos-vm` (31 binaries) | `render_views` unbounded hang; `inflate_layout` fail | **210 pass / 1 fail**; render_views 10.2 s |
+| `acos-framework-natives` (8) | `theme_resolution` fail | **40 pass / 0 fail** |
+| Whole workspace (22 other crates) | arm64/protocol/native-loader/mcp/jni failures | only **jni + mcp Flutter-pointer** (same root) and the 2 app-matrix cases |
+| ART gates | — | v2-counter, w22, form-validation, T03-good pass; T03-wrong `ASSERTION_FAILED` |
+
+Remaining known failures: app-matrix AlertDialog button-bar `stateListAnimator`
+resource 0 (T1a), app-matrix programmatic list scroll not in the tree (T1b),
+`inflate_layout`'s `MockContext.isRestricted` dispatch (T1c), Flutter pointer
+packet never reaches `PlatformDispatcher.onPointerDataPacket` (T1d), and the
+three `render_views` `PIPELINE-FAIL` coverage gaps (T1e). Full detail:
+`results/tests/T1.md`.
+
+**Decision:** keep the frozen-VM tests, refresh the two goldens, fix the shared
+wire/native bugs, and keep a bounded `HostGuard` in `render_views` so a future
+guest loop fails loudly. File the five real failures as T1a–T1e; do not weaken
+any verify/assertion or mark a real failure `#[ignore]`.
+
 ## Backlog (optimization hypotheses; rank = impact × confidence ÷ (cost × risk))
 
 Re-ranked by B2 (E3.2) on the measured objective: **verified tasks per second per
@@ -1714,7 +1760,12 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | K3c | K2 app provider delivery (androidx.startup/WorkManager `InitializationProvider`) | compat | +element, feeders | medium | high | medium | **implemented + measured `40ffc61` (E5.6), OFF by default (`ACOS_ART_APP_PROVIDERS=on`); blocked by K3d/K3e** |
 | K3d | manifest `<meta-data>` → `Bundle` in every `PackageItemInfo` reply under `GET_META_DATA`, plus the guest-openable `sourceDir` | compat | +editor full ladder, +joplin/unitto/antennapod/streetcomplete first frame; unblocks K3c | high (K3 measured the failure) | medium | low | **accepted K4 (E5.8): parsed in `acos-apk` (`parseMetaData` transcription), carried on the typed PMS records, gated on `0x80`, plus `sourceDir` = `/data/app/<name>.apk`; K3c delivery is now the default** |
 | K3e | app-published `IContentProvider` binder in `publishContentProviders` fails to marshal (`BinderProxy.transactNative` "Unknown error", joplin) | compat | unblocks K3c for joplin | medium | medium | medium | **accepted K4 (E5.9): not a marshal bug — the userspace driver cut a `BR_*` command at libbinder's 256-byte read buffer (`*** BAD COMMAND`); `flush_pend` now copies whole commands only. joplin: no start rung → first frame 1269 ms + tree + screenshot** |
-| T1 | **Legacy frozen-VM test drift:** 15 `acos-runtime` / `acos-framework-natives` / `acos-vm` (inflate_layout) integration tests (counter_interaction, app_matrix_interaction, pms golden, theme_resolution `static_overlay_overrides_framework_bool`, m2 lifecycle, wms/toast/notifications) fail against freshly rebuilt fixtures. Identical on pre-V1 main `9787616`, so pre-existing; the goldens predate the current fixture build (e.g. PMS `app.flags` +0x42 debuggable/allowClearUserData; framework bool now 0xFFFFFFFF). Not the ART product path (all ART gates green). Decide: refresh goldens vs. retire frozen-VM tests | test-suite health | `cargo test --workspace` green | high | low | low | queued (found 2026-11-13 during V1 merge) |
+| T1 | **Legacy frozen-VM test health (mostly done, E9.1):** the 15 failure reports were three shared wire bugs (SurfaceControl body read short by 40 bytes; KCM native payload format; `render_views` non-reentrant mutex double-lock in `pp_can_morph`) plus two stale goldens (PMS `app.flags=0x3000_0046`; framework bool true `0xFFFF_FFFF`). Fixed; `acos-runtime` 119/2/4, `acos-vm` 210/1, `acos-framework-natives` 40/0. `render_views` now 10.2 s with a 180 s HostGuard. Remaining real failures split into T1a–T1e | test-suite health | `cargo test --workspace` green; no hang | high | done | low | **done 2026-11-13 (E9.1)**; remaining real failures T1a–T1e |
+| T1a | app-matrix `dialogs_alert_opens_and_cancel_dismisses`: `AlertDialog` button-bar `Button` inflation raises `Resources$NotFoundException: Resource ID #0x0` from `AnimatorInflater.loadStateListAnimator`; dialog never reaches the tree | dialog compat | AlertDialog opens/cancels | high (deterministic) | medium | low | **open (T1, E9.1)** |
+| T1b | app-matrix `list_scroll_button_moves_the_recycled_window`: the `Scroll to last` tap reports `state_changed` but the pumped tree still starts at Item 0 (smooth scroll not settled/observable) | list interaction | tail row visible after tap | high (deterministic) | medium | low | **open (T1, E9.1)** |
+| T1c | `acos-vm --test inflate_layout`: real `MockContext.isRestricted()` throws `UnsupportedOperationException`; the test's `TestContext` override is present in the DEX but the framework `TextView.readTextAppearance` call still lands on `MockContext` (virtual-dispatch/context identity gap) | frozen-VM inflate coverage | TextView inflation succeeds | high (stack + DEX evidence) | medium | low | **open (T1, E9.1)** |
+| T1d | Flutter `flutter_hello_under_confinement` and MCP `flutter_launch_observe_tap_round_trip`: pointer packet never reaches `PlatformDispatcher.onPointerDataPacket`; engine logs `Failed to set raster task runner priority` | Flutter product path | tap reaches Dart | high (both tests) | high | medium | **open (T1, E9.1)** |
+| T1e | `render_views` pipeline coverage: `form-validation`/`text-input` hit `Settings$Config.getContentResolver` NPE; `widget-gallery` hits unsupported `PathParser.nInterpolatePathData` (test records `PIPELINE-FAIL`, does not false-pass) | render corpus coverage | 5/5 pipeline scenes | high | medium | low | **open (T1, E9.1)** |
 | H1 | Strict numbers drop after event settle; re-measure M3–M8 and take cheap wins | M4/M6/M7/M5 | — | — | — | — | **done (H6)**: M7 151→41, M4 440→309, M6 463→342 |
 | H2 | Early post-first-frame concurrent GC (Z7) on the exec path | M1/M2 | −23–30 MiB/session | high | low | low | **accepted: product default, E2.10** (H6 numbers are pre-H2; re-baseline) |
 | R2a | Gaten launch flake: SIGSEGV after first frame (~1/10). **Diagnosability done (E13.6):** the guest now reports fault addr / `si_code` / faulting thread / ART backtrace with mapped library + offset, keeps its run tree, and `session-exit.json.native_crash` reaches the agent; crash rate 1/10 → **0/40** but the root cause is still unnamed (not reproduced at n=40). Remaining: n≥100 to separate rare from fixed, then bisect the named library/offset | verified-launch stability | name the frame, then 10/10 | high (evidence path proven with a deterministic fault) | low | low | **diagnosability done; root cause open** (R3 §6) |

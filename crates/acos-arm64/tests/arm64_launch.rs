@@ -81,6 +81,14 @@ fn fail_closed_when_sysroot_is_missing() {
     let dir = scratch_dir("missing-sysroot");
     let guest = dir.join("guest-not-needed");
     std::fs::write(&guest, b"\x7fELF").unwrap();
+    // The transport checks the qemu executable before the sysroot on hosts
+    // without qemu; this test covers the sysroot error, so skip loudly instead
+    // of asserting a message the host could never produce.
+    if let Err(e) = acos_arm64::default_qemu() {
+        skip(&format!("{e}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        return;
+    }
     let mut spec = LaunchSpec::new(&guest, dir.join("rw"));
     spec.sysroot = Some(dir.join("no-such-sysroot"));
     // `launch` validates the sysroot before it ever needs qemu.
