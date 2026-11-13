@@ -2840,9 +2840,30 @@ public final class LaunchMain {
     static int DENSITY_DPI = envInt("ACOSLAUNCH_DENSITY", 420);
     static int STATUS_INSET = envInt("ACOSLAUNCH_STATUS_INSET", 128);
     static int NAV_INSET = envInt("ACOSLAUNCH_NAV_INSET", 63);
+    /**
+     * W7: the app-window inset model the host WMS is using. `carve` is the
+     * pre-W7 shim (the app area is the display minus the bars); `report` is
+     * AOSP's model (the app window is the full display and the WMS reports the
+     * bar insets, which DecorView or the app's own padding consumes).
+     *
+     * <p>The guest must derive the same `DisplayInfo.appWidth/appHeight` and
+     * `Configuration` size as the WMS frame, otherwise a `report` run would
+     * still tell the app it owns only the carved rectangle.
+     */
+    static String WM_INSETS = env("ACOSLAUNCH_WM_INSETS", "carve");
+    static boolean REPORT_INSETS = "report".equalsIgnoreCase(WM_INSETS);
     /** Device pixels the app area occupies (`appWidth`/`appHeight`). */
     static int APP_W = PANEL_W;
-    static int APP_H = PANEL_H - STATUS_INSET - NAV_INSET;
+    static int APP_H = REPORT_INSETS ? PANEL_H : PANEL_H - STATUS_INSET - NAV_INSET;
+
+    static String env(String name, String fallback) {
+        try {
+            String v = System.getenv(name);
+            if (v != null && v.trim().length() > 0) return v.trim();
+        } catch (Throwable ignored) {
+        }
+        return fallback;
+    }
 
     static int envInt(String name, int fallback) {
         try {

@@ -735,6 +735,39 @@ first traversal:
   anything testing animation, transition, ripple or timing behaviour; those
   need `animations:"on"`.
 
+### 8.6.6 `insets:"carve"|"report"` (W7)
+
+The app-window inset model is a launch-time choice, default **`carve`** (the
+pre-W7 shim). It is selected by `ACOS_WM_INSETS=carve|report` or by
+`acos launch --insets carve|report`; `acos-art launch` also has
+`--insets carve|report` for direct runs.
+
+* `carve` — the WMS gives the app the display's application area
+  (`[0,128][1080,2337]` on the API-34 profile) and the reported `InsetsState`
+  therefore calculates to zero. This is the frozen behaviour every existing
+  screenshot, `assert_region` coordinate and frame-size baseline was captured
+  against.
+* `report` — AOSP's window model: the app window is the full display
+  (`[0,0][1080,2400]`) and the WMS reports the status-bar, navigation-bar and
+  system-gesture sources. `PhoneWindow.generateLayout` sends
+  `fitInsetsTypes=0` for non-floating windows, so `WindowLayout` does not carve
+  the frame; `DecorView` consumes the reported insets for a non-edge-to-edge
+  app, and an edge-to-edge app (RN `SafeAreaView`, `setDecorFitsSystemWindows
+  (false)`) applies them itself. Floating dialogs keep the default
+  `systemBars()` fit and stay inside the application area.
+* Geometry comes from the same one source as the rest of the launch:
+  `ACOS_ART_*` / `acos-art launch --width/--panel-height/--density/
+  --status-inset/--nav-inset`, or `ACOS_DISPLAY_OVERRIDE`. The defaults are the
+  API-34 profile (1080x2400@420, status 128, navigation 63).
+* Frames under `report` are display-sized: `display_origin` is `[0,0]` (or
+  absent, meaning identity) and tree bounds, PNG pixels and tap coordinates all
+  share the display space with no status-bar offset.
+* Every ART reply states the model the guest was launched with, and a `reset`
+  relaunch reuses it. `verify`/`serve` read `ACOS_WM_INSETS`; the MCP
+  `acos_launch` field is `"insets": "carve"|"report"`.
+* The W7 regression is `scenarios/w7-insets-report.yaml` (run under `report`)
+  and `scenarios/w7-insets-carve-negative.yaml` (must fail under `carve`).
+
 ### 8.7 `assert`
 
 Evaluate one assertion.

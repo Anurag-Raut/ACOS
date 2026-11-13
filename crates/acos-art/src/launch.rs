@@ -111,6 +111,9 @@ pub struct LaunchOpts {
     pub status_inset: u32,
     /// Navigation-bar bottom inset in pixels.
     pub nav_inset: u32,
+    /// W7: app-window inset model (`carve` = pre-W7 carved frame,
+    /// `report` = AOSP full-display frame plus reported insets).
+    pub insets: String,
     /// P12: per-session framework animation scales.
     pub animations: Animations,
 }
@@ -127,6 +130,7 @@ impl Default for LaunchOpts {
             density_dpi: 420,
             status_inset: 128,
             nav_inset: 63,
+            insets: acos_services::wms::DEFAULT_INSETS_MODE.as_str().to_string(),
             animations: Animations::On,
         }
     }
@@ -389,6 +393,11 @@ fn apply_malloc_controls() {
 
 /// Run the real `ActivityThread.main`-style startup until `Application.onCreate`.
 pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
+    // W7: the in-process peer's `WmsState` is built from this process's env, so
+    // install the selected inset model before the peer host exists. The guest
+    // also receives `ACOSLAUNCH_WM_INSETS` below so its DisplayInfo/Configuration
+    // agree with the WMS frame it is about to be given.
+    std::env::set_var("ACOS_WM_INSETS", &opts.insets);
     // W39 (flagged call-site edit in the W36-owned launch.rs): stage markers for
     // the exec -> activity-resumed wall. Inert unless ACOS_ART_STAGE_TIMING=1.
     crate::stage("launch-entry");
@@ -1024,6 +1033,7 @@ pub(crate) fn launch_session(
         ("ACOSLAUNCH_STATUS_INSET", opts.status_inset),
         ("ACOSLAUNCH_NAV_INSET", opts.nav_inset),
     ];
+    sb.env("ACOSLAUNCH_WM_INSETS", &opts.insets);
     let defaults = (1080u32, 2400u32, 420u32, 128u32, 63u32);
     let current = (
         opts.width,

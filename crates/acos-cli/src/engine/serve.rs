@@ -411,6 +411,29 @@ impl ServeEngine {
             },
         };
         let settle_timeout_ms = settle_timeout_arg(args);
+        // W7: app-window inset model, launch-time like `animations`. Defaults
+        // to the process's `ACOS_WM_INSETS` (and then the compile-time default)
+        // so `acos verify` and a direct `acos-art launch` agree.
+        let insets: &'static str = match args.get("insets").and_then(Value::as_str) {
+            None => match crate::engine::art::insets_mode_from_env() {
+                "report" => "report",
+                _ => "carve",
+            },
+            Some(value) => match acos_services::wms::parse_insets_mode(value) {
+                Some(acos_services::wms::InsetsMode::Carve) => "carve",
+                Some(acos_services::wms::InsetsMode::Report) => "report",
+                None => {
+                    return art_failure(
+                        request_id,
+                        Some(id),
+                        trust,
+                        ErrorCode::InvalidArgument,
+                        format!("insets must be \"carve\" or \"report\" (got {value:?})"),
+                        json!({"field": "insets"}),
+                    )
+                }
+            },
+        };
         let apk = match acos_mcp::safety::validate_path(apk_arg, &ctx.allowed_roots) {
             Ok(path) => path,
             Err(reason) => {
@@ -471,6 +494,27 @@ impl ServeEngine {
                             }),
                         ),
                         "animations is launch-time: call acos_destroy for this session id, then \
+                         acos_launch with the new choice.",
+                    );
+                }
+                if args.get("insets").is_some() && session.insets() != insets {
+                    return with_hint(
+                        art_failure(
+                            request_id,
+                            Some(id),
+                            held.trust,
+                            ErrorCode::InvalidArgument,
+                            format!(
+                                "session `{id}` runs with insets:{} and a live session cannot \
+                                 change it",
+                                session.insets()
+                            ),
+                            json!({
+                                "held_insets": session.insets(),
+                                "requested_insets": insets,
+                            }),
+                        ),
+                        "insets is launch-time: call acos_destroy for this session id, then \
                          acos_launch with the new choice.",
                     );
                 }
@@ -545,7 +589,7 @@ impl ServeEngine {
             );
         }
         let artifacts = self.artifacts_root.join(sanitize_session_id(id));
-        match ArtSession::start_with_animations(&apk, &artifacts, animations) {
+        match ArtSession::start_with_options(&apk, &artifacts, animations, insets) {
             Ok(mut session) => {
                 session.set_settle_timeout(settle_timeout_ms);
                 let started = match session.ensure_launch_tree(settle, pixels) {
@@ -778,6 +822,7 @@ impl ServeEngine {
                 label_meta(&mut result, ENGINE_ART, trust, evidence_for(tool));
                 if let Some(object) = result.as_object_mut() {
                     object.insert("animations".into(), json!(session.animations()));
+                    object.insert("insets".into(), json!(session.insets()));
                 }
                 label_frame(&mut result, &session);
                 label_timing(&mut result, &session, tool, started);
@@ -1151,6 +1196,7 @@ fn launch_reply(
     });
     label_meta(&mut result, ENGINE_ART, held.trust, EVIDENCE_HOST_PIXEL);
     result["animations"] = json!(session.animations());
+    result["insets"] = json!(session.insets());
     label_frame(&mut result, session);
     // P9: the same `settle` object the tree verbs return, so a launch says how
     // its tree was bound (`strict-event` on the P12 event rule, or
@@ -1620,6 +1666,7 @@ fn status_value(session: &ArtSession) -> Value {
         "live": true,
         "mode": "live",
         "animations": session.animations(),
+        "insets": session.insets(),
         "capabilities": {
             "tree": true, "screenshot": true, "tap": true, "tap_text": true,
             "type_text": true, "key": true, "reset": true, "logs": true,

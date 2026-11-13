@@ -1,0 +1,65 @@
+{
+ "reference": {
+  "device": "results/gaten/evidence/GR1/visual/welcome/device.png",
+  "elements": "results/gaten/evidence/GR1/visual/welcome/elements.json",
+  "footer_band_cropped_y": [
+   2022,
+   2151
+  ],
+  "footer_band_display_y": [
+   2130,
+   2259
+  ],
+  "crop_origin_display_y": 108
+ },
+ "runs": {
+  "report60": {
+   "mode": "report",
+   "geometry": "1080x2400@400 status=108 nav=60",
+   "footer_band_display_y": [
+    2150,
+    2279
+   ],
+   "footer_delta_px": [
+    20,
+    20
+   ],
+   "ssim_recomputed": 0.7647960016603068,
+   "pct_pixels_gt16": 11.17637455922685,
+   "mean_abs_channel_diff": 14.130590744852205
+  },
+  "report80": {
+   "mode": "report",
+   "geometry": "1080x2400@400 status=108 nav=80",
+   "footer_band_display_y": [
+    2130,
+    2259
+   ],
+   "footer_delta_px": [
+    0,
+    0
+   ],
+   "ssim_recomputed": 0.8795999855169774,
+   "pct_pixels_gt16": 7.196029776674938,
+   "mean_abs_channel_diff": 9.972111575464716
+  },
+  "carve60": {
+   "mode": "carve",
+   "geometry": "1080x2400@400 status=108 nav=60",
+   "footer_band_display_y": [
+    2130,
+    2259
+   ],
+   "footer_delta_px": [
+    0,
+    0
+   ],
+   "note": "frame is 1080x2232 at display origin [0,108]; the band is reported in display coordinates by adding the origin.",
+   "ssim_recomputed": 0.7395848538406296
+  }
+ },
+ "ssim_before_gr1": 0.84854,
+ "ssim_before_recomputed": 0.7451756185156143,
+ "method": "SSIM grayscale, non-overlapping 8x8 windows, C1=0.01, C2=0.03; device.png is 380x806 covering display y=108..2400, so the report frame is cropped at display y=108 and resized to 380x806 with Lanczos. Same implementation for before and after; the absolute recomputed before differs from GR1's 0.84854 because the original script was not committed.",
+ "device_gesture_note": "The Moto G35 reference reports a 108 px status-bar inset and an 80 px bottom gesture/navigation inset (the GR1 metrics file calls the latter 'mandatory-gesture bottom 80'); react-native-safe-area-context reads navigationBars, so nav=80 reproduces the device footer. nav=60 (24 dp at 400 dpi) is the synthetic API-34 profile default and lands 20 px low."
+}

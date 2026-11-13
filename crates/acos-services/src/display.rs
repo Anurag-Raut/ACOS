@@ -435,8 +435,15 @@ pub struct DisplayInfo {
 impl DisplayInfo {
     /// The reference hello-views display, with any active [`DisplayOverride`]
     /// applied so `getDisplayInfo` / `DisplayMetrics` follow `acos launch`.
+    ///
+    /// W7: under `ACOS_WM_INSETS=report` the app area is the full display, the
+    /// same `appWidth`/`appHeight` a device reports for an edge-to-edge app;
+    /// `carve` keeps the pre-W7 application area (`height - status - nav`).
     #[must_use]
     pub fn hello_views() -> Self {
+        let insets_mode = acos_wm::display::InsetsMode::from_env(
+            acos_wm::display::DEFAULT_INSETS_MODE,
+        );
         let mut d = Self {
             display_id: 0,
             layer_stack: 0,
@@ -484,15 +491,22 @@ impl DisplayInfo {
             d.logical_width = o.width;
             d.logical_height = o.height;
             d.app_width = o.width;
-            d.app_height = o.app_height();
-            d.smallest_nominal_app_width = o.width;
-            d.smallest_nominal_app_height = d.app_height;
-            d.largest_nominal_app_width = o.width;
-            d.largest_nominal_app_height = d.app_height;
+            d.app_height = if insets_mode.is_report() {
+                o.height
+            } else {
+                o.app_height()
+            };
             d.density_dpi = o.density_dpi;
             d.physical_x_dpi = o.density_dpi as f32;
             d.physical_y_dpi = o.density_dpi as f32;
         }
+        if insets_mode.is_report() {
+            d.app_height = d.logical_height;
+        }
+        d.smallest_nominal_app_width = d.logical_width;
+        d.smallest_nominal_app_height = d.app_height;
+        d.largest_nominal_app_width = d.logical_width;
+        d.largest_nominal_app_height = d.app_height;
         d.supported_modes = vec![DisplayMode::new(
             d.mode_id,
             d.logical_width,

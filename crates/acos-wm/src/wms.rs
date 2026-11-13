@@ -23,7 +23,7 @@ use crate::codec::{
     MergedConfiguration, PrivacyIndicatorBounds, RoundedCorner, RoundedCorners, SurfaceControlInfo,
     WindowConfiguration,
 };
-use crate::display::DisplaySpec;
+use crate::display::{DisplaySpec, InsetsMode};
 use crate::error::{Result, WmError};
 use crate::geom::{InsetsI, PointI, RectI};
 use crate::transport::{Channel, InputChannelRegistry};
@@ -720,6 +720,44 @@ pub fn compute_frame_for(display: &DisplaySpec, params: &LayoutParams) -> RectI 
     compute_frame_for_requested(display, params, UNSPECIFIED_LENGTH, UNSPECIFIED_LENGTH)
 }
 
+/// Subtract the `InsetsState` sources a window asked to fit, exactly as
+/// `WindowLayout.computeFrames` does with
+/// `state.calculateInsets(windowBounds, attrs.getFitInsetsTypes(), ...)`.
+///
+/// The shim's display model has one status-bar source at the top and one
+/// navigation-bar source at the bottom; a zero `fitInsetsSides` (the field's
+/// pre-initialised value in [`LayoutParams::default`]) means `Side.all()`, which
+/// is the framework's own default.
+fn fit_insets_frame(display: &DisplaySpec, params: &LayoutParams, bounds: RectI) -> RectI {
+    let types = params.fit_insets_types;
+    if types == 0 {
+        return bounds;
+    }
+    let sides = if params.fit_insets_sides == 0 {
+        0x0f // WindowInsets.Side.LEFT|TOP|RIGHT|BOTTOM
+    } else {
+        params.fit_insets_sides
+    };
+    let mut frame = bounds;
+    if types & inset_type::STATUS_BAR != 0 && sides & 0x02 != 0 {
+        frame.top += display.bars.status_bar.height();
+    }
+    if types & inset_type::NAVIGATION_BAR != 0 && sides & 0x08 != 0 {
+        frame.bottom -= display.bars.nav_bar.height();
+    }
+    // System gestures use the mandatory-gesture strips in the reference model;
+    // fitting them is a side inset only when the source is the side strip.
+    if types & inset_type::SYSTEM_GESTURES != 0 {
+        if sides & 0x01 != 0 {
+            frame.left += display.bars.system_gestures_left.width();
+        }
+        if sides & 0x04 != 0 {
+            frame.right -= display.bars.system_gestures_right.width();
+        }
+    }
+    frame
+}
+
 /// `WindowLayout.computeFrames` for the fullscreen, `compatScale == 1` case.
 ///
 /// This mirrors `frameworks/base/core/java/android/view/WindowLayout.java`:
@@ -729,9 +767,15 @@ pub fn compute_frame_for(display: &DisplaySpec, params: &LayoutParams) -> RectI 
 /// verbatim. The frame is then positioned with `Gravity.apply` inside the
 /// parent frame and nudged on-screen with `Gravity.applyDisplay`.
 ///
-/// The display content area [`DisplaySpec::app_bounds`] already excludes the
-/// system-bar insets in this model, so it is both the parent frame and the
-/// display frame here.
+/// In [`InsetsMode::Carve`] the display content area
+/// [`DisplaySpec::app_bounds`] already excludes the system-bar insets, so it is
+/// both the parent frame and the display frame. In [`InsetsMode::Report`] the
+/// bounds are the full display and the frame is reduced only by the
+/// `LayoutParams.fitInsetsTypes`/`fitInsetsSides` the client actually asked for
+/// (AOSP `WindowLayout.computeFrames`): `PhoneWindow.generateLayout` sets both
+/// to zero for every non-floating window, so an Activity gets the full display
+/// and `DecorView` applies the reported insets itself; a floating dialog keeps
+/// the default `systemBars()` fit and stays inside the app area.
 #[must_use]
 pub fn compute_frame_for_requested(
     display: &DisplaySpec,
@@ -739,9 +783,12 @@ pub fn compute_frame_for_requested(
     requested_width: i32,
     requested_height: i32,
 ) -> RectI {
-    let window_bounds = display.app_bounds;
-    let out_display_frame = window_bounds;
-    let out_parent_frame = window_bounds;
+    let window_bounds = display.window_frame();
+    let out_display_frame = match display.insets_mode {
+        InsetsMode::Carve => window_bounds,
+        InsetsMode::Report => fit_insets_frame(display, params, window_bounds),
+    };
+    let out_parent_frame = out_display_frame;
     let pw = out_parent_frame.width();
     let ph = out_parent_frame.height();
 
@@ -1161,16 +1208,44 @@ pub fn reference_merged_configuration(display: &DisplaySpec) -> MergedConfigurat
         screen_layout: REFERENCE_SCREEN_LAYOUT, // ldltr nrml long (measured `display.txt`)
         color_mode: 0,        // HDR_UNDEFINED / sRGB
         ui_mode: 0x11,        // UI_MODE_TYPE_NORMAL | NIGHT_NO
-        screen_width_dp: 411,
-        screen_height_dp: 842,
-        smallest_screen_width_dp: 411,
+        // W7: under `report` the configuration describes the full display,
+        // exactly like the device (`sw432dp w432dp h960dp` on the Moto G35 at
+        // 400 dpi). `carve` keeps the measured API-34 application-area values
+        // so the frozen baselines are unchanged.
+        screen_width_dp: if display.insets_mode.is_report() {
+            display.screen_width_dp()
+        } else {
+            411
+        },
+        screen_height_dp: if display.insets_mode.is_report() {
+            display.screen_height_dp()
+        } else {
+            842
+        },
+        smallest_screen_width_dp: if display.insets_mode.is_report() {
+            display.screen_width_dp().min(display.screen_height_dp())
+        } else {
+            411
+        },
         density_dpi: display.density_dpi as i32,
-        compat_screen_width_dp: 411,
-        compat_screen_height_dp: 842,
-        compat_smallest_screen_width_dp: 411,
+        compat_screen_width_dp: if display.insets_mode.is_report() {
+            display.screen_width_dp()
+        } else {
+            411
+        },
+        compat_screen_height_dp: if display.insets_mode.is_report() {
+            display.screen_height_dp()
+        } else {
+            842
+        },
+        compat_smallest_screen_width_dp: if display.insets_mode.is_report() {
+            display.screen_width_dp().min(display.screen_height_dp())
+        } else {
+            411
+        },
         window_configuration: WindowConfiguration {
             bounds: display.frame,
-            app_bounds: Some(display.app_bounds),
+            app_bounds: Some(display.window_frame()),
             max_bounds: display.frame,
             windowing_mode: 1, // WINDOWING_MODE_FULLSCREEN
             activity_type: 0,  // ACTIVITY_TYPE_UNDEFINED

@@ -178,6 +178,10 @@ pub struct ArtSession {
     reset_settle: &'static str,
     /// P9: whether that reset's tree request also captures a PNG.
     reset_pixels: bool,
+    /// W7: `"carve"`/`"report"`, the session's launch-time app-window inset
+    /// model. A `reset` relaunch must use the same model, and every reply may
+    /// state it.
+    insets: &'static str,
     /// P12: `"on"`/`"off"`, the session's launch-time animation scales. Every
     /// reply states it so a functional result is never mistaken for animation
     /// evidence.
@@ -928,6 +932,15 @@ fn dm6_trace(event: serde_json::Value) {
     }
 }
 
+/// W7: the process's requested app-window inset model, as the env spelling.
+#[must_use]
+pub fn insets_mode_from_env() -> &'static str {
+    match acos_services::wms::InsetsMode::from_env(acos_services::wms::DEFAULT_INSETS_MODE) {
+        acos_services::wms::InsetsMode::Report => "report",
+        acos_services::wms::InsetsMode::Carve => "carve",
+    }
+}
+
 impl ArtSession {
     /// Spawn `acos-art launch --apk <apk> --until activity-resumed` in its
     /// interactive mode (`ACOSLAUNCH_INTERACTIVE=1`) and wait for its ready
@@ -959,6 +972,32 @@ impl ArtSession {
         artifacts: &Path,
         animations: &str,
     ) -> Result<ArtSession, BackendError> {
+        let insets = std::env::var("ACOS_WM_INSETS").unwrap_or_else(|_| {
+            acos_services::wms::DEFAULT_INSETS_MODE.as_str().to_string()
+        });
+        Self::start_with_options(apk, artifacts, animations, &insets)
+    }
+
+    /// W7: start a session with an explicit app-window inset model.
+    /// `insets` is `carve` (pre-W7 carved frame) or `report` (AOSP full-display
+    /// frame plus a reported `InsetsState`). It is a launch-time choice and is
+    /// stated in every reply, like `animations`.
+    pub fn start_with_options(
+        apk: &Path,
+        artifacts: &Path,
+        animations: &str,
+        insets: &str,
+    ) -> Result<ArtSession, BackendError> {
+        let insets: &'static str = match acos_services::wms::parse_insets_mode(insets) {
+            Some(acos_services::wms::InsetsMode::Carve) => "carve",
+            Some(acos_services::wms::InsetsMode::Report) => "report",
+            None => {
+                return Err(BackendError::Failed {
+                    code: acos_protocol::ErrorCode::InvalidArgument,
+                    detail: format!("insets must be \"carve\" or \"report\" (got {insets:?})"),
+                })
+            }
+        };
         let animations: &'static str = match animations.trim().to_ascii_lowercase().as_str() {
             "on" => "on",
             "off" => "off",
@@ -1025,6 +1064,8 @@ impl ArtSession {
             .arg(&out)
             .arg("--animations")
             .arg(animations)
+            .arg("--insets")
+            .arg(insets)
             // The launcher reads this seam (no `acos-art` CLI flag change): a
             // live session instead of a one-shot launch. The guest publishes
             // the read-only view-tree probe the `tree`/`tap` replies carry.
@@ -1206,6 +1247,7 @@ impl ArtSession {
             last_tree_settle: None,
             reset_settle: "strict",
             reset_pixels: true,
+            insets,
             animations,
             settle_timeout_ms: None,
             reset_settle_timeout_ms: None,
@@ -1395,6 +1437,11 @@ impl ArtSession {
     /// P12: the animation choice this session was launched with (`"on"`/`"off"`).
     pub fn animations(&self) -> &'static str {
         self.animations
+    }
+
+    /// W7: the app-window inset model this guest was launched with.
+    pub fn insets(&self) -> &'static str {
+        self.insets
     }
 
     /// P1: the guest's settle block for the most recent input, verbatim.
@@ -2787,7 +2834,12 @@ impl SessionBackend for ArtSession {
         }
         let stop_ms = phase_started.elapsed().as_millis() as u64;
         let relaunch_started = Instant::now();
-        let mut fresh = match ArtSession::start_with_animations(&apk, &artifacts, self.animations) {
+        let mut fresh = match ArtSession::start_with_options(
+            &apk,
+            &artifacts,
+            self.animations,
+            self.insets(),
+        ) {
             Ok(fresh) => fresh,
             Err(error) => {
                 self.invalidate_frame();

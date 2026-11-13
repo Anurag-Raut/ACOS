@@ -43,6 +43,7 @@ use acos_wm::codec::{
     ClientWindowFrames, InsetsSourceControlArray, InsetsState, LayoutParams, MergedConfiguration,
     ParcelCodec, SurfaceControlInfo,
 };
+use acos_wm::display::{DisplaySpec, InsetsMode};
 use acos_wm::geom::{PointI, RectI};
 use acos_wm::wms::ADD_OKAY;
 
@@ -802,16 +803,25 @@ pub const fn relayout_surface_changed() -> i32 {
     acos_wm::wms::RELAYOUT_RES_SURFACE_CHANGED
 }
 
+/// The reference display with the process's `ACOS_WM_INSETS` model.
+#[must_use]
+pub fn reference_display() -> DisplaySpec {
+    DisplaySpec::reference_with_insets(InsetsMode::from_env(
+        acos_wm::display::DEFAULT_INSETS_MODE,
+    ))
+}
+
 /// The reference `ClientWindowFrames` for the hello-views window.
 #[must_use]
 pub fn reference_frames() -> ClientWindowFrames {
+    let display = reference_display();
     ClientWindowFrames {
-        frame: RectI::new(0, 128, 1080, 2337),
-        display_frame: RectI::new(0, 0, 1080, 2400),
-        parent_frame: RectI::new(0, 128, 1080, 2337),
+        frame: display.window_frame(),
+        display_frame: display.frame,
+        parent_frame: display.window_frame(),
         // `acos-wm` reports the parent frame as the attached frame for the
         // top-level app window, matching the measured capture.
-        attached_frame: Some(RectI::new(0, 128, 1080, 2337)),
+        attached_frame: Some(display.window_frame()),
         is_parent_frame_clipped_by_display_cutout: false,
         compat_scale: 1.0,
     }
@@ -820,27 +830,19 @@ pub fn reference_frames() -> ClientWindowFrames {
 /// The reference `InsetsState` for a hidden IME.
 #[must_use]
 pub fn reference_insets() -> InsetsState {
-    acos_wm::wms::reference_insets_state(
-        &acos_wm::display::DisplaySpec::reference_1080x2400(),
-        false,
-    )
+    acos_wm::wms::reference_insets_state(&reference_display(), false)
 }
 
 /// The reference `InsetsSourceControl$Array`.
 #[must_use]
 pub fn reference_insets_controls() -> InsetsSourceControlArray {
-    acos_wm::wms::reference_insets_controls(
-        &acos_wm::display::DisplaySpec::reference_1080x2400(),
-        0x1000,
-    )
+    acos_wm::wms::reference_insets_controls(&reference_display(), 0x1000)
 }
 
 /// The reference `MergedConfiguration`.
 #[must_use]
 pub fn reference_merged_configuration() -> MergedConfiguration {
-    acos_wm::wms::reference_merged_configuration(
-        &acos_wm::display::DisplaySpec::reference_1080x2400(),
-    )
+    acos_wm::wms::reference_merged_configuration(&reference_display())
 }
 
 /// A `SurfaceControl` description for a layer handle (test helper).
