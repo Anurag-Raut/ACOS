@@ -1608,9 +1608,14 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   silent host-uid fallback. The application-created marker now records
   `guest_uid`, `pms_uid`, `/proc/self/uid_map`, `Uid/Gid/Groups/CapEff`,
   `files_dir` writability and `/data/app-data` entries for measurement.
-  **The real-ART uid run was still queued at the checkpoint**, so no measured
-  uid facts are recorded here yet; cross-session isolation is *not* claimed
-  beyond the separate per-run `/data` bind sources in `lib.rs`.
+  **Measured on the final tree** (editor, real ART): `guest_uid=10192`,
+  `pms_uid=10192` (agreement), `uid_map=10192 0 1`, `Uid: 10192 10192 10192
+  10192`, `Gid: 984 984 984 984`, `Groups: … 984 …`, `CapEff: 0`,
+  `/data/app-data` writable and contains only the current package. Notes: the
+  gid/groups remain the host caller's (984) and the outer uid maps to host 1000,
+  so this is **uid fidelity, not host-level isolation**; each session gets its
+  own `/data/app-data` bind (a previous session's directory is absent), and no
+  cross-session isolation beyond that is claimed.
 - **Services (`crates/acos-services/src/extras.rs`):** `trust` keeps read paths
   (`isDeviceLocked/Secure/TrustUsuallyManaged/ActiveUnlock`) and now **rejects**
   every setter/listener transaction with `UnsupportedOperationException`.
@@ -1630,9 +1635,21 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   privileged-process classification removed. Because the keystore is now
   default-off, element/dot.gallery are expected to return to the K4 wall until
   K5b lands; this is an intentional opt-in, not a measured funnel result.
-- **Open / next:** 2-run corpus on the final tree; gate matrix; the uid facts
-  on a free lock; the RedReader ART decode. Commit is a checkpoint, not an
-  accepted K5.
+- **Gates (final tree, real ART, one lock acquisition per chunk):** **34/34 as
+  required, 0 false passes.** 25 pass: the 19 standard (`v2-art-counter`,
+  `w22-counter-reset`, `w54-dialog-pixels`, `w42-back-frame`,
+  `w15-dialog-menu`, `form-validation`, `suite/T03-render-good`,
+  `v1-offscreen-pager`, `p11-{anim,delay40,delay200,delay1000,background,chain,
+  dialog,activity,list-smooth,layout-transition,rapid-taps}`) + `w7-insets-report`
+  + all five Gaten flows (`gaten-home/-lesson/-search/-settings/-tabs`).
+  9 expected failures with the right code: `suite/T03-render-wrong`,
+  `p11-progress-timeout` (TIMEOUT), `negative/offscreen-pager-visible`
+  (ELEMENT_OFFSCREEN), the five `negative/gaten-*-wrong` (ASSERTION_FAILED) and
+  `w7-insets-carve-negative` (ASSERTION_FAILED). `gaten-home` now **passes**
+  (K4's TIMEOUT is gone; it moved with merged main, not with K5 — K4 recorded it
+  as pre-existing).
+- **Open / next:** 2-run corpus on the final tree; the RedReader ART decode.
+  Commit is a checkpoint, not an accepted K5.
 
 ## E13.5 — W7: report the system-bar insets instead of carving the app window — PASS as an opt-in model; default stays `carve` (one strict gate changes by 1/255)
 
