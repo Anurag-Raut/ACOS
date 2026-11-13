@@ -417,8 +417,12 @@ fn notifications_are_reported_as_not_enabled_and_post_is_unsupported() {
     );
 
     // An explicit `enqueueNotificationWithTag` (a status-bar notification) is
-    // still unsupported: ACOS has no system UI to post it to.
-    let err = invoke_err(
+    // recorded, not rejected: AOSP's `NotificationManagerService` answers it
+    // with the normal `V` reply (it never throws for a valid post). ACOS has no
+    // system UI to display it, so the truthful answer is "accepted and
+    // recorded", not a fabricated success frame or a spurious unsupported
+    // error (K2/K5 compat behaviour).
+    let reply = invoke(
         &mut host,
         "notification",
         INOTIF,
@@ -427,12 +431,25 @@ fn notifications_are_reported_as_not_enabled_and_post_is_unsupported() {
             s("dev.acos.fixtures.helloviews"),
             s("dev.acos.fixtures.helloviews"),
             s("tag"),
-            Value::Int(0),
+            Value::Int(7),
             null_obj(),
             Value::Int(0),
         ],
     );
-    assert_eq!(err.code(), codes::UNSUPPORTED_ANDROID_API);
+    assert!(reply.is_empty(), "enqueueNotificationWithTag returns void");
+    let posted = host
+        .notification_state()
+        .expect("notification state")
+        .lock()
+        .unwrap()
+        .posted
+        .clone();
+    assert!(
+        posted
+            .iter()
+            .any(|(pkg, id)| pkg == "dev.acos.fixtures.helloviews" && *id == 7),
+        "the notification post was recorded, got {posted:?}"
+    );
 }
 
 #[test]

@@ -376,9 +376,11 @@ impl Default for MotionEventState {
 
 #[derive(Debug)]
 struct KeyMapState {
+    /// `InputDevice` id the map was read with (`-1` = virtual keyboard).
+    device_id: i32,
     keyboard_type: i32,
-    /// The layout name the services layer wrote into the `KeyCharacterMap`
-    /// parcel (`Generic` for ACOS's virtual keyboard).
+    /// The layout file the services layer wrote into the `KeyCharacterMap`
+    /// parcel (`/system/usr/keychars/Virtual.kcm` for ACOS's virtual keyboard).
     layout: String,
     /// The parsed map.
     kcm: Kcm,
@@ -1554,18 +1556,6 @@ fn key_code_to_string(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 /// Layout name the services layer writes for ACOS's virtual keyboard.
 const GENERIC_LAYOUT: &str = "Generic";
 
-/// Resolve a layout name to a parsed map.
-///
-/// ACOS ships the AOSP generic layout; an unknown name is answered with that
-/// same map rather than invented per-layout data, and the requested name is
-/// kept in [`KeyMapState::layout`] so the mismatch is observable.
-fn kcm_for_layout(layout: &str) -> Kcm {
-    match layout {
-        "Generic" | "Virtual" | "generic" | "virtual" | "" => kcm::generic(),
-        _ => kcm::generic(),
-    }
-}
-
 /// Run `f` over the map behind native pointer `ptr`.
 fn kcm_lookup<R>(ptr: u64, f: impl FnOnce(&Kcm) -> R) -> Option<R> {
     POOLS.with(|p| p.borrow().key_maps.get(&ptr).map(|k| f(&k.kcm)))
@@ -1719,16 +1709,18 @@ fn kcm_get_fallback(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn kcm_obtain_empty(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     me_hit(ctx, "nativeObtainEmptyKeyCharacterMap");
-    let keyboard_type = vm.arg_i32(ctx, 0);
+    let device_id = vm.arg_i32(ctx, 0);
     let id = POOLS.with(|p| {
         let mut p = p.borrow_mut();
         let id = p.alloc_id();
+        let kcm = kcm::generic();
         p.key_maps.insert(
             id,
             KeyMapState {
-                keyboard_type,
+                device_id,
+                keyboard_type: kcm.keyboard_type,
                 layout: GENERIC_LAYOUT.to_string(),
-                kcm: kcm::generic(),
+                kcm,
             },
         );
         id
@@ -1751,52 +1743,196 @@ fn kcm_read_from_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     me_hit(ctx, "nativeReadFromParcel");
     let parcel_obj = vm.arg_ref(ctx, 0);
     let handle = parcel_ptr(vm, parcel_obj)?;
-    let keyboard_type = parcel_flat(with_store(|s| {
-        s.table
-            .with_parcel(handle, acos_parcel::Parcel::read_int32)
+    let parsed = parcel_flat(with_store(|s| {
+        s.table.with_parcel(handle, read_native_key_character_map)
     }))?;
-    let layout = parcel_flat(with_store(|s| {
-        s.table
-            .with_parcel(handle, acos_parcel::Parcel::read_string8)
-    }))?
-    .unwrap_or_default();
-    let kcm = kcm_for_layout(&layout);
     let id = POOLS.with(|p| {
         let mut p = p.borrow_mut();
         let id = p.alloc_id();
-        p.key_maps.insert(
-            id,
-            KeyMapState {
-                keyboard_type,
-                layout,
-                kcm,
-            },
-        );
+        p.key_maps.insert(id, parsed);
         id
     });
     vm.ret_i64(ctx, id as i64);
     Ok(())
 }
 
-/// `nativeWriteToParcel(J, Parcel)V`: write the same payload back.
+/// `KeyCharacterMap.nativeReadFromParcel` -> the image's
+/// `KeyCharacterMap::readFromParcel` (`libs/input/KeyCharacterMap.cpp`):
+/// `deviceId`, `hasMap`, a raw NUL-terminated+4-byte-padded load file name,
+/// keyboard type, overlay flag, key records with behaviour lists, then the
+/// remap/scan/usage tables. The host's `acos-services` writes this payload
+/// (`keychars::KeyMap::parcel_bytes`); the previous reader assumed a
+/// `[type, String8]` pair, which left the enclosing `InputDevice` parcel
+/// desynchronised.
+fn read_native_key_character_map(p: &mut acos_parcel::Parcel) -> Result<KeyMapState, acos_parcel::ParcelError> {
+    const MAX_KEYS: i32 = 8192;
+    let device_id = p.read_int32()?;
+    let has_map = p.read_int32()?;
+    if has_map == 0 {
+        return Ok(KeyMapState {
+            device_id,
+            keyboard_type: kcm::KEYBOARD_FULL,
+            layout: GENERIC_LAYOUT.to_string(),
+            kcm: kcm::generic(),
+        });
+    }
+    let layout = read_cstring(p)?;
+    let keyboard_type = p.read_int32()?;
+    let _overlay = p.read_int32()?;
+    let num_keys = p.read_int32()?;
+    if !(0..=MAX_KEYS).contains(&num_keys) {
+        if std::env::var_os("ACOS_KCM_DEBUG").is_some() {
+            eprintln!("KCM-BAD device={device_id} has={has_map} layout={layout:?} type={keyboard_type} overlay={_overlay} num_keys={num_keys}");
+        }
+        return Err(acos_parcel::ParcelError::BadLength {
+            len: num_keys.max(0) as usize,
+            max: MAX_KEYS as usize,
+        });
+    }
+    let mut keys = std::collections::BTreeMap::new();
+    for _ in 0..num_keys {
+        let key_code = p.read_int32()?;
+        let label = p.read_int32()? as u16;
+        let number = p.read_int32()? as u16;
+        let mut variations = Vec::new();
+        loop {
+            match p.read_int32()? {
+                0 => break,
+                1 => {
+                    let meta = p.read_int32()?;
+                    let character = p.read_int32()? as u16;
+                    let fallback = p.read_int32()?;
+                    let replacement = p.read_int32()?;
+                    variations.push(kcm::Variation {
+                        meta,
+                        ch: character,
+                        fallback: (fallback != 0).then_some(fallback),
+                        is_none: character == 0 && fallback == 0 && replacement == 0,
+                    });
+                }
+                _ => {
+                    return Err(acos_parcel::ParcelError::BadString(
+                        "KeyCharacterMap: bad behaviour marker",
+                    ))
+                }
+            }
+        }
+        keys.insert(
+            key_code,
+            kcm::Key {
+                label,
+                number,
+                variations,
+            },
+        );
+    }
+    for _ in 0..3 {
+        let count = p.read_int32()?;
+        if count < 0 {
+            return Err(acos_parcel::ParcelError::BadLength {
+                len: 0,
+                max: p.remaining() / 8,
+            });
+        }
+        for _ in 0..count {
+            let _from = p.read_int32()?;
+            let _to = p.read_int32()?;
+        }
+    }
+    Ok(KeyMapState {
+        device_id,
+        keyboard_type,
+        layout,
+        kcm: Kcm { keyboard_type, keys },
+    })
+}
+
+/// `Parcel::readCString`: raw bytes + NUL, 4-byte padded, no length prefix
+/// (`libbinder`, `native/libs/binder/Parcel.cpp`).
+fn read_cstring(p: &mut acos_parcel::Parcel) -> Result<String, acos_parcel::ParcelError> {
+    // `acos-parcel`'s `read_byte` is Android's `readByte` (an int32), while
+    // `Parcel::readCString` consumes **raw** bytes. Read one aligned word at a
+    // time and unpack it little-endian, which is byte-identical on the wire.
+    let mut bytes = Vec::new();
+    loop {
+        let word = p.read_int32()? as u32;
+        for b in word.to_le_bytes() {
+            if b == 0 {
+                return Ok(String::from_utf8_lossy(&bytes).into_owned());
+            }
+            bytes.push(b);
+        }
+    }
+}
+
+/// `Parcel::writeCString`: raw bytes + NUL, 4-byte padded, no length prefix.
+fn write_cstring(p: &mut acos_parcel::Parcel, value: &str) -> Result<(), acos_parcel::ParcelError> {
+    let mut bytes = value.as_bytes().to_vec();
+    bytes.push(0);
+    while bytes.len() % 4 != 0 {
+        bytes.push(0);
+    }
+    for chunk in bytes.chunks_exact(4) {
+        p.write_int32(i32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
+    }
+    Ok(())
+}
+
+/// `nativeWriteToParcel(J, Parcel)V`: write the same native-map payload back.
 fn kcm_write_to_parcel(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     me_hit(ctx, "nativeWriteToParcel");
     let ptr = vm.arg_i64(ctx, 0) as u64;
     let parcel_obj = vm.arg_ref(ctx, 1);
     let handle = parcel_ptr(vm, parcel_obj)?;
-    let (keyboard_type, layout) = POOLS.with(|p| {
-        p.borrow()
-            .key_maps
-            .get(&ptr)
-            .map(|k| (k.keyboard_type, k.layout.clone()))
+    let state = POOLS.with(|p| {
+        p.borrow().key_maps.get(&ptr).map(|k| {
+            (
+                k.device_id,
+                k.keyboard_type,
+                k.layout.clone(),
+                k.kcm.keys.clone(),
+            )
+        })
     })
-    .unwrap_or((kcm::KEYBOARD_FULL, GENERIC_LAYOUT.to_string()));
-    with_store(|s| s.table.with_parcel(handle, |p| p.write_int32(keyboard_type)))
-        .map_err(parcel_err)?;
+    .unwrap_or((
+        -1,
+        kcm::KEYBOARD_FULL,
+        GENERIC_LAYOUT.to_string(),
+        std::collections::BTreeMap::new(),
+    ));
     parcel_flat(with_store(|s| {
-        s.table
-            .with_parcel(handle, |p| p.write_string8_opt(Some(&layout)))
+        s.table.with_parcel(handle, |p| write_native_key_character_map(p, &state))
     }))?;
+    Ok(())
+}
+
+fn write_native_key_character_map(
+    p: &mut acos_parcel::Parcel,
+    state: &(i32, i32, String, std::collections::BTreeMap<i32, kcm::Key>),
+) -> Result<(), acos_parcel::ParcelError> {
+    let (device_id, keyboard_type, layout, keys) = state;
+    p.write_int32(*device_id);
+    p.write_int32(1); // hasMap
+    write_cstring(p, layout)?;
+    p.write_int32(*keyboard_type);
+    p.write_int32(0); // mLayoutOverlayApplied
+    p.write_int32(keys.len() as i32);
+    for (key_code, key) in keys {
+        p.write_int32(*key_code);
+        p.write_int32(i32::from(key.label));
+        p.write_int32(i32::from(key.number));
+        for v in &key.variations {
+            p.write_int32(1);
+            p.write_int32(v.meta);
+            p.write_int32(i32::from(v.ch));
+            p.write_int32(v.fallback.unwrap_or(0));
+            p.write_int32(0); // replacementKeyCode
+        }
+        p.write_int32(0);
+    }
+    p.write_int32(0); // mKeyRemapping
+    p.write_int32(0); // mKeysByScanCode
+    p.write_int32(0); // mKeysByUsageCode
     Ok(())
 }
 

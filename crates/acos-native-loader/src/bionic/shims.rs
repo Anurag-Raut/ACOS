@@ -1224,18 +1224,44 @@ mod sem_tests {
 
     /// A guest `sem_t`: bionic treats it as a 32-bit counter word, and the
     /// engine's `fml::Semaphore` only ever touches it through these shims.
-    #[repr(align(4))]
-    struct GuestSem([u8; SEM_BYTES]);
+    ///
+    /// `check_sem` validates that the pointer names a live writable mapping
+    /// (`range_is_mapped`), so the unit test must use a real mapping rather
+    /// than a stack array; the production path is a guest address inside the
+    /// guest's mapped image.
+    struct GuestSem(*mut c_void);
 
     impl GuestSem {
         fn new() -> Self {
-            GuestSem([0; SEM_BYTES])
+            // SAFETY: a private anonymous mapping of exactly one counter word.
+            let p = unsafe {
+                libc::mmap(
+                    std::ptr::null_mut(),
+                    SEM_BYTES,
+                    libc::PROT_READ | libc::PROT_WRITE,
+                    libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+                    -1,
+                    0,
+                )
+            };
+            assert_ne!(p, libc::MAP_FAILED, "mmap for GuestSem");
+            Self(p)
         }
         fn raw(&self) -> *mut c_void {
-            self.0.as_ptr() as *mut c_void
+            self.0
         }
         fn counter(&self) -> c_int {
-            i32::from_ne_bytes(self.0)
+            // SAFETY: live aligned 4-byte mapping owned by this value.
+            unsafe { *(self.0 as *const c_int) }
+        }
+    }
+
+    impl Drop for GuestSem {
+        fn drop(&mut self) {
+            // SAFETY: the mapping was created by `new` and has not been freed.
+            unsafe {
+                libc::munmap(self.0, SEM_BYTES);
+            }
         }
     }
 
@@ -1277,7 +1303,11 @@ mod sem_tests {
             assert_eq!(sem_trywait(original.raw()), 0, "token taken at the original");
             assert_eq!(sem_post(original.raw()), 0);
             let mut moved = GuestSem::new();
-            moved.0.copy_from_slice(&original.0);
+            std::ptr::copy_nonoverlapping(
+                original.raw() as *const u8,
+                moved.raw() as *mut u8,
+                SEM_BYTES,
+            );
             assert_eq!(moved.counter(), 1, "count moved with the object");
             assert_eq!(sem_trywait(moved.raw()), 0, "moved handle still works");
             assert_eq!(sem_trywait(moved.raw()), -1, "and shares the counter state");

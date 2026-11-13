@@ -905,6 +905,9 @@ fn execute_step(
             if !caps.input {
                 return StepExec::unsupported(Capability::Input, "the backend cannot deliver back");
             }
+            // A scenario `back` has no settle field: it is always strict, and a
+            // previous `settle: fast` input must not leak into it.
+            backend.set_input_settle(false);
             input_step(backend, &InputAction::Back, caps, previous, last_frame_seq)
         }
         StepRef::Rotate(rotate) => {
@@ -912,6 +915,7 @@ fn execute_step(
             if !caps.input {
                 return StepExec::unsupported(Capability::Input, "the backend cannot rotate");
             }
+            backend.set_input_settle(false);
             input_step(
                 backend,
                 &InputAction::Rotate(rotate.orientation),
@@ -1372,17 +1376,17 @@ fn fast_input_step(step: &Step) -> bool {
     }
 }
 
-/// Steps that evaluate the bound frame itself (UI-tree and pixel assertions, a
-/// non-fresh capture). After a `settle: fast` input these must fail closed.
+/// Steps that evaluate the bound frame itself (UI-tree assertions, a non-fresh
+/// capture). After a `settle: fast` input these must fail closed.
+/// `assert_screenshot`/`assert_region` take their own fresh strict capture, so
+/// they are not blocked (advisor review of 6301c06).
 fn binds_to_bound_frame(step: &Step) -> bool {
     match step.as_step() {
         Some(
             StepRef::AssertText(_)
             | StepRef::AssertVisible(_)
             | StepRef::AssertNotVisible(_)
-            | StepRef::AssertState(_)
-            | StepRef::AssertScreenshot(_)
-            | StepRef::AssertRegion(_),
+            | StepRef::AssertState(_),
         ) => true,
         Some(StepRef::Capture(capture)) => !capture.fresh,
         _ => false,
