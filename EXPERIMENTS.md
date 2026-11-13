@@ -1296,6 +1296,135 @@ PASS (1 documented false pass -> 0; one live Gaten false pass re-measured as a r
   `.cache/h17/{gates,corpus,latency,tests-full.log}`, kept guest run evidence
   (`ERR landlock=plan-missing`, exit 135) under `.cache/h17/loop-*/guest-evidence/`.
 
+## E2.12 — H13: a per-serve ASLR shared boot image (`ACOS_ART_BOOT_IMAGE`) — MEASURED (memory pass; not default: cold-start cost)
+
+- **Date / commit:** 2026-11-13; branch `mem-h13-shared-image` off `main` `f9f6ffa`;
+  worktree `/home/Qui/.paseo/worktrees/3oxa6xao/h13`. Host: Ryzen 9 9950X, 62 GiB,
+  load recorded per arm (`results/vm/H13.md`).
+- **Question / hypothesis.** B3 proved a shared, file-backed uncompressed boot
+  image saves ~12–13 MiB/session, but only with `-Xnorelocate` at the fixed base
+  `0x70000000` (image ASLR off, trusted-only). Android instead randomises the
+  boot image **once per boot** in the zygote and shares that one mapping with
+  every app. Hypothesis: do the same once per **serve cohort** — rebuild the
+  uncompressed image at a random page-aligned base on the first launch of a
+  serve, pass `-Xnorelocate`, and let every session of that serve map it
+  read-only and shared. Then the memory win survives without a fixed image base,
+  and each new serve start gets a new base. The open question was the one-time
+  relocation cost and whether rebuilding at a random base changes the runtime
+  layout enough to eat the win.
+- **Change.** New `crates/acos-art/src/boot_image.rs` + a launch/plumbing change:
+  `ACOS_ART_BOOT_IMAGE=lz4|shared-fixed|shared-aslr` (unset = `lz4`, the product
+  default). Shared modes build with the sysroot's stock `dex2oat64
+  --image-format=uncompressed --base=<base>` in a staging bwrap (B2's recipe),
+  store the tree at `<ACOS_ART_DATA>/boot-image/` (root `0700`, files `0444`),
+  and `--ro-bind` it at `/data/img`. `shared-aslr` picks ART's own
+  `0x70000000 ± 128 MiB` window on a 4 KiB grid (**16 bits**), keyed by the
+  invoking process (parent pid + start time): one serve = one base, a new serve =
+  a new base. `shared-fixed` keeps B2's `0x70000000`; `ACOS_SHARED_BOOT_IMAGE`
+  remains its explicit-directory form. A bad value fails the launch; nothing
+  falls back. `acos-art build-image` now shares the same builder. Documented in
+  `docs/AGENT_API.md` §16.1 and `docs/SECURITY.md`.
+- **Method.** Every ART arm went through `tools/art-runtime/run-exclusive.sh
+  --task H13 -- tools/guarded.sh ...` (8G; 16G for N=10; scratch under
+  `.cache/h13/`). M2: `tools/art-runtime/dm2/measure.py` with `--settle 60`,
+  N=1/5/10, one held serve per arm, `ΣPss`, private dirty and cgroup
+  anon+shmem from `/proc`/`memory.stat`; host load recorded before/after. M3/M4:
+  `tools/bench/acos-bench.sh --phases cold|latency` (5 and 3 reps). Agent loop:
+  `--phases loop1,loop5` (H6/P5), H2 early GC left on. Prep cost: two identical
+  counter verifies per mode, first (build) minus second (reuse). P11:
+  `--phases p11,scenarios`; correctness gates through `acos verify --engine art`.
+  Two concurrent sessions were checked in raw `maps`/`smaps`; bases across serve
+  starts were read from the same dumps.
+- **A/B memory (MiB per session).** LZ4 is the default; `sf` is the B2/`shared-fixed`
+  reference; `sfg` is `shared-fixed` rebuilt by this code; `sa` is `shared-aslr`
+  (two independent serve cohorts at N=5/10; the table gives both, with the median
+  in the Δ column). All rows are one held serve, 60 s settle, 0 survivors.
+
+| arm | N | cgroup anon+shmem/session | Δ vs lz4 | ΣPss/session | private dirty/session | boot Pss | boot PrivDirty | boot SharedClean |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| lz4 | 1 | **65.45** | — | 201.1 | 47.4 | 40.6 | 26.34 | 0.0 |
+| lz4 | 5 | **66.85** | — | 79.7 | 48.3 | 29.3 | 26.34 | 14.2 |
+| lz4 | 10 | **64.41** | — | 61.7 | 46.0 | 27.8 | 26.34 | 14.3 |
+| sf (B2) | 1 | 54.25 | −11.2 | 239.1 | 35.7 | 82.1 | 13.95 | 0.0 |
+| sf (B2) | 5 | 53.59 | −13.3 | 76.8 | 35.5 | 27.7 | 13.95 | 68.9 |
+| sf (B2) | 10 | 52.98 | −11.4 | 55.4 | 35.1 | 20.5 | 13.95 | 66.3 |
+| sfg | 5 | 53.29 | −13.6 | 73.5 | 35.4 | 28.3 | 13.95 | 72.3 |
+| sfg | 10 | 52.30 | −12.1 | 53.3 | 34.1 | 21.1 | 13.95 | 72.3 |
+| sa | 1 | 56.74 | −8.7 | 242.4 | 38.2 | 83.2 | 13.95 | 0.0 |
+| sa | 5 | 55.11 / 55.27 | **−11.6** (median) | 78.5 / 73.8 | 37.0 / 37.1 | 27.9 / 27.1 | 13.95 | 70.1 / — |
+| sa | 10 | 55.60 / 52.58 | **−10.3** (median) | 57.2 / 53.0 | 37.2 / 34.5 | 20.2 / 20.4 | 13.95 | 62.9 / — |
+
+The memory win is the `26.34 → 13.95 MiB` boot-image private-dirty drop plus
+`Shared_Clean` (63–72 MiB/session at N=5/10) from the file-backed mapping. The
+shared image is **worse at N=1 on ΣPss** (the whole image is charged once), as
+B3 found; on the M2 metric it is still cheaper. `shared-aslr` lands 1–3 MiB
+above `shared-fixed` on some cohorts: rebuilding at a random base changes the
+image/class layout enough to shift `LinearAlloc`/region-space runtime
+allocation (sa-n10 first cohort: linear 4.05 MiB vs 2.07 in the second). That
+is real variance, not a leak; the 10–12 MiB median saving survives.
+
+- **One-time prep and launch.** `shared-aslr` first verify **7.23 s**, repeat
+  verify with the same cohort **3.60 s** → **3.63 s** prep (the second
+  `shared-fixed` pair: 7.22 / 3.72 → 3.50 s; both `dex2oat64` builds, ~173 MiB
+  of image files). M3 cold (new serve per rep, page cache evicted) therefore
+  moves from **409.3 ms p50** (lz4, p95 461.6, load 1.1–1.7) to **4133.9 ms
+  p50** (shared-aslr, p95 8473.1, load 8.0–11.0), **+3.72 s**. Warm M4 is
+  unchanged: lz4 vs shared-aslr **strict 309.0 vs 308.0 ms**, **fast 175.5 vs
+  160.8 ms** (3 reps, one serve per phase; no regression). M7 strict 41.1 vs
+  41.2 ms. The prep is paid once per serve, not per session: the A/B was taken
+  on the first launch of a cohort.
+- **H6 agent loop / tasks per GiB-min.** H2 early GC on, P5 loop, 3 reps:
+  lz4 **277.4 (N=1) / 664.7 (N=5)**; shared-fixed (prebuilt B2 image, no prep)
+  **247.5 / 572.1**; shared-aslr **112.8 / 264.3**. The shared-aslr number is
+  dominated by charging the first-launch `dex2oat64` (~400 MiB anon, ~4 s CPU)
+  and the 173 MiB file-cache pages to the measured job cgroup. The same P5
+  records the fairer **net anon+shmem** integral: lz4 ≈ **900 / 845**,
+  shared-fixed ≈ **986 / 1065**, shared-aslr prep-inclusive ≈ **586 / 559**
+  tasks/GiB-min. Verified task rate is **1.000** in every arm (0 false passes).
+  Read: the shared image does not slow the steady-state loop; the one-time prep
+  is the only regression, and it is visible only in short (per-serve) cohorts.
+- **Correctness under `shared-aslr` (one cohort, image built once).** Pass:
+  `v2-art-counter`, `w22-counter-reset`, `w54-dialog-pixels`, `w42-back-frame`,
+  `w15-dialog-menu`, `form-validation`, `suite/T03-render-good`,
+  `v1-offscreen-pager`. Expected fail: `suite/T03-render-wrong` →
+  `ASSERTION_FAILED` (568 029 differing bytes). P11: **0 false passes** over
+  3 × the full settle-lab corpus; `progress` (p11-progress-timeout) is
+  **not settled in 5/5**, i.e. a non-pass, never a false pass; the
+  `scenarios/p11-*.yaml` sweep has **0 unexpected failures**.
+  `cargo test --release --offline -p acos-art -p acos-cli` passes. Bad-knob
+  control (`ACOS_ART_BOOT_IMAGE=bogus`) refuses the launch with the Layout
+  error, no LZ4 fallback.
+  Two concurrent sessions of one serve map the same inode at the same base;
+  raw `smaps` of the five-session cohort has `boot.art` at
+  `0x74690000–0x74af8000` in all five and `Shared_Clean` 2.99 MiB on the primary
+  mapping alone (the full boot group is 70.1 MiB/session at N=5). Three separate
+  serve starts chose `0x71fd7000`, `0x74690000`, `0x74a46000`. `gaten-home` is
+  **TIMEOUT at its first `wait_for` on both arms** (lz4 and shared-aslr,
+  reproduced twice on lz4); that is a pre-existing main/host-load issue, not a
+  shared-image regression — the launch step passes and no shared-image code is
+  in the settle path. Recorded rather than hidden.
+- **Security analysis.** `shared-aslr` keeps the memory win with **16 bits** of
+  image-base entropy per serve (ART's own ±128 MiB / 4 KiB window), the same
+  shape as stock Android's per-boot zygote choice; a new serve is a new base.
+  Sessions of one serve share the base, exactly as apps in one Android boot do.
+  The image is a **read-only** file mapping (`--ro-bind`, files `0444`, dir
+  `0700`): a session cannot write it or affect a sibling; the B3/S4 canary
+  covers the read-only shared-input rule. `shared-fixed` remains fixed
+  `0x70000000` and trusted-only. The new costs are operational (3.6 s first
+  launch, 173 MiB disk per cohort), not a new host read/write surface.
+- **Conclusion.** H13's hypothesis is **confirmed at the memory layer**: a
+  per-serve relocated uncompressed image is correct, shares its pages, and
+  saves ~10–12 MiB/session at N=5/10 with no warm-launch or false-pass
+  regression. It is **not proposed as the default** because it adds **3.6 s**
+  to every new serve's first launch (and inflates short-cohort `tasks/GiB-min`
+  by charging the `dex2oat64` build to the cgroup). Recommendation: keep `lz4`
+  as the default; expose `shared-aslr` as the opt-in for long-lived serves and
+  leave `shared-fixed` trusted-only. The owner decides whether the cold-start
+  cost is acceptable for untrusted runs. A cheap offline relocator (patch the
+  image at a random base without re-running `dex2oat64`) is the follow-up that
+  would remove the 3.6 s cost. Tables and raw JSON: `results/vm/H13.md`,
+  `.cache/h13/`.
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
@@ -1322,6 +1451,7 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | Tap acknowledgement | **5 ms** | main `4958703` | B2, E3.2 | 2026-11-13 | tie (P1) |
 | M1 idle memory, 1 app | **66.5 MiB cgroup anon+shmem** (ΣPss 210 MiB) | main `4958703` (H2 on) | B2, E3.2 | 2026-11-13 | pre-H2 98.9 MiB — **−32.8 %** (H2 early GC) |
 | Memory / extra session | **64.96 / 65.22 / 65.59 MiB cgroup anon+shmem** at N=1/5/10; ΣPss 195.4 / 76.8 / 62.6 MiB | main `4958703` (H2 on) | B2, E3.2 | 2026-11-13 | pre-H2 97.3/98.0/97.7 cgroup and 213/108/94 Pss — **−33 %** anon+shmem, −29/−33 % ΣPss at N=5/N=10 |
+| Memory / extra session, opt-in shared boot image (H13) | **65.5 (N=1) / 66.9 (N=5) / 64.4 (N=10) MiB cgroup anon+shmem, lz4 + H2**; best opt-in shared image **56.7 / 55.2 / 54.1** (`shared-aslr`, N=5/10 median of 2 cohorts; `shared-fixed` 54.3/53.6/53.0) | `mem-h13-shared-image` off `f9f6ffa` | H13, E2.12 | 2026-11-13 | H2 on; shared image −8.7 / −11.6 / −10.3 MiB/session vs lz4, +3.6 s first launch. Pre-H2 H6 row: 97.3/98.0/97.7 |
 | Idle CPU / wakeups | **0.647 / 2.77 / 5.28 %** of one core at N=1/5/10 (0.647/0.554/0.528 per session); **34.1 / 90.8 / 161.7** wakeups/s | main `4958703` | B2, E3.2 | 2026-11-13 | pre-H2 0.61/2.44/4.47 % — within the 21–38 % load-derived bands; wakeups unchanged |
 | Teardown | **12 ms** (`teardown_ms`, lifecycle) | main `4958703` | B2, E3.2 | 2026-11-13 | tie with GL1 12 ms (−33…−40 % vs 18–20) |
 | Agent loop (animations on) | **1423.9 ms/task; 0.653 tasks/s, 283.5 (page cache) / 905.3 (anon+shmem) tasks/GiB-min at N=1; 1428.1 ms, 2.679 tasks/s, 667.6 / 865.8 at N=5** | main `4958703` | B2, E3.2 | 2026-11-13 | latency tie with pre-H2; **anon+shmem GiB-min +45.7 % (N=1) / +49.8 % (N=5) from H2**, invisible in the page-cache denominator (+1.1 %/+0.5 %) |
@@ -1345,7 +1475,7 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | ID | Hypothesis | Metric | Expected | Confidence | Cost | Risk | Status |
 |---|---|---|---|---|---|---|---|
 | H15 | **The reset/relaunch is the loop's next wall: 342 ms (24 %) with animations on, 245–343 ms (48 %) with animations off** — fresh ART boot + framework + Activity + strict bind, per task. Zygote/shared boot image (B3 `-Xnorelocate` −13.6 MiB/session measured) or a fast reset for non-asserting steps | M6, loop, tasks/GiB-min | −150–200 ms/task → −10…14 % loop (on), −30…40 % (off) | medium-high | medium | medium (fixed image address / ASLR, zygote F1) | **#1, was #3** |
-| H13 | **Memory per session is now 65 MiB anon+shmem, flat N=1/5/10.** Finish it: B3 shared uncompressed image (−13.6 MiB/session measured), then zygote CoW (Z6 −25–60 % at N≥5) | M2, tasks/GiB-min (anon+shmem) | −14 % (B3) … −25 % | high (B3) / medium (zygote) | low (B3 flag) / medium | medium | **#2, was #1** (H2 took the first 32 MiB) |
+| H13 | **Memory per session (now 65–67 MiB with H2) is the GiB denominator.** B3's shared uncompressed image is implemented as `ACOS_ART_BOOT_IMAGE=lz4|shared-fixed|shared-aslr`; `shared-aslr` relocates once per serve (16-bit base) and saves 10–12 MiB/session at N=5/10 | M2, tasks/GiB-min | −10–12 MiB/session (shared image); zygote CoW still −25–60 % at N≥5 | high (shared image) / medium (zygote) | low (shared image) / medium | medium (fixed image address for `shared-fixed`; +3.6 s first launch) | **#1, implemented opt-in (E2.12); not default — owner decision. Next: offline relocator or zygote CoW** |
 | H14 | **Strict tap 956 ms with the framework press/elevation animator.** Adopted the P12 `animations:off` switch as the agent-facing functional-check mode: 7.34×/8.35× taps, 2.71–2.84× loop, 5–8.7× tasks/GiB-min (anon+shmem), 0 false passes. Defaults unchanged | M8, loop | measured | high | low | medium (verification semantics: fast never backs an assertion) | **done: mode available, E3.3; use it for functional checks** |
 | H17 | **N=10 verified loop: fixed.** Two shared-input races: `<data>/seccomp/landlock.plan` rewritten in place by every launch and read by the guard at start (`ERR landlock=plan-missing`, exit 126/1), and the shared `<data>/app/<apk>` truncated by `fs::copy` while ART had it mapped (SIGBUS, exit 135). Atomic `publish_atomic` + per-run APK. 428/450 → **600/600** verified over 12 after-reps, 0 false passes; N=5 75/75, N=20 40/40 | loop verified rate at N≥8 | 100 % | high | done | low | **done 2026-11-13, E2.13** |
 | H16 | **N=5 strict assert flake** (H6: 1/75). Not reproduced in B2 (63/63 N=1, 75/75 N=5, plus 150+ H14 tasks) | loop verified rate | — | low now | low | low | **not reproduced in B2** (H6 saw 1/75 at N=5: a strict post-tap count read that did not see the tap; false_pass stayed 0). Twelve B2/H14 loop cohorts, 0 failures of that shape; the N≥8 failure mode is H17 instead |

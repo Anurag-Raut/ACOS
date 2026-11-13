@@ -35,7 +35,8 @@ sets it.
 | `ACOS_FLUTTER_LIB_DIR`, `ACOS_FLUTTER_DRIVER_DEX`, `ACOS_RN_DRIVER_DEX` | `acos-mcp`, `acos-runtime`, `acos-jni` | Guest code loaded into the confined child (engine lib, driver DEX) | Only point these at artifacts you built; the child still runs confined, but the code is not otherwise authenticated |
 | `ACOS_FLUTTER_SCRATCH`, `ACOS_RN_SCRATCH` | `acos-mcp` | Scratch dirs for engine/RN staging (fallback when `ACOS_SESSION_ROOT` is unset) | Inside the session root by default |
 | `ACOS_NO_BOOT_CACHE`, `ACOS_BOOT_CACHE_NO_IMAGE`, `ACOS_BOOT_CACHE_DEX_TABLES` | `acos-runtime` (`session_pool.rs`), `acos-cli` | Turn the boot cache (or parts of it) **off** | These only reduce trust in the cache — they are the safe direction. The cache payload is validated on restore and a crafted entry can only cause a cache miss |
-| `ACOS_SHARED_BOOT_IMAGE` | `acos-art` (`launch.rs`, B3) | Research/trusted only, **off by default**: ro-binds an uncompressed boot image dir and passes `-Ximage:/data/img/boot.art -Xnorelocate` | **Weakens ASLR**: the boot image sits at a fixed base (0x70000000) in every session, so its layout is not secret between sessions. Untrusted APKs must not use it until the owner decides the trade-off (see `results/art-runtime/ZS-security-review.md` F10). A bad value fails the launch |
+| `ACOS_ART_BOOT_IMAGE` | `acos-art` (`boot_image.rs`, `launch.rs`, H13) | `lz4` (default) / `shared-fixed` / `shared-aslr`. Shared modes ro-bind an uncompressed image dir and pass `-Ximage:/data/img/boot.art -Xnorelocate`; `shared-aslr` builds one relocated image per serve cohort and reuses it for that cohort's sessions | **Shared mapping and image ASLR policy**: `shared-fixed` keeps the base at `0x70000000` in every session (trusted only). `shared-aslr` uses ART's own ±128 MiB, 4 KiB-aligned window (**16 bits**, same shape as the stock zygote's per-boot choice) and changes the base per serve start. A session can read the base of its own mapping and therefore of its siblings in the same serve — exactly what a stock Android app learns from the zygote image. A bad value fails the launch |
+| `ACOS_SHARED_BOOT_IMAGE` | `acos-art` (`launch.rs`, B3 compatibility) | Explicit directory for the **fixed-base** image; equivalent to `ACOS_ART_BOOT_IMAGE=shared-fixed` with that directory | Same fixed-base ASLR warning as `shared-fixed`; refused when combined with `shared-aslr` |
 | `ACOS_ZYGOTE_APP` | `acos-art` (`launch.rs`, Z3) | Research/trusted only, **off by default**: runs the guest as a pre-initialised ART zygote that forks the app child | Binds an arbitrary host build dir into the guest and copies a native shim into the session's `<data>/shim`; adds `-Xzygote -Xhidden-api-policy:disabled`. Only point it at a dir you built from `research/zygote-proto/z3/`. Never for untrusted APKs: the zygote sandbox failed security review for untrusted code (ZS, 2026-11-12) |
 | `ACOS_ART_XMS`, `ACOS_ART_XMX`, `ACOS_ART_HEAP_TARGET_UTILIZATION` | `acos-art` (`launch.rs`, Z7) | Research/trusted only, **off by default**: passes the value as the real ART argv `-Xms`/`-Xmx`/`-XX:HeapTargetUtilization=` to `dalvikvm64` | Changes the guest's heap policy; a too-small ceiling can make an app fail (OOM) or GC more. Values are validated and a bad value fails the launch. Unset = argv unchanged |
 | `ACOS_ART_EARLY_GC`, `ACOS_ART_GC_DELAY_MS` | `acos-art` (`launch.rs` + guest `LaunchMain`, H2) | **Product default ON**: right after the first live frame the guest requests one ART background CC collection (`VMRuntime.requestConcurrentGC()`); `ACOS_ART_EARLY_GC=0` turns it off, `ACOS_ART_GC_DELAY_MS` delays it (research knob) | Runs guest-side ART heap work earlier than the app would (a real background collection that returns free region space to the OS). It changes when the guest releases its own pages, not what it can touch; no sandbox line moves. Unset = on; `0` = inert |
@@ -62,6 +63,38 @@ agent-facing error for a rejected session root is `UNSAFE_PATH` with
 Rationale: these roots decide *what code the confined child loads* and *what
 app data it sees*. The sandbox makes the child unable to write outside its root;
 this check makes the root itself trustworthy.
+
+## Shared boot image (H13): what one session learns about another
+
+`shared-aslr` maps **one read-only file** into every session of a serve cohort.
+The file is prepared once by the first launch under `<ACOS_ART_DATA>/boot-image/`
+(directory `0700`, files `0444`) and is `--ro-bind`-mounted at `/data/img`; the
+guest cannot write it, so a compromised session cannot poison a sibling's
+image. The host user who owns the data root can replace it, but that user is
+inside the trust boundary that already controls the runtime and sysroot.
+
+The security trade is address-space information, not data integrity:
+
+* **Base entropy.** `shared-aslr` picks `0x70000000 ± 128 MiB` on a 4 KiB grid:
+  65 536 positions = **16 bits per serve cohort**. This is ART's own
+  `ART_BASE_ADDRESS_MIN/MAX_DELTA` window and the same shape as stock Android's
+  zygote, which randomises the boot image once per boot and shares that one
+  mapping with every app.
+* **Cross-session.** Every session of the cohort sees the same image base, so an
+  attacker who can read `/proc/self/maps` in one session learns the base used by
+  its siblings. Stock Android has the same property for all apps in a boot.
+  A new serve start chooses a new base; there is no cross-serve reuse.
+* **Cross-serve.** The prepared image is not a secret at rest: it contains no
+  per-session data and its base is written in the image header. The knob does
+  not add a new host read surface; it removes the per-process relocation cost,
+  not the guest's ability to inspect its own address space.
+* **`shared-fixed` is different.** It keeps `0x70000000` in every session and
+  across every serve. That is a real loss of image ASLR and remains
+  trusted-workloads-only (see `results/art-runtime/ZS-security-review.md` F10).
+* **Disk / cgroup.** A prepared cohort costs ~173 MiB on disk and its pages are
+  file-backed page cache, not anonymous memory. A new cohort sweeps the previous
+  cohort's images; a killed serve can leave one behind until the next cohort or
+  manual cleanup.
 
 ## Known residual trust boundaries
 
