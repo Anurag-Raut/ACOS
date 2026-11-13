@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- W7: every value below is read from the framework at run time and printed
+     as text, so a scenario can assert what the app actually sees rather than
+     a host guess. -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="8dp">
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="status=?" />
+
+        <TextView
+            android:id="@+id/nav"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="nav=?" />
+
+        <TextView
+            android:id="@+id/system_bars"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="systemBars=?" />
+
+        <TextView
+            android:id="@+id/gestures"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="gestures=?" />
+
+        <TextView
+            android:id="@+id/decor"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="decor=?" />
+
+        <TextView
+            android:id="@+id/frame"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="frame=?" />
+
+        <TextView
+            android:id="@+id/window"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="window=?" />
+
+        <TextView
+            android:id="@+id/display"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="display=?" />
+
+        <TextView
+            android:id="@+id/probe_mode"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="mode=?" />
+    </LinearLayout>
+</ScrollView>

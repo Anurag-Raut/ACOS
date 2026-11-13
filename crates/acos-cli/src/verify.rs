@@ -301,6 +301,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     // so it is recorded here and charged separately from the `launch` step.
     let mut session_boot_ms: Option<u64> = None;
     let mut session_animations: Option<&'static str> = None;
+    let mut session_insets: Option<&'static str> = None;
     let backend: EngineBackend = match engine {
         // The default route is forwarded verbatim: engine selection does not
         // change Rust VM behaviour.
@@ -332,6 +333,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                 Ok(session) => {
                     session_boot_ms = Some(session.session_start_ms());
                     session_animations = Some(session.animations());
+                    session_insets = Some(session.insets());
                     EngineBackend::session(Box::new(session))
                 }
                 Err(error) => {
@@ -372,6 +374,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         &artifacts,
         session_boot_ms,
         session_animations,
+        session_insets,
     );
     finish_run(&envelope, &args, &artifacts, Some(trust))
 }
@@ -388,6 +391,7 @@ pub(crate) fn annotate(
     artifacts: &Path,
     session_boot_ms: Option<u64>,
     session_animations: Option<&'static str>,
+    session_insets: Option<&'static str>,
 ) {
     let engine = engine.unwrap_or(Engine::RustVm);
     let Some(result) = envelope.result().cloned() else {
@@ -449,6 +453,7 @@ pub(crate) fn annotate(
         })),
         "explicit": args.engine != "rust-vm" || mode == Mode::Preview,
         "animations": session_animations.unwrap_or("on"),
+        "insets": session_insets.unwrap_or("carve"),
     });
     if let Some(object) = verdict.as_object_mut() {
         object.insert("engine".to_string(), engine_block["engine"].clone());
@@ -462,6 +467,7 @@ pub(crate) fn annotate(
             "animations".to_string(),
             engine_block["animations"].clone(),
         );
+        object.insert("insets".to_string(), engine_block["insets"].clone());
         if let Some(summary) = &session_exit_summary {
             object.insert("session_exit".to_string(), summary.clone());
         }

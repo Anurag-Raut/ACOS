@@ -31,6 +31,10 @@ USAGE:
                      [--width PX] [--panel-height PX] [--content-height PX]
                      [--status-inset PX] [--nav-inset PX] [--density DPI]
                      [--text-allcaps device|theme]
+  acos-art launch --apk FILE [--until POINT] [--out DIR] [--width PX]
+                     [--panel-height PX] [--status-inset PX] [--nav-inset PX]
+                     [--density DPI] [--insets carve|report]
+                     [--animations on|off]
   acos-art session --apk FILE [--out DIR] [--package PKG] [--activity CLASS]
                      [--width PX] [--panel-height PX] [--status-inset PX]
                      [--nav-inset PX] [--density DPI] [--session-id ID]
@@ -122,6 +126,9 @@ fn real_main() -> Result<ExitCode> {
     let mut panel_height = 2400u32;
     let mut status_inset = 128u32;
     let mut nav_inset = 63u32;
+    let mut insets = std::env::var("ACOS_WM_INSETS").unwrap_or_else(|_| {
+        acos_services::wms::DEFAULT_INSETS_MODE.as_str().to_string()
+    });
     let mut all_caps = acos_art::app::AllCaps::Device;
     let mut activity: Option<String> = None;
     let mut session_id: Option<String> = None;
@@ -188,6 +195,15 @@ fn real_main() -> Result<ExitCode> {
             "--content-height" => size.1 = next(&mut i)?.parse().unwrap_or(2062),
             "--status-inset" => status_inset = next(&mut i)?.parse().unwrap_or(128),
             "--nav-inset" => nav_inset = next(&mut i)?.parse().unwrap_or(63),
+            "--insets" => {
+                let value = next(&mut i)?;
+                if acos_services::wms::parse_insets_mode(&value).is_none() {
+                    return Err(Error::Layout(format!(
+                        "--insets must be carve or report (got {value:?})"
+                    )));
+                }
+                insets = value;
+            }
             "--density" => size.2 = next(&mut i)?.parse().unwrap_or(420),
             "--text-allcaps" => {
                 all_caps = match next(&mut i)?.as_str() {
@@ -367,6 +383,7 @@ fn real_main() -> Result<ExitCode> {
                 density_dpi: size.2,
                 status_inset,
                 nav_inset,
+                insets,
                 animations,
             };
             let res = acos_art::launch::launch(&root, &opts)?;

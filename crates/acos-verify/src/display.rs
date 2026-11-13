@@ -55,19 +55,62 @@ pub fn frame_display_geometry(
     frame_width: u32,
     frame_height: u32,
 ) -> Option<FrameDisplayGeometry> {
-    let geometry = match acos_runtime::display_override() {
+    frame_display_geometry_for(
+        frame_width,
+        frame_height,
+        acos_runtime::InsetsMode::from_env(acos_runtime::DEFAULT_INSETS_MODE),
+    )
+}
+
+/// [`frame_display_geometry`] with an explicit W7 inset model.
+///
+/// Under `report` the app frame is the full display, so the PNG origin is the
+/// display origin and `app_size` is the display size; there is no status-bar
+/// offset to apply. Under `carve` the pre-W7 application-area origin is kept.
+#[must_use]
+pub fn frame_display_geometry_for(
+    frame_width: u32,
+    frame_height: u32,
+    insets_mode: acos_runtime::InsetsMode,
+) -> Option<FrameDisplayGeometry> {
+    frame_display_geometry_with(
+        frame_width,
+        frame_height,
+        insets_mode,
+        acos_runtime::display_override(),
+    )
+}
+
+/// [`frame_display_geometry_for`] with an explicit display override, so a unit
+/// test never observes another test's process-global `set_display_override`.
+#[must_use]
+pub fn frame_display_geometry_with(
+    frame_width: u32,
+    frame_height: u32,
+    insets_mode: acos_runtime::InsetsMode,
+    display_override: Option<acos_runtime::DisplayOverride>,
+) -> Option<FrameDisplayGeometry> {
+    let geometry = match display_override {
         Some(display) => {
             let width = display.width.max(0) as u32;
             let height = display.height.max(0) as u32;
             let status_bar = display.status_bar_top.max(0);
             let nav_bar = display.nav_bar_bottom.max(0) as u32;
             FrameDisplayGeometry {
-                origin: [0, status_bar],
+                origin: if insets_mode.is_report() {
+                    [0, 0]
+                } else {
+                    [0, status_bar]
+                },
                 display_size: [width, height],
-                app_size: [
-                    width,
-                    height.saturating_sub(status_bar as u32 + nav_bar),
-                ],
+                app_size: if insets_mode.is_report() {
+                    [width, height]
+                } else {
+                    [
+                        width,
+                        height.saturating_sub(status_bar as u32 + nav_bar),
+                    ]
+                },
                 source: "display-override",
             }
         }
@@ -76,7 +119,11 @@ pub fn frame_display_geometry(
             let app = frames.frame;
             let display = frames.display_frame;
             FrameDisplayGeometry {
-                origin: [app.left, app.top],
+                origin: if insets_mode.is_report() {
+                    [0, 0]
+                } else {
+                    [app.left, app.top]
+                },
                 display_size: [display.width().max(0) as u32, display.height().max(0) as u32],
                 app_size: [app.width().max(0) as u32, app.height().max(0) as u32],
                 source: "wms-reference",
@@ -116,7 +163,19 @@ mod tests {
     fn the_reference_display_puts_an_app_area_frame_at_the_status_bar() {
         // The ART frame is 1080x2209; the display is 1080x2400 with a 128 px
         // status bar and a 63 px navigation bar.
-        let geometry = frame_display_geometry(1080, 2209).expect("app-area frame");
+        let geometry = frame_display_geometry_with(
+            1080,
+            2209,
+            acos_runtime::InsetsMode::Carve,
+            Some(acos_runtime::DisplayOverride {
+                width: 1080,
+                height: 2400,
+                density_dpi: 420,
+                status_bar_top: 128,
+                nav_bar_bottom: 63,
+            }),
+        )
+        .expect("app-area frame");
         assert_eq!(geometry.origin, [0, 128]);
         assert_eq!(geometry.display_size, [1080, 2400]);
         let frame = FrameMeta::new(1, "t", "c", 1080, 2209, 420, "h", true);
@@ -124,6 +183,31 @@ mod tests {
         assert_eq!(frame.display_origin, Some([0, 128]));
         assert_eq!(frame.display_rect().top(), 128);
         assert_eq!(frame.display_rect().bottom(), 2337);
+    }
+
+    #[test]
+    fn report_mode_puts_the_full_display_frame_at_the_origin() {
+        let geometry = frame_display_geometry_with(
+            1080,
+            2400,
+            acos_runtime::InsetsMode::Report,
+            Some(acos_runtime::DisplayOverride {
+                width: 1080,
+                height: 2400,
+                density_dpi: 420,
+                status_bar_top: 128,
+                nav_bar_bottom: 63,
+            }),
+        )
+        .expect("full-display frame");
+        assert_eq!(geometry.origin, [0, 0]);
+        assert_eq!(geometry.display_size, [1080, 2400]);
+        assert_eq!(geometry.app_size, [1080, 2400]);
+        let frame = FrameMeta::new(1, "t", "c", 1080, 2400, 420, "h", true);
+        let frame = geometry.apply(frame);
+        assert_eq!(frame.display_origin, Some([0, 0]));
+        assert_eq!(frame.display_rect().top(), 0);
+        assert_eq!(frame.display_rect().bottom(), 2400);
     }
 
     #[test]

@@ -907,6 +907,83 @@ PASS (1 documented false pass -> 0; one live Gaten false pass re-measured as a r
   layout / a launch that never paints) remains the reason a green Gaten run is luck-dependent (1 of
   2 re-runs here hit the white-paint flake at step 1, as GR2 measured 2/6).
 
+## E13.5 — W7: report the system-bar insets instead of carving the app window — PASS as an opt-in model; default stays `carve` (one strict gate changes by 1/255)
+
+- **Date / commit:** 2026-11-13; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/w7`, branch
+  `wm-w7-insets` (off `main` `52def4f`). Real ART guest; no phone; all runs under the host-wide
+  `run-exclusive.sh` lock and `guarded.sh --mem 8G`.
+- **Question / goal:** GR1 E13.1(b) measured Gaten's footer 60 px (24 dp) low on ACOS: the WMS shim
+  handed the app an already-carved window (`DecorView [0,108][1080,2400]`) and a real `InsetsState`
+  calculated to zero, while the phone reported status/gesture insets the app consumed itself. Can
+  the window manager model AOSP's full-display frame + reported insets, without special-casing an
+  app, and without weakening a verification assertion?
+- **Where the carve was:** `crates/acos-art/guest/java/dev/acos/art/LaunchMain.java:2821`
+  (`APP_H = PANEL_H - STATUS_INSET - NAV_INSET`, fed to `DisplayInfo.appHeight`) and
+  `crates/acos-wm/src/wms.rs:742` (`compute_frame_for_requested`: `window_bounds =
+  display.app_bounds`), built from `crates/acos-wm/src/display.rs:183`
+  (`app_bounds = Rect(0,status,width,height-nav)`). Because the frame excluded the bars,
+  `InsetsState.calculateInsets(mWinFrame, …)` returned zero; that is why `--nav-inset` alone never
+  moved Gaten's footer.
+- **Change:** new `ACOS_WM_INSETS=carve|report` selector (plus `acos launch --insets`,
+  `acos-art launch --insets`, and the serve/MCP `acos_launch` field). `report` follows
+  `WindowLayout.computeFrames`: start at the full display, subtract only the client's
+  `fitInsetsTypes`/`fitInsetsSides`; `PhoneWindow.generateLayout` sends 0/0 for a non-floating
+  Activity, so it gets the full display and DecorView consumes the reported insets, while a floating
+  dialog keeps the default `systemBars()` fit. The guest derives `DisplayInfo` and the merged
+  `Configuration` from the same selector; `acos-verify` publishes display-origin `[0,0]`. New
+  edge-to-edge fixture `fixtures/apps/insets-probe` (targetSdk 35) prints the root insets + frames,
+  with `scenarios/w7-insets-report.yaml` and `scenarios/w7-insets-carve-negative.yaml`. Default
+  remains `carve`.
+- **Result (window model):** under `report` on the API-34 profile the probe reads status 128,
+  navigation 63, decor `[0,0][1080,2400]`, screen frame `[0,0][1080,2400]`; under `carve` it reads
+  status 0, nav 0, decor `[0,0][1080,2209]`, screen `[0,128][1080,2337]`, and the negative scenario
+  fails with `ASSERTION_FAILED`. Non-edge-to-edge content is unchanged: counter's app views are
+  identical (`count [42,317,63,368]`, `inc [42,368,273,494]`, `reset [42,494,273,620]`, content
+  `[0,275][1080,2337]`); only the faithful decor additions differ (`decor_content_parent` spans to
+  y=0, `statusBarBackground`/`navigationBarBackground` appear). Same for the dialog fixtures.
+- **Result (Gaten, phone reference):** stored device `elements.json` footer band is
+  `[2022,2151]` in the 1080x2292 cropped reference = display `[2130,2259]`. `report` with the
+  phone's actual bottom inset (`nav=80`, `ACOS_ART_{WIDTH,PANEL_HEIGHT,DENSITY,STATUS_INSET,NAV_INSET}
+  =1080,2400,400,108,80`) puts the footer at display `[2130,2259]`: **delta 0 px**. SSIM vs the
+  stored device reference rises from GR1's 0.84854 (or 0.74518 recomputed with the committed
+  8x8-grayscale method) to **0.87960**; >16/255 differing pixels fall 14.56 % → 7.20 %, mean abs
+  channel diff 18.79 → 9.97. `nav=60` (the synthetic 24 dp default) lands 20 px low because the
+  reference phone's safe-area bottom is 80 px; `carve` with `nav=60` also matches the footer but
+  keeps the zero-inset, carved-window model. Evidence:
+  `results/render/W7-evidence/{metrics.json,welcome-report80-380.png,welcome-report60-380.png}`.
+- **Why the default stays `carve`:** `w42-back-frame` changes under `report` by exactly one
+  anti-aliased row (display y=283, 122 px, G 210→211; deterministic over 3 runs). Every other frame
+  and the second region are byte-identical. Accepting that would require weakening a strict RGBA8
+  hash, which is a verification-semantics change, so `report` ships opt-in and `carve` remains the
+  default. `report` also changes frame metadata (display-sized PNG, origin `[0,0]`), which is more
+  faithful but not compatible with every frozen frame-size assumption.
+- **Gates, both arms:** all 7 non-Gaten gates pass under `carve`; under `report` 6/7 pass, with
+  `w42` failing only for the 1/255 row above. `T03-render-wrong` → `ASSERTION_FAILED`,
+  `negative/offscreen-pager-visible` → `ELEMENT_OFFSCREEN`, `negative/offscreen-pager-wait` →
+  `TIMEOUT` in both arms. P11: 11 pass + the declared `p11-progress-timeout` non-pass in both arms,
+  **0 false passes**; all 12 `scenarios/negative/*` fail correctly in both arms.
+  `gaten-home` under the stock animated profile times out at the welcome capture on both arms, and
+  the **main** binary reproduces that timeout (pre-existing continuous-animation/settle wall, R2);
+  with `--animations off` + `ACOS_STRICT_SETTLE_CONFIRM_MS=0` + phone geometry nav 80 it passes
+  **14/14 under `report`** (and stops at the Skip tap under `carve`, whose local visible rect clips
+  the bottom row).
+- **A/B (M3/M4, ART lock, host load recorded):** M3 cold 408.77 → 402.23 ms (−1.6 %, noise); M4
+  strict 309.76 → 309.68 ms (−0.03 %); M4 fast 175.53 → 175.58 ms (+0.03 %); M5 24.24 → 24.55 ms.
+  Load1 per M4 rep: carve 3.89/1.65/2.72, report 1.90/0.55/2.89; MemAvailable 46.4–47.5 GiB.
+  The stock cold phase refuses the report tree (`EXPECT_NODES=12` vs the 14 nodes with the two
+  system-bar backgrounds); the direct P7 run changes only that measurement constant.
+- **Regression / false pass:** `cargo test --offline -j2 --no-fail-fast -p acos-wm -p acos-services
+  -p acos-verify -p acos-art -p acos-cli` rc=0 (79 binaries). The full workspace run is still
+  blocked by the pre-existing `acos-vm --test render_views` hang (hangs standalone too; `acos-vm`
+  does not depend on any W7 crate) and the pre-existing `acos-arm64`/qemu + frozen-VM failures.
+  **0 false passes.** No assertion was loosened.
+- **Conclusion / next:** the window model is now a selector, and `report` is faithful enough to hit
+  the device footer exactly (0 px) and improve SSIM. Making it the default needs either (a) the
+  `w42` 1/255 AA difference accepted as a changed, more-faithful pixel expectation (owner call), or
+  (b) the strict capture/hash path made tolerant of a single AA row without hiding real moves. The
+  `gaten-home` continuous-animation capture is the other blocker: strict settle cannot bind the
+  forever-looping welcome screen, and the main binary fails it too (R2's area).
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
@@ -934,6 +1011,8 @@ merged after that build; re-baseline on merged main.
 | Early-GC memory saving per session | **28.2–30.6 MiB ΣPss** at N=5/N=10 (27.1–32.5 %); 28.9–30.4 MiB at N=1 | H2 default `54b9c33` | H2, E2.10 | 2026-11-13 | post-H6 (current main) |
 | Compat first-frame rate (K1 corpus, real ART, N=1) | **13/42 (31.0 %)**; tap 7/42 (16.7 %) | K2 `cdc1a69…c389090` | K2/R1–R3 | 2026-11-12 | post-H6 (current main) |
 | M8 tap → settled | strict 955 ms (event, animations on); **182 ms p50 with `animations: off`** (P12 counter step incl. ~78 ms capture) / fast 70.9 ms | main P11, P12 | P1, P11, P12 E2.9 | 2026-11-13 | P12 animations:off (current main) |
+| Gaten-vs-device footer delta | **0 px** (`report`, phone geometry nav 80); `report` nav 60 = +20 px; GR1 `carve` = +60 px | `wm-w7-insets` | W7, E13.5 | 2026-11-13 | first model that reproduces the device footer |
+| Gaten-vs-device SSIM | **0.87960** (`report`, nav 80) vs 0.84854 GR1 / 0.74518 recomputed before | `wm-w7-insets` | W7, E13.5 | 2026-11-13 | >16/255 pixels 14.56 % → 7.20 % |
 | False passes | **0**, class closed at the root: selectors/asserts/taps match user-visible nodes only; off-screen-only match = `ELEMENT_OFFSCREEN` | `verify-v1-visibility` | V1, E13.4 | 2026-11-13 | V1 (current main) |
 
 ## Backlog (optimization hypotheses; rank = impact × confidence ÷ (cost × risk))
@@ -958,4 +1037,5 @@ merged after that build; re-baseline on merged main.
 | K3c | K2 app provider delivery (androidx.startup/WorkManager `InitializationProvider`) | compat | +element, feeders | medium | high | medium | investigated (K2 §6) |
 | R2a | Gaten launch flake: SIGSEGV after first frame (~1/10). Guest SIGSEGV handler dumping fault address + mapped path, then bisect the app's 23 native libs / the gralloc shim | verified-launch stability | 9/10 → 10/10 | high (reproduced) | low | low | **next** (R2 §6) |
 | R2b | W6 `+1080 px` fragment offset: move `ACOSLAUNCH_GEOM_TRACE` to `application-created`, keep failing runs, n=20. Then a first-measure race vs a pager-translation source is decidable from `win_frame` vs `app_cfg` | layout correctness | catch + fix the root cause | medium | low | low | **next** (R2 §6) |
+| W7a | `report` is faithful (Gaten footer 0 px, SSIM 0.87960) but cannot become the default while `w42-back-frame` changes one AA row (G: 210→211). Decide: accept the changed pixel expectation as more faithful, or make strict capture tolerant of a single AA row without masking real moves. `gaten-home`'s forever-looping welcome also needs a strict-settle answer | verification semantics / default | `carve` → `report` default | high (measured) | low (owner decision) / medium (settle) | medium | **owner decision** (W7, E13.5) |
 | R2c | Per-view canvas for the ART guest without a GPU: opt-in per-view nested `Bitmap` canvas + blit (R2 §4.3) vs a `libhwui`-shim `RenderNode`/`HardwareRenderer` | SVG/wordmark fidelity | `canvasIsViewPx=true` | medium | medium/high | medium (draw cost 1.5–3×) | **owner decision** (R2 §4) |
