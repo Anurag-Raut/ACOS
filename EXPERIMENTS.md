@@ -1096,7 +1096,7 @@ PASS (1 documented false pass -> 0; one live Gaten false pass re-measured as a r
   its cause. `acos-cli`: trace-only dm6 events for spawn/stop/liveness (inert unless `DM6_RESET_TRACE`).
   Three deterministic unit tests (held-reader, concurrent-reader, re-staged APK) fail on the pre-fix
   code and pass after. Branch `fix-h17-n10-reset`.
-- **Benchmark method + environment + host load:** real ART, release, P5 loop (6 loops/agent, 1 warm-up,
+- **Benchmark method + environment + host load:** real ART, release (after build `5b06ab9f`), P5 loop (6 loops/agent, 1 warm-up,
   50 measured tasks/rep, 3 reps/arm) in one `acos serve` per rep, one 16G `run-exclusive.sh` +
   `guarded.sh` acquisition per arm; `ACOS_ART_KEEP_RUN=1` on the diagnostic reps only. Load1 per rep
   recorded below; queue 3–205 s; every acquisition < 10 min.
@@ -1105,17 +1105,18 @@ PASS (1 documented false pass -> 0; one live Gaten false pass re-measured as a r
   | arm | load1 | before (main) | after (fix) |
   |---|---|---|---|
   | on, quiet | 2.60 / 2.60 / 2.60 vs 1.05 / 1.68 / 1.66 | 49, 49, 50 = **148/150** | 50, 50, 50 = **150/150** |
+  | on, final build `5b06ab9f` | — vs 3.79 / 4.15 / 3.96 | — | 50, 50, 50 = **150/150** |
   | on, loaded | 8.45 / 7.29 / 8.07 | 48, 50, 33 = **131/150** | not run at that load (no deliberate load generator) |
-  | off | 1.10 / 1.10 / 1.09 vs 1.40 / 2.07 / 1.98 | 50, 49, 50 = **149/150** | 50, 50, 50 = **150/150** |
-  | off, fresh acquisition | — vs 4.21 / 4.20 / 4.02 | — | 50, 50, 50 = **150/150** |
+  | off, quiet | 1.10 / 1.10 / 1.09 vs 1.40 / 2.07 / 1.98 | 50, 49, 50 = **149/150** | 50, 50, 50 = **150/150** |
+  | off, final build `5b06ab9f` | — vs 4.21 / 4.20 / 4.02 | — | 50, 50, 50 = **150/150** |
 
-  Pooled **428/450 (95.1 %) → 450/450 (100 %)** over 9 after-reps; all before-failures were exit 1/126
+  Pooled **428/450 (95.1 %) → 600/600 (100 %)** over 12 after-reps; all before-failures were exit 1/126
   from the torn plan or exit 135 (SIGBUS) from the truncated mapped APK. Latency/throughput unchanged:
   on 1426–1441 ms/task and 4.6–5.2 tasks/s (before 1431–1487, 4.8–5.2); off 533–535 ms and 11.3–11.5
   tasks/s in two clean reps (before 520–531, 11.1–11.4); reset step p50 344–351 ms before/after.
-- **Result:** **fixed.** N=5 stays 75/75 (3 × 25, load1 1.25–1.58). N=20: **40/40 verified**, 0 false
-  passes, job cgroup `memory.current` peak 2178 MiB, guest anon+shmem peak 1416 MiB, host
-  `MemAvailable` ≥ 47.0 GiB of 60.5 (≈22 % used, well under the 90 % rule), no `oom_kill`. Gates:
+- **Result:** **fixed.** N=5 stays 75/75 (3 × 25, load1 2.9–3.5). N=20: **40/40 verified**, 0 false passes,
+  job cgroup `memory.current` peak 2186 MiB, guest anon+shmem peak 1329 MiB, host
+  `MemAvailable` 47.25 GiB of 60.5 (≈22 % used, well under the 90 % rule), no `oom_kill`. Gates:
   v2-art-counter, w22-counter-reset, w54-dialog-pixels, w42-back-frame, w15-dialog-menu,
   form-validation, v1-offscreen-pager, T03-render-good all pass; T03-render-wrong fails
   `ASSERTION_FAILED` as required. P11 corpus: 0 false passes, 12/12 scenario expectations,
@@ -1172,7 +1173,7 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | Agent loop (animations on) | **1423.9 ms/task; 0.653 tasks/s, 283.5 (page cache) / 905.3 (anon+shmem) tasks/GiB-min at N=1; 1428.1 ms, 2.679 tasks/s, 667.6 / 865.8 at N=5** | main `4958703` | B2, E3.2 | 2026-11-13 | latency tie with pre-H2; **anon+shmem GiB-min +45.7 % (N=1) / +49.8 % (N=5) from H2**, invisible in the page-cache denominator (+1.1 %/+0.5 %) |
 | Agent loop (animations off, functional-check mode) | **507–523 ms/task, 1.79 tasks/s, 5239 tasks/GiB-min (anon+shmem) at N=1; 537 ms / 6.28 / 3942 at N=5; 530 ms / 10.22 / 3798 at N=10** | main `4958703`, `--animations off` | H14, E3.3 | 2026-11-13 | 2.71–2.84× latency, 5.8×/5.0×/8.7× anon+shmem tasks/GiB-min at N=1/5/10; loop becomes reset-bound (48 %); not a default change |
 | False passes | **0** — P11 0/105, scenarios 0/12 (negative control = honest `timeout`), loop 0; verified 63/63 (N=1) and 75/75 (N=5) | main `4958703` | B2, E3.2 | 2026-11-13 | H6's 1-in-75 strict-assert flake (H16) did not reproduce |
-| Agent loop N=10 reliability | **100 %: 450/450 verified over 9 reps** (load1 1.0–4.6), 0 false passes; 428/450 (95.1 %) before the fix (exit 1/126 torn Landlock plan, exit 135 SIGBUS on the truncated mapped APK) | `fix-h17-n10-reset` off main `84fc8bc`, 10 sessions / one serve | H17, E2.13 | 2026-11-13 | fixed two shared-input races (atomic publish + per-run APK); see E2.13 |
+| Agent loop N=10 reliability | **100 %: 600/600 verified over 12 reps** (load1 1.0–4.6), 0 false passes; 428/450 (95.1 %) before the fix (exit 1/126 torn Landlock plan, exit 135 SIGBUS on the truncated mapped APK) | `fix-h17-n10-reset` off main `84fc8bc`, 10 sessions / one serve | H17, E2.13 | 2026-11-13 | fixed two shared-input races (atomic publish + per-run APK); see E2.13 |
 | Compat first-frame rate (K1 corpus, real ART, N=1) | **13/42 (31.0 %)**; tap 7/42 (16.7 %) | K2 `cdc1a69…c389090` | K2/R1–R3 | 2026-11-12 | unchanged by H2/P12 |
 | Agent loop N=10 (Z7 method, fresh launch/task) | 45.0 tasks/GiB-min main; **67.7 with exec-path early GC** (seam, off by default → H2); 103.6 zygote+early GC (research, trusted only) | Z7 `zygote-z7-lifetime` | Z7, E2.8 | 2026-11-12 | post-H6 (current main) |
 | Agent loop N=10/N=5, H2 default-on | **85.9 tasks/GiB-min** (off 55.7, +54.2 %) / **135.6** (off 98.8, +37.2 %); 1-min interleaved reps, 0 false passes | `perf-h2-early-gc` `54b9c33` | H2, E2.10 | 2026-11-13 | post-H6 (current main) |
@@ -1192,7 +1193,7 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | H15 | **The reset/relaunch is the loop's next wall: 342 ms (24 %) with animations on, 245–343 ms (48 %) with animations off** — fresh ART boot + framework + Activity + strict bind, per task. Zygote/shared boot image (B3 `-Xnorelocate` −13.6 MiB/session measured) or a fast reset for non-asserting steps | M6, loop, tasks/GiB-min | −150–200 ms/task → −10…14 % loop (on), −30…40 % (off) | medium-high | medium | medium (fixed image address / ASLR, zygote F1) | **#1, was #3** |
 | H13 | **Memory per session is now 65 MiB anon+shmem, flat N=1/5/10.** Finish it: B3 shared uncompressed image (−13.6 MiB/session measured), then zygote CoW (Z6 −25–60 % at N≥5) | M2, tasks/GiB-min (anon+shmem) | −14 % (B3) … −25 % | high (B3) / medium (zygote) | low (B3 flag) / medium | medium | **#2, was #1** (H2 took the first 32 MiB) |
 | H14 | **Strict tap 956 ms with the framework press/elevation animator.** Adopted the P12 `animations:off` switch as the agent-facing functional-check mode: 7.34×/8.35× taps, 2.71–2.84× loop, 5–8.7× tasks/GiB-min (anon+shmem), 0 false passes. Defaults unchanged | M8, loop | measured | high | low | medium (verification semantics: fast never backs an assertion) | **done: mode available, E3.3; use it for functional checks** |
-| H17 | **N=10 verified loop: fixed.** Two shared-input races: `<data>/seccomp/landlock.plan` rewritten in place by every launch and read by the guard at start (`ERR landlock=plan-missing`, exit 126/1), and the shared `<data>/app/<apk>` truncated by `fs::copy` while ART had it mapped (SIGBUS, exit 135). Atomic `publish_atomic` + per-run APK. 428/450 → **450/450** verified, 0 false passes; N=5 75/75, N=20 40/40 | loop verified rate at N≥8 | 100 % | high | done | low | **done 2026-11-13, E2.13** |
+| H17 | **N=10 verified loop: fixed.** Two shared-input races: `<data>/seccomp/landlock.plan` rewritten in place by every launch and read by the guard at start (`ERR landlock=plan-missing`, exit 126/1), and the shared `<data>/app/<apk>` truncated by `fs::copy` while ART had it mapped (SIGBUS, exit 135). Atomic `publish_atomic` + per-run APK. 428/450 → **600/600** verified over 12 after-reps, 0 false passes; N=5 75/75, N=20 40/40 | loop verified rate at N≥8 | 100 % | high | done | low | **done 2026-11-13, E2.13** |
 | H16 | **N=5 strict assert flake** (H6: 1/75). Not reproduced in B2 (63/63 N=1, 75/75 N=5, plus 150+ H14 tasks) | loop verified rate | — | low now | low | low | **not reproduced in B2** (H6 saw 1/75 at N=5: a strict post-tap count read that did not see the tap; false_pass stayed 0). Twelve B2/H14 loop cohorts, 0 failures of that shape; the N≥8 failure mode is H17 instead |
 | H9 | Form-validation N=5 under host load: 3/5 `:id/name` taps hit the 30 s bound (2/5 verified) **with early GC off and on**, 2/2 runs each; Z7 saw the same in a/a′/c′ | loop correctness | remove a pre-existing input/queue stall | high (reproduced) | medium | low | **resolved 2026-11-13, E2.11/L1**: not input or the looper — the pre-P12 pixel-unchanged guard (on by default) timed out focus taps with no pixel change/no C1 buffer. P12 guard-off default + `TrustGuard::refresh`: N=5 form 5/5 ×2 at 110–176 ms, guard-on reproduces 30 s (2/5). Evidence `results/art-runtime/evidence/L1/` |
 | H4 | Idle CPU **5.28 %** of one core and 161.7 wakeups/s at N=10 (0.53 %/session; wakeups ~16 s⁻¹/session at N≥5). Remove the 250 ms probe fallback and per-session timers | CPU, wakeups | lower wakeups; small at N=10 now | medium | low | low | queued (after H15) |
