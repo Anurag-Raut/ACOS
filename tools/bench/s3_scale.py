@@ -143,11 +143,16 @@ def error_row(env):
     }
 
 
-class PssSampler(d2_warm.WarmSampler):
-    """WarmSampler + a 1 Hz sum-Pss snapshot of the live serve tree."""
+class PssSampler(benchlib.ChurnSampler):
+    """ChurnSampler + a 1 Hz sum-Pss snapshot of the live serve tree.
 
-    def __init__(self, job, sampler_pid, serve_pid, interval=0.1):
-        super().__init__(job, sampler_pid, interval=interval)
+    S3c showed the legacy WarmSampler missed short-lived guests (the compat
+    corpus is almost entirely short-lived), so the compat/Gaten memory record
+    now uses the creation-time discovery and coverage accounting of S3c.
+    """
+
+    def __init__(self, job, sampler_pid, serve_pid, interval=0.1, **kw):
+        super().__init__(job, sampler_pid=sampler_pid, interval=interval, **kw)
         self.serve_pid = int(serve_pid)
         self.pss_rows = []
 
@@ -163,12 +168,21 @@ class PssSampler(d2_warm.WarmSampler):
         return row
 
 
-def memory_record(sampler, n, window=None):
+def memory_record(sampler, n, window=None, expected_guests=None):
     rows = [r for r in (sampler.pss_rows if sampler else [])
             if window is None or window[0] <= r["t"] <= window[1]]
     samples = [s for s in (sampler.samples if sampler else [])
                if window is None or window[0] <= s["t"] <= window[1]]
-    out = {"samples": len(rows)}
+    summary = {}
+    if sampler is not None and window:
+        summary = sampler.summary(window[0], window[1], sessions=n,
+                                  expected_guests=expected_guests)
+    out = {"samples": len(rows),
+           "coverage": summary.get("coverage"),
+           "guests_observed": summary.get("guests_observed"),
+           "guests_expected": summary.get("guests_expected"),
+           "samples_per_guest": summary.get("samples_per_guest"),
+           "sampler_ticks": len(samples)}
     if rows:
         pss = [r["sum_pss_mib"] for r in rows if r.get("sum_pss_mib") is not None]
         spss = [r["session_pss_mib"] for r in rows
@@ -193,6 +207,14 @@ def memory_record(sampler, n, window=None):
                 statistics.median(net) / n, 3)
         if cur:
             out["cgroup_memory_current_mib"] = {"max": round(max(cur), 3)}
+    # S3c: report the churn-safe GiB-min numbers and their coverage together.
+    for key in ("net_anon_shmem_gib_min", "guest_anon_shmem_gib_min",
+                "job_gib_min"):
+        if summary.get(key) is not None:
+            out[key] = summary[key]
+    out["coverage_rule"] = ("guest scopes observed / one per acos_launch "
+                            "(no reset in this harness); coverage is an upper "
+                            "bound when a scope is created and removed between ticks")
     return out
 
 
@@ -448,7 +470,8 @@ def summarize(args, payload, sampler, t0, t1):
     rows = payload.get("rows") or []
     ok = [r for r in rows if r.get("ok")]
     first = [r for r in rows if r.get("first_frame")]
-    launch_ms = [r.get("launch_ms") for r in first]
+    # A failed launch/tree must never contribute a latency sample.
+    launch_ms = [r.get("launch_ms") for r in ok]
     tree_ms = [r.get("tree_ms") for r in ok]
     out = {
         "n": args.n,
@@ -464,10 +487,15 @@ def summarize(args, payload, sampler, t0, t1):
             [r.get("tree_after_delay_nodes") for r in ok]),
         "failure_classes": failure_classes(rows),
         "host_cpu": ab.host_cpu_delta(captured.get("cpu0"), ab.host_cpu_times()),
-        "memory": memory_record(sampler, args.n, window=(t0 - 1, t1 + 1)),
+        "memory": memory_record(
+            sampler, args.n, window=(t0 - 1, t1 + 1),
+            expected_guests=sum(1 for r in rows if r.get("launch_ok"))),
         "per_session_anon_shmem_mib": None,
     }
     mem = out["memory"]
+    out["coverage"] = mem.get("coverage")
+    out["guests_observed"] = mem.get("guests_observed")
+    out["guests_expected"] = mem.get("guests_expected")
     if mem.get("net_anon_shmem_mib"):
         out["per_session_anon_shmem_mib"] = round(
             mem["net_anon_shmem_mib"]["median"] / args.n, 3)
@@ -511,8 +539,12 @@ def main(argv=None):
     serve = d2_warm.Serve(args.acos, scratch, engine="art",
                           max_sessions=max(args.n + 2, 10))
     job = benchlib.cgroup_path(serve.proc.pid)
-    sampler = PssSampler(job, os.getpid(), serve.proc.pid, interval=0.1) if job else None
-    if sampler:
+    sampler = None
+    if job:
+        sampler = PssSampler(
+            job, os.getpid(), serve.proc.pid, interval=0.1,
+            scope_parent=Path(job).parent,
+            artifacts=[str(scratch / "sessions")], root_pid=os.getpid())
         sampler.start()
     doc = {
         "schema": "acos-s3-scale/1", "utc": utc(), "mode": args.mode,
@@ -535,6 +567,29 @@ def main(argv=None):
     doc["sampler_errors"] = sampler.errors if sampler else []
     doc["summary"] = summarize(args, doc, sampler, t0, t1)
     doc["session_exits"] = find_session_exits(scratch, t0)
+    destroy_failures = []
+    for row in doc.get("rows") or []:
+        for drow in row.get("destroy") or []:
+            if drow.get("destroy_error") or not drow.get("destroy_ok", True):
+                destroy_failures.append({"session": row.get("session_id"),
+                                         **drow})
+    for drow in doc.get("destroy") or []:
+        if drow.get("destroy_error") or not drow.get("destroy_ok", True):
+            destroy_failures.append(drow)
+    doc["destroy_failures"] = destroy_failures
+    missing = doc.get("missing_apks") or []
+    harness_errors = list(doc.get("errors") or [])
+    if missing:
+        harness_errors.append("missing APK(s): %s" % (missing,))
+    if doc.get("sampler_errors"):
+        harness_errors.append("sampler errors: %s" % (doc["sampler_errors"][:3],))
+    doc["harness_errors"] = harness_errors
+    rows = doc.get("rows") or []
+    first_frame = (doc.get("summary") or {}).get("first_frame") or 0
+    doc["ok"] = bool(not harness_errors and rows and first_frame > 0)
+    # A cohort that launched nothing, or a broken/missing fixture, is a failed
+    # harness run -- not an empty-but-successful table.
+    doc["harness_ok"] = doc["ok"]
     if sampler:
         sampler.stop()
     try:
@@ -553,7 +608,7 @@ def main(argv=None):
              (doc["summary"]["launch_ms"] or {}).get("p50"), out))
     if not args.keep_scratch and scratch.exists():
         shutil.rmtree(scratch, ignore_errors=True)
-    return 0
+    return 0 if doc.get("ok") else 1
 
 
 if __name__ == "__main__":

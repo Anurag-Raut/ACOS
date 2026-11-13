@@ -441,7 +441,10 @@ def run_phase(args):
         doc["job_cgroup"] = str(job)
         daemon = serve.client()
         daemon.call("ping", {})
-        sampler = d2_warm.WarmSampler(job, os.getpid())
+        sampler = benchlib.ChurnSampler(
+            job, sampler_pid=os.getpid(), root_pid=os.getpid(),
+            scope_parent=Path(job).parent,
+            artifacts=[str(scratch / "sessions")])
         sampler.start()
         time.sleep(args.bare_settle)
         win = sampler.window(time.time() - args.bare_settle + 1.0)
@@ -579,6 +582,7 @@ def run_phase(args):
             sampler.stop()
             doc["sample_count"] = len(sampler.samples)
             doc["sampler_errors"] = sampler.errors[:5]
+            doc["sampler_summary"] = sampler.summary()
             with open(evidence / "samples.json", "w") as f:
                 json.dump(sampler.samples, f)
         if daemon is not None:
