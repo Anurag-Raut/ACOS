@@ -1569,6 +1569,71 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   count `BR_*` bytes per transaction so a future command type cannot silently fall
   outside `br_cmd_len`.
 
+## E5.10 — K5: signature-block caps/signer semantics, app-uid fidelity, explicit service failures, opt-in keystore — PARTIAL (checkpoint; corpus/gates not run)
+
+- **Date / commit:** 2026-11-13; branch `compat-k5-keystore`, off `main` after the
+  K4 merge and `origin/main` `5cae694` (merge `8ef1b5e`).
+- **Why this entry is PARTIAL:** the hour was spent on the advisor's fix-first
+  list. The final-tree 42-app corpus (2 runs), the gate matrix and the full
+  per-crate test set were **not** run before the checkpoint bound, so no funnel
+  delta is claimed. Everything below is either a unit test, a boot-image dex
+  check, or a targeted real-ART smoke from the earlier K5 pass (marked).
+- **Signing certificates (`crates/acos-apk/src/signing.rs`, `apk.rs`):**
+  - v1 blocks are read with `MAX_SIGNATURE_BLOCK_BYTES` = 1 MiB, a
+    `MAX_SIGNATURE_BLOCK_RATIO` = 200 deflate ratio cap, and a capped
+    `read_to_end` (the zip size field is untrusted). Violations are
+    `APK_SIGNING_MALFORMED`, not a skipped block.
+  - `Signature[]` is now **one leaf certificate per signer**, not the first
+    signer's whole chain; v2/v3/v3.1 iterate every signer and take its first
+    cert.
+  - Scheme selection never downgrades: the highest present scheme is
+    authoritative; a malformed v3 is an error, never a v2/v1 fallback. v1 is
+    used only when the block has no known scheme. v1 identifies the signer by
+    `SignerInfo` issuer+serial instead of assuming chain[0].
+  - `Apk::signing_certificates_error` records the reason (`PMS` still sees an
+    empty array rather than a wrong one).
+  - Tests: `acos-apk` lib 14/14 (scheme chain-vs-leaf, v3-over-v2, malformed-v3
+    no-downgrade, oversized block, v1 sid selection, declared-size/ratio/lying-
+    reader caps).
+  - **RedReader**: the exact 832-byte F-Droid DER is embedded in
+    `acos-runtime/tests/parcelable_java.rs`; the **real framework
+    `PackageInfo.CREATOR.createFromParcel`** decodes the Rust-built
+    `PackageInfo` and re-emits identical bytes (`parcelable_java` 1/1). The ART
+    guest's `OPENSSL_internal:DECODE_ERROR` therefore is not explained by the
+    Rust framing; it remains open (hypothesis: the guest decodes a different
+    reply, or the peer pipe truncates a >2 KiB reply). Not claimed fixed.
+- **Guest uid (`crates/acos-art/src/lib.rs`):** `ACOS_ART_GUEST_UID` now
+  returns `Result`; only `host` (explicit A/B) or the PMS fixture uid 10192 are
+  accepted. Malformed/other numeric values are `INVALID_GUEST_UID`, never a
+  silent host-uid fallback. The application-created marker now records
+  `guest_uid`, `pms_uid`, `/proc/self/uid_map`, `Uid/Gid/Groups/CapEff`,
+  `files_dir` writability and `/data/app-data` entries for measurement.
+  **The real-ART uid run was still queued at the checkpoint**, so no measured
+  uid facts are recorded here yet; cross-session isolation is *not* claimed
+  beyond the separate per-run `/data` bind sources in `lib.rs`.
+- **Services (`crates/acos-services/src/extras.rs`):** `trust` keeps read paths
+  (`isDeviceLocked/Secure/TrustUsuallyManaged/ActiveUnlock`) and now **rejects**
+  every setter/listener transaction with `UnsupportedOperationException`.
+  `restrictions.requestPermission` is a void call in the API-34 proxy (verified
+  in `classes.dex`), so its correct reply is the exception header with **no**
+  payload; the old null-`IntentSender` word was removed. `createLocalApprovalIntent`
+  (transaction 6, `readTypedObject`) answers null. `location.geocoderIsPresent`
+  code 12 + `readBoolean` were re-verified against the boot image.
+- **Software keystore:** now **opt-in** (`ACOS_ART_KEYSTORE=on`); default runs
+  keep the honest `KeyStoreException: AndroidKeyStore not found`. The advisor's
+  fix list (KeyInfo software level, purposes/modes/padding, import
+  `ProtectionParameter`, attestation refusal, persistence failures, 0600,
+  retention, reset/crash/concurrent tests) is Backlog **K5b**, not implemented.
+- **Earlier K5 targeted real-ART evidence (from the pre-merge pass, unchanged):**
+  element 1534 ms first frame + tree, dot.gallery 2504 ms + tree (both with the
+  keystore explicitly on), editor full ladder 326 ms, WebView
+  privileged-process classification removed. Because the keystore is now
+  default-off, element/dot.gallery are expected to return to the K4 wall until
+  K5b lands; this is an intentional opt-in, not a measured funnel result.
+- **Open / next:** 2-run corpus on the final tree; gate matrix; the uid facts
+  on a free lock; the RedReader ART decode. Commit is a checkpoint, not an
+  accepted K5.
+
 ## E13.5 — W7: report the system-bar insets instead of carving the app window — PASS as an opt-in model; default stays `carve` (one strict gate changes by 1/255)
 
 - **Date / commit:** 2026-11-13; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/w7`, branch
@@ -1887,6 +1952,7 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | False passes | **0** — P11 0/105, scenarios 0/12 (negative control = honest `timeout`), loop 0; verified 63/63 (N=1) and 75/75 (N=5) | main `4958703` | B2, E3.2 | 2026-11-13 | H6's 1-in-75 strict-assert flake (H16) did not reproduce |
 | Agent loop N=10 reliability | **100 %: 600/600 verified over 12 reps** (load1 1.0–4.6), 0 false passes; 428/450 (95.1 %) before the fix (exit 1/126 torn Landlock plan, exit 135 SIGBUS on the truncated mapped APK) | `fix-h17-n10-reset` off main `84fc8bc`, 10 sessions / one serve | H17, E2.13 | 2026-11-13 | fixed two shared-input races (atomic publish + per-run APK); see E2.13 |
 | Compat first-frame rate (K1 corpus, real ART, N=1) | **17/42 (40.5 %)**; tree/screenshot 16/42 (38.1 %); tap 9/42 (21.4 %); `onCreate` completed **20/42** (47.6 %); first frame p50 **808 ms** / p90 **1269 ms** (K3 12/42, tap 7/42, 16/42, 647/1050 ms). Same binary with app providers off: 14/42 first frame, tap 8/42, 18/42, p50 546/p90 1043 ms — ON is >= OFF at every rung with zero per-app regressions, so ON is the default | K4 `compat-k4-metadata` (E5.8 K3d metadata+sourceDir, E5.9 K3e binder-driver refill) | K4/K3d–K3e, E5.8–E5.9 | 2026-11-13 |
+| Compat first-frame rate after K5 (K1 corpus, real ART, N=1) | **not re-measured — K4 17/42 stands as the last full-corpus number.** K5 checkpoint changes: signing certs (caps/signer/scheme), app uid 10192 with explicit override rejection, trust/restrictions/location read paths, keystore **opt-in** (default off). Targeted pre-merge smokes: element 1534 ms + tree, dot.gallery 2504 ms + tree (keystore on), editor full ladder 326 ms | `compat-k5-keystore` (E5.10 PARTIAL) | K5/E5.10 | 2026-11-13 | **not accepted: 2-run corpus and gates are the next action; default-off keystore intentionally returns element/dot.gallery to the K4 wall until K5b** |
 | Agent loop at N=20 | **1460.4 ms/task p50 / 1501.8 p90; 7.41 verified tasks/s; 471.9 (page cache) / 603.0 (anon+shmem) tasks/GiB-min; 73 MiB anon+shmem and 53 MiB ΣPss per session; 21.2 % of one core; 298/300 verified, 0 false passes** | `scale-s3-n20` off main `15849a5` (H2+P12+H17), 20 sessions / one serve, 3 reps, animations on | S3, E3.4 | 2026-11-13 | latency +1.6 % vs N=1 and throughput 11.4×; the 2 losses are the new reset defects S3a/S3b. See §1.2 for why the anon+shmem integral is a floor (S3c); at the measured 65.6 MiB/session the steady rate is 641 tasks/GiB-min |
 | Agent loop at N=20 (animations off, functional-check mode) | **543.8 ms/task p50 / 575.3 p90; 10.49 verified tasks/s; 711.7 / 1414.2 † tasks/GiB-min; 65 MiB/session anon+shmem; 300/300 verified, 0 false passes** | same branch, `--animations off` | S3, E3.4 | 2026-11-13 | 2.7× the on-arm throughput; † denominator undercount (S3c) — the sampling-independent ratio is 2.7× |
 | Scale ceiling (verified loop, largest N probed) | **N=30: 600/600 verified (100 %), 0 false passes**; p50 1534–1541 ms on, 5.78–6.79 tasks/s; **job cgroup peak 2.34–2.67 GiB (≈4 % of 61.9 GiB), host used 23–24 %**, no oom_kill | same branch, 24G guarded arm, 4 reps (3 on / 1 off), load1 5.1–13.0 | S3, E3.4 | 2026-11-13 | N=20 used < 50 % of RAM so N=30 was probed and passed; the ceiling is ≥ N=30 and is set by latency stability under external load, not memory. Reset defects S3a/S3b are stochastic (seen at N=10/20, not in this 600) |
@@ -1972,6 +2038,9 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | H8 | Faster PNG (SIMD deflate) / region screenshots | M5 | 24 → 10–15 ms | medium | medium | low | backlog (5.5 % of the animations-off loop, 2 % on) |
 | H3 | Warm exec pool | M3/M4 | −73 ms launch | — | — | +idle memory | **declined by owner 2026-11-12** |
 | K3a | K2 next walls: AndroidKeyStore shim, GL/BLAST natives, WebView provider classification | compat first-frame | +3–5 apps | high (K1/K2 evidence) | medium | medium | **classified (K3, E5.7): all three need a real backend (weeks); no shim, no fake pass** |
+| K5 | K3a continuation: app-uid fidelity + software keystore + location/trust/restrictions read paths + real signing certs | compat first frame | +2–3 apps | high (targeted smokes) | medium | medium | **PARTIAL (E5.10): uid 10192 default with explicit override rejection; keystore opt-in; trust setters fail; restrictions reply shape corrected; signing certs capped + signer-correct + scheme-strict. Full corpus/gates not run at the checkpoint** |
+| K5b | **Software keystore security/correctness fix list (advisor Q1):** `KeyInfo` software security level; honour/reject purposes, modes, padding, validity, randomized-encryption; import `ProtectionParameter`; explicit attestation refusal; propagate persistence failures; generated RSA/EC certificate chains; key-file retention policy + 0600; reset/restart/crash/SIGKILL/concurrent-session/identical-alias tests; label evidence "software-keystore compatibility" only | keystore compat | element/dot.gallery without lying about security | high | medium | medium | **open (K5b). Not implemented this hour; provider is default-off** |
+| K5c | **RedReader `PackageInfo.signatures` ART decode:** Rust framing passes the real `PackageInfo.CREATOR` in the VM and the reply bytes are byte-exact, but the ART guest still raises `OPENSSL_internal:DECODE_ERROR`. Test: replay the captured reply through the guest transport, compare the received byte range to `.cache/k5/pmsreply.bin`; check >2 KiB peer-pipe delivery | compat first frame | redreader onCreate | high | low | low | **open (E5.10). Smallest next action: instrument the guest's received `PackageInfo` byte range against the captured reply** |
 | K3b | K2 PMS error class (`NameNotFoundException`) and `checkService` null for unknown names | compat | +2 apps (vlc, fdroid) | high | low | low | **accepted `9df9e71` (E5.5): both leave the wall; vlc → `ConstraintLayout` inflate (R2), fdroid → `getSystemAvailableFeatures`** |
 | K3c | K2 app provider delivery (androidx.startup/WorkManager `InitializationProvider`) | compat | +element, feeders | medium | high | medium | **implemented + measured `40ffc61` (E5.6), OFF by default (`ACOS_ART_APP_PROVIDERS=on`); blocked by K3d/K3e** |
 | K3d | manifest `<meta-data>` → `Bundle` in every `PackageItemInfo` reply under `GET_META_DATA`, plus the guest-openable `sourceDir` | compat | +editor full ladder, +joplin/unitto/antennapod/streetcomplete first frame; unblocks K3c | high (K3 measured the failure) | medium | low | **accepted K4 (E5.8): parsed in `acos-apk` (`parseMetaData` transcription), carried on the typed PMS records, gated on `0x80`, plus `sourceDir` = `/data/app/<name>.apk`; K3c delivery is now the default** |

@@ -1246,9 +1246,10 @@ pub(crate) fn launch_session(
     // device; ACOS's WMS runs no transition animations, so there is nothing to
     // scale beyond the app-side animator scale.
     sb.env("ACOS_ANIMATIONS", opts.animations.as_str());
-    // K5: the software AndroidKeyStore seam (`off` keeps the K4 behaviour for
-    // A/B). The guest environment is cleared by bwrap, so every `System.getenv`
-    // the launch guest reads must be listed here explicitly.
+    // K5: the software AndroidKeyStore seam (`on` enables the opt-in shim;
+    // unset/`off` keeps the honest K4 failure). The guest environment is
+    // cleared by bwrap, so every `System.getenv` the launch guest reads must be
+    // listed here explicitly.
     if let Ok(v) = std::env::var("ACOS_ART_KEYSTORE") {
         sb.env("ACOS_ART_KEYSTORE", &v);
     }
