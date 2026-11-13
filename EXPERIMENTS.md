@@ -1425,6 +1425,150 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   would remove the 3.6 s cost. Tables and raw JSON: `results/vm/H13.md`,
   `.cache/h13/`.
 
+## E5.8 — K3d: manifest `<meta-data>` becomes the `PackageItemInfo.metaData` Bundle, gated on `GET_META_DATA` — MEASURED (accepted)
+
+- **Date / commit:** 2026-11-13; K4 worktree branch `compat-k4-metadata` (off
+  `main` `5d211a6`).
+- **Agent / bottleneck:** K4; K3's E5.6 follow-up 1. With provider delivery on,
+  `io.element.android.x` died in `SentryInitProvider` (`DSN is required`) and
+  `org.billthefarmer.editor`/`com.libreweatherrn` died in
+  `FileProvider.attachInfo` (`Missing android.support.FILE_PROVIDER_PATHS
+  meta-data`) because nothing parsed `<meta-data>` and no reply carried a
+  `metaData` `Bundle`.
+- **Baseline (K3, providers on):** first frame 11/42; editor, libreweatherrn and
+  joplin *below* their K3-off rungs.
+- **Hypothesis + solution:** implement the platform's own path, in the platform's
+  own order:
+  1. **`acos-apk`** parses `<meta-data android:name android:value|android:resource>`
+     under `<application>`/`<activity>`/`<service>`/`<receiver>`/`<provider>` into
+     a typed model, transcribed from `.cache/aosp/base/.../PackageParser.java`
+     `parseMetaData` (android-14.0.0_r75, line 5597): `android:resource` first and
+     stored as `putInt(name, resourceId)`; `android:value` as `putString`
+     (TYPE_STRING), `putBoolean` (TYPE_INT_BOOLEAN), `putInt`
+     (TYPE_FIRST_INT..TYPE_LAST_INT = int dec/hex **and the four colour types**),
+     `putFloat` (TYPE_FLOAT); any other type (including a reference in
+     `android:value`) is not stored, exactly as `RIGID_PARSER=false` does.
+  2. **`acos-services::pms`** carries the entries on `AppInfo`, `ActivityInfo`,
+     `ProviderInfo`, `ServiceInfo` and writes them into the `metaData` parcel
+     field **only when the call's `flags` (a `long` on API 34) contains
+     `PackageManager.GET_META_DATA` = `0x80`**, which is what
+     `PackageParser.copyNeeded`/`generateApplicationInfo`/`generateActivityInfo`/
+     `generateServiceInfo`/`generateProviderInfo` do. `getPackageInfo` propagates
+     the same flags into the nested `ApplicationInfo`.
+  3. **`acos-art`** publishes the APK path the *guest* can open
+     (`/data/app/<name>.apk`) as `ApplicationInfo.sourceDir`/
+     `publicSourceDir`. `PackageManager.getResourcesForApplication` builds
+     `Resources` from that field, so the host path ACOS used to publish made every
+     `PackageItemInfo.loadXmlMetaData` fail: `ApkAssets.nativeLoad: Failed to load
+     asset path <host path>` — FileProvider's own XML read, i.e. the second half of
+     K3's FileProvider failure.
+  4. **`acos-art`**'s guest `LaunchMain` also puts the `<application>` `<meta-data>`
+     on the bind request's `ApplicationInfo` (`context.getApplicationInfo()
+     .metaData`, which is how Sentry reads `io.sentry.auto-init`) and each
+     `<provider>`'s `<meta-data>` on the `ProviderInfo` the framework hands to
+     `ContentProvider.attachInfo`.
+- **Method:** targeted batches with delivery on (element, editor,
+  libreweatherrn, joplin), then the whole 42-app corpus **A/B** under
+  `run-exclusive.sh --task K4` + `guarded.sh --mem 8G`, batches of 4
+  (`ACOS_ART_APP_PROVIDERS=on|off`; the two arms ran back to back on the same
+  release binary, one `acos serve` per app, APKs on the exec path), then the
+  shipping default. Host state: 21–23 % RAM used (60 GiB box) at every batch
+  start, `/` 79 % full, load 30+ from the four other agents sharing the ART lock
+  (queue waits 25–150 s per batch, recorded in `.cache/art-locks/runs.log`); no
+  batch exceeded the 90 % RAM gate. Same host state for both arms, so the A/B is
+  paired in time.
+- **Result (delivery ON, 42 apps, `.cache/k4/runs-on`):** first frame **17/42**,
+  tree/screenshot 16/42, tap 9/42, `onCreate` completed 20/42; p50 808 ms,
+  p90 1269 ms. `org.billthefarmer.editor` is a **full-ladder pass** again
+  (416 ms, was a FileProvider failure), `org.jellyfin.mobile`,
+  `net.gsantner.markor`, `com.money.manager.ex`, `com.github.muellerma.coffee`,
+  `com.beemdevelopment.aegis`, `org.kde.kdeconnect_tp` keep theirs, and
+  `com.perflyst.twire`, `de.danoeh.antennapod` join the tap rung.
+  `io.element.android.x` leaves metadata entirely: `InitializationProvider` and
+  `SentryInitProvider` both run and the app reaches `MainActivity`, where the
+  next wall is the classified `AndroidKeyStore` one (K3a).
+- **Finding (proven):** the metadata path is now the platform's: parse once at
+  the lowest layer, carry it on the typed record, parcel it only under the flag,
+  and let `FileProvider`/`androidx.startup`/Sentry read it through their own
+  `resolveContentProvider`/`getProviderInfo`/`getApplicationInfo` calls. The
+  `GET_META_DATA` gate is observable: the same reply without the flag carries
+  `null` (`crates/acos-services/tests/k4_metadata.rs` asserts both; the guest's
+  own trace shows the real calls carrying `flags=0x80`, e.g.
+  `resolveContentProvider key=org.billthefarmer.editor.fileprovider flags=0x80
+  get_meta_data=true meta_entries=1`). Proven separately: the failure that
+  remained after the Bundle arrived was **not** the Bundle but
+  `Resources` over a host path (item 3 above), which is why the fix is three
+  layers and not one.
+- **Fidelity / evidence:** `results/compat/K4.md`, machine-readable
+  `.cache/k4/k4-on.json`, per-app evidence under `.cache/k4/runs-on/<pkg>/`;
+  new tests `crates/acos-apk/src/manifest.rs` (typed values, resource reference,
+  a real corpus APK) and `crates/acos-services/tests/k4_metadata.rs` (flag
+  gating on every `PackageItemInfo` reply + Bundle parcel round trip).
+- **Regression / false pass:** none measured: ON is >= OFF at every rung with
+  **zero per-app regressions** (`tools` diff in `results/compat/K4.md` §2), and
+  no app that passed at K3 dropped a rung in either mode.
+- **Conclusion / next:** accepted; it is what lets E5.6's provider delivery
+  become the default (K4 §3). Remaining, sized in K4 §6: `<instrumentation>`
+  metadata and `<meta-data>` under `<manifest>`-level elements ACOS still does
+  not model; the non-ART (`acos-runtime`) path materialises `metaData` as `null`
+  because it builds `ApplicationInfo` through the Java bridge rather than through
+  these parcelables.
+
+## E5.9 — K3e: the userspace binder driver split a `BR_*` command at the 256-byte read-buffer edge — MEASURED (accepted)
+
+- **Date / commit:** 2026-11-13; same branch.
+- **Agent / bottleneck:** K4; K3's E5.6 follow-up 2. With provider delivery on,
+  `net.cozic.joplin` (7 providers) died in
+  `IActivityManager$Stub$Proxy.publishContentProviders` with
+  `BinderProxy.transactNative` → `java.lang.RuntimeException: Unknown error`,
+  and the guest log carried
+  `E/IPCThreadState: *** BAD COMMAND -847180016 received from Binder driver`.
+- **Baseline (K3, providers on):** joplin: no process start rung (crash during
+  provider install); K3 classified it as "app-published `IContentProvider` fails
+  to marshal".
+- **Hypothesis + solution:** not a marshal bug. `publishContentProviders` exports
+  one binder per provider; each new node makes the driver pend
+  `BR_INCREFS` + `BR_ACQUIRE` (2 x 20 bytes). libbinder reads through one fixed
+  256-byte Parcel (`IPCThreadState` ctor: `mIn.setDataCapacity(256)`, and
+  `talkWithDriver` sets `read_size = mIn.dataCapacity()`), and the kernel driver
+  never copies a *partial* command — a command either fits or stays queued.
+  ACOS's `flush_pend` copied `min(pend_len, read_size)`, so 7 providers
+  (7 x 40 + 8 = 288 bytes) were cut inside the 7th `BR_INCREFS`; the leftover
+  pointer word was then read as a command
+  (`IPCThreadState::executeCommand` default branch, `BAD COMMAND %d`).
+  Fix: `flush_pend` walks `br_cmd_len()` (header + the payload of exactly the
+  commands this driver pends: `BR_TRANSACTION_COMPLETE`/`BR_FAILED_REPLY`/
+  `BR_NOOP`/`BR_SPAWN_LOOPER`/`BR_DEAD_REPLY` 4 B, `BR_INCREFS`/`BR_ACQUIRE`/
+  `BR_RELEASE`/`BR_DECREFS` 20 B, `BR_TRANSACTION`/`BR_REPLY` 68 B) and copies
+  only whole commands, leaving the rest in `pend` for the next call — the kernel's
+  invariant, restored.
+- **Method:** one-app runs with `E3G_DEBUG=1` (the driver's own trace printed
+  `REQ seq=46 code=31 ... size=10740/64` = 8 flat objects: 7 providers +
+  `IApplicationThread`, then 7 `node refs` lines = 280 bytes of `BR_INCREFS`/
+  `BR_ACQUIRE`), then the full corpus A/B on the same host state as E5.8
+  (21–23 % RAM, load 30+, one lock acquisition per 4-app batch).
+- **Result:** `net.cozic.joplin` goes from "no start rung" to **first frame at
+  1269 ms + tree + screenshot** (tap still fails later, on a wall it owned
+  before). `io.element.android.x` also stops dying in
+  `publishContentProviders` (it has 6 providers and was the K4 run that made the
+  same failure visible there).
+- **Finding (proven):** the 256-byte read buffer is a hard driver contract, not
+  an implementation detail: any driver that splits a command produces libbinder's
+  `BAD COMMAND` and a transact that fails with `Unknown error`. The Rust peer was
+  never wrong; the marshal was correct and the driver's refill was not.
+- **Fidelity / evidence:** `results/compat/K4.md` §4,
+  `.cache/k4/runs-dbg-e3g/net.cozic.joplin/` (E3G trace + logd),
+  `crates/acos-binder-peer/native/binder_driver.c` (`br_cmd_len`/`flush_pend`).
+- **Regression / false pass:** none; the corpus ON funnel after the fix is
+  >= the pre-fix one at every rung, and the K3-off default funnel is unchanged
+  (`results/compat/K4.md` §2). A host-side C unit test for `flush_pend` would need
+  a new harness (the driver is only built for the NDK target), so the evidence is
+  the reproducer + the corpus.
+- **Conclusion / next:** accepted. Follow-up: give the driver a C unit-test
+  harness (feed a synthetic `pend`, assert only whole commands are copied), and
+  count `BR_*` bytes per transaction so a future command type cannot silently fall
+  outside `br_cmd_len`.
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
@@ -1458,7 +1602,7 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | Agent loop (animations off, functional-check mode) | **507–523 ms/task, 1.79 tasks/s, 5239 tasks/GiB-min (anon+shmem) at N=1; 537 ms / 6.28 / 3942 at N=5; 530 ms / 10.22 / 3798 at N=10** | main `4958703`, `--animations off` | H14, E3.3 | 2026-11-13 | 2.71–2.84× latency, 5.8×/5.0×/8.7× anon+shmem tasks/GiB-min at N=1/5/10; loop becomes reset-bound (48 %); not a default change |
 | False passes | **0** — P11 0/105, scenarios 0/12 (negative control = honest `timeout`), loop 0; verified 63/63 (N=1) and 75/75 (N=5) | main `4958703` | B2, E3.2 | 2026-11-13 | H6's 1-in-75 strict-assert flake (H16) did not reproduce |
 | Agent loop N=10 reliability | **100 %: 600/600 verified over 12 reps** (load1 1.0–4.6), 0 false passes; 428/450 (95.1 %) before the fix (exit 1/126 torn Landlock plan, exit 135 SIGBUS on the truncated mapped APK) | `fix-h17-n10-reset` off main `84fc8bc`, 10 sessions / one serve | H17, E2.13 | 2026-11-13 | fixed two shared-input races (atomic publish + per-run APK); see E2.13 |
-| Compat first-frame rate (K1 corpus, real ART, N=1) | **13/42 (31.0 %)**; tap 7/42 (16.7 %) — K3 measured with a 13/42 first frame in one run and 12/42 (the RN/WebView flicker) in the second, `onCreate` completed 15→**16/42**; first frame p50 647–652 ms / p90 1050–1115 ms (K2 581/1056) | K3 `9df9e71`,`40ffc61` (provider delivery measured but off) | K3/K3b–K3a, E5.5–E5.7 | 2026-11-13 |
+| Compat first-frame rate (K1 corpus, real ART, N=1) | **17/42 (40.5 %)**; tree/screenshot 16/42 (38.1 %); tap 9/42 (21.4 %); `onCreate` completed **20/42** (47.6 %); first frame p50 **808 ms** / p90 **1269 ms** (K3 12/42, tap 7/42, 16/42, 647/1050 ms). Same binary with app providers off: 14/42 first frame, tap 8/42, 18/42, p50 546/p90 1043 ms — ON is >= OFF at every rung with zero per-app regressions, so ON is the default | K4 `compat-k4-metadata` (E5.8 K3d metadata+sourceDir, E5.9 K3e binder-driver refill) | K4/K3d–K3e, E5.8–E5.9 | 2026-11-13 |
 | Agent loop N=10 (Z7 method, fresh launch/task) | 45.0 tasks/GiB-min main; **67.7 with exec-path early GC** (seam, off by default → H2); 103.6 zygote+early GC (research, trusted only) | Z7 `zygote-z7-lifetime` | Z7, E2.8 | 2026-11-12 | post-H6 (current main) |
 | Agent loop N=10/N=5, H2 default-on | **85.9 tasks/GiB-min** (off 55.7, +54.2 %) / **135.6** (off 98.8, +37.2 %); 1-min interleaved reps, 0 false passes | `perf-h2-early-gc` `54b9c33` | H2, E2.10 | 2026-11-13 | post-H6 (current main) |
 | Early-GC memory saving per session | **28.2–30.6 MiB ΣPss** at N=5/N=10 (27.1–32.5 %); 28.9–30.4 MiB at N=1 | H2 default `54b9c33` | H2, E2.10 | 2026-11-13 | post-H6 (current main) |
@@ -1489,8 +1633,8 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | K3a | K2 next walls: AndroidKeyStore shim, GL/BLAST natives, WebView provider classification | compat first-frame | +3–5 apps | high (K1/K2 evidence) | medium | medium | **classified (K3, E5.7): all three need a real backend (weeks); no shim, no fake pass** |
 | K3b | K2 PMS error class (`NameNotFoundException`) and `checkService` null for unknown names | compat | +2 apps (vlc, fdroid) | high | low | low | **accepted `9df9e71` (E5.5): both leave the wall; vlc → `ConstraintLayout` inflate (R2), fdroid → `getSystemAvailableFeatures`** |
 | K3c | K2 app provider delivery (androidx.startup/WorkManager `InitializationProvider`) | compat | +element, feeders | medium | high | medium | **implemented + measured `40ffc61` (E5.6), OFF by default (`ACOS_ART_APP_PROVIDERS=on`); blocked by K3d/K3e** |
-| K3d | manifest `<meta-data>` → `Bundle` in `ApplicationInfo`/`ProviderInfo` and in PMS `resolveContentProvider` | compat | unblocks K3c (editor, libreweatherrn, element) | high (K3 measured the failure) | medium | low | next (E5.6 follow-up 1) |
-| K3e | app-published `IContentProvider` binder in `publishContentProviders` fails to marshal (`BinderProxy.transactNative` "Unknown error", joplin) | compat | unblocks K3c for joplin | medium | medium | medium | next (E5.6 follow-up 2) |
+| K3d | manifest `<meta-data>` → `Bundle` in every `PackageItemInfo` reply under `GET_META_DATA`, plus the guest-openable `sourceDir` | compat | +editor full ladder, +joplin/unitto/antennapod/streetcomplete first frame; unblocks K3c | high (K3 measured the failure) | medium | low | **accepted K4 (E5.8): parsed in `acos-apk` (`parseMetaData` transcription), carried on the typed PMS records, gated on `0x80`, plus `sourceDir` = `/data/app/<name>.apk`; K3c delivery is now the default** |
+| K3e | app-published `IContentProvider` binder in `publishContentProviders` fails to marshal (`BinderProxy.transactNative` "Unknown error", joplin) | compat | unblocks K3c for joplin | medium | medium | medium | **accepted K4 (E5.9): not a marshal bug — the userspace driver cut a `BR_*` command at libbinder's 256-byte read buffer (`*** BAD COMMAND`); `flush_pend` now copies whole commands only. joplin: no start rung → first frame 1269 ms + tree + screenshot** |
 | T1 | **Legacy frozen-VM test drift:** 15 `acos-runtime` / `acos-framework-natives` / `acos-vm` (inflate_layout) integration tests (counter_interaction, app_matrix_interaction, pms golden, theme_resolution `static_overlay_overrides_framework_bool`, m2 lifecycle, wms/toast/notifications) fail against freshly rebuilt fixtures. Identical on pre-V1 main `9787616`, so pre-existing; the goldens predate the current fixture build (e.g. PMS `app.flags` +0x42 debuggable/allowClearUserData; framework bool now 0xFFFFFFFF). Not the ART product path (all ART gates green). Decide: refresh goldens vs. retire frozen-VM tests | test-suite health | `cargo test --workspace` green | high | low | low | queued (found 2026-11-13 during V1 merge) |
 | H1 | Strict numbers drop after event settle; re-measure M3–M8 and take cheap wins | M4/M6/M7/M5 | — | — | — | — | **done (H6)**: M7 151→41, M4 440→309, M6 463→342 |
 | H2 | Early post-first-frame concurrent GC (Z7) on the exec path | M1/M2 | −23–30 MiB/session | high | low | low | **accepted: product default, E2.10** (H6 numbers are pre-H2; re-baseline) |

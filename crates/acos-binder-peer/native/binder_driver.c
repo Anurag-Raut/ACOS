@@ -1202,9 +1202,56 @@ static void handle_commands(const uint8_t* wbuf, size_t wsize) {
     }
 }
 
+// Bytes one whole BR_* command occupies (header included), or 0 when the stream
+// does not start with a complete command this driver emits.
+static size_t br_cmd_len(const uint8_t* p, size_t avail) {
+    if (avail < 4) return 0;
+    uint32_t cmd;
+    memcpy(&cmd, p, 4);
+    switch (cmd) {
+        case BR_TRANSACTION_COMPLETE:
+        case BR_FAILED_REPLY:
+        case BR_NOOP:
+        case BR_SPAWN_LOOPER:
+        case BR_DEAD_REPLY:
+            return 4;
+        case BR_INCREFS:
+        case BR_ACQUIRE:
+        case BR_RELEASE:
+        case BR_DECREFS:
+            return 4 + sizeof(struct binder_ptr_cookie);
+        case BR_TRANSACTION:
+        case BR_REPLY:
+            return 4 + sizeof(struct binder_transaction_data);
+        default:
+            return 0;
+    }
+}
+
 static void flush_pend(struct binder_write_read* bwr) {
     size_t room = (size_t)bwr->read_size;
-    size_t n = T.pend_len < room ? T.pend_len : room;
+    // libbinder reads through one fixed 256-byte Parcel
+    // (`IPCThreadState`: `mIn.setDataCapacity(256)`), and the kernel driver
+    // never copies a *partial* command into it: a command either fits or stays
+    // queued.  Copying `min(pend_len, room)` breaks that invariant, and the
+    // leftover half-command is then read as a command on the next call:
+    //
+    //   E/IPCThreadState: *** BAD COMMAND -847180016 received from Binder driver
+    //
+    // K3e hit exactly this: `publishContentProviders` exports one binder per
+    // provider, each export pends BR_INCREFS + BR_ACQUIRE (2 * 20 bytes), so a
+    // process with 7 content providers pends 280 bytes into a 256-byte buffer
+    // and the cut lands inside the 7th BR_INCREFS.  Copy whole commands only.
+    size_t n = 0;
+    while (n < T.pend_len) {
+        size_t len = br_cmd_len(T.pend + n, T.pend_len - n);
+        if (len == 0) {
+            WARN("undecodable BR_* command at pend offset %zu of %zu", n, T.pend_len);
+            break;
+        }
+        if (n + len > room) break;
+        n += len;
+    }
     if (n) {
         memcpy((void*)(uintptr_t)bwr->read_buffer, T.pend, n);
         memmove(T.pend, T.pend + n, T.pend_len - n);

@@ -478,6 +478,9 @@ pub(crate) fn launch_session(
     let apk = run.dir("app").join(&apk_name);
     crate::app::stage_apk(&opts.apk, &apk)?;
     crate::app::ensure_apk_mountpoint(&root.data, &apk_name, &opts.apk)?;
+    // The same file as the guest sees it (H17 binds the per-run copy
+    // read-only at `/data/app/<name>`).
+    let guest_apk = format!("/data/app/{apk_name}");
     let package = crate::app::apk_package(&opts.apk)?;
     crate::stage("apk-stage");
 
@@ -630,7 +633,14 @@ pub(crate) fn launch_session(
                 (host, handles)
             }
         };
-        if let Err(e) = host.install_package_from_apk(&apk_for_peer) {
+        // K3d: the PMS publishes the APK path the **guest** can open
+        // (`/data/app/<name>.apk`, read-only bound by the sandbox), not the host
+        // file. `PackageManager.getResourcesForApplication` builds `Resources`
+        // from `ApplicationInfo.sourceDir`, so a host path made
+        // `PackageItemInfo.loadXmlMetaData` fail with
+        // `ApkAssets.nativeLoad: Failed to load asset path <host path>` —
+        // which is how FileProvider's `FILE_PROVIDER_PATHS` XML lookup died.
+        if let Err(e) = host.install_package_from_apk_as(&apk_for_peer, Some(&guest_apk)) {
             eprintln!("acos-art: launch: install_package_from_apk failed: {e}");
         }
         // W38 (flagged, minimal): the guest's `startActivity` is resolved by the
@@ -1051,6 +1061,23 @@ pub(crate) fn launch_session(
     // `PackageParser` equivalent, `pms::PmsState`). The framework's
     // `ActivityThread.installContentProviders` then creates them, which is the
     // stock order (after `attachBaseContext`, before `Application.onCreate`).
+    //
+    // K3d: the last field is the provider's own `<meta-data>`, so the
+    // `ProviderInfo` the framework hands to `ContentProvider.attachInfo` carries
+    // the `Bundle` its manifest declares (the same values PMS answers with
+    // `GET_META_DATA`). Format: `name=type+value` entries joined with `;`,
+    // `|`, `;`, `=` and newlines escaped by [`meta_spec_escape`]; types are
+    // `s`tring, `i`nt (also a resource reference id), `b`ool, `f`loat.
+    //
+    // Fidelity note: AMS builds this list with
+    // `queryContentProviders(process, uid, STOCK_PM_FLAGS | GET_PROVIDERS)`,
+    // which does *not* ask for metadata, so a device's bind `ProviderInfo` has
+    // `metaData == null` and providers read their metadata back through
+    // `Context.getPackageManager()` (which is what `FileProvider`,
+    // `androidx.startup` and Sentry do, and what PMS served above). ACOS sends
+    // the declared entries here as well: it only ever exposes what the app's own
+    // manifest says, and it keeps `ProviderInfo.metaData` truthful for a
+    // provider that reads it from `attachInfo`.
     let provider_spec = installed.as_ref().map_or_else(String::new, |state| {
         let mut seen: Vec<(&str, Vec<&str>)> = Vec::new();
         for p in &state.providers {
@@ -1066,23 +1093,13 @@ pub(crate) fn launch_session(
         }
         seen.iter()
             .map(|(class, authorities)| {
-                let read = state
-                    .providers
-                    .iter()
-                    .find(|p| p.name == *class)
-                    .map_or("", |p| p.read_permission.as_str());
-                let exported = state
-                    .providers
-                    .iter()
-                    .find(|p| p.name == *class)
-                    .is_some_and(|p| p.exported);
-                let grant_uri = state
-                    .providers
-                    .iter()
-                    .find(|p| p.name == *class)
-                    .is_some_and(|p| p.grant_uri_permissions);
+                let declared = state.providers.iter().find(|p| p.name == *class);
+                let read = declared.map_or("", |p| p.read_permission.as_str());
+                let exported = declared.is_some_and(|p| p.exported);
+                let grant_uri = declared.is_some_and(|p| p.grant_uri_permissions);
+                let meta = declared.map_or_else(String::new, |p| meta_spec(&p.meta_data));
                 format!(
-                    "{class}|{}|{read}|{}|{}",
+                    "{class}|{}|{read}|{}|{}|{meta}",
                     authorities.join(";"),
                     u8::from(exported),
                     u8::from(grant_uri)
@@ -1091,22 +1108,25 @@ pub(crate) fn launch_session(
             .collect::<Vec<_>>()
             .join("\n")
     });
-    // Measured but OFF by default (K3 results/compat/K3.md §2): the framework
-    // path itself is correct and verified — with this on,
-    // `io.element.android.x`'s `InitializationProvider` runs and
-    // `de.westnordost.streetcomplete` gains its first frame — but two gaps
-    // downstream of the delivery make it a net *regression* on the corpus
-    // today, so the shipping default keeps K2's behaviour:
-    //   1. manifest `<meta-data>` is not parsed, so `FileProvider`'s
-    //      `android.support.FILE_PROVIDER_PATHS` (editor, libreweatherrn) and
-    //      Sentry's DSN (element) are missing;
-    //   2. an app-published `IContentProvider` binder inside
-    //      `publishContentProviders` fails to marshal for joplin
-    //      (`BinderProxy.transactNative` → "Unknown error").
-    // `ACOS_ART_APP_PROVIDERS=on` turns delivery on for the follow-up work.
+    // K3 shipped this OFF because two gaps downstream of the delivery made it a
+    // net regression. Both are fixed, so delivery is the default (K4
+    // results/compat/K4.md):
+    //   1. K3d (E5.8): manifest `<meta-data>` is parsed and served as the
+    //      `PackageItemInfo.metaData` Bundle under `GET_META_DATA`
+    //      (`FileProvider`'s `android.support.FILE_PROVIDER_PATHS`,
+    //      androidx.startup's initializer list, Sentry's `io.sentry.*`), and the
+    //      PMS publishes the APK path the guest can open so
+    //      `getResourcesForApplication`/`loadXmlMetaData` work;
+    //   2. K3e (E5.9): the userspace binder driver no longer splits a `BR_*`
+    //      command when it crosses libbinder's 256-byte read buffer, which is
+    //      what made `publishContentProviders` with >=7 provider binders die
+    //      with `BinderProxy.transactNative` "Unknown error".
+    // Measured on the 42-app corpus: ON is >= OFF at every rung with zero
+    // per-app regressions (first frame 17 vs 14, tap 9 vs 8).
+    // `ACOS_ART_APP_PROVIDERS=off` restores K3's behaviour for A/B.
     let app_providers_on = std::env::var("ACOS_ART_APP_PROVIDERS")
-        .map(|v| matches!(v.trim(), "1" | "on" | "true" | "yes"))
-        .unwrap_or(false);
+        .map(|v| !matches!(v.trim(), "0" | "off" | "false" | "no"))
+        .unwrap_or(true);
     if !provider_spec.is_empty() {
         if app_providers_on {
             eprintln!(
@@ -1119,6 +1139,18 @@ pub(crate) fn launch_session(
                 "acos-art: launch: app providers {} NOT delivered (ACOS_ART_APP_PROVIDERS is off; K3 §2)",
                 provider_spec.lines().count()
             );
+        }
+    }
+    // K3d: the `<application>`'s own `<meta-data>`, delivered on the bind
+    // request's `ApplicationInfo` (`LoadedApk.makeApplication` hands that object
+    // to the app, and `context.getApplicationInfo().metaData` reads it).
+    if let Some(state) = &installed {
+        if !state.app.meta_data.is_empty() {
+            eprintln!(
+                "acos-art: launch: application meta-data {} (bind ApplicationInfo.metaData)",
+                state.app.meta_data.len()
+            );
+            sb.env("ACOSLAUNCH_APP_META", &meta_spec(&state.app.meta_data));
         }
     }
     if std::env::var_os("ACOSLAUNCH_PROBE").is_some() {
@@ -5037,6 +5069,48 @@ fn split_exit_status(status: Option<std::process::ExitStatus>) -> (Option<i32>, 
         }
     }
     (exit, signal)
+}
+
+/// Escape one `<meta-data>` name or value for the guest's `ACOSLAUNCH_PROVIDERS`
+/// field encoding: the record uses `|`, `;` and `=` as separators and newlines
+/// as record terminators, so those characters (and the escape itself) are
+/// spelled out.
+fn meta_spec_escape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '|' => out.push_str("\\p"),
+            ';' => out.push_str("\\s"),
+            '=' => out.push_str("\\e"),
+            '\n' => out.push_str("\\n"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// Encode a component's `<meta-data>` for the guest: `name=type+value` entries
+/// joined with `;`. The type letters are the four `Bundle` value types
+/// `PackageParser.parseMetaData` stores — `s`tring, `i`nt (an
+/// `android:resource` reference is an int id, exactly as the platform stores
+/// it), `b`ool and `f`loat.
+fn meta_spec(entries: &[acos_services::pms::MetaDataEntry]) -> String {
+    use acos_services::pms::MetaDataValue;
+    entries
+        .iter()
+        .map(|entry| {
+            let (kind, value) = match &entry.value {
+                MetaDataValue::String(text) => ('s', text.clone()),
+                MetaDataValue::Int(number) => ('i', number.to_string()),
+                MetaDataValue::Boolean(flag) => ('b', u8::from(*flag).to_string()),
+                MetaDataValue::Float(number) => ('f', number.to_string()),
+                MetaDataValue::Reference(id) => ('i', (*id as i32).to_string()),
+            };
+            format!("{}={kind}{value}", meta_spec_escape(&entry.name))
+        })
+        .collect::<Vec<_>>()
+        .join(";")
 }
 
 #[derive(Default)]

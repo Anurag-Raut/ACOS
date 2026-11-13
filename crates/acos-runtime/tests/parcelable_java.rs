@@ -116,6 +116,7 @@ fn service_info_value(app: &acos_services::pms::AppInfo) -> Parcelable {
         exported: false,
         flags: 0,
         foreground_service_type: 0,
+        meta_data: Vec::new(),
     }
     .to_parcelable(app)
 }
@@ -197,6 +198,7 @@ fn resolve_info_value(app: &acos_services::pms::AppInfo) -> Parcelable {
         theme: 0,
         exported: true,
         parent_activity_name: String::new(),
+        meta_data: Vec::new(),
     };
     Parcelable::ordered(
         "android.content.pm.ResolveInfo",
@@ -305,6 +307,7 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         theme: 0,
         exported: true,
         parent_activity_name: String::new(),
+        meta_data: Vec::new(),
     };
     let act_bytes = encoded(&act.to_parcelable(&app));
     let pkg = PmsPackageInfo {

@@ -585,6 +585,16 @@ impl ServiceHost {
     /// of raising `unknown service name <package>`. Returns an error (never a
     /// silent no-op) when the package service is missing or mistyped.
     pub fn install_package_from_apk(&mut self, apk_path: &std::path::Path) -> Result<()> {
+        self.install_package_from_apk_as(apk_path, None)
+    }
+
+    /// The same install, publishing `guest_source_dir` as the APK's
+    /// `sourceDir`/`publicSourceDir` (the path the confined guest can open).
+    pub fn install_package_from_apk_as(
+        &mut self,
+        apk_path: &std::path::Path,
+        guest_source_dir: Option<&str>,
+    ) -> Result<()> {
         let object = self.ensure("android.content.pm.IPackageManager")?;
         let service = object
             .as_any_mut()
@@ -592,7 +602,7 @@ impl ServiceHost {
             .ok_or_else(|| {
                 ServiceError::Internal("package service is not a PmsService".into())
             })?;
-        service.set_package_from_apk(apk_path)
+        service.set_package_from_apk_as(apk_path, guest_source_dir)
     }
 
     /// Dispatch one transaction.

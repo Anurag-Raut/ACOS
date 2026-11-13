@@ -15,10 +15,25 @@ use std::sync::{Arc, Mutex};
 
 use acos_aidl::MethodInfo;
 
+/// The parsed `<meta-data>` model, re-exported so a crate that only depends on
+/// `acos-services` (the ART launcher building the guest's `ProviderInfo`s) can
+/// name the entries without a second manifest parser.
+pub use acos_apk::manifest::{MetaDataEntry, MetaDataValue};
+
 use crate::error::{ServiceError, Result};
 use crate::host::{CallResult, ServiceObject};
 use crate::parcelable;
-use crate::value::{Parcelable, Value};
+use crate::value::{Bundle, Parcelable, Value};
+
+/// `PackageManager.GET_META_DATA` (API 34 `PackageManager.java`): the caller is
+/// asking for the `PackageItemInfo.metaData` `Bundle`.
+///
+/// `PackageParser` keeps the parsed `<meta-data>` off the installed
+/// `ApplicationInfo` (`Package.mAppMetaData`) and off the installed component
+/// infos (`Component.metaData`); `generateApplicationInfo`/
+/// `generateActivityInfo`/`generateServiceInfo`/`generateProviderInfo` copy it
+/// into the reply only when this flag is set (`PackageParser.copyNeeded`).
+pub const GET_META_DATA: i64 = 0x0000_0080;
 
 /// The typed PMS description most recently produced by the service.
 ///
@@ -138,6 +153,10 @@ pub struct AppInfo {
     pub shared_library_files: Vec<String>,
     /// `targetSandboxVersion`.
     pub target_sandbox_version: i32,
+    /// `<application>` `<meta-data>`, exactly as `PackageParser.parseMetaData`
+    /// parsed it (`Package.mAppMetaData`). Sent in the `metaData` Bundle only
+    /// when the caller passes [`GET_META_DATA`].
+    pub meta_data: Vec<MetaDataEntry>,
 }
 
 impl AppInfo {
@@ -207,6 +226,7 @@ impl AppInfo {
             split_names: Vec::new(),
             shared_library_files: Vec::new(),
             target_sandbox_version: 2,
+            meta_data: manifest.application.meta_data.clone(),
         }
     }
 
@@ -237,12 +257,16 @@ impl AppInfo {
             split_names: Vec::new(),
             shared_library_files: Vec::new(),
             target_sandbox_version: 2,
+            meta_data: Vec::new(),
         }
     }
 
     /// Encode in the full `ApplicationInfo.writeToParcel` order (78 fields).
+    ///
+    /// `metaData` is present only when `flags` contains [`GET_META_DATA`], which
+    /// is what `PackageParser.generateApplicationInfo` does.
     #[must_use]
-    pub fn to_parcelable(&self) -> Parcelable {
+    pub fn to_parcelable_with_flags(&self, flags: i64) -> Parcelable {
         Parcelable::ordered(
             "android.content.pm.ApplicationInfo",
             vec![
@@ -253,7 +277,7 @@ impl AppInfo {
                 Value::Str(None), // label (TextUtils.writeToParcel)
                 Value::Int(self.icon),
                 Value::Int(self.label_res),
-                Value::Bundle(None), // metaData
+                meta_data_value(&self.meta_data, flags), // metaData
                 Value::Int(0),       // showUser
                 Value::Int(0),       // showBadge / isArchived
                 Value::Str8(None),   // taskAffinity
@@ -336,6 +360,12 @@ impl AppInfo {
         )
     }
 
+    /// Encode without the metadata `Bundle` (the flags-off form).
+    #[must_use]
+    pub fn to_parcelable(&self) -> Parcelable {
+        self.to_parcelable_with_flags(0)
+    }
+
     /// Decode a typed parcelable produced by [`AppInfo::to_parcelable`].
     #[must_use]
     pub fn from_parcelable(p: &Parcelable) -> Option<Self> {
@@ -363,6 +393,7 @@ impl AppInfo {
             min_sdk: f.get(46)?.as_int()?,
             target_sdk: f.get(47)?.as_int()?,
             target_sandbox_version: f.get(61)?.as_int()?,
+            meta_data: Vec::new(),
         })
     }
 }
@@ -384,12 +415,16 @@ pub struct ActivityInfo {
     pub exported: bool,
     /// Parent activity (empty when none).
     pub parent_activity_name: String,
+    /// `<activity>` `<meta-data>` (`Component.metaData`); see [`GET_META_DATA`].
+    pub meta_data: Vec<MetaDataEntry>,
 }
 
 impl ActivityInfo {
     /// Encode in the full `ActivityInfo.writeToParcel` order (43 fields).
+    /// `metaData` follows the request flags, like
+    /// `PackageParser.generateActivityInfo`.
     #[must_use]
-    pub fn to_parcelable(&self, app: &AppInfo) -> Parcelable {
+    pub fn to_parcelable_with_flags(&self, app: &AppInfo, flags: i64) -> Parcelable {
         Parcelable::ordered(
             "android.content.pm.ActivityInfo",
             vec![
@@ -399,10 +434,10 @@ impl ActivityInfo {
                 Value::Str(None), // label
                 Value::Int(0),    // icon
                 Value::Int(0),    // labelRes
-                Value::Bundle(None),
+                meta_data_value(&self.meta_data, flags),
                 Value::Int(0), // showUser
                 Value::Int(0), // showBadge
-                Value::Parcelable(app.to_parcelable()), // ComponentInfo.applicationInfo
+                Value::Parcelable(app.to_parcelable_with_flags(flags)), // ComponentInfo.applicationInfo
                 Value::Str8(Some(self.package_name.clone())), // processName
                 Value::Str8(None), // splitName
                 Value::StringArray(None), // attributionTags
@@ -446,6 +481,12 @@ impl ActivityInfo {
             ],
         )
     }
+
+    /// Encode without the metadata `Bundle` (the flags-off form).
+    #[must_use]
+    pub fn to_parcelable(&self, app: &AppInfo) -> Parcelable {
+        self.to_parcelable_with_flags(app, 0)
+    }
 }
 
 /// Typed `ProviderInfo` values (the subset the framework and the fixtures read).
@@ -469,12 +510,21 @@ pub struct ProviderInfo {
     pub grant_uri_permissions: bool,
     /// `initOrder`.
     pub init_order: i32,
+    /// `<provider>` `<meta-data>` (`Component.metaData`); see [`GET_META_DATA`].
+    pub meta_data: Vec<MetaDataEntry>,
 }
 
 impl ProviderInfo {
     /// Encode in the full `ProviderInfo.writeToParcel` order (28 fields).
+    ///
+    /// `metaData` follows the request flags, like
+    /// `PackageParser.generateProviderInfo`: `FileProvider` re-resolves its own
+    /// authority with `GET_META_DATA` and reads
+    /// `android.support.FILE_PROVIDER_PATHS` from this field, and
+    /// `androidx.startup`'s `InitializationProvider` reads its initializer list
+    /// from it the same way.
     #[must_use]
-    pub fn to_parcelable(&self, app: &AppInfo) -> Parcelable {
+    pub fn to_parcelable_with_flags(&self, app: &AppInfo, flags: i64) -> Parcelable {
         Parcelable::ordered(
             "android.content.pm.ProviderInfo",
             vec![
@@ -484,10 +534,10 @@ impl ProviderInfo {
                 Value::Str(None), // label
                 Value::Int(0),    // icon
                 Value::Int(0),    // labelRes
-                Value::Bundle(None),
+                meta_data_value(&self.meta_data, flags),
                 Value::Int(0), // showUser
                 Value::Int(0), // showBadge
-                Value::Parcelable(app.to_parcelable()), // ComponentInfo.applicationInfo
+                Value::Parcelable(app.to_parcelable_with_flags(flags)), // ComponentInfo.applicationInfo
                 Value::Str8(Some(self.process_name.clone())),
                 Value::Str8(None), // splitName
                 Value::StringArray(None), // attributionTags
@@ -524,7 +574,14 @@ impl ProviderInfo {
             exported: f.get(15)?.as_int()? != 0,
             grant_uri_permissions: f.get(20)?.as_int()? != 0,
             init_order: f.get(25)?.as_int()?,
+            meta_data: Vec::new(),
         })
+    }
+
+    /// Encode without the metadata `Bundle` (the flags-off form).
+    #[must_use]
+    pub fn to_parcelable(&self, app: &AppInfo) -> Parcelable {
+        self.to_parcelable_with_flags(app, 0)
     }
 }
 
@@ -545,12 +602,17 @@ pub struct ServiceInfo {
     pub flags: i32,
     /// `mForegroundServiceType`.
     pub foreground_service_type: i32,
+    /// `<service>` `<meta-data>` (`Component.metaData`); see [`GET_META_DATA`].
+    pub meta_data: Vec<MetaDataEntry>,
 }
 
 impl ServiceInfo {
     /// Encode in the full `ServiceInfo.writeToParcel` order (20 fields).
+    ///
+    /// `metaData` follows the request flags, like
+    /// `PackageParser.generateServiceInfo`.
     #[must_use]
-    pub fn to_parcelable(&self, app: &AppInfo) -> Parcelable {
+    pub fn to_parcelable_with_flags(&self, app: &AppInfo, flags: i64) -> Parcelable {
         Parcelable::ordered(
             "android.content.pm.ServiceInfo",
             vec![
@@ -561,10 +623,10 @@ impl ServiceInfo {
                 Value::Str(None), // label
                 Value::Int(0),    // icon
                 Value::Int(0),    // labelRes
-                Value::Bundle(None),
+                meta_data_value(&self.meta_data, flags),
                 Value::Int(0), // showUser
                 Value::Int(0), // showBadge
-                Value::Parcelable(app.to_parcelable()),
+                Value::Parcelable(app.to_parcelable_with_flags(flags)),
                 Value::Str8(Some(self.process_name.clone())),
                 Value::Str8(None),        // splitName
                 Value::StringArray(None), // attributionTags
@@ -592,7 +654,14 @@ impl ServiceInfo {
             exported: f.get(15)?.as_int()? != 0,
             flags: f.get(18)?.as_int()?,
             foreground_service_type: f.get(19)?.as_int()?,
+            meta_data: Vec::new(),
         })
+    }
+
+    /// Encode without the metadata `Bundle` (the flags-off form).
+    #[must_use]
+    pub fn to_parcelable(&self, app: &AppInfo) -> Parcelable {
+        self.to_parcelable_with_flags(app, 0)
     }
 }
 
@@ -601,6 +670,61 @@ fn opt(empty: bool, value: String) -> Option<String> {
         None
     } else {
         Some(value)
+    }
+}
+
+/// The `metaData` field of a `PackageItemInfo` reply.
+///
+/// `PackageParser.generate*Info` hands the parsed `Bundle` to the caller only
+/// when the request carries [`GET_META_DATA`]; without the flag the parcelled
+/// field is `null`. A component that declares no `<meta-data>` also replies
+/// `null` even with the flag (there is nothing to copy).
+fn meta_data_value(entries: &[MetaDataEntry], flags: i64) -> Value {
+    if flags & GET_META_DATA == 0 || entries.is_empty() {
+        return Value::Bundle(None);
+    }
+    let mut bundle = Bundle::new();
+    for entry in entries {
+        // The `Bundle` value types `parseMetaData` writes: `putString`,
+        // `putInt` (also for an `android:resource` id), `putBoolean`, `putFloat`.
+        let value = match &entry.value {
+            MetaDataValue::String(text) => Value::Str(Some(text.clone())),
+            MetaDataValue::Int(number) => Value::Int(*number),
+            MetaDataValue::Boolean(flag) => Value::Bool(*flag),
+            MetaDataValue::Float(number) => Value::Float(*number),
+            MetaDataValue::Reference(id) => Value::Int(*id as i32),
+        };
+        bundle.put(entry.name.clone(), value);
+    }
+    Value::Bundle(Some(bundle))
+}
+
+/// K4 diagnostic: `ACOS_PMS_TRACE=<path>` appends one line per
+/// metadata-bearing query (method, key, the flags actually received, and how
+/// many `<meta-data>` entries the reply carries). It is how the `GET_META_DATA`
+/// gate is observed on the wire rather than assumed; unset (the default) it is
+/// inert.
+fn trace_query(method: &str, key: &str, flags: i64, entries: usize) {
+    let Some(path) = std::env::var_os("ACOS_PMS_TRACE") else {
+        return;
+    };
+    use std::io::Write as _;
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(
+            file,
+            "{method} key={key} flags={flags:#x} get_meta_data={} meta_entries={entries}",
+            flags & GET_META_DATA != 0
+        );
+    }
+}
+
+/// The `flags` argument of a PMS query (`long` on API 34, `int` on older
+/// signatures): `0` when the caller supplied none.
+fn flags_arg(args: &[Value], index: usize) -> i64 {
+    match args.get(index) {
+        Some(Value::Long(flags)) => *flags,
+        Some(Value::Int(flags)) => i64::from(*flags),
+        _ => 0,
     }
 }
 
@@ -642,8 +766,11 @@ pub struct PackageInfo {
 
 impl PackageInfo {
     /// Encode in the full `PackageInfo.writeToParcel` order (41 fields).
+    ///
+    /// `PackageParser.generatePackageInfo` builds the nested `ApplicationInfo`
+    /// with the same request flags, so the metadata `Bundle` follows them.
     #[must_use]
-    pub fn to_parcelable(&self) -> Parcelable {
+    pub fn to_parcelable_with_flags(&self, flags: i64) -> Parcelable {
         Parcelable::ordered(
             "android.content.pm.PackageInfo",
             vec![
@@ -658,7 +785,7 @@ impl PackageInfo {
                 Value::Int(0),         // sharedUserLabel
                 Value::Cond {
                     present: true,
-                    values: vec![Value::Parcelable(self.application.to_parcelable())],
+                    values: vec![Value::Parcelable(self.application.to_parcelable_with_flags(flags))],
                 }, // applicationInfo
                 Value::Long(self.first_install_time),
                 Value::Long(self.last_update_time),
@@ -702,6 +829,12 @@ impl PackageInfo {
                 Value::Bool(false), // isActiveApex
             ],
         )
+    }
+
+    /// Encode without the metadata `Bundle` (the flags-off form).
+    #[must_use]
+    pub fn to_parcelable(&self) -> Parcelable {
+        self.to_parcelable_with_flags(0)
     }
 }
 
@@ -929,6 +1062,7 @@ impl PmsState {
                 theme: 0,
                 exported: true,
                 parent_activity_name: String::new(),
+                meta_data: Vec::new(),
             }],
             requested_permissions: Vec::new(),
             first_install_time: 0,
@@ -970,6 +1104,7 @@ impl PmsState {
                 theme: 0,
                 exported: c.exported.unwrap_or(false),
                 parent_activity_name: String::new(),
+                meta_data: c.meta_data.clone(),
             })
             .collect();
         let requested_permissions: Vec<String> = manifest
@@ -1002,6 +1137,7 @@ impl PmsState {
                     // absent; it is `android:grantUriPermissions`, default false.
                     grant_uri_permissions: c.grant_uri_permissions.unwrap_or(false),
                     init_order: 0,
+                    meta_data: c.meta_data.clone(),
                 });
             }
         }
@@ -1022,6 +1158,7 @@ impl PmsState {
                     exported: c.exported.unwrap_or(false),
                     flags: 0,
                     foreground_service_type: 0,
+                    meta_data: c.meta_data.clone(),
                 }
             })
             .collect();
@@ -1050,6 +1187,20 @@ impl PmsState {
             installer_package: None,
             apk_path: path.to_path_buf(),
         })
+    }
+
+    /// Publish `guest` as the installed APK's `sourceDir`/`publicSourceDir`.
+    ///
+    /// The state is built from the host file (`from_apk` reads it), but every
+    /// `ApplicationInfo`/`PackageInfo` reply must name the path the caller can
+    /// open. Both copies of the record (`app` and `package.application`) are
+    /// updated: the parcelable hierarchy nests the second one in every
+    /// `ComponentInfo` reply.
+    pub fn set_guest_apk_path(&mut self, guest: &str) {
+        for app in [&mut self.app, &mut self.package.application] {
+            app.source_dir = guest.to_string();
+            app.public_source_dir = guest.to_string();
+        }
     }
 
     /// Locate and load the fixture APK, falling back to the baked-in values.
@@ -1204,7 +1355,29 @@ impl PmsService {
     /// for `getApplicationInfo`. A missing APK is a structured error, never a
     /// silent fallback to the previous package.
     pub fn set_package_from_apk(&mut self, apk_path: &Path) -> Result<()> {
-        let state = PmsState::from_apk(apk_path)?;
+        self.set_package_from_apk_as(apk_path, None)
+    }
+
+    /// The same install with the APK path the **guest** uses.
+    ///
+    /// `sourceDir`/`publicSourceDir` are what
+    /// `PackageManager.getResourcesForApplication` passes to
+    /// `ResourcesManager.getResources`, so the value the PMS publishes has to be
+    /// a path the caller can open. In the confined ART guest that is
+    /// `/data/app/<name>.apk` (the APK is read-only-bound there), not the host
+    /// file the parser read: publishing the host path made every
+    /// `PackageItemInfo.loadXmlMetaData` (`FileProvider`'s
+    /// `FILE_PROVIDER_PATHS` XML) fail with
+    /// `ApkAssets.nativeLoad: Failed to load asset path <host path>`.
+    pub fn set_package_from_apk_as(
+        &mut self,
+        apk_path: &Path,
+        guest_source_dir: Option<&str>,
+    ) -> Result<()> {
+        let mut state = PmsState::from_apk(apk_path)?;
+        if let Some(guest) = guest_source_dir {
+            state.set_guest_apk_path(guest);
+        }
         *self.state.lock().unwrap() = state;
         Ok(())
     }
@@ -1253,10 +1426,18 @@ impl ServiceObject for PmsService {
             // exception here made the app see `IllegalArgumentException`
             // instead of the exception it catches, which is what stopped vlc on
             // `getPackageInfo("com.google.android.gsf")` (K2 §6).
+            // K3d: the `flags` argument (a `long` on API 34) is honoured for
+            // `GET_META_DATA` on every `PackageItemInfo` reply, exactly as
+            // `PackageParser.generate*Info` does; without the flag the
+            // `metaData` field is null.
             "getApplicationInfo" => {
                 let package = args.first().and_then(Value::as_str);
+                let flags = flags_arg(args, 1);
                 let info = match Self::lookup(&state, package) {
-                    Ok(p) => p.application.to_parcelable(),
+                    Ok(p) => {
+                        trace_query("getApplicationInfo", package.unwrap_or(""), flags, p.application.meta_data.len());
+                        p.application.to_parcelable_with_flags(flags)
+                    }
                     Err(ServiceError::UnknownService { .. }) => Parcelable::Null,
                     Err(e) => return Err(e),
                 };
@@ -1264,8 +1445,9 @@ impl ServiceObject for PmsService {
             }
             "getPackageInfo" => {
                 let package = args.first().and_then(Value::as_str);
+                let flags = flags_arg(args, 1);
                 let info = match Self::lookup(&state, package) {
-                    Ok(p) => p.to_parcelable(),
+                    Ok(p) => p.to_parcelable_with_flags(flags),
                     Err(ServiceError::UnknownService { .. }) => Parcelable::Null,
                     Err(e) => return Err(e),
                 };
@@ -1285,8 +1467,9 @@ impl ServiceObject for PmsService {
                     .find(|a| a.name == name)
                     .cloned();
                 cache_activity_info(activity.clone());
+                let flags = flags_arg(args, 1);
                 vec![match activity {
-                    Some(a) => Value::TypedObject(a.to_parcelable(&state.app)),
+                    Some(a) => Value::TypedObject(a.to_parcelable_with_flags(&state.app, flags)),
                     None => Value::TypedObject(Parcelable::Null),
                 }]
             }
@@ -1298,8 +1481,9 @@ impl ServiceObject for PmsService {
                     .and_then(Value::as_str)
                     .unwrap_or_default();
                 let service = state.services.iter().find(|s| s.name == name).cloned();
+                let flags = flags_arg(args, 1);
                 vec![match service {
-                    Some(s) => Value::TypedObject(s.to_parcelable(&state.app)),
+                    Some(s) => Value::TypedObject(s.to_parcelable_with_flags(&state.app, flags)),
                     None => Value::TypedObject(Parcelable::Null),
                 }]
             }
@@ -1311,8 +1495,10 @@ impl ServiceObject for PmsService {
                     .and_then(Value::as_str)
                     .unwrap_or_default();
                 let provider = state.providers.iter().find(|p| p.name == name).cloned();
+                let flags = flags_arg(args, 1);
+                trace_query("getProviderInfo", name, flags, provider.as_ref().map_or(0, |p| p.meta_data.len()));
                 vec![match provider {
-                    Some(p) => Value::TypedObject(p.to_parcelable(&state.app)),
+                    Some(p) => Value::TypedObject(p.to_parcelable_with_flags(&state.app, flags)),
                     None => Value::TypedObject(Parcelable::Null),
                 }]
             }
@@ -1442,11 +1628,23 @@ impl ServiceObject for PmsService {
             "queryProperty" => vec![Value::TypedObject(Parcelable::Null)],
             "resolveContentProvider" => {
                 // `resolveContentProvider(String authority, long flags, int userId)`.
+                // This is the call `androidx.core.content.FileProvider` makes
+                // with `GET_META_DATA` to read its `FILE_PROVIDER_PATHS` XML,
+                // and what `ContentResolver` uses for a provider it has not
+                // published yet; `PackageInfoUtils.generateProviderInfo` gates
+                // the metadata `Bundle` on the same flag.
                 let authority = args.first().and_then(Value::as_str).unwrap_or_default();
+                let flags = flags_arg(args, 1);
                 let provider = state.provider_for_authority(authority);
+                trace_query(
+                    "resolveContentProvider",
+                    authority,
+                    flags,
+                    provider.as_ref().map_or(0, |p| p.meta_data.len()),
+                );
                 cache_provider_info(provider.clone());
                 vec![match provider {
-                    Some(p) => Value::TypedObject(p.to_parcelable(&state.app)),
+                    Some(p) => Value::TypedObject(p.to_parcelable_with_flags(&state.app, flags)),
                     None => Value::TypedObject(Parcelable::Null),
                 }]
             }
@@ -1581,6 +1779,7 @@ mod tests {
             exported: true,
             grant_uri_permissions: false,
             init_order: 0,
+            meta_data: Vec::new(),
         }
     }
 
@@ -1593,6 +1792,7 @@ mod tests {
             exported: false,
             flags: 0,
             foreground_service_type: 0,
+            meta_data: Vec::new(),
         }
     }
 

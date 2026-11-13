@@ -2775,6 +2775,14 @@ public final class LaunchMain {
         // (P4b.md §4).
         set(ai, "deviceProtectedDataDir", ai.dataDir);
         set(ai, "credentialProtectedDataDir", ai.dataDir);
+        // K3d: the `<application>` `<meta-data>` `PackageParser` stores off to
+        // the side (`Package.mAppMetaData`). `ActivityThread` hands
+        // `data.appInfo` to `LoadedApk.makeApplication`, so an app that reads
+        // `context.getApplicationInfo().metaData` sees its own declaration
+        // instead of `null`. The host parses it with the same model PMS answers
+        // `getApplicationInfo(GET_META_DATA)` from.
+        String appMeta = System.getenv("ACOSLAUNCH_APP_META");
+        if (appMeta != null) ai.metaData = metaBundle(appMeta);
         set(ai, "compileSdkVersion", 34);
         set(ai, "appComponentFactory", "android.app.AppComponentFactory");
         set(ai, "enabled", Boolean.TRUE);
@@ -2990,10 +2998,14 @@ public final class LaunchMain {
                 pi.initOrder = 0;
                 pi.isSyncable = false;
                 pi.multiprocess = false;
-                // An empty Bundle, not null: a provider whose metadata a
-                // manifest does not declare still has an empty metadata map,
-                // and `androidx.startup`'s own discovery reads it.
-                pi.metaData = new android.os.Bundle();
+                // K3d: the provider's own `<meta-data>`, host-parsed from the
+                // APK's manifest by the same `PackageParser` model PMS answers
+                // `getProviderInfo`/`resolveContentProvider` from. Empty when
+                // the manifest declares none: the provider still has a
+                // metadata map, it is just empty.
+                pi.metaData = f.length > 5
+                        ? metaBundle(f[5])
+                        : new android.os.Bundle();
                 list.add(pi);
             }
         }
@@ -3002,6 +3014,65 @@ public final class LaunchMain {
         Class<?> cls = Class.forName("android.content.pm.ProviderInfoList");
         Method fromList = cls.getMethod("fromList", java.util.List.class);
         return fromList.invoke(null, list);
+    }
+
+    /**
+     * K3d: decode the host's `<meta-data>` field encoding
+     * (`name=type+value` entries joined with `;`, `|`, `;`, `=` and newlines
+     * escaped as `\|`, `\s`, `\e`, `\n`, and backslash as `\\`).
+     *
+     * <p>The value types are the four `Bundle` types
+     * `PackageParser.parseMetaData` stores: `putString` (`s`), `putInt` (`i`,
+     * which is also how an `android:resource` reference id is stored),
+     * `putBoolean` (`b`) and `putFloat` (`f`). No other type reaches a bundle
+     * on a device either.
+     */
+    static android.os.Bundle metaBundle(String spec) {
+        android.os.Bundle bundle = new android.os.Bundle();
+        if (spec == null || spec.length() == 0) return bundle;
+        for (String entry : spec.split(";", -1)) {
+            if (entry.length() == 0) continue;
+            int eq = entry.indexOf('=');
+            if (eq <= 0 || eq + 2 > entry.length()) continue;
+            String key = metaUnescape(entry.substring(0, eq));
+            char kind = entry.charAt(eq + 1);
+            String raw = metaUnescape(entry.substring(eq + 2));
+            try {
+                switch (kind) {
+                    case 's': bundle.putString(key, raw); break;
+                    case 'i': bundle.putInt(key, Integer.parseInt(raw)); break;
+                    case 'b': bundle.putBoolean(key, "1".equals(raw)); break;
+                    case 'f': bundle.putFloat(key, Float.parseFloat(raw)); break;
+                    default:
+                        System.out.println("ACOSLAUNCH WARN meta-data type " + kind
+                                + " is not a Bundle type; dropped (" + key + ")");
+                }
+            } catch (NumberFormatException e) {
+                System.out.println("ACOSLAUNCH WARN meta-data value for " + key
+                        + " is not a " + kind + ": " + raw);
+            }
+        }
+        return bundle;
+    }
+
+    static String metaUnescape(String text) {
+        StringBuilder out = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c != '\\' || i + 1 >= text.length()) {
+                out.append(c);
+                continue;
+            }
+            char n = text.charAt(++i);
+            switch (n) {
+                case 'p': out.append('|'); break;
+                case 's': out.append(';'); break;
+                case 'e': out.append('='); break;
+                case 'n': out.append('\n'); break;
+                default: out.append(n); break;
+            }
+        }
+        return out.toString();
     }
 
     // ------------------------------------------------------ conformance probe
