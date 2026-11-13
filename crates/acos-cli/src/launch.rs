@@ -88,6 +88,15 @@ pub struct LaunchArgs {
     #[arg(long)]
     pub reference: bool,
 
+    /// W7: app-window inset model. `carve` (default) is the pre-W7 shim whose
+    /// app frame is the display application area and whose reported insets are
+    /// therefore zero. `report` gives the app the full-display window frame and
+    /// reports status/navigation/system-gesture insets, which DecorView (non-
+    /// edge-to-edge apps) or the app's own padding (edge-to-edge apps) then
+    /// consumes. `--engine art` forwards it to the ART guest and its WMS peer.
+    #[arg(long, value_name = "carve|report")]
+    pub insets: Option<String>,
+
     /// P12: framework animation scales for an ART session (`on`/`off`).
     ///
     /// `off` sets Android's three animation scales to 0 for functional checks
@@ -147,6 +156,16 @@ pub fn run(args: LaunchArgs) -> ExitCode {
     match display {
         Some(o) => std::env::set_var("ACOS_DISPLAY_OVERRIDE", o.spec()),
         None => std::env::remove_var("ACOS_DISPLAY_OVERRIDE"),
+    }
+    // W7: the inset selector is an environment contract for the WMS shim and
+    // the ART guest; `--insets` is the CLI spelling. Validate here so a typo
+    // never silently falls back to `carve`.
+    if let Some(value) = args.insets.as_deref() {
+        if acos_services::wms::parse_insets_mode(value).is_none() {
+            eprintln!("launch: --insets must be \"carve\" or \"report\" (got {value:?})");
+            return ExitCode::FAILURE;
+        }
+        std::env::set_var("ACOS_WM_INSETS", value);
     }
     // The engine is explicit and never inferred from the engine the last
     // command used. `art` means: run the APK's own launcher Activity on Google
@@ -260,6 +279,7 @@ fn run_keep(
         "flutter": flutter,
         "rn": rn,
         "display": display.map(|o| o.spec()),
+        "insets": args.insets.clone(),
         "animations": args.animations.clone(),
         "timeout_ms": args.timeout.saturating_mul(1000),
     });

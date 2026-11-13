@@ -891,6 +891,10 @@ pub struct InsetsSource {
     pub visible_frame: Option<RectI>,
     pub visible: bool,
     pub flags: i32,
+    /// `InsetsSource.mInsetsRoundedCornerFrame` in the API-34 boot jar
+    /// (`framework.jar` / `classes4.dex`); the android14 `AOSP_REFERENCE`
+    /// source tree has newer side-hint fields, but the frozen-VM wire must
+    /// match the jar it actually executes.
     pub insets_rounded_corner_frame: bool,
 }
 

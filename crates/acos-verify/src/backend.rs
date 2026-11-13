@@ -730,6 +730,10 @@ pub trait Backend {
     /// the default is a no-op (a backend with no settle rule has nothing to
     /// bound). A timeout is still an observation, never a pass for an assertion.
     fn set_settle_timeout(&mut self, _timeout_ms: Option<u64>) {}
+
+    /// The settle rule for the next input action (a scenario's `settle: fast`).
+    /// Assertions never use this: they observe the action's own bound frame.
+    fn set_input_settle(&mut self, _fast: bool) {}
 }
 
 #[cfg(test)]

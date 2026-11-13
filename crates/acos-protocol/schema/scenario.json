@@ -390,6 +390,17 @@
           ],
           "description": "Symbolic key."
         },
+        "settle": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StepSettle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Settle rule for this input (`strict` default, `fast` navigation)."
+        },
         "settle_timeout_ms": {
           "description": "P12b: strict/fast settle deadline for this key action (milliseconds).",
           "format": "uint64",
@@ -1370,6 +1381,25 @@
       },
       "type": "object"
     },
+    "StepSettle": {
+      "description": "The settle rule an input step asks for. `strict` is the default and the only rule an assertion may use; `fast` is the navigation rule for a screen that never settles (a JS auto-advance timer, an endless animation). It is accepted only on input steps and is labelled in the step evidence.",
+      "oneOf": [
+        {
+          "description": "Strict event settle (default).",
+          "enum": [
+            "strict"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Fast navigation settle (never assertion evidence).",
+          "enum": [
+            "fast"
+          ],
+          "type": "string"
+        }
+      ]
+    },
     "TapStep": {
       "description": "`tap`.",
       "properties": {
@@ -1383,6 +1413,17 @@
             }
           ],
           "description": "Target selector."
+        },
+        "settle": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StepSettle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Settle rule for this input (`strict` default, `fast` navigation)."
         },
         "settle_timeout_ms": {
           "description": "P12b: strict/fast settle deadline for this tap (milliseconds).",
@@ -1575,6 +1616,17 @@
             }
           ],
           "description": "Target selector (absent = current focus)."
+        },
+        "settle": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StepSettle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Settle rule for this input (`strict` default, `fast` navigation)."
         },
         "settle_timeout_ms": {
           "description": "P12b: strict/fast settle deadline for this type action (milliseconds).",

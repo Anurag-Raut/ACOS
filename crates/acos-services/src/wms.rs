@@ -38,6 +38,16 @@ use acos_wm::codec::{LayoutParams, SurfaceControlInfo};
 use acos_wm::display::DisplaySpec;
 use acos_wm::error::{Result as WmResult, WmError};
 use acos_wm::wms::{AddWindowResult, RelayoutResult, SessionId, WindowId, WindowManager};
+/// W7: re-export the app-window inset selector so every engine
+/// (`acos-art launch`, the daemon, the verifier) spells it the same way.
+pub use acos_wm::display::{InsetsMode, DEFAULT_INSETS_MODE, INSETS_ENV};
+
+/// Parse an `ACOS_WM_INSETS` value (`carve` / `report`).
+#[must_use]
+pub fn parse_insets_mode(value: &str) -> Option<InsetsMode> {
+    InsetsMode::parse(value)
+}
+
 /// W47: the stock `Configuration.screenLayout` for the reference display;
 /// `acos-art` forwards it to the launch guest (`ACOSLAUNCH_SCREEN_LAYOUT`).
 pub use acos_wm::wms::REFERENCE_SCREEN_LAYOUT;
@@ -145,15 +155,17 @@ impl WmsState {
     /// A state machine on the reference display with one open session.
     #[must_use]
     pub fn new() -> Self {
+        let insets_mode = InsetsMode::from_env(acos_wm::display::DEFAULT_INSETS_MODE);
         let display = match crate::display::display_override() {
-            Some(o) => DisplaySpec::custom(
+            Some(o) => DisplaySpec::custom_with_insets(
                 o.width,
                 o.height,
                 o.density_dpi as u32,
                 o.status_bar_top,
                 o.nav_bar_bottom,
+                insets_mode,
             ),
-            None => DisplaySpec::reference_1080x2400(),
+            None => DisplaySpec::reference_with_insets(insets_mode),
         };
         let mut wm = WindowManager::new(display);
         let (session, session_binder) = wm.open_session(None);

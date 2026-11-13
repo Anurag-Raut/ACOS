@@ -1,0 +1,63 @@
+# gaten-settings: the Settings tab and two of its pages on real ART.
+# NEGATIVE CONTROL: the app is correct but the expected text is wrong.
+# Must produce status=fail (ASSERTION_FAILED), never pass.
+#
+# Functional state, not animation: the theme switch is proven by the Settings
+# hub's own Appearance value changing Light -> dark, and About by its licence
+# copy. Onboarding taps are navigation (`settle: fast`); assertions are strict
+# on a capture's bound frame.
+version: 1
+name: gaten-settings-wrong
+description: >-
+  Settings hub, Appearance page (Theme Light -> Dark, then the hub reflects
+  "dark"), and the About page with its licence rows.
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: fail
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  # Strict first tap (waits through the welcome timeline); the Skip pages are
+  # navigation (`settle: fast`); Home is then proven strictly below.
+  - tap: {selector: {text: {contains: "Set up Gaten"}}, settle_timeout_ms: 5000}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - capture: {name: settings-home, format: png, fresh: true}
+  # Settings hub.
+  - tap: {selector: {content_desc: {exact: Settings}}}
+  - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - capture: {name: settings-hub, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "Screen lookup"}}, text: {exact: "Screen lookup"}}
+  - assert_text: {selector: {text: {exact: "Kanji reference"}}, text: {exact: "Kanji reference"}}
+  - assert_text: {selector: {text: {exact: "Appearance"}}, text: {exact: "Theme"}}
+  # Appearance: the current value is the hub row's own text.
+  - tap: {selector: {content_desc: {contains: "Appearance."}}}
+  - wait_for: {selector: {text: {contains: "Accent"}}, timeout_ms: 30000}
+  - capture: {name: settings-appearance, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "Theme"}}, text: {exact: "Theme"}}
+  - assert_text: {selector: {text: {exact: "Haptics"}}, text: {exact: "Haptics"}}
+  # Theme Dark is a radio pressable with its own accessibility label.
+  - tap: {selector: {content_desc: {exact: "Theme Dark"}}}
+  - capture: {name: settings-appearance-dark, format: png, fresh: true}
+  # Back to the hub: its Appearance row must now read the new mode.
+  - back: {}
+  - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - capture: {name: settings-hub-dark, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "Dark"}}, text: {exact: "Dark"}}
+  # About page.
+  - tap: {selector: {content_desc: {contains: "About."}}}
+  - wait_for: {selector: {text: {contains: "Privacy"}}, timeout_ms: 30000}
+  - capture: {name: settings-about, format: png, fresh: true}
+  - assert_text: {selector: {text: {contains: "Japanese lookup, offline by default."}}, text: {contains: "Japanese lookup, offline by default."}}
+  - assert_text: {selector: {text: {exact: "Privacy policy"}}, text: {exact: "Privacy policy"}}
+  - back: {}
+  - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - capture: {name: settings-back-home, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "About"}}, text: {exact: "About"}}

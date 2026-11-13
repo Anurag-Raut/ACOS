@@ -16,6 +16,7 @@
 #   fixtures/build/apps/form-validation.apk
 #   fixtures/build/apps/svg-viewbox.apk
 #   fixtures/build/apps/offscreen-pager.apk
+#   fixtures/build/apps/insets-probe.apk
 # Installation on a device is attempted only if one is already attached; no
 # emulator is ever started here.
 set -euo pipefail
@@ -89,6 +90,12 @@ build_apk() {
     local app_dir="$APPS_DIR/$name"
     local work="$BUILD_DIR/$name"
     local out="$BUILD_DIR/$name.apk"
+    # W7: a fixture may need a different SDK. `insets-probe` is targetSdk 35
+    # (Android 15 edge-to-edge default); everything else stays on the frozen
+    # API-34 profile its baselines were captured on.
+    local target_sdk="${APP_TARGET_SDK:-34}"
+    local android_jar="$SDK/platforms/android-$target_sdk/android.jar"
+    [ -f "$android_jar" ] || die "android.jar not found: $android_jar"
 
     rm -rf "$work"
     mkdir -p "$work/compiled" "$work/gen" "$work/classes" "$work/dex"
@@ -99,22 +106,22 @@ build_apk() {
     echo "build-apps: [$name] linking resources + manifest"
     "$AAPT2" link \
         -o "$work/base.apk" \
-        -I "$ANDROID_JAR" \
+        -I "$android_jar" \
         --manifest "$app_dir/AndroidManifest.xml" \
         -R "$work/compiled.zip" \
         --java "$work/gen" \
         --min-sdk-version 26 \
-        --target-sdk-version 34 \
+        --target-sdk-version "$target_sdk" \
         --auto-add-overlay
 
     echo "build-apps: [$name] compiling java"
     # shellcheck disable=SC2046
-    javac --release 11 -encoding UTF-8 -cp "$ANDROID_JAR" -d "$work/classes" \
+    javac --release 11 -encoding UTF-8 -cp "$android_jar" -d "$work/classes" \
         $(find "$app_dir/src" "$work/gen" -name '*.java')
 
     echo "build-apps: [$name] dexing"
     # shellcheck disable=SC2046
-    "$D8" --lib "$ANDROID_JAR" --min-api 26 --output "$work/dex" \
+    "$D8" --lib "$android_jar" --min-api 26 --output "$work/dex" \
         $(find "$work/classes" -name '*.class')
 
     python3 "$APPEND_PY" "$work/base.apk" "$work/dex/classes.dex" "$@"
@@ -199,6 +206,11 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 for app in counter todo-list multi-activity form-validation settle-lab thread-heavy svg-viewbox offscreen-pager; do
     build_apk "$app"
 done
+
+# insets-probe is the W7 window-model fixture: an edge-to-edge Activity that
+# prints the frame and the reported system-bar insets. It is the only fixture
+# built at targetSdk 35, the Android 15 edge-to-edge default.
+APP_TARGET_SDK=35 build_apk insets-probe
 
 # --- optional device smoke test ---------------------------------------------
 # Opt-in only (2026-11-12): a physical phone may be attached (the owner's own

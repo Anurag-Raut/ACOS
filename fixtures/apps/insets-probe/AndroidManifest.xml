@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.acos.fixtures.insetsprobe"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+    <!-- W7: an edge-to-edge app. targetSdk 35 is the Android 15 default; the
+         Activity also calls Window.setDecorFitsSystemWindows(false) explicitly
+         so the edge-to-edge contract holds on the API-34 image ACOS runs. -->
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+
+    <application
+        android:label="@string/app_name"
+        android:allowBackup="false"
+        android:debuggable="true">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -681,7 +681,15 @@ fn static_overlay_overrides_framework_bool() {
     assert_eq!(name, "android:bool/config_buttonTextAllCaps");
     let (_, before) = base.get_resource_value(ID, 0, true).expect("base value");
     assert_eq!(before.data_type, 0x12, "base is TYPE_INT_BOOLEAN");
-    assert_eq!(before.data, 1, "framework-res declares config_buttonTextAllCaps=true");
+    // AOSP's `TYPE_INT_BOOLEAN` true sentinel is `(uint32_t)-1`, not 1
+    // (`base/libs/androidfw/ResourceTypes.cpp`: `outValue->data =
+    // (uint32_t)-1`; `TypedArray.getBoolean` is `data != 0`). The old golden
+    // value `1` was an ACOS-authored placeholder; this framework-res.apk
+    // stores the AOSP sentinel, so 0xFFFF_FFFF is the device-accurate value.
+    assert_eq!(
+        before.data, 0xFFFF_FFFF,
+        "framework-res declares config_buttonTextAllCaps=true"
+    );
     let untouched_before = base.get_resource_value(UNTOUCHED, 0, true).map(|(_, v)| v.data);
 
     let overridden = base.apply_overlay(ApkAssets::open(&overlay_path).unwrap());

@@ -1,0 +1,48 @@
+# gaten-search: the dictionary lookup flow on real ART — text input, a result
+# NEGATIVE CONTROL: the app is correct but the expected text is wrong.
+# Must produce status=fail (ASSERTION_FAILED), never pass.
+# list, and a word-detail page, all from Gaten's own bundled dictionary.
+#
+# The search field is a real TextInput: the tap focuses it and `type` goes
+# through the guest's text-input command. State is proven by the result card and
+# the word page, not by the tap's delivery.
+version: 1
+name: gaten-search-wrong
+description: >-
+  Type "neko" into Home's search field, open the 猫 result, and assert the word
+  details page (Meanings / Example sentences).
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: fail
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  - tap: {selector: {text: {contains: "Set up Gaten"}}, settle_timeout_ms: 5000}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - capture: {name: search-home, format: png, fresh: true}
+  # Focus the field, then type a romaji reading.
+  - tap: {selector: {content_desc: {exact: "Search Japanese dictionary"}}, settle_timeout_ms: 5000}
+  - type: {text: "neko", settle: fast}
+  - wait_for: {selector: {text: {contains: "猫"}}, timeout_ms: 30000}
+  - capture: {name: search-results, format: png, fresh: true}
+  - assert_text: {selector: {text: {contains: "results"}}, text: {contains: "results"}}
+  - assert_text: {selector: {text: {exact: "猫"}}, text: {exact: "猫"}}
+  # The result card's own accessible name: "Open 猫".
+  - tap: {selector: {content_desc: {contains: "Open 猫"}}, settle_timeout_ms: 5000}
+  - wait_for: {selector: {text: {exact: "Meanings"}}, timeout_ms: 30000}
+  - capture: {name: search-word, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "Meanings"}}, text: {exact: "Not meanings"}}
+  - assert_text: {selector: {text: {contains: "Example sentences"}}, text: {contains: "Example sentences"}}
+  # Back returns to the result list, which is still the same search.
+  - back: {}
+  - wait_for: {selector: {text: {contains: "results"}}, timeout_ms: 30000}
+  - capture: {name: search-results-again, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "猫"}}, text: {exact: "猫"}}

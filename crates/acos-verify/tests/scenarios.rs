@@ -1143,3 +1143,38 @@ fn a_refused_log_channel_fails_closed_with_the_backend_code() {
     assert!(failure.error.message.contains("UNTRUSTED_LOG_ASSERTION"));
     let _ = std::fs::remove_dir_all(&artifacts);
 }
+
+const FAST_TAP_ASSERT: &str = r#"
+version: 1
+name: fast-tap-assert
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+steps:
+  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
+  - tap: {selector: {id: btn}, settle: fast}
+  - assert_text: {selector: {id: result}, text: {exact: "clicks: 1"}}
+"#;
+
+#[test]
+fn assertion_on_a_fast_input_frame_fails_closed() {
+    // GR3/G3a: `settle: fast` is navigation only. An assertion bound to that
+    // frame must fail, even when the frame would satisfy it.
+    let outcome =
+        run_slice(FAST_TAP_ASSERT, SliceMode::Good, b"initial".to_vec(), b"after".to_vec());
+    assert_eq!(outcome.verdict.verdict, Status::Fail, "{:?}", outcome.verdict.failure);
+    let failure = outcome.verdict.failure.as_ref().unwrap();
+    assert_eq!(failure.error.code, acos_protocol::ErrorCode::AssertionFailed);
+    assert!(failure.error.message.contains("settle: fast"), "{}", failure.error.message);
+}
+
+#[test]
+fn a_strict_wait_for_after_a_fast_input_rebinds_the_frame() {
+    let yaml = FAST_TAP_ASSERT.replace(
+        "  - assert_text:",
+        "  - wait_for: {selector: {id: result}, timeout_ms: 1000}\n  - assert_text:",
+    );
+    let outcome = run_slice(&yaml, SliceMode::Good, b"initial".to_vec(), b"after".to_vec());
+    assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+}

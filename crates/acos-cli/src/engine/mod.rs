@@ -363,6 +363,10 @@ pub trait SessionBackend {
     /// default has no settle rule and ignores it.
     fn set_settle_timeout(&mut self, _timeout_ms: Option<u64>) {}
 
+    /// P12c: the settle rule for the next input action (`fast` for a scenario
+    /// that must drive a screen which never settles). Assertions never use it.
+    fn set_input_settle_mode(&mut self, _fast: bool) {}
+
     /// P12b: the settle block of the most recent input when its strict settle
     /// timed out (`settled:false`, `bound:"timeout"`), or `None`.
     ///
@@ -806,6 +810,12 @@ impl Backend for EngineBackend {
 
     fn observe(&mut self) -> Result<SessionObservation, BackendError> {
         self.observe_session()
+    }
+
+    fn set_input_settle(&mut self, fast: bool) {
+        if let EngineBackend::Session { session, .. } = self {
+            session.set_input_settle_mode(fast);
+        }
     }
 
     fn refresh(&mut self) -> Result<SessionObservation, BackendError> {
@@ -1621,6 +1631,7 @@ mod engine_tests {
             &dir,
             None,
             None,
+            None,
         );
         let verdict = envelope.result().unwrap().get("verdict").unwrap();
         assert_eq!(verdict["engine"], "art");
@@ -1725,6 +1736,7 @@ mod engine_tests {
             backend.session_capabilities().as_ref(),
             crate::trust::Trust::Trusted,
             &dir,
+            None,
             None,
             None,
         );

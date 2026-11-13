@@ -111,6 +111,9 @@ pub struct LaunchOpts {
     pub status_inset: u32,
     /// Navigation-bar bottom inset in pixels.
     pub nav_inset: u32,
+    /// W7: app-window inset model (`carve` = pre-W7 carved frame,
+    /// `report` = AOSP full-display frame plus reported insets).
+    pub insets: String,
     /// P12: per-session framework animation scales.
     pub animations: Animations,
 }
@@ -127,6 +130,7 @@ impl Default for LaunchOpts {
             density_dpi: 420,
             status_inset: 128,
             nav_inset: 63,
+            insets: acos_services::wms::DEFAULT_INSETS_MODE.as_str().to_string(),
             animations: Animations::On,
         }
     }
@@ -389,6 +393,11 @@ fn apply_malloc_controls() {
 
 /// Run the real `ActivityThread.main`-style startup until `Application.onCreate`.
 pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
+    // W7: the in-process peer's `WmsState` is built from this process's env, so
+    // install the selected inset model before the peer host exists. The guest
+    // also receives `ACOSLAUNCH_WM_INSETS` below so its DisplayInfo/Configuration
+    // agree with the WMS frame it is about to be given.
+    std::env::set_var("ACOS_WM_INSETS", &opts.insets);
     // W39 (flagged call-site edit in the W36-owned launch.rs): stage markers for
     // the exec -> activity-resumed wall. Inert unless ACOS_ART_STAGE_TIMING=1.
     crate::stage("launch-entry");
@@ -416,6 +425,10 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         )));
     }
     root.ensure_data()?;
+    // H15: the host's cgroup-scope capability is a per-boot constant; the cache
+    // stamp lives in this shared data root, so a relaunch (`reset`) does not pay
+    // the two `systemd-run` capability probes again.
+    crate::cgroup::set_capability_root(&root.data);
     root.ensure_linkerconfig(false)?;
     crate::stage("linkerconfig");
     root.ensure_classpath_env(false)?;
@@ -1024,6 +1037,7 @@ pub(crate) fn launch_session(
         ("ACOSLAUNCH_STATUS_INSET", opts.status_inset),
         ("ACOSLAUNCH_NAV_INSET", opts.nav_inset),
     ];
+    sb.env("ACOSLAUNCH_WM_INSETS", &opts.insets);
     let defaults = (1080u32, 2400u32, 420u32, 128u32, 63u32);
     let current = (
         opts.width,
@@ -1177,6 +1191,13 @@ pub(crate) fn launch_session(
         if let Ok(v) = std::env::var(knob) {
             sb.env(knob, &v);
         }
+    }
+    // H15 diagnostic: name the ANIMATION-queue callbacks that keep drawing after
+    // the first frame (`ACOSLAUNCH TRACE` cannot show them: they run inside
+    // Choreographer.doFrame, not as handler messages). Forwarded only when the
+    // caller set it, so the default guest payload is unchanged.
+    if std::env::var_os("P10_PROBE_ANIM_TRACE").is_some() {
+        sb.env("P10_PROBE_ANIM_TRACE", "1");
     }
     // W5: keep the guest's main looper alive for N ms after `activity-resumed`
     // so the first traversal's draw (lockCanvas -> queueBuffer -> BLAST) can be
@@ -1940,6 +1961,11 @@ impl ProbeWake {
 #[derive(Default)]
 struct ProbeState {
     latest: Option<ProbeSample>,
+    /// H15: the last `anim_callbacks` set traced, so the trace names each
+    /// distinct animation callback once instead of once per sample.
+    anim_traced: String,
+    /// H15: the last `in_touch_mode` value traced (same once-only rule).
+    touch_traced: Option<bool>,
     /// The newest `ACOSUNSUPPORTED {…}` marker (guest-asserted).
     unsupported: Option<serde_json::Value>,
     /// Monotonic marker count, so a stale marker is not attributed to a later
@@ -2575,6 +2601,36 @@ fn drain_tee_lines<R: std::io::Read>(
                     // quiet sample parses exactly as before (settled=false,
                     // draw_ms=0 are simply unused there).
                     let event = value.get("settle");
+                    if let Some(names) = event
+                        .and_then(|e| e.get("anim_callbacks"))
+                        .and_then(|v| v.as_array())
+                        .filter(|a| !a.is_empty())
+                    {
+                        let names: Vec<String> = names
+                            .iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect();
+                        let joined = names.join(",");
+                        let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+                        if state.anim_traced != joined {
+                            state.anim_traced = joined.clone();
+                            if let Some(trace) = state.trace.as_mut() {
+                                trace.line("GUEST", &format!("anim_callbacks {joined}"));
+                            }
+                        }
+                    }
+                    if let Some(touch) = event
+                        .and_then(|e| e.get("in_touch_mode"))
+                        .and_then(|v| v.as_bool())
+                    {
+                        let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+                        if state.touch_traced != Some(touch) {
+                            state.touch_traced = Some(touch);
+                            if let Some(trace) = state.trace.as_mut() {
+                                trace.line("GUEST", &format!("touch_mode {touch}"));
+                            }
+                        }
+                    }
                     let draw_ms = event
                         .and_then(|v| v.get("draw_ms"))
                         .and_then(|v| v.as_u64())
@@ -3203,6 +3259,17 @@ fn wait_for_event_settled(
     let (unsupported_baseline, _) = latest_unsupported(probe_state);
     let mut last_generation = min_generation;
     let mut last_wake = Instant::now();
+    // Host wake pacing. The guest already emits a sample on every dirty draw
+    // (P10), so asking it for another one every 20 ms while a screen animates
+    // only floods the main Looper with full tree walks; under Gaten's endless
+    // welcome timeline that is enough to starve the probe entirely (the
+    // `probe-floor` + 12 s `tree_age_ms` symptom). Wake only when the newest
+    // sample has not moved since the previous request, and at a lower cadence;
+    // an idle screen still gets a sample, a drawing one uses its own events.
+    let wake_ms = env_u64("ACOS_STRICT_SETTLE_WAKE_MS", 50);
+    let mut last_requested_seq = latest_probe(probe_state)
+        .map(|sample| sample.seq)
+        .unwrap_or(0);
     let mut candidate: Option<ProbeSample> = None;
     let mut candidate_since = Instant::now();
     let mut first_change_ms: Option<u64> = None;
@@ -3328,10 +3395,17 @@ fn wait_for_event_settled(
                 }
             }
         }
-        // An idle screen emits nothing; one wake per ~20 ms while a settle is
-        // waiting is enough to confirm the same draw without a poll cadence.
-        if last_wake.elapsed() >= Duration::from_millis(20) {
+        // An idle screen emits nothing, so a bounded wake keeps it observable;
+        // a drawing screen's own dirty events are the request. Never re-ask for
+        // a sample that already arrived since the last request.
+        let current_probe_seq = latest_probe(probe_state)
+            .map(|sample| sample.seq)
+            .unwrap_or(last_requested_seq);
+        if last_wake.elapsed() >= Duration::from_millis(wake_ms)
+            && current_probe_seq == last_requested_seq
+        {
             request_guest_probe(guest_stdin);
+            last_requested_seq = current_probe_seq;
             last_wake = Instant::now();
         }
         if Instant::now() >= deadline {
@@ -5521,6 +5595,8 @@ mod probe_line_tests {
                 bad_probe_lines: self.bad_probe_lines,
                 trace: None,
                 wake: Arc::clone(&self.wake),
+                anim_traced: self.anim_traced.clone(),
+                touch_traced: self.touch_traced,
             }
         }
     }

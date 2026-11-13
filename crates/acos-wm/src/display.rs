@@ -15,6 +15,78 @@
 
 use crate::geom::{InsetsI, PointI, RectI};
 
+/// Environment selector for the app-window inset model (W7).
+///
+/// * [`InsetsMode::Carve`] is the pre-W7 shim: the app window frame is the
+///   display's application area (`display.app_bounds`), and a real
+///   `InsetsState` calculated against that frame reports zero system-bar
+///   insets because the bars sit outside the frame.
+/// * [`InsetsMode::Report`] follows AOSP's edge-to-edge window model: the app
+///   window frame is the full display and the `InsetsState` source frames are
+///   reported to the client, which then applies them itself (DecorView margins
+///   for a non-edge-to-edge app, app padding for an edge-to-edge one).
+pub const INSETS_ENV: &str = "ACOS_WM_INSETS";
+
+/// The default model when `ACOS_WM_INSETS` is unset.
+///
+/// W7 keeps the pre-W7 behaviour as the default: every frozen screenshot,
+/// `assert_region` coordinate and frame-size baseline in the gate list was
+/// captured against the carved frame. `report` is opt-in (see EXPERIMENTS
+/// E13.5); the code path is exercised by the `w7-insets-report` scenario.
+pub const DEFAULT_INSETS_MODE: InsetsMode = InsetsMode::Carve;
+
+/// App-window inset model selected by [`INSETS_ENV`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum InsetsMode {
+    /// Pre-W7: the window manager subtracts the system bars from the frame.
+    #[default]
+    Carve,
+    /// AOSP: full-display window plus a reported `InsetsState`.
+    Report,
+}
+
+impl InsetsMode {
+    /// Parse the `ACOS_WM_INSETS` spelling (`carve` / `report`).
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "carve" => Some(Self::Carve),
+            "report" => Some(Self::Report),
+            _ => None,
+        }
+    }
+
+    /// The wire/env spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Carve => "carve",
+            Self::Report => "report",
+        }
+    }
+
+    /// Parse `value` or fall back to `default`.
+    #[must_use]
+    pub fn parse_or(value: &str, default: Self) -> Self {
+        Self::parse(value).unwrap_or(default)
+    }
+
+    /// The selector from the process environment, falling back to `default`.
+    #[must_use]
+    pub fn from_env(default: Self) -> Self {
+        std::env::var(INSETS_ENV)
+            .ok()
+            .map(|value| Self::parse_or(&value, default))
+            .unwrap_or(default)
+    }
+
+    /// `true` for [`InsetsMode::Report`].
+    #[must_use]
+    pub const fn is_report(self) -> bool {
+        matches!(self, Self::Report)
+    }
+}
+
 /// Logical display width in pixels.
 pub const DISPLAY_WIDTH: i32 = 1080;
 /// Logical display height in pixels.
@@ -116,6 +188,8 @@ pub struct DisplaySpec {
     pub bars: SystemBars,
     /// Current rotation (0..3).
     pub rotation: u8,
+    /// W7: whether the app window is carved or the insets are reported.
+    pub insets_mode: InsetsMode,
 }
 
 impl Default for DisplaySpec {
@@ -138,7 +212,16 @@ impl DisplaySpec {
             frame_interval_nanos: FRAME_INTERVAL_NANOS,
             bars: SystemBars::reference(),
             rotation: 0,
+            insets_mode: InsetsMode::Carve,
         }
+    }
+
+    /// The reference display with an explicit W7 inset model.
+    #[must_use]
+    pub const fn reference_with_insets(insets_mode: InsetsMode) -> Self {
+        let mut display = Self::reference_1080x2400();
+        display.insets_mode = insets_mode;
+        display
     }
 
     /// A display with explicit geometry, used by `acos launch --density` /
@@ -156,6 +239,26 @@ impl DisplaySpec {
         density_dpi: u32,
         status_bar_top: i32,
         nav_bar_bottom: i32,
+    ) -> Self {
+        Self::custom_with_insets(
+            width,
+            height,
+            density_dpi,
+            status_bar_top,
+            nav_bar_bottom,
+            InsetsMode::Carve,
+        )
+    }
+
+    /// [`Self::custom`] with an explicit W7 inset model.
+    #[must_use]
+    pub fn custom_with_insets(
+        width: i32,
+        height: i32,
+        density_dpi: u32,
+        status_bar_top: i32,
+        nav_bar_bottom: i32,
+        insets_mode: InsetsMode,
     ) -> Self {
         let width = width.max(1);
         let height = height.max(1);
@@ -187,6 +290,7 @@ impl DisplaySpec {
             frame_interval_nanos: FRAME_INTERVAL_NANOS,
             bars,
             rotation: 0,
+            insets_mode,
         }
     }
 
@@ -202,10 +306,30 @@ impl DisplaySpec {
         self.bars.app_insets()
     }
 
-    /// `addToDisplayAsUser`'s `outFrame` for a normal app window: the app bounds.
+    /// `addToDisplayAsUser`'s `outFrame` for a normal app window: the app bounds
+    /// under [`InsetsMode::Carve`], the full display under
+    /// [`InsetsMode::Report`] (AOSP `WindowLayout` with `fitInsetsTypes == 0`,
+    /// which `PhoneWindow.generateLayout` sets for every non-floating window).
     #[must_use]
     pub const fn window_frame(&self) -> RectI {
-        self.app_bounds
+        match self.insets_mode {
+            InsetsMode::Carve => self.app_bounds,
+            InsetsMode::Report => self.frame,
+        }
+    }
+
+    /// Screen width in dp at this density (framework rounding).
+    #[must_use]
+    pub fn screen_width_dp(&self) -> i32 {
+        ((self.frame.width() as i64 * 160 + self.density_dpi as i64 / 2)
+            / self.density_dpi.max(1) as i64) as i32
+    }
+
+    /// Screen height in dp at this density (framework rounding).
+    #[must_use]
+    pub fn screen_height_dp(&self) -> i32 {
+        ((self.frame.height() as i64 * 160 + self.density_dpi as i64 / 2)
+            / self.density_dpi.max(1) as i64) as i32
     }
 
     /// `InsetsSourceControl` surface positions from the dumpsys `Control map`:

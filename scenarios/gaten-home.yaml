@@ -10,11 +10,13 @@
 # release build at the default path below (`acos inspect` / `--engine art` only
 # needs the APK; no signing).
 #
-# Status at GR1 (results/gaten/GR1.md): steps 1-2 pass (first frame, welcome
-# screen, real tree/pixels via `--engine art`); the `tap` on "Set up Gaten"
-# lands but the welcome flow does not advance, so the Skip pages and Home are
-# not reached yet. Keep the scenario as the definition of done; run it with
-#   acos verify --engine art scenarios/gaten-home.yaml
+# Onboarding note (GR3): the welcome screen runs a 10 s looping Reanimated
+# timeline and the Skip pages arm a 200 ms auto-advance retry, so a strict settle
+# on those screens honestly times out (results/gaten/GR3.md §1). The first tap
+# waits through the welcome transition strictly; the three Skip taps are
+# navigation (`settle: fast`, never assertion evidence). Every state the
+# scenario claims is then proven strictly: the Home wait/capture/asserts, and the
+# Analytics wait/capture/assert. Assertions run on a capture's bound frame.
 version: 1
 name: gaten-home
 description: >-
@@ -26,20 +28,21 @@ fallback: forbid
 api_level: 34
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
 expectation: pass
 budgets: {memory_mib: 4096, wall_ms: 240000}
 steps:
   - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
-  - wait_for: {selector: {text: {contains: "Set up Gaten"}}, timeout_ms: 60000}
-  - capture: {name: gaten-welcome, format: png, fresh: true}
-  - tap: {selector: {text: {contains: "Set up Gaten"}}}
-  - tap: {selector: {text: {exact: Skip}}}
-  - tap: {selector: {text: {exact: Skip}}}
-  - tap: {selector: {text: {exact: Skip}}}
-  - wait_for: {selector: {text: {contains: "猫, ねこ, neko"}}, timeout_ms: 30000}
+  - tap: {selector: {text: {contains: "Set up Gaten"}}, settle_timeout_ms: 5000}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  # Home settles (no endless timeline), so this is a strict, event-settled wait.
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - capture: {name: gaten-home, format: png, fresh: true}
   - assert_text: {selector: {text: {contains: "Daily streak"}}, text: {contains: "Daily streak"}}
   - assert_text: {selector: {text: {contains: "Recently looked up"}}, text: {contains: "Recently looked up"}}
-  - capture: {name: gaten-home, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "Anki"}}, text: {exact: "Anki"}}
   # The tab bar's own pressable, not a text node: the tree also carries the
   # (warm-mounted, off-screen) Analytics *page*, whose "Analytics" text sits at
   # x=1080..2160 and whose centre falls inside the Home segment. A text selector
@@ -47,8 +50,5 @@ steps:
   # claimed) — see results/gaten/GR2.md W3. `content_desc` names the pressable.
   - tap: {selector: {content_desc: {exact: Analytics}}}
   - wait_for: {selector: {text: {contains: "Accuracy"}}, timeout_ms: 30000}
-  # The selected flag is the tab bar's real state, but `assert_state` has no
-  # `selected` flag (docs/AGENT_API.md §9), and the text above is also true on the
-  # off-screen page, so this step cannot prove the switch by assertion yet — the
-  # capture below is the evidence (results/gaten/GR2.md W3/W4).
   - capture: {name: gaten-analytics, format: png, fresh: true}
+  - assert_text: {selector: {text: {contains: "Study activity"}}, text: {contains: "Study activity"}}

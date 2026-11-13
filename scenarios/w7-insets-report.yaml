@@ -1,0 +1,35 @@
+# W7: report the system-bar insets instead of carving the app window.
+#
+# Run with `ACOS_WM_INSETS=report` (or `acos launch --engine art --insets
+# report`). The fixture is an edge-to-edge Activity (targetSdk 35, explicit
+# `Window.setDecorFitsSystemWindows(false)`) that reads
+# `DecorView.getRootWindowInsets()` and `WindowManager.getCurrentWindowMetrics()`
+# and prints them. On the default API-34 profile the full display is
+# 1080x2400@420 with a 128 px status bar and a 63 px navigation bar, so the app
+# must own the full display and see those insets. Under the pre-W7
+# `ACOS_WM_INSETS=carve` model the frame is `[0,128][1080,2337]` and the same
+# `InsetsState` calculates to zero; this scenario is expected to fail there.
+version: 1
+name: w7-insets-report
+description: >-
+  Edge-to-edge insets probe under the report model: full-display app window and
+  non-zero status/navigation/system-gesture insets.
+app: fixtures/build/apps/insets-probe.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+budgets: {memory_mib: 1024, wall_ms: 120000}
+steps:
+  - launch: {activity: dev.acos.fixtures.insetsprobe/.MainActivity, clear_state: true}
+  - wait_for: {selector: {id: status}, timeout_ms: 20000}
+  - assert_text: {selector: {id: probe_mode}, text: {exact: "mode=edge-to-edge"}}
+  - assert_text: {selector: {id: status}, text: {exact: "status=128"}}
+  - assert_text: {selector: {id: nav}, text: {exact: "nav=63"}}
+  - assert_text: {selector: {id: system_bars}, text: {exact: "systemBars=128,63"}}
+  - assert_text: {selector: {id: decor}, text: {exact: "decor=[0,0][1080,2400]"}}
+  - assert_text: {selector: {id: frame}, text: {exact: "frame=[0,0][1080,2400]"}}
+  - assert_text: {selector: {id: display}, text: {exact: "display=1080x2400"}}
+  - capture: {name: w7-insets-report, format: png, fresh: true}
