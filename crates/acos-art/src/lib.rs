@@ -129,6 +129,11 @@ pub enum Error {
     /// there is no silent fallback to the stock heap values (W48).
     #[error("INVALID_HEAP_CONFIG: {0}")]
     InvalidHeapConfig(String),
+    /// An `ACOS_ART_GUEST_UID` seam refused its value. There is no silent
+    /// fallback to the host uid: uid 1000 is Android's `SYSTEM_UID` and makes
+    /// the framework take privileged branches that do not exist for an app.
+    #[error("INVALID_GUEST_UID: {0}")]
+    InvalidGuestUid(String),
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -1110,14 +1115,37 @@ const SANDBOX_FLAGS: &[&str] = &[
 /// allowed in privileged processes`, so every app that probes WebView died in a
 /// *system* branch it can never take on a device.
 ///
-/// `ACOS_ART_GUEST_UID=host` keeps the old uid for A/B work; any other unsigned
-/// value overrides the uid (it must remain a valid inner mapping target).
-fn guest_uid() -> Option<u32> {
-    match std::env::var("ACOS_ART_GUEST_UID") {
-        Ok(v) if v.trim() == "host" || v.trim().is_empty() => None,
-        Ok(v) => v.trim().parse::<u32>().ok(),
-        Err(_) => Some(acos_services::pms::FIXTURE_UID as u32),
+/// `ACOS_ART_GUEST_UID=host` keeps the old uid for A/B work. Any other value
+/// must be exactly the PMS fixture uid: PMS/AMS answers and the writable mount
+/// ownership are keyed to it, so a different numeric uid would make
+/// `Process.myUid()` and `getPackageUid()` disagree. A malformed or unsupported
+/// value is an explicit `INVALID_GUEST_UID` error, never a silent host-uid
+/// fallback (host uid 1000 is `SYSTEM_UID`).
+fn guest_uid() -> Result<Option<u32>> {
+    let raw = match std::env::var("ACOS_ART_GUEST_UID") {
+        Err(std::env::VarError::NotPresent) => {
+            return Ok(Some(acos_services::pms::FIXTURE_UID as u32))
+        }
+        Err(e) => return Err(Error::InvalidGuestUid(e.to_string())),
+        Ok(v) => v,
+    };
+    let value = raw.trim();
+    if value.eq_ignore_ascii_case("host") {
+        return Ok(None);
     }
+    let uid = value.parse::<u32>().map_err(|_| {
+        Error::InvalidGuestUid(format!(
+            "{raw:?} is neither `host` nor an application uid"
+        ))
+    })?;
+    if uid != acos_services::pms::FIXTURE_UID as u32 {
+        return Err(Error::InvalidGuestUid(format!(
+            "uid {uid} != PMS fixture uid {} (PMS/AMS answers and the writable \
+             mounts are keyed to the fixture uid)",
+            acos_services::pms::FIXTURE_UID
+        )));
+    }
+    Ok(Some(uid))
 }
 
 /// Builder for the `bwrap` command line: the mini-Android root, its
@@ -1279,7 +1307,7 @@ impl<'a> Sandbox<'a> {
         // Runs get an application uid (see `guest_uid`); host-side staging
         // steps and the argv-shape tests keep the caller's uid.
         if self.active_run_root().is_some() {
-            if let Some(uid) = guest_uid() {
+            if let Some(uid) = guest_uid()? {
                 a.push("--unshare-user".into());
                 a.push("--uid".into());
                 a.push(uid.to_string().into());

@@ -166,71 +166,116 @@ fn read_u64(bytes: &[u8], at: usize) -> Result<u64> {
     ]))
 }
 
-/// DER-encoded X.509 signing certificates carried by the APK.
+/// Absolute cap for an untrusted signature block read out of the zip.
 ///
-/// `PackageManager` must answer the app's **real** signing certificate for
-/// `GET_SIGNATURES`/`GET_SIGNING_CERTIFICATES`; `PackageInfo.signatures` was
-/// previously empty, so an app that parses its own certificate
-/// (`org.quantumbadger.redreader` does this in `Application.onCreate`) died in
-/// conscrypt on a malformed/absent signature.
-///
-/// The block is parsed with the layout of `ApkSignatureSchemeV2Verifier` /
-/// `V3Verifier` (AOSP `frameworks/base/core/java/android/util/apk/`):
-/// `[len:u32 signers][signer...]`, each signer
-/// `[len:u32 signedData][len:u32 signatures][len:u32 publicKey]`, and the
-/// signed data `[len:u32 digests][len:u32 certificates][...]` where
-/// `certificates` is a sequence of `[len:u32 der]`. The highest scheme the file
-/// carries is preferred (v3.1, then v3, then v2), matching the platform's
-/// `SigningDetails` selection. A v1-only APK falls back to the PKCS#7
-/// `META-INF/*.RSA` block and its first `Certificate`.
-#[must_use]
-pub fn certificates(bytes: &[u8], v1_blocks: &[Vec<u8>]) -> Vec<Vec<u8>> {
-    if let Some(magic_at) = find_magic(bytes) {
-        if let Ok(pairs) = parse_block(bytes, magic_at) {
-            for id in [ID_V3_1, ID_V3, ID_V2] {
-                if let Some((_, value)) = pairs.iter().find(|(i, _)| *i == id) {
-                    let certs = scheme_certificates(value);
-                    if !certs.is_empty() {
-                        return certs;
-                    }
-                }
-            }
-        }
-    }
-    for block in v1_blocks {
-        if let Some(cert) = pkcs7_first_certificate(block) {
-            return vec![cert];
-        }
-    }
-    Vec::new()
+/// A v1 block is a PKCS#7 `SignedData`; real ones are a few KiB. The cap keeps
+/// a crafted entry from making ingest allocate (and decompress) without bound.
+pub const MAX_SIGNATURE_BLOCK_BYTES: usize = 1 << 20;
+/// Deflated signature blocks compress extremely well; a high ratio on a tiny
+/// compressed entry is the zip-bomb shape. Real PKCS#7 blocks stay well under
+/// this because most bytes are already DER/ASN.1.
+pub const MAX_SIGNATURE_BLOCK_RATIO: usize = 200;
+/// One X.509 certificate.
+pub const MAX_CERT_BYTES: usize = 128 * 1024;
+/// All `PackageInfo.signatures` certificates together.
+pub const MAX_TOTAL_CERT_BYTES: usize = 1 << 20;
+
+fn signing_err(message: impl Into<String>) -> crate::error::ApkError {
+    crate::error::ApkError::new(crate::error::APK_SIGNING_MALFORMED, message)
 }
 
-fn scheme_certificates(block: &[u8]) -> Vec<Vec<u8>> {
-    let mut pos = 0;
-    let Some(signers) = der_len_prefixed(block, &mut pos) else {
-        return Vec::new();
-    };
-    let mut spos = 0;
-    let Some(signer) = der_len_prefixed(signers, &mut spos) else {
-        return Vec::new();
-    };
-    let mut p = 0;
-    let Some(signed_data) = der_len_prefixed(signer, &mut p) else {
-        return Vec::new();
-    };
-    let mut q = 0;
-    let _digests = der_len_prefixed(signed_data, &mut q);
-    let Some(cert_seq) = der_len_prefixed(signed_data, &mut q) else {
-        return Vec::new();
-    };
-    let mut out = Vec::new();
-    let mut c = 0;
-    while let Some(cert) = der_len_prefixed(cert_seq, &mut c) {
-        if !cert.is_empty() {
-            out.push(cert.to_vec());
+/// DER-encoded X.509 **signer** certificates carried by the APK.
+///
+/// The array shape is the platform's `PackageInfo.signatures`: one entry per
+/// signer, each the signer's own (leaf) certificate — **not** the signer's
+/// whole chain. The APK Signing Block is parsed with the layout of
+/// `ApkSignatureSchemeV2Verifier`/`V3Verifier` (AOSP
+/// `frameworks/base/core/java/android/util/apk/`): the value is a
+/// length-prefixed sequence of signers, each signer is
+/// `[len:u32 signedData][len:u32 signatures][len:u32 publicKey]`, and the
+/// signed data is `[len:u32 digests][len:u32 certificates][...]` where
+/// `certificates` is a sequence of `[len:u32 der]` (leaf first).
+///
+/// Scheme selection mirrors the platform's refusal to downgrade: the highest
+/// scheme present is authoritative. A malformed v3 value is an error, never a
+/// silent fall back to v2; v1 (JAR) is used only when the block carries none of
+/// v2/v3/v3.1. v1 identifies the signer by the `SignerInfo` issuer+serial, so a
+/// chain whose first certificate is not the signer is handled correctly.
+pub fn certificates(bytes: &[u8], v1_blocks: &[Vec<u8>]) -> Result<Vec<Vec<u8>>> {
+    if let Some(magic_at) = find_magic(bytes) {
+        let pairs = parse_block(bytes, magic_at)?;
+        let chosen = [ID_V3_1, ID_V3, ID_V2]
+            .iter()
+            .find_map(|id| pairs.iter().find(|(i, _)| i == id));
+        if let Some((id, value)) = chosen {
+            let certs = scheme_certificates(value)
+                .map_err(|e| signing_err(format!("scheme {id:08x}: {e}")))?;
+            return Ok(certs);
         }
+        // A signing block without a known scheme: the platform falls back to v1.
     }
-    out
+    if v1_blocks.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    for block in v1_blocks {
+        let cert = pkcs7_signer_certificate(block)
+            .ok_or_else(|| signing_err("v1 signature block has no signer certificate"))?;
+        push_cert(&mut out, cert)?;
+    }
+    Ok(out)
+}
+
+fn push_cert(out: &mut Vec<Vec<u8>>, cert: Vec<u8>) -> Result<()> {
+    if cert.len() > MAX_CERT_BYTES {
+        return Err(signing_err("signing certificate exceeds cap"));
+    }
+    let total: usize = out.iter().map(Vec::len).sum::<usize>() + cert.len();
+    if total > MAX_TOTAL_CERT_BYTES {
+        return Err(signing_err("signing certificates exceed cap"));
+    }
+    let mut pos = 0;
+    let (tag, _, _, end) =
+        der_tlv(&cert, &mut pos).ok_or_else(|| signing_err("signing certificate is not DER"))?;
+    if tag != 0x30 || end != cert.len() {
+        return Err(signing_err("signing certificate is not a DER SEQUENCE"));
+    }
+    out.push(cert);
+    Ok(())
+}
+
+/// One **leaf** certificate per signer in a v2/v3/v3.1 value.
+fn scheme_certificates(block: &[u8]) -> std::result::Result<Vec<Vec<u8>>, &'static str> {
+    if block.len() > MAX_SIGNATURE_BLOCK_BYTES {
+        return Err("signature block exceeds cap");
+    }
+    let mut pos = 0;
+    let mut out = Vec::new();
+    while pos < block.len() {
+        let signer = der_len_prefixed(block, &mut pos).ok_or("truncated signer list")?;
+        if signer.is_empty() {
+            return Err("empty signer");
+        }
+        let mut p = 0;
+        let signed_data = der_len_prefixed(signer, &mut p).ok_or("truncated signer")?;
+        let _signatures = der_len_prefixed(signer, &mut p).ok_or("truncated signatures")?;
+        let _public_key = der_len_prefixed(signer, &mut p).ok_or("truncated public key")?;
+        let mut q = 0;
+        let _digests = der_len_prefixed(signed_data, &mut q).ok_or("truncated digests")?;
+        let cert_seq = der_len_prefixed(signed_data, &mut q).ok_or("truncated certificates")?;
+        let mut c = 0;
+        let leaf = der_len_prefixed(cert_seq, &mut c).ok_or("signer has no certificate")?;
+        if leaf.is_empty() {
+            return Err("empty certificate");
+        }
+        push_cert(&mut out, leaf.to_vec()).map_err(|_| "certificate exceeds cap")?;
+        // The rest of the signed data (additional attributes) is irrelevant
+        // here; the chain members after the leaf are deliberately skipped.
+    }
+    if out.is_empty() {
+        return Err("no signers");
+    }
+    Ok(out)
 }
 
 /// A little-endian `u32` length followed by that many bytes.
@@ -272,17 +317,23 @@ fn der_tlv<'a>(bytes: &'a [u8], pos: &mut usize) -> Option<(u8, &'a [u8], usize,
     Some((tag, content, start, end))
 }
 
-/// First X.509 certificate in a PKCS#7 `SignedData` (v1 signature block).
+/// The X.509 certificate of the v1 `SignerInfo`, matched by its
+/// `issuerAndSerialNumber`.
 ///
-/// `ContentInfo ::= SEQUENCE { OID, [0] EXPLICIT SignedData }`, and
-/// `SignedData ::= SEQUENCE { INTEGER, SET, SEQUENCE, [0] IMPLICIT
-/// CertificateSet, ... }`. Only the first certificate is needed: the platform's
-/// `Signature[]` for a single-signer APK has one element, and corpus APKs are
-/// single-signed.
-fn pkcs7_first_certificate(block: &[u8]) -> Option<Vec<u8>> {
+/// `ContentInfo ::= SEQUENCE { OID, [0] EXPLICIT SignedData }`,
+/// `SignedData ::= SEQUENCE { version, digestAlgorithms, contentInfo,
+///   [0] certificates, [1] crls OPTIONAL, signerInfos }`, and
+/// `SignerInfo ::= SEQUENCE { version, sid, ... }`. The signer is the
+/// certificate whose `tbsCertificate.issuer` and `serialNumber` equal the
+/// `sid`; a certificate chain's leaf is normally the signer, but matching the
+/// sid is what makes that true rather than an assumption.
+fn pkcs7_signer_certificate(block: &[u8]) -> Option<Vec<u8>> {
+    if block.len() > MAX_SIGNATURE_BLOCK_BYTES {
+        return None;
+    }
     let mut pos = 0;
-    let (tag, content, _, _) = der_tlv(block, &mut pos)?;
-    if tag != 0x30 {
+    let (tag, content, _, end) = der_tlv(block, &mut pos)?;
+    if tag != 0x30 || end != block.len() {
         return None;
     }
     let mut p = 0;
@@ -295,22 +346,226 @@ fn pkcs7_first_certificate(block: &[u8]) -> Option<Vec<u8>> {
         return None;
     }
     let mut w = 0;
-    let (sd_tag, signed_data, _, _) = der_tlv(wrapped, &mut w)?;
-    if sd_tag != 0x30 {
+    let (sd_tag, signed_data, _, sd_end) = der_tlv(wrapped, &mut w)?;
+    if sd_tag != 0x30 || sd_end != wrapped.len() {
         return None;
     }
     let mut s = 0;
+    let (_version, _, _, _) = der_tlv(signed_data, &mut s)?;
+    let (_digests, _, _, _) = der_tlv(signed_data, &mut s)?;
+    let (_content, _, _, _) = der_tlv(signed_data, &mut s)?;
+    let mut certs: Vec<&[u8]> = Vec::new();
+    let mut signer_infos: Option<&[u8]> = None;
     while s < signed_data.len() {
         let (t, c, _, _) = der_tlv(signed_data, &mut s)?;
-        if t == 0xA0 {
-            // CertificateSet: the first element is the leaf certificate.
-            let mut cpos = 0;
-            let (ct, _, cs, ce) = der_tlv(c, &mut cpos)?;
-            if ct == 0x30 {
-                return Some(c[cs..ce].to_vec());
+        match t {
+            0xA0 => {
+                let mut cp = 0;
+                while cp < c.len() {
+                    let (ct, _, cs, ce) = der_tlv(c, &mut cp)?;
+                    if ct == 0x30 {
+                        certs.push(&c[cs..ce]);
+                    }
+                }
             }
-            return None;
+            0x31 => signer_infos = Some(c),
+            _ => {}
+        }
+    }
+    let infos = signer_infos?;
+    let mut ip = 0;
+    let (_it, signer_info, _, _) = der_tlv(infos, &mut ip)?;
+    let mut sp = 0;
+    let (_v, _, _, _) = der_tlv(signer_info, &mut sp)?;
+    let (sid_tag, sid, _, _) = der_tlv(signer_info, &mut sp)?;
+    if sid_tag != 0x30 {
+        // subjectKeyIdentifier signer ids are not used by the corpus; refusing
+        // is explicit rather than returning the wrong certificate.
+        return None;
+    }
+    let mut ap = 0;
+    let (issuer_tag, _, issuer_start, issuer_end) = der_tlv(sid, &mut ap)?;
+    let (serial_tag, serial, _, _) = der_tlv(sid, &mut ap)?;
+    if issuer_tag != 0x30 || serial_tag != 0x02 {
+        return None;
+    }
+    let issuer = &sid[issuer_start..issuer_end];
+    for cert in certs {
+        let (cert_issuer, cert_serial) = certificate_issuer_serial(cert)?;
+        if cert_issuer == issuer && cert_serial == serial {
+            return Some(cert.to_vec());
         }
     }
     None
+}
+
+/// `tbsCertificate.issuer` (full DER element) and `serialNumber` (contents).
+fn certificate_issuer_serial(cert: &[u8]) -> Option<(&[u8], &[u8])> {
+    let mut pos = 0;
+    let (tag, content, _, end) = der_tlv(cert, &mut pos)?;
+    if tag != 0x30 || end != cert.len() {
+        return None;
+    }
+    let mut p = 0;
+    let (tbs_tag, tbs, _, _) = der_tlv(content, &mut p)?;
+    if tbs_tag != 0x30 {
+        return None;
+    }
+    let mut t = 0;
+    let mut first = der_tlv(tbs, &mut t)?;
+    if first.0 == 0xA0 {
+        first = der_tlv(tbs, &mut t)?;
+    }
+    if first.0 != 0x02 {
+        return None;
+    }
+    let (_sig, _, _, _) = der_tlv(tbs, &mut t)?;
+    let (issuer_tag, _, issuer_start, issuer_end) = der_tlv(tbs, &mut t)?;
+    if issuer_tag != 0x30 {
+        return None;
+    }
+    Some((&tbs[issuer_start..issuer_end], first.1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tlv(tag: u8, content: &[u8]) -> Vec<u8> {
+        let mut out = vec![tag];
+        if content.len() < 0x80 {
+            out.push(content.len() as u8);
+        } else {
+            out.push(0x81);
+            out.push(content.len() as u8);
+        }
+        out.extend_from_slice(content);
+        out
+    }
+
+    fn u32p(bytes: &[u8]) -> Vec<u8> {
+        let mut out = (bytes.len() as u32).to_le_bytes().to_vec();
+        out.extend_from_slice(bytes);
+        out
+    }
+
+    fn cert(serial: u8, issuer: &[u8]) -> Vec<u8> {
+        let tbs = [
+            tlv(0x02, &[serial]),
+            tlv(0x30, &[0x06, 0x00]),
+            issuer.to_vec(),
+        ]
+        .concat();
+        tlv(0x30, &tlv(0x30, &tbs))
+    }
+
+    fn scheme_value(certs: &[&[u8]]) -> Vec<u8> {
+        let mut chain = Vec::new();
+        for c in certs {
+            chain.extend(u32p(c));
+        }
+        let mut signed_data = u32p(b"\x00\x00\x00\x00");
+        signed_data.extend(u32p(&chain));
+        signed_data.extend(u32p(&[]));
+        let signer = [u32p(&signed_data), u32p(b"\x00\x00"), u32p(b"key")].concat();
+        u32p(&signer)
+    }
+
+    fn signing_block(pairs: &[(u32, Vec<u8>)]) -> Vec<u8> {
+        let mut body = Vec::new();
+        for (id, value) in pairs {
+            let mut pair = id.to_le_bytes().to_vec();
+            pair.extend_from_slice(value);
+            body.extend(u32p_u64(&pair));
+        }
+        let size = (body.len() + 8 + 16) as u64;
+        [&size.to_le_bytes()[..], &body, &size.to_le_bytes()[..], BLOCK_MAGIC].concat()
+    }
+
+    fn u32p_u64(bytes: &[u8]) -> Vec<u8> {
+        let mut out = (bytes.len() as u64).to_le_bytes().to_vec();
+        out.extend_from_slice(bytes);
+        out
+    }
+
+    fn pkcs7(issuer: &[u8], serials_and_certs: &[(u8, Vec<u8>)], signer_serial: u8) -> Vec<u8> {
+        let mut certs = Vec::new();
+        for (_, c) in serials_and_certs {
+            certs.extend_from_slice(c);
+        }
+        let sid = tlv(0x30, &[issuer.to_vec(), tlv(0x02, &[signer_serial])].concat());
+        let signer_info = tlv(0x30, &[tlv(0x02, &[1]), sid].concat());
+        let signed_data = tlv(
+            0x30,
+            &[
+                tlv(0x02, &[1]),
+                tlv(0x31, &[]),
+                tlv(0x30, &[]),
+                tlv(0xA0, &certs),
+                tlv(0x31, &signer_info),
+            ]
+            .concat(),
+        );
+        let ci = tlv(
+            0x30,
+            &[
+                vec![0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x07, 0x02],
+                tlv(0xA0, &signed_data),
+            ]
+            .concat(),
+        );
+        ci
+    }
+
+    #[test]
+    fn scheme_returns_one_leaf_per_signer_not_the_chain() {
+        let issuer = tlv(0x30, &tlv(0x31, &tlv(0x30, &[0x06, 0x03, b'a', b'b', b'c'])));
+        let leaf1 = cert(1, &issuer);
+        let chain1 = cert(9, &issuer);
+        let leaf2 = cert(2, &issuer);
+        let value = [scheme_value(&[&leaf1, &chain1]), scheme_value(&[&leaf2])].concat();
+        let got = scheme_certificates(&value).expect("valid");
+        assert_eq!(got, vec![leaf1, leaf2]);
+    }
+
+    #[test]
+    fn highest_present_scheme_wins_and_never_downgrades() {
+        let issuer = tlv(0x30, &[]);
+        let v2 = cert(1, &issuer);
+        let v3 = cert(2, &issuer);
+        let bytes = signing_block(&[
+            (ID_V2, scheme_value(&[&v2])),
+            (ID_V3, scheme_value(&[&v3])),
+        ]);
+        assert_eq!(certificates(&bytes, &[]).unwrap(), vec![v3]);
+
+        let malformed_v3 = vec![0x01];
+        let bytes = signing_block(&[
+            (ID_V2, scheme_value(&[&cert(1, &issuer)])),
+            (ID_V3, malformed_v3),
+        ]);
+        let v1 = pkcs7(&issuer, &[(1, cert(1, &issuer))], 1);
+        let err = certificates(&bytes, &[v1]).unwrap_err();
+        assert_eq!(err.code(), crate::error::APK_SIGNING_MALFORMED);
+    }
+
+    #[test]
+    fn oversized_block_is_rejected_before_parsing() {
+        let huge = vec![0u8; MAX_SIGNATURE_BLOCK_BYTES + 1];
+        assert_eq!(scheme_certificates(&huge), Err("signature block exceeds cap"));
+        assert_eq!(pkcs7_signer_certificate(&huge), None);
+    }
+
+    #[test]
+    fn v1_uses_the_signer_sid_not_the_first_chain_certificate() {
+        let issuer = tlv(0x30, &tlv(0x31, &[0x06, 0x03, b'x', b'y', b'z']));
+        let leaf = cert(1, &issuer);
+        let signer = cert(2, &issuer);
+        let block = pkcs7(&issuer, &[(1, leaf.clone()), (2, signer.clone())], 2);
+        assert_eq!(
+            certificate_issuer_serial(&signer).map(|(i, _)| i),
+            Some(&issuer[..])
+        );
+        assert_eq!(pkcs7_signer_certificate(&block), Some(signer));
+    }
 }

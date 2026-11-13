@@ -657,6 +657,7 @@ const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
 const RESTRICTIONS_HAS_PROVIDER: u32 = 3;
 const RESTRICTIONS_REQUEST_PERMISSION: u32 = 4;
 const RESTRICTIONS_NOTIFY_PERMISSION_RESPONSE: u32 = 5;
+const RESTRICTIONS_CREATE_LOCAL_APPROVAL_INTENT: u32 = 6;
 
 /// `android.content.IRestrictionsManager`: an unmanaged device.
 ///
@@ -717,16 +718,26 @@ impl ServiceObject for RestrictionsService {
                 Ok(true)
             }
             RESTRICTIONS_REQUEST_PERMISSION => {
-                // A real service with no provider returns a null IntentSender
-                // (`RestrictionsManagerService.requestPermission` logs and
-                // returns null when `mRestrictionsProvider == null`).
+                // The API-34 proxy is `requestPermission(String, String,
+                // String, PersistableBundle)V`: after `readException()` it
+                // reads **nothing** (verified in the boot image's
+                // `IRestrictionsManager$Stub$Proxy`; the method returns void
+                // and the answer arrives through the listener). Writing the
+                // old null-IntentSender presence word here desynchronised
+                // nothing only because the proxy stopped reading; the correct
+                // shape has no payload.
                 crate::exception::write_no_exception(reply);
-                // `writeTypedObject(null, ...)`: the presence int is 0.
-                reply.write_int32(0);
                 Ok(true)
             }
             RESTRICTIONS_NOTIFY_PERMISSION_RESPONSE => {
                 crate::exception::write_no_exception(reply);
+                Ok(true)
+            }
+            RESTRICTIONS_CREATE_LOCAL_APPROVAL_INTENT => {
+                // `requestPermission`'s no-provider path: `null` IntentSender,
+                // read with `readTypedObject` (presence word 0).
+                crate::exception::write_no_exception(reply);
+                reply.write_int32(0);
                 Ok(true)
             }
             _ => Ok(false),
@@ -833,8 +844,9 @@ const TRUST_IS_ACTIVE_UNLOCK_RUNNING: u32 = 15;
 /// Answers are the device's real state for a fresh single-user AOSP instance:
 /// no device credential (`isDeviceSecure=false`), no keyguard shown
 /// (`isDeviceLocked=false`), trust agents not managed, no active unlock. The
-/// report/listener calls are accepted as no-ops exactly as `TrustManagerService`
-/// accepts them from a client; they never change what an app can read here.
+/// Read paths answer the device state. Setters and listener registration are
+/// **rejected** with `UnsupportedOperationException`: a no-op would let a client
+/// believe it changed lock/biometric state that the read paths still deny.
 #[derive(Debug, Default)]
 pub struct TrustService;
 
@@ -868,6 +880,11 @@ impl ServiceObject for TrustService {
                 reply.write_int32(0);
                 Ok(true)
             }
+            // Setters and listener registration are not implemented. Accepting
+            // them silently would claim lock/biometric state changed when the
+            // read paths above still answer the fixed no-credential state.
+            // They fail explicitly instead; the app sees the platform's
+            // UnsupportedOperationException on the binder call.
             TRUST_REPORT_UNLOCK_ATTEMPT
             | TRUST_REPORT_USER_REQUESTED_UNLOCK
             | TRUST_REPORT_USER_MAY_REQUEST_UNLOCK
@@ -879,7 +896,11 @@ impl ServiceObject for TrustService {
             | TRUST_SET_DEVICE_LOCKED_FOR_USER
             | TRUST_UNLOCKED_BY_BIOMETRIC
             | TRUST_CLEAR_ALL_BIOMETRIC_RECOGNIZED => {
-                crate::exception::write_no_exception(reply);
+                crate::exception::write_exception(
+                    reply,
+                    crate::exception::EX_UNSUPPORTED_OPERATION,
+                    "trust mutation/listener registration is not supported on ACOS",
+                )?;
                 Ok(true)
             }
             _ => Ok(false),
