@@ -1465,6 +1465,44 @@ can otherwise drive the host to tens of gigabytes (host-safety incident
 
 ---
 
+## 16.1 Boot-image source: `ACOS_ART_BOOT_IMAGE` (H13)
+
+`acos-art`, and therefore every ART session started by `acos serve` or
+`acos verify --engine art`, reads the boot image from one of three sources. The
+knob is an **environment seam**, not a CLI flag: `acos serve` inherits it and
+every launch child sees it. Unset and `lz4` are the same (the product default).
+
+| Value | Image | Address policy | Cost / use |
+|---|---|---|---|
+| unset, `lz4` | the sysroot's stock LZ4 boot image | ART relocates per process (stock image ASLR) | status quo; each session decompresses ~26.3 MiB into private anon memory |
+| `shared-fixed` | uncompressed image at the recorded base `0x70000000` (B2/B3; or the directory in `ACOS_SHARED_BOOT_IMAGE`, which is still honoured) | `-Xnorelocate`: **no image ASLR** | trusted workloads only; ~−12 MiB/session, but the image base is predictable in every session |
+| `shared-aslr` | uncompressed image built once per **serve cohort** at a random page-aligned base | `-Xnorelocate`: fixed for the cohort, new base for every serve start | best shared-image option for a long-lived serve; first launch of a cohort pays the one-time `dex2oat64` build (measured **3.6 s**, ±load) and every later session of that cohort maps it file-backed and shared |
+
+Rules and behaviour:
+
+* A set-but-unknown value fails the launch (`Error::Layout`) before any guest
+  starts; there is no silent fallback to LZ4. `shared-aslr` also refuses a
+  simultaneous `ACOS_SHARED_BOOT_IMAGE` (that variable names a fixed-base image).
+* `shared-aslr` chooses `ART_BASE_ADDRESS (±128 MiB)` with 4 KiB alignment —
+  ART's own `ART_BASE_ADDRESS_MIN/MAX_DELTA` window, **16 bits** of entropy —
+  and stores the prepared tree under `<ACOS_ART_DATA>/boot-image/`. The
+  directory is `0700`, files are `0444`, and the guest gets a **read-only**
+  bind at `/data/img`.
+* The cohort key is the invoking process (parent pid + start time), so one
+  `acos serve` (or one `acos verify`) shares one base and a new serve gets a new
+  one. `ACOS_ART_BOOT_IMAGE_GENERATION` overrides the key for diagnostics.
+* Do not point `ACOS_SHARED_BOOT_IMAGE` at a stale directory and expect
+  relocation: the image's recorded base is what ART maps.
+* Measurement on this branch (host load recorded in
+  `results/vm/H13.md`): `shared-aslr` at N=5/10 saves **~10–12 MiB/session**
+  on the M2 cgroup anon+shmem metric versus `lz4`; warm M4 launch and P11 gates
+  are unchanged. The costs are the one-time **+3.6 s** on the first launch of a
+  new serve (M3 cold) and ~173 MiB of disk per prepared cohort. It is **not**
+  the default; the owner decides whether those costs are acceptable for
+  untrusted runs.
+
+---
+
 ## 17. The `verify` runner and the `Backend` seam
 
 The scenario runner lives in `crates/acos-verify` and is exposed as

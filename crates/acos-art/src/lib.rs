@@ -27,6 +27,7 @@
 pub mod app;
 // W37: integrator-owned mod line — additive declaration for the shared
 // content-addressed build cache (see src/build_cache.rs).
+pub mod boot_image;
 pub mod build_cache;
 pub mod capture;
 pub mod cgroup;

@@ -223,27 +223,20 @@ pub struct UnsupportedCall {
     pub error: String,
 }
 
-/// B3: opt-in **shared** boot image (arm (b) of the Zygote comparison).
-///
-/// `ACOS_SHARED_BOOT_IMAGE=<dir>` points the launch at an *uncompressed* boot
-/// image built by `tools/art-runtime/b2/build-uncompressed.sh --out <dir>`
-/// (B2's recipe: `--image-format=uncompressed --base=0x70000000`). The launch
-/// then passes `-Ximage:/data/img/boot.art -Xnorelocate`: ART maps the image at
-/// its recorded base, the pages stay file-backed and are shared between
-/// sessions instead of being LZ4-decompressed into private anon memory (B2:
-/// 26.3 -> 12.7 MiB private + 25.7 MiB shared per session).
-///
-/// `-Xnorelocate` turns **image ASLR off** (fixed base 0x70000000), so this is
-/// a trusted-workloads-only experiment seam. It is OFF by default and unset
-/// means the argv is byte-for-byte what it was before (no image flag at all).
-pub const ENV_SHARED_BOOT_IMAGE: &str = "ACOS_SHARED_BOOT_IMAGE";
+/// H13: the boot-image source selector (`lz4`, `shared-fixed`, `shared-aslr`).
+/// See [`crate::boot_image`] for the full contract. Unset = `lz4`, the product
+/// default; anything else is resolved before the sandbox is wired and fails the
+/// launch if unusable.
+pub const ENV_ART_BOOT_IMAGE: &str = crate::boot_image::ENV_BOOT_IMAGE;
 
-/// Resolve the `ACOS_SHARED_BOOT_IMAGE` seam; `None` = default (LZ4, unchanged).
-///
-/// `Some(dir)` must hold `<dir>/x86_64/boot.art`: ART appends the instruction
-/// set to an `-Ximage` location (`image_space.cc:136`, `GetSystemImageFilename`).
-/// A set-but-unusable value is an error, never a silent fallback to the
-/// compressed image, so a typo cannot masquerade as a measurement.
+/// B3's explicit shared-image directory, now the `shared-fixed` input. Kept for
+/// compatibility: with `ACOS_ART_BOOT_IMAGE` unset it still selects the fixed
+/// image it always did.
+pub const ENV_SHARED_BOOT_IMAGE: &str = crate::boot_image::ENV_SHARED_BOOT_IMAGE;
+
+/// Validate `ACOS_SHARED_BOOT_IMAGE` for the B3 compatibility tests (the launch
+/// path now goes through [`crate::boot_image::resolve`]).
+#[cfg(test)]
 fn resolve_shared_boot_image(raw: Option<std::ffi::OsString>) -> Result<Option<PathBuf>> {
     let Some(raw) = raw else { return Ok(None) };
     let dir = PathBuf::from(raw);
@@ -840,20 +833,17 @@ pub(crate) fn launch_session(
     // class path and sandbox are exactly what they were before this seam.
     // See results/art-runtime/Z3.md.
     let zygote_app: Option<PathBuf> = std::env::var_os("ACOS_ZYGOTE_APP").map(PathBuf::from);
-    // B3: opt-in shared boot image, resolved before the sandbox is wired so a
-    // bad value fails the launch instead of silently running the LZ4 image.
-    let shared_boot_image = resolve_shared_boot_image(std::env::var_os(ENV_SHARED_BOOT_IMAGE))?;
+    // H13/B3: the boot-image source is resolved before the sandbox is wired so
+    // a bad knob fails the launch instead of silently running another image.
+    let boot_image = crate::boot_image::resolve(root)?;
     let mut argv: Vec<String> = Vec::new();
-    if shared_boot_image.is_some() {
-        // Exactly B2's pair (`with_image` below ro-binds the dir to /data/img).
+    if let Some(image) = &boot_image {
+        // `with_image` below ro-binds the prepared directory to /data/img.
+        // `-Xnorelocate` keeps the file pages file-backed and shared; for
+        // `shared-aslr` the recorded base was chosen per serve cohort.
         argv.push("-Ximage:/data/img/boot.art".into());
         argv.push("-Xnorelocate".into());
-    }
-    if let Some(dir) = &shared_boot_image {
-        eprintln!(
-            "acos-art: launch: shared boot image {} (-Ximage:/data/img/boot.art -Xnorelocate; fixed base, no image ASLR)",
-            dir.display()
-        );
+        eprintln!("acos-art: launch: {}", image.note());
     }
     // Z7: real ART heap options (OFF by default; empty unless a knob is set).
     let heap_argv = resolve_heap_argv()?;
@@ -933,8 +923,8 @@ pub(crate) fn launch_session(
     }
     crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();
-    if let Some(dir) = &shared_boot_image {
-        sb.with_image(Some(dir.clone()));
+    if let Some(image) = &boot_image {
+        sb.with_image(Some(image.dir.clone()));
     }
     sb.run_root(run.path());
     // Z4: a foreign-guest session does not spawn ART itself, so the guest
@@ -1524,11 +1514,8 @@ pub(crate) fn launch_session(
         code = Some(HOST_MEMORY_LIMIT.to_string());
     }
     let mut unsupported_notes: Vec<String> = Vec::new();
-    if let Some(dir) = &shared_boot_image {
-        unsupported_notes.push(format!(
-            "shared-boot-image: {} (-Ximage:/data/img/boot.art -Xnorelocate; fixed base, no image ASLR)",
-            dir.display()
-        ));
+    if let Some(image) = &boot_image {
+        unsupported_notes.push(image.note());
     }
     unsupported_notes.push(cgroup.summary());
     if cgroup.oom_kills() > 0 {

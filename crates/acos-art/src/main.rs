@@ -592,57 +592,14 @@ fn build_image(root: &ArtRoot, out: Option<PathBuf>, force: bool) -> Result<Path
         eprintln!("acos-art: boot image already built at {}", named.display());
         return Ok(out);
     }
-    root.ensure_linkerconfig(false)?;
-    root.ensure_classpath_env(false)?;
-    // Use the device classpath (derive_classpath output), not the sysroot's
-    // hand-derived list: the jar *locations* become the named boot-image
-    // component names ART looks up at run time (mainline extension images).
-    let jars = match root.classpaths() {
-        Some(cp) => cp.boot,
-        None => root.device_bootclasspath()?,
-    };
-    if jars.is_empty() {
-        return Err(Error::Layout("empty BOOTCLASSPATH".into()));
-    }
-    let mut argv = vec![
-        "--image=/data/img/x86_64/boot.art".to_string(),
-        "--base=0x70000000".to_string(),
-        "--oat-file=/data/img/x86_64/boot.oat".to_string(),
-        "--instruction-set=x86_64".to_string(),
-        "--image-format=lz4".to_string(),
-    ];
-    for j in &jars {
-        argv.push(format!("--dex-file={j}"));
-        argv.push(format!("--dex-location={j}"));
-    }
-    // Host-side build step: staging mode (shared <data>, writable) — the boot
-    // image is produced here, so this is the one route allowed to write it.
-    let mut sb = root.sandbox();
-    sb.staging(true);
-    sb.rw_bind(&out, "/data/img");
-    sb.env(
-        "LD_LIBRARY_PATH",
-        "/apex/com.android.art/lib64:/apex/com.android.os.statsd/lib64:\
-         /apex/com.android.i18n/lib64:/system/lib64:/apex/sharedlibs/lib64",
-    );
-    let started = std::time::Instant::now();
-    let mut cmd = sb.command("/apex/com.android.art/bin/dex2oat64", &argv)?;
-    eprintln!("acos-art: dex2oat64 ({} boot jars) …", jars.len());
-    let output = cmd.output()?;
-    eprintln!(
-        "acos-art: dex2oat64 rc={:?} in {} ms",
-        output.status.code(),
-        started.elapsed().as_millis()
-    );
-    if !output.status.success() {
-        let mut log = String::from_utf8_lossy(&output.stderr).to_string();
-        log.push_str(&String::from_utf8_lossy(&output.stdout));
-        std::fs::write(root.data.join("dex2oat.log"), &log)?;
-        return Err(Error::Tool(format!(
-            "dex2oat64 failed (log: {})",
-            root.data.join("dex2oat.log").display()
-        )));
-    }
+    // H13: the boot-image builder is shared with the `shared-aslr` preparation
+    // path. `build-image` keeps the product's stock LZ4 format and fixed base.
+    let report = acos_art::boot_image::build_to(
+        root,
+        &out,
+        "lz4",
+        acos_art::boot_image::ART_BASE_ADDRESS,
+    )?;
     if !named.join("boot.art").is_file() {
         return Err(Error::Layout(format!(
             "dex2oat produced no {}",
@@ -655,7 +612,7 @@ fn build_image(root: &ArtRoot, out: Option<PathBuf>, force: bool) -> Result<Path
             "boot image for {} built {} from {} boot classpath jars\n",
             "android-34 x86_64",
             chrono_like_now(),
-            jars.len()
+            report.jars
         ),
     )?;
     Ok(out)

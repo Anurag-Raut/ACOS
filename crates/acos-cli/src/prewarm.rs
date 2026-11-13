@@ -23,7 +23,7 @@
 //!
 //! | launch source | derived here from |
 //! |---|---|
-//! | boot image (`-Ximage` default / `ACOS_SHARED_BOOT_IMAGE`) | `launch.rs::resolve_shared_boot_image`'s rules over the sysroot |
+//! | boot image (`-Ximage` default / `ACOS_ART_BOOT_IMAGE` / `ACOS_SHARED_BOOT_IMAGE`) | `ACOS_SHARED_BOOT_IMAGE` or a generated `shared-fixed` tree when present, else the sysroot (`shared-aslr` is built later by the first launch) |
 //! | `dalvikvm64` + `libart*.so` | the ART APEX under `<sysroot>/system/apex/` |
 //! | `libandroid_runtime.so` | `<sysroot>/system/lib64/` |
 //! | `BOOTCLASSPATH` jars | `<data>/system/environ/classpath` (`derive_classpath`), guest path → sysroot |
@@ -274,19 +274,51 @@ fn data_dir(root: &Path) -> PathBuf {
         .unwrap_or_else(|| root.join(".cache/art/data"))
 }
 
-/// The boot image the launch will pass to ART. `ACOS_SHARED_BOOT_IMAGE` is the
-/// B3 seam `launch.rs::resolve_shared_boot_image` accepts only when
-/// `<dir>/x86_64/boot.art` is a file; otherwise the sysroot's stock trio.
+/// The boot image the launch will pass to ART. `ACOS_SHARED_BOOT_IMAGE` and a
+/// generated `shared-fixed` directory are stable and can be warmed;
+/// `shared-aslr` is built by the first launch after this prewarm, so it falls
+/// back to the sysroot's stock trio. A directory without `x86_64/boot.art` is
+/// ignored here — `launch.rs` is the fail-closed validator, this is only a
+/// page-cache hint.
 fn boot_image(sysroot: &Path) -> Vec<PathBuf> {
+    let data = data_dir(&repo_root().unwrap_or_else(|| PathBuf::from(".")));
+    let mut dirs = Vec::new();
     if let Some(raw) = std::env::var_os("ACOS_SHARED_BOOT_IMAGE") {
-        let dir = PathBuf::from(raw);
-        if dir.join("x86_64/boot.art").is_file() {
-            let isa = dir.join("x86_64");
-            return ["boot.art", "boot.oat", "boot.vdex"]
-                .iter()
-                .map(|name| isa.join(name))
-                .collect();
+        dirs.push(PathBuf::from(raw));
+    }
+    match std::env::var("ACOS_ART_BOOT_IMAGE")
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "shared-fixed" if std::env::var_os("ACOS_SHARED_BOOT_IMAGE").is_none() => {
+            dirs.push(data.join("boot-image/fixed-70000000"));
         }
+        // `shared-aslr` builds its cohort image on the first launch, after
+        // this prewarm has run; warming a previous cohort's file would be
+        // wasted (and could crowd out framework.jar under the cap).
+        _ => {}
+    }
+    for dir in dirs {
+        if !dir.join("x86_64/boot.art").is_file() {
+            continue;
+        }
+        let isa = dir.join("x86_64");
+        let mut out: Vec<PathBuf> = ["boot.art", "boot.oat", "boot.vdex"]
+            .iter()
+            .map(|name| isa.join(name))
+            .collect();
+        // Extension images are named after their boot-classpath component.
+        if let Ok(rd) = std::fs::read_dir(&isa) {
+            for entry in rd.flatten() {
+                let p = entry.path();
+                if p.extension().and_then(|e| e.to_str()) == Some("art") && p != isa.join("boot.art") {
+                    out.push(p);
+                }
+            }
+        }
+        return out;
     }
     let isa = sysroot.join("system/framework/x86_64");
     vec![
