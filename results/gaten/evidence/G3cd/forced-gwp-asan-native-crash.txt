@@ -1,0 +1,16 @@
+ACOSCRASH {"code":2,"fault_addr":"0x77eb4495d000","pid":2,"signal":11,"source":"acos-shim","thread":"com.gaten","tid":2}
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Fatal signal 11 (SIGSEGV), code 2 (SEGV_ACCERR) fault addr 0x77eb4495d000
+OS: Linux 7.2.11-arch1-1 (x86_64)
+Cmdline: <unset>
+Thread: 2 "com.gaten"
+Registers:
+    rax: 0x0000000000000001    rbx: 0x0000000000000080    rcx: 0x000077eb4495cff8    rdx: 0x0000000000000000
+    rdi: 0x0000000000000000    rsi: 0x000077e6ccffefb0    rbp: 0x000077e6ccffeff0    rsp: 0x000077e6ccffefb0
+    r8 : 0x0000000000000400    r9 : 0x000077eb42361140    r10: 0x0000000000002000    r11: 0x0000000000000246
+    r12: 0x000077eb4495cff8    r13: 0x000077eb423611a0    r14: 0x000077e6ccfff000    r15: 0x00007ffdf04f8c18
+    rip: 0x000077eb42352d45    eflags: 0x00010287 [ CF PF SF IF ]
+     cs: 0x00000033     gs: 0x00000000     fs: 0x00000000
+
+Backtrace:
+	#00 pc 000cfd45  /apex/com.android.runtime/lib64/bionic/libc.so (android_unsafe_frame_pointer_chase+117) (BuildId: fa337969c798946280caa45e2d71a2e7)

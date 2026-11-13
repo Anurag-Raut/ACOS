@@ -1202,6 +1202,18 @@ fn launch_reply(
     // its tree was bound (`strict-event` on the P12 event rule, or
     // `probe-fresh` from the first traversal with no quiet window).
     result["settle"] = session.last_tree_settle().cloned().unwrap_or(Value::Null);
+    // G3c: how the first frame was bound. A frame that is still only the window
+    // skeleton is published as `first_frame.placeholder: true` *and* with
+    // `frame.meaningful: false`, so an assertion can never rest on it.
+    if let Some(report) = session.first_frame_report() {
+        result["first_frame"] = report.to_json();
+        if report.placeholder {
+            if let Some(frame) = result.get_mut("frame").and_then(Value::as_object_mut) {
+                frame.insert("meaningful".into(), json!(false));
+                frame.insert("placeholder".into(), json!(true));
+            }
+        }
+    }
     label_timing(&mut result, session, "acos_launch", started);
     Envelope::pass(
         request_id,

@@ -338,6 +338,14 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
     );
     sb.env("ACOSART_LOAD", "libandroid_runtime.so:libhwui.so");
     sb.env("ACOSART_BINDER_FAKE", "1");
+    // G3d: no GWP-ASan sampling allocator in a guest unless a caller asks (its
+    // sampled backtrace walks a frame-pointer-free stack off the top page).
+    for (key, value) in crate::gwp_asan_guest_env(
+        |k| std::env::var(k).ok(),
+        std::env::var("ACOS_ART_GWP_ASAN").ok().as_deref(),
+    ) {
+        sb.env(&key, &value);
+    }
 
     let dalvik = "/system/apex/com.android.art/bin/dalvikvm64";
     let cmd = sb.command(dalvik, &argv)?;
