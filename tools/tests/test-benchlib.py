@@ -1106,6 +1106,46 @@ def test_churn_sampler_coverage_counts_every_guest():
         eq("samples per guest reported", summ["samples_per_guest"]["min"], 1)
 
 
+def test_churn_sampler_window_and_extras_compat():
+    """The ported harnesses use WarmSampler's ``window``/``extras`` names."""
+    with tempfile.TemporaryDirectory() as d:
+        slice_dir = Path(d) / "cg" / "app.slice"
+        job = _fake_scope(slice_dir, "job.scope", anon=20)
+        _fake_proc(Path(d) / "proc", 42, 1, "python3", "/app.slice/job.scope")
+        _fake_scope(slice_dir, "run-5.scope", anon=40, pids=[50])
+        _fake_proc(Path(d) / "proc", 50, 42, "dalvikvm64",
+                   "/app.slice/run-5.scope")
+        s = bl.ChurnSampler(job, scope_parent=slice_dir,
+                            proc_root=Path(d) / "proc", slow_every=10 ** 6,
+                            root_pid=42, sampler_pid=42)
+        s.sample_once()
+        win = s.window(s.samples[0]["t"] - 1)
+        check("window returns samples", win and win["samples"] == 1, repr(win))
+        check("window carries net anon+shmem",
+              win["net_anon_shmem_mib"]["n"] == 1, repr(win))
+        eq("extras lists the live guest scope",
+           s.extras, [str(slice_dir / "run-5.scope")])
+
+
+def test_prune_screens_caps_per_task_pngs():
+    """TEETH: an unbounded per-task PNG dir is capped to --keep-screens."""
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        for i in range(30):
+            (root / ("task-%03d.png" % i)).write_bytes(b"x" * 1024)
+            os.utime(root / ("task-%03d.png" % i), (1000 + i, 1000 + i))
+        res = bl.prune_screens(root, keep=20)
+        eq("20 screenshots retained", len(list(root.rglob("*.png"))), 20)
+        eq("10 screenshots deleted", len(res["deleted"]), 10)
+        eq("newest sample retained", "task-029.png" in res["kept"], True)
+        eq("oldest sample removed", "task-000.png" in res["deleted"], True)
+        check("pruned bytes reported", res["freed_bytes"] == 10 * 1024)
+        # keep=0 is the explicit "no screenshots" arm, not "keep everything".
+        res0 = bl.prune_screens(root, keep=0)
+        eq("keep=0 removes every png", len(list(root.rglob("*.png"))), 0)
+        check("keep=0 deleted something", len(res0["deleted"]) == 20)
+
+
 def test_sample_integral_forward_fill_guest():
     """A guest discovered late must be charged from its first sample only."""
     job = [{"t": 0, "bytes": 10, "stat": {"anon": 10}},

@@ -1289,8 +1289,10 @@ PASS (1 documented false pass -> 0; one live Gaten false pass re-measured as a r
   only by the rate.
 - **Follow-ups:** `docs/ERROR_CODES.md` promises an exit-126-with-guard-`ERR` → `SECCOMP_UNAVAILABLE`
   re-classification that the launch path only applies when the outcome is otherwise Ok; the record now
-  names the cause, but the re-classification is still worth doing. `acos_bench.py`'s M6 loop ignores
-  `launch()`'s result, which is how a failed launch surfaced as 20 fast reset refusals.
+  names the cause, but the re-classification is still worth doing. `acos_bench.py`'s M6 loop ignored
+  `launch()`'s result, which is how a failed launch surfaced as 20 fast reset refusals — **closed by
+  E3.6/B4** (fail-closed harnesses; the M6 negative proof now exits 1 with coded failures and zero
+  latency samples from the failed launch).
 - **Fidelity / evidence:** `art-reference` (real ART, release), MEASURED, 0 false passes;
   `results/bench/H17.md`, `.cache/h17/loop-{diag-on,before-on-quiet,before-off,after-on,after-off,after-off2,n5-after,n20-after}/`,
   `.cache/h17/{gates,corpus,latency,tests-full.log}`, kept guest run evidence
@@ -1827,6 +1829,60 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
 - **Fidelity / evidence:** real ART, MEASURED, 0 false passes; `results/bench/S3c.md` (tables,
   coverage, sampler cost, limits); raw phase docs `.cache/s3c/loop-n20-*.json`; `tools/tests/test-benchlib.py`.
 
+## E3.6 — B4: fail-closed benchmark harnesses (H17 follow-up) — PASS on the tool; no regression
+
+- **Experiment ID / name:** B4 — a broken launch can never be reported as a fast/good number (H17 follow-up, backlog `H17b`).
+- **Responsible agent:** B4 (worktree `.paseo/worktrees/3oxa6xao/b4`, branch `bench-b4-harness` off `main`
+  `ac65027`). Tooling only; no product code touched.
+- **Bottleneck investigated:** `acos_bench.py`'s M6 loop ignored the initial `launch()` result, so an
+  `APK_IO`/launch failure surfaced as 20 fast `SESSION_NOT_FOUND` reset refusals (~0.009 ms) and the
+  phase still returned `ok=True`. The same “record the number, ignore the verdict” pattern existed in
+  the P5 loop (failed tasks entered `loop_total`), `s3_scale.py` (failed launches/trees entered
+  `launch_ms`, `main()` always returned 0, legacy sampler) and the per-task PNG writers (one PNG per
+  task, never pruned; S3ab wrote 28 GB).
+- **Baseline (p50/p95):** main N=5 loop, animations on, 45 measured tasks: **1431.8 / 1455.6 ms**,
+  45/45 verified, 0 false passes. Main M6 with a missing M6 APK: **20 fast latency samples per mode,
+  0.009–0.010 ms, `ok=True`, exit 0**, no failure record.
+- **Hypothesis + proposed solution:** a harness must be fail-closed: every launch/reset/observe/step
+  reply is checked; a failed step is counted with its error code and can never enter a latency array;
+  any harness-level failure makes the phase/cohort exit non-zero; PNGs are capped; the S3c
+  `ChurnSampler` is the one memory sampler, with coverage printed beside every GiB number.
+- **Implementation + commits:** `tools/bench/acos_bench.py` (`StepFailures`, checked M4/M6/M7/M8/tap/
+  destroy/M6 launch, latency-only-good `add()`, fail-closed `phase_loop`, `--keep-screens`,
+  `--m6-apk` diagnostic), `results/art-runtime/evidence/P5/p5_loop.py` (bootstrap check, verified-only
+  latency, error codes, ChurnSampler, coverage, screenshot cap), `tools/bench/s3_scale.py`
+  (ChurnSampler, verified-only launch/tree latency, coverage, non-zero exit on missing APK/worker/
+  sampler errors), `tools/art-runtime/{d2_warm,dm2/measure,agent_loop}.py`,
+  `research/zygote-proto/z7/loop.py`, `tools/benchlib.py` (`prune_screens`, ChurnSampler
+  `window`/`extras`), tests `tools/tests/test-benchlib.py` (+2) and new
+  `tools/tests/test-bench-harness.py` (9 tests). Commit on `bench-b4-harness`.
+- **Method + environment + host load:** real ART release binary (unchanged main build), one
+  `run-exclusive.sh --task B4 -- tools/guarded.sh --mem 8G --time 300/540` acquisition per proof;
+  negative run load1 1.83 (MemAvailable 44.8 GiB), positive before load1 2.61 / after 6.76
+  (MemAvailable 44.9 / 42.9 GiB; after `noisy=true`, recorded). 5 sessions, 10 loops/agent,
+  1 warm-up → 45 measured tasks per arm. Unit tests: **242 + 9 passed, 0 failed**.
+- **Before/after:** negative M6 broken launch: main **20 + 20 fast samples (0.009–0.010 ms),
+  ok=true, exit 0** → **0 latency values (bad=20 per mode), 170 failed steps
+  (`APK_IO` 2, `SESSION_NOT_FOUND` 168), ok=false, exit 1**. Positive N=5: verified **45/45 → 45/45**,
+  false passes **0 → 0**, p50 **1431.8 → 1448.9 ms (+1.2 %)**, p95 **1455.6 → 1470.6 ms (+1.0 %)**,
+  throughput **2.934 → 2.898 verified tasks/s (−1.2 %)** — inside noise, and the after arm ran at the
+  higher load1. Coverage now reported: after `coverage=0.571` (S3c 0.667), 60/105 guests observed,
+  median 14 ticks/guest, 6 live scopes with **0 zero-guest ticks**, sampler CPU 2.6 % of one core.
+- **Result:** **accepted (tool).** No product regression; the GiB-min denominator changed from legacy
+  `WarmSampler` to `ChurnSampler`, so before/after GiB-min is a metric correction (S3c), not a win or loss.
+- **Why it worked:** the failure is checked at the layer where the reply exists (every step), and the
+  latency arrays enforce the verdict at insertion (`add()`), so no downstream summary can resurrect a
+  failed sample. The phase/bundle exit code is derived from the failure counters, not from “did we
+  produce a number”.
+- **Trade-offs / regressions:** failed steps are recorded (capped at 500 rows) with `bad` counters;
+  the after positive arm is load-contaminated (load1 6.76) and should be re-run quiet for a headline
+  number. `--m6-apk` exists only for negative controls.
+- **Follow-ups:** re-run E3.3's N=1/5/10 cells on ChurnSampler; consider a quiet N=5 confirmation;
+  `s3_scale` compat/Gaten still needs a real ART run with the new sampler (code path fixed, not yet
+  exercised end-to-end here).
+- **Fidelity / evidence:** real ART, MEASURED, 0 false passes; `results/bench/B4.md`;
+  raw `.cache/b4/neg-{before,after}.json`, `.cache/b4/pos-{before,after}.json`; unit-test output above.
+
 ## E13.7 — GR3: Gaten flows past Home on real ART (tabs, Settings, search/word, lesson gate) + the animating-screen/probe wake — PASS on the flows, the animation wall is honest and owner-decided
 
 - **Date / commit:** 2026-11-13; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/gr3`, branch
@@ -2024,6 +2080,7 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | H13 | **Memory per session (now 65–67 MiB with H2) is the GiB denominator.** B3's shared uncompressed image is implemented as `ACOS_ART_BOOT_IMAGE=lz4|shared-fixed|shared-aslr`; `shared-aslr` relocates once per serve (16-bit base) and saves 10–12 MiB/session at N=5/10 | M2, tasks/GiB-min | −10–12 MiB/session (shared image); zygote CoW still −25–60 % at N≥5 | high (shared image) / medium (zygote) | low (shared image) / medium | medium (fixed image address for `shared-fixed`; +3.6 s first launch) | **#1, implemented opt-in (E2.12); not default — owner decision. Next: offline relocator or zygote CoW** |
 | H14 | **Strict tap 956 ms with the framework press/elevation animator.** Adopted the P12 `animations:off` switch as the agent-facing functional-check mode: 7.34×/8.35× taps, 2.71–2.84× loop, 5–8.7× tasks/GiB-min (anon+shmem), 0 false passes. Defaults unchanged | M8, loop | measured | high | low | medium (verification semantics: fast never backs an assertion) | **done: mode available, E3.3; use it for functional checks** |
 | H17 | **N=10 verified loop: fixed.** Two shared-input races: `<data>/seccomp/landlock.plan` rewritten in place by every launch and read by the guard at start (`ERR landlock=plan-missing`, exit 126/1), and the shared `<data>/app/<apk>` truncated by `fs::copy` while ART had it mapped (SIGBUS, exit 135). Atomic `publish_atomic` + per-run APK. 428/450 → **600/600** verified over 12 after-reps, 0 false passes; N=5 75/75, N=20 40/40 | loop verified rate at N≥8 | 100 % | high | done | low | **done 2026-11-13, E2.13** |
+| H17b | **The M6 bench harness ignored its launch result** (H17 follow-up): a failed launch became 20 fast reset refusals and `ok=True`; P5/s3_scale also admitted failed-task latency and always exited 0, and per-task PNGs grew without bound. Fixed by checking every step, excluding failed tasks from latency, exiting non-zero on harness failures, capping screenshots and porting all harnesses to `ChurnSampler` with coverage. Negative proof: main 20+20 fast samples (0.009–0.010 ms), `ok=true`, exit 0 → after 0 latency values, 170 coded failures, exit 1; N=5 45/45 verified, p50 1431.8 → 1448.9 ms (noise). | harness integrity | no false good numbers | high (measured) | done | low | **done 2026-11-13, E3.6** |
 | H16 | **N=5 strict assert flake** (H6: 1/75). Not reproduced in B2 (63/63 N=1, 75/75 N=5, plus 150+ H14 tasks) | loop verified rate | — | low now | low | low | **not reproduced in B2** (H6 saw 1/75 at N=5: a strict post-tap count read that did not see the tap; false_pass stayed 0). Twelve B2/H14 loop cohorts, 0 failures of that shape; the N≥8 failure mode is H17 instead |
 | H9 | Form-validation N=5 under host load: 3/5 `:id/name` taps hit the 30 s bound (2/5 verified) **with early GC off and on**, 2/2 runs each; Z7 saw the same in a/a′/c′ | loop correctness | remove a pre-existing input/queue stall | high (reproduced) | medium | low | **resolved 2026-11-13, E2.11/L1**: not input or the looper — the pre-P12 pixel-unchanged guard (on by default) timed out focus taps with no pixel change/no C1 buffer. P12 guard-off default + `TrustGuard::refresh`: N=5 form 5/5 ×2 at 110–176 ms, guard-on reproduces 30 s (2/5). Evidence `results/art-runtime/evidence/L1/` |
 | H4 | Idle CPU **5.28 %** of one core and 161.7 wakeups/s at N=10 (0.53 %/session; wakeups ~16 s⁻¹/session at N≥5). Remove the 250 ms probe fallback and per-session timers | CPU, wakeups | lower wakeups; small at N=10 now | medium | low | low | queued (after H15) |

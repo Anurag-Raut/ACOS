@@ -1693,10 +1693,29 @@ class ChurnSampler(threading.Thread):
         self.join(timeout=5)
 
     # -- derived readings -------------------------------------------------- #
+    @property
+    def extras(self):
+        """Live guest scope paths (WarmSampler's ``extras`` compatibility)."""
+        return sorted(self.live)
+
     def series(self, t_from=None, t_to=None):
         return [r for r in self.samples
                 if (t_from is None or r["t"] >= t_from)
                 and (t_to is None or r["t"] <= t_to)]
+
+    def window(self, t_from, t_to=None):
+        """WarmSampler-compatible window summary (legacy callers)."""
+        rows = self.series(t_from, t_to)
+        vals = [s.get("net_anon_shmem_mib") for s in rows
+                if s.get("net_anon_shmem_mib") is not None]
+        if not rows:
+            return None
+        return {
+            "samples": len(rows),
+            "net_anon_shmem_mib": stats(vals) if vals else None,
+            "last": rows[-1],
+            "first": rows[0],
+        }
 
     def summary(self, t_from=None, t_to=None, sessions=None, expected_guests=None):
         """Integrals + coverage for one window (all from this sampler's ticks)."""
@@ -2193,6 +2212,35 @@ def check_variant_scopes(rows):
 ALWAYS_KEEP_EVIDENCE = ("verdict.json", "engine.json", "mem.json",
                         "art-frames/session-timing.json")
 SMALL_EVIDENCE_BYTES = 32 * 1024
+
+
+def prune_screens(root, keep=20):
+    """Keep at most ``keep`` screenshots under ``root`` (newest by name/mtime).
+
+    Per-task harnesses used to write one PNG per task and never remove them;
+    S3ab filled 28 GB that way. This is a hard cap, not an evidence policy:
+    the retained files are the newest ``keep`` files matching ``*.png`` (the
+    failure evidence for a run is the JSON record, not 10 000 frames).
+    """
+    root = Path(root)
+    out = {"dir": str(root), "keep": max(0, int(keep)), "kept": [], "deleted": [],
+           "freed_bytes": 0}
+    if not root.exists():
+        return out
+    files = [p for p in root.rglob("*.png") if p.is_file()]
+    files.sort(key=lambda p: (p.stat().st_mtime, str(p)), reverse=True)
+    for p in files[:out["keep"]]:
+        out["kept"].append(str(p.relative_to(root)))
+    for p in files[out["keep"]:]:
+        try:
+            size = p.stat().st_size
+            p.unlink()
+        except OSError:
+            out["kept"].append(str(p.relative_to(root)))
+            continue
+        out["deleted"].append(str(p.relative_to(root)))
+        out["freed_bytes"] += size
+    return out
 
 
 def prune_artifacts(art_dir, *, keep=False, passed=True, max_failure_mib=4.0,
