@@ -416,6 +416,10 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
         )));
     }
     root.ensure_data()?;
+    // H15: the host's cgroup-scope capability is a per-boot constant; the cache
+    // stamp lives in this shared data root, so a relaunch (`reset`) does not pay
+    // the two `systemd-run` capability probes again.
+    crate::cgroup::set_capability_root(&root.data);
     root.ensure_linkerconfig(false)?;
     crate::stage("linkerconfig");
     root.ensure_classpath_env(false)?;
@@ -1145,6 +1149,13 @@ pub(crate) fn launch_session(
         if let Ok(v) = std::env::var(knob) {
             sb.env(knob, &v);
         }
+    }
+    // H15 diagnostic: name the ANIMATION-queue callbacks that keep drawing after
+    // the first frame (`ACOSLAUNCH TRACE` cannot show them: they run inside
+    // Choreographer.doFrame, not as handler messages). Forwarded only when the
+    // caller set it, so the default guest payload is unchanged.
+    if std::env::var_os("P10_PROBE_ANIM_TRACE").is_some() {
+        sb.env("P10_PROBE_ANIM_TRACE", "1");
     }
     // W5: keep the guest's main looper alive for N ms after `activity-resumed`
     // so the first traversal's draw (lockCanvas -> queueBuffer -> BLAST) can be
@@ -1902,6 +1913,11 @@ impl ProbeWake {
 #[derive(Default)]
 struct ProbeState {
     latest: Option<ProbeSample>,
+    /// H15: the last `anim_callbacks` set traced, so the trace names each
+    /// distinct animation callback once instead of once per sample.
+    anim_traced: String,
+    /// H15: the last `in_touch_mode` value traced (same once-only rule).
+    touch_traced: Option<bool>,
     /// The newest `ACOSUNSUPPORTED {…}` marker (guest-asserted).
     unsupported: Option<serde_json::Value>,
     /// Monotonic marker count, so a stale marker is not attributed to a later
@@ -2537,6 +2553,36 @@ fn drain_tee_lines<R: std::io::Read>(
                     // quiet sample parses exactly as before (settled=false,
                     // draw_ms=0 are simply unused there).
                     let event = value.get("settle");
+                    if let Some(names) = event
+                        .and_then(|e| e.get("anim_callbacks"))
+                        .and_then(|v| v.as_array())
+                        .filter(|a| !a.is_empty())
+                    {
+                        let names: Vec<String> = names
+                            .iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect();
+                        let joined = names.join(",");
+                        let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+                        if state.anim_traced != joined {
+                            state.anim_traced = joined.clone();
+                            if let Some(trace) = state.trace.as_mut() {
+                                trace.line("GUEST", &format!("anim_callbacks {joined}"));
+                            }
+                        }
+                    }
+                    if let Some(touch) = event
+                        .and_then(|e| e.get("in_touch_mode"))
+                        .and_then(|v| v.as_bool())
+                    {
+                        let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+                        if state.touch_traced != Some(touch) {
+                            state.touch_traced = Some(touch);
+                            if let Some(trace) = state.trace.as_mut() {
+                                trace.line("GUEST", &format!("touch_mode {touch}"));
+                            }
+                        }
+                    }
                     let draw_ms = event
                         .and_then(|v| v.get("draw_ms"))
                         .and_then(|v| v.as_u64())
@@ -5438,6 +5484,8 @@ mod probe_line_tests {
                 bad_probe_lines: self.bad_probe_lines,
                 trace: None,
                 wake: Arc::clone(&self.wake),
+                anim_traced: self.anim_traced.clone(),
+                touch_traced: self.touch_traced,
             }
         }
     }

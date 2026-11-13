@@ -122,6 +122,115 @@ pub fn parse_size(raw: &str) -> Option<u64> {
     n.checked_mul(mul)
 }
 
+// ---------------------------------------------------------------- capability
+
+/// The two host facts a launch used to re-probe with two `systemd-run` calls
+/// on every guest start: can an unprivileged transient scope be created at all,
+/// and does this systemd know `MemoryOOMGroup=`.
+///
+/// `(scope_ok, oom_group)`. Cached three ways, cheapest first:
+/// 1. in-process (`OnceLock`) — repeated launches inside one launcher/agent;
+/// 2. a stamp file under the shared ART data root, keyed by the kernel **boot
+///    id**, so a fresh session after a reset does not pay the probes again
+///    (`ACOS_ART_DATA`; absent → no file cache);
+/// 3. the probes themselves (the old behaviour).
+///
+/// A stale *positive* cannot create an unbounded run: every scope is still
+/// proven by [`RunCgroup::confirm`] (the run's own `/proc/self/cgroup`, its
+/// `memory.max`, `memory.swap.max` and `pids.max` are read back before the guest
+/// is allowed to continue), and a scope that cannot be created fails at spawn.
+/// A stale *negative* would refuse launches loudly, never silently pass.
+fn host_scope_capability() -> Result<(bool, bool)> {
+    static CACHED: std::sync::OnceLock<(bool, bool)> = std::sync::OnceLock::new();
+    if let Some(hit) = CACHED.get() {
+        return Ok(*hit);
+    }
+    let boot_id = std::fs::read_to_string("/proc/sys/kernel/random/boot_id")
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+    let cache = capability_cache_path();
+    if let Some(path) = &cache {
+        if let Ok(text) = std::fs::read_to_string(path) {
+            if let Some(hit) = parse_capability(&text, &boot_id) {
+                let _ = CACHED.set(hit);
+                return Ok(hit);
+            }
+        }
+    }
+    // `systemd-run --user --scope` is the only unprivileged way to get a
+    // writable memory.max on this host (see the module docs).
+    let probe = Command::new("systemd-run")
+        .args(["--user", "--scope", "-q", "-p", "MemoryMax=64M", "true"])
+        .output();
+    match probe {
+        Ok(out) if out.status.success() => {}
+        Ok(out) => {
+            return Err(Error::CgroupUnavailable(format!(
+                "systemd-run --user --scope cannot create a scope (status {:?}): {}",
+                out.status.code(),
+                String::from_utf8_lossy(&out.stderr).trim()
+            )))
+        }
+        Err(e) => {
+            return Err(Error::CgroupUnavailable(format!(
+                "systemd-run is not usable ({e}): cannot create the mandatory memory cgroup"
+            )))
+        }
+    }
+    // Older systemd has no `MemoryOOMGroup=`; the memory ceiling is still
+    // mandatory, only the group-kill refinement is dropped (measured in
+    // results/art-runtime/S5.md).
+    let oom_group = Command::new("systemd-run")
+        .args(["--user", "--scope", "-q", "-p", "MemoryOOMGroup=yes", "true"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    let found = (true, oom_group);
+    let _ = CACHED.set(found);
+    if let Some(path) = &cache {
+        // Atomic (temp + rename): a concurrent launcher never reads a torn file.
+        let body = format!(
+            "{{\"boot_id\":\"{boot_id}\",\"scope_ok\":true,\"oom_group\":{oom_group}}}\n"
+        );
+        let _ = crate::publish_atomic(path, body.as_bytes());
+    }
+    Ok(found)
+}
+
+/// H15: the shared ART data root whose on-disk capability stamp is used. The
+/// launcher sets it from the `ArtRoot` it resolved (the same root every session
+/// of one `acos serve` shares); `ACOS_ART_DATA` is the fallback for a process
+/// that never got that far.
+static CAPABILITY_ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Point the capability cache at the shared ART data root (idempotent).
+pub fn set_capability_root(root: &Path) {
+    let _ = CAPABILITY_ROOT.set(root.to_path_buf());
+}
+
+/// The stamp file the capability cache lives in (no root known → none).
+fn capability_cache_path() -> Option<PathBuf> {
+    CAPABILITY_ROOT
+        .get()
+        .cloned()
+        .or_else(|| std::env::var_os("ACOS_ART_DATA").map(PathBuf::from))
+        .map(|d| d.join("cgroup-capability.json"))
+}
+
+/// Read a cached capability record; `None` when it belongs to another boot or
+/// does not parse (then the probes run, as before).
+fn parse_capability(text: &str, boot_id: &str) -> Option<(bool, bool)> {
+    let value: serde_json::Value = serde_json::from_str(text.trim()).ok()?;
+    let cached_boot = value.get("boot_id")?.as_str()?;
+    if boot_id.is_empty() || cached_boot != boot_id {
+        return None;
+    }
+    Some((
+        value.get("scope_ok")?.as_bool()?,
+        value.get("oom_group")?.as_bool()?,
+    ))
+}
+
 /// One run's cgroup scope.
 #[derive(Debug)]
 pub struct RunCgroup {
@@ -145,34 +254,18 @@ impl RunCgroup {
                 "no cgroup v2 hierarchy at /sys/fs/cgroup (memory.max unavailable)".into(),
             ));
         }
-        // `systemd-run --user --scope` is the only unprivileged way to get a
-        // writable memory.max on this host (see the module docs).
-        let probe = Command::new("systemd-run")
-            .args(["--user", "--scope", "-q", "-p", "MemoryMax=64M", "true"])
-            .output();
-        match probe {
-            Ok(out) if out.status.success() => {}
-            Ok(out) => {
-                return Err(Error::CgroupUnavailable(format!(
-                    "systemd-run --user --scope cannot create a scope (status {:?}): {}",
-                    out.status.code(),
-                    String::from_utf8_lossy(&out.stderr).trim()
-                )))
-            }
-            Err(e) => {
-                return Err(Error::CgroupUnavailable(format!(
-                    "systemd-run is not usable ({e}): cannot create the mandatory memory cgroup"
-                )))
-            }
+        // H15: the two capability probes below are **host constants**, but they
+        // were run synchronously on every launch (measured 6.5–7 ms of every
+        // guest start, `results/bench/H15.md`). They are cached per boot (a
+        // systemd/session change inside one boot is not a case the fail-closed
+        // `confirm()` cannot still catch: an unusable scope fails at spawn or at
+        // the `memory.max` read-back, never into an unbounded run).
+        let (scope_ok, oom_group) = host_scope_capability()?;
+        if !scope_ok {
+            return Err(Error::CgroupUnavailable(
+                "systemd-run --user --scope cannot create a scope (cached host probe)".into(),
+            ));
         }
-        // Older systemd has no `MemoryOOMGroup=`; the memory ceiling is still
-        // mandatory, only the group-kill refinement is dropped (measured in
-        // results/art-runtime/S5.md).
-        let oom_group = Command::new("systemd-run")
-            .args(["--user", "--scope", "-q", "-p", "MemoryOOMGroup=yes", "true"])
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
         Ok(Self {
             limits,
             cg: PathBuf::new(),
@@ -365,6 +458,28 @@ fn read_trim(path: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// H15: the capability stamp is only trusted for the boot that wrote it, and
+    /// anything unparseable falls back to the probes (never to a silent "ok").
+    #[test]
+    fn capability_stamp_is_boot_scoped_and_never_guesses() {
+        let record = r#"{"boot_id":"abc-123","scope_ok":true,"oom_group":false}"#;
+        assert_eq!(parse_capability(record, "abc-123"), Some((true, false)));
+        // Another boot: stale, the probes run again.
+        assert_eq!(parse_capability(record, "other-boot"), None);
+        // No boot id at all: never trust the file.
+        assert_eq!(parse_capability(record, ""), None);
+        // Garbage, a truncated write, or a missing key: probes.
+        assert_eq!(parse_capability("{", "abc-123"), None);
+        assert_eq!(parse_capability(r#"{"boot_id":"abc-123"}"#, "abc-123"), None);
+        assert_eq!(
+            parse_capability(r#"{"boot_id":"abc-123","scope_ok":true}"#, "abc-123"),
+            None
+        );
+        // A cached negative is carried, not hidden: it is what refuses the run.
+        let refused = r#"{"boot_id":"abc-123","scope_ok":false,"oom_group":false}"#;
+        assert_eq!(parse_capability(refused, "abc-123"), Some((false, false)));
+    }
 
     #[test]
     fn sizes_parse() {
