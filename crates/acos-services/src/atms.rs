@@ -903,6 +903,7 @@ impl AtmsService {
             exported: entry.exported,
             grant_uri_permissions: entry.grant_uri_permissions,
             init_order: entry.init_order,
+            meta_data: Vec::new(),
         }
         .to_parcelable(&app);
         // `ContentProviderHolder.writeToParcel` (API 34):

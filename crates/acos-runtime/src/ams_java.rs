@@ -541,6 +541,9 @@ fn provider_application_info(
         split_names: Vec::new(),
         shared_library_files: Vec::new(),
         target_sandbox_version: 2,
+        // The provider's application info carries no `<meta-data>`: the
+        // runtime path materialises no `Bundle` (see `pms_java.rs`).
+        meta_data: Vec::new(),
     };
     crate::pms_java::application_info(vm, &app)
 }
@@ -1272,6 +1275,7 @@ pub fn schedule_launch(
         theme: 0,
         exported: true,
         parent_activity_name: String::new(),
+        meta_data: Vec::new(),
     };
     let info = crate::pms_java::activity_info(vm, app, &activity)?;
     let intent = materialize_intent(vm, &launch.intent)?;

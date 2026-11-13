@@ -1523,6 +1523,7 @@ fn provider_holder_parcelable(provider: &ProviderRecord) -> Parcelable {
         exported: false,
         grant_uri_permissions: false,
         init_order: 0,
+        meta_data: Vec::new(),
     }
     .to_parcelable(&app);
     // `ContentProviderHolder.writeToParcel` (API 34).

@@ -87,6 +87,7 @@ fn publish_content_providers_decodes_the_typed_list() {
         exported: false,
         grant_uri_permissions: false,
         init_order: 0,
+        meta_data: Vec::new(),
     };
     let holder = Parcelable::ordered(
         "android.app.ContentProviderHolder",
