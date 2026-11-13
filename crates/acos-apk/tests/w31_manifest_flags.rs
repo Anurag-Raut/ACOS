@@ -21,7 +21,9 @@ use std::path::{Path, PathBuf};
 use acos_apk::manifest::{
     Manifest, FLAG_ALLOW_BACKUP, FLAG_ALLOW_CLEAR_USER_DATA, FLAG_DEBUGGABLE,
     FLAG_EXTRACT_NATIVE_LIBS, FLAG_HARDWARE_ACCELERATED, FLAG_HAS_CODE, FLAG_INSTALLED,
-    FLAG_IS_GAME, FLAG_LARGE_HEAP, FLAG_MULTIARCH, FLAG_SUPPORTS_RTL,
+    FLAG_IS_GAME, FLAG_LARGE_HEAP, FLAG_MULTIARCH, FLAG_RESIZEABLE_FOR_SCREENS,
+    FLAG_SUPPORTS_LARGE_SCREENS, FLAG_SUPPORTS_NORMAL_SCREENS, FLAG_SUPPORTS_RTL,
+    FLAG_SUPPORTS_SCREEN_DENSITIES, FLAG_SUPPORTS_SMALL_SCREENS, FLAG_SUPPORTS_XLARGE_SCREENS,
     FLAG_USES_CLEARTEXT_TRAFFIC, FLAG_VM_SAFE_MODE,
 };
 use acos_apk::Apk;
@@ -76,11 +78,13 @@ fn counter_flags_follow_the_parser_defaults() {
     // Absent attributes: hasCode/extractNativeLibs default true; supportsRtl
     // defaults false in this tag's parser; hardwareAccelerated defaults true
     // for targetSdk >= 14; usesCleartextTraffic defaults false for targetSdk
-    // >= 28 (P).
-    assert_eq!(manifest.application_flags(), 0x3000_0046);
+    // >= 28 (P). The absent `<supports-screens>` group defaults all six screen
+    // flags on for screen SDK 34: SMALL(9) | NORMAL(10) | LARGE(11) |
+    // RESIZEABLE(12) | DENSITIES(13) | XLARGE(19).
+    assert_eq!(manifest.application_flags(), 0x3008_3e46);
     assert_eq!(
         manifest.application_flags_installed(),
-        0x3080_0046,
+        0x3088_3e46,
         "the installed package adds FLAG_INSTALLED (1 << 23)"
     );
     assert_bits(
@@ -91,6 +95,15 @@ fn counter_flags_follow_the_parser_defaults() {
             (FLAG_ALLOW_CLEAR_USER_DATA, "FLAG_ALLOW_CLEAR_USER_DATA"),
             (FLAG_EXTRACT_NATIVE_LIBS, "FLAG_EXTRACT_NATIVE_LIBS"),
             (FLAG_HARDWARE_ACCELERATED, "FLAG_HARDWARE_ACCELERATED"),
+            (FLAG_SUPPORTS_SMALL_SCREENS, "FLAG_SUPPORTS_SMALL_SCREENS (absent group)"),
+            (FLAG_SUPPORTS_NORMAL_SCREENS, "FLAG_SUPPORTS_NORMAL_SCREENS (absent group)"),
+            (FLAG_SUPPORTS_LARGE_SCREENS, "FLAG_SUPPORTS_LARGE_SCREENS (absent group)"),
+            (FLAG_RESIZEABLE_FOR_SCREENS, "FLAG_RESIZEABLE_FOR_SCREENS (absent group)"),
+            (
+                FLAG_SUPPORTS_SCREEN_DENSITIES,
+                "FLAG_SUPPORTS_SCREEN_DENSITIES (absent group)",
+            ),
+            (FLAG_SUPPORTS_XLARGE_SCREENS, "FLAG_SUPPORTS_XLARGE_SCREENS (absent group)"),
             (FLAG_INSTALLED, "FLAG_INSTALLED"),
         ],
         &[
@@ -117,8 +130,10 @@ fn gaten_debug_declares_cleartext_debuggable_rtl_and_backup() {
     assert_eq!(manifest.application.supports_rtl, Some(true));
     assert_eq!(manifest.application.extract_native_libs, Some(true));
     // Parser flags: HW(29) | EXTRACT(28) | CLEARTEXT(27) | RTL(22) |
-    // BACKUP(15) | CLEAR_USER_DATA(6) | HAS_CODE(2) | DEBUGGABLE(1).
-    assert_eq!(manifest.application_flags(), 0x3840_8046);
+    // BACKUP(15) | CLEAR_USER_DATA(6) | HAS_CODE(2) | DEBUGGABLE(1), plus the
+    // absent `<supports-screens>` defaults SMALL(9) | NORMAL(10) | LARGE(11) |
+    // RESIZEABLE(12) | DENSITIES(13) | XLARGE(19).
+    assert_eq!(manifest.application_flags(), 0x3848_be46);
     assert_bits(
         manifest.application_flags_installed(),
         &[
@@ -128,6 +143,12 @@ fn gaten_debug_declares_cleartext_debuggable_rtl_and_backup() {
             (FLAG_SUPPORTS_RTL, "FLAG_SUPPORTS_RTL"),
             (FLAG_EXTRACT_NATIVE_LIBS, "FLAG_EXTRACT_NATIVE_LIBS"),
             (FLAG_HAS_CODE, "FLAG_HAS_CODE"),
+            (FLAG_SUPPORTS_SMALL_SCREENS, "FLAG_SUPPORTS_SMALL_SCREENS"),
+            (FLAG_SUPPORTS_NORMAL_SCREENS, "FLAG_SUPPORTS_NORMAL_SCREENS"),
+            (FLAG_SUPPORTS_LARGE_SCREENS, "FLAG_SUPPORTS_LARGE_SCREENS"),
+            (FLAG_RESIZEABLE_FOR_SCREENS, "FLAG_RESIZEABLE_FOR_SCREENS"),
+            (FLAG_SUPPORTS_SCREEN_DENSITIES, "FLAG_SUPPORTS_SCREEN_DENSITIES"),
+            (FLAG_SUPPORTS_XLARGE_SCREENS, "FLAG_SUPPORTS_XLARGE_SCREENS"),
             (FLAG_INSTALLED, "FLAG_INSTALLED"),
         ],
         &[
@@ -147,7 +168,7 @@ fn gaten_release_does_not_claim_cleartext_or_debuggable() {
     assert_eq!(manifest.application.uses_cleartext_traffic, None);
     // targetSdk 36 keeps the cleartext default false: the release APK must not
     // be given a permission it did not ask for.
-    assert_eq!(manifest.application_flags(), 0x3040_8044);
+    assert_eq!(manifest.application_flags(), 0x3048_be44);
     assert_bits(
         manifest.application_flags(),
         &[
@@ -155,6 +176,15 @@ fn gaten_release_does_not_claim_cleartext_or_debuggable() {
             (FLAG_SUPPORTS_RTL, "FLAG_SUPPORTS_RTL (declared true)"),
             (FLAG_EXTRACT_NATIVE_LIBS, "FLAG_EXTRACT_NATIVE_LIBS"),
             (FLAG_HAS_CODE, "FLAG_HAS_CODE"),
+            (FLAG_SUPPORTS_SMALL_SCREENS, "FLAG_SUPPORTS_SMALL_SCREENS"),
+            (FLAG_SUPPORTS_NORMAL_SCREENS, "FLAG_SUPPORTS_NORMAL_SCREENS"),
+            (FLAG_SUPPORTS_LARGE_SCREENS, "FLAG_SUPPORTS_LARGE_SCREENS"),
+            (FLAG_RESIZEABLE_FOR_SCREENS, "FLAG_RESIZEABLE_FOR_SCREENS"),
+            // The Gaten runtime marker lacked this bit (0x10c08044, the
+            // density-compat symptom); the parser must supply it for an
+            // absent `<supports-screens>` group on a modern targetSdk.
+            (FLAG_SUPPORTS_SCREEN_DENSITIES, "FLAG_SUPPORTS_SCREEN_DENSITIES"),
+            (FLAG_SUPPORTS_XLARGE_SCREENS, "FLAG_SUPPORTS_XLARGE_SCREENS"),
         ],
         &[
             (FLAG_DEBUGGABLE, "FLAG_DEBUGGABLE"),

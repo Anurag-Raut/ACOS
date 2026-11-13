@@ -9,7 +9,7 @@
 //!
 //! `app.flags` is the AOSP-parser truth for this APK, not a measured capture
 //! (the `art-api34-x86_64` set has no `dumpsys package` dump). The current value
-//! `805306438` = `0x3000_0046` is:
+//! `805846598` = `0x3008_3E46` is:
 //!
 //! * `0x4` `FLAG_HAS_CODE` — declared/omitted `android:hasCode` defaults true
 //!   (`PackageParser.java`, `AndroidManifestApplication_hasCode`);
@@ -20,7 +20,14 @@
 //!   defaults true (`PackageParser.java` line 3562);
 //! * `0x1000_0000` `FLAG_EXTRACT_NATIVE_LIBS` + `0x2000_0000`
 //!   `FLAG_HARDWARE_ACCELERATED` — the parser derives the latter from
-//!   `targetSdkVersion >= 14` when `android:hardwareAccelerated` is absent.
+//!   `targetSdkVersion >= 14` when `android:hardwareAccelerated` is absent;
+//! * `0x8_3E00` screen flags — the manifest has no `<supports-screens>`, so
+//!   `PackageParser.parseBaseApkCommon`'s "unknown" sentinel defaults
+//!   smallScreens/normalScreens/largeScreens/resizeable/anyDensity and
+//!   xlargeScreens on for the effective screen SDK (`targetSdkVersion` 34):
+//!   `FLAG_SUPPORTS_SMALL_SCREENS` (9) | `FLAG_SUPPORTS_NORMAL_SCREENS` (10) |
+//!   `FLAG_SUPPORTS_LARGE_SCREENS` (11) | `FLAG_RESIZEABLE_FOR_SCREENS` (12) |
+//!   `FLAG_SUPPORTS_SCREEN_DENSITIES` (13) | `FLAG_SUPPORTS_XLARGE_SCREENS` (19).
 //!
 //! The previous golden value (`805306372` = `0x3000_0004`) missed the
 //! debuggable/allowClearUserData bits that the freshly rebuilt fixture manifest
