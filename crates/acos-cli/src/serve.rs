@@ -202,17 +202,31 @@ pub fn run(args: ServeArgs) -> ExitCode {
                 });
             }
             Err(e) if e.kind() == ErrorKind::WouldBlock => {
-                // Block until a connection arrives (or the idle-check interval
-                // elapses) instead of sleeping a fixed 50 ms. The old
-                // `thread::sleep(50ms)` made every new CLI connection wait up
-                // to a full poll interval before it was accepted, which showed
-                // up as a ~50 ms floor on every daemon round trip.
+                // Block until a connection arrives. A connection wakes poll
+                // immediately, so the timeout only bounds the idle-exit check
+                // (seconds granularity). H4: 1 s, not 50 ms, removes a 20/s
+                // idle timer from every idle serve; while a session is held
+                // the check cannot fire anyway, so it waits the full second.
+                let held = shared.active.load(Ordering::SeqCst) > 0
+                    || engine.session_count() > 0;
+                let idle_left = idle.saturating_sub(
+                    shared
+                        .last_activity
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .elapsed(),
+                );
+                let wait_ms = if held {
+                    1_000
+                } else {
+                    idle_left.as_millis().clamp(1, 1_000) as i32
+                };
                 let mut pfd = libc::pollfd {
                     fd: listener.as_raw_fd(),
                     events: libc::POLLIN,
                     revents: 0,
                 };
-                let rc = unsafe { libc::poll(&mut pfd, 1, 50) };
+                let rc = unsafe { libc::poll(&mut pfd, 1, wait_ms) };
                 if rc < 0 && std::io::Error::last_os_error().kind() != ErrorKind::Interrupted {
                     eprintln!("acos serve: poll: {}", std::io::Error::last_os_error());
                     break;
