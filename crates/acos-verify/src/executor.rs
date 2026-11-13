@@ -226,6 +226,10 @@ pub fn run_scenario(
     let mut previous_observation: Option<SessionObservation> = None;
     let mut bound_frame_seq: Option<u64> = None;
     let mut last_frame_seq: Option<u64> = None;
+    // GR3/G3a: whether the bound frame came from a `settle: fast` input. Fast is
+    // navigation only, so an assertion may not describe that frame; a strict
+    // `wait_for`/`capture`/input must bind a new one first.
+    let mut bound_is_fast = false;
 
     // A log fetch that failed (for example the untrusted-run refusal from
     // `TrustGuard`) is remembered so an `assert_log` step reports that exact
@@ -303,7 +307,10 @@ pub fn run_scenario(
         };
 
         let cause_id = format!("{}:{}:{}", options.request_id, step.kind(), index);
-        let exec = execute_step(
+        let exec = if bound_is_fast && binds_to_bound_frame(step) {
+            fast_bound_failure(step.kind())
+        } else {
+            execute_step(
             backend,
             caps,
             &manifest,
@@ -320,7 +327,8 @@ pub fn run_scenario(
             bound_frame_seq,
             last_frame_seq,
             &mut capabilities_used,
-        );
+        )
+        };
         let duration_ms = clock.now_unix_ms().saturating_sub(step_started);
 
         // ---- W58: complete the frame evidence at the verifier's boundary ----
@@ -400,12 +408,14 @@ pub fn run_scenario(
                 last_frame_seq = Some(observation.frame.frame_seq);
                 if frame_advancing_step(step) {
                     bound_frame_seq = Some(observation.frame.frame_seq);
+                    bound_is_fast = fast_input_step(step);
                 }
                 previous_observation = Some(observation.clone());
             } else if let Some(frame) = &exec.produced_frame {
                 last_frame_seq = Some(frame.frame_seq);
                 if matches!(step.as_step(), Some(StepRef::Launch(_))) {
                     bound_frame_seq = Some(frame.frame_seq);
+                    bound_is_fast = false;
                 }
             }
         }
@@ -1349,6 +1359,59 @@ fn meaningful_error(observation: &SessionObservation) -> Option<StepExec> {
         observation: None,
         produced_frame: None,
         session: None,
+    })
+}
+
+/// An input step that asked for the `settle: fast` navigation rule.
+fn fast_input_step(step: &Step) -> bool {
+    match step.as_step() {
+        Some(StepRef::Tap(tap)) => matches!(tap.settle, Some(StepSettle::Fast)),
+        Some(StepRef::Type(ty)) => matches!(ty.settle, Some(StepSettle::Fast)),
+        Some(StepRef::Key(key)) => matches!(key.settle, Some(StepSettle::Fast)),
+        _ => false,
+    }
+}
+
+/// Steps that evaluate the bound frame itself (UI-tree and pixel assertions, a
+/// non-fresh capture). After a `settle: fast` input these must fail closed.
+fn binds_to_bound_frame(step: &Step) -> bool {
+    match step.as_step() {
+        Some(
+            StepRef::AssertText(_)
+            | StepRef::AssertVisible(_)
+            | StepRef::AssertNotVisible(_)
+            | StepRef::AssertState(_)
+            | StepRef::AssertScreenshot(_)
+            | StepRef::AssertRegion(_),
+        ) => true,
+        Some(StepRef::Capture(capture)) => !capture.fresh,
+        _ => false,
+    }
+}
+
+/// An assertion whose bound frame came from a `settle: fast` input. Fast is the
+/// navigation rule (never assertion evidence), so this is a failed binding, not
+/// an evaluation of a possibly unsettled frame.
+fn fast_bound_failure(kind: &str) -> StepExec {
+    let detail = "the bound frame came from a `settle: fast` input, which is navigation only; \
+                  add a strict wait_for or a capture (fresh: true) before asserting";
+    StepExec::failed(Evaluated {
+        result: AssertionResult {
+            kind: "frame_binding".to_string(),
+            passed: false,
+            diff: Some(AssertionDiff {
+                expected: serde_json::json!({"settle": "strict"}),
+                actual: serde_json::json!({"settle": "fast"}),
+                path: Some("frame.settle".to_string()),
+                detail: Some(detail.to_string()),
+            }),
+            matched_node_ids: Vec::new(),
+            message: None,
+        },
+        error: Some(BackendError::Failed {
+            code: ErrorCode::AssertionFailed,
+            detail: format!("{kind}: {detail}"),
+        }),
     })
 }
 
