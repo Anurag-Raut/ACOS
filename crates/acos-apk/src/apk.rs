@@ -68,6 +68,8 @@ pub struct Apk {
     pub native_libs: BTreeMap<String, Vec<NativeLib>>,
     pub assets: Vec<ApkEntry>,
     pub signing: SigningInfo,
+    /// DER X.509 signing certificates (the platform's `PackageInfo.signatures`).
+    pub signing_certificates: Vec<Vec<u8>>,
     pub manifest_raw: Option<Vec<u8>>,
     pub arsc_raw: Option<Vec<u8>>,
     raw: Vec<u8>,
@@ -95,6 +97,9 @@ impl Apk {
         let mut assets = Vec::new();
         let mut manifest_raw = None;
         let mut arsc_raw = None;
+        // v1 signature blocks (`META-INF/*.RSA|DSA|EC`), read after the index
+        // pass: their bytes are the PKCS#7 fallback for the signing certificate.
+        let mut v1_indices: Vec<usize> = Vec::new();
 
         for i in 0..archive.len() {
             let mut file = archive
@@ -153,6 +158,8 @@ impl Apk {
                     data_offset,
                     uncompressed_in_apk,
                 });
+            } else if is_v1_signature_block(&name) {
+                v1_indices.push(i);
             } else if name.starts_with("assets/") {
                 assets.push(ApkEntry {
                     name,
@@ -171,6 +178,16 @@ impl Apk {
 
         let entry_names: Vec<String> = entries.iter().map(|e| e.name.clone()).collect();
         let signing = signing::detect(&entry_names, &bytes);
+        let mut v1_blocks: Vec<Vec<u8>> = Vec::new();
+        for i in v1_indices {
+            if let Ok(mut file) = archive.by_index(i) {
+                let mut buf = Vec::new();
+                if file.read_to_end(&mut buf).is_ok() {
+                    v1_blocks.push(buf);
+                }
+            }
+        }
+        let signing_certificates = signing::certificates(&bytes, &v1_blocks);
 
         Ok(Apk {
             source: "<memory>".to_string(),
@@ -179,6 +196,7 @@ impl Apk {
             native_libs,
             assets,
             signing,
+            signing_certificates,
             manifest_raw,
             arsc_raw,
             raw: bytes,
@@ -407,3 +425,10 @@ fn parse_lib_name(name: &str) -> Option<(String, String)> {
     Some((abi.to_string(), lib.to_string()))
 }
 
+/// `META-INF/*.RSA` / `*.DSA` / `*.EC`: a v1 (JAR) signature block, whose
+/// PKCS#7 payload carries the signing certificate.
+fn is_v1_signature_block(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    upper.starts_with("META-INF/")
+        && (upper.ends_with(".RSA") || upper.ends_with(".DSA") || upper.ends_with(".EC"))
+}

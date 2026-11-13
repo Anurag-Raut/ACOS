@@ -1225,6 +1225,12 @@ pub(crate) fn launch_session(
     // device; ACOS's WMS runs no transition animations, so there is nothing to
     // scale beyond the app-side animator scale.
     sb.env("ACOS_ANIMATIONS", opts.animations.as_str());
+    // K5: the software AndroidKeyStore seam (`off` keeps the K4 behaviour for
+    // A/B). The guest environment is cleared by bwrap, so every `System.getenv`
+    // the launch guest reads must be listed here explicitly.
+    if let Ok(v) = std::env::var("ACOS_ART_KEYSTORE") {
+        sb.env("ACOS_ART_KEYSTORE", &v);
+    }
     acos_services::animation::set_enabled(opts.animations.is_on());
     set_animations_state(opts.animations.is_on());
     crate::watchdog::note_guest_priority_gap("launch");
@@ -5276,6 +5282,9 @@ fn build_launch_guest(root: &ArtRoot) -> Result<PathBuf> {
     fs::create_dir_all(&out_dir)?;
     let sources = [
         src_dir.join("dev/acos/art/LaunchMain.java"),
+        // The software AndroidKeyStore provider (installed by LaunchMain.main,
+        // the way the zygote installs the real one before app code).
+        src_dir.join("dev/acos/art/SoftwareKeyStore.java"),
         src_dir.join("dev/acos/art/RenderNat.java"),
         // The driver's JNI surface (`startBinderLooper`), shared with SessionMain
         // and with the P2f acceptance dex (`dev.acos.e3g.Nat`); one copy under

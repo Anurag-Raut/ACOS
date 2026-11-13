@@ -319,6 +319,7 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         requested_permissions: Vec::new(),
         first_install_time: 0,
         last_update_time: 0,
+        signatures: Vec::new(),
     };
     let pkg_bytes = encoded(&pkg.to_parcelable());
     // W155-A: the PackageInfo member arrays + intent resolution specs.

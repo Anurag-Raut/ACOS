@@ -1075,8 +1075,11 @@ fn run_dir_is_live(path: &Path) -> bool {
 /// inherited from the host. `--cap-drop ALL` is redundant (bwrap's implicit
 /// user namespace already zeroes the capability sets) but costs nothing.
 ///
-/// Deliberately absent: `--unshare-user` (bwrap already does it implicitly),
-/// `--disable-userns` and `--new-session` (untested against ART; see S2).
+/// `--unshare-user` is made explicit for runs because it is what lets the guest
+/// carry an **application** uid instead of the host caller's uid (see
+/// [`guest_uid`]); bwrap would create the namespace implicitly anyway.
+/// `--disable-userns` and `--new-session` remain absent (untested against ART;
+/// see S2).
 const SANDBOX_FLAGS: &[&str] = &[
     "--unshare-pid",
     "--unshare-net",
@@ -1088,6 +1091,34 @@ const SANDBOX_FLAGS: &[&str] = &[
     "--cap-drop",
     "ALL",
 ];
+
+/// The uid the guest runs as inside the sandbox's user namespace.
+///
+/// `bwrap --unshare-user --uid N` maps inner `N` onto the host caller's uid, so
+/// every host file the run binds stays accessible (it appears owned by `N`
+/// inside) while the guest's *kernel* uid — and therefore `Process.myUid()`,
+/// `Libcore.os.getuid()`, `/proc/self/status` — is an application uid.
+///
+/// Default: [`acos_services::pms::FIXTURE_UID`] (10192), the uid PMS/AMS already
+/// answer for the installed package, so `Process.myUid()` and
+/// `getPackageUid()` agree. This is a fidelity fix, not a cosmetic one: the
+/// host caller is uid 1000, which is Android's `Process.SYSTEM_UID`. Framework
+/// code branches on it — `WebViewFactory.getProvider()` refuses for
+/// `ROOT_UID`/`SYSTEM_UID`/`SHELL_UID`/`NETWORK_STACK_UID`/`BLUETOOTH_UID`
+/// (measured from the API-34 framework dex: uids 0, 1000, 1001, 1027, 1002) and
+/// throws `UnsupportedOperationException: For security reasons, WebView is not
+/// allowed in privileged processes`, so every app that probes WebView died in a
+/// *system* branch it can never take on a device.
+///
+/// `ACOS_ART_GUEST_UID=host` keeps the old uid for A/B work; any other unsigned
+/// value overrides the uid (it must remain a valid inner mapping target).
+fn guest_uid() -> Option<u32> {
+    match std::env::var("ACOS_ART_GUEST_UID") {
+        Ok(v) if v.trim() == "host" || v.trim().is_empty() => None,
+        Ok(v) => v.trim().parse::<u32>().ok(),
+        Err(_) => Some(acos_services::pms::FIXTURE_UID as u32),
+    }
+}
 
 /// Builder for the `bwrap` command line: the mini-Android root, its
 /// environment, and any extra host directories the task needs.
@@ -1244,6 +1275,15 @@ impl<'a> Sandbox<'a> {
         // options in order, so these must precede every mount and `--setenv`.
         for f in SANDBOX_FLAGS {
             a.push((*f).into());
+        }
+        // Runs get an application uid (see `guest_uid`); host-side staging
+        // steps and the argv-shape tests keep the caller's uid.
+        if self.active_run_root().is_some() {
+            if let Some(uid) = guest_uid() {
+                a.push("--unshare-user".into());
+                a.push("--uid".into());
+                a.push(uid.to_string().into());
+            }
         }
         a.push("--tmpfs".into());
         a.push("/".into());

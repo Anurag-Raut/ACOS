@@ -200,6 +200,19 @@ public final class LaunchMain {
         System.out.println("ACOSLAUNCH MARK resume-budget ms=" + sResumeMs
                 + " ready_ms=" + sResumeReadyMs);
         System.out.flush();
+        // A device's zygote installs the AndroidKeyStore provider once, before
+        // any app process exists (ZygoteInit.warmUpJcaProviders). ACOS starts
+        // dalvikvm64 directly, so install the software provider here — before
+        // app code, which is where the platform has it. Session-private
+        // storage: keys live under this run's /data/app-data only.
+        try {
+            String ks = System.getenv("ACOS_ART_KEYSTORE");
+            if (ks == null || !"off".equalsIgnoreCase(ks.trim())) {
+                SoftwareKeyStore.install("/data/app-data/" + sPkg);
+            }
+        } catch (Throwable t) {
+            System.out.println("ACOSLAUNCH WARN keystore install: " + t);
+        }
         try {
             run(t0);
         } catch (Throwable t) {
@@ -343,7 +356,6 @@ public final class LaunchMain {
         // which `Parcel.marshall()` refuses to carry over the peer byte pipe).
         sThread = thread;
         sClient = iatClient(appThread);
-
         byte[] bind = buildBindApplicationRequest();
         pushToPeer(1, bind);
         System.out.println("ACOSLAUNCH MARK bind-request-pushed bytes=" + bind.length);

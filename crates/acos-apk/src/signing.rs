@@ -165,3 +165,152 @@ fn read_u64(bytes: &[u8], at: usize) -> Result<u64> {
         b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
     ]))
 }
+
+/// DER-encoded X.509 signing certificates carried by the APK.
+///
+/// `PackageManager` must answer the app's **real** signing certificate for
+/// `GET_SIGNATURES`/`GET_SIGNING_CERTIFICATES`; `PackageInfo.signatures` was
+/// previously empty, so an app that parses its own certificate
+/// (`org.quantumbadger.redreader` does this in `Application.onCreate`) died in
+/// conscrypt on a malformed/absent signature.
+///
+/// The block is parsed with the layout of `ApkSignatureSchemeV2Verifier` /
+/// `V3Verifier` (AOSP `frameworks/base/core/java/android/util/apk/`):
+/// `[len:u32 signers][signer...]`, each signer
+/// `[len:u32 signedData][len:u32 signatures][len:u32 publicKey]`, and the
+/// signed data `[len:u32 digests][len:u32 certificates][...]` where
+/// `certificates` is a sequence of `[len:u32 der]`. The highest scheme the file
+/// carries is preferred (v3.1, then v3, then v2), matching the platform's
+/// `SigningDetails` selection. A v1-only APK falls back to the PKCS#7
+/// `META-INF/*.RSA` block and its first `Certificate`.
+#[must_use]
+pub fn certificates(bytes: &[u8], v1_blocks: &[Vec<u8>]) -> Vec<Vec<u8>> {
+    if let Some(magic_at) = find_magic(bytes) {
+        if let Ok(pairs) = parse_block(bytes, magic_at) {
+            for id in [ID_V3_1, ID_V3, ID_V2] {
+                if let Some((_, value)) = pairs.iter().find(|(i, _)| *i == id) {
+                    let certs = scheme_certificates(value);
+                    if !certs.is_empty() {
+                        return certs;
+                    }
+                }
+            }
+        }
+    }
+    for block in v1_blocks {
+        if let Some(cert) = pkcs7_first_certificate(block) {
+            return vec![cert];
+        }
+    }
+    Vec::new()
+}
+
+fn scheme_certificates(block: &[u8]) -> Vec<Vec<u8>> {
+    let mut pos = 0;
+    let Some(signers) = der_len_prefixed(block, &mut pos) else {
+        return Vec::new();
+    };
+    let mut spos = 0;
+    let Some(signer) = der_len_prefixed(signers, &mut spos) else {
+        return Vec::new();
+    };
+    let mut p = 0;
+    let Some(signed_data) = der_len_prefixed(signer, &mut p) else {
+        return Vec::new();
+    };
+    let mut q = 0;
+    let _digests = der_len_prefixed(signed_data, &mut q);
+    let Some(cert_seq) = der_len_prefixed(signed_data, &mut q) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let mut c = 0;
+    while let Some(cert) = der_len_prefixed(cert_seq, &mut c) {
+        if !cert.is_empty() {
+            out.push(cert.to_vec());
+        }
+    }
+    out
+}
+
+/// A little-endian `u32` length followed by that many bytes.
+fn der_len_prefixed<'a>(bytes: &'a [u8], pos: &mut usize) -> Option<&'a [u8]> {
+    let len_bytes = bytes.get(*pos..pos.checked_add(4)?)?;
+    let len = u32::from_le_bytes([len_bytes[0], len_bytes[1], len_bytes[2], len_bytes[3]]) as usize;
+    *pos += 4;
+    let out = bytes.get(*pos..pos.checked_add(len)?)?;
+    *pos += len;
+    Some(out)
+}
+
+/// One DER TLV: `(tag, content, start, end)` where `start..end` is the whole
+/// element (header included) relative to `bytes`.
+fn der_tlv<'a>(bytes: &'a [u8], pos: &mut usize) -> Option<(u8, &'a [u8], usize, usize)> {
+    let start = *pos;
+    let tag = *bytes.get(*pos)?;
+    *pos += 1;
+    let first = *bytes.get(*pos)?;
+    *pos += 1;
+    let len = if first & 0x80 == 0 {
+        usize::from(first)
+    } else {
+        let n = usize::from(first & 0x7f);
+        if n == 0 || n > 4 {
+            return None;
+        }
+        let mut v = 0usize;
+        for _ in 0..n {
+            v = (v << 8) | usize::from(*bytes.get(*pos)?);
+            *pos += 1;
+        }
+        v
+    };
+    let content_start = *pos;
+    let end = content_start.checked_add(len)?;
+    let content = bytes.get(content_start..end)?;
+    *pos = end;
+    Some((tag, content, start, end))
+}
+
+/// First X.509 certificate in a PKCS#7 `SignedData` (v1 signature block).
+///
+/// `ContentInfo ::= SEQUENCE { OID, [0] EXPLICIT SignedData }`, and
+/// `SignedData ::= SEQUENCE { INTEGER, SET, SEQUENCE, [0] IMPLICIT
+/// CertificateSet, ... }`. Only the first certificate is needed: the platform's
+/// `Signature[]` for a single-signer APK has one element, and corpus APKs are
+/// single-signed.
+fn pkcs7_first_certificate(block: &[u8]) -> Option<Vec<u8>> {
+    let mut pos = 0;
+    let (tag, content, _, _) = der_tlv(block, &mut pos)?;
+    if tag != 0x30 {
+        return None;
+    }
+    let mut p = 0;
+    let (oid, _, _, _) = der_tlv(content, &mut p)?;
+    if oid != 0x06 {
+        return None;
+    }
+    let (wrapped_tag, wrapped, _, _) = der_tlv(content, &mut p)?;
+    if wrapped_tag != 0xA0 {
+        return None;
+    }
+    let mut w = 0;
+    let (sd_tag, signed_data, _, _) = der_tlv(wrapped, &mut w)?;
+    if sd_tag != 0x30 {
+        return None;
+    }
+    let mut s = 0;
+    while s < signed_data.len() {
+        let (t, c, _, _) = der_tlv(signed_data, &mut s)?;
+        if t == 0xA0 {
+            // CertificateSet: the first element is the leaf certificate.
+            let mut cpos = 0;
+            let (ct, _, cs, ce) = der_tlv(c, &mut cpos)?;
+            if ct == 0x30 {
+                return Some(c[cs..ce].to_vec());
+            }
+            return None;
+        }
+    }
+    None
+}
