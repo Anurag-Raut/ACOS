@@ -1648,8 +1648,25 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   `w7-insets-carve-negative` (ASSERTION_FAILED). `gaten-home` now **passes**
   (K4's TIMEOUT is gone; it moved with merged main, not with K5 — K4 recorded it
   as pre-existing).
-- **Open / next:** 2-run corpus on the final tree; the RedReader ART decode.
-  Commit is a checkpoint, not an accepted K5.
+- **Corpus (final tree, real ART, N=1, `run-k1.sh --batch 4`):** r1 completed
+  all 42: inspect 42, process start 42, `Application.onCreate` completed **21**,
+  first frame **15**, tree/screenshot **15**, tap **9**; p50 621.5 ms / p90
+  1595.3 ms. K4 was 21 / 16–17 / 16 / 9 at p50 808 / p90 1269, so this is
+  **−1 first frame and −1 tree, +tap equal**, with two apps of headroom in K4's
+  own 16-vs-17 flicker range. r2 was cut at the bound after **4 apps**, all
+  stable vs r1 (`aegis` tap 510.7 vs 499.6 ms; three others same rung): **not a
+  2-run corpus, so no flicker claim**.
+  - **Open regression:** `net.cozic.joplin` (K4 tree+screenshot) aborted once
+    with guest exit **134 (SIGABRT) "while binding the tree"**; confirmation
+    runs did not acquire the lock. This is **unresolved**, so K5 is not
+    accepted and zero-regression is not claimed.
+  - Expected: element/dot.gallery at the `AndroidKeyStore not found` wall
+    (keystore default-off); `nextcloud.client` reads `inspect` only because its
+    new `IConnectivityManager.requestNetwork` wall fires before the
+    application-created marker (K3 was also process start).
+- **Open / next:** 2 full corpus runs on the final tree; joplin 2× to decide
+  regression vs flake; the RedReader ART decode. Commit is a checkpoint, not an
+  accepted K5.
 
 ## E13.5 — W7: report the system-bar insets instead of carving the app window — PASS as an opt-in model; default stays `carve` (one strict gate changes by 1/255)
 
@@ -2055,7 +2072,7 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | H8 | Faster PNG (SIMD deflate) / region screenshots | M5 | 24 → 10–15 ms | medium | medium | low | backlog (5.5 % of the animations-off loop, 2 % on) |
 | H3 | Warm exec pool | M3/M4 | −73 ms launch | — | — | +idle memory | **declined by owner 2026-11-12** |
 | K3a | K2 next walls: AndroidKeyStore shim, GL/BLAST natives, WebView provider classification | compat first-frame | +3–5 apps | high (K1/K2 evidence) | medium | medium | **classified (K3, E5.7): all three need a real backend (weeks); no shim, no fake pass** |
-| K5 | K3a continuation: app-uid fidelity + software keystore + location/trust/restrictions read paths + real signing certs | compat first frame | +2–3 apps | high (targeted smokes) | medium | medium | **PARTIAL (E5.10): uid 10192 default with explicit override rejection; keystore opt-in; trust setters fail; restrictions reply shape corrected; signing certs capped + signer-correct + scheme-strict. Full corpus/gates not run at the checkpoint** |
+| K5 | K3a continuation: app-uid fidelity + software keystore + location/trust/restrictions read paths + real signing certs | compat first frame | +2–3 apps | high (targeted smokes) | medium | medium | **PARTIAL (E5.10): uid 10192 measured (PMS agreement, `CapEff 0`, own app-data); 34/34 gates (25 pass, 9 expected failures, 0 false passes); corpus r1 21/15/15/9 vs K4 21/16–17/16/9; `gaten-home` now passes (merged main). Joplin single-run SIGABRT is an open regression; r2 only 4 apps** |
 | K5b | **Software keystore security/correctness fix list (advisor Q1):** `KeyInfo` software security level; honour/reject purposes, modes, padding, validity, randomized-encryption; import `ProtectionParameter`; explicit attestation refusal; propagate persistence failures; generated RSA/EC certificate chains; key-file retention policy + 0600; reset/restart/crash/SIGKILL/concurrent-session/identical-alias tests; label evidence "software-keystore compatibility" only | keystore compat | element/dot.gallery without lying about security | high | medium | medium | **open (K5b). Not implemented this hour; provider is default-off** |
 | K5c | **RedReader `PackageInfo.signatures` ART decode:** Rust framing passes the real `PackageInfo.CREATOR` in the VM and the reply bytes are byte-exact, but the ART guest still raises `OPENSSL_internal:DECODE_ERROR`. Test: replay the captured reply through the guest transport, compare the received byte range to `.cache/k5/pmsreply.bin`; check >2 KiB peer-pipe delivery | compat first frame | redreader onCreate | high | low | low | **open (E5.10). Smallest next action: instrument the guest's received `PackageInfo` byte range against the captured reply** |
 | K3b | K2 PMS error class (`NameNotFoundException`) and `checkService` null for unknown names | compat | +2 apps (vlc, fdroid) | high | low | low | **accepted `9df9e71` (E5.5): both leave the wall; vlc → `ConstraintLayout` inflate (R2), fdroid → `getSystemAvailableFeatures`** |
