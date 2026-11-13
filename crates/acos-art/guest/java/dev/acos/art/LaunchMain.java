@@ -689,9 +689,13 @@ public final class LaunchMain {
         boolean settled;
         final ArrayList<String> pending = new ArrayList<String>();
         int frameCallbacks;
+        /** H15: ANIMATION-queue callback class names (P10_PROBE_ANIM_TRACE only). */
+        final ArrayList<String> animCallbacks = new ArrayList<String>();
         long queueDueMs = -1;
         long horizonMs;
         long windowStableMs;
+        /** H15: the window's touch-mode answer when this sample was built. */
+        boolean inTouchMode;
 
         void add(String reason) {
             for (int i = 0; i < pending.size(); i++) {
@@ -699,6 +703,70 @@ public final class LaunchMain {
             }
             if (pending.size() < 12) pending.add(reason);
         }
+    }
+
+    /**
+     * H15 diagnostic (P10_PROBE_ANIM_TRACE=1 only): name the running framework
+     * animators. `AnimationHandler$1` is the animator *pump*; the animator that
+     * keeps drawing a relaunched Activity is one of the `AnimationHandler`
+     * callbacks, so read that list and describe each entry (`ValueAnimator`
+     * duration/target/property). Read-only reflection, never throws.
+     */
+    static String animationHandlerDump() {
+        try {
+            Class<?> ah = Class.forName("android.animation.AnimationHandler");
+            Object inst = ah.getMethod("getInstance").invoke(null);
+            Object local = staticField(ah, "mAnimationCallbacks");
+            Object callbacks = local instanceof ThreadLocal
+                    ? ((ThreadLocal<?>) local).get() : get(inst, "mAnimationCallbacks");
+            if (!(callbacks instanceof java.util.List)) return null;
+            java.util.List<?> list = (java.util.List<?>) callbacks;
+            StringBuilder b = new StringBuilder();
+            for (int i = 0; i < list.size() && i < 4; i++) {
+                Object cb = list.get(i);
+                if (cb == null) continue;
+                if (b.length() > 0) b.append(';');
+                b.append(cb.getClass().getSimpleName());
+                Object dur = get(cb, "mDuration");
+                if (dur instanceof Number) b.append(" dur=").append(dur);
+                Object prop = get(cb, "mPropertyName");
+                if (prop != null) b.append(" prop=").append(prop);
+                Object target = get(cb, "mTarget");
+                if (target instanceof java.lang.ref.Reference) {
+                    Object view = ((java.lang.ref.Reference<?>) target).get();
+                    b.append(" target=").append(view == null ? "null" : view.getClass().getName());
+                }
+                Object props = get(cb, "mValues");
+                if (props instanceof Object[]) b.append(" values=").append(((Object[]) props).length);
+                Object startDelay = get(cb, "mStartDelay");
+                if (startDelay instanceof Number) b.append(" delay=").append(startDelay);
+                for (String listName : new String[]{"mUpdateListeners", "mListeners"}) {
+                    Object list2 = get(cb, listName);
+                    if (!(list2 instanceof java.util.List)) continue;
+                    java.util.List<?> ls = (java.util.List<?>) list2;
+                    b.append(' ').append(listName).append("=[");
+                    for (int k = 0; k < ls.size() && k < 3; k++) {
+                        Object l = ls.get(k);
+                        if (k > 0) b.append(',');
+                        b.append(l == null ? "null" : l.getClass().getName());
+                    }
+                    b.append(']');
+                }
+            }
+            return b.length() == 0 ? null : b.toString();
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /** H15: the ANIMATION-queue callback names, JSON (empty unless tracing). */
+    static String animCallbacksJson(SettleSignals s) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < s.animCallbacks.size(); i++) {
+            if (i > 0) b.append(',');
+            b.append('"').append(jesc(s.animCallbacks.get(i))).append('"');
+        }
+        return b.toString();
     }
 
     static void addPending(SettleSignals s, String reason) {
@@ -861,6 +929,20 @@ public final class LaunchMain {
                     // pin every tap to ~1 s on this image. INPUT/TRAVERSAL/insets
                     // callbacks are still hard gates.
                     if (i != 1) addPending(s, "frame");
+                    // H15 diagnostic (only with P10_PROBE_ANIM_TRACE=1): name the
+                    // ANIMATION-queue callbacks that keep drawing, so a post-launch
+                    // animation can be attributed to a class instead of guessed.
+                    if (i == 1 && sAnimTrace) {
+                        Object head = get(qs[i], "mHead");
+                        Object cb = get(head, "action");
+                        if (cb == null) cb = get(head, "mCallback");
+                        String name = cb == null ? "null" : cb.getClass().getName();
+                        if (s.animCallbacks.size() < 3) s.animCallbacks.add(name);
+                        String detail = animationHandlerDump();
+                        if (detail != null && s.animCallbacks.size() < 3) {
+                            s.animCallbacks.add(detail);
+                        }
+                    }
                 }
             }
             // `frame` is added per non-animation queue above (see the note).
@@ -898,6 +980,10 @@ public final class LaunchMain {
             sWindowSignatureAtMs = now;
         }
         s.windowStableMs = now - sWindowSignatureAtMs;
+        try {
+            s.inTouchMode = decor.isInTouchMode();
+        } catch (Throwable ignored) {
+        }
         if (s.windowStableMs < 16) addPending(s, "window-unstable");
 
         s.settled = s.pending.isEmpty();
@@ -1521,9 +1607,13 @@ public final class LaunchMain {
             j.append("],\"frame_callbacks\":").append(settle.frameCallbacks)
                     .append(",\"queue_due_ms\":").append(settle.queueDueMs)
                     .append(",\"horizon_ms\":").append(settle.horizonMs)
+                    .append(",\"anim_callbacks\":[")
+                    .append(animCallbacksJson(settle))
+                    .append(']')
                     .append(",\"draw_ms\":").append(sLastDrawMs)
                     .append(",\"draw_seq\":").append(sDrawSeq)
                     .append(",\"window_stable_ms\":").append(settle.windowStableMs)
+                    .append(",\"in_touch_mode\":").append(settle.inTouchMode)
                     .append(",\"view_generation\":").append(sViewGeneration)
                     .append('}');
         }
@@ -1638,6 +1728,9 @@ public final class LaunchMain {
      * `emit_us` on the probe line.
      */
     static final int PROBE_NODE_BUDGET = 2000;
+
+    /** H15: probe-diagnostic flag, set only by P10_PROBE_ANIM_TRACE=1. */
+    static final boolean sAnimTrace = envLong("P10_PROBE_ANIM_TRACE", 0) != 0;
 
     /** The window root's screen origin (`getGlobalVisibleRect` is root-local). */
     static int[] rootOrigin(View root) {
