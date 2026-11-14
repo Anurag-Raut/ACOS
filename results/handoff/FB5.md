@@ -176,3 +176,13 @@ weakened and not touched.
 * Disk: `/` started at 84 % (751 G used) and peaked at 86 %; it is 83 %
   (160 G free) at handoff. The scratch prefix (1.7 G) and the release target
   directory (5.7 G) are deleted at the end of the track.
+
+## Review (Opus, 2026-11-15) — verdict MERGE AFTER FIXES (findings pasted from BRIEFS.md §FB5b)
+
+- **H1 (must)**: idle expiry bypasses the external-daemon ownership rule. `sweep_idle` (session_backend.rs ~1991-2023) maps a failed `session_list` to `current=None` and destroys by id with no token check (the SERVELEAK2/F3 id-guess). `daemon_sessions` sends `session_list` through `forward_session_tool_opts`, which fills the DEFAULT session id, so once the default session expired its tombstone (~432-436) makes every later `session_list` "fail" -> instance A's sweep can destroy instance B's live relaunch of a shared explicit id; every exit teardown on the external daemon then leaks. Fix: `session_list` goes straight to `forward_to_daemon_opts` (no tombstone, no touch); in `sweep_idle` on the EXTERNAL daemon `current=None` -> destroy nothing (log). Test: default session expires, then a second sweep with another owned session -> list works, nothing foreign destroyed.
+- **M1 (must)**: in-flight/just-finished calls do not protect from expiry (~1975-2023, ~457: touch only after the call; sweep never re-reads `last_used`). Touch / mark in-flight BEFORE forwarding, re-check `last_used` under the owned lock right before destroying; a call arriving mid-destroy gets the `idle_ttl_expired` reason, not a bare SESSION_NOT_FOUND.
+- **M2 (must)**: empty-token sessions fall back to id-only ownership (~1997-1998). On an EXTERNAL daemon never idle-expire a tokenless session (log instead); the installed v0.2.1 serve may not return tokens.
+- **M3 (should)**: per-uid fallback dir (daemon.rs `ensure_private_dir` / `ensure_runtime_base`) follows symlinks -> `symlink_metadata`, refuse symlinks, never `set_permissions` through a link.
+- **L1 (should)**: `owned_status` (~2074-2120) joins on id only -> filter by token like the sweep; never report another client's guest/RSS; read `guest_pid` only while the session is provably ours.
+- **L2**: `session_list` must not touch the default session (fixed by H1).
+- **L3**: SIGTERM + stdin EOF together -> main must wait for the signal thread's teardown to finish (join); a second SIGTERM/SIGINT during teardown is handled (exit promptly after a bounded wait).

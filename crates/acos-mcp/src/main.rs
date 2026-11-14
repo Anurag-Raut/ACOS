@@ -124,6 +124,9 @@ fn main() {
     // `acos_launch {idle_ttl_s}` overrides it) holds only a `Weak`.
     backend.start_idle_reaper();
     serve(backend);
+    // FB5b/L3: a SIGTERM racing stdin EOF owns a teardown that may still be
+    // running; returning now would end the process mid-teardown.
+    acos_mcp::signals::join_teardown();
     teardown.shutdown();
 }
 

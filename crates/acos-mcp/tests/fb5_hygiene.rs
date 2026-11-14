@@ -52,6 +52,10 @@ enum Mode {
     Healthy,
     /// `session_list` fails (an older/foreign daemon): teardown must not guess.
     ListFails,
+    /// An older daemon: launches and listings carry no `session_token` (M2).
+    NoTokens,
+    /// Non-launch/destroy/list tools take 1.5 s (an in-flight call, M1).
+    Slow,
 }
 
 struct FakeDaemon {
@@ -121,10 +125,14 @@ fn fake_daemon(path: &std::path::Path, mode: Mode) -> FakeDaemon {
                     .with_value_result(json!({"sessions": listed, "count": listed.len()}))
                 }
             } else if tool == "acos_launch" {
-                let token = format!("tok-{session}");
+                let token = if mode == Mode::NoTokens {
+                    String::new()
+                } else {
+                    format!("tok-{session}")
+                };
                 let mut listed = live.lock().unwrap();
                 listed.retain(|entry| entry["session_id"] != json!(session));
-                listed.push(json!({
+                let mut entry = json!({
                     "session_id": session,
                     "session_token": token,
                     "launched": true,
@@ -134,7 +142,11 @@ fn fake_daemon(path: &std::path::Path, mode: Mode) -> FakeDaemon {
                     "live": true,
                     "mode": "live",
                     "guest_pid": Value::Null,
-                }));
+                });
+                if mode == Mode::NoTokens {
+                    entry.as_object_mut().unwrap().remove("session_token");
+                }
+                listed.push(entry);
                 drop(listed);
                 Envelope::pass(
                     "req_launch",
@@ -142,12 +154,16 @@ fn fake_daemon(path: &std::path::Path, mode: Mode) -> FakeDaemon {
                     Fidelity::ArtReference,
                     Metrics::wall_ms(0),
                 )
-                .with_value_result(json!({
+                .with_value_result(if mode == Mode::NoTokens {
+                    json!({"session_id": session, "launched": true, "reached_stage": "first_frame"})
+                } else {
+                    json!({
                     "session_id": session,
                     "session_token": token,
                     "launched": true,
                     "reached_stage": "first_frame",
-                }))
+                    })
+                })
             } else if tool == "acos_destroy" {
                 live.lock()
                     .unwrap()
@@ -160,6 +176,9 @@ fn fake_daemon(path: &std::path::Path, mode: Mode) -> FakeDaemon {
                 )
                 .with_value_result(json!({"destroyed": true}))
             } else {
+                if mode == Mode::Slow {
+                    std::thread::sleep(Duration::from_millis(1500));
+                }
                 Envelope::pass(
                     "req_other",
                     ProtocolBackend::AcosNative,
@@ -339,4 +358,235 @@ fn external_daemon_list_failure_never_falls_back_to_destroy_by_id() {
 fn _in_process_is_a_type(session: AgentSession) -> bool {
     let _ = session;
     true
+}
+
+
+fn launch(backend: &SessionBackend, ctx: &CallContext, dir: &std::path::Path, session: Option<&str>, ttl: u64) -> Envelope {
+    let mut base = json!({"request_id": "req_launch"});
+    if let Some(session) = session {
+        base["session_id"] = json!(session);
+    }
+    let envelope = backend
+        .session_call(
+            "acos_launch",
+            &json!({
+                "apk": dir.join("counter.apk").display().to_string(),
+                "idle_ttl_s": ttl,
+                "base": base,
+            }),
+            ctx,
+        )
+        .expect("launch is forwarded");
+    assert!(envelope.ok(), "launch: {envelope:?}");
+    envelope
+}
+
+fn tools_seen(seen: &Receiver<Value>, wait_ms: u64) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    while let Ok(value) = seen.recv_timeout(Duration::from_millis(wait_ms)) {
+        out.push((
+            value["tool"].as_str().unwrap_or("").to_string(),
+            value["session_id"].as_str().unwrap_or("").to_string(),
+        ));
+    }
+    out
+}
+
+/// FB5b/H1: once the DEFAULT session expired, its tombstone must not make every
+/// later `session_list` "fail": the next sweep still lists, still proves
+/// ownership, destroys only what is ours and never anything foreign.
+#[test]
+fn h1_default_session_expiry_does_not_break_the_next_sweeps_listing() {
+    let dir = scratch("h1");
+    let socket = dir.join("session.sock");
+    let fake = fake_daemon(&socket, Mode::Healthy);
+    let backend = backend(&socket);
+    let ctx = context(&dir);
+
+    launch(&backend, &ctx, &dir, None, 1); // default session id
+    launch(&backend, &ctx, &dir, Some("s_second"), 3);
+    fake.sessions.lock().unwrap().push(json!({
+        "session_id": "s_foreign", "session_token": "tok-foreign", "live": true
+    }));
+    tools_seen(&fake.seen, 100);
+
+    std::thread::sleep(Duration::from_millis(1200));
+    backend.sweep_idle();
+    let first = tools_seen(&fake.seen, 200);
+    let default_id = acos_mcp::session_backend::default_session_id();
+    assert!(first.contains(&("acos_destroy".into(), default_id.into())), "{first:?}");
+
+    // The default session is tombstoned now. A second sweep must still list.
+    std::thread::sleep(Duration::from_millis(2000));
+    backend.sweep_idle();
+    let second = tools_seen(&fake.seen, 200);
+    assert!(
+        second.iter().any(|(tool, _)| tool == "session_list"),
+        "the second sweep listed: {second:?}"
+    );
+    assert!(
+        second.contains(&("acos_destroy".into(), "s_second".into())),
+        "our own second session was proven and destroyed: {second:?}"
+    );
+    assert!(
+        !second.iter().chain(first.iter()).any(|(tool, id)| tool == "acos_destroy" && id == "s_foreign"),
+        "a foreign session is never destroyed"
+    );
+    assert!(fake
+        .sessions
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|entry| entry["session_id"] == json!("s_foreign")));
+
+    // And a listing is not an expired-session answer even for the default id.
+    let list = backend
+        .session_call("session_list", &json!({"base": {"request_id": "req_list"}}), &ctx)
+        .expect("forwarded");
+    assert!(list.ok(), "session_list is not the tombstone: {list:?}");
+
+    let _ = fake.stop.send(());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// FB5b/H1 + the review's scenario: another client relaunched the same explicit
+/// id (a different token); our expiry must leave its guest alone.
+#[test]
+fn h1_a_relaunched_foreign_session_with_the_same_id_is_never_destroyed() {
+    let dir = scratch("h1-relaunch");
+    let socket = dir.join("session.sock");
+    let fake = fake_daemon(&socket, Mode::Healthy);
+    let backend = backend(&socket);
+    let ctx = context(&dir);
+
+    launch(&backend, &ctx, &dir, Some("s_shared"), 1);
+    // The other client relaunched the same id: a new token.
+    for entry in fake.sessions.lock().unwrap().iter_mut() {
+        entry["session_token"] = json!("tok-OTHER-CLIENT");
+    }
+    tools_seen(&fake.seen, 100);
+    std::thread::sleep(Duration::from_millis(1200));
+    backend.sweep_idle();
+    let seen = tools_seen(&fake.seen, 200);
+    assert!(
+        !seen.iter().any(|(tool, _)| tool == "acos_destroy"),
+        "nothing destroyed: {seen:?}"
+    );
+    assert_eq!(fake.sessions.lock().unwrap().len(), 1, "their guest lives");
+    let _ = fake.stop.send(());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// FB5b/H1: a failed listing on the EXTERNAL daemon destroys nothing at all.
+#[test]
+fn h1_a_failed_listing_destroys_nothing_on_the_external_daemon() {
+    let dir = scratch("h1-listfail");
+    let socket = dir.join("session.sock");
+    let fake = fake_daemon(&socket, Mode::ListFails);
+    let backend = backend(&socket);
+    let ctx = context(&dir);
+    launch(&backend, &ctx, &dir, Some("s_maybe"), 1);
+    tools_seen(&fake.seen, 100);
+    std::thread::sleep(Duration::from_millis(1200));
+    assert!(backend.sweep_idle(), "reports the unproven listing");
+    let seen = tools_seen(&fake.seen, 200);
+    assert!(!seen.iter().any(|(tool, _)| tool == "acos_destroy"), "{seen:?}");
+    // The session is still ours and live (no tombstone either).
+    let tap = backend
+        .session_call("acos_observe", &json!({"base": {"request_id": "r", "session_id": "s_maybe"}}), &ctx)
+        .expect("forwarded");
+    assert!(tap.ok(), "{tap:?}");
+    let _ = fake.stop.send(());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// FB5b/M2: a tokenless session on an external daemon is never idle-expired.
+#[test]
+fn m2_tokenless_sessions_are_never_expired_on_the_external_daemon() {
+    let dir = scratch("m2");
+    let socket = dir.join("session.sock");
+    let fake = fake_daemon(&socket, Mode::NoTokens);
+    let backend = backend(&socket);
+    let ctx = context(&dir);
+    let reply = launch(&backend, &ctx, &dir, Some("s_old_daemon"), 1);
+    assert_eq!(reply.result().unwrap()["idle_ttl_s"], json!(0), "expiry disabled and reported");
+    tools_seen(&fake.seen, 100);
+    std::thread::sleep(Duration::from_millis(1200));
+    assert!(!backend.sweep_idle());
+    let seen = tools_seen(&fake.seen, 200);
+    assert!(
+        !seen.iter().any(|(tool, _)| tool == "acos_destroy"),
+        "no id-only destroy: {seen:?}"
+    );
+    let _ = fake.stop.send(());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// FB5b/M1 end to end: a slow call in flight past the TTL keeps its session.
+#[test]
+fn m1_a_slow_call_in_flight_is_not_idleness() {
+    let dir = scratch("m1");
+    let socket = dir.join("session.sock");
+    let fake = fake_daemon(&socket, Mode::Slow);
+    let backend = Arc::new(backend(&socket));
+    let ctx = context(&dir);
+    launch(&backend, &ctx, &dir, Some("s_slow"), 1);
+    tools_seen(&fake.seen, 100);
+
+    let worker = {
+        let backend = Arc::clone(&backend);
+        let ctx = context(&dir);
+        std::thread::spawn(move || {
+            backend.session_call(
+                "acos_observe",
+                &json!({"base": {"request_id": "r", "session_id": "s_slow"}}),
+                &ctx,
+            )
+        })
+    };
+    std::thread::sleep(Duration::from_millis(1200)); // call started 1.2 s ago, TTL is 1 s
+    backend.sweep_idle();
+    let reply = worker.join().expect("worker").expect("forwarded");
+    assert!(reply.ok(), "{reply:?}");
+    let seen = tools_seen(&fake.seen, 200);
+    assert!(
+        !seen.iter().any(|(tool, _)| tool == "acos_destroy"),
+        "the in-flight call kept the session: {seen:?}"
+    );
+    // The finished call renewed the clock: an immediate sweep is a no-op too.
+    backend.sweep_idle();
+    assert!(!tools_seen(&fake.seen, 200).iter().any(|(tool, _)| tool == "acos_destroy"));
+    let _ = fake.stop.send(());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// FB5b/L1: `acos_status` never reports (or measures) another client's guest.
+#[test]
+fn l1_status_ignores_a_session_another_client_relaunched() {
+    let dir = scratch("l1");
+    let socket = dir.join("session.sock");
+    let fake = fake_daemon(&socket, Mode::Healthy);
+    let backend = backend(&socket);
+    let ctx = context(&dir);
+    launch(&backend, &ctx, &dir, Some("s_mine"), 600);
+    for entry in fake.sessions.lock().unwrap().iter_mut() {
+        entry["session_token"] = json!("tok-OTHER-CLIENT");
+        entry["guest_pid"] = json!(std::process::id());
+    }
+    let status = backend
+        .session_call("acos_status", &json!({"base": {"request_id": "r", "session_id": "s_mine"}}), &ctx)
+        .expect("status");
+    let text = serde_json::to_string(&status).unwrap();
+    let sessions = status
+        .result()
+        .and_then(|result| result.get("sessions"))
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    assert!(
+        sessions.iter().all(|entry| entry["session_id"] != json!("s_mine")),
+        "another client's guest is not listed as ours: {text}"
+    );
+    let _ = fake.stop.send(());
+    let _ = std::fs::remove_dir_all(&dir);
 }

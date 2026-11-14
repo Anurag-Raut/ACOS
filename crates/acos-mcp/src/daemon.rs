@@ -76,18 +76,35 @@ pub fn fallback_runtime_dir() -> PathBuf {
 pub fn ensure_runtime_base(dir: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::{MetadataExt, PermissionsExt};
     std::fs::create_dir_all(dir)?;
+    // FB5b/M3: never chmod *through* a symlink (the chmod would land on whatever
+    // the link names). A link is accepted only when its target is ours and
+    // already private; it is verified, not repaired.
+    let link = std::fs::symlink_metadata(dir)?;
     let meta = std::fs::metadata(dir)?;
     // SAFETY: `geteuid` has no preconditions and cannot fail.
     let uid = unsafe { libc::geteuid() };
-    if meta.uid() != uid {
+    if meta.uid() != uid || !meta.is_dir() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
             format!(
-                "{} is owned by uid {}, not {uid}; refusing to use another user's runtime directory",
+                "{} is not a directory owned by uid {uid} (owner {}); refusing to use it as a runtime directory",
                 dir.display(),
                 meta.uid()
             ),
         ));
+    }
+    if link.file_type().is_symlink() {
+        let mode = meta.permissions().mode() & 0o777;
+        if mode & 0o077 != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!(
+                    "{} is a symlink to a directory with mode 0{mode:o}; refusing to chmod through a link",
+                    dir.display()
+                ),
+            ));
+        }
+        return Ok(());
     }
     std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
 }
@@ -98,13 +115,39 @@ pub fn ensure_runtime_base(dir: &Path) -> std::io::Result<()> {
 /// or one that is group/world accessible, is refused with an error naming both
 /// facts. That is the FB5 rule for the `/tmp` fallback (SERVELEAK3 review
 /// finding 6) and the same check the private daemon's own directory gets.
+///
+/// FB5b/M3: the final component is inspected with `symlink_metadata` and a
+/// symlink (or a non-directory) is **refused** — a hostile `/tmp/acos-<uid>`
+/// link to a directory the attacker controls must never become our runtime dir,
+/// and no `chmod` ever follows a link.
 pub fn ensure_private_dir(dir: &Path) -> std::io::Result<()> {
-    use std::os::unix::fs::{MetadataExt, PermissionsExt};
-    if !dir.exists() {
-        std::fs::create_dir_all(dir)?;
-        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+    match std::fs::symlink_metadata(dir) {
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            if let Some(parent) = dir.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            // Created 0700 atomically; an existing entry (a racing symlink) makes
+            // this fail with AlreadyExists and falls through to the check below.
+            match std::fs::DirBuilder::new().mode(0o700).create(dir) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Err(e) => return Err(e),
     }
-    let meta = std::fs::metadata(dir)?;
+    let meta = std::fs::symlink_metadata(dir)?;
+    if meta.file_type().is_symlink() || !meta.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!(
+                "{} is a symlink or not a directory; refusing to use it as a private runtime directory",
+                dir.display()
+            ),
+        ));
+    }
     // SAFETY: `geteuid` has no preconditions and cannot fail.
     let uid = unsafe { libc::geteuid() };
     if meta.uid() != uid {
@@ -289,6 +332,28 @@ mod tests {
             err.to_string().contains("expected 0700"),
             "the error names the mode rule: {err}"
         );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn symlinked_private_dirs_are_refused_and_never_chmodded() {
+        let base = scratch("symlink-dir");
+        let target = base.join("target");
+        std::fs::create_dir_all(&target).expect("target");
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        let link = base.join("acos-link");
+        std::os::unix::fs::symlink(&target, &link).expect("symlink");
+
+        let err = ensure_private_dir(&link).expect_err("a symlink must be refused");
+        assert!(err.to_string().contains("symlink"), "{err}");
+        let mode = std::fs::metadata(&target).expect("stat").permissions().mode() & 0o777;
+        assert_eq!(mode, 0o755, "the link target was not chmod-ed");
+
+        // The runtime *base* helper must not chmod through the link either.
+        let err = ensure_runtime_base(&link).expect_err("0755 link target refused");
+        assert!(err.to_string().contains("chmod through a link"), "{err}");
+        let mode = std::fs::metadata(&target).expect("stat").permissions().mode() & 0o777;
+        assert_eq!(mode, 0o755, "still untouched");
         let _ = std::fs::remove_dir_all(&base);
     }
 }
