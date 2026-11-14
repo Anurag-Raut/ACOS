@@ -182,13 +182,26 @@ impl SystemBars {
     }
 
     /// One quarter turn into the `src_h x src_w` frame.
+    ///
+    /// The rects are turned with [`RectI::rotate_quarters`] (a `Surface.ROTATION_90`
+    /// clockwise turn), **except the navigation bar**: `DisplayPolicy`'s phone
+    /// rule is `mNavigationBarCanMove == false`, so the navigation bar hugs the
+    /// bottom edge of the frame in every rotation. A reference API-34 phone's
+    /// `mDecorInsetsInfo` says exactly that — `ROTATION_0` `[0,128][0,63]`,
+    /// `ROTATION_90` `[128,0][0,63]`, `ROTATION_180` `[0,0][0,191]` (status bar
+    /// 128 + nav 63 both at the bottom), `ROTATION_270` `[0,0][128,63]` — i.e.
+    /// only the status bar travels to a side edge.
     #[must_use]
     pub fn rotate_quarters(&self, src_w: i32, src_h: i32) -> Self {
         let r = |rect: RectI| rect.rotate_quarters(src_w, src_h);
+        let new_h = src_w;
+        let new_w = src_h;
         Self {
             status_bar: r(self.status_bar),
             status_bar_tappable: r(self.status_bar_tappable),
-            nav_bar: r(self.nav_bar),
+            // The navigation bar cannot move: it stays on the bottom edge of
+            // the new frame (`NAV_BAR_BOTTOM`), keeping its thickness.
+            nav_bar: RectI::new(0, new_h - self.nav_bar.height(), new_w, new_h),
             nav_bar_tappable: r(self.nav_bar_tappable),
             ime_visible: r(self.ime_visible),
             display_cutout: r(self.display_cutout),
@@ -569,13 +582,14 @@ mod tests {
         // Density and refresh rate are panel properties: a rotation keeps them.
         assert_eq!(land.density_dpi, portrait.density_dpi);
         assert_eq!(land.refresh_hz, portrait.refresh_hz);
-        // The portrait status bar [0,0][1080,128] becomes the right-edge bar
-        // [2400-128,0][2400,1080]: on a display rotated a quarter turn the
-        // short edge is the vertical one.
-        assert_eq!(land.bars.status_bar, RectI::new(2272, 0, 2400, 1080));
-        assert_eq!(land.bars.nav_bar, RectI::new(0, 0, 63, 1080));
-        assert_eq!(land.app_insets(), InsetsI::new(63, 0, 128, 0));
-        assert_eq!(land.app_bounds, RectI::new(63, 0, 2272, 1080));
+        // The portrait status bar [0,0][1080,128] becomes the left-edge bar
+        // [0,0][128,1080] (a reference phone's `mDecorInsetsInfo` ROTATION_90
+        // is `nonDecorInsets=[128,0][0,63]`), while the navigation bar stays on
+        // the bottom edge (`mNavigationBarCanMove == false`).
+        assert_eq!(land.bars.status_bar, RectI::new(0, 0, 128, 1080));
+        assert_eq!(land.bars.nav_bar, RectI::new(0, 1017, 2400, 1080));
+        assert_eq!(land.app_insets(), InsetsI::new(128, 0, 0, 63));
+        assert_eq!(land.app_bounds, RectI::new(128, 0, 2400, 1017));
         // ... and the dp screen size follows the frame, not the rotation.
         assert_eq!(land.screen_width_dp(), 914);
         assert_eq!(land.screen_height_dp(), 411);
@@ -592,13 +606,85 @@ mod tests {
             assert_eq!(back.app_bounds, portrait.app_bounds, "rotation {target} app bounds");
             assert_eq!(back.rotation, 0);
         }
-        // Half turn keeps the portrait frame and mirrors both bars.
+        // Half turn keeps the portrait frame; the status bar moves to the
+        // bottom edge, where the navigation bar already is (ROTATION_180 in a
+        // reference phone's `mDecorInsetsInfo` is `nonDecorInsets=[0,0][0,191]`).
         let half = portrait.rotated(2);
         assert_eq!(half.frame, portrait.frame);
         assert!(!half.is_landscape());
         assert_eq!(half.bars.status_bar, RectI::new(0, 2272, 1080, 2400));
-        assert_eq!(half.bars.nav_bar, RectI::new(0, 0, 1080, 63));
-        assert_eq!(half.app_insets(), InsetsI::new(0, 63, 0, 128));
+        assert_eq!(half.bars.nav_bar, RectI::new(0, 2337, 1080, 2400));
+        assert_eq!(half.app_insets(), InsetsI::new(0, 0, 0, 191));
+        assert_eq!(half.app_bounds, RectI::new(0, 0, 1080, 2209));
+    }
+
+    /// The four rotations against the reference device's own numbers.
+    ///
+    /// Source: `fixtures/reference/hello-views/art-api34-x86_64/display.txt`
+    /// (`dumpsys window displays`, API-34 x86_64 phone, 1080x2400 @ 420 dpi):
+    ///
+    /// ```text
+    /// mDecorInsetsInfo:
+    ///   ROTATION_0={nonDecorInsets=[0,128][0,63], nonDecorFrame=[0,128][1080,2337]}
+    ///   ROTATION_90={nonDecorInsets=[128,0][0,63], nonDecorFrame=[128,0][2400,1017]}
+    ///   ROTATION_180={nonDecorInsets=[0,0][0,191], nonDecorFrame=[0,0][1080,2209]}
+    ///   ROTATION_270={nonDecorInsets=[0,0][128,63], nonDecorFrame=[0,0][2272,1017]}
+    /// ```
+    ///
+    /// The app window frame (`nonDecorFrame`) is what the app is laid out in,
+    /// and it is exactly `frame - app_insets()` here; the UI-tree bounds of the
+    /// oracle capture (`ui_after_recreate.xml`: root `[128,0][2400,1080]`,
+    /// `decor_content_parent` `[128,0][2400,1017]`) sit inside it.
+    #[test]
+    fn every_rotation_matches_the_reference_decor_insets() {
+        let d = DisplaySpec::reference_1080x2400();
+        // (rotation, status bar edge, nav bar edge, insets, non-decor frame)
+        let table: [(u8, RectI, RectI, InsetsI, RectI); 4] = [
+            (
+                0,
+                RectI::new(0, 0, 1080, 128),
+                RectI::new(0, 2337, 1080, 2400),
+                InsetsI::new(0, 128, 0, 63),
+                RectI::new(0, 128, 1080, 2337),
+            ),
+            (
+                1,
+                RectI::new(0, 0, 128, 1080),
+                RectI::new(0, 1017, 2400, 1080),
+                InsetsI::new(128, 0, 0, 63),
+                RectI::new(128, 0, 2400, 1017),
+            ),
+            (
+                2,
+                RectI::new(0, 2272, 1080, 2400),
+                RectI::new(0, 2337, 1080, 2400),
+                InsetsI::new(0, 0, 0, 191),
+                RectI::new(0, 0, 1080, 2209),
+            ),
+            (
+                3,
+                RectI::new(2272, 0, 2400, 1080),
+                RectI::new(0, 1017, 2400, 1080),
+                InsetsI::new(0, 0, 128, 63),
+                RectI::new(0, 0, 2272, 1017),
+            ),
+        ];
+        for (rotation, status, nav, insets, non_decor) in table {
+            let r = d.rotated(rotation);
+            assert_eq!(r.bars.status_bar, status, "rotation {rotation} status bar");
+            assert_eq!(r.bars.nav_bar, nav, "rotation {rotation} nav bar");
+            assert_eq!(r.app_insets(), insets, "rotation {rotation} insets");
+            assert_eq!(r.app_bounds, non_decor, "rotation {rotation} app frame");
+            // Every bar rect stays inside the rotated frame.
+            for rect in [
+                r.bars.status_bar,
+                r.bars.nav_bar,
+                r.bars.system_gestures_left,
+                r.bars.system_gestures_right,
+            ] {
+                assert_eq!(rect.intersect(r.frame), rect, "rotation {rotation} bar inside frame");
+            }
+        }
     }
 
     #[test]
@@ -608,13 +694,13 @@ mod tests {
         // asking once; a step from either side lands on the same geometry.
         assert_eq!(d.rotated(1).rotated(1), d.rotated(1));
         assert_eq!(d.rotated(1).rotated(2), d.rotated(2));
-        // Rotation 3 is the other landscape: same frame, the bars on the
-        // opposite edges.
+        // Rotation 3 is the other landscape: same frame, the status bar on the
+        // opposite edge, the navigation bar still on the bottom edge.
         let other = d.rotated(3);
         assert_eq!(other.frame, RectI::new(0, 0, 2400, 1080));
-        assert_eq!(other.bars.status_bar, RectI::new(0, 0, 128, 1080));
-        assert_eq!(other.bars.nav_bar, RectI::new(2337, 0, 2400, 1080));
-        assert_eq!(other.app_insets(), InsetsI::new(128, 0, 63, 0));
+        assert_eq!(other.bars.status_bar, RectI::new(2272, 0, 2400, 1080));
+        assert_eq!(other.bars.nav_bar, RectI::new(0, 1017, 2400, 1080));
+        assert_eq!(other.app_insets(), InsetsI::new(0, 0, 128, 63));
         assert_ne!(other.bars, d.rotated(1).bars);
         assert_eq!(d.rotated(1).rotated(0), d);
     }

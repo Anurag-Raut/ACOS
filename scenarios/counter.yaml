@@ -115,16 +115,19 @@ steps:
         - '^onStart$'
         - '^onResume$'
 
-  # ROT4: the landscape window is inset by the rotated system bars (nav bar
-  # 63 px on the left), so the count sits at [105,168][126,219] on a 2400x1080
-  # frame; measured on the relaunch path (`.cache/rot4/live1`). The portrait
+  # ROT5: the landscape window is inset by the rotated system bars the way a
+  # reference phone reports them in `dumpsys window displays` (`mDecorInsetsInfo`
+  # ROTATION_90 = `nonDecorInsets=[128,0][0,63]`: status bar 128 px on the LEFT,
+  # navigation bar still on the bottom), so the count sits at [170,168][191,219]
+  # on a 2400x1080 frame (x = 128 + the same 16dp/42 px padding portrait shows);
+  # re-measured on the relaunch path after the ROT5 fix. The portrait
   # assertion below is unchanged. The lifecycle order above is the AOSP one the
   # relaunch really delivers (`onPause -> onStop -> onSaveInstanceState -> onDestroy
   # -> onCreate -> onStart -> onResume`).
   - assert_text:
       selector: {id: count}
       text: {exact: "2"}
-      bounds: [105, 168, 126, 219]
+      bounds: [170, 168, 191, 219]
 
   - rotate:
       orientation: portrait

@@ -3,9 +3,12 @@
 # What is asserted (structure + preserved state, per AOSP):
 #  * the rotated frame is *landscape*: the counter's controls are re-laid out at
 #    the landscape geometry (the display is 1080x2400 portrait, so an Increment
-#    button at [105,219][336,345] can only be the 2400x1080 frame with the
-#    rotated system bars — nav bar 63 px on the left; in portrait the same
-#    button is [42,368][273,494]);
+#    button at [170,219][401,345] can only be the 2400x1080 frame with the
+#    rotated system bars — status bar 128 px on the LEFT and the navigation bar
+#    still on the bottom edge, which is the reference phone's own
+#    `mDecorInsetsInfo` ROTATION_90 = `nonDecorInsets=[128,0][0,63]`
+#    (`fixtures/reference/hello-views/art-api34-x86_64/display.txt`); in
+#    portrait the same button is [42,368][273,494]);
 #  * state survives the rotation: the count set before the rotate is still there
 #    after it, and a tap on `inc` still lands on the button at its *new* bounds
 #    (rotated input mapping), incrementing 1 -> 2;
@@ -82,23 +85,25 @@ steps:
   # (2400 wide x 1080 high), recorded in the rotate step's evidence.
   # The landscape window is inset by the rotated system bars (nav bar 63 px on
   # the left, status bar on the right), exactly as `DisplaySpec::rotated` puts
-  # them; portrait has neither inset horizontally. Measured on this image with
-  # the relaunch path: `.cache/rot4/live1` (2400x1080, ids below).
+  # them; portrait has neither inset horizontally. Re-derived from the
+  # reference phone's ROTATION_90 decor insets (status bar 128 left, nav 63
+  # bottom) and re-measured on this image after the ROT5 bar-placement fix:
+  # x = 128 + 16dp(42) = 170, the same 42 px padding the portrait bounds show.
   - assert_text:
       selector: {id: inc}
       text: {exact: Increment}
-      bounds: [105, 219, 336, 345]
+      bounds: [170, 219, 401, 345]
 
   - assert_text:
       selector: {id: reset}
       text: {exact: Reset}
-      bounds: [105, 345, 336, 471]
+      bounds: [170, 345, 401, 471]
 
   # Preserved state: the count set before the rotation is still 1.
   - assert_text:
       selector: {id: count}
       text: {exact: "1"}
-      bounds: [105, 168, 126, 219]
+      bounds: [170, 168, 191, 219]
 
   # ---- rotated input mapping: the same control, its new bounds ----------
   - tap:
@@ -107,7 +112,7 @@ steps:
   - assert_text:
       selector: {id: count}
       text: {exact: "2"}
-      bounds: [105, 168, 126, 219]
+      bounds: [170, 168, 191, 219]
 
   # ---- rotate back to portrait -----------------------------------------
   - rotate:

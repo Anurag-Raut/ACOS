@@ -95,21 +95,31 @@ impl RectI {
     ///
     /// `src_w`/`src_h` are the dimensions of the display frame **before** the
     /// turn; the returned rect lives in the `src_h x src_w` frame. The point
-    /// map is the one `SurfaceFlinger`/`DisplayFrames` use for a one-step
-    /// rotation: `(x, y) -> (src_h - y, x)`, applied to both corners and
+    /// map is a clockwise quarter turn in the frame `Surface.ROTATION_90`
+    /// means: `(x, y) -> (y, src_w - x)`, applied to both corners and
     /// normalised afterwards (so a rect keeps its extent, not its sign).
+    ///
+    /// The direction is the one the reference device reports, not an arbitrary
+    /// convention: an API-34 phone's `dumpsys window displays`
+    /// `mDecorInsetsInfo` entry for `ROTATION_90` is
+    /// `nonDecorInsets=[128,0][0,63]` (`ROTATION_270` is its mirror,
+    /// `[0,0][128,63]`), i.e. on a quarter turn to the *left* in panel terms the
+    /// natural top edge (the status bar) lands on the **left** of the rotated
+    /// frame. The opposite map would put `ROTATION_90`'s status bar on the
+    /// right edge, which no reference capture shows.
     ///
     /// A rect is rotated as a *region*: the raster does not move, the frame
     /// it is expressed in does. `[0,0][1080,128]` (a portrait status bar)
-    /// therefore becomes `[2400-128,0][2400,1080]` on a 1080x2400 display.
+    /// therefore becomes `[0,0][128,1080]` on a 1080x2400 display.
     #[must_use]
     pub fn rotate_quarters(self, src_w: i32, src_h: i32) -> RectI {
         debug_assert!(
             src_w > 0 && src_h > 0,
             "a rotated rect needs the source frame's size"
         );
-        let (x0, y0) = (src_h - self.top, self.left);
-        let (x1, y1) = (src_h - self.bottom, self.right);
+        let (x0, y0) = (self.top, src_w - self.left);
+        let (x1, y1) = (self.bottom, src_w - self.right);
+        let _ = src_h;
         RectI::new(x0.min(x1), y0.min(y1), x0.max(x1), y0.max(y1))
     }
 }
