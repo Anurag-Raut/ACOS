@@ -2117,6 +2117,51 @@ so focus/pixel order is preserved), forces a redraw and fails with `POST_RESUME_
 table / InputChannel name in the reply) stays **open** — no speculative parcel fix shipped.
 S3a is **hardened, unproven end-to-end**.
 
+## E2.16 — S3PERF: the S3AB readiness gate fires on every normal launch and costs one frame (M4 fast +9 %, M4 strict +5 %) — ROOT CAUSE MEASURED, NOT FIXED
+
+**Date:** 2026-11-14. **Branch:** `fix-s3ab-perf` off `int-s3ab` (`d1541ea`). **Binaries:** main
+`3e11d9c` sha256 `5a2ea97d…`, `int-s3ab` / candidate A `d54249d9…`. **Report:**
+`results/handoff/S3PERF.md`; evidence `results/bench/S3PERF-evidence/`; probe
+`tools/bench/s3perf_probe.py`.
+
+**Finding 1 — the skip path is the normal path, not a stale reason.** A per-launch probe
+(sequential single-session counter launches, guest `ACOSLAUNCH MARK` lines teed via
+`ACOSLAUNCH_GUEST_STDOUT_FILE`) shows **7 of 8** `int-s3ab` launches take `awaitFirstTraversal`'s
+new draw-evidence branch, always with `traversal:view_not_visible` (main: 0, it has no gate).
+AOSP explains it exactly: `ViewRootImpl.mAppVisible` defaults true (:520) but `setView` overwrites
+it from the add reply's `ADD_FLAG_APP_VISIBLE` bit (:1606), which ACOS does not set (E2.15 §2.4),
+so the first traversal is invisible, skips the draw (`mLastPerformTraversalsSkipDrawReason =
+"view_not_visible"`, :4059) after `mFirst` is already false (:4015), and the host's oneway
+`dispatchAppVisibility(true)` arrives afterwards and draws at the next frame. The probe shows
+`app_visible=true` already at the check, i.e. the callback landed between the traversal and the
+posted readiness check. So `int-s3ab` waits for a draw main never waited for — one 60 Hz frame.
+
+**Finding 2 — removing the forced redraw is not enough (candidate A).** Patch (kept as
+`variant-a-no-forced-redraw.diff`, not committed): on a skipped traversal record `draw_skip` and
+wait for the next OnDraw only — no `dispatchAppVisibility` replay, no
+`requestLayout()`/`invalidate()`. Interleaved A/B, 3 reps/arm, `acos-bench.sh --reps 1 --groups
+"a:latency:8G:300"`:
+
+| metric | main p50 med | candidate A p50 med | Δ |
+|---|---:|---:|---:|
+| M4 warm launch strict | 309.5 ms | 325.4 | **+5.1 %** |
+| M4 warm launch fast | 173.9 | 189.9 | **+9.2 %** |
+| M6 reset strict | 329.2 | 336.1 | +2.1 % |
+| M6 reset fast | 191.0 | 204.7 | **+7.2 %** |
+| M7 tree strict / M8 tap strict / M5 shot | 41.2 / 952.9 / 24.9 | 41.2 / 955.3 / 24.7 | 0.0 / +0.3 / −0.8 % |
+
+The fast arm (`settle: fast`, M4 fast 175 → 190 ms) proves the launch reply does wait for the
+guest's `activity-resumed` marker, so **any ready-level draw gate costs a frame**; the strict arm
+pays it too because the reply's settle waits for the same frame the gate blocks on.
+
+**Decision:** not fixed in this experiment. The gate must move from readiness to the no-frame
+path: publish `draw_skip` as *evidence* in the `activity-resumed` marker (ready path byte-identical
+to main), and have the engine's `NO_LIVE_FRAME` loop use a ≤2 s budget and fail with
+`POST_RESUME_NOT_READY` + `draw_skip=` when the guest reported a skipped traversal — a launch
+still requires a live frame (`c1_generation`), so a skipped draw is never certified. To be
+implemented and A/B'd next. Do not re-try `ADD_FLAG_APP_VISIBLE` (regresses T03) or a
+`requestLayout()`/`invalidate()` on the skip path (one frame, measured here).
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
