@@ -2791,6 +2791,9 @@ impl ArtSession {
         let timeout_ms = self
             .settle_timeout_ms
             .unwrap_or(DEFAULT_CONTENT_SETTLE_TIMEOUT_MS);
+        if std::env::var_os("ACOS_CONTENT_TRACE").is_some() {
+            eprintln!("content_settle: step timeout {:?} -> {timeout_ms} ms", self.settle_timeout_ms);
+        }
         let started = Instant::now();
         // The floor: the newest sample this session already consumed. The first
         // traversal of the window must be newer than it, so the pre-request /
@@ -3224,6 +3227,18 @@ impl SessionBackend for ArtSession {
 
     fn tree(&mut self) -> Result<UiTree, BackendError> {
         self.tree_with_settle("strict")
+    }
+
+    /// SE2b: forward the step's `settle_timeout_ms` to the session.
+    ///
+    /// The verifier's `Backend::set_settle_timeout` reaches
+    /// `EngineBackend::Session { session: Box<dyn SessionBackend> }`, so without
+    /// this override the trait's default (a no-op) swallowed it: every scenario's
+    /// declared settle budget was silently ignored and the engine default was
+    /// used instead. A declared budget that is not applied is exactly the kind of
+    /// quiet downgrade a verification tool must not have.
+    fn set_settle_timeout(&mut self, timeout_ms: Option<u64>) {
+        ArtSession::set_settle_timeout(self, timeout_ms);
     }
 
     fn set_input_settle_mode(&mut self, fast: bool) {

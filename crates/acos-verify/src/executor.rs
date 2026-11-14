@@ -326,6 +326,12 @@ pub fn run_scenario(
             // be animating). A pixel/frame assertion bound to a content-settled
             // frame is a failed binding, never a comparison.
             failure
+        } else if let Some(failure) = content_settle_geometry_failure(step, bound_settle.as_ref()) {
+            // SE2b: nor does it say anything about geometry - a view translated
+            // by an animation changes its reported rect every frame (measured on
+            // the reference screen). A bounds claim on a content-settled frame is
+            // a failed binding too.
+            failure
         } else {
             execute_step(
             backend,
@@ -1735,10 +1741,14 @@ fn content_settle_unhonored(step: &Step, exec: &StepExec) -> Option<StepExec> {
     // SE2b: a mode string alone is not proof. The record must say the content
     // window settled AND name the very frame the observation carries; a record
     // from another traversal (or one that timed out) never honours the step.
+    // The frame identity is the observation's own frame; a `launch` step hands
+    // back `produced_frame` instead of a full observation, so that frame is the
+    // one the record must name.
     let observation_frame_seq = exec
         .observation
         .as_ref()
-        .map(|observation| observation.frame.frame_seq);
+        .map(|observation| observation.frame.frame_seq)
+        .or_else(|| exec.produced_frame.as_ref().map(|frame| frame.frame_seq));
     let honoured = settle.as_ref().is_some_and(|settle| {
         settle.get("mode").and_then(serde_json::Value::as_str) == Some("content")
             && settle.get("settled").and_then(serde_json::Value::as_bool) == Some(true)
@@ -1847,6 +1857,78 @@ fn content_settle_pixel_failure(
                 "step_kind": step.kind(),
                 "settle": settle,
                 "pixel_evidence": false,
+            })),
+        }),
+    });
+    exec.observation = None;
+    Some(exec)
+}
+
+/// SE2b: a **geometry** claim bound only to a content-settled frame.
+///
+/// The content signature cannot hash `bounds`/`visible_bounds`: on the very
+/// screen ADR-0026 decision 3 names, a Reanimated timeline translates four views
+/// and their reported rects differ by 1 px from one fresh traversal to the next
+/// while every content field is identical
+/// (`.cache/se2b/probe-trees.json`). Geometry therefore animates with the
+/// pixels, so an assertion that reads it needs a strict (geometry-settled)
+/// frame. `assert_text`/`assert_visible`/`assert_not_visible` with an expected
+/// `bounds` are the steps that make that claim.
+fn content_settle_geometry_failure(
+    step: &Step,
+    bound_settle: Option<&serde_json::Value>,
+) -> Option<StepExec> {
+    let settle = bound_settle?;
+    if settle.get("mode").and_then(serde_json::Value::as_str) != Some("content") {
+        return None;
+    }
+    let claims_bounds = match step.as_step() {
+        Some(StepRef::AssertText(assertion)) => assertion.bounds.is_some(),
+        Some(StepRef::AssertVisible(assertion) | StepRef::AssertNotVisible(assertion)) => {
+            assertion.bounds.is_some()
+        }
+        _ => false,
+    };
+    if !claims_bounds {
+        return None;
+    }
+    let detail = format!(
+        "{}: the bound frame was settled by `settle: content` (UI tree content stable), which \
+         is not geometry evidence - an animating view's reported bounds change every frame",
+        step.kind()
+    );
+    let mut exec = StepExec::failed(Evaluated {
+        result: AssertionResult {
+            kind: "frame_binding".to_string(),
+            passed: false,
+            diff: Some(AssertionDiff {
+                expected: serde_json::json!({"settle": "strict", "geometry_evidence": true}),
+                actual: serde_json::json!({"settle": "content", "geometry_hashed": false}),
+                path: Some("frame.settle".to_string()),
+                detail: Some(
+                    "content settle proves the tree's text/nodes/state stopped changing; a \
+                     translated view's bounds keep changing with the pixels"
+                        .to_string(),
+                ),
+            }),
+            matched_node_ids: Vec::new(),
+            message: None,
+        },
+        error: Some(BackendError::Protocol {
+            code: ErrorCode::AssertionFailed,
+            detail,
+            hint: Some(
+                "A bounds claim needs a geometry-settled frame: use `settle: strict` (the \
+                 default) and wait for the animation to stop. Assert text/state instead, which \
+                 content settle may back."
+                    .to_string(),
+            ),
+            details: Some(serde_json::json!({
+                "reason": "content_settle_geometry",
+                "step_kind": step.kind(),
+                "settle": settle,
+                "signature_geometry_fields": crate::settle::SIGNATURE_GEOMETRY_FIELDS,
+                "geometry_evidence": false,
             })),
         }),
     });
@@ -2913,6 +2995,41 @@ mod content_settle_tests {
         let failure = content_settle_pixel_failure(&parsed.steps[1], Some(&content_record()))
             .expect("a content-bound screenshot comparison is a failed binding");
         assert_eq!(failure.error.as_ref().unwrap().code, ErrorCode::AssertionFailed);
+    }
+
+    /// SE2b: a bounds claim on a content-settled frame fails closed, exactly
+    /// like a pixel claim. Before the fix the signature omitted every geometry
+    /// field an assertion could read, so `assert_text {bounds: ...}` passed on a
+    /// frame whose views were still being translated.
+    #[test]
+    fn geometry_claims_are_refused_on_content_settle() {
+        let parsed = scenario(&format!(
+            "{HEADER}  - assert_text: {{selector: {{id: title}}, text: {{contains: Welcome}}, bounds: [0, 0, 10, 10]}}\n"
+        ));
+        let step = &parsed.steps[1];
+        let failure = content_settle_geometry_failure(step, Some(&content_record()))
+            .expect("a content-bound bounds claim is a failed binding");
+        assert_eq!(failure.status, Status::Fail);
+        let error = failure.error.as_ref().expect("structured error");
+        assert_eq!(error.code, ErrorCode::AssertionFailed);
+        let details = error.details.as_ref().expect("details");
+        assert_eq!(details["reason"], "content_settle_geometry");
+        assert_eq!(details["geometry_evidence"], false);
+        assert_eq!(failure.assertions[0].kind, "frame_binding");
+        // Without a bounds claim the same assertion is fine, and a strict frame
+        // may back the bounds claim.
+        let parsed = scenario(&format!(
+            "{HEADER}  - assert_text: {{selector: {{id: title}}, text: {{contains: Welcome}}}}\n"
+        ));
+        assert!(content_settle_geometry_failure(&parsed.steps[1], Some(&content_record())).is_none());
+        let parsed = scenario(&format!(
+            "{HEADER}  - assert_visible: {{selector: {{id: title}}, bounds: [0, 0, 10, 10]}}\n"
+        ));
+        assert!(
+            content_settle_geometry_failure(&parsed.steps[1], Some(&strict_record())).is_none(),
+            "a strict settle may back a bounds claim"
+        );
+        assert!(content_settle_geometry_failure(&parsed.steps[1], Some(&content_record())).is_some());
     }
 
     /// SE2: a UI/text assertion may be backed by content settle.

@@ -5,7 +5,13 @@
 # 300 ms window) must be a structured `TIMEOUT` with
 # `details.reason: "content-not-stable"` - never a "close enough" pass, and never
 # a hang. `expect_error` pins the code and the reason, so this control cannot go
-# green on any other failure.
+# green on any other failure (a NO_FRESH_TREE, an UNSUPPORTED_ASSERTION or an
+# unapplied rule all become a harness error).
+#
+# It runs on the calm counter fixture on purpose: the only thing under test is
+# the deadline, so the screen must never be the reason for a rejection (a fast
+# first-frame bind on the forever-animating Gaten screen can transiently answer
+# `NO_FRESH_TREE`, which would make the control flaky rather than pinned).
 #
 # The *changing signature* path (a countdown/alternating screen that resets the
 # window on every traversal) is proven in
@@ -17,20 +23,23 @@ name: gaten-content-window-impossible
 description: >-
   SE2 negative: a content settle with a budget shorter than its window is a
   TIMEOUT (content-not-stable), never a pass.
-app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+app: fixtures/build/apps/counter.apk
 engine: native-preferred
-fallback: forbid
+fallback: report-and-escalate
 api_level: 34
 isolation: process
-display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
-animations: off
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
 expectation: non_pass
 expect_error: {code: TIMEOUT, reason: content-not-stable}
-budgets: {memory_mib: 4096, wall_ms: 240000}
+budgets: {memory_mib: 512, wall_ms: 120000}
 steps:
-  # 1 ms cannot prove the 300 ms content window, whatever the screen does.
-  - launch:
-      activity: com.gaten.app.MainActivity
-      clear_state: true
+  # A plain strict launch (unchanged path), then a content input whose budget
+  # cannot prove the 300 ms window.
+  - launch: {activity: dev.acos.fixtures.counter/.MainActivity, clear_state: true}
+  - wait_for:
+      selector: {id: count}
+      timeout_ms: 5000
+  - tap:
+      selector: {id: inc}
       settle: content
       settle_timeout_ms: 1

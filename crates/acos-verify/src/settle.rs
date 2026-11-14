@@ -15,17 +15,24 @@
 //! assertion is failed closed by the executor (see
 //! `executor::content_settle_pixel_failure`).
 //!
-//! The signature is a hash over **every field a selector or an assertion can
-//! read** ([`SIGNATURE_FIELDS`]), in tree/visible order, plus the tree-level
-//! `package`, `truncated` and `text_available` facts: `class`, `resource_id`,
-//! `text`, `content_desc`, `hint`, `bounds`, `visible_bounds`, `visible`,
-//! `enabled`, `focused`, `clickable`, `scrollable`, `checked`, `selected`,
-//! `window`, `package` and the node structure/order. Nothing is silently
-//! dropped from that list, so a field an assertion could read can never change
-//! while the signature stays the same. A text value that an animation updates
-//! (a countdown, a progress percentage) therefore *does* change the signature:
-//! the screen is not content-stable, and that is reported as a `TIMEOUT` rather
-//! than mistaken for a settled observation.
+//! The signature is a hash over every **content** field a selector or an
+//! assertion can read ([`SIGNATURE_FIELDS`]), in tree/visible order, plus the
+//! tree-level `package`, `truncated` and `text_available` facts: `class`,
+//! `resource_id`, `text`, `content_desc`, `hint`, `visible`, `enabled`,
+//! `focused`, `clickable`, `scrollable`, `checked`, `selected`, `window`,
+//! `package` and the node structure/order. Nothing is silently dropped from that
+//! list, so a content fact an assertion reads can never change while the
+//! signature stays the same. A text value that an animation updates (a
+//! countdown, a progress percentage) therefore *does* change the signature: the
+//! screen is not content-stable, and that is reported as a `TIMEOUT` rather than
+//! mistaken for a settled observation.
+//!
+//! Geometry (`bounds`, `visible_bounds`) is the one exception, and it is an
+//! explicit one: a view translated by an animation changes its reported rect
+//! every frame on the reference screen ([`SIGNATURE_GEOMETRY_FIELDS`]), so
+//! geometry claims are *refused* on a content-settled frame instead
+//! (`executor::content_settle_geometry_failure`) - the same fail-closed shape as
+//! the pixel rule.
 
 use acos_protocol::ui::{UiNode, UiTree};
 
@@ -52,14 +59,12 @@ pub fn content_window_ms(requested: Option<u64>) -> u64 {
 /// `assert_visible`, `assert_state`, `assert_offscreen`, ...) can read, plus the
 /// structural facts that decide whether a read is even meaningful. A field an
 /// assertion reads may never change without changing the signature.
-pub const SIGNATURE_FIELDS: [&str; 16] = [
+pub const SIGNATURE_FIELDS: [&str; 14] = [
     "class",
     "resource_id",
     "text",
     "content_desc",
     "hint",
-    "bounds",
-    "visible_bounds",
     "visible",
     "enabled",
     "focused",
@@ -70,6 +75,27 @@ pub const SIGNATURE_FIELDS: [&str; 16] = [
     "window",
     "package",
 ];
+
+/// The geometry fields the signature deliberately does **not** hash, because a
+/// bounds claim on a content-settled frame is refused instead
+/// (`executor::content_settle_geometry_failure`).
+///
+/// Measured on the very screen ADR-0026 decision 3 names (Gaten's welcome page,
+/// `.cache/se2b/probe-trees.json`): four nodes' `bounds`/`visible_bounds` differ
+/// by 1 px from one fresh traversal to the next while the page's text, nodes and
+/// state are identical - the artwork is translated by a Reanimated timeline, so
+/// the *layout geometry* animates with the pixels. Hashing it would make the
+/// reference screen permanently "not content-stable" (770 proven traversals,
+/// `TIMEOUT`), i.e. the rule could never answer the question it exists for.
+/// Hashing `bounds` was only ever stable there because the pre-SE2b traversals
+/// were the *same* stale probe sample: the stability was an artifact of the
+/// defect SE2b fixes (settle::ContentProbeWindow).
+///
+/// So geometry is treated exactly like pixels: a content verdict never backs a
+/// geometry claim, and `assert_text`/`assert_visible`/`assert_not_visible` with
+/// an expected `bounds` fails closed on a content-settled frame with
+/// `details.reason: "content_settle_geometry"`.
+pub const SIGNATURE_GEOMETRY_FIELDS: [&str; 2] = ["bounds", "visible_bounds"];
 
 /// Tree-level facts whose change invalidates a content verdict (a truncated
 /// tree or a missing text route means the tree did not describe the screen).
@@ -98,9 +124,6 @@ fn hash_node<H: std::hash::Hasher>(node: &UiNode, hasher: &mut H) {
     node.clickable.hash(hasher);
     node.scrollable.hash(hasher);
     node.visible.hash(hasher);
-    node.bounds.0.hash(hasher);
-    // W58: the clipped rect is what a tap/`assert_offscreen` reads.
-    node.visible_bounds.map(|b| b.0).hash(hasher);
     // GR4: the window label decides which frame a bounds value refers to.
     node.window.hash(hasher);
     node.package.hash(hasher);
@@ -404,15 +427,17 @@ mod tests {
     }
 
     #[test]
-    fn text_bounds_and_state_changes_change_the_signature() {
+    fn text_and_state_changes_change_the_signature_but_geometry_does_not() {
         let base = tree(vec![node("n1", "Welcome", Bounds::new(0, 0, 10, 10))]);
         let base_sig = content_signature(&base);
 
         let text = tree(vec![node("n1", "Welcome 2", Bounds::new(0, 0, 10, 10))]);
         assert_ne!(base_sig, content_signature(&text));
 
+        // SE2b: a *geometry* animation (a translated view) is not content, and
+        // a bounds claim on a content-settled frame is refused by the executor.
         let text_anim = tree(vec![node("n1", "Welcome", Bounds::new(0, 1, 10, 11))]);
-        assert_ne!(base_sig, content_signature(&text_anim));
+        assert_eq!(base_sig, content_signature(&text_anim));
 
         let mut checked = tree(vec![node("n1", "Welcome", Bounds::new(0, 0, 10, 10))]);
         checked.nodes[0].checked = true;
@@ -603,9 +628,6 @@ mod tests {
         t.nodes[0].scrollable = true;
         changed.push(("scrollable", content_signature(&t)));
         let mut t = base.clone();
-        t.nodes[0].visible_bounds = Some(Bounds::new(0, 0, 5, 5));
-        changed.push(("visible_bounds", content_signature(&t)));
-        let mut t = base.clone();
         t.nodes[0].window = "w1".to_string();
         changed.push(("window", content_signature(&t)));
         let mut t = base.clone();
@@ -624,10 +646,31 @@ mod tests {
         for (field, signature) in changed {
             assert_ne!(base_sig, signature, "a {field} change must change the signature");
         }
+        // Geometry is the audited *exclusion*: a translated view changes its
+        // rect every frame, so these are not hashed - and a bounds claim on a
+        // content-settled frame is refused by the executor instead (see
+        // `executor::content_settle_tests::geometry_claims_are_refused_on_content_settle`).
+        for (field, signature) in [
+            ("bounds", {
+                let mut t = base.clone();
+                t.nodes[0].bounds = Bounds::new(0, 1, 10, 11);
+                content_signature(&t)
+            }),
+            ("visible_bounds", {
+                let mut t = base.clone();
+                t.nodes[0].visible_bounds = Some(Bounds::new(0, 0, 5, 5));
+                content_signature(&t)
+            }),
+        ] {
+            assert_eq!(
+                base_sig, signature,
+                "a {field} change must NOT change the content signature (geometry animates)"
+            );
+        }
         // The published field list is the audited one: every field here is
         // named, so a reader can check the signature against the assertions.
         for field in [
-            "class", "resource_id", "text", "content_desc", "hint", "bounds", "visible_bounds",
+            "class", "resource_id", "text", "content_desc", "hint",
             "visible", "enabled", "focused", "clickable", "scrollable", "checked", "selected",
             "window", "package",
         ] {

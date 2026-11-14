@@ -6,9 +6,13 @@
 # times out (GR3 §4.3, backlog G3e). Until SE2 the only way past them was
 # `settle: fast` navigation, which never backs a pass. ADR-0026 decision 3 adds
 # the opt-in `settle: content`: settled when the UI tree content signature
-# (class, text, content-desc, hint, checked/selected/enabled/focused state,
-# bounds, visibility — in visible order) is unchanged for a >= 300 ms window,
-# even though the pixels keep animating.
+# (class, resource-id, text, content-desc, hint, checked/selected/enabled/
+# focused/clickable/scrollable state, window, package — in visible order) is
+# unchanged for a >= 300 ms window, even though the pixels keep animating. The
+# traversals must be provably fresh samples (strictly increasing probe_seq), and
+# geometry (bounds) is never part of the signature: a translated view's rect
+# animates, so a bounds claim on a content-settled frame fails closed
+# (`content_settle_geometry`).
 #
 # Here the launch and the "Set up Gaten" press are both content-stable, and the
 # text assertions describe that same content-settled tree. Their step evidence
