@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "acos-aidl"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-dex",
  "serde",
@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "acos-apk"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-test-support",
  "serde",
@@ -25,7 +25,7 @@ dependencies = [
 
 [[package]]
 name = "acos-arm64"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-sandbox",
  "libc",
@@ -35,7 +35,7 @@ dependencies = [
 
 [[package]]
 name = "acos-art"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-binder-peer",
  "acos-render",
@@ -51,7 +51,7 @@ dependencies = [
 
 [[package]]
 name = "acos-binder-peer"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-aidl",
  "acos-parcel",
@@ -62,7 +62,7 @@ dependencies = [
 
 [[package]]
 name = "acos-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-apk",
  "acos-art",
@@ -89,7 +89,7 @@ dependencies = [
 
 [[package]]
 name = "acos-dex"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "borsh",
  "serde_json",
@@ -99,7 +99,7 @@ dependencies = [
 
 [[package]]
 name = "acos-framework-natives"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-apk",
  "acos-test-support",
@@ -111,14 +111,14 @@ dependencies = [
 
 [[package]]
 name = "acos-gles"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-native-loader",
 ]
 
 [[package]]
 name = "acos-jni"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-dex",
  "acos-gles",
@@ -137,7 +137,7 @@ dependencies = [
 
 [[package]]
 name = "acos-mcp"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-jni",
  "acos-protocol",
@@ -153,7 +153,7 @@ dependencies = [
 
 [[package]]
 name = "acos-native-loader"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-render",
  "acos-sandbox",
@@ -167,7 +167,7 @@ dependencies = [
 
 [[package]]
 name = "acos-parcel"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "proptest",
  "rustix",
@@ -176,7 +176,7 @@ dependencies = [
 
 [[package]]
 name = "acos-protocol"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "regex",
  "schemars",
@@ -188,7 +188,7 @@ dependencies = [
 
 [[package]]
 name = "acos-render"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-test-support",
  "freetype-sys",
@@ -212,7 +212,7 @@ dependencies = [
 
 [[package]]
 name = "acos-runtime"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-aidl",
  "acos-apk",
@@ -234,7 +234,7 @@ dependencies = [
 
 [[package]]
 name = "acos-sandbox"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "libc",
  "serde",
@@ -244,7 +244,7 @@ dependencies = [
 
 [[package]]
 name = "acos-seccomp-guard"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-sandbox",
  "libc",
@@ -252,7 +252,7 @@ dependencies = [
 
 [[package]]
 name = "acos-services"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-aidl",
  "acos-apk",
@@ -270,25 +270,25 @@ dependencies = [
 
 [[package]]
 name = "acos-sfgeom"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cc",
 ]
 
 [[package]]
 name = "acos-sqlite"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "rusqlite",
 ]
 
 [[package]]
 name = "acos-test-support"
-version = "0.2.0"
+version = "0.2.1"
 
 [[package]]
 name = "acos-verify"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-apk",
  "acos-protocol",
@@ -304,7 +304,7 @@ dependencies = [
 
 [[package]]
 name = "acos-vm"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-dex",
  "acos-framework-natives",
@@ -337,7 +337,7 @@ dependencies = [
 
 [[package]]
 name = "acos-wm"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "acos-aidl",
  "acos-dex",
