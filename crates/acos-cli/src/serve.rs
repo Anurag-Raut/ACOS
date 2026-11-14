@@ -66,6 +66,16 @@ pub struct ServeArgs {
     #[arg(long, default_value_t = 0)]
     pub heap_max_mb: u64,
 
+    /// Exit (destroying every session first) when this pid is gone (SERVELEAK).
+    ///
+    /// Set by a caller that spawns the daemon for its own use — the bench, a CI
+    /// job, a wrapper: if that process disappears (even by `kill -9`), nobody
+    /// will ever address the sessions again, so the daemon takes them down with
+    /// it instead of holding live guests for `--idle-timeout`. A shared daemon
+    /// (`acos session …` auto-start) passes no owner: another client may attach.
+    #[arg(long)]
+    pub owner_pid: Option<i32>,
+
     /// Emit a JSON startup banner on stdout and do not detach.
     #[arg(long)]
     pub json: bool,
@@ -154,6 +164,9 @@ pub fn run(args: ServeArgs) -> ExitCode {
         active: AtomicUsize::new(0),
     });
 
+    if let Some(owner) = args.owner_pid.filter(|pid| *pid > 1) {
+        eprintln!("acos serve: owned by pid {owner}; exiting when it is gone");
+    }
     if args.json {
         println!(
             "{}",
@@ -164,6 +177,7 @@ pub fn run(args: ServeArgs) -> ExitCode {
                 "pid": std::process::id(),
                 "engine": default_engine.as_str(),
                 "art_artifacts": artifacts_root.display().to_string(),
+                "owner_pid": args.owner_pid,
             })
         );
     }
@@ -185,11 +199,22 @@ pub fn run(args: ServeArgs) -> ExitCode {
     // A `SIGTERM`/`SIGINT` (the MCP server tearing its private daemon down, or
     // an operator stopping it) must run the same shutdown as the idle exit:
     // close every ART guest and reap its process group, then remove the socket.
-    // The handler only sets a flag; the accept loop checks it once per second.
-    install_termination_handler();
+    //
+    // SERVELEAK: a daemon that is terminated must take its guests with it.
+    // Without this, `SIGTERM` (a bench teardown, a CI job, `kill`) ended the
+    // process before `engine.shutdown()` ever ran and every live session's
+    // guest (bwrap + dalvikvm64) was orphaned. The handlers only record the
+    // request; the accept loop breaks and the same shutdown path runs, so a
+    // guest is always destroyed *and* proven gone before the socket disappears.
+    // This is the **one** signal mechanism: `SIGTERM`, `SIGINT` and `SIGHUP`
+    // (SERVELEAK) all set [`SHUTDOWN`], which the loop tests below. (REL3a
+    // installed a second, SIGTERM/SIGINT-only handler with its own
+    // `TERMINATING` flag; it is folded into this one, keeping its
+    // exit-at-the-top-of-the-iteration behaviour.)
+    install_shutdown_signals();
     let idle = Duration::from_secs(args.idle_timeout.max(1));
     loop {
-        if TERMINATING.load(Ordering::SeqCst) {
+        if shutdown_requested() {
             eprintln!("acos serve: termination signal; shutting sessions down");
             break;
         }
@@ -246,6 +271,23 @@ pub fn run(args: ServeArgs) -> ExitCode {
                 break;
             }
         }
+        // SERVELEAK: the process that spawned this daemon for its own use is
+        // gone, so its sessions have no owner left: take them down and exit.
+        if args
+            .owner_pid
+            .filter(|pid| *pid > 1)
+            .is_some_and(|pid| !process_is_alive(pid))
+        {
+            eprintln!("acos serve: owner pid is gone; destroying sessions and exiting");
+            break;
+        }
+        if shutdown_requested() {
+            eprintln!(
+                "acos serve: shutdown signal received; destroying {} session(s) first",
+                engine.session_count()
+            );
+            break;
+        }
         let idle_elapsed = shared
             .last_activity
             .lock()
@@ -267,35 +309,59 @@ pub fn run(args: ServeArgs) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-struct SharedState {
-    last_activity: Mutex<Instant>,
-    active: AtomicUsize,
-}
-
-/// Set by the `SIGTERM`/`SIGINT` handler; the accept loop owns the shutdown.
-static TERMINATING: AtomicBool = AtomicBool::new(false);
-
-/// Make `SIGTERM`/`SIGINT` reach the normal daemon shutdown.
-///
-/// A signal handler cannot call `engine.shutdown()` (it is not
-/// async-signal-safe), so it only sets [`TERMINATING`]; the binding loop polls
-/// it at most a second later and runs the ordinary exit path.
-fn install_termination_handler() {
-    // SAFETY: `on_terminate` is async-signal-safe (one atomic store), the
-    // `sigaction` struct is zeroed and only `sa_sigaction`/`sa_flags` are set,
-    // and the bindings are the same libc the process already uses.
-    unsafe {
-        let mut action: libc::sigaction = std::mem::zeroed();
-        action.sa_sigaction = on_terminate as usize;
-        action.sa_flags = 0;
-        libc::sigemptyset(&mut action.sa_mask);
-        let _ = libc::sigaction(libc::SIGTERM, &action, std::ptr::null_mut());
-        let _ = libc::sigaction(libc::SIGINT, &action, std::ptr::null_mut());
+/// Is `pid` still alive (a zombie counts as gone: it cannot use the daemon)?
+fn process_is_alive(pid: i32) -> bool {
+    // SAFETY: signal 0 performs the existence/permission check only.
+    if unsafe { libc::kill(pid, 0) } != 0 {
+        return false;
+    }
+    match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+        Ok(stat) => stat
+            .rsplit_once(')')
+            .map(|(_, rest)| !rest.trim_start().starts_with('Z'))
+            .unwrap_or(true),
+        Err(_) => false,
     }
 }
 
-extern "C" fn on_terminate(_signal: libc::c_int) {
-    TERMINATING.store(true, Ordering::SeqCst);
+/// A shutdown signal (SIGTERM/SIGINT/SIGHUP) was delivered.
+static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn shutdown_requested() -> bool {
+    SHUTDOWN.load(Ordering::SeqCst)
+}
+
+/// Record SIGTERM/SIGINT/SIGHUP as a shutdown request.
+///
+/// The handler only sets a flag (`async-signal-safe`): the accept loop exits and
+/// the daemon runs its ordinary `engine.shutdown()` path, so the *guests* are
+/// destroyed and proven gone, not just this process. `sa_flags` deliberately
+/// omits `SA_RESTART` so the blocking `poll`/`accept` returns `EINTR` and the
+/// loop re-checks the flag within a millisecond instead of after its timeout.
+#[cfg(target_os = "linux")]
+fn install_shutdown_signals() {
+    extern "C" fn on_signal(_signal: libc::c_int) {
+        SHUTDOWN.store(true, Ordering::SeqCst);
+    }
+    for signal in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP] {
+        // SAFETY: `sigaction` is given a zeroed struct with a plain function
+        // pointer handler and an empty mask; the handler only touches an atomic.
+        unsafe {
+            let mut action: libc::sigaction = std::mem::zeroed();
+            action.sa_sigaction = on_signal as usize;
+            action.sa_flags = 0;
+            libc::sigemptyset(&mut action.sa_mask);
+            libc::sigaction(signal, &action, std::ptr::null_mut());
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn install_shutdown_signals() {}
+
+struct SharedState {
+    last_activity: Mutex<Instant>,
+    active: AtomicUsize,
 }
 
 fn handle_connection(stream: UnixStream, engine: &ServeEngine) {

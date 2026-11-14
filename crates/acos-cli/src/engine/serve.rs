@@ -67,9 +67,47 @@ struct HeldArtSession {
     /// classify a lost guest (W55).
     artifacts: PathBuf,
     trust: Trust,
+    /// SERVELEAK2/F3: the identity of the **launch** that currently owns this
+    /// session id. Every `acos_launch` renews it, `session_list` reports it and a
+    /// client that launched the session records it, so a client whose launch was
+    /// replaced by another one can tell that the session is no longer its guest
+    /// (and must not destroy it on exit).
+    launch_token: Mutex<String>,
     /// `Mutex` because two connections may address the same session id; the
     /// guest takes one command at a time.
     session: Mutex<ArtSession>,
+}
+
+impl HeldArtSession {
+    /// Renew and return this session's launch token (SERVELEAK2/F3).
+    fn renew_launch_token(&self) -> String {
+        let token = new_launch_token();
+        *self.launch_token.lock().unwrap_or_else(|e| e.into_inner()) = token.clone();
+        token
+    }
+
+    fn launch_token(&self) -> String {
+        self.launch_token
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+}
+
+/// A fresh per-launch identity (SERVELEAK2/F3).
+fn new_launch_token() -> String {
+    let mut bytes = [0u8; 8];
+    let read = std::fs::File::open("/dev/urandom")
+        .and_then(|mut file| std::io::Read::read_exact(&mut file, &mut bytes))
+        .is_ok();
+    if !read {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0);
+        bytes.copy_from_slice(&nanos.to_le_bytes());
+    }
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 /// Session routing for the daemon: which engine owns a session id.
@@ -170,6 +208,10 @@ impl ServeEngine {
                 "guest_exit": exit.as_ref().map(GuestExit::to_json),
                 "native": true,
                 "trust": held.trust.as_str(),
+                // SERVELEAK2/F3: which launch owns the id right now, so a client
+                // can check that the session it is about to destroy is still the
+                // guest *it* launched.
+                "session_token": held.launch_token(),
             }));
         }
         let count = sessions.len();
@@ -616,6 +658,7 @@ impl ServeEngine {
                     apk: apk.clone(),
                     artifacts: artifacts.clone(),
                     trust,
+                    launch_token: Mutex::new(String::new()),
                     session: Mutex::new(session),
                 });
                 self.art
@@ -674,7 +717,12 @@ impl ServeEngine {
                 .last_teardown()
                 .map(|(path, ms)| (path.as_str(), ms))
                 .unwrap_or(("unknown", 0));
-            let leftovers = session.session_leftovers();
+            // SERVELEAK: a destroy that names a leftover must kill it. The
+            // teardown proves every process group the session owns (launcher and
+            // guest); this is the wider session check (a launcher left behind
+            // outside those groups) and it *acts*: it SIGKILLs what it finds and
+            // reports only what is still alive afterwards.
+            let leftovers = session.reap_leftovers();
             let (ok, detail) = match report {
                 Ok(report) => {
                     let clean = report.is_clean() && leftovers.is_empty();
@@ -687,10 +735,22 @@ impl ServeEngine {
                             "lifecycle": path,
                             "teardown_ms": teardown_ms,
                             "session_leftovers": leftovers,
+                            "session_leftovers_reaped": true,
                         }),
                     )
                 }
-                Err(error) => (false, json!({"error": error.to_protocol_error()})),
+                // The cleanup above still ran: the reply reports the failure
+                // **after** the tree was killed and proven, never instead.
+                Err(error) => (
+                    false,
+                    json!({
+                        "error": error.to_protocol_error(),
+                        "lifecycle": path,
+                        "teardown_ms": teardown_ms,
+                        "session_leftovers": leftovers,
+                        "session_leftovers_reaped": true,
+                    }),
+                ),
             };
             let mut result = json!({
                 "session_id": id,
@@ -1187,8 +1247,13 @@ fn launch_reply(
     started: std::time::Instant,
 ) -> Envelope {
     let (max_nodes, node_count, truncated, tree_value) = tree_json(tree, 2000);
+    // SERVELEAK2/F3: this launch now owns the id. A client that launched the
+    // session earlier keeps its old token and can see that its guest was
+    // replaced (see `SessionBackend::shutdown`).
+    let session_token = held.renew_launch_token();
     let mut result = json!({
         "session_id": id,
+        "session_token": session_token,
         "launched": true,
         "relaunch": !fresh_guest,
         "replaced_guest": replaced_guest,

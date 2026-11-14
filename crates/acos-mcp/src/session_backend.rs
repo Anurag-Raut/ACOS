@@ -51,17 +51,6 @@ const SESSION_COMMANDS: &[CommandName] = &[
     CommandName::Destroy,
 ];
 
-/// The default session id when a request omits `base.session_id`.
-///
-/// It is unique **per server process** (`mcp-<pid>`): two agents pointed at the
-/// same external daemon can never address each other's session by accident.
-/// Callers that want a stable id pass `base.session_id` explicitly.
-#[must_use]
-pub fn default_session_id() -> &'static str {
-    static DEFAULT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    DEFAULT.get_or_init(|| format!("mcp-{}", std::process::id()))
-}
-
 /// Teardown handle for this server's private ART daemon.
 #[derive(Clone)]
 pub struct ArtDaemonHandle(std::sync::Arc<Mutex<Option<PrivateDaemon>>>);
@@ -108,6 +97,17 @@ pub struct SessionBackend {
     flutter: FlutterSessions,
     /// React Native sessions owned by this process (the confined child).
     rn: RnSessions,
+    /// Session ids this process launched (SERVELEAK). `shutdown` destroys
+    /// exactly these and nothing a different client created.
+    ///
+    /// SERVELEAK2/F3: the value is the **launch token** the daemon returned for
+    /// that launch (empty when the daemon is too old to report one). Ownership
+    /// of a session id is not ownership of a *guest*: two MCP servers pointed at
+    /// the same daemon with the same id meant the second launch replaced the
+    /// first, and the first server's stdin EOF then destroyed the second's live
+    /// guest. `shutdown` re-reads the token from the daemon and destroys only a
+    /// session whose current token is still the one this server launched.
+    owned: Mutex<HashMap<String, String>>,
 }
 
 impl std::fmt::Debug for SessionBackend {
@@ -136,6 +136,7 @@ impl SessionBackend {
             private: std::sync::Arc::new(Mutex::new(None)),
             flutter: FlutterSessions::default(),
             rn: RnSessions::default(),
+            owned: Mutex::new(HashMap::new()),
         }
     }
 
@@ -153,6 +154,7 @@ impl SessionBackend {
             private: std::sync::Arc::new(Mutex::new(None)),
             flutter: FlutterSessions::default(),
             rn: RnSessions::default(),
+            owned: Mutex::new(HashMap::new()),
         }
     }
 
@@ -208,12 +210,97 @@ impl SessionBackend {
             .map(|daemon| daemon.socket().to_path_buf())
     }
 
-    /// Destroy held sessions, terminate and reap the private ART daemon.
+    /// Destroy the sessions **this process launched**, then terminate and reap
+    /// its private ART daemon.
     ///
-    /// Called on MCP stdin EOF/exit; `Drop` does the same for a backend that is
-    /// dropped without it.
+    /// This is the one teardown: `Server::serve` reaches it through
+    /// [`Backend::shutdown`] on stdin EOF (SERVELEAK) and `main` reaches it
+    /// through [`Self::art_daemon_handle`]; both stop the daemon *after* the
+    /// owned sessions were destroyed through it, so the destroy actually reaches
+    /// the ART guest (a daemon that was SIGTERMed first can no longer answer
+    /// `acos_destroy`).
     pub fn shutdown(&self) {
-        self.art_daemon_handle().shutdown();
+        self.destroy_owned_sessions();
+        let stopped = self
+            .private
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
+        if let Some(mut daemon) = stopped {
+            daemon.shutdown();
+        }
+    }
+
+    /// Destroy every session this process launched, keeping nothing back.
+    ///
+    /// SERVELEAK: each owned session is destroyed through its own engine — the
+    /// daemon's `acos_destroy` (which kills and proves the ART guest tree) or the
+    /// in-process one — so a client that closes stdin never leaves a live guest
+    /// behind. Failures are logged, not ignored silently; the process is exiting
+    /// either way.
+    ///
+    /// SERVELEAK2/F3: a session **id** is not a guest. Two servers against one
+    /// daemon that used the same id (the old shared `DEFAULT_SESSION`) meant the
+    /// second launch replaced the first, and the first server's EOF then
+    /// destroyed the second's live guest. Ownership is therefore checked against
+    /// the launch token the daemon reports *now*: a session whose token changed
+    /// belongs to a different launch and is left alone. This applies to **both**
+    /// daemons (external and private): a private daemon reports tokens too, and
+    /// an id in it can only be ours by construction, which is exactly what the
+    /// token check re-proves.
+    fn destroy_owned_sessions(&self) {
+        let ids: Vec<(String, String)> = {
+            let mut owned = self.owned.lock().unwrap_or_else(|e| e.into_inner());
+            owned.drain().collect()
+        };
+        if ids.is_empty() {
+            return;
+        }
+        let ctx = CallContext {
+            cancel: crate::process::CancelToken::new(),
+            deadline: std::time::Instant::now() + std::time::Duration::from_secs(30),
+            budget: acos_protocol::ResourceBudget::default(),
+            allowed_roots: Vec::new(),
+            artifacts_dir: std::path::PathBuf::from("."),
+            max_arg_chars: 8 * 1024,
+            max_output_bytes: 1024 * 1024,
+        };
+        let current = self.current_launch_tokens(&ctx);
+        for (id, token) in ids {
+            // A daemon that lists its sessions is authoritative: destroy only a
+            // session that still carries the token this server launched.
+            if !current.is_empty() {
+                match current.get(&id) {
+                    Some(current_token) if token.is_empty() || *current_token == token => {}
+                    Some(_) => {
+                        eprintln!(
+                            "acos-mcp: session {id} was launched again by another client; \
+                             not destroying it on exit"
+                        );
+                        continue;
+                    }
+                    None => {
+                        eprintln!("acos-mcp: session {id} is already gone; nothing to destroy");
+                        continue;
+                    }
+                }
+            }
+            let args = json!({"base": {"request_id": "req_shutdown", "session_id": id}});
+            let envelope = SessionBackend::session_call(self, "acos_destroy", &args, &ctx);
+            match envelope {
+                Some(envelope) if envelope.ok() => {
+                    eprintln!("acos-mcp: destroyed session {id} on exit")
+                }
+                Some(envelope) => eprintln!(
+                    "acos-mcp: session {id} teardown reported {} on exit",
+                    envelope
+                        .error()
+                        .map(|e| e.code.as_str().to_string())
+                        .unwrap_or_else(|| "a non-pass reply".to_string())
+                ),
+                None => eprintln!("acos-mcp: session {id} could not be destroyed on exit"),
+            }
+        }
     }
 
     /// A handle that survives `self` moving into the server, so the process can
@@ -225,9 +312,16 @@ impl SessionBackend {
 
     /// Forward a session tool to the external daemon, else to the private ART
     /// daemon. `None` means "serve it in-process" (the legacy engine).
+    ///
+    /// **Merge note (SERVELEAK3):** this is the *one* forwarding path. SERVELEAK
+    /// tracked the sessions it launched for the external daemon and REL3a added
+    /// the private daemon as a second forwarding branch; here both branches go
+    /// through [`Self::forward_to_daemon`], so every forwarded `acos_launch` is
+    /// recorded as owned (with the daemon's launch token) no matter which daemon
+    /// served it.
     fn forward_session_tool(&self, tool: &str, args: &Value) -> Option<Envelope> {
         // Fill the default identity here, not in the daemon: the default session
-        // id is unique per MCP server process (`mcp-<pid>`), and a shared
+        // id is unique per MCP server process (`mcp-<pid>-<rand>`), and a shared
         // external daemon must never invent one for us.
         let mut normalized = args.clone();
         if let Some(object) = normalized.as_object_mut() {
@@ -244,6 +338,20 @@ impl SessionBackend {
             object.insert("base".to_string(), base);
         }
         let args = &normalized;
+        let envelope = self.forward_to_daemon(tool, args)?;
+        // SERVELEAK: remember what this process launched *in a daemon*, so stdin
+        // EOF can destroy exactly those sessions (a daemon outlives this process
+        // by design; its guests must not outlive their purpose). SERVELEAK2/F3:
+        // the launch token makes ownership provable, not just a name.
+        if tool == "acos_launch" && envelope.ok() {
+            self.remember_owned(&session_id(args), &launch_token(&envelope));
+        }
+        Some(envelope)
+    }
+
+    /// Forward one call to the external daemon when one is configured, else to
+    /// this server's private ART daemon (spawned lazily).
+    fn forward_to_daemon(&self, tool: &str, args: &Value) -> Option<Envelope> {
         if let Some(daemon) = &self.daemon {
             let mut client = daemon.lock().unwrap_or_else(|e| e.into_inner());
             return Some(match client.call(tool, args) {
@@ -1539,8 +1647,25 @@ impl SessionBackend {
     }
 
     /// Server-local session tools (`acos_launch`, `acos_tap`, ...).
+    /// Record a session this process launched, with the launch token the
+    /// daemon returned for it (SERVELEAK2/F3).
+    fn remember_owned(&self, id: &str, token: &str) {
+        self.owned
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id.to_string(), token.to_string());
+    }
+
     pub fn session_call(&self, name: &str, args: &Value, ctx: &CallContext) -> Option<Envelope> {
         if name != "acos_doctor" && !name.is_empty() {
+            // **One** forwarding path for both daemons (merge of SERVELEAK and
+            // REL3a): [`Self::forward_session_tool`] forwards to the external
+            // daemon when one is configured and to this server's private ART
+            // daemon otherwise, and it is where a launch is recorded as owned
+            // (SERVELEAK) with the token the daemon returned (SERVELEAK2/F3).
+            // SERVELEAK's inline external-daemon branch and REL3a's private
+            // branch were two copies of this, so only the private daemon was
+            // covered by the owned-session bookkeeping.
             if let Some(envelope) = self.forward_session_tool(name, args) {
                 return Some(envelope);
             }
@@ -1686,6 +1811,40 @@ impl SessionBackend {
             Err(err) => session_error_envelope(request_id, Some(&id), &err),
         })
     }
+
+    /// The launch token the daemon currently reports per session id
+    /// (SERVELEAK2/F3).
+    ///
+    /// Empty when nothing can answer (`session_list` unsupported, a transport
+    /// error, or an in-process backend): the caller then falls back to the
+    /// id-only ownership SERVELEAK established.
+    fn current_launch_tokens(&self, ctx: &CallContext) -> HashMap<String, String> {
+        let mut out: HashMap<String, String> = HashMap::new();
+        let args = json!({"base": {"request_id": "req_shutdown_list"}});
+        let Some(envelope) = SessionBackend::session_call(self, "session_list", &args, ctx) else {
+            return out;
+        };
+        if !envelope.ok() {
+            return out;
+        }
+        let Some(sessions) = envelope
+            .result()
+            .and_then(|result| result.get("sessions"))
+            .and_then(Value::as_array)
+        else {
+            return out;
+        };
+        for session in sessions {
+            let (Some(id), token) = (
+                session.get("session_id").and_then(Value::as_str),
+                session.get("session_token").and_then(Value::as_str),
+            ) else {
+                continue;
+            };
+            out.insert(id.to_string(), token.unwrap_or_default().to_string());
+        }
+        out
+    }
 }
 
 impl Backend for SessionBackend {
@@ -1732,14 +1891,78 @@ impl Backend for SessionBackend {
     }
 
     fn session_call(&self, name: &str, args: &Value, ctx: &CallContext) -> Option<Envelope> {
+        // No bookkeeping here: [`SessionBackend::forward_session_tool`] records a
+        // forwarded launch for both daemons, and an in-process session dies with
+        // this process. (Keeping a second copy here made the ownership map depend
+        // on *which* entry point the call took, and let it record an un-normalized
+        // id.)
         SessionBackend::session_call(self, name, args, ctx)
+    }
+
+    /// Destroy every session this process created, then stop the private daemon.
+    ///
+    /// Called when the MCP transport ends (`Server::serve` after stdin EOF). This
+    /// is the same teardown as [`SessionBackend::shutdown`]; the trait method
+    /// exists so a generically typed server (`B: Backend`) reaches it.
+    fn shutdown(&self) {
+        SessionBackend::shutdown(self);
     }
 }
 
 fn session_id(args: &Value) -> String {
     args.pointer("/base/session_id")
         .and_then(Value::as_str)
-        .unwrap_or_else(|| default_session_id())
+        .map(str::to_string)
+        .unwrap_or_else(|| default_session_id().to_string())
+}
+
+/// SERVELEAK2/F3: this **server instance's** default session id.
+///
+/// The old default was the shared constant `s_mcp`. Many agents run an
+/// `acos-mcp` at the same time, and against one daemon two servers with the same
+/// default id address the *same* held session: the second launch replaces the
+/// first, and either server's stdin EOF then destroys the other's live guest
+/// (F3). A per-instance id (`mcp-<pid>-<random>`) makes the default id private to
+/// this process, exactly as an explicitly chosen id always was. An explicit
+/// `base.session_id` still wins, so a client that wants to share a session
+/// across processes still can.
+///
+/// **Merge note (SERVELEAK3):** this is the *only* `default_session_id`. Both
+/// daemons this server can forward to use it — the external one (`with_daemon`)
+/// and the private one REL3a spawns — because the id is filled in once, by
+/// [`session_base`] inside [`SessionBackend::forward_session_tool`], before any
+/// forwarding. REL3a's `mcp-<pid>` version is folded in here: the random suffix
+/// keeps two servers that share a pid namespace (containers, `fork` trees) apart
+/// as well.
+pub fn default_session_id() -> &'static str {
+    static ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    ID.get_or_init(|| {
+        let mut bytes = [0u8; 8];
+        let read = std::fs::File::open("/dev/urandom")
+            .and_then(|mut file| std::io::Read::read_exact(&mut file, &mut bytes))
+            .is_ok();
+        if !read {
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u64)
+                .unwrap_or(0);
+            bytes.copy_from_slice(&nanos.to_le_bytes());
+        }
+        let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+        format!("mcp-{}-{hex}", std::process::id())
+    })
+}
+
+/// SERVELEAK2/F3: the launch token a daemon returned for an `acos_launch`.
+///
+/// Empty for a backend that does not report one (an in-process session, or a
+/// daemon older than the field).
+fn launch_token(envelope: &Envelope) -> String {
+    envelope
+        .result()
+        .and_then(|result| result.get("session_token"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
         .to_string()
 }
 

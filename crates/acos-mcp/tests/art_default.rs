@@ -322,7 +322,20 @@ fn default_session_ids_are_unique_per_server() {
             .as_str()
             .unwrap_or_else(|| panic!("no session id: {envelope}"))
             .to_string();
-        assert_eq!(id, format!("mcp-{}", server.child.id()), "{envelope}");
+        // SERVELEAK3: the default id is this server instance's own —
+        // `mcp-<pid>-<random>` (SERVELEAK2/F3 folded into REL3a's per-process
+        // id). The pid names the owning process; the random suffix keeps two
+        // servers apart even inside one pid namespace. Assert both halves rather
+        // than the old exact `mcp-<pid>`, and keep the cross-server uniqueness
+        // check below.
+        let suffix = id
+            .strip_prefix(&format!("mcp-{}-{}", server.child.id(), ""))
+            .unwrap_or_else(|| panic!("default id {id} does not name this server: {envelope}"))
+            .to_string();
+        assert!(
+            !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_hexdigit()),
+            "default id {id} must carry a per-instance random suffix: {envelope}"
+        );
         ids.push(id);
         server.close();
     }

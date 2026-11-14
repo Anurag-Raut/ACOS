@@ -1468,6 +1468,7 @@ pub(crate) fn launch_session(
             opts.density_dpi,
             &boot_image_report,
             &mut child,
+            pid,
             &mut cgroup,
             &live,
             &probe_state,
@@ -4012,6 +4013,7 @@ fn interactive_serve(
     density_dpi: u32,
     boot_image: &crate::boot_image::BootImageReport,
     child: &mut std::process::Child,
+    guest_pid: i32,
     cgroup: &mut crate::cgroup::RunCgroup,
     live: &acos_services::registry::LiveHandles,
     probe_state: &Arc<std::sync::Mutex<ProbeState>>,
@@ -4195,6 +4197,11 @@ fn interactive_serve(
         // H13b: the boot-image mode and cache outcome of *this* session, so a
         // serve's launch reply can report a warm cache without a second probe.
         "boot_image": boot_image,
+        // SERVELEAK: the guest runs in its **own** process group (`process_group(0)`
+        // at spawn above, so the pgid is the guest's pid). The session owner must
+        // know it, or its teardown proof only ever covers this launcher and a
+        // `acos_destroy` can report a clean tree while bwrap/dalvikvm64 still run.
+        "guest_process_group": guest_pid,
         "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
     });
     protocol_write(&ready);

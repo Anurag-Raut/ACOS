@@ -29,7 +29,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use crate::daemon::{self, DaemonClient};
 
@@ -68,6 +68,9 @@ pub struct PrivateDaemon {
     child: Child,
     client: Option<DaemonClient>,
     engine: String,
+    /// Set once the child has been reaped: a second `shutdown` must not signal
+    /// the pid again (SERVELEAK2/F4: a reaped pid can be recycled).
+    stopped: bool,
 }
 
 impl std::fmt::Debug for PrivateDaemon {
@@ -104,6 +107,13 @@ impl PrivateDaemon {
             .arg(&socket)
             .arg("--engine")
             .arg(engine)
+            // SERVELEAK's own-owner binding: a daemon spawned for one process
+            // must exit when that process is gone, even after `kill -9` (the
+            // accept loop checks the owner once a second). `PR_SET_PDEATHSIG`
+            // below is the kernel-level backstop; this one also covers a parent
+            // whose *thread* outlived it or a `PDEATHSIG` the kernel dropped.
+            .arg("--owner-pid")
+            .arg(std::process::id().to_string())
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -132,6 +142,7 @@ impl PrivateDaemon {
             child,
             client: None,
             engine: engine.to_string(),
+            stopped: false,
         };
         daemon.wait_ready(Duration::from_secs(30))?;
         Ok(daemon)
@@ -198,15 +209,24 @@ impl PrivateDaemon {
         self.child.id()
     }
 
-    /// Destroy held sessions, terminate the daemon and reap it.
+    /// Terminate the daemon and reap it (idempotent).
     ///
-    /// The daemon's own `SIGTERM` handler closes every ART guest, so the
-    /// explicit destroy calls are best effort (and make the teardown visible in
-    /// the daemon log) before the signal.
+    /// The sessions it still holds are destroyed by the daemon itself: `acos
+    /// serve` handles `SIGTERM` by running `engine.shutdown()`, which closes
+    /// every ART guest and proves its process group gone before the socket
+    /// disappears (SERVELEAK). The explicit per-session destroys happen *before*
+    /// this in [`crate::SessionBackend`]'s teardown, through the owned-session
+    /// set and the launch token, so nothing here has to guess at ownership —
+    /// and this function deliberately never lists-and-destroys "everything the
+    /// daemon knows about", which is not a proof of ownership (SERVELEAK2).
     pub fn shutdown(&mut self) {
-        if let Some(mut client) = self.client.take() {
-            let _ = destroy_all(&mut client);
+        if self.stopped {
+            return;
         }
+        self.stopped = true;
+        self.client.take();
+        // Signal *before* reaping: while the child is unreaped its pid (and so
+        // any group derived from it) cannot have been recycled.
         // SAFETY: `kill` on a pid we own; a failure (already exited) is ignored.
         unsafe {
             libc::kill(self.child.id() as libc::pid_t, libc::SIGTERM);
@@ -260,30 +280,6 @@ fn spawn_on_lifetime_thread(mut command: Command) -> io::Result<Child> {
         Ok(Err(e)) => Err(e),
         Err(_) => Err(io::Error::other("the daemon spawn thread died")),
     }
-}
-
-/// Ask the daemon for its sessions, then destroy each one. Best effort.
-fn destroy_all(client: &mut DaemonClient) -> io::Result<()> {
-    let envelope = client.call(daemon::TOOL_LIST, &json!({}))?;
-    let ids: Vec<String> = envelope
-        .result()
-        .and_then(|result| result.get("sessions"))
-        .and_then(Value::as_array)
-        .map(|sessions| {
-            sessions
-                .iter()
-                .filter_map(|session| session.get("session_id").and_then(Value::as_str))
-                .map(ToString::to_string)
-                .collect()
-        })
-        .unwrap_or_default();
-    for id in ids {
-        let _ = client.call(
-            "acos_destroy",
-            &json!({"base": {"request_id": "req_mcp_shutdown", "session_id": id}}),
-        );
-    }
-    Ok(())
 }
 
 /// `$XDG_RUNTIME_DIR/acos/mcp-<pid>-<rand>` (falling back like the daemon does).

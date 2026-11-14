@@ -164,6 +164,16 @@ fi
 
 mkdir -p "$RUN_DIR" "$SCRATCH_ROOT" "$(dirname "$OUT")"
 
+# SERVELEAK2/F2: this run's own identity. The scratch root (and the
+# `r<rep>-<group>` directory names under it) is shared between concurrent bench
+# runs, so a daemon may only be reaped by the run that started it. Every daemon
+# spawned below inherits these two variables.
+ACOS_BENCH_RUN_ID="${ACOS_BENCH_RUN_ID:-$(basename "$RUN_DIR")-$$}"
+export ACOS_BENCH_RUN_ID
+ACOS_BENCH_PIDFILE="${ACOS_BENCH_PIDFILE:-$RUN_DIR/daemons.pids}"
+export ACOS_BENCH_PIDFILE
+: > "$ACOS_BENCH_PIDFILE"
+
 export ACOS_FONT_DIR="${ACOS_FONT_DIR:-/home/Qui/Projects/acos/.cache/boot/android-34/fonts}"
 unset ACOS_BOOT_DIR
 
@@ -197,6 +207,14 @@ phase_time() {
     esac
 }
 phase_mem() { [ "$1" = memory ] && echo "$MEM_PHASE_MEM" || echo "$OTHER_MEM"; }
+
+# SERVELEAK2/F2: a daemon a phase spawned must never outlive the run, and a
+# *different* run's daemon must never be reaped by this one. The reaper reads the
+# pids this run recorded (ACOS_BENCH_PIDFILE, written by the driver at spawn) and
+# re-verifies each one (run id in its environment, `acos serve` command line,
+# identical /proc start time) before signalling. See tools/bench/reap-daemons.sh.
+. "$ROOT/tools/bench/reap-daemons.sh"
+trap 'bench_reap_daemons' EXIT INT TERM
 
 FAILED=0
 for rep in $(seq 1 "$REPS"); do
