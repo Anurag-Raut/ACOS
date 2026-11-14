@@ -2624,6 +2624,134 @@ semantics vs AOSP, uid escape analysis) before any merge.
   and **loses reset** (+72 %: `reset` = kill the old child, keep the epoch, re-fork through the
   launcher's contract) and **teardown** (+295 ms: `acos_destroy` kills the child's process group
   and reaps it). Both regressions are named follow-ups, not corrected here.
+- **ZPROD6 (same number, same branch; merge of `main` `cb5bd04` first, both sides of the
+  `acos-art` `Error` enum kept): the reset and teardown regressions are located and FIXED —
+  both were one 300 ms lifecycle grace spent on a process that has no lifecycle.** The task
+  named `refork through the launcher's contract` (reset) and `kill-by-group + reap` (teardown)
+  as the causes. Phase timestamps say otherwise: the refork is *cheap* on the zygote arm, and
+  the reap was never the cost.
+  *Method (goal 1).* `DM6_RESET_TRACE` (already in the engine, inert by default) was switched on
+  for the live `serve` path — one daemon per arm, the same verb sequence, 2 reps per arm,
+  interleaved `off on off on`, same binary
+  (`sha256 daf1693ee7f5ac4794852f01612a5053508959beb73a84cd4280ddb42d1fd694`,
+  harness `.cache/zprod6/profile.py`, raw `.cache/zprod6/profile/profile.json`). The engine's own
+  `stop`/`reset` events split every phase, so this is a measurement, not a hypothesis.
+
+  **Phase table, BEFORE the fix (p50 of 4 resets per arm, ms):**
+
+  | phase (engine trace) | OFF — exec path | ON — zygote | delta |
+  |---|---:|---:|---:|
+  | `reset.stop_ms` (old guest down) | **13.5** | **307** | **+293.5** |
+  | `reset.relaunch_ms` (launcher + fork + ready) | 183 | 113 | −70 |
+  | `reset.bind_ms` (first strict tree) | 142 | 142 | 0 |
+  | `reset.engine_total_ms` | 342 | 566 | +224 |
+  | `stop`: `path` / `exit_ms` / `reaped_before_deadline` | `lifecycle` / 13.5 / true | **`killed` / 300 / false** | — |
+  | `acos_destroy` `teardown_ms` | 13 | 307 | +294 |
+
+  The whole ON regression is one phase: `stop`. `relaunch` is already **70 ms faster** on the
+  zygote (no exec-path launcher ART boot), and `bind` is identical. So the named causes are wrong
+  in an important way, and the fix is not a USAP pool, nor a reused launcher contract, nor an
+  overlapped kill — those optimise the phases that are already equal or better.
+  *Root cause (proven).* A zygote session's engine-side `child` is **not the app**. It is the
+  session launcher in foreign-guest mode: it builds the sockets and the `ServiceHost` and starts
+  no ART (ZPROD3b), while the app child was forked **inside the keeper**. `shutdown()` writes
+  `{"cmd":"close"}` and then waits GL1's 300 ms lifecycle bound for *that* process to exit — and
+  it never does (`reaped_before_deadline=false`, `exit_ms=300` on **every** ON stop, in both the
+  reset and the destroy path). The grace was pure loss: the zygote child is SIGKILLed by the
+  keeper anyway (`kill <tag>` → `kill(-child, SIGKILL)` + `wait4`, `ZygoteApp.z4KillOne`), and
+  that ack *is* the death proof.
+  *Fix (goal 2 + goal 3, one change).* `teardown_grace_ms_for(zygote)`: a zygote session takes a
+  **zero** lifecycle grace (`DEFAULT_ZYGOTE_TEARDOWN_GRACE_MS = 0`); the exec path keeps GL1's
+  300 ms. The stop then does what the goal asks — signal, then prove: `close` the shim, SIGKILL
+  its group, and the unchanged kernel proof (`kill(-pgid,0)` then a `/proc` scan only when the
+  kernel says a member exists, adaptive 1→10 ms poll) must show the group empty, or
+  `PROCESS_TREE_DIRTY` still fails the destroy. The app child (and its bwrap) is signalled and
+  proven by the keeper's `reaped` ack, fetched by `close`/`reset` immediately after the stop.
+  `ACOS_ART_TEARDOWN_GRACE_MS` still overrides both arms, so the old bound stays reproducible.
+  Nothing about `survivors`, `data_cleared`, `state_reset` or the reset refork changed, and the
+  flag stays opt-in (ADR-0026 #1).
+  *Why not the AOSP USAP pool (decision).* Pre-forking the next child while the current one runs
+  buys `relaunch_ms` (113 ms) down toward 0 but costs a resident idle child per keeper (memory,
+  and a child that must be discarded whenever `argv`/`binds` differ), and it does not touch the
+  293 ms. Reusing the session's launcher removes the ~113 ms launcher round-trip but needs the
+  launcher to survive a `run`-root wipe and re-publish `argv`, which is exactly the contract
+  ZPROD5 made fail-closed; overlap cannot help because the stop must complete before the run root
+  is wiped. The smallest change that hits the target is therefore "do not wait for a lifecycle
+  the shim cannot deliver", and the measurement above says it hits it with ~65 ms to spare rather
+  than the 17 ms the +5 % budget allowed.
+
+  **Phase table, AFTER the fix (same harness, same interleaving, 4 samples per arm, ms):**
+
+  | phase (engine trace) | OFF — exec path | ON — zygote | delta |
+  |---|---:|---:|---:|
+  | `reset.stop_ms` | 14 | **7.5** | −6.5 |
+  | `reset.relaunch_ms` | 184 | 121 | −63 |
+  | `reset.bind_ms` | 142 | 142 | 0 |
+  | `reset.engine_total_ms` | 341.7 | **276.7** | **−19 %** |
+  | `stop`: `path` / `grace_ms` / `stop_ms` | `lifecycle` / 300 / 13.5 | `killed` / **0** / 7.5 | — |
+  | `acos_destroy` `teardown_ms` p50 | 13 | **7** | −6 |
+  | `acos_launch` (warm daemon, 2nd rep) | 297.0 / 312.8 | **265.8 / 273.8** | −9 % |
+
+  Every ON stop now reads `path=killed grace_ms=0 stop_ms=7..11 reaped_before_deadline=false` and
+  every arm ended with `survivors=[]`, `session_leftovers=[]`, `verified=true`; `count=0` after
+  every reset and the reset kept its `previous_child_pid` → new child with the **same**
+  `zygote_boot_epoch`. The zygote is now faster than the shipped default on **all three** metrics
+  the task named (launch, reset, teardown), which was the precondition for making it the default.
+  *The bench A/B (acceptance C, the ZPROD5 method: `tools/bench/acos-bench.sh --reps 1 --groups
+  "a:latency:8G:300" --latency-reps 12 --no-build`, `ACOS_BENCH_TASK=ZPROD6`, arms interleaved
+  `off on off on`, same binary `sha256 daf1693e…`).* p50 over 12 samples per metric, both arms
+  `ok=true`, `noisy_phases=[]`:
+
+  | metric (bench p50) | OFF — shipped default | ON — zygote | delta | ZPROD5 was |
+  |---|---:|---:|---:|---:|
+  | M4 launch strict | 306.2 ms | **259.2 ms** | −15.4 % | −15.5 % (unchanged) |
+  | M4 launch fast | 170.4 ms | **123.8 ms** | −27.3 % | −25.9 % (unchanged) |
+  | M6 reset strict | 319.7 ms | **272.2 ms** | **−14.9 %** | +72.1 % |
+  | M6 reset fast | 180.7 ms | **133.4 ms** | **−26.2 %** | +123.5 % |
+  | teardown (`acos_destroy`) | 12.0 ms | **6.5 ms** | **−46 %** | +2356 % |
+  | M5 screenshot | 24.4 ms | 23.5 ms | parity | parity |
+  | M8 tap counter strict / fast | 959.7 / 49.3 ms | 961.4 / 44.7 ms | parity | parity |
+
+  Honest caveats: (a) the chain script's rep counter (`grep -c "^arm=$arm "`) never matched the
+  `=== arm=…` log line, so arms 1–2's raw JSON was overwritten by arms 3–4 — the pair reported
+  here is the surviving interleaved `off`/`on` pair (copies in `.cache/zprod6/ab/keep/`), one rep
+  each, and the two-rep-per-arm numbers come from the `DM6_RESET_TRACE` harness above; (b) as in
+  ZPROD5 the arms do not run the same boot image (OFF `shared-fixed`, ON `lz4` — F11), which is
+  the honest limit of the delta; (c) the flag stays **off by default**; nothing in this increment
+  changes the default.
+  *Tests (goal 1 of the acceptance).* Two new `acos-cli` tests, mock ART, ~0.35 s:
+  `only_the_exec_path_pays_the_lifecycle_grace` (the arm decides; the operator knob still wins on
+  both) and `a_zygote_session_signals_and_proves_instead_of_waiting_the_grace` — a launcher shim
+  that ignores `close` and stays alive costs the **exec** arm its full bound (asserted ≥ 250 ms,
+  `path=killed`) and the **zygote** arm **< 100 ms**, still with an empty, verified group.
+  *Live `acos serve` proof (acceptance B: the ZPROD5 live proof, unchanged harness
+  `.cache/zprod5/live_serve.py`, re-run on this tree) — **13/13 PASS**, `RESULT PASS []`: launch
+  `isolation=fresh-zygote-child child_pid=8 epoch=44075745284`, tap → count **1**, reset → count
+  **0** with `state_reset`/`data_cleared` and child **8→35** in the **same** epoch, destroy
+  `{"lifecycle":"killed","teardown_ms":**6**,"survivors":[],"session_leftovers":[],"verified":true}`
+  (was 307), SIGKILL the keeper → `ZYGOTE_DEAD` + `session="lost"` + `repointed=false`, the next
+  launch boots a **new** keeper (`epoch 44075745284→44081672917`, child 62→8), and after serve
+  exit no keeper/launcher/bwrap/daemon survives (the SIGTERM plan-root residue is still swept by
+  the next daemon).
+  *Suites (acceptance A).* `cargo test --release -p acos-cli --no-fail-fast -- --test-threads=1`:
+  16 test binaries, **173 passed, 0 failed**, including all 8 `zygote_host::tests` and both new
+  tests (`.cache/zprod6/cli-suite.log`).
+  *Gates (acceptance D), `--engine art`, animations on, same binary, `ACOS_ART_DATA` per arm:*
+  **flag OFF — 3/3 pass** (`v2-art-counter`, `w22-counter-reset`, `form-validation`). **Flag ON —
+  2/3 pass** (`v2-art-counter`, `w22-counter-reset`); `form-validation` fails deterministically at
+  **step 5 `assert_log`** with an **empty** guest log buffer (`actual: []`, expected
+  `^onCreate$ ^onStart$ ^onResume$`; reproduced twice, `.cache/zprod6/gates/`). The zygote itself
+  served both runs for real (`plan/ready epoch=43843439484 boot_ms=22`, keeper log `ZP1 forked
+  tag=0 child=8 probe_stdin=on`, `ZP1 killed … status=0x9`), and the three steps before it pass on
+  a live tree. This is a **pre-existing flag-on gap, not a ZPROD6 regression and not a relaxed
+  check**: a forked child's guest log lines go to the **keeper's** stdout, not to the session's
+  log buffer, so any `assert_log` scenario cannot pass on the zygote path. It fails at step 5 of
+  28, long before any stop — the only thing ZPROD6 changes. Named as the next follow-up
+  (route the child's log buffer to the session, the same class as ZPROD3b's probe channel). No
+  gate is claimed to pass that did not.
+  *Acceptance summary:* (A) PASS 173/0; (B) PASS 13/13 live; (C) PASS — reset 272.2 vs 319.7 ms and
+  teardown 6.5 vs 12.0 ms p50 with launch unchanged-or-better; (D) OFF 3/3, ON 2/3 with the log
+  gap named above; (E) this subsection + `results/handoff/ZPROD6.md`.
 
 ## E13.10 — SE1: an opt-in per-step `expect_change` closes GR4's vacuous-flow gap (a no-op tap can no longer pass) — PASS (ADR-0026 decision 2 shipped; 0 false passes)
 
