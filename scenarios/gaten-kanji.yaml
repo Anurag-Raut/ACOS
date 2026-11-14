@@ -1,15 +1,23 @@
 # gaten-kanji: Settings -> Kanji reference, a stored radio choice on real ART.
 #
-# The page's radio group offers WaniKani and Remembering the Kanji. With no
-# WaniKani account connected the hub starts on WaniKani; selecting RTK writes
-# the choice through the RTK bridge, and the hub row's own value must read the
-# new source when Back returns. Onboarding taps are navigation (`settle: fast`);
-# every claim after them is strict on a capture's bound frame.
+# The page's radio group offers WaniKani and Remembering the Kanji. On a device
+# with no WaniKani account the *default* is already Remembering the Kanji
+# (`KanjiReferencePreference.defaultFor(wanikaniConfigured = false) = RTK`), and
+# the page's `select()` returns early when the tapped option is already the
+# source -- so tapping RTK here would be a no-op that proves nothing. This flow
+# therefore changes the value away from the default and back again, and reads the
+# Settings hub row, whose own accessibility label carries the stored value
+# (`Kanji reference. <source>`): the row must flip to `WaniKani` and then back to
+# `Remembering the Kanji`, both across a page push and Back.
+#
+# Onboarding taps are navigation (`settle: fast`); every claim after them is
+# strict on a capture's bound frame.
 version: 1
 name: gaten-kanji
 description: >-
-  Settings hub -> Kanji reference page -> select Remembering the Kanji -> Back
-  -> the hub's Kanji reference row reads Remembering the Kanji.
+  Settings hub -> Kanji reference page (default Remembering the Kanji) -> choose
+  WaniKani -> Back -> the hub's row reads WaniKani -> choose Remembering the
+  Kanji -> Back -> the hub's row reads Remembering the Kanji again.
 app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
 engine: native-preferred
 fallback: forbid
@@ -30,20 +38,31 @@ steps:
   - tap: {selector: {content_desc: {exact: Settings}}}
   - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
   - capture: {name: kanji-hub, format: png, fresh: true}
-  # Fresh state: never chosen and no WaniKani account, so the row follows the
-  # default (WaniKani).
-  - assert_text: {selector: {text: {exact: "Kanji reference"}}, text: {exact: "Kanji reference"}}
+  # Fresh state, no WaniKani account: the row follows the default (RTK). The
+  # row's own label carries the value, so this is not a shared-string match.
+  - assert_visible: {selector: {content_desc: {exact: "Kanji reference. Remembering the Kanji"}}}
+  - assert_not_visible: {selector: {content_desc: {exact: "Kanji reference. WaniKani"}}}
   - tap: {selector: {content_desc: {contains: "Kanji reference."}}, settle_timeout_ms: 8000}
   - wait_for: {selector: {text: {exact: "Remembering the Kanji"}}, timeout_ms: 30000}
   - capture: {name: kanji-page, format: png, fresh: true}
   - assert_text: {selector: {text: {contains: "bundled, works offline"}}, text: {contains: "bundled, works offline"}}
   - assert_text: {selector: {text: {exact: "WaniKani"}}, text: {exact: "WaniKani"}}
-  # The RTK radio's own title; the write is the page's own state.
-  - tap: {selector: {text: {exact: "Remembering the Kanji"}}, settle_timeout_ms: 8000}
-  - capture: {name: kanji-selected, format: png, fresh: true}
+  # Change away from the default: the WaniKani option's own pressable.
+  - tap: {selector: {content_desc: {contains: "WaniKani. Your WaniKani account"}}, settle_timeout_ms: 8000}
+  - capture: {name: kanji-wanikani-selected, format: png, fresh: true}
   - assert_not_visible: {selector: {text: {exact: "The choice could not be saved. Try again."}}}
-  # Back: the hub re-reads the stored source and its row's value changes.
+  # Back: the hub re-reads the stored source and its row's value really changed.
   - back: {}
   - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
-  - capture: {name: kanji-hub-after, format: png, fresh: true}
-  - assert_text: {selector: {text: {exact: "Remembering the Kanji"}}, text: {exact: "Remembering the Kanji"}}
+  - capture: {name: kanji-hub-wanikani, format: png, fresh: true}
+  - assert_visible: {selector: {content_desc: {exact: "Kanji reference. WaniKani"}}}
+  - assert_not_visible: {selector: {content_desc: {exact: "Kanji reference. Remembering the Kanji"}}}
+  # And back again, so the proof is a write, not a one-way default.
+  - tap: {selector: {content_desc: {contains: "Kanji reference."}}, settle_timeout_ms: 8000}
+  - wait_for: {selector: {text: {exact: "WaniKani"}}, timeout_ms: 30000}
+  - tap: {selector: {content_desc: {contains: "Remembering the Kanji. Keywords"}}, settle_timeout_ms: 8000}
+  - back: {}
+  - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - capture: {name: kanji-hub-rtk, format: png, fresh: true}
+  - assert_visible: {selector: {content_desc: {exact: "Kanji reference. Remembering the Kanji"}}}
+  - assert_not_visible: {selector: {content_desc: {exact: "Kanji reference. WaniKani"}}}

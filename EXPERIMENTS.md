@@ -1967,17 +1967,20 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   `wait_for`/`assert_*` on a bound capture frame. Gaten source read only (`src-dev`), no file
   changed, no `adb`.
 - **Result (measured, all post-merge):** `gaten-support` **27 steps, 3/3 pass** (8.40 s wall p50),
-  `gaten-kanji` **23 steps, 3/3** (8.66 s), `gaten-recognition` **33 steps, 3/3** (9.58 s),
+  `gaten-kanji` **33 steps, 3/3** (11.56 s), `gaten-recognition` **33 steps, 3/3** (9.58 s),
   `gaten-backstack` **25 steps, 4/4** (8.34 s). Negative twins `ASSERTION_FAILED` **3/3 each** at the
-  deliberate step (13, 22, 28, 23). The merged five still pass (`home` 14, `tabs` 22, `settings`
+  deliberate step (13, 19, 28, 23). The merged five still pass (`home` 14, `tabs` 22, `settings`
   33, `search` 22, `lesson` 28 steps) and their five twins still fail `ASSERTION_FAILED` (5/5).
-  **34 runs, 0 false passes**, every session `outcome=ok`/`guest_exit=0`, guest cgroup peak
-  236–429 MiB. R2a/G3d did not recur (0/34 launches).
+  **26 accepted runs, 0 false passes** (the six superseded `gaten-kanji` v1 runs are excluded), every
+  session `outcome=ok`/`guest_exit=0`, guest cgroup peak 236–429 MiB. R2a/G3d did not recur
+  (0/40 launches since `d7dc8e2`).
 - **What each new claim proves:** a RN `Modal` (`DialogShell`) is dismissed by the **Close** action
   **and by Android Back** (`onRequestClose` — the handoff's open risk 2 is answered: works, not a
-  wall); a second Settings page's radio choice persists through the RTK bridge (the hub's Kanji
-  reference row reads `Remembering the Kanji` after Back); a `fitToViewport` download confirmation's
-  **Cancel** leaves both the page and the persisted value at `Standard`; and a Settings page pushed
+  wall); a second Settings page's radio choice really persists through the RTK bridge — the hub
+  row's own label flips `Kanji reference. Remembering the Kanji` → `Kanji reference. WaniKani` after
+  choosing WaniKani and Back, then back again after choosing RTK and Back, with the opposite label
+  asserted absent at each hop and the pixels agreeing (4604 / 4604 changed, 0 px on the return);
+  a `fitToViewport` download confirmation's **Cancel** leaves both the page and the persisted value at `Standard`; and a Settings page pushed
   on the **Analytics** tab's own stack returns to Analytics on Back (strictly `Study activity`,
   `Accuracy`, “Answer accuracy will appear here.”, with the Settings hub row absent).
 - **Density fix, judged on post-merge pixels only:** the 2.625× SVG regression is gone. Same screen,
@@ -1987,6 +1990,14 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   (`[58,188][105,304]`, whole wordmark 333×116) against GR1's expected 116 px viewBox height (a
   2.625× double-scale would be ~305 px); hub icons 58×57, chevrons 39×39, sheet icons 52×53, bottom
   bar icons 52×53, nothing overflowing its row. No exact-parity claim against the Moto G35.
+- **A green draft that proved nothing, caught and rewritten:** `gaten-kanji` v1 was 3/3 pre-merge
+  while asserting that the hub row read `Remembering the Kanji` *after* tapping RTK. But
+  `KanjiReferencePreference.defaultFor(wanikaniConfigured = false) = RTK` (this guest has no account,
+  so the default already was RTK) and `KanjiReferenceSettingsScreen.tsx::select()` returns early when
+  the tapped option is already the source, so the tap wrote nothing. The tell was pixel-level: the
+  before/after hub captures and the before/after page captures were **byte-identical** (0 changed
+  pixels). v2 moves the value off the default and back; Backlog `G4c` files the harness gap (nothing
+  notices a no-op tap; comparing the bound captures does).
 - **Walls / defects found:** **no new blocking ACOS wall**; GR3's data walls (AnkiDroid absent, no
   WaniKani token) still stand and were not fabricated. Two observations, filed as Backlog rows and
   not fixed here: `G4a` — the tree reports `visible=false` for the bottom bar's active label whose
@@ -2168,3 +2179,4 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | G3e | **No verification semantics for a screen that animates forever in a region that does not matter.** Options (stable tree content, region mask, navigation-only fast, explicit non-settle assertion) + false-pass analysis in `results/gaten/GR3.md` §4.3 | verify semantics | owner decision | — | — | — | **owner decision; do not weaken until then** |
 | G4a | **The tree reports `visible=false` for a node whose pixels the app painted** (GR4). `tree/18.json`: the bottom bar's active label `[512,2214][642,2251]` is `visible: false` because it lies below the root's `visible_bounds` bottom (`2209`) in a `insets: carve` session, while the bound frame `frames/18.png` paints its glyphs at png `y 2088–2122`, `x 513–640` (bounds − `display_origin.y` 128). AOSP's `View.getGlobalVisibleRect` intersects with the display and ancestor clips, not with the nav-bar band, so a real a11y tree reports it visible (a tap there would still land on the system bar, so fail-closed is defensible — the *classification* is what is inconsistent). Lowest layer: per-node `visible`/`visible_bounds` vs the carved visible frame, surfaced as `ELEMENT_OFFSCREEN` (`crates/acos-verify/src/native.rs`). Verification false-negative only, **never a false pass**. Worked around in scenarios: target the tab pressable's `content_desc`, never the label (`results/gaten/GR4.md` §2.2, §5) | node visibility vs frame | classification matches the pixels | high (tree + frame, same bound frame) | low (decide the policy, then align) | low | **open, found by GR4 (E13.8)** |
 | G4b | **Tree frame metadata reports `density: 420` for a `density_dpi: 400` run** (GR4): every `tree/*.json` frame record says 420 while `repro.json`/`verdict.json` echo the scenario's 400. Either the guest boots at the reference 420 on this path or the tree's `FrameMeta` is stamped from the reference default; not root-caused. Consequence: density-dependent geometry cannot be audited from tree metadata, which is exactly the density-fix area. Pixels are correct either way (116 px wordmark glyphs, GR4 §4) | tree/frame metadata integrity | metadata agrees with the launch spec | high (36 runs, all 420) | low (thread the launch density into the tree record) | low | **open, found by GR4 (E13.8)** |
+| G4c | **A scenario can pass 3/3 while proving nothing, and nothing in the harness notices** (GR4). A `tap` on a control that is already in the asserted state writes nothing — Gaten's Kanji reference `select()` returns early when `next === source`, and the guest's default was already the asserted value — so the post-tap assertions hold on state that never changed. The only evidence was pixel-level: the before/after bound captures were byte-identical (0 changed px) where the claim needs a change. Candidate: an explicit step (`expect_change` / `assert_frame_differs`) or a writer-side rule that a `capture` pair around a mutating tap must differ, so a vacuous flow fails instead of passing. Worked around in GR4 by asserting the hub label's *other* value is absent at each hop and by diffing the captures by hand (`results/gaten/GR4.md` §2.3) | verify semantics / false-pass class | no vacuous pass | high (reproduced + rewritten) | medium (new step + schema + provenance rule) | medium (a legitimate no-op must stay expressible) | **open, found by GR4 (E13.8)** |

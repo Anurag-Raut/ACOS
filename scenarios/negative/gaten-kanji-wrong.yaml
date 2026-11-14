@@ -1,10 +1,11 @@
-# gaten-kanji NEGATIVE CONTROL: the flow is the same, the stored value is read back wrong.
+# gaten-kanji NEGATIVE CONTROL: the same write is made, and the hub is read as if it
+# did not happen.
 # Must produce status=fail (ASSERTION_FAILED), never pass.
 version: 1
 name: gaten-kanji-wrong
 description: >-
-  Settings hub -> Kanji reference page -> select Remembering the Kanji -> Back
-  -> the hub's row is asserted to still read WaniKani (wrong).
+  Settings hub -> Kanji reference -> choose WaniKani -> Back is asserted to leave
+  the hub row on its old value, Remembering the Kanji (wrong).
 app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
 engine: native-preferred
 fallback: forbid
@@ -25,17 +26,16 @@ steps:
   - tap: {selector: {content_desc: {exact: Settings}}}
   - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
   - capture: {name: kanji-hub, format: png, fresh: true}
-  - assert_text: {selector: {text: {exact: "Kanji reference"}}, text: {exact: "Kanji reference"}}
+  - assert_visible: {selector: {content_desc: {exact: "Kanji reference. Remembering the Kanji"}}}
   - tap: {selector: {content_desc: {contains: "Kanji reference."}}, settle_timeout_ms: 8000}
   - wait_for: {selector: {text: {exact: "Remembering the Kanji"}}, timeout_ms: 30000}
   - capture: {name: kanji-page, format: png, fresh: true}
-  - assert_text: {selector: {text: {contains: "bundled, works offline"}}, text: {contains: "bundled, works offline"}}
-  - assert_text: {selector: {text: {exact: "WaniKani"}}, text: {exact: "WaniKani"}}
-  - tap: {selector: {text: {exact: "Remembering the Kanji"}}, settle_timeout_ms: 8000}
-  - capture: {name: kanji-selected, format: png, fresh: true}
-  - assert_not_visible: {selector: {text: {exact: "The choice could not be saved. Try again."}}}
+  - tap: {selector: {content_desc: {contains: "WaniKani. Your WaniKani account"}}, settle_timeout_ms: 8000}
+  - capture: {name: kanji-wanikani-selected, format: png, fresh: true}
   - back: {}
   - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
-  - capture: {name: kanji-hub-after, format: png, fresh: true}
-  # Wrong on purpose: after selecting RTK the hub row reads Remembering the Kanji.
-  - assert_text: {selector: {text: {exact: "Remembering the Kanji"}}, text: {exact: "WaniKani"}}
+  - capture: {name: kanji-hub-wanikani, format: png, fresh: true}
+  # Wrong on purpose: the row carries the stored value WaniKani now, so a visible
+  # node whose text is "WaniKani" cannot read "Remembering the Kanji" (the hub's
+  # own WaniKani row label is the one such node).
+  - assert_text: {selector: {text: {exact: "WaniKani"}}, text: {exact: "Remembering the Kanji"}}

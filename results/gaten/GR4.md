@@ -9,13 +9,16 @@ bundle, asset or APK was modified; nothing in `~/Projects/gaten` was touched, ch
 run. No secrets read. `crates/` unchanged — this task adds scenarios and evidence only.
 
 **One-line verdict: four new Gaten scenarios verify strictly on real ART after the density fix —
-3/3 each, 34 runs in total with **0 false passes** — a RN `Modal` (support sheet) opened and
-dismissed by both the Close action and Android Back, a second Settings page whose choice persists
-through the RTK bridge (Kanji reference), a second `fitToViewport` modal whose Cancel leaves state
+3/3 each with **0 false passes** — a RN `Modal` (support sheet) opened and dismissed by both the
+Close action and Android Back, a second Settings page whose stored choice really changes and
+changes back (Kanji reference: the hub row flips `Remembering the Kanji` → `WaniKani` → back, 4604
+changed pixels each way and 0 on return), a second `fitToViewport` modal whose Cancel leaves state
 untouched (Text recognition → Enhanced), and a Settings page pushed on the **Analytics** tab's own
 stack whose Back returns to Analytics. All four deliberately-wrong twins fail with
 `ASSERTION_FAILED` (not `TIMEOUT`/`ELEMENT_*`), and the five merged flows plus their five negative
-controls still pass/fail as GR3 recorded.**
+controls still pass/fail as GR3 recorded. One draft claim (`gaten-kanji` v1) was **vacuous** — it
+passed 3/3 while proving nothing because the tapped control was already in that state — and was
+rewritten to make a real write (§2.3).**
 
 ## 0. What changed in ACOS
 
@@ -26,6 +29,7 @@ was touched, and no gate moved. Three things changed outside the product:
 |---|---|---|
 | `scenarios/gaten-backstack.yaml` | last step re-targeted | the draft asserted `text exact "Analytics"`, which on this app is a **tab-bar label** (`Text`, `visible=false`) and not the page heading (the heading is `content_desc: "Analytics"` with empty text). The strict run reported `ELEMENT_OFFSCREEN` on the label. Replaced with Analytics-only copy (`Accuracy`, `Answer accuracy will appear here.`) plus `assert_not_visible` on the Settings hub's `Kanji reference` row, so a Back that landed on Home or the Settings hub cannot satisfy it. The claim is unchanged and no rule was weakened; see §2.2. |
 | `scenarios/negative/gaten-backstack-wrong.yaml` | last step re-targeted | same reason, and it must fail `ASSERTION_FAILED`, not `ELEMENT_OFFSCREEN`. It now asserts the visible heading (`content_desc: "Analytics"`) reads `Settings`. |
+| `scenarios/gaten-kanji.yaml`, `scenarios/negative/gaten-kanji-wrong.yaml` | rewritten (v2) | the draft claimed the hub starts on `WaniKani` and that tapping RTK *changes* it. In fact `KanjiReferencePreference.defaultFor(wanikaniConfigured = false) = RTK`, so on this guest the default is already `Remembering the Kanji`, and the page's `select()` returns early when the tapped option is already the source — the tap was a no-op and the 3/3 pre-merge pass proved nothing. v2 changes the value away from the default (WaniKani) and back again and reads the hub row's own label at each hop; see §2.3. |
 | `.cache/gr4/verdict.py` (gitignored scratch) | new | the handoff's runner read `d["verdict"]["steps"]` and always printed `steps=0`; the real path is `result.verdict.steps` and step entries carry `status`, not `ok`. Step counts and failure codes in the tables below come from the corrected parser. |
 
 The four positive scenarios and the other three twins were **not** edited from the handoff's draft,
@@ -48,6 +52,9 @@ Each has a twin in `scenarios/negative/`.
 
 ## 2. Scenarios — post-merge acceptance runs
 
+26 accepted runs on the committed scenario set: 13 positive (four new × 3, plus `gaten-backstack`
+4 including its smoke) and 13 negative, plus the five merged flows and their five twins.
+
 All runs: `acos verify <scenario> --apk <APK> --engine art --json --artifacts .cache/gr4/suite/…`,
 inside one ART-lock acquisition per batch
 (`tools/art-runtime/run-exclusive.sh --task gr4 -- tools/guarded.sh --mem 8G --time …`),
@@ -58,7 +65,7 @@ in the table is a `wait_for`/`assert_*` on a bound capture frame, never on a fas
 | scenario | steps | runs | result | failure class | wall p50 | evidence |
 |---|---:|---:|---|---|---:|---|
 | `scenarios/gaten-support.yaml` | 27 | 3 | **3/3 pass** | — | 8.40 s | `evidence/GR4/gaten-support-{home,hub,sheet,closed,sheet-again,back-dismissed}.png` |
-| `scenarios/gaten-kanji.yaml` | 23 | 3 | **3/3 pass** | — | 8.66 s | `evidence/GR4/gaten-kanji-{hub,page,selected,hub-after}.png` |
+| `scenarios/gaten-kanji.yaml` | 33 | 3 | **3/3 pass** | — | 11.56 s | `evidence/GR4/gaten-kanji-{home,hub,page,wanikani-selected,hub-wanikani,hub-rtk}.png` |
 | `scenarios/gaten-recognition.yaml` | 33 | 3 | **3/3 pass** | — | 9.58 s | `evidence/GR4/gaten-recognition-{page,confirm,cancelled,hub-after}.png` |
 | `scenarios/gaten-backstack.yaml` | 25 | 3 (+1 smoke) | **4/4 pass** | — | 8.34 s | `evidence/GR4/gaten-backstack-{analytics,wanikani-page,analytics-again}.png` |
 
@@ -72,7 +79,7 @@ Merged five, re-run post-merge (one run each, the GR3 acceptance shape):
 | `gaten-search` | 22 | **pass** | 8.38 s | `…/old-gaten-search-1.json` |
 | `gaten-lesson` | 28 | **pass** | 10.20 s | `…/old-gaten-lesson-1.json` |
 
-Every one of the 34 runs ended with `session_exit.outcome = ok`, `guest_exit = 0`, no
+Every accepted run ended with `session_exit.outcome = ok`, `guest_exit = 0`, no
 `native_crash`, and a guest cgroup peak of **236–429 MiB** (budget `memory_mib: 4096`). The known
 R2a/G3d launch SIGSEGV did not recur (0 of 34 launches since `d7dc8e2`).
 
@@ -84,10 +91,15 @@ R2a/G3d launch SIGSEGV did not recur (0 of 34 launches since `d7dc8e2`).
   row `Support Gaten` is visible again. Reopened, then `back: {}`: the body is gone **and** the hub
   is intact. So ACOS delivers Android Back to the RN `Modal`'s `onRequestClose` — the open question
   the handoff listed as risk 2 is answered: **not a wall, works**.
-- **`gaten-kanji`** — the pushed page asserts `Remembering the Kanji`, “bundled, works offline” and
-  `WaniKani`; after tapping RTK the page's save-error line has no visible node, and **after Back the
-  hub's own Kanji reference row reads `Remembering the Kanji`**. That is functional persistence, the
-  same evidence class as GR3's Theme Light → Dark.
+- **`gaten-kanji`** — the pushed page asserts both option titles and “bundled, works offline”; the
+  hub row's own accessibility label (`Kanji reference. <source>`) starts at the guest's default
+  `Remembering the Kanji` (source-verified: `defaultFor(wanikaniConfigured = false) = RTK`), flips to
+  `Kanji reference. WaniKani` after choosing WaniKani and Back, then flips back to
+  `Remembering the Kanji` after choosing RTK and Back, with the opposite label asserted *absent*
+  at each hop. That is a real bidirectional write through the RTK bridge — the same evidence class
+  as GR3's Theme Light → Dark — and the pixels confirm it: hub → hub-wanikani **4604 px changed**,
+  hub-wanikani → hub-rtk **4604 px changed**, hub → hub-rtk **0 px changed**, page →
+  wanikani-selected **3227 px changed** (the radio mark moves).
 - **`gaten-recognition`** — the page asserts `Standard` / `Enhanced` / “Better for stylised fonts”;
   tapping Enhanced raises the confirmation (`Download Enhanced?`, `Download size`, the reason copy,
   `Wi-Fi recommended`, `Cancel`, `Download`); **Cancel** removes it (`assert_not_visible`) and the
@@ -122,6 +134,29 @@ Nothing was relaxed: the scenario still requires the Analytics dashboard after B
 requires the Settings hub row to be **absent**, which a Back that overshot to the hub or to Home
 cannot satisfy. See Backlog `G4a` for the tree/frame inconsistency this exposed.
 
+### 2.3 A 3/3 pass that proved nothing (`gaten-kanji` v1), and how it was caught
+
+The handoff's draft was green 3/3 pre-merge and would have stayed green: it asserted the hub row
+read `Remembering the Kanji` **after** tapping `Remembering the Kanji`. Two independent facts make
+that vacuous —
+
+* `app/src/main/java/com/gaten/app/rtk/KanjiReferencePreference.kt`:
+  `defaultFor(wanikaniConfigured) = if (wanikaniConfigured) WANIKANI else RTK`, and this guest has no
+  WaniKani account, so the row already read `Remembering the Kanji` before the run touched anything
+  (confirmed in a second, unrelated run: the Settings pager sibling in `gaten-backstack`'s frame 18
+  already shows `Kanji reference. Remembering the Kanji`);
+* `KanjiReferenceSettingsScreen.tsx::select()` starts with `if (next === source || busy) return`, so
+  tapping the already-selected radio performs **no write at all**.
+
+The tell was pixel-level, not assertion-level: the draft's before/after hub captures were
+**byte-identical** (`frames/12.png` vs `frames/21.png`, 0 changed pixels), as were its page captures
+before/after the tap (`frames/16.png` vs `frames/18.png`, 0 changed pixels) — a "state changed"
+claim whose two witnesses never differ. The scenario was rewritten to move the value away from the
+default and back (§2.1) and now shows 4604 / 4604 changed pixels with a 0-pixel return. The lesson
+is in Backlog `G4c`: a scenario that taps a control which is already in the target state passes on
+its assertions and proves nothing, and nothing in the harness notices; comparing the before/after
+captures does.
+
 ## 3. Negative controls — the same flows, deliberately wrong
 
 Each twin selects a node that exists and is **visible**, then asserts wrong text on it, so the
@@ -130,7 +165,7 @@ failure class is `ASSERTION_FAILED` and never `ELEMENT_NOT_FOUND`/`ELEMENT_OFFSC
 | negative | steps | runs | result | failing step | message |
 |---|---:|---:|---|---|---|
 | `scenarios/negative/gaten-support-wrong.yaml` | 14/27 | 3 | **3/3 `ASSERTION_FAILED`** | 13 | expected text containing “a review or a subscription keeps it going”, got “Gaten is a one-person project. If it has been useful, a review or a coffee helps…” |
-| `scenarios/negative/gaten-kanji-wrong.yaml` | 23/23 | 3 | **3/3 `ASSERTION_FAILED`** | 22 | expected text exactly “WaniKani”, got “Remembering the Kanji” |
+| `scenarios/negative/gaten-kanji-wrong.yaml` | 20/20 | 3 | **3/3 `ASSERTION_FAILED`** | 19 | expected text exactly “Remembering the Kanji”, got “WaniKani” — i.e. the write is claimed not to have happened |
 | `scenarios/negative/gaten-recognition-wrong.yaml` | 29/29 | 3 | **3/3 `ASSERTION_FAILED`** | 28 | expected text exactly “Enhanced”, got “Standard” |
 | `scenarios/negative/gaten-backstack-wrong.yaml` | 24/24 | 3 | **3/3 `ASSERTION_FAILED`** | 23 | expected text exactly “Settings”, got “” (the Analytics heading, whose text is empty) |
 
@@ -141,7 +176,8 @@ being able to satisfy the flow.
 
 **0 false passes**: every positive verdict is `pass` with a strict spine, every negative verdict is
 `fail` with `error.code = ASSERTION_FAILED`. No scenario was forced green, and no assertion,
-visibility rule or settle horizon was changed to make anything pass.
+visibility rule or settle horizon was changed to make anything pass. One draft was **vacuous**
+(§2.3) and was rewritten rather than kept.
 
 ## 4. Post-merge pixels: the density fix in the evidence
 
@@ -209,9 +245,10 @@ No crate, fixture or doc under `docs/` was modified, so no ACOS gate changed: th
 
 - New scenarios: `scenarios/gaten-{support,kanji,recognition,backstack}.yaml` and
   `scenarios/negative/gaten-{support,kanji,recognition,backstack}-wrong.yaml`.
-- Evidence: `results/gaten/evidence/GR4/*.png` (17 downscaled frames, 405×828, from the
-  `*-1` runs), verdict JSONs under `.cache/gr4/suite/*.json` (gitignored scratch).
-- `EXPERIMENTS.md`: experiment `E13.8`; Backlog rows `G4a`, `G4b` (+ the R2a datapoint).
+- Evidence: `results/gaten/evidence/GR4/*.png` (20 downscaled frames, 405×828, from the
+  `*-1` runs), verdict JSONs under `.cache/gr4/suite/*.json` (gitignored scratch; 37 run records,
+  of which 6 are the superseded `gaten-kanji` v1 runs).
+- `EXPERIMENTS.md`: experiment `E13.8`; Backlog rows `G4a`, `G4b`, `G4c` (+ the R2a datapoint).
 
 ## 8. Reproduce
 
@@ -224,6 +261,9 @@ for b in newpos newneg; do
   timeout 1200 tools/art-runtime/run-exclusive.sh --task gr4 -- \
     tools/guarded.sh --mem 8G --time 570 -- bash .cache/gr4/run_suite.sh $b 3
 done
+# one scenario + its twin, 3 reps, one hold
+timeout 1500 tools/art-runtime/run-exclusive.sh --task gr4 -- \
+  tools/guarded.sh --mem 8G --time 300 -- bash .cache/gr4/run_suite.sh redo gaten-kanji 3
 timeout 1200 tools/art-runtime/run-exclusive.sh --task gr4 -- \
   tools/guarded.sh --mem 8G --time 400 -- bash .cache/gr4/run_suite.sh old
 timeout 1200 tools/art-runtime/run-exclusive.sh --task gr4 -- \
