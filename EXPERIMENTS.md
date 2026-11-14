@@ -2063,7 +2063,7 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
 - **Gates:** v2-art-counter, w22-counter-reset, w54-dialog-pixels, w42-back-frame, w15-dialog-menu, form-validation, suite/T03-render-good, v1-offscreen-pager, p11-background, p11-delay1000, p12-progress-anim-off **pass**; suite/T03-render-wrong `ASSERTION_FAILED`; negative/offscreen-pager-visible `ELEMENT_OFFSCREEN`; negative/offscreen-pager-wait and p11-progress-timeout `TIMEOUT`. `cargo test --release --offline -p acos-cli -p acos-verify -p acos-art` green (343 tests; new cgroup test included).
 - **Fidelity / evidence:** `art-reference` (real ART, release), MEASURED; `results/bench/H15.md` (tables, budget, options, risks) and `.cache/h15/` (per-arm `profile.json`/`dm6.jsonl`/`trace.log`, the four probe scripts, the 8 H6 loop artifacts, gate JSONs, both binaries).
 
-## E2.15 — H13b: `shared-fixed` boot image is the default and cached on disk — MEASURED (accepted by ADR-0026 §4; memory/loop rows pending)
+## E2.15 — H13b: `shared-fixed` boot image is the default and cached on disk — MEASURED (accepted by ADR-0026 §4; H13C closed the serve-path and memory/loop rows)
 
 - **Date / commit:** 2026-11-14; branch `perf-h13b-shared-image` off `main`
   `3e11d9c`; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/h4`. Host: Ryzen 9
@@ -2130,10 +2130,32 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   (checksum, file named) both rebuild; two concurrent builders produce exactly
   one build (`Built` + `Hit`); a failed/empty build is a structured error and
   leaves no entry; pruning keeps 2 entries.
-- **Not measured.** M1/M2 memory at N=1/5/10 and the N=10 agent loop. The image
-  bytes are H13's `shared-fixed` (E2.12 measured −10–12 MiB/session at N=5/10);
-  this experiment prices the same image at ~0 per serve. `acos-bench.sh`
-  `--phases mem,loop10` cells remain the next action.
+- **H13C follow-up (serve path + memory/loop rows, same branch `0676c6f`).**
+  The handoff's "`acos serve` dies `GUEST_EXITED` 134 on both arms" was the probe
+  fixture, not the serve path: `fixtures/build/apps/acos-counter.apk` is a 47 MB
+  **Flutter** app that SIGABRTs in its `1.raster` thread (`__android_log_assert`
+  through `/data/shim/libartshim.so`, logcat `tid 19 name 1.raster >>> …
+  dalvikvm64 <<<`) on main `3e11d9c` **and** on this branch, while the plain
+  `counter.apk` — the fixture every scenario and `acos_bench.py` uses — serves
+  and launches `first_frame` on both arms. A second probe mistake set
+  `XDG_RUNTIME_DIR` to a private dir, which breaks `systemd-run --user --scope`
+  (the mandatory cgroup) → `MEMORY_CGROUP_UNAVAILABLE`. No code change; the
+  proof and the abort evidence are in `results/bench/H13b/serve/`.
+- **Serve reply proof.** `boot_image: {mode:shared-fixed, cache:built,
+  prep_ms:3628, input_hash:4b0adb4f56cff1ad, base:0x70000000, reason:"no usable
+  manifest…"}` in the `acos_launch` reply and in the `session list` row for
+  `s_cli`; the next serve reports `cache:"hit"` in both.
+- **M1/M2 + N=10 loop, interleaved 3 reps, `--groups "ml:memory,loop10:16G:600"`,
+  animations on, load1 1.2–1.9, MemAvail 51.4–52.3 GiB.** cgroup anon+shmem
+  per session: lz4 **64.85 / 65.35 / 65.89** → shared-fixed **53.95 / 53.45 /
+  53.55** MiB at N=1/5/10 (medians, **−10.9 / −11.9 / −12.3 MiB**, −16.8…−18.7 %);
+  M1 idle 66.41 → 55.53 MiB (−16.4 %); ΣPss/session at N=10 61.09 → 54.37
+  (−11.0 %). N=10 loop latency **1431.2 → 1413.9 ms/task** (−1.2 %, tie). One
+  pre-existing lz4 flake (`reset → GUEST_EXITED`, 49/50, fail-closed, 0 false
+  passes); no shared-fixed task failed. The page-cache-included
+  `tasks/GiB-min` cell (819.6 vs 664.9) is *not* an A/B claim: it charges the
+  ~173 MiB image file pages per session and its cohort sampler covered
+  0.55–0.64 of guests; the label-matched anon+shmem cell ties (571.0 vs 575.1).
 - **Conclusion.** Accepted as ADR-0026 §4's default: the shared image's memory
   win is kept, image ASLR is traded away (owner accepted), and the cold-start
   cost that blocked H13 is paid once per machine instead of once per serve.
@@ -2167,7 +2189,9 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | M1 idle memory, 1 app | **66.5 MiB cgroup anon+shmem** (ΣPss 210 MiB) | main `4958703` (H2 on) | B2, E3.2 | 2026-11-13 | pre-H2 98.9 MiB — **−32.8 %** (H2 early GC) |
 | Memory / extra session | **64.96 / 65.22 / 65.59 MiB cgroup anon+shmem** at N=1/5/10; ΣPss 195.4 / 76.8 / 62.6 MiB | main `4958703` (H2 on) | B2, E3.2 | 2026-11-13 | pre-H2 97.3/98.0/97.7 cgroup and 213/108/94 Pss — **−33 %** anon+shmem, −29/−33 % ΣPss at N=5/N=10 |
 | Memory / extra session, opt-in shared boot image (H13) | **65.5 (N=1) / 66.9 (N=5) / 64.4 (N=10) MiB cgroup anon+shmem, lz4 + H2**; best opt-in shared image **56.7 / 55.2 / 54.1** (`shared-aslr`, N=5/10 median of 2 cohorts; `shared-fixed` 54.3/53.6/53.0) | `mem-h13-shared-image` off `f9f6ffa` | H13, E2.12 | 2026-11-13 | H2 on; shared image −8.7 / −11.6 / −10.3 MiB/session vs lz4, +3.6 s first launch. Pre-H2 H6 row: 97.3/98.0/97.7 |
-| Boot-image cold start (default `shared-fixed`) | **3.58 s once per machine** (`session_start_ms` 3 817 ms including the boot it replaces), then **153–161 ms** with `cache: hit` on every later serve; lz4 median 173 ms in the same interleaved window | `perf-h13b-shared-image` off `main` `3e11d9c` | H13b, E2.15 | 2026-11-14 | ADR-0026 §4 default; H13's +3.6 s per serve was the only blocker and is now per machine || Idle CPU / wakeups | **0.647 / 2.77 / 5.28 %** of one core at N=1/5/10 (0.647/0.554/0.528 per session); **34.1 / 90.8 / 161.7** wakeups/s | main `4958703` | B2, E3.2 | 2026-11-13 | pre-H2 0.61/2.44/4.47 % — within the 21–38 % load-derived bands; wakeups unchanged |
+| Boot-image cold start (default `shared-fixed`) | **3.58 s once per machine** (`session_start_ms` 3 817 ms including the boot it replaces), then **153–161 ms** with `cache: hit` on every later serve; lz4 median 173 ms in the same interleaved window | `perf-h13b-shared-image` off `main` `3e11d9c` | H13b, E2.15 | 2026-11-14 | ADR-0026 §4 default; H13's +3.6 s per serve was the only blocker and is now per machine |
+| Memory / extra session, default shared boot image (H13b/H13C) | **53.95 / 53.45 / 53.55 MiB cgroup anon+shmem** at N=1/5/10 (lz4 64.85 / 65.35 / 65.89 in the same interleaved window; ΣPss 54.37 vs 61.09 at N=10); M1 idle 55.53 vs 66.41 | `perf-h13b-shared-image` `0676c6f` off `main` `3e11d9c` | H13C (E2.15) | 2026-11-14 | **−10.9 / −11.9 / −12.3 MiB/session** vs lz4, cached image at ~0 per serve; N=10 loop latency 1431.2 → 1413.9 ms/task (tie) |
+| Idle CPU / wakeups | **0.647 / 2.77 / 5.28 %** of one core at N=1/5/10 (0.647/0.554/0.528 per session); **34.1 / 90.8 / 161.7** wakeups/s | main `4958703` | B2, E3.2 | 2026-11-13 | pre-H2 0.61/2.44/4.47 % — within the 21–38 % load-derived bands; wakeups unchanged |
 | Teardown | **12 ms** (`teardown_ms`, lifecycle) | main `4958703` | B2, E3.2 | 2026-11-13 | tie with GL1 12 ms (−33…−40 % vs 18–20) |
 | Agent loop (animations on) | **1421.9 ms/task; 0.658 tasks/s, 281.6 (page cache) / 891.7 (anon+shmem) tasks/GiB-min at N=1; 1424.6 ms, 2.699 tasks/s, 681.3 / 846.6 at N=5** (H15 binary, 3 reps, verified 1.000); main `4958703` measured 1437.6 / 1441.0 ms in the same H15 window | `perf-h15-reset` (H15) off main `1ce336b`; B2 row for main `4958703` | H15, E2.14 (B2, E3.2) | 2026-11-13 | H15 vs its own interleaved base: **−1.1 % latency at N=1 and N=5**; 0 false passes, verified rate 1.000 |
 | Agent loop (animations off, functional-check mode) | **507–523 ms/task, 1.79 tasks/s, 5239 tasks/GiB-min (anon+shmem) at N=1; 537 ms / 6.28 / 3942 at N=5; 530 ms / 10.22 / 3798 at N=10**; H15 re-measured 490.8 (base) / 501.7 (H15 binary) at N=1 and 518.3 / 516.9 at N=5 | main `4958703`, `--animations off` | H14, E3.3 (H15, E2.14) | 2026-11-13 | 2.71–2.84× latency; the 5.8×/5.0×/8.7× anon+shmem tasks/GiB-min ratios at N=1/5/10 were the S3c denominator bias — corrected (E3.5) the *latency* ratio 2.76–2.79× holds and the cohort GiB-min ratio tracks throughput (1.23–1.30× at N=20); loop becomes reset-bound (48 %); not a default change. H15's Δ is inside noise (±5 % threshold, overlapping rep ranges) |
