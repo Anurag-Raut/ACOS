@@ -2237,6 +2237,90 @@ wire/native bugs, and keep a bounded `HostGuard` in `render_views` so a future
 guest loop fails loudly. File the five real failures as T1a–T1e; do not weaken
 any verify/assertion or mark a real failure `#[ignore]`.
 
+## E9.2 — HYG1: an order-dependent S5 refusal test, and the `writeValue` length word that `VAL_MAP` was missing — PASS (all suites, gates and Gaten flows as expected)
+
+- **Date / commit:** 2026-11-14; branch `hyg1-tests-parcel` off `main` `863def1`
+  (worktree `/home/Qui/.paseo/worktrees/3oxa6xao/s3ab`). Reported in
+  `results/handoff/HYG1.md`.
+- **Question / goal:** (1) make `acos-art`'s
+  `sandbox_s5::refuses_to_run_when_no_cgroup_can_be_created` independent of test
+  order and host warmth, without changing production behaviour; (2) make
+  `parcelable::write_dynamic`/`read_dynamic` match API 34's
+  `Parcel.writeValue` for every `VAL_*` type the module writes, with byte-layout
+  goldens and AOSP citations, and prove no caller depended on a wrong layout.
+- **Method:** reproduce first (`cargo test -p acos-art --test sandbox_s5 --
+  refuses_… --exact` under one ART-lock acquisition with the **warm**
+  productised `ACOS_ART_DATA=.cache/art/data`), then read
+  `.cache/aosp/base/core/java/android/os/Parcel.java` (android-14.0.0_r75) for
+  `writeValue`/`readValue`/`isLengthPrefixed`/`writeMap`/`writeParcelable`,
+  confirm the shipped image carries the same method
+  (`grep isLengthPrefixed` in the `framework.jar` dex), fix, and re-run every
+  suite plus the ART gates and Gaten flows.
+- **Inputs:** API-34 image `.cache/boot/android-34` (framework.jar + dex),
+  Gaten APK `.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk`,
+  release `acos`/`acos-art` from `.cache/s3ab-target/release`. Scratch
+  `.cache/hyg1/`.
+- **Result:**
+  - *Cause of (1):* `RunCgroup::prepare` → `host_scope_capability()` answers
+    from a per-process `OnceLock` and the per-boot stamp
+    `<ACOS_ART_DATA>/cgroup-capability.json` before probing, so the test's fake
+    failing `systemd-run` was never consulted (`RunCgroup { cg: "" }`).
+  - *Fix (1):* the two `OnceLock`s became one `Mutex<CapabilityCache>` plus a
+    `#[doc(hidden)] set_capability_test_seam(data_root, probe_dir)`; the S5 test
+    owns a fresh scratch data root and fake probe dir (no `PATH` mutation) and
+    holds the guest mutex. New unit test
+    `warm_stamp_answers_without_probing_and_a_cold_root_probes` proves both the
+    refusal and that the per-boot cache still works in production.
+  - *Cause of (2):* `VAL_PARCELABLE` **is** length-prefixed in API 34
+    (`Parcel.writeValue` 2458-2481 backpatches `end - start`;
+    `isLengthPrefixed` 4908-4926; `readValue` 4529-4546) and ACOS already wrote
+    that word correctly. `VAL_MAP` is length-prefixed too and ACOS did **not**
+    write or read it, so a real framework client would take `writeMap`'s size as
+    the byte count and the first key's type tag as the entry count — the
+    `LIST_config` reply's `value` `HashMap` is exactly that path, and the
+    host-vs-peer byte test was self-consistent on the wrong layout.
+  - *Fix (2):* shared `write_value_length_prefixed` / `read_value_length` /
+    `check_value_length`, used by both length-prefixed types; the read side
+    bounds the declared length by the bytes left (before allocating) and refuses
+    a body/length mismatch where AOSP only `Slog.wtfStack`s; a null class name
+    in `VAL_PARCELABLE` now decodes as null (AOSP `readParcelableCreatorInternal`
+    5081-5085). No other `VAL_*` type got a length word.
+  - *Tests:* `crates/acos-services/tests/parcel_dynamic_golden.rs` (16 golden
+    byte-layout tests, one or more per `VAL_*` type written, plus teeth: legacy
+    length-less map refused, length/body mismatch refused, length beyond the
+    parcel refused) and `gate1_bounds.rs` updated to the API-34 layout (hostile
+    `i32::MAX` count still refused without allocating).
+
+| suite / run | result |
+|---|---|
+| `acos-art` default (parallel) | **rc=0, 151 passed, 0 failed** |
+| `acos-art --test-threads=1` | **rc=0, 151 passed, 0 failed** |
+| S5 refusal test alone, warm host, twice | **1 passed**, **1 passed** |
+| `acos-services` | **rc=0, 41 binaries, 319 passed, 0 failed** |
+| `acos-cli` / `acos-verify` | **147 passed / 66 passed**, rc=0 both |
+| gates (11) | 8 pass (`v2-art-counter`, `w22-counter-reset`, `w54-dialog-pixels`, `w42-back-frame`, `w15-dialog-menu`, `form-validation`, `suite/T03-render-good`, `v1-offscreen-pager`); `suite/T03-render-wrong` → `ASSERTION_FAILED`; `negative/offscreen-pager-visible` → `ELEMENT_OFFSCREEN`; `p11-progress-timeout` → `TIMEOUT` |
+| Gaten flows / negatives | 5/5 pass (`home`, `tabs`, `settings`, `search`, `lesson`); 5/5 negatives `ASSERTION_FAILED` |
+
+- **Finding:** the S5 failure was a test-isolation defect, not a product one:
+  the H15 cache is correct and is still proven by the new unit test. The parcel
+  defect was real but not where the brief put it — the length word belongs on
+  `VAL_MAP` (and was already right on `VAL_PARCELABLE`); the old layout was
+  self-consistent between ACOS' writer and reader, which is why only a byte
+  golden (not a round trip) could see it. Gates and Gaten are unchanged, so the
+  binder-path change is behaviour-neutral for every currently verified flow.
+- **Fidelity / evidence:** measured, logs under `.cache/hyg1/`
+  (`art-default.log`, `art-serial.log`, `services2.log`, `cli.log`,
+  `verify.log`, `suite/gate-*.json`, `suite/gaten-*.json`); layout citations are
+  file:line against the local android-14.0.0_r75 sparse checkout.
+- **Regression / false pass:** none — no assertion weakened, nothing
+  `#[ignore]`d; the golden tests fail against the old layout (the legacy-map
+  teeth test). The gates' three deliberate failures still fail with their
+  expected codes, so no false pass was introduced.
+- **Conclusion / next:** keep the seam test-only and documented; the remaining
+  open item is that no verified flow exercises a *non-empty* `HashMap` value
+  through a real framework client (`LIST_config` is empty on this image), so the
+  new map layout is proven at the byte level, not yet end-to-end from the guest.
+
 ## Backlog (optimization hypotheses; rank = impact × confidence ÷ (cost × risk))
 
 Re-ranked by B2 (E3.2) on the measured objective: **verified tasks per second per
