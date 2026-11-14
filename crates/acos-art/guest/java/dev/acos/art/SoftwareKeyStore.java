@@ -629,23 +629,41 @@ public final class SoftwareKeyStore extends Provider {
     // `KeyGenParameterSpec`'s getters for the requested characteristics are
     // `@hide` (present in the image, trimmed from `android.jar`), exactly as
     // `AndroidKeyStoreProvider`'s own SPIs reach them. Reflected once, cached.
+    //
+    // A reflection failure fails *closed*: silently returning null would drop the
+    // validity-window, attestation, purposes or randomized-encryption checks and
+    // accept a key the app asked us to constrain.
     private static java.lang.reflect.Method specMethod(String name, Class<?>... params) {
         try {
             java.lang.reflect.Method m = KeyGenParameterSpec.class.getMethod(name, params);
             m.setAccessible(true);
             return m;
         } catch (Throwable t) {
-            return null;
+            throw new ProviderException(
+                    "ACOS keystore: cannot read KeyGenParameterSpec." + name + ": " + t, t);
         }
     }
 
     private static Object call(Object target, String name) {
         java.lang.reflect.Method m = specMethod(name);
-        if (m == null) return null;
         try {
             return m.invoke(target);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            // `KeyGenParameterSpec`'s getters throw `IllegalStateException("<X> not
+            // specified")` when the characteristic was never set (AOSP's own
+            // contract, e.g. `getDigests`). That is the getter working, not a
+            // reflection failure, so it keeps its old meaning: not specified ->
+            // null -> the caller's default.
+            if (cause instanceof IllegalStateException) {
+                return null;
+            }
+            throw new ProviderException(
+                    "ACOS keystore: cannot read KeyGenParameterSpec." + name + ": " + cause,
+                    cause);
         } catch (Throwable t) {
-            return null;
+            throw new ProviderException(
+                    "ACOS keystore: cannot read KeyGenParameterSpec." + name + ": " + t, t);
         }
     }
 

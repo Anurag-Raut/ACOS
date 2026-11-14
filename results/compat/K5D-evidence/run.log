@@ -1,0 +1,75 @@
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+[k5b] === phase fidelity ===
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+[k5b] ok   fidelity: fidelity.provider :: providers=AndroidKeyStoreGuard,AndroidOpenSSL,CertPathProvider,BC,HarmonyJSSE,AndroidKeyStore
+[k5b] ok   fidelity: fidelity.store_empty_at_start :: size=0
+[k5b] ok   fidelity: fidelity.keyinfo.size :: size=256
+[k5b] ok   fidelity: fidelity.keyinfo.purposes :: purposes=0x3
+[k5b] ok   fidelity: fidelity.keyinfo.software :: insideSecureHardware=false securityLevel=0
+[k5b] ok   fidelity: fidelity.keyinfo.origin :: origin=1
+[k5b] ok   fidelity: fidelity.keyinfo.alias :: alias=k_aes
+[k5b] ok   fidelity: fidelity.keyinfo.digests_modes :: blockModes=[GCM, CBC]
+[k5b] ok   fidelity: fidelity.creation_date :: Sat Nov 14 13:03:55 GMT+00:00 2026
+[k5b] ok   fidelity: fidelity.cipher.roundtrip :: ct=20 iv=12
+[k5b] ok   fidelity: fidelity.purposes.impossible_rejected :: Unsupported purposes 0x4 for algorithm AES
+[k5b] ok   fidelity: fidelity.purpose.encrypt_only_allows_encrypt :: encrypt ok iv=16 provider=AndroidKeyStoreGuard
+[k5b] ok   fidelity: fidelity.purpose.encrypt_only_refuses_decrypt :: InvalidKeyException(Keystore operation failed) cause=KeyStoreException/code=-3/key "k_encrypt_only" does not have PURPOSE_DECRYPT (purposes=0x1)
+[k5b] ok   fidelity: fidelity.refusal.no_foreign_provider :: Cipher.getProvider()=AndroidKeyStoreGuard (InvalidKeyException(Keystore operation failed) cause=KeyStoreException/code=-3/key "k_encrypt_only" does not have PURPOSE_DECRYPT (purposes=0x1))
+[k5b] ok   fidelity: fidelity.refusal.control_foreign_provider_visible :: plain SecretKeySpec performed by AndroidOpenSSL
+[k5b] ok   fidelity: fidelity.refusal.stable :: InvalidKeyException(Keystore operation failed) cause=KeyStoreException/code=-3/key "k_encrypt_only" does not have PURPOSE_DECRYPT (purposes=0x1)
+[k5b] ok   fidelity: fidelity.opaque.secret :: class=dev.acos.art.SoftwareKeyStore$StoreSecretKey encoded=null format=null
+[k5b] ok   fidelity: fidelity.randomized_iv_refused :: InvalidAlgorithmParameterException(Caller-provided IV not permitted)
+[k5b] ok   fidelity: fidelity.randomized_iv_no_foreign_provider :: Cipher.getProvider()=AndroidKeyStoreGuard
+[k5b] ok   fidelity: fidelity.purpose.rsa_sign_only_allows_sign :: signature bytes=>0
+[k5b] ok   fidelity: fidelity.opaque.private :: class=dev.acos.art.SoftwareKeyStore$StorePrivateKey encoded=null format=null
+[k5b] ok   fidelity: fidelity.opaque.public_x509 :: class=dev.acos.art.SoftwareKeyStore$StorePublicKey format=X.509
+[k5b] ok   fidelity: fidelity.purpose.rsa_sign_only_refuses_encrypt :: InvalidKeyException(Keystore operation failed) cause=KeyStoreException/code=-3/key "k_rsa_sign" does not have PURPOSE_ENCRYPT (purposes=0x4)
+[k5b] ok   fidelity: fidelity.refusal.rsa_no_foreign_provider :: Cipher.getProvider()=AndroidKeyStoreGuard
+[k5b] ok   fidelity: fidelity.purpose.sign_allowed :: 
+[k5b] ok   fidelity: fidelity.validity.not_yet_valid :: KeyNotYetValidException(Key not yet valid)
+[k5b] ok   fidelity: fidelity.validity.expired :: KeyExpiredException(Key expired)
+[k5b] ok   fidelity: fidelity.import.protection_parameter :: Unsupported protection parameter class:dev.acos.fixtures.keystoreprobe.KeystoreProbe$1. Supported: android.security.KeyStoreParameter
+[k5b] ok   fidelity: fidelity.import.secret :: origin=2 size=256 encoded=null
+[k5b] ok   fidelity: fidelity.chain.verifies :: len=1 subject=CN=k_rsa issuer=CN=k_rsa selfSigned=true
+[k5b] ok   fidelity: fidelity.keyinfo.rsa :: size=2048 purposes=0xf
+[k5b] ok   fidelity: fidelity.chain.ec :: chain=1 size=256
+[k5b] ok   fidelity: fidelity.attestation.refused :: UNSUPPORTED_ATTESTATION: the ACOS software keystore has no attestation-capable keymaster; refusing to fabricate a chain
+[k5b] ok   fidelity: fidelity.userauth.refused :: ACOS software keystore cannot enforce user authentication
+[k5b] ok   fidelity: fidelity.persist.mode_0600 :: file=[OWNER_READ, OWNER_WRITE] dir=[OWNER_READ, OWNER_EXECUTE, OWNER_WRITE]
+[k5b] ok   fidelity: fidelity.persist.no_group_world :: file=[OWNER_READ, OWNER_WRITE]
+[k5b] ok   fidelity: fidelity.absent_alias :: getKey returned null
+[k5b] ok   fidelity: fidelity.unsupported_algorithm :: DESede refused with NoSuchAlgorithmException
+[k5b] fidelity: 38/38 checks pass
+[k5b] RESULT (fidelity): PASS
+[k5b] === phase xsession ===
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+[k5b] session A alive=1639378 material=/home/Qui/Projects/acos/.cache/art-locks/data-K5D-1639164/runs/1639378-0/app-data/dev.acos.fixtures.keystoreprobe/files/keystore-probe/private-a.txt keys=/home/Qui/Projects/acos/.cache/art-locks/data-K5D-1639164/runs/1639378-0/app-data/dev.acos.fixtures.keystoreprobe/acos-keystore/entries.properties copy_rc=0 mode=600
+[k5b] ok   xsession: control.own_alias_readable :: k_b is B's own key
+[k5b] ok   xsession: control.own_file_readable :: /data/app-data/dev.acos.fixtures.keystoreprobe/files/keystore-probe/private-b.txt
+[k5b] ok   xsession: xsession.alias_absent :: k_a absent
+[k5b] ok   xsession: xsession.path_absent[/home/Qui/Projects/acos/.cache/art-locks/data-K5D-1639164/runs/1639378-0/app-data/dev.acos.fixtures.keystoreprobe/files/keystore-probe/private-a.txt] :: refused: FileNotFoundException: /home/Qui/Projects/acos/.cache/art-locks/data-K5D-1639164/runs/1639378-0/app-data/dev.acos.fixtures.keystoreprobe/files/keystore-probe/private-a.txt (absent)
+[k5b] ok   xsession: xsession.path_absent[/home/Qui/Projects/acos/.cache/art-locks/data-K5D-1639164/runs/1639378-0/app-data/dev.acos.fixtures.keystoreprobe/acos-keystore/entries.properties] :: refused: FileNotFoundException: /home/Qui/Projects/acos/.cache/art-locks/data-K5D-1639164/runs/1639378-0/app-data/dev.acos.fixtures.keystoreprobe/acos-keystore/entries.properties (absent)
+[k5b] ok   xsession: xsession.path_absent[/data/app-data/dev.acos.fixtures.keystoreprobe/files/keystore-probe/private-a.txt] :: refused: FileNotFoundException: /data/app-data/dev.acos.fixtures.keystoreprobe/files/keystore-probe/private-a.txt (absent)
+[k5b] ok   xsession: xsession.path_absent[/data/app-data/dev.acos.fixtures.keystoreprobe/acos-keystore/entries.properties] :: readable but without A's material (exists)
+[k5b] ok   xsession: xsession.host_root_absent :: root=[etc, system_ext, product, vendor, sys, proc, dev, data, linkerconfig, apex, system]
+[k5b] xsession: 8/8 checks pass
+[k5b] RESULT (xsession): PASS
+[k5b] === phase default_off ===
+[k5b] default-off: 3 record(s) from the log buffer
+[k5b] ok   default-off: default_off.not_found :: java.security.KeyStoreException: AndroidKeyStore not found
+[k5b] ok   default-off: default_off.provider_absent :: providers=AndroidNSSP,AndroidOpenSSL,CertPathProvider,BC,HarmonyJSSE
+[k5b] default-off: 2/2 checks pass
+[k5b] RESULT (default_off): PASS
+
+[k5b] summary:
+keystore-file-mode	600	app-data/dev.acos.fixtures.keystoreprobe/acos-keystore/entries.properties
+fidelity	PASS	.cache/k5d/keystore-suite2/fidelity
+xsession-a-live-copy	0	.cache/k5d/keystore-suite2/xsession/a/appdata
+xsession-a-keystore-mode	600	/home/Qui/Projects/acos/.cache/art-locks/data-K5D-1639164/runs/1639378-0/app-data/dev.acos.fixtures.keystoreprobe/acos-keystore/entries.properties
+xsession-a-alive-during-b	yes	pid=1639378
+xsession	PASS	.cache/k5d/keystore-suite2/xsession
+default_off	PASS	.cache/k5d/keystore-suite2/default_off
+[k5b] RESULT: PASS

@@ -175,6 +175,18 @@ pub const MAX_SIGNATURE_BLOCK_BYTES: usize = 1 << 20;
 /// compressed entry is the zip-bomb shape. Real PKCS#7 blocks stay well under
 /// this because most bytes are already DER/ASN.1.
 pub const MAX_SIGNATURE_BLOCK_RATIO: usize = 200;
+/// How many v1 (JAR) signature block candidates one APK may declare.
+///
+/// A real APK of the v1 era ships one `.SF` + `.RSA|DSA|EC` pair; even a
+/// multi-signer v1 APK stays in single digits. Without this cap a crafted
+/// archive with ~10k pairs would make ingest read ~10k x [`MAX_SIGNATURE_BLOCK_BYTES`]
+/// into host memory, so the count is checked before any block is read.
+pub const MAX_V1_SIGNATURE_BLOCKS: usize = 16;
+/// Summed cap for all v1 signature blocks of one APK, declared and actual.
+///
+/// 4 MiB is four times the single-block cap: a multi-signer v1 APK still fits
+/// comfortably, while a crafted archive cannot accumulate reads without bound.
+pub const MAX_TOTAL_V1_SIGNATURE_BYTES: usize = 4 << 20;
 /// One X.509 certificate.
 pub const MAX_CERT_BYTES: usize = 128 * 1024;
 /// All `PackageInfo.signatures` certificates together.

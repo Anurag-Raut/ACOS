@@ -2471,3 +2471,50 @@ AndroidKeyStore provider (2/2 PASS).
 host ART lock's two slots were held by other tracks and both attempts spent
 their timeout in the queue (`acos-apk --lib` 18/18 was re-run and is green).
 Evidence `results/compat/K5C-evidence/`; report `results/compat/K5.md` (K5c).
+
+### K5d — two review findings, and what the first real run of the fail-closed keystore taught us (2026-11-14)
+
+Two small fixes from the K5 review, nothing else. Track K5D,
+branch `compat-k5-keystore`.
+
+**F1 (host memory DoS, `acos-apk`).** `META-INF/*.RSA|DSA|EC` blocks that pair
+with a `.SF` were each capped at 1 MiB (ratio ≤ 200) but the *number* was
+uncapped: a ~50 MB APK with ~10k pairs made ingest read ~10 GB into host
+memory. New caps in `signing.rs`, checked **before any block is read**: at most
+`MAX_V1_SIGNATURE_BLOCKS` (16) candidate blocks and at most
+`MAX_TOTAL_V1_SIGNATURE_BYTES` (4 MiB) summed — the declared sizes are summed
+up front *and* the bytes actually read are summed, so a lying central directory
+cannot get past it. A violation is a structured `APK_SIGNING_MALFORMED` in
+`signing_certificates_error`, reading stops, and no partial signer set is parsed
+(a subset could change which signer wins). Tests: 17 blocks → error, 5×900 KiB
+→ total-cap error, one real `.SF`+`.RSA` pair → the same signer as the direct
+uncapped v1 parse. `cargo test --release -p acos-apk`: **21/21 lib** (18 + 3)
+plus all integration suites green.
+
+**F2 (fail-open reflection, `SoftwareKeyStore`).** `specMethod()`/`call()`
+returned `null` on any reflection failure, silently dropping validity-window,
+attestation, purposes and randomized-encryption checks. A lookup/access failure
+now throws `ProviderException("ACOS keystore: cannot read
+KeyGenParameterSpec.<name>: …")`. **The first live run of that change failed
+fidelity and was right to:** `getDigests` threw
+`IllegalStateException("Digests not specified")` — AOSP's documented way of
+saying *not specified* (same for block modes and paddings). That is the getter
+working, not a reflection failure, so `call()` keeps its old meaning for
+`IllegalStateException` (`null` → the caller's default) and fails closed for
+every other throwable. Behaviour when reflection works is unchanged; the
+regression was caught by the suite, not by review.
+
+**Result (real ART, under the main checkout's `run-exclusive.sh` +
+`guarded.sh`):** `fidelity` **38/38**, `xsession` **8/8**, `default_off`
+**2/2** — the K5c numbers, unchanged, with the fail-closed provider. See
+`results/compat/K5D-evidence/` for the exact evidence files; report
+`results/handoff/K5D.md`; the threat-model line is in `results/compat/K5.md`
+(K5c §6).
+
+**Harness note.** `tools/keystore-k5b/run.sh` hardcodes the K5 worktree and
+re-invokes itself through it, so running the suite from another worktree needs
+a relocated copy; K5d used a scratch copy in `.cache/k5d/run.sh` whose diff
+against the tracked script is only the worktree/target/output paths and the
+main-checkout lock path (`--task K5D`). Making the script relocatable is the
+smallest follow-up.
+
