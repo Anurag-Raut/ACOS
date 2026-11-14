@@ -762,6 +762,9 @@ pub struct PackageInfo {
     pub first_install_time: i64,
     /// lastUpdateTime.
     pub last_update_time: i64,
+    /// The APK's signing certificates (DER X.509), as
+    /// `PackageInfo.signatures` carries them under `GET_SIGNATURES`.
+    pub signatures: Vec<Vec<u8>>,
 }
 
 impl PackageInfo {
@@ -804,7 +807,19 @@ impl PackageInfo {
                         .collect(),
                 )),
                 Value::IntArray(None), // requestedPermissionsFlags
-                Value::List(None),     // signatures
+                // `PackageInfo.signatures`: `Signature[]`, each element a
+                // `writeByteArray` (the image's `Signature.writeToParcel`).
+                Value::List(Some(
+                    self.signatures
+                        .iter()
+                        .map(|der| {
+                            Value::Parcelable(Parcelable::ordered(
+                                "android.content.pm.Signature",
+                                vec![Value::ByteArray(Some(der.clone()))],
+                            ))
+                        })
+                        .collect(),
+                )),
                 Value::List(None),     // configPreferences
                 Value::List(None),     // reqFeatures
                 Value::List(None),     // featureGroups
@@ -1067,6 +1082,7 @@ impl PmsState {
             requested_permissions: Vec::new(),
             first_install_time: 0,
             last_update_time: 0,
+            signatures: Vec::new(),
         };
         Self {
             uid_packages: vec![(app.uid, app.package_name.clone())],
@@ -1173,6 +1189,7 @@ impl PmsState {
             requested_permissions: requested_permissions.clone(),
             first_install_time: 0,
             last_update_time: 0,
+            signatures: apk.signing_certificates.clone(),
         };
         Ok(Self {
             uid_packages: vec![(app.uid, app.package_name.clone())],

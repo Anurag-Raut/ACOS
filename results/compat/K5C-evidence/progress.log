@@ -1,0 +1,8 @@
+fidelity run rc=0
+fidelity run rc=0 (store= mode=)
+fidelity run rc=0 (store= mode=)
+fidelity run rc=0 (store=/home/Qui/Projects/acos/.cache/art-locks/data-K5B-1145278/runs/1152222-0/app-data/dev.acos.fixtures.keystoreprobe/acos-keystore/entries.properties mode=600)
+[k5b] session A alive=1173159 material=/home/Qui/Projects/acos/.cache/art-locks/data-K5B-1152831/runs/1173159-0/app-data/dev.acos.fixtures.keystoreprobe/files/keystore-probe/private-a.txt keys=/home/Qui/Projects/acos/.cache/art-locks/data-K5B-1152831/runs/1173159-0/app-data/dev.acos.fixtures.keystoreprobe/acos-keystore/entries.properties copy_rc=0 mode=600
+xsession B rc=0
+xsession A rc=0
+default-off launch rc=0
