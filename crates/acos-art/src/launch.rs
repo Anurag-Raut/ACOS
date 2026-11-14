@@ -3236,6 +3236,11 @@ fn wait_for_event_settled(
     min_probe_seq: u64,
     previous_fnv: Option<u64>,
     publish_epoch_ms: u64,
+    // G3f1: the tree the caller has already bound. When present, a sample may
+    // be the settle's candidate only if the guest's tree differs from it, so
+    // the reply is the app's *next* committed state and not the same skeleton
+    // the caller already holds.
+    await_tree: Option<&serde_json::Value>,
 ) -> SettleEnd {
     let confirm = Duration::from_millis(env_u64("ACOS_STRICT_SETTLE_CONFIRM_MS", 24));
     // Owner decision (2026-11-12): the pixel-unchanged guard is OFF by default.
@@ -3264,6 +3269,16 @@ fn wait_for_event_settled(
         min_probe_seq
     };
     let (unsupported_baseline, _) = latest_unsupported(probe_state);
+    // G3f1: when the caller supplies the tree it already holds, the wait ends on
+    // the app's next **draw commit** — a probe sample whose tree differs from
+    // the baseline and whose draw has been stored by C1 — instead of requiring
+    // the framework to be completely idle. A forever-animating screen (Gaten's
+    // welcome timeline) never reports `settled`, but it does commit draws, and a
+    // launch's contract is a *fresh* frame, not a settled one (P9). The settle
+    // verdict the reply reports stays the guest's own: a sample that is also
+    // settled keeps `bound:"strict-event"`, a draw-commit-only sample says
+    // `settled:false, bound:"change-draw"`.
+    let entry_generation = latest_generation(live);
     let mut last_generation = min_generation;
     let mut last_wake = Instant::now();
     // Host wake pacing. The guest already emits a sample on every dirty draw
@@ -3307,6 +3322,56 @@ fn wait_for_event_settled(
             Some(sample) => {
                 if sample.seq <= entry_floor {
                     last_reason = "probe-floor".to_string();
+                } else if await_tree
+                    .map(|baseline| &sample.tree == baseline)
+                    .unwrap_or(false)
+                {
+                    // G3f1: the app has not committed a new tree state yet
+                    // (the caller still holds exactly this tree). Keep waiting;
+                    // the guest's own dirty-draw events drive the next sample.
+                    last_reason = "tree-unchanged".to_string();
+                } else if await_tree.is_some() {
+                    // G3f1: the tree changed; it is a valid content bind once the
+                    // draw behind it has been committed to C1 (a store at/after
+                    // request entry). A confirmation window is deliberately NOT
+                    // required here: on a screen that keeps animating (Gaten's
+                    // welcome timeline) the draw changes every frame, so a
+                    // "same draw stayed newest" rule can never converge — that is
+                    // the settle rule, which this wait replaces by the *change*
+                    // rule. The bind is labelled `change-draw` and its settle
+                    // verdict stays `settled:false`, so nothing claims a quiet
+                    // screen.
+                    if probe_usable_for_fast_tree(&sample, entry_generation, entry_floor) {
+                        let bound = if sample.settled {
+                            "strict-event"
+                        } else {
+                            "change-draw"
+                        };
+                        let timing = SettleTiming {
+                            mode: SettleMode::Strict,
+                            first_change_ms: Some(sample.at_ms.saturating_sub(publish_epoch_ms)),
+                            frame_ms: None,
+                            state_changed: Some(true),
+                            bound,
+                            rule: Some("event"),
+                            reason: None,
+                            pixels_changed: None,
+                        };
+                        trace_host(
+                            probe_state,
+                            &format!(
+                                "settle change ready gen={generation} probe_seq={} draw_seq={} \
+                                 bound={bound} settled={}",
+                                sample.seq, sample.draw_seq, sample.settled
+                            ),
+                        );
+                        return SettleEnd::Settled(Settled {
+                            probe: sample.clone(),
+                            generation,
+                            timing,
+                        });
+                    }
+                    last_reason = "no-store-after-change".to_string();
                 } else if !sample.settled {
                     last_reason = sample
                         .pending
@@ -3361,6 +3426,11 @@ fn wait_for_event_settled(
                     && candidate_since.elapsed() >= confirm
                     && sample.generation == generation
                 {
+                    let bound = if sample.settled {
+                        "strict-event"
+                    } else {
+                        "change-draw"
+                    };
                     let timing = SettleTiming {
                         mode: SettleMode::Strict,
                         first_change_ms,
@@ -3370,7 +3440,7 @@ fn wait_for_event_settled(
                             Some(host_ms().saturating_sub(publish_epoch_ms))
                         },
                         state_changed: None,
-                        bound: "strict-event",
+                        bound,
                         rule: Some("event"),
                         reason: None,
                         pixels_changed: last_pixels_changed,
@@ -3481,6 +3551,10 @@ fn wait_for_settled_observation(
     mode: SettleMode,
     baseline_probe: Option<ProbeSample>,
     publish_epoch_ms: u64,
+    // G3f1: a caller holding a known tree (the launch's window skeleton) waits
+    // for the *next* state instead of polling; `None` keeps every existing
+    // caller byte-identical.
+    await_tree: Option<&serde_json::Value>,
 ) -> SettleEnd {
     if mode == SettleMode::Strict {
         return wait_for_event_settled(
@@ -3494,6 +3568,7 @@ fn wait_for_settled_observation(
             min_probe_seq,
             previous_fnv,
             publish_epoch_ms,
+            await_tree,
         );
     }
     // ---- fast (P1): first probe tree that differs from the pre-action baseline.
@@ -4071,6 +4146,15 @@ fn interactive_serve(
                     .get("pixels")
                     .and_then(serde_json::Value::as_bool)
                     .unwrap_or(true);
+                // G3f1: a caller that already holds the window skeleton can
+                // wait for the app's **next committed tree state** instead of
+                // re-traversing on a timer. `baseline_tree` is the probe tree
+                // the caller last bound; the strict settle rule is unchanged
+                // except that a sample whose tree is still byte-identical to
+                // the baseline is not a valid candidate. Same signal the
+                // launch's own traversal uses (a settled sample bound to a
+                // draw), so nothing new is claimed as evidence.
+                let baseline_tree = request.get("baseline_tree").cloned();
                 if mode == SettleMode::Fast && want_pixels {
                     let reply = serde_json::json!({
                         "ok": false, "cmd": "tree", "code": "BAD_REQUEST",
@@ -4081,6 +4165,9 @@ fn interactive_serve(
                     continue;
                 }
                 let mut tree_timeout: Option<SettleTiming> = None;
+                // G3f1: how a successful strict settle bound the reply (a fully
+                // settled sample, or a draw commit after the caller's baseline).
+                let mut tree_bind: Option<SettleTiming> = None;
                 let probe = if mode == SettleMode::Fast {
                     let deadline = Instant::now()
                         + request_settle_timeout(&request, Duration::from_millis(750));
@@ -4152,9 +4239,13 @@ fn interactive_serve(
                         SettleMode::Strict,
                         None,
                         0,
+                        baseline_tree.as_ref(),
                     );
                     match settled {
-                        SettleEnd::Settled(settled) => settled.probe,
+                        SettleEnd::Settled(settled) => {
+                            tree_bind = Some(settled.timing);
+                            settled.probe
+                        }
                         SettleEnd::Timeout { timing, .. } => {
                             tree_timeout = Some(timing);
                             match latest_probe(probe_state) {
@@ -4200,44 +4291,78 @@ fn interactive_serve(
                 let p3_t_settled = p3_now_us();
                 let tree_age_ms = host_ms().saturating_sub(probe.at_ms);
                 let strict_event = mode == SettleMode::Strict;
-                let mut settle_json = match &tree_timeout {
-                    Some(timing) => serde_json::json!({
+                // G3f1: a draw-commit bind is a fresh frame, not a settled one.
+                let draw_commit = tree_timeout.is_none()
+                    && tree_bind
+                        .as_ref()
+                        .map(|timing| timing.bound == "change-draw")
+                        .unwrap_or(false);
+                let mut settle_json = if draw_commit {
+                    serde_json::json!({
                         "mode": "strict",
                         "settled": false,
                         "probe_seq": probe.seq,
                         "tree_age_ms": tree_age_ms,
-                        "bound": "timeout",
+                        "bound": "change-draw",
                         "strict_rule": "event",
-                        "reason": timing.reason.clone(),
-                        "animating": timing
-                            .reason
-                            .as_deref()
-                            .map(|r| r.contains("anim") || r.contains("frame"))
-                            .unwrap_or(false),
-                        "warning": "strict settle timed out: the tree and frame identity are the \
-                                    latest observed state, not a settled one; this is not assertion \
-                                    evidence",
-                    }),
-                    None => serde_json::json!({
-                        "mode": mode.as_str(),
-                        "settled": true,
-                        "probe_seq": probe.seq,
-                        "tree_age_ms": tree_age_ms,
-                        "bound": if mode == SettleMode::Fast {
-                            "probe-fresh"
-                        } else {
-                            "strict-event"
-                        },
-                        "meaning": if strict_event {
-                            "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply"
-                        } else {
-                            "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; tree_age_ms is host receipt -> reply"
-                        },
-                    }),
-                };
+                        "awaited": "tree-change",
+                        "changed_since_baseline": true,
+                        "warning": "the tree changed and its draw is committed, but the framework still reports pending UI work (an animating screen): this is a fresh frame, not a settled one, and it is not assertion evidence",
+                    })
+                } else {
+                    match &tree_timeout {
+                        Some(timing) => serde_json::json!({
+                            "mode": "strict",
+                            "settled": false,
+                            "probe_seq": probe.seq,
+                            "tree_age_ms": tree_age_ms,
+                            "bound": "timeout",
+                            "strict_rule": "event",
+                            "reason": timing.reason.clone(),
+                            "animating": timing
+                                .reason
+                                .as_deref()
+                                .map(|r| r.contains("anim") || r.contains("frame"))
+                                .unwrap_or(false),
+                            "warning": "strict settle timed out: the tree and frame identity are the \
+                                        latest observed state, not a settled one; this is not assertion \
+                                        evidence",
+                        }),
+                        None => serde_json::json!({
+                            "mode": mode.as_str(),
+                            "settled": true,
+                            "probe_seq": probe.seq,
+                            "tree_age_ms": tree_age_ms,
+                            "bound": if mode == SettleMode::Fast {
+                                "probe-fresh"
+                            } else {
+                                "strict-event"
+                            },
+                            "meaning": if strict_event {
+                                "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply"
+                            } else {
+                                "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; tree_age_ms is host receipt -> reply"
+                            },
+                            }),
+                        }
+                    };
                 if strict_event && tree_timeout.is_none() {
                     if let Some(map) = settle_json.as_object_mut() {
                         map.insert("strict_rule".into(), serde_json::json!("event"));
+                    }
+                }
+                // G3f1: say what the request waited for, so a reply can never
+                // be mistaken for "the same tree again": the sample it binds
+                // was forced to differ from the caller's baseline tree.
+                if baseline_tree.is_some() {
+                    if let Some(map) = settle_json.as_object_mut() {
+                        map.insert("awaited".into(), serde_json::json!("tree-change"));
+                        // Only a settled reply *proves* the change; a timeout
+                        // returns the latest sample whatever it is.
+                        map.insert(
+                            "changed_since_baseline".into(),
+                            serde_json::json!(tree_timeout.is_none()),
+                        );
                     }
                 }
                 if !want_pixels {
@@ -4557,6 +4682,7 @@ fn interactive_serve(
                     mode,
                     baseline_probe,
                     publish_epoch_ms,
+                    None,
                 );
                 let (settled_probe, g1, p1, settle_timing) = match settled {
                     SettleEnd::Settled(settled) => (

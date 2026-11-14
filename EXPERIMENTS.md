@@ -2110,6 +2110,88 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   the owner decision on animating-screen semantics (G3e), R2a/R2b, and a real lesson (needs
   AnkiDroid or a WaniKani account — data, not ACOS).
 
+## E13.12 — G3F1: the launch's first frame is an **event**, not a traversal count — 30/30 launches bind Gaten's content frame (0 placeholders, 0 crashes), and a prelaunch guest death now keeps its evidence and is classified — PASS
+
+- **Date / commit:** 2026-11-14; worktree `/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9`,
+  branch `g3f1-first-frame`, off `main` `1f8d76b`. APK read-only
+  `.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk` (the one the five flows use).
+  Evidence: `.cache/g3f1/loop/` (30 reps), `.cache/g3f1/suite/` (gates + flows + negatives),
+  `.cache/g3f1/test-*.log`; handoff `results/handoff/G3F1.md`.
+- **Question / goal:** E13.8's re-verification left 9/30 launches publishing a *labelled placeholder*
+  (the 10–15-node window skeleton, `first_frame.placeholder: true`, `meaningful: false`,
+  `waited_ms` ≈ 1.63 s) even though the same sessions had 243 nodes 2 s later. Fix the launch's first
+  frame to reach the app's content frame, keep every fail-closed guarantee, and give a `GUEST_EXITED`
+  before the first frame its evidence and a class.
+- **Measurement that changed the design.** The pre-fix budget was not the only constraint. On this
+  host Gaten's launch traversal is **unsettled** (the welcome screen runs a 10 s Reanimated timeline;
+  `acos observe --tree` 2 s later *also* reports `settle.bound: "timeout"` with 243 nodes). So:
+  ~2/3 of launches already get an unsettled content frame from the first traversal (P9 hands it
+  back); ~1/3 get a *settled skeleton* before the RN mount starts. A settle-gated retry can never
+  reach content on that screen, at any budget:
+  - 3 s budget: 3/12 placeholders; 6 s: 1/12; 10 s: 3/12 then 7/12 in the next batch (load 2.4–3.0);
+  - a change-gated wait built on the strict settle's 24 ms "same draw stayed newest" confirmation
+    validated **no sample at all** in 10 s (an animating screen changes `draw_seq` every frame, so the
+    candidate restarts forever) and every such launch fell back to the placeholder;
+  - a launch with `ACOS_ART_FIRST_FRAME_MS=0` bound the skeleton at 0.83 s and the *same session* had
+    243 nodes at +2 s — the content was there; the wait's rule, not the app, was the blocker.
+- **Method / change.** The guest's `tree` command accepts an optional `baseline_tree` (the raw probe
+  tree the caller already holds). With it the strict settle's candidate must be (i) a tree ≠ baseline
+  (exact `Value` comparison of the reply's own tree, no host re-serialisation), (ii) a probe newer
+  than the request entry floor whose draw is committed to C1 (`probe_usable_for_fast_tree`). The
+  24 ms same-draw confirmation is deliberately excluded — that is the *settle* rule, and this wait
+  replaces it with the *change* rule (`settle:fast` already uses it for freshness). The reply says
+  which rule bound it: `bound:"strict-event"` when the sample was also settled, `bound:"change-draw"`
+  with `settled:false` and `awaited:"tree-change"` when only the draw commit was proven;
+  `reason:"tree-unchanged"` on timeout. `ArtSession::bind_first_frame` keeps its first traversal and
+  only waits when that traversal **settled on an unmounted skeleton** (≤ 40 nodes, no text), one
+  request per committed state, wall-clock bounded by `ACOS_ART_FIRST_FRAME_MS` (now the content
+  wait's budget, default **5000 ms**, measured from the end of the launch's own traversal; a caller
+  `settle_timeout_ms` stays a ceiling). `FIRST_FRAME_MAX_ATTEMPTS` (8) is only a runaway guard.
+- **Result — launch stability (n=30, one exclusive lock acquisition per batch, `animations: off`,
+  1080×2400 @400 like the flows; load1 1.6–3.0):**
+
+  | n | pass | crash | placeholder | content frame (nodes) | launch p50 / p90 | traversals | event waits |
+  |---:|---:|---:|---:|---|---|---|---|
+  | 30 | **30** | **0** | **0/30** | **30/30** (21×243, 9×201) | **2.210 s / 2.228 s** (min 0.890 s) | 1×17, 3×1, 4×2, 5×10 | 13/30 launches waited (223–235 ms) |
+
+  The 13 launches that needed the wait finished **faster** than the content-first ones (0.89–1.01 s
+  vs 2.2 s): the skeleton settled early and the app's next committed state is the content frame, so
+  the event wait costs ~0.23 s of 3–4 committed states. 0 `GUEST_EXITED`, 0 SIGSEGV, no crash record
+  in any rep; every session had 243 nodes at +2 s.
+- **Guarantees, unit-tested** (`cargo test -p acos-cli --bin acos g3f1`, 6/6, plus the classification
+  test in `failure.rs`): late content → content frame (`traversals 2`, `event_waits 1`, settled
+  `strict-event`); content never → labelled placeholder (`placeholder: true`) with the settle verdict
+  **rolled back** to the last settled traversal (`settled: true`, `bound: strict-event`); a changed
+  but uncommitted/timed-out retry → rollback (never a `TIMEOUT`); a draw commit → content frame with
+  `settled:false, bound:"change-draw"` (never assertion evidence); content-first → **zero** extra
+  traversals (one `tree` request, asserted by the fake launcher's request log). A placeholder never
+  satisfies a UI assertion.
+- **(b) Prelaunch guest death.** `serve`'s fresh-launch failure path now closes/reaps the launcher
+  (bounded) so its `session-exit.json` is on disk, writes
+  `<session>/art-frames/launch-failure.json` (classification, last 12 logd lines, session-exit facts,
+  the list of evidence files that exist) and classifies the death in the envelope
+  (`details.launch_failure.classification.class` ∈ `guest-exited-before-first-frame` /
+  `guest-signal-crash` / `guest-signal` / `guest-exited-zero` / `unclassified-guest-death` /
+  `no-death`) with a hint pointing at the kept evidence. The pre-fix race (the reply is written
+  before the launcher's exit record, so the reply carried `session_exit: null`) is the unit test: the
+  fake launcher answers `GUEST_EXITED`, *then* writes its record, then exits 1.
+- **Gates / flows:** v2-art-counter, w22-counter-reset, w54-dialog-pixels, w42-back-frame,
+  w15-dialog-menu, form-validation, suite/T03-render-good, v1-offscreen-pager **pass**;
+  suite/T03-render-wrong `ASSERTION_FAILED`; negative/offscreen-pager-visible `ELEMENT_OFFSCREEN`;
+  p11-progress-timeout `TIMEOUT`. `gaten-{home,tabs,settings,search,lesson}` **3/3 each (15/15)**;
+  `scenarios/negative/gaten-*-wrong` **5/5 `ASSERTION_FAILED`**. 0 false passes.
+- **False passes:** 0. A placeholder is still published only as `placeholder: true` +
+  `meaningful:false`; a `change-draw` frame is published with `settled: false` in its own settle
+  block and the launch's `result.settle` is untouched by P9's restore rule.
+- **Decision:** land. The content wait is event-driven (the guest's own committed tree change), its
+  budget is a ceiling that only an app which never gains content ever spends, and a launch whose
+  first frame is already content still pays nothing.
+- **Open risks:** (1) a `change-draw` frame is fresh but not *settled*; SE2 (ADR-0026 #3,
+  content-stable settle) is the route to a settled launch frame on forever-animating screens;
+  (2) an app whose first screen is genuinely text-free and ≤ 40 nodes pays the 5 s budget once
+  (tunable, visible in `first_frame`); (3) the E13.8 exit-1 class did not recur in 30 launches, so
+  (b)'s classification is proven by unit test, not by field evidence.
+
 ## E2.14 — H15: M6 reset profiled — 117 ms of the strict bind is a framework animator run, and the 25 % target is not reachable without a strict-rule change — MEASURED (partial: −3.9 % fast, −0.6 % strict)
 
 - **Experiment ID / name:** H15 — cut M6 reset (`strict` 333–342 ms / `fast` 210 ms p50); reset is 24 % of the agent loop with animations on and ~48 % with them off.
