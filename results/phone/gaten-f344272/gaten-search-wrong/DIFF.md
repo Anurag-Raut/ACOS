@@ -1,0 +1,28 @@
+### gaten-search-wrong
+
+| step | kind | selector | ACOS status/target/bounds | phone status/target/bounds | text only ACOS | text only phone | class |
+|---|---|---|---|---|---|---|---|
+| 0 | launch | `-` | pass / - / - | pass / - / - | - | Gaten looks up words you circle on screen and saves them to Anki., Look up Japanese in any | **text-set** |
+| 1 | tap | `{"text": {"contains": "Set up Gaten"}}` | pass / - / - | pass / Set up Gaten / [55,2130][1025,2260] | Look up Japanese anywhere. Step 1 of 3., Step 1 of 3 | - | **text-set** |
+| 2 | tap | `{"text": {"exact": "Skip"}}` | pass / Skip / [498,2163][582,2216] | pass / Skip / [500,2175][580,2225] | Install AnkiDroid, Look up Japanese anywhere, Look up Japanese anywhere. Step 1 of 3., Loo | Allow Gaten to read your AnkiDroid collection., Allow access, AnkiDroid is installed, Conn | **bounds** |
+| 3 | tap | `{"text": {"exact": "Skip"}}` | pass / Skip / [498,2163][582,2216] | pass / Skip / [500,2175][580,2225] | 2 / 3, A separate app from Google Play., Allow access, Connect AnkiDroid to review your de | 0, 1, 3 / 3, Analytics, Anki, Anki Fri: study activity unknown, Anki Mon: study activity u | **bounds** |
+| 4 | tap | `{"text": {"exact": "Skip"}}` | pass / Skip / [498,2163][582,2216] | pass / Skip / [500,2175][580,2225] | 3 / 3, Back, Connect AnkiDroid to review your decks and save words from your lookups as fl | 0, Analytics, Anki, Anki Fri: study activity unknown, Anki Mon: study activity unknown, An | **bounds** |
+| 5 | wait_for | `{"text": {"contains": "Recently looked up"}}` | pass / Recently looked up / [58,1424][1024,1482] | pass / Recently looked up / [55,1343][1025,1398] | Anki, Not connected, Open Anki, Daily streak. Anki study days follow your collection's rol | Anki, Permission needed, Grant access, Grant access, Permission needed | **bounds** |
+| 6 | capture | `-` | pass / - / - | pass / - / - | Anki, Not connected, Open Anki, Daily streak. Anki study days follow your collection's rol | Anki, Permission needed, Grant access, Grant access, Permission needed | **text-set** |
+| 7 | tap | `{"content_desc": {"exact": "Search Japanese dictionary"}}` | pass / 猫, ねこ, neko... / [189,170][831,286] | fail / - / - | Cancel search, Search Japanese dictionary, Search by kanji, kana, or a reading in romaji., | 0, Analytics, Anki, Anki Fri: study activity unknown, Anki Mon: study activity unknown, An | **missing-on-phone** |
+| 8 | type | `-` | pass / - / - | pass / - / - | Cancel search, Search Japanese dictionary, Search by kanji, kana, or a reading in romaji., | 0, Analytics, Anki, Anki Fri: study activity unknown, Anki Mon: study activity unknown, An | **text-set** |
+| 9 | wait_for | `{"text": {"contains": "\u732b"}}` | pass / Open 猫 / [58,415][1022,766] | pass / 猫, ねこ, neko... / [180,336][983,446] | 9 results, Clear search, Open 猫, Open 猫愛好, Open 猫板, Open 猫要らず, Open 猫足, Open 猫鼬, Search Ja | 0, Analytics, Anki, Anki Fri: study activity unknown, Anki Mon: study activity unknown, An | **state** |
+| 10 | capture | `-` | pass / - / - | pass / - / - | 9 results, Clear search, Open 猫, Open 猫愛好, Open 猫板, Open 猫要らず, Open 猫足, Open 猫鼬, Search Ja | 0, Analytics, Anki, Anki Fri: study activity unknown, Anki Mon: study activity unknown, An | **text-set** |
+| 11 | assert_text | `{"text": {"contains": "results"}}` | pass / 9 results / [58,328][1024,373] | fail / - / - | 9 results, Clear search, Open 猫, Open 猫愛好, Open 猫板, Open 猫要らず, Open 猫足, Open 猫鼬, Search Ja | 0, Analytics, Anki, Anki Fri: study activity unknown, Anki Mon: study activity unknown, An | **missing-on-phone** |
+| 12 | assert_text | `{"text": {"exact": "\u732b"}}` | pass / 猫 / [100,447][139,500] | fail / - / - | 9 results, Clear search, Open 猫, Open 猫愛好, Open 猫板, Open 猫要らず, Open 猫足, Open 猫鼬, Search Ja | 0, Analytics, Anki, Anki Fri: study activity unknown, Anki Mon: study activity unknown, An | **missing-on-phone** |
+| 13 | tap | `{"content_desc": {"contains": "Open \u732b"}}` | pass / - / - | fail / - / - | 1 character, Back, Cast pearls before swine., Cat (esp. the domestic cat, Felis catus), fe | 0, Analytics, Anki, Anki Fri: study activity unknown, Anki Mon: study activity unknown, An | **status** |
+| 14 | wait_for | `{"text": {"exact": "Meanings"}}` | pass / Meanings / [58,761][1024,809] | fail / - / - | 1 character, Back, Cast pearls before swine., Cat (esp. the domestic cat, Felis catus), fe | 0, Analytics, Anki, Anki Fri: study activity unknown, Anki Mon: study activity unknown, An | **missing-on-phone** |
+| 15 | capture | `-` | pass / - / - | pass / - / - | 1 character, Back, Cast pearls before swine., Cat (esp. the domestic cat, Felis catus), fe | 0, Analytics, Anki, Anki Fri: study activity unknown, Anki Mon: study activity unknown, An | **text-set** |
+| 16 | assert_text | `{"text": {"exact": "Meanings"}}` | fail / Meanings / [58,761][1024,809] | fail / - / - | 1 character, Back, Cast pearls before swine., Cat (esp. the domestic cat, Felis catus), fe | 0, Analytics, Anki, Anki Fri: study activity unknown, Anki Mon: study activity unknown, An | **text-set** |
+| 17 | assert_text | `{"text": {"contains": "Example sentences"}}` | - / - / - | fail / - / - | - | 0, Analytics, Anki, Anki Fri: study activity unknown, Anki Mon: study activity unknown, An | **missing-side** |
+| 18 | back | `-` | - / - / - | pass / - / - | - | - | **missing-side** |
+| 19 | wait_for | `{"text": {"contains": "results"}}` | - / - / - | fail / - / - | - | - | **missing-side** |
+| 20 | capture | `-` | - / - / - | pass / - / - | - | - | **missing-side** |
+| 21 | assert_text | `{"text": {"exact": "\u732b"}}` | - / - / - | fail / - / - | - | - | **missing-side** |
+
+Counts: bounds=4, missing-on-phone=4, missing-side=5, state=1, status=1, text-set=7

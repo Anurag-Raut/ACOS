@@ -1,0 +1,2390 @@
+{
+  "schema_version": 1,
+  "source": "acos",
+  "fidelity": "art-reference",
+  "scenario": {
+    "name": "gaten-recognition",
+    "path": "scenarios/gaten-recognition.yaml",
+    "sha256": "180b83c77803dddd448a917a12c95bd5f353df190f2f04e1c88008d982ed8a2c"
+  },
+  "app": {
+    "package": null,
+    "activity": "com.gaten.app.MainActivity",
+    "sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29"
+  },
+  "engine": {
+    "backend": "acos-native",
+    "isolation": "process",
+    "verdict": "pass",
+    "display": {
+      "density_dpi": 400,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    }
+  },
+  "started": "2026-11-14T12:03:28.874+00:00",
+  "steps": [
+    {
+      "index": 0,
+      "kind": "launch",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [],
+      "screen": {},
+      "assertion": null,
+      "screenshot": null,
+      "error": null
+    },
+    {
+      "index": 1,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Set up Gaten"
+        }
+      },
+      "target": null,
+      "visible_texts": [
+        "1 / 3",
+        "Android needs Gaten as an accessibility service.",
+        "Choose text recognition",
+        "Look up Japanese anywhere",
+        "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+        "Skip",
+        "Standard or Enhanced",
+        "Turn on lookup mode"
+      ],
+      "visible_descs": [
+        "Look up Japanese anywhere. Step 1 of 3.",
+        "Skip lookup mode setup",
+        "Step 1 of 2, Turn on lookup mode, current",
+        "Step 1 of 3",
+        "Step 2 of 2, Choose text recognition, not started"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 3,
+        "content_hash": "aabbc7f02163bf15d33f9eda33100768"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-01-tap.png",
+      "error": null,
+      "visible_labels": [
+        "1 / 3",
+        "Android needs Gaten as an accessibility service.",
+        "Choose text recognition",
+        "Look up Japanese anywhere",
+        "Look up Japanese anywhere. Step 1 of 3.",
+        "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+        "Skip",
+        "Skip lookup mode setup",
+        "Standard or Enhanced",
+        "Step 1 of 2, Turn on lookup mode, current",
+        "Step 1 of 3",
+        "Step 2 of 2, Choose text recognition, not started",
+        "Turn on lookup mode"
+      ],
+      "node_count": 175
+    },
+    {
+      "index": 2,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Skip"
+        }
+      },
+      "target": {
+        "text": "Skip",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          498,
+          2163,
+          582,
+          2216
+        ]
+      },
+      "visible_texts": [
+        "2 / 3",
+        "Install AnkiDroid",
+        "Look up Japanese anywhere",
+        "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+        "Skip"
+      ],
+      "visible_descs": [
+        "Back",
+        "Look up Japanese anywhere. Step 1 of 3.",
+        "Skip Anki setup",
+        "Step 2 of 3"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 4,
+        "content_hash": "52240058eb1b4f8c3026f68027e9a35f"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-02-tap.png",
+      "error": null,
+      "visible_labels": [
+        "2 / 3",
+        "Back",
+        "Install AnkiDroid",
+        "Look up Japanese anywhere",
+        "Look up Japanese anywhere. Step 1 of 3.",
+        "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+        "Skip",
+        "Skip Anki setup",
+        "Step 2 of 3"
+      ],
+      "node_count": 162
+    },
+    {
+      "index": 3,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Skip"
+        }
+      },
+      "target": {
+        "text": "Skip",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          498,
+          2163,
+          582,
+          2216
+        ]
+      },
+      "visible_texts": [
+        "2 / 3",
+        "A separate app from Google Play.",
+        "Allow access",
+        "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+        "Install AnkiDroid",
+        "Read decks, record answers, add words.",
+        "Skip",
+        "Study with Anki"
+      ],
+      "visible_descs": [
+        "Back",
+        "Skip Anki setup",
+        "Step 1 of 2, Install AnkiDroid, current",
+        "Step 2 of 2, Allow access, not started",
+        "Step 2 of 3",
+        "Study with Anki. Step 2 of 3."
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 5,
+        "content_hash": "d8a88e0fa0bcd406f82b15ad19b3bce6"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-03-tap.png",
+      "error": null,
+      "visible_labels": [
+        "2 / 3",
+        "A separate app from Google Play.",
+        "Allow access",
+        "Back",
+        "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+        "Install AnkiDroid",
+        "Read decks, record answers, add words.",
+        "Skip",
+        "Skip Anki setup",
+        "Step 1 of 2, Install AnkiDroid, current",
+        "Step 2 of 2, Allow access, not started",
+        "Step 2 of 3",
+        "Study with Anki",
+        "Study with Anki. Step 2 of 3."
+      ],
+      "node_count": 162
+    },
+    {
+      "index": 4,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Skip"
+        }
+      },
+      "target": {
+        "text": "Skip",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          498,
+          2163,
+          582,
+          2216
+        ]
+      },
+      "visible_texts": [
+        "1",
+        "3 / 3",
+        "Checking\u2026",
+        "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+        "Create a token",
+        "Need a token? Show me how",
+        "Paste it here",
+        "Paste your token",
+        "Show",
+        "Skip",
+        "Study with Anki"
+      ],
+      "visible_descs": [
+        "Back",
+        "Show token",
+        "Skip WaniKani setup and finish",
+        "Step 1 of 2, Create a token, available",
+        "Step 2 of 2, Paste it here, current",
+        "Step 3 of 3",
+        "Study with Anki. Step 2 of 3.",
+        "WaniKani personal access token"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 6,
+        "content_hash": "ea37d81307b6165dc3ddc5d78b906237"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-04-tap.png",
+      "error": null,
+      "visible_labels": [
+        "1",
+        "3 / 3",
+        "Back",
+        "Checking\u2026",
+        "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+        "Create a token",
+        "Need a token? Show me how",
+        "Paste it here",
+        "Paste your token",
+        "Show",
+        "Show token",
+        "Skip",
+        "Skip WaniKani setup and finish",
+        "Step 1 of 2, Create a token, available",
+        "Step 2 of 2, Paste it here, current",
+        "Step 3 of 3",
+        "Study with Anki",
+        "Study with Anki. Step 2 of 3.",
+        "WaniKani personal access token"
+      ],
+      "node_count": 179
+    },
+    {
+      "index": 5,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Recently looked up"
+        }
+      },
+      "target": {
+        "text": "Recently looked up",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          58,
+          1424,
+          1024,
+          1482
+        ]
+      },
+      "visible_texts": [
+        "0",
+        "Anki",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Home",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "visible_descs": [
+        "Analytics",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "No recent searches found",
+        "Search Japanese dictionary",
+        "Settings",
+        "WaniKani, Not connected, Connect"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 7,
+        "content_hash": "1cc6a5e0e7e52addae37ae72478b1df3"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-05-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Connect",
+        "Daily streak",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Fri",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Search Japanese dictionary",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 218
+    },
+    {
+      "index": 6,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "0",
+        "Anki",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Home",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "visible_descs": [
+        "Analytics",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "No recent searches found",
+        "Search Japanese dictionary",
+        "Settings",
+        "WaniKani, Not connected, Connect"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 8,
+        "content_hash": "1cc6a5e0e7e52addae37ae72478b1df3"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-06-capture.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Connect",
+        "Daily streak",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Fri",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Search Japanese dictionary",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 218
+    },
+    {
+      "index": 7,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "exact": "Settings"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Settings",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          58,
+          188,
+          1022,
+          304
+        ]
+      },
+      "visible_texts": [
+        "0.1.0",
+        "About",
+        "Anki cards",
+        "App",
+        "Appearance",
+        "Kanji reference",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Not installed",
+        "Off",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "WaniKani"
+      ],
+      "visible_descs": [
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards. Not installed",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference. Remembering the Kanji",
+        "Screen lookup. Off",
+        "Settings",
+        "Support Gaten",
+        "Text recognition. Standard",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 10,
+        "content_hash": "d9e9b896cf6669f810722aeae8211178"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-07-tap.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Not installed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Not installed",
+        "Off",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 326
+    },
+    {
+      "index": 8,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Screen lookup"
+        }
+      },
+      "target": {
+        "text": "Screen lookup",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          147,
+          483,
+          872,
+          536
+        ]
+      },
+      "visible_texts": [
+        "0.1.0",
+        "About",
+        "Anki cards",
+        "App",
+        "Appearance",
+        "Kanji reference",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Not installed",
+        "Off",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "WaniKani"
+      ],
+      "visible_descs": [
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards. Not installed",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference. Remembering the Kanji",
+        "Screen lookup. Off",
+        "Settings",
+        "Support Gaten",
+        "Text recognition. Standard",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 11,
+        "content_hash": "d9e9b896cf6669f810722aeae8211178"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-08-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Not installed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Not installed",
+        "Off",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 326
+    },
+    {
+      "index": 9,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "0.1.0",
+        "About",
+        "Anki cards",
+        "App",
+        "Appearance",
+        "Kanji reference",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Not installed",
+        "Off",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "WaniKani"
+      ],
+      "visible_descs": [
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards. Not installed",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference. Remembering the Kanji",
+        "Screen lookup. Off",
+        "Settings",
+        "Support Gaten",
+        "Text recognition. Standard",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 12,
+        "content_hash": "d9e9b896cf6669f810722aeae8211178"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-09-capture.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Not installed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Not installed",
+        "Off",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 326
+    },
+    {
+      "index": 10,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "contains": "Text recognition."
+        }
+      },
+      "target": null,
+      "visible_texts": [
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "visible_descs": [
+        "Back",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 14,
+        "content_hash": "e1c23a2111115c8835484b509c1ed7ab"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-10-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 11,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Standard"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Standard",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          58,
+          386,
+          1022,
+          558
+        ]
+      },
+      "visible_texts": [
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "visible_descs": [
+        "Back",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 15,
+        "content_hash": "e1c23a2111115c8835484b509c1ed7ab"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-11-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 12,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "visible_descs": [
+        "Back",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 16,
+        "content_hash": "e1c23a2111115c8835484b509c1ed7ab"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-12-capture.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 13,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Standard"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Standard",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          58,
+          386,
+          1022,
+          558
+        ]
+      },
+      "visible_texts": [
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "visible_descs": [
+        "Back",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 16,
+        "content_hash": "e1c23a2111115c8835484b509c1ed7ab"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Standard"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-13-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 14,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Enhanced"
+        }
+      },
+      "target": {
+        "text": "Enhanced",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          153,
+          592,
+          338,
+          645
+        ]
+      },
+      "visible_texts": [
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "visible_descs": [
+        "Back",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 16,
+        "content_hash": "e1c23a2111115c8835484b509c1ed7ab"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Enhanced"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-14-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 15,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Better for stylised fonts"
+        }
+      },
+      "target": {
+        "text": "Better for stylised fonts, novels and harder-to-read text",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          153,
+          655,
+          1023,
+          700
+        ]
+      },
+      "visible_texts": [
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "visible_descs": [
+        "Back",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 16,
+        "content_hash": "e1c23a2111115c8835484b509c1ed7ab"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "contains": "Better for stylised fonts"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-15-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 16,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "contains": "Enhanced"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Enhanced, Recommended",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          58,
+          560,
+          1022,
+          732
+        ]
+      },
+      "visible_texts": [
+        "76.6 MB",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Enhanced",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "visible_descs": [
+        "Back",
+        "Download size 76.6 MB",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 18,
+        "content_hash": "5832705da67bb81094df9ae19022af40"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-16-tap.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 292
+    },
+    {
+      "index": 17,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Download Enhanced?"
+        }
+      },
+      "target": {
+        "text": "Download Enhanced?",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          267,
+          930,
+          950,
+          988
+        ]
+      },
+      "visible_texts": [
+        "76.6 MB",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Enhanced",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "visible_descs": [
+        "Back",
+        "Download size 76.6 MB",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 19,
+        "content_hash": "5832705da67bb81094df9ae19022af40"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-17-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 292
+    },
+    {
+      "index": 18,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "76.6 MB",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Enhanced",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "visible_descs": [
+        "Back",
+        "Download size 76.6 MB",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 20,
+        "content_hash": "5832705da67bb81094df9ae19022af40"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-18-capture.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 292
+    },
+    {
+      "index": 19,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Download Enhanced?"
+        }
+      },
+      "target": {
+        "text": "Download Enhanced?",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          267,
+          930,
+          950,
+          988
+        ]
+      },
+      "visible_texts": [
+        "76.6 MB",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Enhanced",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "visible_descs": [
+        "Back",
+        "Download size 76.6 MB",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 20,
+        "content_hash": "5832705da67bb81094df9ae19022af40"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Download Enhanced?"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-19-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 292
+    },
+    {
+      "index": 20,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Download size"
+        }
+      },
+      "target": {
+        "text": "Download size",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          131,
+          1049,
+          356,
+          1097
+        ]
+      },
+      "visible_texts": [
+        "76.6 MB",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Enhanced",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "visible_descs": [
+        "Back",
+        "Download size 76.6 MB",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 20,
+        "content_hash": "5832705da67bb81094df9ae19022af40"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Download size"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-20-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 292
+    },
+    {
+      "index": 21,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Reads screen and novel text better"
+        }
+      },
+      "target": {
+        "text": "Reads screen and novel text better, then works offline.",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          131,
+          1133,
+          950,
+          1239
+        ]
+      },
+      "visible_texts": [
+        "76.6 MB",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Enhanced",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "visible_descs": [
+        "Back",
+        "Download size 76.6 MB",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 20,
+        "content_hash": "5832705da67bb81094df9ae19022af40"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "contains": "Reads screen and novel text better"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-21-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 292
+    },
+    {
+      "index": 22,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Wi-Fi recommended"
+        }
+      },
+      "target": {
+        "text": "Wi-Fi recommended. Mobile data may incur charges.",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          131,
+          1271,
+          950,
+          1316
+        ]
+      },
+      "visible_texts": [
+        "76.6 MB",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Enhanced",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "visible_descs": [
+        "Back",
+        "Download size 76.6 MB",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 20,
+        "content_hash": "5832705da67bb81094df9ae19022af40"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "contains": "Wi-Fi recommended"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-22-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 292
+    },
+    {
+      "index": 23,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Cancel"
+        }
+      },
+      "target": {
+        "text": "Cancel",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          450,
+          1405,
+          579,
+          1458
+        ]
+      },
+      "visible_texts": [
+        "76.6 MB",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Enhanced",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "visible_descs": [
+        "Back",
+        "Download size 76.6 MB",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 20,
+        "content_hash": "5832705da67bb81094df9ae19022af40"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Cancel"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-23-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 292
+    },
+    {
+      "index": 24,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Download"
+        }
+      },
+      "target": {
+        "text": "Download",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          695,
+          1399,
+          887,
+          1452
+        ]
+      },
+      "visible_texts": [
+        "76.6 MB",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Enhanced",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "visible_descs": [
+        "Back",
+        "Download size 76.6 MB",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 20,
+        "content_hash": "5832705da67bb81094df9ae19022af40"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Download"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-24-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Cancel",
+        "Clear, regular text in standard fonts",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Reads screen and novel text better, then works offline.",
+        "Recommended",
+        "Standard",
+        "Text recognition",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 292
+    },
+    {
+      "index": 25,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Cancel"
+        }
+      },
+      "target": null,
+      "visible_texts": [
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "visible_descs": [
+        "Back",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 21,
+        "content_hash": "e1c23a2111115c8835484b509c1ed7ab"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-25-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 26,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "visible_descs": [
+        "Back",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 22,
+        "content_hash": "e1c23a2111115c8835484b509c1ed7ab"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-26-capture.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 27,
+      "kind": "assert_not_visible",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Download Enhanced?"
+        }
+      },
+      "target": null,
+      "visible_texts": [
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "visible_descs": [
+        "Back",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 22,
+        "content_hash": "e1c23a2111115c8835484b509c1ed7ab"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-27-assert_not_visible.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 28,
+      "kind": "assert_visible",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Enhanced"
+        }
+      },
+      "target": {
+        "text": "Enhanced",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          153,
+          592,
+          338,
+          645
+        ]
+      },
+      "visible_texts": [
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "visible_descs": [
+        "Back",
+        "Enhanced, Recommended",
+        "Open help",
+        "Standard"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 22,
+        "content_hash": "e1c23a2111115c8835484b509c1ed7ab"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-28-assert_visible.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 29,
+      "kind": "back",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "0.1.0",
+        "About",
+        "Anki cards",
+        "App",
+        "Appearance",
+        "Kanji reference",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Not installed",
+        "Off",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "WaniKani"
+      ],
+      "visible_descs": [
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards. Not installed",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference. Remembering the Kanji",
+        "Screen lookup. Off",
+        "Settings",
+        "Support Gaten",
+        "Text recognition. Standard",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 23,
+        "content_hash": "d9e9b896cf6669f810722aeae8211178"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-29-back.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Not installed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Not installed",
+        "Off",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 326
+    },
+    {
+      "index": 30,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Screen lookup"
+        }
+      },
+      "target": {
+        "text": "Screen lookup",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          147,
+          483,
+          872,
+          536
+        ]
+      },
+      "visible_texts": [
+        "0.1.0",
+        "About",
+        "Anki cards",
+        "App",
+        "Appearance",
+        "Kanji reference",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Not installed",
+        "Off",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "WaniKani"
+      ],
+      "visible_descs": [
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards. Not installed",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference. Remembering the Kanji",
+        "Screen lookup. Off",
+        "Settings",
+        "Support Gaten",
+        "Text recognition. Standard",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 24,
+        "content_hash": "d9e9b896cf6669f810722aeae8211178"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-30-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Not installed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Not installed",
+        "Off",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 326
+    },
+    {
+      "index": 31,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "0.1.0",
+        "About",
+        "Anki cards",
+        "App",
+        "Appearance",
+        "Kanji reference",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Not installed",
+        "Off",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "WaniKani"
+      ],
+      "visible_descs": [
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards. Not installed",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference. Remembering the Kanji",
+        "Screen lookup. Off",
+        "Settings",
+        "Support Gaten",
+        "Text recognition. Standard",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 25,
+        "content_hash": "d9e9b896cf6669f810722aeae8211178"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-31-capture.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Not installed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Not installed",
+        "Off",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 326
+    },
+    {
+      "index": 32,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Standard"
+        }
+      },
+      "target": {
+        "text": "Standard",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          808,
+          645,
+          951,
+          693
+        ]
+      },
+      "visible_texts": [
+        "0.1.0",
+        "About",
+        "Anki cards",
+        "App",
+        "Appearance",
+        "Kanji reference",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Not installed",
+        "Off",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "WaniKani"
+      ],
+      "visible_descs": [
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards. Not installed",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference. Remembering the Kanji",
+        "Screen lookup. Off",
+        "Settings",
+        "Support Gaten",
+        "Text recognition. Standard",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 25,
+        "content_hash": "d9e9b896cf6669f810722aeae8211178"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Standard"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-32-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Not installed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Not installed",
+        "Off",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 326
+    }
+  ],
+  "finished": "2026-11-14T12:03:31.007+00:00",
+  "available": ".cache/phone2/acos/gaten-recognition"
+}
