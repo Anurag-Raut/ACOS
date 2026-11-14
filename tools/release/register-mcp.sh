@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
 # Register the ACOS MCP server with coding agents.
 #
-#   tools/release/register-mcp.sh [--scope user|local|project] [--acos-bin PATH]
-#                                 [--acos-mcp-bin PATH] [--allowed-roots PATH[:PATH...]]
-#                                 [--dry-run]
+#   tools/release/register-mcp.sh [--prefix DIR] [--scope user|local|project]
+#                                 [--acos-bin PATH] [--acos-mcp-bin PATH]
+#                                 [--allowed-roots PATH[:PATH...]] [--dry-run]
 #
 # What it does:
 #   * `claude mcp add` (Claude Code) with the ACOS binaries and the roots an
 #     agent may read APKs/scenarios from;
 #   * prints the equivalent `mcpServers` JSON for every other MCP client.
+#
+# Which binaries: an installed ACOS wins. When `<prefix>/bin/acos` and
+# `<prefix>/bin/acos-mcp` both exist (default prefix: $ACOS_PREFIX, else
+# ~/.local; or --prefix) they are registered, because those wrappers export
+# ACOS_HOME pinned to the versioned install root, so the server and every `acos`
+# it spawns read the installed tree from any directory. Only when no install is
+# present does it fall back to `<checkout>/target/release/*` (then PATH).
 #
 # Why ACOS_ALLOWED_ROOTS defaults to $HOME: the server refuses every path
 # argument that does not resolve under an allowed root (`UNSAFE_PATH`). An agent
@@ -22,11 +29,13 @@
 set -euo pipefail
 
 scope=user
+prefix="${ACOS_PREFIX:-$HOME/.local}"
 acos_bin=""
 acos_mcp_bin=""
 allowed_roots="${ACOS_ALLOWED_ROOTS:-$HOME}"
 dry_run=0
 artifacts_dir=""
+bin_source=""
 
 usage() {
   sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
@@ -35,6 +44,8 @@ usage() {
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    --prefix) prefix=${2:?}; shift 2 ;;
+    --prefix=*) prefix=${1#*=}; shift ;;
     --scope) scope=${2:?}; shift 2 ;;
     --acos-bin) acos_bin=${2:?}; shift 2 ;;
     --acos-mcp-bin) acos_mcp_bin=${2:?}; shift 2 ;;
@@ -48,13 +59,20 @@ done
 
 case "$scope" in user|local|project) ;; *) echo "register-mcp.sh: --scope must be user, local or project" >&2; exit 2 ;; esac
 
-# Locate the binaries: explicit flag, $ACOS_BIN/$ACOS_MCP_BIN, next to this
+# Locate the binaries. Order: explicit flag, then an installed ACOS (both
+# wrappers present under <prefix>/bin), then $ACOS_BIN/$ACOS_MCP_BIN, then this
 # script's checkout, then PATH.
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+if [ -z "$acos_bin" ] && [ -z "$acos_mcp_bin" ] \
+   && [ -x "$prefix/bin/acos" ] && [ -x "$prefix/bin/acos-mcp" ]; then
+  acos_bin=$prefix/bin/acos
+  acos_mcp_bin=$prefix/bin/acos-mcp
+  bin_source="installed ($prefix)"
+fi
 if [ -z "$acos_bin" ]; then
-  if [ -n "${ACOS_BIN:-}" ]; then acos_bin=$ACOS_BIN
-  elif [ -x "$here/target/release/acos" ]; then acos_bin=$here/target/release/acos
-  elif command -v acos >/dev/null 2>&1; then acos_bin=$(command -v acos)
+  if [ -n "${ACOS_BIN:-}" ]; then acos_bin=$ACOS_BIN; bin_source="ACOS_BIN"
+  elif [ -x "$here/target/release/acos" ]; then acos_bin=$here/target/release/acos; bin_source="checkout target/release"
+  elif command -v acos >/dev/null 2>&1; then acos_bin=$(command -v acos); bin_source="PATH"
   else echo "register-mcp.sh: cannot find the acos binary (pass --acos-bin)" >&2; exit 2; fi
 fi
 if [ -z "$acos_mcp_bin" ]; then
@@ -77,6 +95,7 @@ acos_mcp_bin=$(cd -- "$(dirname -- "$acos_mcp_bin")" && pwd)/$(basename -- "$aco
 [ -n "$artifacts_dir" ] || artifacts_dir="$HOME/.acos-mcp-artifacts"
 mkdir -p "$artifacts_dir"
 
+echo "binaries  : ${bin_source:-explicit}"
 echo "acos      : $acos_bin"
 echo "acos-mcp  : $acos_mcp_bin"
 echo "roots     : $allowed_roots"
@@ -95,8 +114,9 @@ if [ "$dry_run" = 1 ]; then
   printf '%q ' "${cmd[@]}"
   printf '\n\n'
 elif command -v claude >/dev/null 2>&1; then
-  # Replace any previous registration so the paths are never stale.
-  claude mcp remove acos >/dev/null 2>&1 || true
+  # Idempotent: drop any previous `acos` entry at this scope first, so a re-run
+  # either repairs stale paths or is a no-op for an identical registration.
+  claude mcp remove --scope "$scope" acos >/dev/null 2>&1 || true
   "${cmd[@]}"
   echo
   echo "registered; check with: claude mcp list"

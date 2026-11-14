@@ -2,6 +2,7 @@
 # Install ACOS into a self-contained prefix (REL1a).
 #
 #   tools/release/install.sh [--prefix DIR] [--version V] [--from-target DIR] [--force]
+#                             [--register-mcp]
 #
 # The install root is a copy of the checkout's *runtime* trees under
 # <prefix>/share/acos/<version>/ with the same relative layout the code already
@@ -20,6 +21,7 @@ PREFIX=${ACOS_PREFIX:-$HOME/.local}
 VERSION=0.2.0
 FROM_TARGET=
 FORCE=0
+REGISTER_MCP=0
 
 die() {
     printf 'install.sh: %s\n' "$*" >&2
@@ -40,6 +42,8 @@ Options:
   --from-target DIR  use DIR/release binaries instead of building
   --force            overwrite an existing version directory built from
                      something else
+  --register-mcp     register the installed wrappers with Claude Code (user
+                     scope) after installing; default off
   -h, --help         this text
 
 Layout (under <prefix>/share/acos/<version>/):
@@ -66,6 +70,7 @@ while [ $# -gt 0 ]; do
         --from-target) FROM_TARGET=$2; shift 2 ;;
         --from-target=*) FROM_TARGET=${1#*=}; shift ;;
         --force) FORCE=1; shift ;;
+        --register-mcp) REGISTER_MCP=1; shift ;;
         -h|--help) usage; exit 0 ;;
         *) die "unknown argument: $1 (try --help)" ;;
     esac
@@ -199,6 +204,12 @@ write_wrapper acos-mcp
 
 ln -sfn "$VERSION" "$SHARE/current"
 
+# -------------------------------------------------------------- next steps
+if [ "$REGISTER_MCP" -eq 1 ]; then
+    printf '\nregistering the MCP server (user scope)\n'
+    "$SELF_DIR/register-mcp.sh" --prefix "$PREFIX"
+fi
+
 # ------------------------------------------------------------------ report
 SIZE=$(du -sh "$DEST" | cut -f1)
 FILES=$(grep -c '^bin/\|^\.cache/\|^crates/' "$DEST/MANIFEST.txt" || true)
@@ -210,5 +221,12 @@ installed ACOS $VERSION
   current $SHARE/current -> $VERSION
   wrapper $PREFIX/bin/acos, $PREFIX/bin/acos-mcp
 
-  $PREFIX/bin/acos doctor
+Next steps
+  1. preflight:   $PREFIX/bin/acos doctor
+  2. try it:      $PREFIX/bin/acos inspect app.apk
+  3. run:         $PREFIX/bin/acos launch app.apk --engine art --json
+  4. MCP (Claude Code, user scope):
+       $PREFIX/bin/acos-mcp is registered by:
+       tools/release/register-mcp.sh --prefix $PREFIX
+     (or re-run this installer with --register-mcp; --dry-run prints the command)
 EOF

@@ -18,9 +18,17 @@ tools/release/install.sh --prefix ~/.local --from-target target
 ```
 
 Options: `--prefix DIR` (default `$ACOS_PREFIX`, else `~/.local`), `--version V`
-(default `0.2.0`), `--from-target DIR`, `--force`. It prints the install size.
-No root, no downloads. `--force` is required only when the version directory
-already exists and was not left by this installer for that version.
+(default `0.2.0`), `--from-target DIR`, `--force`, `--register-mcp`. It prints
+the install size and the next steps. No root, no downloads. `--force` is
+required only when the version directory already exists and was not left by this
+installer for that version.
+
+`--register-mcp` (default off) registers the **installed wrappers** with Claude
+Code at user scope by calling `tools/release/register-mcp.sh --prefix <prefix>`;
+run that script directly to print the command first (`--dry-run`) or to
+re-register after moving the prefix. Other MCP clients get the equivalent
+`mcpServers` JSON from the same script. See `docs/MCP.md` §1, including the
+`ACOS_ALLOWED_ROOTS` path allow-list an agent in another repository needs.
 
 ## What lands where
 
@@ -79,7 +87,10 @@ for building fixtures:
 
 With `ACOS_HOME` set, doctor checks the install itself (root, `VERSION`, sysroot,
 fonts, overlays, guest sources, `acos-art`, writable state) and stops treating a
-missing checkout as a failure.
+missing checkout as a failure. The MCP server follows the same rule: its
+runtime paths (boot-classpath cache, engine/RN driver assets) resolve under
+`ACOS_HOME` exactly like the CLI's, so an installed server launched from another
+repository reads the installed tree and never a checkout.
 
 ## Environment
 

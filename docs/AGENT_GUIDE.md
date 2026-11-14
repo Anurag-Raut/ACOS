@@ -58,8 +58,10 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    app actually reached `onCreate`.
 7. **Prove the flow.** `acos_verify {"apk": ..., "scenario": ...}` (or
    `acos verify <scenario.yaml> --artifacts out/<name>`) runs a YAML scenario and
-   writes `verdict.json`, per-step JSON and the frames. A pass is valid only
-   when its evidence exists on disk.
+   writes `verdict.json`, per-step JSON and the frames. Pass `"engine": "art"`
+   when the scenario needs real ART (anything with `animations: off`); without
+   it the CLI default engine runs. A pass is valid only when its evidence exists
+   on disk.
 8. **Clean up.** `acos_reset {"scope": "app"}` (relaunch in a fresh guest with
    an empty app-data directory) and `acos_destroy` (idempotent). Sessions also
    die with the `acos-mcp` process.
@@ -238,7 +240,7 @@ first failing step, its `error.code`, the diff and the linked frame.
 | `HOST_MEMORY_LIMIT` | a memory ceiling was hit **while** the guest ran | reduce concurrency or run on a host with more headroom; the guest was capped by its cgroup |
 | `HOST_DISK_FULL` | the scratch filesystem is full | free space under `.cache/`, or point `--artifacts` elsewhere, then retry |
 | `UNVERIFIED_FIDELITY`, `ARTIFACTS_INVALID`, `INSUFFICIENT_HOST_EVIDENCE` | the evidence does not support the claim | re-run at a qualifying fidelity with fresh artifacts; never accept a pass without evidence |
-| `UNSAFE_PATH` | a path escaped the allowed roots | keep APK/scenario/artifacts paths inside the roots you declared |
+| `UNSAFE_PATH` | a path (or a symlink it names) escaped `ACOS_ALLOWED_ROOTS` | move the file under an allowed root, or add that root to `ACOS_ALLOWED_ROOTS` and restart; see Limits → Paths |
 | `INVALID_ARGUMENT`, `INVALID_SCENARIO` | bad request or bad YAML | read `details`/the validation `path` and fix it |
 | `INTERNAL`, `HOST_PANIC`, `GUEST_EXITED` | ACOS harness failure, needs triage | capture request/scenario/artifacts, report the harness bug; do not count it as a pass |
 
@@ -291,5 +293,17 @@ Two session-specific hints worth memorising:
 * **Signing.** ACOS never installs APKs on a device; it reads them. A debug
   keystore is only needed to *build* fixtures (`tools/build-dogfood-apps.sh`
   generates one) and `acos doctor` reports it.
+* **Paths.** Every path argument (`apk`, `scenario`, `artifacts`, `path`) must
+  resolve under one of the roots in `ACOS_ALLOWED_ROOTS` (`:`-separated). The
+  registered server defaults it to your home directory, plus the artifacts
+  directory. The path is canonicalised, so a **symlink that resolves outside the
+  roots is rejected** even when the link itself is inside one, and `..` is
+  rejected before resolution; any violation is `UNSAFE_PATH` and nothing is read
+  and no guest starts. Fix it by (a) copying/pointing at the APK or scenario
+  inside an allowed root (its build output directory usually is one), or (b)
+  adding that repository to `ACOS_ALLOWED_ROOTS` in the client's server config
+  and restarting the server, or (c) writing evidence to the artifacts
+  directory. Relative paths resolve against the server's working directory,
+  never against the APK's directory.
 
 <!-- /topic:limits -->

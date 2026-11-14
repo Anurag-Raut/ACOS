@@ -29,6 +29,7 @@ pub mod flutter_backend;
 pub mod gate;
 pub mod help;
 pub mod jsonrpc;
+pub mod paths;
 pub mod process;
 pub mod rn_backend;
 pub mod safety;

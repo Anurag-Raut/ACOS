@@ -32,15 +32,28 @@ them as environment variables in the client config.
 ### One command
 
 ```bash
-tools/release/register-mcp.sh                # --scope user (default), --dry-run to print
-tools/release/register-mcp.sh --dry-run      # prints the exact claude command + JSON
+tools/release/register-mcp.sh                     # install at ~/.local, user scope
+tools/release/register-mcp.sh --prefix <prefix>   # an install elsewhere
+tools/release/register-mcp.sh --dry-run           # prints the exact claude command + JSON
 ```
 
 The script registers the server with Claude Code (`claude mcp add --scope user
 -e ACOS_BIN=… -e ACOS_ALLOWED_ROOTS=… -- <acos-mcp>`), resolves both binaries to
 absolute paths, prints the equivalent `mcpServers` JSON for every other client,
-and registers nothing when `--dry-run` is given. It defaults
-`ACOS_ALLOWED_ROOTS` to `$HOME` — see below for why.
+and registers nothing when `--dry-run` is given. It is idempotent: an existing
+`acos` entry at that scope is removed before the new one is added, so a re-run
+repairs stale paths instead of duplicating them.
+
+**Installed ACOS wins.** When `<prefix>/bin/acos` and `<prefix>/bin/acos-mcp`
+exist (default prefix: `$ACOS_PREFIX`, else `~/.local`; `--prefix` to point
+elsewhere) the script registers those **wrappers**, not a checkout build. The
+wrappers export `ACOS_HOME` pinned to the versioned install root, so the server
+and every `acos` it spawns read the installed tree from any directory and never
+touch a checkout. Only when no install is present does it fall back to
+`<checkout>/target/release/{acos,acos-mcp}` (then `PATH`). `tools/release/
+install.sh --register-mcp` calls it for you after installing.
+
+It defaults `ACOS_ALLOWED_ROOTS` to `$HOME` — see below for why.
 
 ### Claude Code, by hand
 
@@ -56,18 +69,37 @@ remove it.
 
 ### `ACOS_ALLOWED_ROOTS`: what value an agent in another repo needs
 
-Every path argument (`apk`, `scenario`, `artifacts`, …) is resolved,
-symlinks are resolved, and the result must live under one of the roots in
-`ACOS_ALLOWED_ROOTS` (a `:`-separated list), else the call fails with
-`UNSAFE_PATH`. The default is the server's working directory, which is useless
-for an agent whose APK and scenario live in a *different* repository.
+Every path argument (`apk`, `scenario`, `artifacts`, `path`, …) must live under
+one of the roots in `ACOS_ALLOWED_ROOTS` (a `:`-separated list):
 
-Use `$HOME` for a developer workstation: then an agent working in, say,
-`~/Projects/gaten` can pass `~/Projects/gaten/app/build/outputs/apk/...` and its
-own `scenarios/*.yaml`, and still cannot reach outside the home directory. On a
-shared or multi-user host, list the specific repositories instead
-(`ACOS_ALLOWED_ROOTS=/srv/agent-a:/srv/agent-b`). The artifacts directory
-(`ACOS_ARTIFACTS_DIR`) is always allowed in addition.
+* the path is resolved **and** canonicalised, so a **symlink that escapes the
+  roots is rejected**, even when the link itself is inside one;
+* `..` components are rejected before resolution;
+* anything else — a relative path that climbs out, an absolute path in another
+  repo, a link into `/etc` — fails with **`UNSAFE_PATH`** (`error.hint` names
+  the path and the roots; nothing is read and no guest starts).
+
+`register-mcp.sh` defaults the value to **`$HOME`** so an agent working in
+another repository (for example `~/Projects/gaten`) can pass that repo's APK and
+its own `scenarios/*.yaml` while still being unable to reach outside the home
+directory. The artifacts directory (`ACOS_ARTIFACTS_DIR`) is always allowed in
+addition, and a bare relative path is resolved against the server's working
+directory first. On a shared or multi-user host, list the specific repositories
+instead (`ACOS_ALLOWED_ROOTS=/srv/agent-a:/srv/agent-b`).
+
+**If you get `UNSAFE_PATH`,** pick one:
+
+1. move (or copy) the APK/scenario under an allowed root — the usual fix, since
+   build outputs often live under the repo you are already allowed to read;
+2. or add that repository to `ACOS_ALLOWED_ROOTS` in the client's server config
+   (colon-separated) and restart the server: with Claude Code,
+   `claude mcp remove --scope user acos` and re-run `register-mcp.sh
+   --allowed-roots <roots>`;
+3. keep produced evidence under the artifacts directory instead of the repo.
+
+A symlinked *root* is fine: the roots themselves are canonicalised at startup, so
+`ACOS_ALLOWED_ROOTS=$HOME` accepts a path under a repository reached through a
+link inside `$HOME`.
 
 ### Generic JSON config
 
@@ -165,6 +197,10 @@ server.
 <!-- ACOS_TOOLS_END -->
 
 Regenerate the block with `cargo run -p acos-mcp --example gen-tools-docs`.
+
+`acos_verify` also accepts `engine: "art"` (mapped to the CLI's `--engine`).
+Without it `acos verify` uses its default engine, which cannot honour an
+ART-only scenario (`animations: off`); pass `engine: "art"` for real ART.
 
 ### `resources` and `prompts`
 
@@ -354,8 +390,10 @@ snapshot is in [`results/mcp/tools.md`](../results/mcp/tools.md) and
 * **No shell.** Children are spawned with an explicit argv.
 * **Path allow-list.** Every path argument (`apk`, `path`, `scenario`,
   `artifacts`, ...) is resolved, `..` components are rejected, symlinks are
-  resolved, and the result must live under `ACOS_ALLOWED_ROOTS` (default: cwd +
-  artifacts dir). Violations return `UNSAFE_PATH`.
+  resolved (a link that resolves outside the roots is rejected too), and the
+  result must live under `ACOS_ALLOWED_ROOTS` (default: cwd + artifacts dir;
+  `register-mcp.sh` sets it to `$HOME`). Violations return `UNSAFE_PATH`; see
+  §1 for how to fix it.
 * **Argument limits.** String arguments are capped
   (`ACOS_MCP_MAX_REQUEST_BYTES` bounds the whole frame), arrays/objects are
   bounded, nesting is bounded.

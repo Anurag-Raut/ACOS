@@ -155,8 +155,14 @@ impl VfsConfig {
     /// `ACOS_SESSION_ROOT` pins the scratch root (and disables cleanup);
     /// otherwise a unique `.cache/sessions/<id>/data` is used.
     pub fn from_env() -> VfsConfig {
-        let boot_root = crate::vm::default_boot_dir(None)
-            .unwrap_or_else(|| PathBuf::from(".cache/boot/android-34"));
+        // REL1c: with ACOS_HOME set (an installed ACOS) an unresolved boot dir
+        // still names the install root, never the cwd.
+        let boot_root = crate::vm::default_boot_dir(None).unwrap_or_else(|| {
+            crate::vm::acos_home().map_or_else(
+                || PathBuf::from(".cache/boot/android-34"),
+                |home| home.join(".cache/boot/android-34"),
+            )
+        });
         let explicit_root = std::env::var_os("ACOS_SESSION_ROOT").map(PathBuf::from);
         let root = explicit_root
             .clone()
