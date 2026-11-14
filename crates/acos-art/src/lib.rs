@@ -37,6 +37,7 @@ pub mod launch;
 pub mod session;
 pub mod landlock;
 pub mod launcher;
+pub mod live_view;
 pub mod logd;
 pub mod props;
 pub mod seccomp;

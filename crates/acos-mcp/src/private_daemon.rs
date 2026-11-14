@@ -27,6 +27,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
@@ -53,6 +54,36 @@ pub fn legacy_requested() -> bool {
             .as_str(),
         "legacy" | "rust-vm" | "rust_vm"
     )
+}
+
+/// Environment variable the daemon reads for the live-view registry's
+/// `client` field (VIEW1a, `docs/LIVE_VIEW.md` §5).
+pub const VIEW_CLIENT_ENV: &str = "ACOS_VIEW_CLIENT";
+/// Environment variable the daemon reads for the registry's `project_dir`.
+pub const VIEW_PROJECT_ENV: &str = "ACOS_VIEW_PROJECT";
+
+/// The MCP client identity from `initialize` (`clientInfo`), process-wide: one
+/// server process serves one client, and the live-view registry names it.
+static VIEW_CLIENT: std::sync::OnceLock<Mutex<Option<(String, String)>>> =
+    std::sync::OnceLock::new();
+
+/// Record the client identity `initialize` reported.
+pub fn set_view_client(name: &str, version: &str) {
+    let slot = VIEW_CLIENT.get_or_init(|| Mutex::new(None));
+    let mut slot = slot.lock().unwrap_or_else(|e| e.into_inner());
+    *slot = Some((name.to_string(), version.to_string()));
+}
+
+/// The `ACOS_VIEW_CLIENT` value for the private daemon: the `clientInfo` the
+/// client sent, as `{"name":…,"version":…}`, or `None` when it sent none (the
+/// daemon then publishes its own `acos-cli` default).
+#[must_use]
+pub fn view_client_env() -> Option<String> {
+    let slot = VIEW_CLIENT.get_or_init(|| Mutex::new(None));
+    let slot = slot.lock().unwrap_or_else(|e| e.into_inner());
+    slot.as_ref().map(|(name, version)| {
+        json!({"name": name, "version": version}).to_string()
+    })
 }
 
 /// The engine name to pass to `acos serve --engine`.
@@ -104,6 +135,13 @@ impl PrivateDaemon {
             .arg(&socket)
             .arg("--engine")
             .arg(engine)
+            // VIEW1a: the live-view registry names this agent and its project.
+            // The daemon publishes one entry per ready session
+            // (`$XDG_RUNTIME_DIR/acos/live`), and a viewer hub shows them.
+            .env(
+                VIEW_PROJECT_ENV,
+                std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+            )
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -124,6 +162,9 @@ impl PrivateDaemon {
                 }
                 Ok(())
             });
+        }
+        if let Some(client) = view_client_env() {
+            command.env(VIEW_CLIENT_ENV, client);
         }
         let child = spawn_on_lifetime_thread(command)?;
         let mut daemon = PrivateDaemon {

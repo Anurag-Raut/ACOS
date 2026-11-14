@@ -12,6 +12,7 @@ mod bench_sessions;
 mod failure;
 mod frame_diff;
 mod launch;
+mod live_registry;
 mod native_inventory;
 mod native_launch;
 mod observe_tree;

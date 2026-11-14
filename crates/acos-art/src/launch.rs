@@ -1482,6 +1482,8 @@ pub(crate) fn launch_session(
             // W22: a live snapshot of the logd sink, so `assert_log` can read
             // the guest's own log while the session is running.
             &logd,
+            // VIEW1a: where the live-view stream socket is bound.
+            &sockets.0,
         );
         match dead {
             Ok(end) => {
@@ -3108,10 +3110,22 @@ fn protocol_write(value: &serde_json::Value) {
     if let (Some(state), Some(object)) = (animations_state(), value.as_object_mut()) {
         object.insert("animations".into(), serde_json::json!(state));
     }
+    // VIEW1a: one place turns every reply this session writes into a live-view
+    // event (action/lifecycle/activity/settle), so no command path can miss the
+    // feed. `observe_reply` is a no-op with no viewer attached.
+    if let Some(view) = LIVE_VIEW.get() {
+        view.observe_reply(&value);
+    }
     let mut out = std::io::stdout().lock();
     let _ = writeln!(out, "{value}");
     let _ = out.flush();
 }
+
+/// VIEW1a: the live-view producer of this process, set once by an interactive
+/// session. `None` in a one-shot launch (no viewer can attach to a session that
+/// has already ended), so nothing changes there.
+static LIVE_VIEW: std::sync::OnceLock<Arc<crate::live_view::LiveView>> =
+    std::sync::OnceLock::new();
 
 struct SessionEnd {
     status: Option<std::process::ExitStatus>,
@@ -4007,6 +4021,49 @@ enum ServeEvent {
     ChildExited,
 }
 
+/// VIEW1a: the live-view frame tap.
+///
+/// Waits on the same condvar the guest's probe samples already signal (with a
+/// 200 ms fallback so a frame that arrives without a probe sample is still
+/// picked up), and asks [`crate::live_view::LiveView::tick`] to consider a frame.
+/// `tick` short-circuits on one atomic load when no viewer is attached, so the
+/// compositor is not even locked. When a viewer *is* attached, only a frame
+/// whose C1 store counter advanced is captured — and the capture is a copy, not
+/// a present: `frame_seq`, `generation` and damage are untouched (ADR-0027).
+fn spawn_live_view_tap(
+    view: Arc<crate::live_view::LiveView>,
+    compositor: Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>,
+    wake: Arc<ProbeWake>,
+) {
+    let _ = std::thread::Builder::new()
+        .name("acos-live-view-tap".to_string())
+        .spawn(move || {
+            let mut seen = 0u64;
+            let mut last_seq = 0u64;
+            let mut source = || -> Option<crate::live_view::SourceFrame> {
+                let state = compositor.lock().unwrap_or_else(|e| e.into_inner());
+                let seq = state.latest_generation();
+                if seq == 0 || seq <= last_seq {
+                    return None;
+                }
+                let capture = state.capture_latest()?;
+                last_seq = seq;
+                Some(crate::live_view::SourceFrame {
+                    seq,
+                    generation: capture.generation,
+                    width: capture.width,
+                    height: capture.height,
+                    stride: capture.stride,
+                    rgba: capture.rgba,
+                })
+            };
+            while !view.is_shutdown() {
+                view.tick(&mut source);
+                wake.wait(&mut seen, Duration::from_millis(200));
+            }
+        });
+}
+
 #[allow(clippy::too_many_arguments)]
 fn interactive_serve(
     density_dpi: u32,
@@ -4024,6 +4081,9 @@ fn interactive_serve(
     activity: Option<&str>,
     dog: Option<&MemoryWatchdog>,
     logd: &Logd,
+    // VIEW1a: the session's short socket directory; the live-view stream socket
+    // is bound there (`view.sock`) exactly like the peer socket.
+    sockets: &Path,
 ) -> std::io::Result<SessionEnd> {
     let mut evidence: Vec<serde_json::Value> = Vec::new();
     let mut captures = 0u64;
@@ -4178,11 +4238,43 @@ fn interactive_serve(
             .map(|(_, buffer)| (buffer.width, buffer.height))
             .unwrap_or((1080, 2400))
     };
+    // VIEW1a: bind the per-session live-view stream socket (protocol v1) and
+    // start the frame tap. A viewer is optional: a bind failure is a log line,
+    // never a failed session, and `stream_socket` is then absent from the ready
+    // line. With no subscriber the tap does one atomic load per probe wake and
+    // nothing else — no capture, no copy, no encode.
+    let view = match crate::live_view::LiveView::bind(
+        &sockets.join("view.sock"),
+        crate::live_view::LiveViewConfig::from_env(),
+        (width, height),
+        std::process::id(),
+    ) {
+        Ok(view) => {
+            let _ = LIVE_VIEW.set(Arc::clone(&view));
+            spawn_live_view_tap(
+                Arc::clone(&view),
+                Arc::clone(&live.compositor),
+                Arc::clone(&wake),
+            );
+            Some(view)
+        }
+        Err(error) => {
+            eprintln!("acos-art: live view: cannot bind the stream socket: {error}");
+            None
+        }
+    };
+    let stream_socket = match &view {
+        Some(view) => serde_json::json!(view.socket_path().display().to_string()),
+        None => serde_json::Value::Null,
+    };
     let ready = serde_json::json!({
         "ok": true,
         "cmd": "ready",
         "package": package,
         "activity": activity.unwrap_or(""),
+        // VIEW1a: the live-view stream socket (`docs/LIVE_VIEW.md`), null when
+        // it could not be bound.
+        "stream_socket": stream_socket,
         "width": width,
         "height": height,
         // The density the guest actually booted at (`--density`, or the

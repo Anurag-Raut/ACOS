@@ -85,6 +85,10 @@ pub struct ServeEngine {
     default_engine: Engine,
     max_sessions: usize,
     artifacts_root: PathBuf,
+    /// VIEW1a: the live-view registry this daemon publishes its sessions to
+    /// (`$XDG_RUNTIME_DIR/acos/live`, protocol v1 §5). It writes nothing until a
+    /// session reaches ready.
+    live: crate::live_registry::LiveRegistry,
     art: Mutex<HashMap<String, Arc<HeldArtSession>>>,
     routes: Mutex<HashMap<String, Route>>,
 }
@@ -106,6 +110,7 @@ impl ServeEngine {
             default_engine,
             max_sessions: max_sessions.max(1),
             artifacts_root,
+            live: crate::live_registry::LiveRegistry::from_env(),
             art: Mutex::new(HashMap::new()),
             routes: Mutex::new(HashMap::new()),
         }
@@ -135,7 +140,43 @@ impl ServeEngine {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clear();
+        // VIEW1a: the daemon is exiting; no entry it published may survive it.
+        self.live.remove_all();
         count
+    }
+
+    /// VIEW1a: publish one ready session to the live-view registry.
+    fn publish_live(&self, id: &str, session: &ArtSession) {
+        let (client_name, client_version) = self.live.client();
+        let entry = crate::live_registry::LiveEntry {
+            session_id: id.to_string(),
+            daemon_pid: std::process::id(),
+            launcher_pid: session.launcher_pid(),
+            started_ms: crate::live_registry::now_ms(),
+            client_name: client_name.to_string(),
+            client_version: client_version.to_string(),
+            project_dir: self.live.project_dir().to_string(),
+            apk: session.apk_path().display().to_string(),
+            package: session.package().to_string(),
+            activity: session.activity().map(str::to_string),
+            display: session.display_size(),
+            stream_socket: session
+                .stream_socket()
+                .map(|path| path.display().to_string()),
+        };
+        if let Err(error) = self.live.write(&entry) {
+            eprintln!(
+                "acos serve: live view: cannot publish session {id} to {}: {error}",
+                self.live.dir().display()
+            );
+        }
+    }
+
+    /// VIEW1a: refresh a session's `activity` in the registry.
+    fn refresh_live_activity(&self, id: &str, session: &ArtSession) {
+        if let Err(error) = self.live.update_activity(id, session.activity()) {
+            eprintln!("acos serve: live view: cannot update session {id} activity: {error}");
+        }
     }
 
     /// The daemon's session list, ART sessions and legacy sessions merged.
@@ -623,6 +664,13 @@ impl ServeEngine {
                     .unwrap_or_else(|e| e.into_inner())
                     .insert(id.to_string(), Arc::clone(&held));
                 self.set_route(id, Route::Art);
+                // VIEW1a: publish the session so a viewer hub can find its
+                // stream socket. A registry write failure is logged and never
+                // fails the launch (the session itself is fine).
+                {
+                    let session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+                    self.publish_live(id, &session);
+                }
                 let guard = held.session.lock().unwrap_or_else(|e| e.into_inner());
                 launch_reply(
                     request_id,
@@ -662,6 +710,9 @@ impl ServeEngine {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .remove(id);
+            // VIEW1a: the session is gone; its registry entry must not outlive
+            // it (a hub must never dial a socket that no longer exists).
+            self.live.remove(id);
             let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
             let report = session.teardown();
             // GL1: name the destruction path and prove the *session*, not just
@@ -839,6 +890,9 @@ impl ServeEngine {
                 }
                 label_frame(&mut result, &session);
                 label_timing(&mut result, &session, tool, started);
+                // VIEW1a: keep the registry's `activity` in step with the
+                // session's own state (a no-op when it has not changed).
+                self.refresh_live_activity(id, &session);
                 let envelope = Envelope::pass(
                     request_id,
                     ProtocolBackend::AcosNative,

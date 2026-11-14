@@ -107,6 +107,9 @@ pub struct ArtSession {
     /// `{mode, cache: hit|built|fallback|external|none, reason}` — so a serve's
     /// launch reply and session list can say whether the shared-image cache hit.
     boot_image: Option<serde_json::Value>,
+    /// VIEW1a: the live-view stream socket the ready line reported
+    /// (`docs/LIVE_VIEW.md`); `None` when the launcher could not bind one.
+    stream_socket: Option<PathBuf>,
     /// The newest *bound* frame seen (tree and, when the reply carried one,
     /// PNG of one traversal). A tree-only reply updates the tree but never
     /// invents pixels.
@@ -1444,6 +1447,7 @@ impl ArtSession {
             height: 2400,
             density: 420,
             boot_image: None,
+            stream_socket: None,
             cached: None,
             last_pixel: None,
             seen_seq: 0,
@@ -1562,6 +1566,13 @@ impl ArtSession {
         if let Some(activity) = ready.get("activity").and_then(|v| v.as_str()) {
             session.activity = Some(activity.to_string());
         }
+        // VIEW1a: the session's live-view stream socket (protocol v1). The
+        // registry publishes it; a session without one still runs normally.
+        if let Some(path) = ready.get("stream_socket").and_then(|v| v.as_str()) {
+            if !path.is_empty() {
+                session.stream_socket = Some(PathBuf::from(path));
+            }
+        }
         // `acos verify` starts the guest before its own step clock, so this is
         // the boot cost the verdict never showed.
         session.session_start_ms = spawned_at.elapsed().as_millis() as u64;
@@ -1638,6 +1649,25 @@ impl ArtSession {
     /// The launched Activity, when the guest reported one.
     pub fn activity(&self) -> Option<&str> {
         self.activity.as_deref()
+    }
+
+    /// VIEW1a: the live-view stream socket this session's ready line reported.
+    #[must_use]
+    pub fn stream_socket(&self) -> Option<&Path> {
+        self.stream_socket.as_deref()
+    }
+
+    /// VIEW1a: the launcher (`acos-art`) pid of the current guest, so the live
+    /// registry can name it and a reader can tell a live entry from a stale one.
+    #[must_use]
+    pub fn launcher_pid(&self) -> Option<u32> {
+        self.process_group.map(|pid| pid as u32)
+    }
+
+    /// VIEW1a: the session's display size as the guest booted it.
+    #[must_use]
+    pub const fn display_size(&self) -> (u32, u32) {
+        (self.width, self.height)
     }
 
     /// The APK this session runs.
