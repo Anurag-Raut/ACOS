@@ -54,8 +54,10 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 sys.path.insert(0, str(REPO / "tools"))
 sys.path.insert(0, str(REPO / "tools/art-runtime"))
+sys.path.insert(0, str(HERE))
 
 import benchlib  # noqa: E402
+import bench_lattice  # noqa: E402
 import d2_warm  # noqa: E402
 import agent_loop  # noqa: E402
 
@@ -70,6 +72,14 @@ P11_MEASURE = REPO / "results/art-runtime/evidence/P11/p11_measure.py"
 MiB = 1024.0 * 1024.0
 HZ = os.sysconf("SC_CLK_TCK")
 FORM_ERROR = "Name is required"
+
+# PERF-REL3: the metrics whose settle path waits for the compositor, so every
+# sample sits on a frame-period lattice. They get raw samples, a pooled 5 %-trimmed
+# mean and per-frame-slot shares in the merged baseline (additive fields; p50/p95
+# are unchanged), and a larger default sample count (--fast-reps).
+FAST_METRICS = ("m4_launch_fast_ms", "m6_reset_fast_ms",
+                "m8_tap_counter_fast_ms", "m8_tap_form_fast_ms")
+DEFAULT_FAST_REPS = 40
 
 # --------------------------------------------------------------------------- #
 # Metric registry. category drives the minimum noise band; direction says which
@@ -897,6 +907,12 @@ def new_base(tag, i):
 def phase_latency(args):
     set_arm(getattr(args, "animations", "on"))
     reps = args.reps
+    # PERF-REL3: the fast-settle metrics are lattice-quantised, so a rep's p50
+    # only says which frame slot holds the middle sample. More samples make the
+    # pooled trimmed mean and the slot shares stable; the added wall time is
+    # recorded per mode below.
+    fast_reps = int(getattr(args, "fast_reps", 0) or 0) or reps
+    mode_wall = {}
     scratch = Path(args.scratch)
     if scratch.exists():
         shutil.rmtree(scratch)
@@ -920,6 +936,8 @@ def phase_latency(args):
 
         # --- M4: launch -> first correct screen, rep = launch + destroy ------
         for mode in ("strict", "fast"):
+            n_mode = fast_reps if mode == "fast" else reps
+            t_mode = time.time()
             tag = "m4-%s" % mode
             warm = new_base(tag + "-warm", 0)
             wr = launch(d, warm, mode)
@@ -927,7 +945,7 @@ def phase_latency(args):
             if not wok:
                 failures.add("m4-warm", "launch", wr)
             destroy(d, warm, None, "m4-warm")
-            for i in range(reps):
+            for i in range(n_mode):
                 base = new_base(tag, i)
                 r = launch(d, base, mode)
                 ok, value = launch_ok(r)
@@ -952,12 +970,15 @@ def phase_latency(args):
                      "nodes": len(nodes_of(tree_of(value))),
                      "verify_ok": count_text(vtree) == "0"})
                 destroy(d, base, teardowns, "m4-%s" % mode)
+            mode_wall["m4-%s" % mode] = round(time.time() - t_mode, 3)
             checks["m4_%s" % mode] = sum(
                 1 for e in samples.get("m4_launch_%s_ms" % mode, {}).get("extra", [])
                 if e.get("verify_ok"))
 
         # --- M6: reset -> correct screen, strict and fast --------------------
         for mode in ("strict", "fast"):
+            n_mode = fast_reps if mode == "fast" else reps
+            t_mode = time.time()
             tag = "m6-%s" % mode
             base = new_base(tag, 0)
             # H17 follow-up: this launch used to be ignored, so a failed launch
@@ -968,7 +989,7 @@ def phase_latency(args):
             lok, _lvalue = launch_ok(lr)
             if not lok:
                 failures.add("%s-launch" % tag, "launch", lr)
-            for i in range(reps + 1):        # rep 0 is the discarded warm-up
+            for i in range(n_mode + 1):      # rep 0 is the discarded warm-up
                 task = "%s-%d" % (tag, i)
                 tr = d.call("acos_tap", {"base": base, "id": "inc",
                                          "settle": "fast"})
@@ -1012,6 +1033,7 @@ def phase_latency(args):
                      "pixels_changed": settle.get("pixels_changed"),
                      "animations": value.get("animations"),
                      "before": count_text(before), "after": count_text(tree)})
+            mode_wall["m6-%s" % mode] = round(time.time() - t_mode, 3)
             destroy(d, base, teardowns, "m6-%s" % mode)
 
         # --- M5 / M7 / M8 on one held counter session -----------------------
@@ -1076,9 +1098,11 @@ def phase_latency(args):
         # M8 counter: repeated taps; strict/fast in the same session.
         taps_expected = 0
         for mode in ("strict", "fast"):
+            n_mode = fast_reps if mode == "fast" else reps
+            t_mode = time.time()
             cpu0 = tree_snapshot(serve.proc.pid) if mode == "strict" else None
             t_cpu0 = time.time() if cpu0 is not None else None
-            for i in range(reps + 1):
+            for i in range(n_mode + 1):
                 r = d.call("acos_tap", {"base": base, "id": "inc", "settle": mode})
                 env = r.get("envelope") or {}
                 settle = (env.get("result") or {}).get("settle") or {}
@@ -1106,6 +1130,7 @@ def phase_latency(args):
                      "animations": (env.get("result") or {}).get("animations")})
                 if settle.get("ack_ms") is not None:
                     add(samples, "tap_ack_ms", settle.get("ack_ms"), ok)
+            mode_wall["m8-counter-%s" % mode] = round(time.time() - t_mode, 3)
             if cpu0 is not None:
                 cpu1 = tree_snapshot(serve.proc.pid)
                 delta = tree_delta(cpu0, cpu1, time.time() - t_cpu0)
@@ -1126,7 +1151,9 @@ def phase_latency(args):
         if not (fok and node_text(tree_of(fvalue), "submit") == "Submit"):
             raise RuntimeError("form session did not launch: %s" % (r["envelope"],))
         for mode in ("strict", "fast"):
-            for i in range(reps + 1):
+            n_mode = fast_reps if mode == "fast" else reps
+            t_mode = time.time()
+            for i in range(n_mode + 1):
                 rr = d.call("acos_reset", {"base": base, "settle": "fast"})
                 reset_ok = bool((rr.get("envelope") or {}).get("ok"))
                 if not reset_ok:
@@ -1158,9 +1185,12 @@ def phase_latency(args):
                      "error": node_text(vtree, "error")})
                 if settle.get("ack_ms") is not None:
                     add(samples, "tap_ack_ms", settle.get("ack_ms"), ok)
+            mode_wall["m8-form-%s" % mode] = round(time.time() - t_mode, 3)
         checks["m8_form_error_text"] = node_text(vtree, "error")
         destroy(d, base, teardowns, "m8-form")
 
+        checks["mode_wall_s"] = mode_wall
+        checks["reps"] = {"other": reps, "fast": fast_reps}
         checks["teardown_verified"] = sum(1 for row in teardowns if row.get("verified"))
         # A failed destroy reply can carry no lifecycle label; sorting a set that
         # mixes str and None raised TypeError and truncated the phase record.
@@ -1325,6 +1355,8 @@ def phase_memory(args):
             add(samples, "wakeups_idle_n%d_per_s" % n, delta["wakeups_per_s"], True)
         for base in sessions:
             destroy(d, base, teardowns, "memory-n10")
+        checks["mode_wall_s"] = mode_wall
+        checks["reps"] = {"other": reps, "fast": fast_reps}
         checks["teardown_verified"] = sum(1 for row in teardowns if row.get("verified"))
     except Exception as exc:  # noqa: BLE001
         errors.append("%s: %s" % (type(exc).__name__, exc))
@@ -1787,6 +1819,29 @@ def compare_rows(base, cur):
     return rows
 
 
+def fast_lattice(target):
+    """PERF-REL3 lattice record for one fast-settle metric (pooled + per rep).
+
+    All reps share one lattice: the period and origin are measured on the pooled
+    samples and reused for every rep, so per-rep shares are comparable and the
+    A/B tool can compare two runs on the same slots.
+    """
+    pooled = bench_lattice.analyse(target["values"])
+    per_rep = []
+    for rep_no, vals in target.get("rep_values") or []:
+        row = bench_lattice.analyse(vals, period=pooled["frame_period_ms"],
+                                    origin=pooled["origin_ms"])
+        st = stats(vals)
+        per_rep.append({
+            "rep": rep_no, "n": row["n"], "p50": st.get("p50"),
+            "trimmed_mean": row["trimmed_mean"], "median": row["median"],
+            "first_slot_share": row["first_slot_share"],
+            "slot_shares": row["slot_shares"],
+        })
+    pooled["per_rep"] = per_rep
+    return {"lattice": pooled}
+
+
 def merge(args):
     run_dir = Path(args.run_dir)
     reps = []
@@ -1832,13 +1887,16 @@ def merge(args):
                 if key not in METRICS:
                     continue
                 target = pooled.setdefault(key, {"values": [], "rep_p50": [],
+                                                 "rep_values": [],
                                                  "ok": 0, "bad": 0, "extra": []})
-                target["values"].extend(block.get("values") or [])
+                raw = block.get("values") or []
+                target["values"].extend(raw)
                 target["ok"] += block.get("ok") or 0
                 target["bad"] += block.get("bad") or 0
                 target["extra"].extend(block.get("extra") or [])
-                st = stats(block.get("values") or [])
+                st = stats(raw)
                 target["rep_p50"].append(st.get("p50"))
+                target["rep_values"].append((rep["rep"], list(raw)))
     metrics = {}
     for key, target in pooled.items():
         meta = METRICS[key]
@@ -1851,8 +1909,14 @@ def merge(args):
             "min": st.get("min"), "max": st.get("max"),
             "n": st.get("n"), "spread_pct": st.get("spread_pct"),
             "ok": target["ok"], "bad": target["bad"],
-            "rep_p50": target["rep_p50"], **thr,
+            "rep_p50": target["rep_p50"],
+            # PERF-REL3: raw samples are always kept now, so a stored run can be
+            # re-analysed (trimmed mean, lattice) without re-running the bench.
+            "samples": [round(float(v), 3) for v in target["values"]],
+            **thr,
         }
+        if key in FAST_METRICS:
+            metrics[key] = {**metrics[key], **fast_lattice(target)}
     # Phase status + host/queue record.
     phase_rows = []
     for rep in reps:
@@ -1918,6 +1982,13 @@ def merge(args):
             "never mixed.",
             "M3 is measured with the launch working set evicted per rep; the "
             "warm-cache variant is M4 + daemon spawn (P7).",
+            "PERF-REL3: every metric now carries its raw `samples`; the "
+            "fast-settle metrics (M4 launch fast, M6 reset fast, M8 tap fast) "
+            "also carry `lattice`: a 5 %-trimmed mean, the frame period measured "
+            "from the samples (phase coherence), and the share of samples per "
+            "frame slot (slot = round((x - origin) / period), origin = the "
+            "fastest observed sample). p50/p95 and the p50 compare gate are "
+            "unchanged; the lattice fields are additive.",
         ],
     }
     out = Path(args.out)
@@ -1964,6 +2035,29 @@ def render_markdown(doc):
             fmt(doc["metrics"][row]["threshold_abs"]), prev,
             doc["metrics"][row]["method"][:110]))
     lines.append("")
+    fast = [row for row in ordered_metrics(doc)
+            if (doc["metrics"][row].get("lattice") or {}).get("n")]
+    if fast:
+        lines.append("## Fast-settle lattice (PERF-REL3)")
+        lines.append("")
+        lines.append("Every fast-settle sample waits for the compositor, so it "
+                     "lands on a frame-period lattice: a rep's p50 is whichever "
+                     "slot holds the middle sample. These numbers do not flip.")
+        lines.append("")
+        lines.append("| metric | n | frame ms (source) | median | 5%-trimmed mean "
+                     "| first-slot share | slot shares |")
+        lines.append("|---|---:|---:|---:|---:|---:|---|")
+        for row in fast:
+            lat = doc["metrics"][row]["lattice"]
+            shares = ", ".join("%s:%.0f%%" % (k, 100.0 * v)
+                               for k, v in sorted(lat["slot_shares"].items(),
+                                                  key=lambda kv: int(kv[0])))
+            lines.append("| `%s` | %d | %.2f (%s) | %s | %s | %s | %s |" % (
+                row, lat["n"], lat["frame_period_ms"], lat["frame_period_source"],
+                fmt(lat["median"]), fmt(lat["trimmed_mean"]),
+                ("%.0f%%" % (100.0 * lat["first_slot_share"])
+                 if lat["first_slot_share"] is not None else "-"), shares))
+        lines.append("")
     lines.append("## Phases and host load")
     lines.append("")
     lines.append("| rep | phase | ok | load1 before -> after | MemAvailable | "
@@ -2133,6 +2227,10 @@ def main(argv=None):
     ap.add_argument("--out-dir", default="")
     ap.add_argument("--scratch-root", default="")
     ap.add_argument("--reps", type=int, default=20)
+    ap.add_argument("--fast-reps", type=int, default=DEFAULT_FAST_REPS,
+                    help="samples per rep for the fast-settle metrics (M4 launch "
+                         "fast, M6 reset fast, M8 tap fast; default %d, PERF-REL3)"
+                         % DEFAULT_FAST_REPS)
     ap.add_argument("--p11-reps", type=int, default=3)
     ap.add_argument("--keep-screens", type=int, default=20,
                     help="max per-task PNG samples retained by the agent loop "
