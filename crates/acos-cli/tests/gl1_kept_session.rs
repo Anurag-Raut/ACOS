@@ -18,9 +18,10 @@
 //!   cargo test --release -p acos-cli --test gl1_kept_session -- --ignored --test-threads=1
 //! ```
 //!
-//! Scratch lives under `ACOS_GL1_SCRATCH` (default
-//! `/home/Qui/Projects/acos/.cache/gl1`): a Unix socket path must fit `SUN_LEN`
-//! (108 bytes), which a worktree path does not.
+//! Scratch lives under `ACOS_GL1_SCRATCH` (default `<repo>/.cache/gl1-tests`).
+//! The daemon socket does not: a Unix socket path must fit `SUN_LEN` (108
+//! bytes), which a worktree path does not, so it is bound in `ShortSocketDir`
+//! (a short `$XDG_RUNTIME_DIR` directory, removed on drop).
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -28,6 +29,10 @@ use std::process::{Child, Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
+
+mod common;
+
+use common::ShortSocketDir;
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -37,20 +42,18 @@ fn acos() -> &'static str {
     env!("CARGO_BIN_EXE_acos")
 }
 
-/// Short, project-level scratch root (see the socket-length note above).
+/// Scratch root for everything that is not a socket (runtime dir, cache dir,
+/// daemon logs).
 fn scratch_root() -> PathBuf {
     if let Some(dir) = std::env::var_os("ACOS_GL1_SCRATCH") {
         return PathBuf::from(dir);
-    }
-    let project = PathBuf::from("/home/Qui/Projects/acos/.cache/gl1");
-    if project.parent().map(|parent| parent.exists()).unwrap_or(false) {
-        return project;
     }
     repo_root().join(".cache").join("gl1-tests")
 }
 
 struct Scratch {
     dir: PathBuf,
+    sockets: ShortSocketDir,
 }
 
 impl Scratch {
@@ -60,11 +63,12 @@ impl Scratch {
         std::fs::create_dir_all(dir.join("runtime")).unwrap();
         std::fs::create_dir_all(dir.join("cache")).unwrap();
         let dir = std::fs::canonicalize(&dir).unwrap_or(dir);
-        Scratch { dir }
+        let sockets = ShortSocketDir::new(tag);
+        Scratch { dir, sockets }
     }
 
     fn socket(&self) -> PathBuf {
-        self.dir.join("s.sock")
+        self.sockets.socket("s.sock")
     }
 
     fn log(&self, name: &str) -> PathBuf {

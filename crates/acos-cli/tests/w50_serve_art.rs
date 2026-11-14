@@ -23,6 +23,10 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
+mod common;
+
+use common::ShortSocketDir;
+
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -38,9 +42,6 @@ fn scratch(tag: &str) -> PathBuf {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("runtime")).unwrap();
     std::fs::create_dir_all(dir.join("cache")).unwrap();
-    // A socket path must fit SUN_LEN (108 bytes). `repo_root()` is built from
-    // `CARGO_MANIFEST_DIR` and can contain `..`, and a worktree adds a path
-    // segment, so resolve the scratch dir before using it for a socket.
     std::fs::canonicalize(&dir).unwrap_or(dir)
 }
 
@@ -48,12 +49,18 @@ struct Daemon {
     child: Child,
     socket: PathBuf,
     dir: PathBuf,
+    // Declared last so the socket dir outlives every use of `socket`; dropped
+    // (and removed) with the daemon.
+    sockets: ShortSocketDir,
 }
 
 impl Daemon {
     fn start(tag: &str, extra: &[&str]) -> Daemon {
         let dir = scratch(tag);
-        let socket = dir.join("serve.sock");
+        // `sun_path` is 108 bytes: the socket never lives under the worktree,
+        // whose path length is not under this test's control.
+        let sockets = ShortSocketDir::new(tag);
+        let socket = sockets.socket("serve.sock");
         let mut command = Command::new(acos());
         command
             .arg("serve")
@@ -80,6 +87,7 @@ impl Daemon {
             child,
             socket,
             dir,
+            sockets,
         }
     }
 
@@ -223,9 +231,10 @@ fn an_unknown_session_is_not_routed_to_the_frozen_rust_vm() {
 #[test]
 fn serve_flag_rejects_an_unknown_engine() {
     let dir = scratch("flag");
+    let sockets = ShortSocketDir::new("flag");
     let output = Command::new(acos())
         .args(["serve", "--socket"])
-        .arg(dir.join("s.sock"))
+        .arg(sockets.socket("s.sock"))
         .args(["--engine", "native"])
         .env("ACOS_RUNTIME_DIR", dir.join("runtime"))
         .output()
