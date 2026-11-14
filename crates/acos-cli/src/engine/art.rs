@@ -1629,6 +1629,26 @@ impl ArtSession {
         })
     }
 
+    /// The child's exit status once its session is known to be lost.
+    ///
+    /// The kernel closes a dying process's pipes before the process becomes
+    /// reapable, so a stdout EOF can be observed while `try_wait` still says
+    /// "running". Poll for a bounded moment so a SIGKILLed launcher is
+    /// classified from its real status instead of falling through to INTERNAL.
+    fn lost_child_exit_status(&mut self) -> Option<std::process::ExitStatus> {
+        const GRACE: Duration = Duration::from_millis(500);
+        let deadline = std::time::Instant::now() + GRACE;
+        loop {
+            if let Some(status) = self.child_exit_status() {
+                return Some(status);
+            }
+            if self.child.is_none() || std::time::Instant::now() >= deadline {
+                return None;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
     /// The display width in pixels.
     pub const fn width(&self) -> u32 {
         self.width
@@ -1704,7 +1724,7 @@ impl ArtSession {
             };
         }
         if let Some((code, facts)) = self
-            .child_exit_status()
+            .lost_child_exit_status()
             .and_then(crate::failure::classify_child_exit)
         {
             return BackendError::Protocol {
