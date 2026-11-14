@@ -1,7 +1,7 @@
 # PHONE — handoff (PHONE-REF-1)
 
 Branch `phone-ref-1` (base `3e11d9c`). Full report: `results/phone/PHONE-REF-1.md`.
-Experiment entry: `EXPERIMENTS.md` E13.9.
+Experiment entry: `EXPERIMENTS.md` E13.14 (renumbered at integration; E13.9 is GR4).
 
 ## What this track delivered
 
