@@ -1535,6 +1535,7 @@ mod engine_tests {
             native: false,
             engine: engine.to_string(),
             animations: None,
+            insets: None,
             untrusted: false,
             json,
         }

@@ -1074,6 +1074,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
         steps,
         output: OutputOptions::default(),
         animations: None,
+        insets: None,
     };
     round_trip(&scenario);
     for step in &scenario.steps {

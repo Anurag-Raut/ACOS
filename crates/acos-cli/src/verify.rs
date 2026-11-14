@@ -72,6 +72,16 @@ pub struct VerifyArgs {
     #[arg(long, value_name = "on|off")]
     pub animations: Option<String>,
 
+    /// W7b: app-window inset model for the ART session (`carve`/`report`).
+    ///
+    /// Overrides a scenario's top-level `insets`, which overrides
+    /// `ACOS_WM_INSETS`. The build default is `report` (AOSP edge-to-edge,
+    /// ADR-0026 decision 6); `carve` selects the pre-W7 shim for baselines
+    /// captured against the carved frame. Launch-time only; the Rust VM has
+    /// no window insets.
+    #[arg(long, value_name = "carve|report")]
+    pub insets: Option<String>,
+
     /// Treat this run as an untrusted APK.
     ///
     /// Untrusted is an explicit opt-in and is allowed by product policy
@@ -246,6 +256,40 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         return finish_run(&envelope, &args, &artifacts, Some(trust));
     }
 
+    // W7b: the inset model is a self-contained per-scenario choice. CLI >
+    // scenario > environment > build default, and the resolved value is
+    // installed in the process environment before the ART session starts so
+    // the guest, the WMS shim and the verifier's frame metadata all agree.
+    // Without this, a `carve` scenario would inherit the `report` default and
+    // its negative assertion could pass for the wrong model (a false pass).
+    let scenario_insets = acos_protocol::scenario::Scenario::load(&scenario)
+        .ok()
+        .and_then(|scenario| scenario.insets);
+    let requested_insets = args.insets.clone().or(scenario_insets);
+    let insets_owned: String = match requested_insets {
+        Some(value) => match value.trim().to_ascii_lowercase().as_str() {
+            "carve" => "carve".to_string(),
+            "report" => "report".to_string(),
+            other => {
+                let envelope = Envelope::failure(
+                    request_id,
+                    ProtocolBackend::AcosNative,
+                    Fidelity::StaticAnalysis,
+                    ProtocolError::new(
+                        ErrorCode::InvalidArgument,
+                        format!("insets must be \"carve\" or \"report\" (got {other:?})"),
+                    )
+                    .with_hint("`insets: report` is AOSP's full-display window with reported system-bar insets; `insets: carve` is the pre-W7 application-area frame."),
+                    Metrics::wall_ms(0),
+                );
+                return finish_run(&envelope, &args, &artifacts, Some(trust));
+            }
+        },
+        None => std::env::var(acos_services::wms::INSETS_ENV)
+            .unwrap_or_else(|_| acos_services::wms::DEFAULT_INSETS_MODE.as_str().to_string()),
+    };
+    std::env::set_var(acos_services::wms::INSETS_ENV, &insets_owned);
+
     let request = VerifyRequest {
         base: RequestBase::new(request_id.clone()),
         apk: args.apk.as_ref().map(|path| path.display().to_string()),
@@ -327,8 +371,11 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                     return finish_run(&envelope, &args, &artifacts, Some(trust));
                 }
             };
-            match crate::engine::art::ArtSession::start_with_animations(
-                &apk, &artifacts, animations,
+            match crate::engine::art::ArtSession::start_with_options(
+                &apk,
+                &artifacts,
+                animations,
+                &insets_owned,
             ) {
                 Ok(session) => {
                     session_boot_ms = Some(session.session_start_ms());
@@ -453,7 +500,8 @@ pub(crate) fn annotate(
         })),
         "explicit": args.engine != "rust-vm" || mode == Mode::Preview,
         "animations": session_animations.unwrap_or("on"),
-        "insets": session_insets.unwrap_or("carve"),
+        "insets": session_insets
+            .unwrap_or(acos_services::wms::DEFAULT_INSETS_MODE.as_str()),
     });
     if let Some(object) = verdict.as_object_mut() {
         object.insert("engine".to_string(), engine_block["engine"].clone());

@@ -2197,10 +2197,83 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | H2 | Early post-first-frame concurrent GC (Z7) on the exec path | M1/M2 | −23–30 MiB/session | high | low | low | **accepted: product default, E2.10** (H6 numbers are pre-H2; re-baseline) |
 | R2a | Gaten launch flake: SIGSEGV after first frame (~1/10). **Fixed (E13.8):** the fault is libc's GWP-ASan sampled-allocation backtrace (`android_unsafe_frame_pointer_chase+0x117`), enabled for 1 in 128 guest processes by libc's own lottery; the frame-pointer walk follows a guard page (`SEGV_ACCERR`) on frame-pointer-free guest code. Guests now get `GWP_ASAN_PROCESS_SAMPLING=0` (`ACOS_ART_GWP_ASAN=on|libc` are the seams). Forced-on: 4/4 SIGSEGV; default: 40/40 launches, 0 crash. Residual: one exit-1 `GUEST_EXITED` before the first frame in the 60-launch before-arm is a different, unnamed class | verified-launch stability | name the frame, then 10/10 | high | low | low | **done, E13.8/G3cd** (root cause named; one separate exit-1 class remains open) |
 | R2b | W6 `+1080 px` fragment offset: move `ACOSLAUNCH_GEOM_TRACE` to `application-created`, keep failing runs, n=20. Then a first-measure race vs a pager-translation source is decidable from `win_frame` vs `app_cfg` | layout correctness | catch + fix the root cause | medium | low | low | **next** (R2 §6) |
-| W7a | `report` is faithful (Gaten footer 0 px, SSIM 0.87960) but cannot become the default while `w42-back-frame` changes one AA row (G: 210→211). Decide: accept the changed pixel expectation as more faithful, or make strict capture tolerant of a single AA row without masking real moves. `gaten-home`'s forever-looping welcome also needs a strict-settle answer | verification semantics / default | `carve` → `report` default | high (measured) | low (owner decision) / medium (settle) | medium | **owner decision** (W7, E13.5) |
+| W7a | `report` is faithful (Gaten footer 0 px, SSIM 0.87960) but cannot become the default while `w42-back-frame` changes one AA row (G: 210→211). Decide: accept the changed pixel expectation as more faithful, or make strict capture tolerant of a single AA row without masking real moves. `gaten-home`'s forever-looping welcome also needs a strict-settle answer | verification semantics / default | `carve` → `report` default | high (measured) | low (owner decision) / medium (settle) | medium | **decided (ADR-0026 decision 6); implemented W7b (E13.9): `report` default, w42 re-blessed with a one-row pixel proof** |
 | R2c | Per-view canvas for the ART guest without a GPU: opt-in per-view nested `Bitmap` canvas + blit (R2 §4.3) vs a `libhwui`-shim `RenderNode`/`HardwareRenderer` | SVG/wordmark fidelity | `canvasIsViewPx=true` | medium | medium/high | medium (draw cost 1.5–3×) | **owner decision** (R2 §4) |
 | G3a | **Scenario input could not request the API's existing fast navigation settle**, so every tap on Gaten's 200 ms-retry onboarding pages was a strict `queue` timeout. Fixed: `settle: fast` on scenario `tap`/`type`/`key`, forwarded through `TrustGuard`; assertions still reject fast | reachable owner flow | 3/3 after the fix | high | low | low | **done, E13.7/GR3** |
 | G3b | **Strict-settle probe wake over-driven the guest**: 20 ms host requests re-asked even after a sample arrived (~50 full tree walks/s under the 10 s Reanimated loop); likely the `probe-floor` starvation. Fixed to 50 ms and no re-ask until the probe sequence moves | probe liveness / tree age | no probe-floor at long n | medium | low | low | **fixed in code, E13.7; still prove at a 60 s pathological n** |
 | G3c | **First frame can be a near-empty tree** (1 node in GR3, **10 nodes in 34 % of 60 measured launches**, 243 two seconds later). Fixed (E13.8): `ArtSession::bind_first_frame` re-traverses while the tree is still the window skeleton (no text/content-desc/hint, ≤ 40 nodes) within 900 ms / 4 traversals; a retry that does not settle rolls the frame *and* its settle verdict back, so no launch turns into a TIMEOUT; a frame that never gains content is `first_frame.placeholder` + `meaningful:false` | first-frame predicate / Gaten first paint | launch frame is the app's content | medium | medium | medium | **done, E13.8** (34 % thin → 0/40; launch p50 2.336 → 2.433 s) |
 | G3d | **Gaten launch SIGSEGV** (1 of 6 `gaten-tabs` runs in GR3): `SIGSEGV code 2 (SEGV_ACCERR)`, thread 2 `com.gaten`, libc frame. Root cause named (E13.8): GWP-ASan's sampled-allocation backtrace, `android_unsafe_frame_pointer_chase+0x117` (`mov 0x8(%r12),%rcx`) reading a stack guard page; the only GOT consumer of that function in libc is `MaybeInitGwpAsan`. Fixed by keeping the sampled allocator out of guests | ART guest native fault | name the faulting frame, then 10/10 | high | low | low | **done, E13.8** (forced-on 4/4 crash reproduces it; default 40/40 clean) |
 | G3e | **No verification semantics for a screen that animates forever in a region that does not matter.** Options (stable tree content, region mask, navigation-only fast, explicit non-settle assertion) + false-pass analysis in `results/gaten/GR3.md` §4.3 | verify semantics | owner decision | — | — | — | **owner decision; do not weaken until then** |
+
+
+## E13.9 — W7b: `report` insets default, the red w7 gate, and the w42 one-row re-bless — PASS (gates, Gaten, crate tests; 0 false passes)
+
+- **Date / branch:** 2026-11-14; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/g3cd`,
+  branch `fix-w7b-insets` (off `main` `3e11d9c`). Real ART guest; all runs under
+  `tools/art-runtime/run-exclusive.sh --task W7B` + `guarded.sh`; scratch `.cache/w7b`.
+- **Question / goal:** `scenarios/w7-insets-report.yaml` was red on main at
+  `status=128` (got `status=0`). Bisect the delta from 5cae694 (density fix
+  `0e569b5`, B4, S3c) to the exact hunk and name the root cause; then ADR-0026
+  decision 6: default the app-window inset model to `report`, keep `carve`
+  selectable, re-bless w42's one AA row with a pixel-diff proof.
+- **Bisect (targeted A/B on the same binary):**
+  - default (`carve`): probe prints `status=0`, decor `[0,128][1080,2337]` → the
+    gate failure (`.cache/w7b/gates/w7-insets-report.json`).
+  - `ACOS_WM_INSETS=report`: probe passes, `status=128`, decor `[0,0][1080,2400]`.
+  - `ACOS_WM_INSETS=report` + `ACOSLAUNCH_APP_FLAGS=0x10808044` (the exact
+    pre-`0e569b5` ApplicationInfo flag set, i.e. no
+    `FLAG_SUPPORTS_SCREEN_DENSITIES`): **also passes**. The density hunk does
+    not change the insets read; B4/S3c are bench-only by file scope. **Root
+    cause: the scenario required `report` but nothing selected it, and the build
+    default was `carve`.** Under AOSP `WindowLayout.computeFrames` +
+    `InsetsState.calculateInsets`, a carved window frame excludes the bar
+    sources, so the calculation is zero; the density flag only feeds
+    `CompatibilityInfo` scaling, and ACOS's guest always binds
+    `DEFAULT_COMPATIBILITY_INFO` (no translator), so it cannot move the rows.
+    AOSP refs: `PackageParser.java:2500`, `CompatibilityInfo.java:295`,
+    `ActivityThread.java:7218`, `ViewRootImpl.java:1407/2098`.
+- **Change:** `DEFAULT_INSETS_MODE = Report` (and the enum default). New
+  validated scenario field `insets: carve|report` threaded through `acos verify`
+  (precedence CLI > scenario > `ACOS_WM_INSETS` > default; the resolved value is
+  installed in the env before launch and published in the verdict). The two W7
+  scenarios pin their model; the negative also asserts the carved frame first,
+  then fails the report contract at `status=128` (without the pin it would
+  become a false pass under the new default). `carve` remains selectable via
+  env, `--insets`, and the scenario field. Docs updated (`AGENT_API` §8.6.6,
+  `SECURITY` env table, `MORNING`, `TRACKS`, `results/render/W7.md` addendum).
+- **w42 re-bless:** `w42-back-frame` pinned to `insets: report`; only the final
+  first-Activity region-1 hash changed
+  (`dee05db8…` → `5edac422…`). Pixel diff (`.cache/w7b/art-w42-*/frames/14.png`,
+  `results/handoff/W7B-pixel-diff.txt`): exactly **one** differing row in the
+  overlapping display area, display y=411 (carve PNG y=283), 122 pixels,
+  x=58..1026, only `G -1` (carve 211 → report 210). Every other pixel identical;
+  the second-activity regions and final region 2 are unchanged. No tolerance.
+- **Result (gates, final binary):** all pass under `report`:
+  `v2-art-counter`, `w22-counter-reset`, `w54-dialog-pixels`, `w42-back-frame`,
+  `w15-dialog-menu`, `form-validation`, `suite/T03-render-good`,
+  `v1-offscreen-pager`, `w7-insets-report`; `w7-insets-carve-negative` fails
+  `ASSERTION_FAILED` at its status assertion with `insets=carve`;
+  `suite/T03-render-wrong` `ASSERTION_FAILED`; `negative/offscreen-pager-visible`
+  `ELEMENT_OFFSCREEN`; `p11-progress-timeout` `TIMEOUT`. Gaten: home/tabs/
+  settings/search/lesson pass (14/22/33/22/28 steps), the five negatives fail
+  `ASSERTION_FAILED`. Evidence `.cache/w7b/gates/`, `.cache/w7b/gaten/`,
+  `results/handoff/W7B.md`.
+- **Tests:** `cargo test --release --offline -p acos-apk -p acos-cli
+  -p acos-verify -p acos-services` green (the services carve wire-golden tests
+  now pin `ServiceHost::standard_with_insets(Carve)`; DisplayInfo is built with
+  the same explicit mode, so the display service can no longer disagree with the
+  WMS). `acos-art`: skip the order-dependent cgroup test with
+  `--test-threads=1 --skip refuses_to_run_when_no_cgroup_can_be_created` (green),
+  then that test alone in a **fresh** lock acquisition (fresh `ACOS_ART_DATA`,
+  green). Same-acquisition rerun reuses the cached `scope_ok=true` and fails.
+- **Regression / false pass:** none; 0 false passes. The negative that would
+  have false-passed without a model pin is now pinned. `report` changes the
+  frame metadata for all ART gates (display-sized PNG, origin `[0,0]`) as W7
+  measured; only w42 had a model-specific hash.
+- **Not fixed:** GR4 Backlog G4a (visibility vs carved bottom bar) — `report`
+  likely removes its carve-specific trigger for Activities; GR4 must re-measure.
+  Any baseline that wants the old pixels must pin `insets: carve`.
+- **Incident:** an external cleanup at ~14:06 removed `.cache/` from this and
+  three sibling worktrees (~92 GB host-wide), including the required symlinks
+  and the prebuilt target; they were recreated and the release rebuilt. Other
+  tracks' `.cache` scratch evidence is gone.

@@ -1797,6 +1797,13 @@
       "default": "report-and-escalate",
       "description": "Fallback policy."
     },
+    "insets": {
+      "description": "W7b: per-session app-window inset model (`carve`/`report`).\n\nSelects the model for this scenario exactly as `ACOS_WM_INSETS` does, and takes precedence over the environment. A scenario that pins the model is self-contained: it cannot silently change meaning when the build default or the caller's environment changes. Launch-time only; the Rust VM has no window insets and ignores it.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "isolation": {
       "allOf": [
         {
