@@ -528,6 +528,12 @@ fn resolves_inside(dir: &Path, value: &str) -> bool {
 /// A re-encode that would not shrink the file, or that fails to decode, leaves
 /// the original bytes untouched: evidence is never replaced by a lossy or
 /// unreadable variant.
+///
+/// SHOTZ (ADR-0027 #6) made the capture encoder write real deflate, so a frame
+/// this process wrote is already compressed: [`is_stored_zlib_png`] recognises
+/// the old stored-block layout and only those files are re-encoded. Re-encoding
+/// an already-compressed frame would cost a decode + encode per frame to save
+/// nothing (and would rewrite the file the verdict's `md5` names).
 pub fn reencode_retained_frames(dir: &Path) -> (u64, u64) {
     let mut count = 0_u64;
     let mut saved = 0_u64;
@@ -540,6 +546,11 @@ pub fn reencode_retained_frames(dir: &Path) -> (u64, u64) {
             let Ok(original) = std::fs::read(&path) else {
                 continue;
             };
+            if !is_stored_zlib_png(&original) {
+                // Already deflated by the capture path (or by an earlier
+                // re-encode): a no-op, not a second encode.
+                continue;
+            }
             let Some(smaller) = reencode_png(&original) else {
                 continue;
             };
@@ -553,6 +564,48 @@ pub fn reencode_retained_frames(dir: &Path) -> (u64, u64) {
         }
     }
     (count, saved)
+}
+
+/// Is this PNG's IDAT a zlib stream of **stored** (uncompressed) blocks?
+///
+/// The pre-SHOTZ capture encoder wrote exactly that: filter 0 per row and stored
+/// blocks, so every 1080x2400 frame was 10 371 258 B. Such a file is the only
+/// kind worth re-encoding losslessly; a frame the capture path already deflated
+/// is left byte-for-byte alone.
+///
+/// The check is one byte: the first deflate block header's `BTYPE` bits. A file
+/// that is not a PNG, has no IDAT, or is an interlaced/odd format answers
+/// `false` (leave it alone — the caller's fallback is "do not touch").
+pub fn is_stored_zlib_png(bytes: &[u8]) -> bool {
+    const SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+    if !bytes.starts_with(&SIGNATURE) {
+        return false;
+    }
+    let mut offset = SIGNATURE.len();
+    while offset + 8 <= bytes.len() {
+        let length = u32::from_be_bytes([
+            bytes[offset],
+            bytes[offset + 1],
+            bytes[offset + 2],
+            bytes[offset + 3],
+        ]) as usize;
+        let kind = &bytes[offset + 4..offset + 8];
+        let body = offset + 8;
+        if kind == b"IDAT" {
+            // zlib header (2 bytes: CMF/FLG) then the first deflate block
+            // header: BFINAL is bit 0, BTYPE is bits 1-2. BTYPE == 0 is stored.
+            if body + 3 > bytes.len() {
+                return false;
+            }
+            let block = bytes[body + 2];
+            return block & 0b110 == 0;
+        }
+        if kind == b"IEND" {
+            return false;
+        }
+        offset = body.saturating_add(length).saturating_add(4);
+    }
+    false
 }
 
 /// Re-encode an 8-bit RGB/RGBA PNG with real deflate and Sub filtering.
@@ -1065,9 +1118,52 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
-    /// A PNG in the ART capture shape: unfiltered rows, zlib stored blocks
-    /// (the ~10 MB "raw buffer" PNG the launcher writes on the capture path).
+    /// A PNG in the ART capture shape *before* SHOTZ: filter 0 rows and zlib
+    /// **stored** blocks — the ~10 MB "raw buffer in a PNG wrapper" the launcher
+    /// wrote on the capture path. This is the only layout the retention pass
+    /// re-encodes, so the helper builds it by hand (the `png` crate cannot write
+    /// stored blocks through its public API).
     fn stored_png(width: u32, height: u32) -> Vec<u8> {
+        let mut raw = Vec::new();
+        for y in 0..height {
+            raw.push(0u8); // filter 0 per row
+            for x in 0..width {
+                let shade = ((x / 8 + y / 8) % 2) as u8;
+                raw.extend_from_slice(&[shade * 200, shade * 100, shade * 40, 255]);
+            }
+        }
+        let mut zlib = vec![0x78, 0x01];
+        let mut offset = 0usize;
+        while offset < raw.len() {
+            let len = (raw.len() - offset).min(65_535);
+            let last = offset + len == raw.len();
+            zlib.push(u8::from(last));
+            zlib.extend_from_slice(&(len as u16).to_le_bytes());
+            zlib.extend_from_slice(&(!(len as u16)).to_le_bytes());
+            zlib.extend_from_slice(&raw[offset..offset + len]);
+            offset += len;
+        }
+        let mut a = 1u32;
+        let mut b = 0u32;
+        for &byte in &raw {
+            a = (a + u32::from(byte)) % 65_521;
+            b = (b + a) % 65_521;
+        }
+        zlib.extend_from_slice(&((b << 16) | a).to_be_bytes());
+
+        let mut out = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+        let mut ihdr = Vec::new();
+        ihdr.extend_from_slice(&width.to_be_bytes());
+        ihdr.extend_from_slice(&height.to_be_bytes());
+        ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
+        test_chunk(&mut out, b"IHDR", &ihdr);
+        test_chunk(&mut out, b"IDAT", &zlib);
+        test_chunk(&mut out, b"IEND", &[]);
+        out
+    }
+
+    /// A PNG the SHOTZ capture encoder writes: real deflate, filtered rows.
+    fn deflated_png(width: u32, height: u32) -> Vec<u8> {
         let mut raw = Vec::new();
         for y in 0..height {
             for x in 0..width {
@@ -1081,12 +1177,36 @@ mod tests {
             encoder.set_color(png::ColorType::Rgba);
             encoder.set_depth(png::BitDepth::Eight);
             encoder.set_compression(png::Compression::Fast);
-            encoder.set_filter(png::FilterType::NoFilter);
             let mut writer = encoder.write_header().unwrap();
             writer.write_image_data(&raw).unwrap();
             writer.finish().unwrap();
         }
         out
+    }
+
+    fn test_crc32(bytes: &[u8]) -> u32 {
+        let mut crc = 0xffff_ffffu32;
+        for &byte in bytes {
+            crc ^= u32::from(byte);
+            for _ in 0..8 {
+                crc = if crc & 1 != 0 {
+                    (crc >> 1) ^ 0xedb8_8320
+                } else {
+                    crc >> 1
+                };
+            }
+        }
+        !crc
+    }
+
+    fn test_chunk(out: &mut Vec<u8>, kind: &[u8; 4], body: &[u8]) {
+        out.extend_from_slice(&(body.len() as u32).to_be_bytes());
+        out.extend_from_slice(kind);
+        out.extend_from_slice(body);
+        let mut crc_input = Vec::with_capacity(4 + body.len());
+        crc_input.extend_from_slice(kind);
+        crc_input.extend_from_slice(body);
+        out.extend_from_slice(&test_crc32(&crc_input).to_be_bytes());
     }
 
     fn decode_pixels(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
@@ -1119,6 +1239,38 @@ mod tests {
         assert_eq!((ow, oh), (nw, nh));
         assert_eq!(opixels, npixels, "re-encoding is lossless");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn an_already_compressed_frame_is_not_reencoded() {
+        // SHOTZ: the capture path now writes real deflate. Re-encoding that
+        // would be a decode + encode per frame to save nothing, and it would
+        // rewrite the file the verdict's md5 names.
+        let dir = temp_dir("reencode-skip");
+        let deflated = deflated_png(240, 320);
+        write(&dir, "frames/1.png", &deflated);
+        let (count, saved) = reencode_retained_frames(&dir);
+        assert_eq!(count, 0, "an already-compressed frame must be skipped");
+        assert_eq!(saved, 0);
+        assert_eq!(
+            std::fs::read(dir.join("frames/1.png")).unwrap(),
+            deflated,
+            "the frame's bytes must be untouched"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_stored_block_detector_separates_the_two_layouts() {
+        assert!(is_stored_zlib_png(&stored_png(16, 8)));
+        assert!(!is_stored_zlib_png(&deflated_png(16, 8)));
+        // Not a PNG, an empty file, a PNG with no IDAT.
+        assert!(!is_stored_zlib_png(b""));
+        assert!(!is_stored_zlib_png(b"GIF89a"));
+        let mut header_only = vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+        test_chunk(&mut header_only, b"IHDR", &[0; 13]);
+        test_chunk(&mut header_only, b"IEND", &[]);
+        assert!(!is_stored_zlib_png(&header_only));
     }
 
     #[test]

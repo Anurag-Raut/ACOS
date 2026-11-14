@@ -4551,3 +4551,130 @@ known worktree-path `w50_serve_art` socket test fails.
 
 Host: peak guest cgroup 432 MiB, MemAvailable never below 29 GiB (49 % of 60 GiB used), disk
 83 % after pruning this worktree's stale target/scratch dirs.
+## E9.4 — SHOTZ: a screenshot is a compressed lossless PNG (10.4 MB → ~80 KB, M5 −51 %), and an MCP image reply is a bounded preview — PASS (image bytes −99.2 %, gates and Gaten as expected, 0 false passes)
+
+- **Date / commit:** 2026-11-14/15; branch `screenshot-compress` off `rel3-int`
+  `19db6b8` (worktree `/home/Qui/.paseo/worktrees/3oxa6xao/gr4`). Report:
+  `results/handoff/SHOTZ.md`. ADR-0027 #6.
+- **Question / goal:** ARTGC showed every capture PNG is exactly 10 371 258 B
+  (zlib *stored* blocks, filter 0 — a 9.9 MB raw buffer in a PNG wrapper), so M5
+  paid an ~11 ms write+MD5 of 9.9 MB on top of a memcpy-shaped "encode". Make the
+  default capture a compressed **lossless** PNG, keep every pixel assertion
+  exact, keep M5 at parity or better, bound the images returned over MCP, and
+  stop ARTGC's post-run re-encode from touching already-compressed frames.
+- **Method:** measure candidates on real 1080x2400 frames first (counter,
+  form-validation, dialog-menu, text-input, hello-views: stored vs
+  fdeflate/flate2 at L1/L3/L6 × Sub/Up/exhaustive-adaptive/sampled-adaptive, size
+  *and* encode time, each output decoded back and compared pixel for pixel), pick
+  the knee, then implement it in the capture encoder and prove it with an
+  interleaved A/B.
+- **Inputs:** API-34 image `$WT/.cache/boot/android-34` (symlink to the shared
+  boot cache), Gaten APK
+  `/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk`,
+  binaries from `$WT/.cache/gr4-target/release`; base arm = `19db6b8` built in a
+  linked worktree at `$WT/.cache/shotz-base` (`.cache/base-target`). Every ART
+  run and every crate test under
+  `/home/Qui/Projects/acos/tools/art-runtime/run-exclusive.sh --task SHOTZ --
+  tools/guarded.sh --mem 10G --time …`; builds via `tools/guarded.sh --mem 14G`.
+  Scratch `$WT/.cache/shotz-*`.
+- **Result:**
+  - *Candidate sweep* (deflate time includes the filter; same frames):
+
+    | candidate | bytes (counter / dialog-menu) | encode |
+    |---|---:|---:|
+    | stored (shipped) | 10 371 258 / 10 371 258 | 33–36 ms (2 passes) |
+    | fdeflate + Sub | 94 382 / 107 975 | 0.8 ms |
+    | fdeflate + Up | 178 747 / 190 509 | 0.9 ms |
+    | fdeflate + adaptive (exhaustive) | 72 954 / 81 700 | 5.9 ms |
+    | **fdeflate + adaptive (sampled 1/8)** | **75 519 / 84 308** | **1.9 ms** |
+    | flate2 L1 + adaptive | 76 489 / 84 864 | 6.8 ms |
+    | flate2 L3 + adaptive | 29 719 / 37 057 | 15.0 ms |
+    | flate2 L6 + adaptive | 29 256 / 36 517 | 16.1 ms |
+
+    The knee is sampled-adaptive + fdeflate: exhaustive-adaptive quality at a
+    third of its cost and 3x cheaper than the stored framing. L3/L6 buy another
+    ~2.5x smaller file for ~8x the encode; 80 KB is already far under the 1 MB
+    target, so the trade is not taken.
+  - *In-tree, per frame* (test `launch::shotz_png_tests`,
+    `results/parity/w198a/`): 10 371 258 B → 75 489 / 84 450 / 77 587 / 88 555 /
+    85 396 B (**−99.2 %**, ~120–137x); encode (filter+deflate) 5.7–6.2 ms →
+    **1.9 ms**.
+  - *Lossless proof:* every candidate's output is decoded and compared pixel for
+    pixel with the source frame; the shipped encoder round-trips the two
+    committed real frames (`fixtures/art-frames/*.png`) exactly, and the
+    canonical 1080x2209 test frame still hashes to what `md5sum` prints for the
+    file — `content_hash` remains the MD5 of exactly the file's bytes.
+  - *Floor:* pure high-entropy noise is the one input fixed-Huffman deflate
+    cannot shrink (it expands ~9 %), so the encoder falls back to the stored
+    layout when deflate loses — a capture is never materially bigger than before.
+  - *MCP replies:* an image is inlined as a preview (long side ≤ 1280 px by
+    `ACOS_MCP_PREVIEW_MAX_SIDE`, file ≤ `ACOS_MCP_MAX_IMAGE_BYTES`); 1080x2400
+    arrives as 576x1280 plus a line naming the size and the lossless file, which
+    is still linked. High-entropy frames halve until they fit (never a multi-MB
+    base64 blob). JPEG is not used: no offline JPEG *encoder* exists in this
+    workspace, and a PNG preview of a real capture is already 20–40 KB.
+  - *ARTGC:* `retention::reencode_retained_frames` re-encodes only frames whose
+    IDAT is a stored-block zlib stream (`is_stored_zlib_png`), so its post-run
+    lossless pass is now a no-op on captures this encoder wrote (0 files,
+    0 bytes, frame bytes untouched).
+  - *Gates:* 10 pass (`v2-art-counter`, `form-validation`,
+    `w54-dialog-pixels`, `w42-back-frame`, `w15-dialog-menu`,
+    `suite/T03-render-good`, `v1-offscreen-pager`, `w7-insets-report`,
+    `p11-activity`, `p11-list-smooth`) and 5 designed failures with the right
+    codes (`suite/T03-render-wrong`, `w7-insets-carve-negative`,
+    `negative/se1-expect-change-noop` — ASSERTION_FAILED;
+    `negative/offscreen-pager-visible` — ELEMENT_OFFSCREEN;
+    `p11-progress-timeout` — TIMEOUT). 5 Gaten flows pass and their 5 wrong
+    twins fail ASSERTION_FAILED. **0 false passes.**
+  - *A/B* (interleaved, `--reps 1 --groups "a:latency:8G:300"`, 3 reps per arm,
+    alternating, base = `19db6b8` built in a linked worktree):
+
+| metric | base (rel3-int 19db6b8) | fix | Δ |
+|---|---:|---:|---:|
+| M4 launch strict | 305.90 ms | 305.73 ms | -0.1 % (-0.17 ms) |
+| M4 launch fast | 155.21 ms | 155.82 ms | +0.4 % (+0.61 ms) |
+| M5 screenshot (PNG) | 24.09 ms | 11.68 ms | -51.5 % (-12.40 ms) |
+| M6 reset strict | 339.92 ms | 341.20 ms | +0.4 % (+1.27 ms) |
+| M6 reset fast | 198.60 ms | 195.86 ms | -1.4 % (-2.74 ms) |
+| M7 tree strict | 41.38 ms | 41.34 ms | -0.1 % (-0.04 ms) |
+| M7 tree fast | 0.56 ms | 0.54 ms | -4.1 % (-0.02 ms) |
+| M8 tap counter strict | 956.03 ms | 948.42 ms | -0.8 % (-7.61 ms) |
+| M8 tap counter fast | 47.71 ms | 49.45 ms | +3.6 % (+1.73 ms) |
+| M8 tap form strict | 948.86 ms | 927.58 ms | -2.2 % (-21.27 ms) |
+| M8 tap form fast | 45.24 ms | 32.35 ms | -28.5 % (-12.89 ms) |
+| tap ack | 5.00 ms | 5.00 ms | +0.0 % (+0.00 ms) |
+| teardown | 13.00 ms | 13.00 ms | +0.0 % (+0.00 ms) |
+| teardown wall | 19.15 ms | 19.10 ms | -0.2 % (-0.05 ms) |
+| active CPU (strict taps) | 46.61% | 45.60% | -2.2 % (-1.01 ms) |
+
+M5 **halves** (−12.4 ms, from 24.09 to 11.68 ms p50): the 9.9 MB write+MD5 stops
+existing. Every other metric is inside the +5 % / +2 ms gate over 4 reps per arm
+(the first 3-rep median put `m8_tap_counter_fast` at +5.3 % / +2.54 ms while the
+arms overlapped; the 4th alternating pair resolved it to +3.6 % / +1.73 ms —
+nothing in this change is on the tap path).
+
+  - *Tests:* `cargo test --release --offline -p acos-art -p acos-cli -p acos-mcp
+    -p acos-verify` green (acos-art 121 lib + 8 integration, acos-mcp 59 lib,
+    acos-verify retention 12 incl. 3 new). New tests: real-frame pixel
+    round-trip and the size assertion (a return to stored blocks fails), the
+    stored baseline proved byte-identical to the pre-SHOTZ encoder, stride/short
+    row padding still decoding to the padded rows, streamed == buffered,
+    determinism, the high-entropy floor; the MCP preview bound (long side,
+    byte cap, aspect ratio, fitting file inlined untouched, undecodable file
+    linked not inlined); the retention skip and the stored-block detector.
+- **Decision:** the capture default is compressed lossless PNG (fdeflate +
+  sampled-adaptive filtering), and an MCP image is a bounded preview plus the
+  lossless path. `content_hash` keeps its meaning (MD5 of the file's bytes);
+  hashing raw pixels was considered and rejected because it would change every
+  recorded `md5`/`content_hash` and break frame-diff/parity comparisons.
+- **Not done:** no JPEG/WebP preview (no offline encoder); the retention pass
+  still has to *decode* a legacy stored-block frame to re-encode it; capture
+  still writes the PNG to disk before it is hashed (now ~80 KB, so the second
+  pass is free).
+- **Left open (pre-existing):** `acos-art`'s
+  `launch_hang::guest_exits_before_milestone…` and
+  `cleanup::log_spam_keeps_the_launcher_peak_rss_under_256_mib` fail only when
+  the whole suite runs under host load; both pass in isolation (0.26 s; 55.6 MiB
+  peak vs the 256 MiB limit). INT-KG-AB recorded the same `launch_hang` flake on
+  `main` and queued it as LHFLAKE.
+

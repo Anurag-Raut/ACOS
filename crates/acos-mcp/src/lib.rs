@@ -23,6 +23,7 @@
 
 pub mod backend;
 pub mod base64;
+pub mod preview;
 pub mod bound;
 pub mod daemon;
 pub mod descriptors;
