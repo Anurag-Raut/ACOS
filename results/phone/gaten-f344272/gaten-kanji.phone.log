@@ -8,5 +8,32 @@
 [replay] phone step 07 tap -> pass
 [replay] phone step 08 wait_for -> pass
 [replay] phone step 09 capture -> pass
-[replay] phone step 10 assert_visible -> unsupported_step
+[replay] phone step 10 assert_visible -> pass
 [replay] phone step 11 assert_not_visible -> pass
+[replay] phone step 12 tap -> pass
+[replay] phone step 13 wait_for -> pass
+[replay] phone step 14 capture -> pass
+[replay] phone step 15 assert_text -> pass
+[replay] phone step 16 assert_text -> pass
+[replay] phone step 17 tap -> pass
+[replay] phone step 18 capture -> pass
+[replay] phone step 19 assert_not_visible -> pass
+[replay] phone step 20 back -> pass
+[replay] phone step 21 wait_for -> pass
+[replay] phone step 22 capture -> pass
+[replay] phone step 23 assert_visible -> pass
+[replay] phone step 24 assert_not_visible -> pass
+[replay] phone step 25 tap -> pass
+[replay] phone step 26 wait_for -> pass
+[replay] phone step 27 tap -> pass
+[replay] phone step 28 back -> pass
+[replay] phone step 29 wait_for -> pass
+[replay] phone step 30 capture -> pass
+[replay] phone step 31 assert_visible -> pass
+[replay] phone step 32 assert_not_visible -> pass
+{
+  "source": "phone",
+  "out": "results/phone/gaten-f344272/gaten-kanji/phone",
+  "steps": 33,
+  "failed": []
+}

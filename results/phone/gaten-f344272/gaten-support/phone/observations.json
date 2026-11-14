@@ -21,7 +21,7 @@
     "density_dpi": 400,
     "font_scale": "1.0"
   },
-  "started": "2026-11-14T11:49:10.651+00:00",
+  "started": "2026-11-14T12:06:41.907+00:00",
   "steps": [
     {
       "index": 0,
@@ -1381,7 +1381,7 @@
         "app_bundle_in_snapshot": "com.gaten"
       },
       "assertion": {
-        "kind": "not_visible",
+        "kind": "assert_not_visible",
         "passed": true,
         "expected_absent": {
           "text": {
@@ -1426,13 +1426,26 @@
     {
       "index": 19,
       "kind": "assert_visible",
-      "status": "unsupported_step",
+      "status": "pass",
       "selector": {
         "content_desc": {
           "exact": "Support Gaten"
         }
       },
-      "target": null,
+      "target": {
+        "text": "",
+        "content_desc": "Support Gaten",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          1551,
+          1025,
+          1701
+        ]
+      },
       "visible_texts": [],
       "visible_descs": [
         "0.1.0",
@@ -1469,9 +1482,17 @@
         "package": "com.gaten",
         "app_bundle_in_snapshot": "com.gaten"
       },
-      "assertion": null,
+      "assertion": {
+        "kind": "assert_visible",
+        "passed": true,
+        "expected_present": {
+          "content_desc": {
+            "exact": "Support Gaten"
+          }
+        }
+      },
       "screenshot": "screenshot-19-assert_visible.png",
-      "error": "unsupported step kind assert_visible",
+      "error": null,
       "visible_labels": [
         "0.1.0",
         "About",
@@ -1832,7 +1853,7 @@
         "app_bundle_in_snapshot": "com.gaten"
       },
       "assertion": {
-        "kind": "not_visible",
+        "kind": "assert_not_visible",
         "passed": true,
         "expected_absent": {
           "text": {
@@ -1975,7 +1996,7 @@
       "node_count": 149
     }
   ],
-  "finished": "2026-11-14T11:49:47.493+00:00",
+  "finished": "2026-11-14T12:07:20.622+00:00",
   "commands": [
     {
       "tool": "adb",
@@ -1985,7 +2006,48 @@
         "list",
         "packages"
       ],
-      "ts": "2026-11-14T11:49:10.064+00:00"
+      "ts": "2026-11-14T12:06:39.922+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "input",
+        "keyevent",
+        "KEYCODE_WAKEUP"
+      ],
+      "ts": "2026-11-14T12:06:40.027+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "wm",
+        "dismiss-keyguard"
+      ],
+      "ts": "2026-11-14T12:06:40.127+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "settings",
+        "get",
+        "global",
+        "stay_on_while_plugged_in"
+      ],
+      "ts": "2026-11-14T12:06:40.223+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "svc",
+        "power",
+        "stayon",
+        "true"
+      ],
+      "ts": "2026-11-14T12:06:40.323+00:00"
     },
     {
       "tool": "adb",
@@ -1994,7 +2056,7 @@
         "getprop",
         "ro.build.fingerprint"
       ],
-      "ts": "2026-11-14T11:49:10.174+00:00"
+      "ts": "2026-11-14T12:06:41.444+00:00"
     },
     {
       "tool": "adb",
@@ -2003,7 +2065,7 @@
         "getprop",
         "ro.build.version.sdk"
       ],
-      "ts": "2026-11-14T11:49:10.228+00:00"
+      "ts": "2026-11-14T12:06:41.496+00:00"
     },
     {
       "tool": "adb",
@@ -2012,7 +2074,7 @@
         "getprop",
         "ro.build.version.release"
       ],
-      "ts": "2026-11-14T11:49:10.271+00:00"
+      "ts": "2026-11-14T12:06:41.544+00:00"
     },
     {
       "tool": "adb",
@@ -2021,7 +2083,7 @@
         "getprop",
         "ro.product.model"
       ],
-      "ts": "2026-11-14T11:49:10.319+00:00"
+      "ts": "2026-11-14T12:06:41.577+00:00"
     },
     {
       "tool": "adb",
@@ -2030,7 +2092,7 @@
         "wm",
         "size"
       ],
-      "ts": "2026-11-14T11:49:10.373+00:00"
+      "ts": "2026-11-14T12:06:41.635+00:00"
     },
     {
       "tool": "adb",
@@ -2039,7 +2101,7 @@
         "wm",
         "density"
       ],
-      "ts": "2026-11-14T11:49:10.453+00:00"
+      "ts": "2026-11-14T12:06:41.719+00:00"
     },
     {
       "tool": "adb",
@@ -2050,7 +2112,7 @@
         "system",
         "font_scale"
       ],
-      "ts": "2026-11-14T11:49:10.556+00:00"
+      "ts": "2026-11-14T12:06:41.817+00:00"
     },
     {
       "tool": "adb",
@@ -2060,7 +2122,7 @@
         "clear",
         "com.gaten"
       ],
-      "ts": "2026-11-14T11:49:10.651+00:00"
+      "ts": "2026-11-14T12:06:41.907+00:00"
     },
     {
       "tool": "agent-device",
@@ -2073,7 +2135,7 @@
         "--foreground",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:10.836+00:00"
+      "ts": "2026-11-14T12:06:42.057+00:00"
     },
     {
       "tool": "agent-device",
@@ -2082,7 +2144,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:13.889+00:00"
+      "ts": "2026-11-14T12:06:44.906+00:00"
     },
     {
       "tool": "adb",
@@ -2091,7 +2153,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:14.186+00:00"
+      "ts": "2026-11-14T12:06:45.189+00:00"
     },
     {
       "tool": "agent-device",
@@ -2099,7 +2161,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-00-launch.png"
       ],
-      "ts": "2026-11-14T11:49:14.299+00:00"
+      "ts": "2026-11-14T12:06:45.292+00:00"
     },
     {
       "tool": "agent-device",
@@ -2108,7 +2170,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:14.657+00:00"
+      "ts": "2026-11-14T12:06:45.720+00:00"
     },
     {
       "tool": "agent-device",
@@ -2118,7 +2180,7 @@
         "2195",
         "--settle"
       ],
-      "ts": "2026-11-14T11:49:14.868+00:00"
+      "ts": "2026-11-14T12:06:45.994+00:00"
     },
     {
       "tool": "agent-device",
@@ -2127,7 +2189,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:16.387+00:00"
+      "ts": "2026-11-14T12:06:47.647+00:00"
     },
     {
       "tool": "adb",
@@ -2136,7 +2198,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:16.597+00:00"
+      "ts": "2026-11-14T12:06:47.852+00:00"
     },
     {
       "tool": "agent-device",
@@ -2144,7 +2206,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-01-tap.png"
       ],
-      "ts": "2026-11-14T11:49:16.709+00:00"
+      "ts": "2026-11-14T12:06:47.973+00:00"
     },
     {
       "tool": "agent-device",
@@ -2153,7 +2215,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:17.031+00:00"
+      "ts": "2026-11-14T12:06:48.346+00:00"
     },
     {
       "tool": "agent-device",
@@ -2163,7 +2225,7 @@
         "2200",
         "--settle"
       ],
-      "ts": "2026-11-14T11:49:17.212+00:00"
+      "ts": "2026-11-14T12:06:48.527+00:00"
     },
     {
       "tool": "agent-device",
@@ -2172,7 +2234,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:18.654+00:00"
+      "ts": "2026-11-14T12:06:50.021+00:00"
     },
     {
       "tool": "adb",
@@ -2181,7 +2243,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:18.838+00:00"
+      "ts": "2026-11-14T12:06:50.185+00:00"
     },
     {
       "tool": "agent-device",
@@ -2189,7 +2251,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-02-tap.png"
       ],
-      "ts": "2026-11-14T11:49:18.947+00:00"
+      "ts": "2026-11-14T12:06:50.299+00:00"
     },
     {
       "tool": "agent-device",
@@ -2198,7 +2260,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:19.261+00:00"
+      "ts": "2026-11-14T12:06:50.675+00:00"
     },
     {
       "tool": "agent-device",
@@ -2208,7 +2270,7 @@
         "2200",
         "--settle"
       ],
-      "ts": "2026-11-14T11:49:19.410+00:00"
+      "ts": "2026-11-14T12:06:50.824+00:00"
     },
     {
       "tool": "agent-device",
@@ -2217,7 +2279,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:21.416+00:00"
+      "ts": "2026-11-14T12:06:52.699+00:00"
     },
     {
       "tool": "adb",
@@ -2226,7 +2288,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:21.727+00:00"
+      "ts": "2026-11-14T12:06:52.995+00:00"
     },
     {
       "tool": "agent-device",
@@ -2234,7 +2296,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-03-tap.png"
       ],
-      "ts": "2026-11-14T11:49:21.844+00:00"
+      "ts": "2026-11-14T12:06:53.102+00:00"
     },
     {
       "tool": "agent-device",
@@ -2243,7 +2305,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:22.156+00:00"
+      "ts": "2026-11-14T12:06:53.469+00:00"
     },
     {
       "tool": "agent-device",
@@ -2253,7 +2315,7 @@
         "2200",
         "--settle"
       ],
-      "ts": "2026-11-14T11:49:22.399+00:00"
+      "ts": "2026-11-14T12:06:53.739+00:00"
     },
     {
       "tool": "agent-device",
@@ -2262,7 +2324,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:24.057+00:00"
+      "ts": "2026-11-14T12:06:55.313+00:00"
     },
     {
       "tool": "adb",
@@ -2271,7 +2333,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:24.321+00:00"
+      "ts": "2026-11-14T12:06:55.562+00:00"
     },
     {
       "tool": "agent-device",
@@ -2279,7 +2341,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-04-tap.png"
       ],
-      "ts": "2026-11-14T11:49:24.420+00:00"
+      "ts": "2026-11-14T12:06:55.680+00:00"
     },
     {
       "tool": "agent-device",
@@ -2288,7 +2350,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:24.731+00:00"
+      "ts": "2026-11-14T12:06:56.058+00:00"
     },
     {
       "tool": "agent-device",
@@ -2297,7 +2359,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:24.974+00:00"
+      "ts": "2026-11-14T12:06:56.271+00:00"
     },
     {
       "tool": "adb",
@@ -2306,7 +2368,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:25.235+00:00"
+      "ts": "2026-11-14T12:06:56.512+00:00"
     },
     {
       "tool": "agent-device",
@@ -2314,7 +2376,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-05-wait_for.png"
       ],
-      "ts": "2026-11-14T11:49:25.344+00:00"
+      "ts": "2026-11-14T12:06:56.619+00:00"
     },
     {
       "tool": "agent-device",
@@ -2323,7 +2385,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:25.664+00:00"
+      "ts": "2026-11-14T12:06:56.985+00:00"
     },
     {
       "tool": "adb",
@@ -2332,7 +2394,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:25.871+00:00"
+      "ts": "2026-11-14T12:06:57.222+00:00"
     },
     {
       "tool": "agent-device",
@@ -2340,7 +2402,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-06-capture-support-home.png"
       ],
-      "ts": "2026-11-14T11:49:25.956+00:00"
+      "ts": "2026-11-14T12:06:57.325+00:00"
     },
     {
       "tool": "agent-device",
@@ -2349,7 +2411,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:26.278+00:00"
+      "ts": "2026-11-14T12:06:57.707+00:00"
     },
     {
       "tool": "agent-device",
@@ -2359,7 +2421,7 @@
         "2241",
         "--settle"
       ],
-      "ts": "2026-11-14T11:49:26.491+00:00"
+      "ts": "2026-11-14T12:06:57.924+00:00"
     },
     {
       "tool": "agent-device",
@@ -2368,7 +2430,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:28.234+00:00"
+      "ts": "2026-11-14T12:06:59.382+00:00"
     },
     {
       "tool": "adb",
@@ -2377,7 +2439,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:28.472+00:00"
+      "ts": "2026-11-14T12:06:59.663+00:00"
     },
     {
       "tool": "agent-device",
@@ -2385,7 +2447,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-07-tap.png"
       ],
-      "ts": "2026-11-14T11:49:28.563+00:00"
+      "ts": "2026-11-14T12:06:59.756+00:00"
     },
     {
       "tool": "agent-device",
@@ -2394,7 +2456,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:28.880+00:00"
+      "ts": "2026-11-14T12:07:00.142+00:00"
     },
     {
       "tool": "agent-device",
@@ -2403,7 +2465,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:29.091+00:00"
+      "ts": "2026-11-14T12:07:00.368+00:00"
     },
     {
       "tool": "adb",
@@ -2412,7 +2474,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:29.333+00:00"
+      "ts": "2026-11-14T12:07:00.600+00:00"
     },
     {
       "tool": "agent-device",
@@ -2420,7 +2482,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-08-wait_for.png"
       ],
-      "ts": "2026-11-14T11:49:29.448+00:00"
+      "ts": "2026-11-14T12:07:00.711+00:00"
     },
     {
       "tool": "agent-device",
@@ -2429,7 +2491,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:29.770+00:00"
+      "ts": "2026-11-14T12:07:01.092+00:00"
     },
     {
       "tool": "adb",
@@ -2438,7 +2500,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:29.991+00:00"
+      "ts": "2026-11-14T12:07:01.313+00:00"
     },
     {
       "tool": "agent-device",
@@ -2446,7 +2508,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-09-capture-support-hub.png"
       ],
-      "ts": "2026-11-14T11:49:30.107+00:00"
+      "ts": "2026-11-14T12:07:01.426+00:00"
     },
     {
       "tool": "agent-device",
@@ -2455,7 +2517,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:30.438+00:00"
+      "ts": "2026-11-14T12:07:01.800+00:00"
     },
     {
       "tool": "agent-device",
@@ -2465,7 +2527,7 @@
         "1626",
         "--settle"
       ],
-      "ts": "2026-11-14T11:49:30.656+00:00"
+      "ts": "2026-11-14T12:07:02.009+00:00"
     },
     {
       "tool": "agent-device",
@@ -2474,7 +2536,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:32.062+00:00"
+      "ts": "2026-11-14T12:07:03.514+00:00"
     },
     {
       "tool": "adb",
@@ -2483,7 +2545,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:32.215+00:00"
+      "ts": "2026-11-14T12:07:03.654+00:00"
     },
     {
       "tool": "agent-device",
@@ -2491,7 +2553,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-10-tap.png"
       ],
-      "ts": "2026-11-14T11:49:32.317+00:00"
+      "ts": "2026-11-14T12:07:03.759+00:00"
     },
     {
       "tool": "agent-device",
@@ -2500,7 +2562,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:32.641+00:00"
+      "ts": "2026-11-14T12:07:04.157+00:00"
     },
     {
       "tool": "agent-device",
@@ -2509,7 +2571,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:32.772+00:00"
+      "ts": "2026-11-14T12:07:04.289+00:00"
     },
     {
       "tool": "adb",
@@ -2518,7 +2580,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:32.909+00:00"
+      "ts": "2026-11-14T12:07:04.419+00:00"
     },
     {
       "tool": "agent-device",
@@ -2526,7 +2588,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-11-wait_for.png"
       ],
-      "ts": "2026-11-14T11:49:33.009+00:00"
+      "ts": "2026-11-14T12:07:04.530+00:00"
     },
     {
       "tool": "agent-device",
@@ -2535,7 +2597,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:33.341+00:00"
+      "ts": "2026-11-14T12:07:04.929+00:00"
     },
     {
       "tool": "adb",
@@ -2544,7 +2606,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:33.563+00:00"
+      "ts": "2026-11-14T12:07:05.062+00:00"
     },
     {
       "tool": "agent-device",
@@ -2552,7 +2614,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-12-capture-support-sheet.png"
       ],
-      "ts": "2026-11-14T11:49:33.660+00:00"
+      "ts": "2026-11-14T12:07:05.174+00:00"
     },
     {
       "tool": "agent-device",
@@ -2561,7 +2623,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:33.967+00:00"
+      "ts": "2026-11-14T12:07:05.569+00:00"
     },
     {
       "tool": "agent-device",
@@ -2570,7 +2632,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:34.094+00:00"
+      "ts": "2026-11-14T12:07:05.724+00:00"
     },
     {
       "tool": "adb",
@@ -2579,7 +2641,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:34.216+00:00"
+      "ts": "2026-11-14T12:07:05.935+00:00"
     },
     {
       "tool": "agent-device",
@@ -2587,7 +2649,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-13-assert_text.png"
       ],
-      "ts": "2026-11-14T11:49:34.302+00:00"
+      "ts": "2026-11-14T12:07:06.050+00:00"
     },
     {
       "tool": "agent-device",
@@ -2596,7 +2658,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:34.631+00:00"
+      "ts": "2026-11-14T12:07:06.460+00:00"
     },
     {
       "tool": "agent-device",
@@ -2605,7 +2667,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:34.762+00:00"
+      "ts": "2026-11-14T12:07:06.591+00:00"
     },
     {
       "tool": "adb",
@@ -2614,7 +2676,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:34.896+00:00"
+      "ts": "2026-11-14T12:07:06.711+00:00"
     },
     {
       "tool": "agent-device",
@@ -2622,7 +2684,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-14-assert_text.png"
       ],
-      "ts": "2026-11-14T11:49:34.997+00:00"
+      "ts": "2026-11-14T12:07:06.839+00:00"
     },
     {
       "tool": "agent-device",
@@ -2631,7 +2693,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:35.314+00:00"
+      "ts": "2026-11-14T12:07:07.228+00:00"
     },
     {
       "tool": "agent-device",
@@ -2640,7 +2702,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:35.441+00:00"
+      "ts": "2026-11-14T12:07:07.366+00:00"
     },
     {
       "tool": "adb",
@@ -2649,7 +2711,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:35.569+00:00"
+      "ts": "2026-11-14T12:07:07.488+00:00"
     },
     {
       "tool": "agent-device",
@@ -2657,7 +2719,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-15-assert_text.png"
       ],
-      "ts": "2026-11-14T11:49:35.668+00:00"
+      "ts": "2026-11-14T12:07:07.588+00:00"
     },
     {
       "tool": "agent-device",
@@ -2666,7 +2728,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:35.981+00:00"
+      "ts": "2026-11-14T12:07:07.976+00:00"
     },
     {
       "tool": "agent-device",
@@ -2676,7 +2738,7 @@
         "1495",
         "--settle"
       ],
-      "ts": "2026-11-14T11:49:36.115+00:00"
+      "ts": "2026-11-14T12:07:08.100+00:00"
     },
     {
       "tool": "agent-device",
@@ -2685,7 +2747,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:37.030+00:00"
+      "ts": "2026-11-14T12:07:09.450+00:00"
     },
     {
       "tool": "adb",
@@ -2694,7 +2756,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:37.251+00:00"
+      "ts": "2026-11-14T12:07:09.685+00:00"
     },
     {
       "tool": "agent-device",
@@ -2702,7 +2764,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-16-tap.png"
       ],
-      "ts": "2026-11-14T11:49:37.341+00:00"
+      "ts": "2026-11-14T12:07:09.787+00:00"
     },
     {
       "tool": "agent-device",
@@ -2711,7 +2773,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:37.663+00:00"
+      "ts": "2026-11-14T12:07:10.171+00:00"
     },
     {
       "tool": "adb",
@@ -2720,7 +2782,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:37.888+00:00"
+      "ts": "2026-11-14T12:07:10.389+00:00"
     },
     {
       "tool": "agent-device",
@@ -2728,7 +2790,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-17-capture-support-closed.png"
       ],
-      "ts": "2026-11-14T11:49:37.987+00:00"
+      "ts": "2026-11-14T12:07:10.492+00:00"
     },
     {
       "tool": "agent-device",
@@ -2737,7 +2799,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:38.302+00:00"
+      "ts": "2026-11-14T12:07:10.873+00:00"
     },
     {
       "tool": "agent-device",
@@ -2746,7 +2808,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:38.522+00:00"
+      "ts": "2026-11-14T12:07:11.088+00:00"
     },
     {
       "tool": "adb",
@@ -2755,7 +2817,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:38.755+00:00"
+      "ts": "2026-11-14T12:07:11.322+00:00"
     },
     {
       "tool": "agent-device",
@@ -2763,7 +2825,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-18-assert_not_visible.png"
       ],
-      "ts": "2026-11-14T11:49:38.868+00:00"
+      "ts": "2026-11-14T12:07:11.443+00:00"
     },
     {
       "tool": "agent-device",
@@ -2772,7 +2834,16 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:39.188+00:00"
+      "ts": "2026-11-14T12:07:11.817+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:07:12.054+00:00"
     },
     {
       "tool": "adb",
@@ -2781,7 +2852,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:39.403+00:00"
+      "ts": "2026-11-14T12:07:12.293+00:00"
     },
     {
       "tool": "agent-device",
@@ -2789,7 +2860,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-19-assert_visible.png"
       ],
-      "ts": "2026-11-14T11:49:39.494+00:00"
+      "ts": "2026-11-14T12:07:12.402+00:00"
     },
     {
       "tool": "agent-device",
@@ -2798,7 +2869,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:39.800+00:00"
+      "ts": "2026-11-14T12:07:12.798+00:00"
     },
     {
       "tool": "agent-device",
@@ -2808,7 +2879,7 @@
         "1626",
         "--settle"
       ],
-      "ts": "2026-11-14T11:49:40.021+00:00"
+      "ts": "2026-11-14T12:07:13.009+00:00"
     },
     {
       "tool": "agent-device",
@@ -2817,7 +2888,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:41.410+00:00"
+      "ts": "2026-11-14T12:07:14.377+00:00"
     },
     {
       "tool": "adb",
@@ -2826,7 +2897,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:41.562+00:00"
+      "ts": "2026-11-14T12:07:14.522+00:00"
     },
     {
       "tool": "agent-device",
@@ -2834,7 +2905,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-20-tap.png"
       ],
-      "ts": "2026-11-14T11:49:41.657+00:00"
+      "ts": "2026-11-14T12:07:14.618+00:00"
     },
     {
       "tool": "agent-device",
@@ -2843,7 +2914,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:41.978+00:00"
+      "ts": "2026-11-14T12:07:15.009+00:00"
     },
     {
       "tool": "agent-device",
@@ -2852,7 +2923,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:42.116+00:00"
+      "ts": "2026-11-14T12:07:15.138+00:00"
     },
     {
       "tool": "adb",
@@ -2861,7 +2932,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:42.257+00:00"
+      "ts": "2026-11-14T12:07:15.267+00:00"
     },
     {
       "tool": "agent-device",
@@ -2869,7 +2940,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-21-wait_for.png"
       ],
-      "ts": "2026-11-14T11:49:42.348+00:00"
+      "ts": "2026-11-14T12:07:15.367+00:00"
     },
     {
       "tool": "agent-device",
@@ -2878,7 +2949,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:42.675+00:00"
+      "ts": "2026-11-14T12:07:15.758+00:00"
     },
     {
       "tool": "adb",
@@ -2887,7 +2958,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:42.812+00:00"
+      "ts": "2026-11-14T12:07:15.895+00:00"
     },
     {
       "tool": "agent-device",
@@ -2895,7 +2966,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-22-capture-support-sheet-again.png"
       ],
-      "ts": "2026-11-14T11:49:42.908+00:00"
+      "ts": "2026-11-14T12:07:15.990+00:00"
     },
     {
       "tool": "agent-device",
@@ -2903,7 +2974,7 @@
         "back",
         "--settle"
       ],
-      "ts": "2026-11-14T11:49:43.236+00:00"
+      "ts": "2026-11-14T12:07:16.371+00:00"
     },
     {
       "tool": "agent-device",
@@ -2912,7 +2983,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:44.426+00:00"
+      "ts": "2026-11-14T12:07:17.315+00:00"
     },
     {
       "tool": "adb",
@@ -2921,7 +2992,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:44.680+00:00"
+      "ts": "2026-11-14T12:07:17.540+00:00"
     },
     {
       "tool": "agent-device",
@@ -2929,7 +3000,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-23-back.png"
       ],
-      "ts": "2026-11-14T11:49:44.771+00:00"
+      "ts": "2026-11-14T12:07:17.635+00:00"
     },
     {
       "tool": "agent-device",
@@ -2938,7 +3009,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:45.107+00:00"
+      "ts": "2026-11-14T12:07:18.024+00:00"
     },
     {
       "tool": "adb",
@@ -2947,7 +3018,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:45.334+00:00"
+      "ts": "2026-11-14T12:07:18.241+00:00"
     },
     {
       "tool": "agent-device",
@@ -2955,7 +3026,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-24-capture-support-back-dismissed.png"
       ],
-      "ts": "2026-11-14T11:49:45.450+00:00"
+      "ts": "2026-11-14T12:07:18.353+00:00"
     },
     {
       "tool": "agent-device",
@@ -2964,7 +3035,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:45.778+00:00"
+      "ts": "2026-11-14T12:07:18.746+00:00"
     },
     {
       "tool": "agent-device",
@@ -2973,7 +3044,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:45.977+00:00"
+      "ts": "2026-11-14T12:07:18.960+00:00"
     },
     {
       "tool": "adb",
@@ -2982,7 +3053,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:46.195+00:00"
+      "ts": "2026-11-14T12:07:19.201+00:00"
     },
     {
       "tool": "agent-device",
@@ -2990,7 +3061,7 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-25-assert_not_visible.png"
       ],
-      "ts": "2026-11-14T11:49:46.301+00:00"
+      "ts": "2026-11-14T12:07:19.298+00:00"
     },
     {
       "tool": "agent-device",
@@ -2999,7 +3070,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:46.629+00:00"
+      "ts": "2026-11-14T12:07:19.690+00:00"
     },
     {
       "tool": "agent-device",
@@ -3008,7 +3079,7 @@
         "--force-full",
         "--json"
       ],
-      "ts": "2026-11-14T11:49:46.843+00:00"
+      "ts": "2026-11-14T12:07:19.906+00:00"
     },
     {
       "tool": "adb",
@@ -3017,7 +3088,7 @@
         "dumpsys",
         "window"
       ],
-      "ts": "2026-11-14T11:49:47.071+00:00"
+      "ts": "2026-11-14T12:07:20.139+00:00"
     },
     {
       "tool": "agent-device",
@@ -3025,21 +3096,44 @@
         "screenshot",
         "results/phone/gaten-f344272/gaten-support/phone/screenshot-26-assert_text.png"
       ],
-      "ts": "2026-11-14T11:49:47.188+00:00"
+      "ts": "2026-11-14T12:07:20.243+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "svc",
+        "power",
+        "stayon",
+        "false"
+      ],
+      "ts": "2026-11-14T12:07:20.622+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "settings",
+        "put",
+        "global",
+        "stay_on_while_plugged_in",
+        "15"
+      ],
+      "ts": "2026-11-14T12:07:21.718+00:00"
     },
     {
       "tool": "agent-device",
       "args": [
         "close"
       ],
-      "ts": "2026-11-14T11:49:47.493+00:00"
+      "ts": "2026-11-14T12:07:21.807+00:00"
     },
     {
       "tool": "agent-device",
       "args": [
         "home"
       ],
-      "ts": "2026-11-14T11:49:47.631+00:00"
+      "ts": "2026-11-14T12:07:21.927+00:00"
     }
   ]
 }

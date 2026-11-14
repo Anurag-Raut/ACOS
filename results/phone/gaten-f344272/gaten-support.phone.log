@@ -17,7 +17,7 @@
 [replay] phone step 16 tap -> pass
 [replay] phone step 17 capture -> pass
 [replay] phone step 18 assert_not_visible -> pass
-[replay] phone step 19 assert_visible -> unsupported_step
+[replay] phone step 19 assert_visible -> pass
 [replay] phone step 20 tap -> pass
 [replay] phone step 21 wait_for -> pass
 [replay] phone step 22 capture -> pass

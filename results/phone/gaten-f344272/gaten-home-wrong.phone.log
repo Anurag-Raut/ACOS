@@ -1,0 +1,22 @@
+[replay] phone step 00 launch -> pass
+[replay] phone step 01 tap -> pass
+[replay] phone step 02 tap -> pass
+[replay] phone step 03 tap -> pass
+[replay] phone step 04 tap -> pass
+[replay] phone step 05 wait_for -> pass
+[replay] phone step 06 capture -> pass
+[replay] phone step 07 assert_text -> fail
+[replay] phone step 08 assert_text -> pass
+[replay] phone step 09 assert_text -> pass
+[replay] phone step 10 tap -> pass
+[replay] phone step 11 wait_for -> pass
+[replay] phone step 12 capture -> pass
+[replay] phone step 13 assert_text -> pass
+{
+  "source": "phone",
+  "out": "results/phone/gaten-f344272/gaten-home-wrong/phone",
+  "steps": 14,
+  "failed": [
+    7
+  ]
+}

@@ -67,7 +67,7 @@ NOW = lambda: _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="millisecond
 log = lambda *a: print("[replay]", *a, file=sys.stderr, flush=True)
 
 PHONE_LOCK = "/home/Qui/Projects/acos/.cache/phone.lock"
-EVIDENCE_MAX_WIDTH = 540
+EVIDENCE_MAX_WIDTH = 360
 
 
 def sha256_file(path):
@@ -560,16 +560,17 @@ def replay_phone(args, doc, steps, out_dir):
                 # it covers the list; ACOS's offscreen guest has no IME window.
                 # Dismissing it is what an agent does before reading the screen.
                 dev.ag("keyboard", "dismiss", timeout=60)
-            elif kind == "assert_not_visible":
+            elif kind in ("assert_visible", "assert_not_visible"):
                 snap = dev.snapshot()
                 nodes = dev.app_nodes(snap, pkg)
                 node = find_best(nodes, selector, pkg)
                 rec["target"] = None if node is None else {
                     k: node.get(k) for k in ("text", "content_desc", "identifier",
                                              "enabled", "checked", "clickable", "bounds")}
-                rec["assertion"] = {"kind": "not_visible", "passed": node is None,
-                                    "expected_absent": selector}
-                if node is not None:
+                want = kind == "assert_visible"
+                key = "expected_present" if want else "expected_absent"
+                rec["assertion"] = {"kind": kind, "passed": (node is not None) == want, key: selector}
+                if (node is not None) != want:
                     rec["status"] = "fail"
                     rec["error"] = "ASSERTION_FAILED"
             elif kind in ("assert_no_crash",):
@@ -759,7 +760,12 @@ def replay_acos(args, doc, steps, out_dir):
 
 
 def _downscale(src, dst, width=EVIDENCE_MAX_WIDTH):
-    """Copy a screenshot as a <=540px-wide PNG (evidence budget)."""
+    """Copy a screenshot as a <=360px-wide, 256-colour PNG (evidence budget).
+
+    A 1080x2400 device capture is ~650 KB; at 360 px with a 256-colour palette the
+    same screen is ~30 KB, so a full 19-scenario reference stays well under the
+    30 MB evidence budget while remaining readable at a glance.
+    """
     try:
         from PIL import Image
     except ImportError:  # pragma: no cover
@@ -772,6 +778,8 @@ def _downscale(src, dst, width=EVIDENCE_MAX_WIDTH):
             im = im.resize((width, h), Image.LANCZOS)
         if im.mode not in ("RGB", "RGBA"):
             im = im.convert("RGB")
+        # 256-colour palette: ~4x smaller, and flat UI screens keep their look
+        im = im.convert("RGB").quantize(colors=256, method=Image.MEDIANCUT)
         im.save(dst, "PNG", optimize=True)
     except Exception as e:  # pragma: no cover
         log(f"downscale failed for {src}: {e}")
