@@ -1,0 +1,6 @@
+{
+  "error": "backend error (GUEST_EXITED): acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: 1)",
+  "note": "S3b: the first relaunch failed for a host transport/host-resource reason; the same APK was relaunched once. The copied files are the first attempt's own evidence (session-exit.json holds the guard line and the guest log).",
+  "reason": "host transport: malformed binder reply parcel",
+  "utc_ms": 1794640550373
+}

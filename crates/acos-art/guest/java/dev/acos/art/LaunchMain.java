@@ -2010,6 +2010,12 @@ public final class LaunchMain {
     }
 
     static volatile boolean sActivityResumed;
+    /**
+     * S3a: why the last completed first traversal did not draw (null = it drew).
+     * Recorded in the `POST_RESUME_NOT_READY` failure so a no-frame relaunch
+     * names the skipped draw instead of only "timeout".
+     */
+    static volatile String sTraversalSkipReason;
     /** The framework printed `<<<<< Finished` for the BIND_APPLICATION message. */
     static volatile boolean sBindFinished;
     /** W38: the app's `IApplicationThread` interface object and its ActivityThread. */
@@ -2264,11 +2270,15 @@ public final class LaunchMain {
                         System.currentTimeMillis() + sResumeReadyMs, adeadline);
                 if (!awaitFirstTraversal(activity, readyDeadline)) {
                     System.out.println("ACOSLAUNCH MARK activity-not-ready"
-                            + " reason=first-traversal-timeout deadline_ms=" + sResumeReadyMs);
+                            + " reason=first-traversal-timeout deadline_ms=" + sResumeReadyMs
+                            + " draw_skip=" + (sTraversalSkipReason == null
+                                    ? "none" : sTraversalSkipReason));
                     System.out.println("ACOSLAUNCH {\"outcome\":\"crash\","
                             + "\"code\":\"POST_RESUME_NOT_READY\",\"activity_resumed\":true,"
                             + "\"reason\":\"first-traversal-timeout\",\"deadline_ms\":"
-                            + sResumeReadyMs + "}");
+                            + sResumeReadyMs + ",\"draw_skip\":\""
+                            + esc(sTraversalSkipReason == null ? "none" : sTraversalSkipReason)
+                            + "\"}");
                     System.out.flush();
                     write(new File(sOut, "activity-not-resumed.marker"),
                             "package=" + sPkg + "\nactivity=" + sActivity
@@ -2384,11 +2394,52 @@ public final class LaunchMain {
                         final View decor = (View) decorObj;
                         // A window path that already traversed synchronously
                         // (not the normal Choreographer path) has no pending
-                        // draw to observe; report the state we actually see.
-                        if (firstTraversalDone(decor)) {
+                        // draw to observe; report the state we actually see —
+                        // but only when that traversal actually drew. AOSP sets
+                        // `mFirst=false` at the end of the first traversal
+                        // *before* the draw decision (ViewRootImpl:4015 vs
+                        // performDraw at 4093), so a traversal that skipped the
+                        // draw (view not visible, screen off, cancel/redraw) is
+                        // not readiness. S3a: accepting it certified
+                        // `activity-resumed` with no C1 buffer, and the
+                        // launcher then waited out its whole no-frame budget.
+                        boolean traversed = firstTraversalDone(decor);
+                        String skip = traversed ? drawSkipReason(decor) : null;
+                        if (traversed && skip == null) {
                             ready.set(true);
                             latch.countDown();
                             return;
+                        }
+                        if (traversed) {
+                            sTraversalSkipReason = skip;
+                            System.out.println("ACOSLAUNCH MARK first-traversal-skipped "
+                                    + skip + "; requesting one redraw");
+                            System.out.flush();
+                            if (skip != null && skip.contains("not_visible")) {
+                                // The host creates this window visible and sends
+                                // `IWindow.dispatchAppVisibility(true)` once. If
+                                // that oneway callback was lost, the first
+                                // traversal sees `mAppVisible=false` and skips
+                                // the draw. Re-deliver the *same* callback on the
+                                // ViewRootImpl (it is public and idempotent),
+                                // after the first traversal, so the redraw below
+                                // runs with the normal visibility state instead
+                                // of never happening. This is not a fabricated
+                                // frame: it is the callback the host meant to
+                                // deliver, replayed only when its absence is
+                                // observable as a skipped draw.
+                                redeliverAppVisibility(decor);
+                            }
+                            // The first traversal completed without drawing and
+                            // nothing else invalidates the window. Ask for one
+                            // more traversal and wait for its OnDraw. This is
+                            // the same WMS-style redraw request (`resized`/
+                            // reportDraw) the framework expects after layout,
+                            // not a retry of the launch; if the window is
+                            // genuinely not visible the deadline still fails
+                            // with `POST_RESUME_NOT_READY` and the reason.
+                            decor.requestLayout();
+                            decor.invalidate();
                         }
                         final ViewTreeObserver observer = decor.getViewTreeObserver();
                         final ViewTreeObserver.OnDrawListener[] self =
@@ -2427,6 +2478,54 @@ public final class LaunchMain {
         } catch (Throwable x) {
             System.out.println("ACOSLAUNCH MARK first-traversal-error " + x);
             return false;
+        }
+    }
+
+    /**
+     * S3a: replay the host's `dispatchAppVisibility(true)` when the first
+     * traversal proves it was missed (`view_not_visible`). `ViewRootImpl`'s
+     * method is public; the message it posts is the same one the host's
+     * oneway `IWindow` callback posts, so focus/layout order is unchanged.
+     */
+    static void redeliverAppVisibility(View decor) {
+        try {
+            Object root = Class.forName("android.view.View")
+                    .getMethod("getViewRootImpl").invoke(decor);
+            if (root == null) return;
+            java.lang.reflect.Method m = root.getClass()
+                    .getMethod("dispatchAppVisibility", boolean.class);
+            m.invoke(root, Boolean.TRUE);
+            System.out.println("ACOSLAUNCH MARK visibility-redelivered");
+            System.out.flush();
+        } catch (Throwable x) {
+            System.out.println("ACOSLAUNCH MARK visibility-redeliver-failed " + x);
+            System.out.flush();
+        }
+    }
+
+    /**
+     * S3a: why the last completed traversal did not draw, or {@code null} when
+     * it did. Reads only framework state that `performTraversals` itself
+     * maintains (`mLastPerformTraversalsSkipDrawReason`,
+     * `mLastPerformDrawSkippedReason`, `mLastDrawScreenOff`,
+     * `mLastTraversalWasVisible`); no timer and no fabricated result.
+     */
+    static String drawSkipReason(View decor) {
+        try {
+            Object root = Class.forName("android.view.View")
+                    .getMethod("getViewRootImpl").invoke(decor);
+            if (root == null) return "no_view_root";
+            Object traversalSkip = get(root, "mLastPerformTraversalsSkipDrawReason");
+            if (traversalSkip != null) return "traversal:" + traversalSkip;
+            Object drawSkip = get(root, "mLastPerformDrawSkippedReason");
+            if (drawSkip != null) return "draw:" + drawSkip;
+            if (Boolean.TRUE.equals(get(root, "mLastDrawScreenOff"))) return "draw:screen_off";
+            if (Boolean.FALSE.equals(get(root, "mLastTraversalWasVisible"))) {
+                return "traversal:not_visible";
+            }
+            return null;
+        } catch (Throwable x) {
+            return "probe_error:" + x;
         }
     }
 

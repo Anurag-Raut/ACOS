@@ -2915,6 +2915,46 @@ fn latest_generation(live: &acos_services::registry::LiveHandles) -> u64 {
         .latest_generation()
 }
 
+/// S3a: a bounded, self-describing snapshot of the C1 state at a startup
+/// timeout. The earlier record only said `c1_generation=0`, which cannot
+/// distinguish "no surface was ever created" (relayout/window path) from "the
+/// surface exists and received transactions but no buffer" (draw path) from
+/// "a layer was created and destroyed again". The layer list is capped; the
+/// counters are exact.
+fn c1_state_summary(live: &acos_services::registry::LiveHandles) -> String {
+    let state = live
+        .compositor
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let mut layers: Vec<String> = state
+        .layers()
+        .take(8)
+        .map(|layer| {
+            format!(
+                "{}:id{}:tx{}:gen{}:buf{}:hidden{}:placed{}",
+                layer.name,
+                layer.layer_id,
+                layer.transactions,
+                layer.latest_generation,
+                u8::from(layer.latest.is_some()),
+                u8::from(layer.hidden),
+                u8::from(layer.placement.is_some())
+            )
+        })
+        .collect();
+    let total = state.layers().count();
+    if total > layers.len() {
+        layers.push(format!("+{} more", total - layers.len()));
+    }
+    format!(
+        "c1_layers={total} c1_transactions={} c1_retained={} c1_destroyed={} layers=[{}]",
+        state.transactions_decoded,
+        state.retained_buffers(),
+        state.destroyed_layers(),
+        layers.join(",")
+    )
+}
+
 /// D-M5: microseconds since the Unix epoch (realtime), so a phase measured in
 /// `acos-art` lines up with the serve-side and client-side clocks.
 fn m5_now_us() -> u128 {
@@ -3835,11 +3875,27 @@ fn interactive_serve(
             break;
         }
         if Instant::now() >= startup_deadline {
+            // S3a evidence: the old line named only `c1_generation=0`. A
+            // timeout now carries the C1 layer/transaction state and the
+            // newest probe age, so the next occurrence says which side never
+            // produced a frame. The redraw path in the guest reports its own
+            // `draw_skip` reason in `POST_RESUME_NOT_READY`.
+            let c1 = c1_state_summary(live);
+            let probe_facts = match probe.as_ref() {
+                Some(p) => format!(
+                    "probe_seq={} probe_age_ms={} probe_gen={} probe_draw_seq={}",
+                    p.seq,
+                    host_ms().saturating_sub(p.at_ms),
+                    p.generation,
+                    p.draw_seq
+                ),
+                None => "probe_seq=none".to_string(),
+            };
             kill_guest(child, cgroup);
             let reply = serde_json::json!({
                 "ok": false, "cmd": "ready", "code": "NO_LIVE_FRAME",
                 "error": format!(
-                    "no live frame within {}s: activity_resumed={marker} probe={} c1_generation={generation}",
+                    "no live frame within {}s: activity_resumed={marker} probe={} c1_generation={generation} {probe_facts} {c1}",
                     startup_budget.as_secs(),
                     probe.is_some()
                 ),
