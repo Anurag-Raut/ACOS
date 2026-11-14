@@ -2362,3 +2362,14 @@ and the two `se1-expect-change*` scenarios error `INVALID_SCENARIO` on this base
 ROT2 gate list, none can be affected by `ActivityInfo.configChanges` (no session in them
 changes configuration), and `se1-*` names a step this base does not implement — recorded here so
 the next pass does not mistake them for rotate fallout.
+
+**A/B (latency arm), interleaved, 1 rep per arm** — `ACOS_BENCH_TASK=ROT2
+tools/bench/acos-bench.sh --reps 1 --groups "a:latency:8G:300" --latency-reps 12 --no-build`
+with the main arm read-only from `.cache/wt-abmain2` (target `.cache/ab-target`, never built
+here). 3 reps per arm **did not fit** the 60-minute rule (one rep ≈ 4.5–5 min under the ART
+lock); one rep each is recorded and is enough to see that the inert change did not move
+latency: M4 strict 308.83 → 308.96 ms (+0.04 %), M4 fast 173.92 → 174.65 (+0.42 %), M5 24.26
+→ 24.79 (+2.2 %, +0.53 ms, the only metric above +0.5 %), M6 strict 319.57 → 320.84 (+0.4 %),
+M6 fast 187.91 → 188.71 (+0.4 %), M8 tap strict counter 961.72 → 957.63 (−0.4 %), M8 form
+935.73 → 933.15 (−0.3 %), M8 fast +0.1/+0.4 %, tap ack 5.00 → 5.00. Every gate
+(≤ +5 % **and** ≤ +2 ms) holds. Raw: `.cache/rot2/ab/{main-1,branch-1}.json` (gitignored).
