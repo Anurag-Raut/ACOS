@@ -1,0 +1,49 @@
+# gaten-kanji: Settings -> Kanji reference, a stored radio choice on real ART.
+#
+# The page's radio group offers WaniKani and Remembering the Kanji. With no
+# WaniKani account connected the hub starts on WaniKani; selecting RTK writes
+# the choice through the RTK bridge, and the hub row's own value must read the
+# new source when Back returns. Onboarding taps are navigation (`settle: fast`);
+# every claim after them is strict on a capture's bound frame.
+version: 1
+name: gaten-kanji
+description: >-
+  Settings hub -> Kanji reference page -> select Remembering the Kanji -> Back
+  -> the hub's Kanji reference row reads Remembering the Kanji.
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: pass
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  - tap: {selector: {text: {contains: "Set up Gaten"}}, settle_timeout_ms: 5000}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - capture: {name: kanji-home, format: png, fresh: true}
+  - tap: {selector: {content_desc: {exact: Settings}}}
+  - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - capture: {name: kanji-hub, format: png, fresh: true}
+  # Fresh state: never chosen and no WaniKani account, so the row follows the
+  # default (WaniKani).
+  - assert_text: {selector: {text: {exact: "Kanji reference"}}, text: {exact: "Kanji reference"}}
+  - tap: {selector: {content_desc: {contains: "Kanji reference."}}, settle_timeout_ms: 8000}
+  - wait_for: {selector: {text: {exact: "Remembering the Kanji"}}, timeout_ms: 30000}
+  - capture: {name: kanji-page, format: png, fresh: true}
+  - assert_text: {selector: {text: {contains: "bundled, works offline"}}, text: {contains: "bundled, works offline"}}
+  - assert_text: {selector: {text: {exact: "WaniKani"}}, text: {exact: "WaniKani"}}
+  # The RTK radio's own title; the write is the page's own state.
+  - tap: {selector: {text: {exact: "Remembering the Kanji"}}, settle_timeout_ms: 8000}
+  - capture: {name: kanji-selected, format: png, fresh: true}
+  - assert_not_visible: {selector: {text: {exact: "The choice could not be saved. Try again."}}}
+  # Back: the hub re-reads the stored source and its row's value changes.
+  - back: {}
+  - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - capture: {name: kanji-hub-after, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "Remembering the Kanji"}}, text: {exact: "Remembering the Kanji"}}

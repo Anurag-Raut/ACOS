@@ -1,0 +1,47 @@
+# gaten-recognition NEGATIVE CONTROL: the flow is the same, the selected engine is read back wrong.
+# Must produce status=fail (ASSERTION_FAILED), never pass.
+version: 1
+name: gaten-recognition-wrong
+description: >-
+  Settings hub -> Text recognition -> Enhanced raises "Download Enhanced?" ->
+  Cancel -> the hub is asserted to read Enhanced (wrong; it still reads Standard).
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: fail
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  - tap: {selector: {text: {contains: "Set up Gaten"}}, settle_timeout_ms: 5000}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - capture: {name: recognition-home, format: png, fresh: true}
+  - tap: {selector: {content_desc: {exact: Settings}}}
+  - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - capture: {name: recognition-hub, format: png, fresh: true}
+  - tap: {selector: {content_desc: {contains: "Text recognition."}}, settle_timeout_ms: 8000}
+  - wait_for: {selector: {text: {exact: "Standard"}}, timeout_ms: 30000}
+  - capture: {name: recognition-page, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "Standard"}}, text: {exact: "Standard"}}
+  - assert_text: {selector: {text: {exact: "Enhanced"}}, text: {exact: "Enhanced"}}
+  - assert_text: {selector: {text: {contains: "Better for stylised fonts"}}, text: {contains: "Better for stylised fonts"}}
+  - tap: {selector: {content_desc: {contains: "Enhanced"}}, settle_timeout_ms: 8000}
+  - wait_for: {selector: {text: {exact: "Download Enhanced?"}}, timeout_ms: 30000}
+  - capture: {name: recognition-confirm, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "Download Enhanced?"}}, text: {exact: "Download Enhanced?"}}
+  - assert_text: {selector: {text: {exact: "Download size"}}, text: {exact: "Download size"}}
+  - tap: {selector: {text: {exact: "Cancel"}}, settle_timeout_ms: 8000}
+  - capture: {name: recognition-cancelled, format: png, fresh: true}
+  - assert_not_visible: {selector: {text: {exact: "Download Enhanced?"}}}
+  - assert_visible: {selector: {text: {exact: "Enhanced"}}}
+  - back: {}
+  - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - capture: {name: recognition-hub-after, format: png, fresh: true}
+  # Wrong on purpose: Cancel selected nothing, so the hub still reads Standard.
+  - assert_text: {selector: {text: {exact: "Standard"}}, text: {exact: "Enhanced"}}

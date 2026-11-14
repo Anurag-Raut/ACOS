@@ -1,0 +1,60 @@
+# gaten-recognition: Settings -> Text recognition and the download confirmation
+# dialog (a bounded React Native Modal) on real ART.
+#
+# Enhanced is the optional engine: tapping its row must raise the confirm dialog
+# and nothing more. The dialog states the size, the reason and the data note;
+# Cancel closes it without selecting or downloading anything, which the hub's
+# own Text recognition value still reads Standard afterwards. Onboarding taps
+# are navigation (`settle: fast`); every claim after them is strict on a
+# capture's bound frame.
+version: 1
+name: gaten-recognition
+description: >-
+  Settings hub -> Text recognition -> Enhanced raises "Download Enhanced?" ->
+  Cancel -> the dialog is gone and the hub still reads Standard.
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: pass
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  - tap: {selector: {text: {contains: "Set up Gaten"}}, settle_timeout_ms: 5000}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - capture: {name: recognition-home, format: png, fresh: true}
+  - tap: {selector: {content_desc: {exact: Settings}}}
+  - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - capture: {name: recognition-hub, format: png, fresh: true}
+  - tap: {selector: {content_desc: {contains: "Text recognition."}}, settle_timeout_ms: 8000}
+  - wait_for: {selector: {text: {exact: "Standard"}}, timeout_ms: 30000}
+  - capture: {name: recognition-page, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "Standard"}}, text: {exact: "Standard"}}
+  - assert_text: {selector: {text: {exact: "Enhanced"}}, text: {exact: "Enhanced"}}
+  - assert_text: {selector: {text: {contains: "Better for stylised fonts"}}, text: {contains: "Better for stylised fonts"}}
+  # Enhanced is not installed, so its row asks before downloading.
+  - tap: {selector: {content_desc: {contains: "Enhanced"}}, settle_timeout_ms: 8000}
+  - wait_for: {selector: {text: {exact: "Download Enhanced?"}}, timeout_ms: 30000}
+  - capture: {name: recognition-confirm, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "Download Enhanced?"}}, text: {exact: "Download Enhanced?"}}
+  - assert_text: {selector: {text: {exact: "Download size"}}, text: {exact: "Download size"}}
+  - assert_text: {selector: {text: {contains: "Reads screen and novel text better"}}, text: {contains: "Reads screen and novel text better"}}
+  - assert_text: {selector: {text: {contains: "Wi-Fi recommended"}}, text: {contains: "Wi-Fi recommended"}}
+  - assert_text: {selector: {text: {exact: "Cancel"}}, text: {exact: "Cancel"}}
+  - assert_text: {selector: {text: {exact: "Download"}}, text: {exact: "Download"}}
+  # Cancel: the dialog closes and nothing was selected or fetched.
+  - tap: {selector: {text: {exact: "Cancel"}}, settle_timeout_ms: 8000}
+  - capture: {name: recognition-cancelled, format: png, fresh: true}
+  - assert_not_visible: {selector: {text: {exact: "Download Enhanced?"}}}
+  - assert_visible: {selector: {text: {exact: "Enhanced"}}}
+  # Back to the hub: its own summary still reads the bundled Standard engine.
+  - back: {}
+  - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - capture: {name: recognition-hub-after, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "Standard"}}, text: {exact: "Standard"}}

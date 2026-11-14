@@ -1,0 +1,46 @@
+# gaten-support NEGATIVE CONTROL: the sheet is the same, the expected body is wrong.
+# Must produce status=fail (ASSERTION_FAILED), never pass.
+version: 1
+name: gaten-support-wrong
+description: >-
+  Settings -> Support Gaten -> the sheet's body and Play Store action -> Close
+  returns to the hub -> reopen -> Back dismisses the modal. The support body is
+  asserted with deliberately wrong wording.
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: fail
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  - tap: {selector: {text: {contains: "Set up Gaten"}}, settle_timeout_ms: 5000}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - capture: {name: support-home, format: png, fresh: true}
+  - tap: {selector: {content_desc: {exact: Settings}}}
+  - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - capture: {name: support-hub, format: png, fresh: true}
+  - tap: {selector: {content_desc: {exact: "Support Gaten"}}, settle_timeout_ms: 8000}
+  - wait_for: {selector: {text: {contains: "one-person project"}}, timeout_ms: 30000}
+  - capture: {name: support-sheet, format: png, fresh: true}
+  # Wrong on purpose: the real body says "a review or a coffee".
+  - assert_text: {selector: {text: {contains: "one-person project"}}, text: {contains: "a review or a subscription keeps it going"}}
+  - assert_text: {selector: {text: {exact: "Rate on Play Store"}}, text: {exact: "Rate on Play Store"}}
+  - assert_text: {selector: {text: {exact: "Close"}}, text: {exact: "Close"}}
+  - tap: {selector: {text: {exact: "Close"}}, settle_timeout_ms: 8000}
+  - capture: {name: support-closed, format: png, fresh: true}
+  - assert_not_visible: {selector: {text: {contains: "one-person project"}}}
+  - assert_visible: {selector: {content_desc: {exact: "Support Gaten"}}}
+  - tap: {selector: {content_desc: {exact: "Support Gaten"}}, settle_timeout_ms: 8000}
+  - wait_for: {selector: {text: {contains: "one-person project"}}, timeout_ms: 30000}
+  - capture: {name: support-sheet-again, format: png, fresh: true}
+  - back: {}
+  - capture: {name: support-back-dismissed, format: png, fresh: true}
+  - assert_not_visible: {selector: {text: {contains: "one-person project"}}}
+  - assert_text: {selector: {text: {exact: "Screen lookup"}}, text: {exact: "Screen lookup"}}

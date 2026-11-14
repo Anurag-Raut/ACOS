@@ -1951,6 +1951,61 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   animating-screen semantics; R2a/R2b first-paint + SIGSEGV root cause; a real lesson needs
   AnkiDroid or a WaniKani account (data, not ACOS).
 
+## E13.8 — GR4: Gaten past the merged five after the density fix — a RN modal dismissed by Close *and* Android Back, a persisted Settings choice, a confirmation modal whose Cancel changes nothing, and a Back out of a page pushed on the *Analytics* stack — PASS 34/34 runs, 0 false passes
+
+- **Date / commit:** 2026-11-14; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/gr4`, branch
+  `gaten-gr4-screens`, off `main` `d7dc8e2` (density fix `00804dc` included). APK read-only
+  `gaten-dev-f344272-x86_64-release-unsigned.apk` (sha256 `e04c7ffc…`). Reported in
+  `results/gaten/GR4.md`; evidence `results/gaten/evidence/GR4/`.
+- **Question / goal:** extend verified Gaten coverage past the five merged flows, with
+  deliberately-wrong twins, and record anything ACOS cannot reach or render as a wall (code, lowest
+  layer, AOSP reference, bug vs missing feature). No fixes in `crates/`.
+- **Inputs / method:** one scenario file per claim plus one negative twin each; batches under a
+  single ART-lock acquisition per group (`tools/art-runtime/run-exclusive.sh --task gr4 --
+  tools/guarded.sh --mem 8G --time …`), `animations: off`, scratch `.cache/gr4/`. Onboarding taps
+  are `settle: fast` **navigation only**, exactly as GR3; every claim after them is a strict
+  `wait_for`/`assert_*` on a bound capture frame. Gaten source read only (`src-dev`), no file
+  changed, no `adb`.
+- **Result (measured, all post-merge):** `gaten-support` **27 steps, 3/3 pass** (8.40 s wall p50),
+  `gaten-kanji` **23 steps, 3/3** (8.66 s), `gaten-recognition` **33 steps, 3/3** (9.58 s),
+  `gaten-backstack` **25 steps, 4/4** (8.34 s). Negative twins `ASSERTION_FAILED` **3/3 each** at the
+  deliberate step (13, 22, 28, 23). The merged five still pass (`home` 14, `tabs` 22, `settings`
+  33, `search` 22, `lesson` 28 steps) and their five twins still fail `ASSERTION_FAILED` (5/5).
+  **34 runs, 0 false passes**, every session `outcome=ok`/`guest_exit=0`, guest cgroup peak
+  236–429 MiB. R2a/G3d did not recur (0/34 launches).
+- **What each new claim proves:** a RN `Modal` (`DialogShell`) is dismissed by the **Close** action
+  **and by Android Back** (`onRequestClose` — the handoff's open risk 2 is answered: works, not a
+  wall); a second Settings page's radio choice persists through the RTK bridge (the hub's Kanji
+  reference row reads `Remembering the Kanji` after Back); a `fitToViewport` download confirmation's
+  **Cancel** leaves both the page and the persisted value at `Standard`; and a Settings page pushed
+  on the **Analytics** tab's own stack returns to Analytics on Back (strictly `Study activity`,
+  `Accuracy`, “Answer accuracy will appear here.”, with the Settings hub row absent).
+- **Density fix, judged on post-merge pixels only:** the 2.625× SVG regression is gone. Same screen,
+  same APK: `evidence/GR3/gaten-tabs-analytics.png` (pre-fix) draws the wordmark and illustrations
+  ~2.6× too large and clipped; `evidence/GR4/gaten-backstack-analytics-again.png` (post-fix) fits
+  every element in its box. Measured post-fix: every wordmark glyph `SvgView` is exactly 116 px tall
+  (`[58,188][105,304]`, whole wordmark 333×116) against GR1's expected 116 px viewBox height (a
+  2.625× double-scale would be ~305 px); hub icons 58×57, chevrons 39×39, sheet icons 52×53, bottom
+  bar icons 52×53, nothing overflowing its row. No exact-parity claim against the Moto G35.
+- **Walls / defects found:** **no new blocking ACOS wall**; GR3's data walls (AnkiDroid absent, no
+  WaniKani token) still stand and were not fabricated. Two observations, filed as Backlog rows and
+  not fixed here: `G4a` — the tree reports `visible=false` for the bottom bar's active label whose
+  glyphs the app **does** paint in the same bound frame (carve mode's 128 px bottom band; a
+  verification false-negative, never a false pass; the rule for authors is “target the tab
+  pressable's `content_desc`, never the label”); `G4b` — tree frame metadata says `density: 420` for
+  a run whose `repro.json` says `density_dpi: 400`.
+- **Scenario correction (selector, not semantics):** `gaten-backstack`'s draft last step asserted
+  `text exact "Analytics"`, which is only ever the bottom-bar label; the strict run failed
+  `ELEMENT_OFFSCREEN` on it while the Back itself passed. Re-targeted to Analytics-only copy plus
+  `assert_not_visible` on the Settings hub row; the wrong twin now asserts the visible heading
+  (`content_desc "Analytics"`) reads `Settings`. No assertion, visibility rule or settle horizon was
+  weakened, and `run_suite.sh`'s step-count bug (`d["verdict"]` vs `result.verdict.steps`, `ok` vs
+  `status`) was fixed in scratch so the reported step counts are real.
+- **Conclusion / next:** Gaten's post-Home surface now includes modals, cross-page persistence and a
+  non-Settings tab stack, all strictly asserted on real ART. Remaining: `G4a`/`G4b` classification,
+  the owner decision on animating-screen semantics (G3e), R2a/R2b, and a real lesson (needs
+  AnkiDroid or a WaniKani account — data, not ACOS).
+
 ## E2.14 — H15: M6 reset profiled — 117 ms of the strict bind is a framework animator run, and the 25 % target is not reachable without a strict-rule change — MEASURED (partial: −3.9 % fast, −0.6 % strict)
 
 - **Experiment ID / name:** H15 — cut M6 reset (`strict` 333–342 ms / `fast` 210 ms p50); reset is 24 % of the agent loop with animations on and ~48 % with them off.
@@ -2102,7 +2157,7 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | T1e | `render_views` pipeline coverage: `form-validation`/`text-input` hit `Settings$Config.getContentResolver` NPE; `widget-gallery` hits unsupported `PathParser.nInterpolatePathData` (test records `PIPELINE-FAIL`, does not false-pass) | render corpus coverage | 5/5 pipeline scenes | high | medium | low | **open (T1, E9.1)** |
 | H1 | Strict numbers drop after event settle; re-measure M3–M8 and take cheap wins | M4/M6/M7/M5 | — | — | — | — | **done (H6)**: M7 151→41, M4 440→309, M6 463→342 |
 | H2 | Early post-first-frame concurrent GC (Z7) on the exec path | M1/M2 | −23–30 MiB/session | high | low | low | **accepted: product default, E2.10** (H6 numbers are pre-H2; re-baseline) |
-| R2a | Gaten launch flake: SIGSEGV after first frame (~1/10). **Diagnosability done (E13.6):** the guest now reports fault addr / `si_code` / faulting thread / ART backtrace with mapped library + offset, keeps its run tree, and `session-exit.json.native_crash` reaches the agent; crash rate 1/10 → **0/40** but the root cause is still unnamed (not reproduced at n=40). Remaining: n≥100 to separate rare from fixed, then bisect the named library/offset | verified-launch stability | name the frame, then 10/10 | high (evidence path proven with a deterministic fault) | low | low | **diagnosability done; root cause open** (R3 §6) |
+| R2a | Gaten launch flake: SIGSEGV after first frame (~1/10). **Diagnosability done (E13.6):** the guest now reports fault addr / `si_code` / faulting thread / ART backtrace with mapped library + offset, keeps its run tree, and `session-exit.json.native_crash` reaches the agent; crash rate 1/10 → **0/40** but the root cause is still unnamed (not reproduced at n=40; GR4 adds **0/34** post-`d7dc8e2` launches, so 0/74). Remaining: n≥100 to separate rare from fixed, then bisect the named library/offset | verified-launch stability | name the frame, then 10/10 | high (evidence path proven with a deterministic fault) | low | low | **diagnosability done; root cause open** (R3 §6) |
 | R2b | W6 `+1080 px` fragment offset: move `ACOSLAUNCH_GEOM_TRACE` to `application-created`, keep failing runs, n=20. Then a first-measure race vs a pager-translation source is decidable from `win_frame` vs `app_cfg` | layout correctness | catch + fix the root cause | medium | low | low | **next** (R2 §6) |
 | W7a | `report` is faithful (Gaten footer 0 px, SSIM 0.87960) but cannot become the default while `w42-back-frame` changes one AA row (G: 210→211). Decide: accept the changed pixel expectation as more faithful, or make strict capture tolerant of a single AA row without masking real moves. `gaten-home`'s forever-looping welcome also needs a strict-settle answer | verification semantics / default | `carve` → `report` default | high (measured) | low (owner decision) / medium (settle) | medium | **owner decision** (W7, E13.5) |
 | R2c | Per-view canvas for the ART guest without a GPU: opt-in per-view nested `Bitmap` canvas + blit (R2 §4.3) vs a `libhwui`-shim `RenderNode`/`HardwareRenderer` | SVG/wordmark fidelity | `canvasIsViewPx=true` | medium | medium/high | medium (draw cost 1.5–3×) | **owner decision** (R2 §4) |
@@ -2111,3 +2166,5 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | G3c | **First frame can be a 1-node blank tree** (old W6/R2a first-paint shape). An assert on the launch frame fails even though the app paints next; the strict first tap re-traverses and recovers it. Mitigated in scenarios (no launch-frame assert) | first-frame predicate / Gaten first paint | launch frame is the app's content | medium | medium | medium | **open, classified; R2a/R2b** |
 | G3d | **Gaten launch SIGSEGV still occurs** (1 of 6 `gaten-tabs` runs in GR3): `SIGSEGV code 2 (SEGV_ACCERR)`, thread 2 `com.gaten`, libc frame; R3 evidence path works | ART guest native fault | name the faulting frame, then 10/10 | high | low | low | **open, same as R2a (E13.6 evidence)** |
 | G3e | **No verification semantics for a screen that animates forever in a region that does not matter.** Options (stable tree content, region mask, navigation-only fast, explicit non-settle assertion) + false-pass analysis in `results/gaten/GR3.md` §4.3 | verify semantics | owner decision | — | — | — | **owner decision; do not weaken until then** |
+| G4a | **The tree reports `visible=false` for a node whose pixels the app painted** (GR4). `tree/18.json`: the bottom bar's active label `[512,2214][642,2251]` is `visible: false` because it lies below the root's `visible_bounds` bottom (`2209`) in a `insets: carve` session, while the bound frame `frames/18.png` paints its glyphs at png `y 2088–2122`, `x 513–640` (bounds − `display_origin.y` 128). AOSP's `View.getGlobalVisibleRect` intersects with the display and ancestor clips, not with the nav-bar band, so a real a11y tree reports it visible (a tap there would still land on the system bar, so fail-closed is defensible — the *classification* is what is inconsistent). Lowest layer: per-node `visible`/`visible_bounds` vs the carved visible frame, surfaced as `ELEMENT_OFFSCREEN` (`crates/acos-verify/src/native.rs`). Verification false-negative only, **never a false pass**. Worked around in scenarios: target the tab pressable's `content_desc`, never the label (`results/gaten/GR4.md` §2.2, §5) | node visibility vs frame | classification matches the pixels | high (tree + frame, same bound frame) | low (decide the policy, then align) | low | **open, found by GR4 (E13.8)** |
+| G4b | **Tree frame metadata reports `density: 420` for a `density_dpi: 400` run** (GR4): every `tree/*.json` frame record says 420 while `repro.json`/`verdict.json` echo the scenario's 400. Either the guest boots at the reference 420 on this path or the tree's `FrameMeta` is stamped from the reference default; not root-caused. Consequence: density-dependent geometry cannot be audited from tree metadata, which is exactly the density-fix area. Pixels are correct either way (116 px wordmark glyphs, GR4 §4) | tree/frame metadata integrity | metadata agrees with the launch spec | high (36 runs, all 420) | low (thread the launch density into the tree record) | low | **open, found by GR4 (E13.8)** |

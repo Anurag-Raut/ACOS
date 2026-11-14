@@ -1,0 +1,60 @@
+# gaten-backstack: a settings page pushed on the Analytics stack, and the Back out of it.
+#
+# Analytics' WaniKani section offers Connect while no token is stored. That
+# action pushes the WaniKani settings page onto the *Analytics* tab's own stack,
+# so Back must return to the Analytics dashboard (not to the Settings hub) and
+# the dashboard must still be on show. This is the round trip the merged five
+# flows do not cover: a settings page raised from a tab that is not Settings.
+# Onboarding taps are navigation (`settle: fast`); every claim after them is
+# strict on a capture's bound frame.
+version: 1
+name: gaten-backstack
+description: >-
+  Analytics -> WaniKani "Connect" pushes the settings page on the Analytics stack
+  -> assert its token and lesson-limit fields -> Back returns to Analytics (not
+  the Settings hub) with Study activity and Accuracy on show.
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: pass
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  - tap: {selector: {text: {contains: "Set up Gaten"}}, settle_timeout_ms: 5000}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - capture: {name: backstack-home, format: png, fresh: true}
+  # Analytics, where WaniKani is not connected.
+  - tap: {selector: {content_desc: {exact: Analytics}}, settle_timeout_ms: 8000}
+  - wait_for: {selector: {text: {contains: "Study activity"}}, timeout_ms: 30000}
+  - capture: {name: backstack-analytics, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "Not connected"}}, text: {exact: "Not connected"}}
+  - assert_text: {selector: {text: {contains: "Connect to see WaniKani progress"}}, text: {contains: "Connect to see WaniKani progress"}}
+  # The section's own action pushes the settings page on this tab's stack.
+  - tap: {selector: {text: {exact: "Connect"}}, settle_timeout_ms: 8000}
+  - wait_for: {selector: {content_desc: {exact: "Personal access token"}}, timeout_ms: 30000}
+  - capture: {name: backstack-wanikani-page, format: png, fresh: true}
+  - assert_text: {selector: {content_desc: {exact: "Personal access token"}}, text: {contains: "Paste your token"}}
+  - assert_text: {selector: {text: {exact: "New per day"}}, text: {exact: "New per day"}}
+  - assert_text: {selector: {text: {exact: "Not connected"}}, text: {exact: "Not connected"}}
+  - assert_visible: {selector: {text: {exact: "Save"}}}
+  # Back: the Analytics dashboard it was pushed from, not the Settings hub.
+  - back: {}
+  - wait_for: {selector: {text: {contains: "Study activity"}}, timeout_ms: 30000}
+  - capture: {name: backstack-analytics-again, format: png, fresh: true}
+  # Analytics-dashboard content that Home and the Settings hub do not carry, so a
+  # Back that landed on either of those cannot satisfy these two lines. The page
+  # heading is `content_desc: "Analytics"` with empty text on this app, and the
+  # bottom-bar label of the same name is a separate, non-visible Text node, so
+  # the heading is never asserted through `text:` here.
+  - assert_text: {selector: {text: {exact: "Accuracy"}}, text: {exact: "Accuracy"}}
+  - assert_text: {selector: {text: {exact: "Answer accuracy will appear here."}}, text: {exact: "Answer accuracy will appear here."}}
+  # Not the Settings hub (its own rows are on the off-screen pager sibling, so
+  # no visible node carries them once Analytics is the shown tab).
+  - assert_not_visible: {selector: {text: {exact: "Kanji reference"}}}
