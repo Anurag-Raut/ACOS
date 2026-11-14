@@ -1,0 +1,52 @@
+{
+  "assertions": [
+    {
+      "kind": "state_change",
+      "matched_node_ids": [],
+      "message": "UI tree and screenshot both changed",
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 78,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/6.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/6.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/03-tap.json"
+    }
+  ],
+  "frame_seq": 6,
+  "index": 3,
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "ack_ms": 5,
+    "bound": "state-commit",
+    "first_change_ms": 4,
+    "frame_ms": 20,
+    "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+    "mode": "fast",
+    "pixels_changed": null,
+    "settled": true,
+    "state_changed": true
+  },
+  "status": "pass",
+  "step": "tap",
+  "trust": "trusted"
+}

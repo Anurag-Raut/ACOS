@@ -77,23 +77,10 @@ pub fn is_flutter(apk: &Path) -> bool {
     matches!(acos_jni::flutter::detect(apk), Ok(Some(_)))
 }
 
-/// The workspace root, derived from this crate's manifest directory.
-fn repo_root_hint() -> Option<PathBuf> {
-    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-    manifest.parent().and_then(Path::parent).map(Path::to_path_buf)
-}
-
-/// Resolve `rel` against the workspace root, falling back to the process cwd
-/// (the CLI is normally run from the repo root).
+/// Resolve a repo-relative asset through the shared rule: `$ACOS_HOME/<rel>`
+/// when installed, else the legacy checkout lookup (`crate::paths`).
 fn repo_relative(rel: &str) -> PathBuf {
-    let direct = PathBuf::from(rel);
-    if direct.exists() {
-        return direct;
-    }
-    repo_root_hint()
-        .map(|root| root.join(rel))
-        .filter(|p| p.exists())
-        .unwrap_or(direct)
+    crate::paths::runtime_path(rel)
 }
 
 /// Directory holding the extracted engine, overridable by env.

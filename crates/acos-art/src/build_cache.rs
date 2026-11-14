@@ -12,8 +12,10 @@
 //! This module builds each artefact **once** into
 //!
 //! ```text
-//! <repo>/.cache/art/build-cache/<sha256-of-inputs>/{MANIFEST.sha256, <files>}
+//! <root>/.cache/art/build-cache/<sha256-of-inputs>/{MANIFEST.sha256, <files>}
 //! ```
+//!
+//! where `<root>` is `$ACOS_HOME` in an installed layout, else the checkout.
 //!
 //! and every later launch only reuses it:
 //!
@@ -45,7 +47,8 @@ pub const MANIFEST: &str = "MANIFEST.sha256";
 
 static SEQ: AtomicU64 = AtomicU64::new(0);
 
-/// The cache root: `$ACOS_ART_BUILD_CACHE`, else `<repo>/.cache/art/build-cache`.
+/// The cache root: `$ACOS_ART_BUILD_CACHE`, else `<root>/.cache/art/build-cache`
+/// (`$ACOS_HOME` when set, else the checkout).
 ///
 /// `ACOS_ART_BUILD_CACHE` may name a directory (tests use a throw-away one) or
 /// be `off`/`0`/`none` to disable reuse.
