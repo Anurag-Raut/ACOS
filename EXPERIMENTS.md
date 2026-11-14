@@ -1571,7 +1571,7 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   count `BR_*` bytes per transaction so a future command type cannot silently fall
   outside `br_cmd_len`.
 
-## E5.10 — K5: signature-block caps/signer semantics, app-uid fidelity, explicit service failures, opt-in keystore — PARTIAL (checkpoint; corpus/gates not run)
+## E5.10 — K5: signature-block caps/signer semantics, app-uid fidelity, explicit service failures, opt-in keystore — PARTIAL (final tree measured 2×42 vs main; parity except one Flutter rung, one main-side gate red)
 
 - **Date / commit:** 2026-11-13; branch `compat-k5-keystore`, off `main` after the
   K4 merge and `origin/main` `5cae694` (merge `8ef1b5e`).
@@ -1669,6 +1669,48 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
 - **Open / next:** 2 full corpus runs on the final tree; joplin 2× to decide
   regression vs flake; the RedReader ART decode. Commit is a checkpoint, not an
   accepted K5.
+
+### E5.10b — K5 on the final merged tree (`ed2ff4d` = K5 + main `d7dc8e2`), 2026-11-14
+
+Reference arm: a `d7dc8e2` binary built in `.cache/k5-main-target` (the shared
+`target/release/acos` predates the density fix and was not used). All runs under
+`run-exclusive.sh` + `guarded.sh`.
+
+1. **Branch reattachment.** The worktree was detached at `6d0fcf5` while the
+   branch still pointed at pre-amend `4918d26`, so no fast-forward was possible;
+   reattached with a merge (`ed2ff4d`). Tree identical to `6d0fcf5` except the
+   `results/aidl/*` text files (newer branch numbers kept). No reset, no force.
+2. **Joplin 3×3 A/B — NOT a K5 regression.** K5 3/3 and main 3/3 SIGABRT
+   (exit 134) with the same logd signature: RN `RNCNetInfo` host-object call →
+   `IConnectivityManager code 42 (requestNetwork)` unsupported →
+   `JniException`/`JavascriptException` → abort on `mqt_v_js`. The connectivity
+   service came from main's `a98e839` (T-38/T-39); K4's tree rung predates it.
+   Evidence `.cache/k5/jab/{branch,main}-{1,2,3}/`. Nothing was changed for it.
+3. **Gates 34 on the final tree:** 24 pass, 9 fail with the expected code,
+   **0 false passes**, but **`w7-insets-report` fails** (`status=128` expected,
+   `status=0` got). Main `d7dc8e2` fails it identically, and the K5 gate run on
+   `49e554c` passed it, so the regression is inside `5cae694..d7dc8e2` (density
+   `0e569b5` is the prime suspect) — a main-side defect, reported not hidden.
+   `w7-insets-carve-negative` now fails at the same wrong step, so its expected
+   failure is no longer the intended assertion. Artifacts
+   `.cache/k5/final/gates*`.
+4. **Corpus 2 × 42 × 2 arms** (`.cache/k5/final{,-r2}`): K5 20/15/15/9
+   (`onCreate`/frame/tree/tap) in both rounds, main 21/15/15/9 in both rounds;
+   per-app rungs identical between rounds in each arm; the only K5↔main app
+   difference is `chat.fluffy.fluffychat` (`onCreate` entered vs completed), and
+   15 isolated runs show both arms aborting in the same Flutter
+   plugin-registration path, so it is unresolved and not K5-attributable.
+   First-frame p50/p90: K5 625.5/1427.6 and 612.4/1421.9 ms vs main
+   626.1/1416.1 and 664.0/1446.7 ms.
+5. **Crate tests:** `acos-apk` lib 18/18; `acos-services`/`acos-art`/`acos-aidl`
+   green except one pre-existing env-race flake in `sandbox_s5`
+   (`refuses_to_run_when_no_cgroup_can_be_created`, passes 7/7 on re-run, fails
+   only with `--test-threads=1`).
+
+**Not accepted.** This track changes app identity, keys and signing data for
+every app; it needs the security/fidelity review in `results/compat/K5.md` §7
+(keystore `KeyInfo`/exportability, cross-session key isolation, signature
+semantics vs AOSP, uid escape analysis) before any merge.
 
 ## E13.5 — W7: report the system-bar insets instead of carving the app window — PASS as an opt-in model; default stays `carve` (one strict gate changes by 1/255)
 
@@ -2103,7 +2145,7 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | False passes | **0** — P11 0/105, scenarios 0/12 (negative control = honest `timeout`), loop 0; verified 63/63 (N=1) and 75/75 (N=5) | main `4958703` | B2, E3.2 | 2026-11-13 | H6's 1-in-75 strict-assert flake (H16) did not reproduce |
 | Agent loop N=10 reliability | **100 %: 600/600 verified over 12 reps** (load1 1.0–4.6), 0 false passes; 428/450 (95.1 %) before the fix (exit 1/126 torn Landlock plan, exit 135 SIGBUS on the truncated mapped APK) | `fix-h17-n10-reset` off main `84fc8bc`, 10 sessions / one serve | H17, E2.13 | 2026-11-13 | fixed two shared-input races (atomic publish + per-run APK); see E2.13 |
 | Compat first-frame rate (K1 corpus, real ART, N=1) | **17/42 (40.5 %)**; tree/screenshot 16/42 (38.1 %); tap 9/42 (21.4 %); `onCreate` completed **20/42** (47.6 %); first frame p50 **808 ms** / p90 **1269 ms** (K3 12/42, tap 7/42, 16/42, 647/1050 ms). Same binary with app providers off: 14/42 first frame, tap 8/42, 18/42, p50 546/p90 1043 ms — ON is >= OFF at every rung with zero per-app regressions, so ON is the default | K4 `compat-k4-metadata` (E5.8 K3d metadata+sourceDir, E5.9 K3e binder-driver refill) | K4/K3d–K3e, E5.8–E5.9 | 2026-11-13 |
-| Compat first-frame rate after K5 (K1 corpus, real ART, N=1) | **not re-measured — K4 17/42 stands as the last full-corpus number.** K5 checkpoint changes: signing certs (caps/signer/scheme), app uid 10192 with explicit override rejection, trust/restrictions/location read paths, keystore **opt-in** (default off). Targeted pre-merge smokes: element 1534 ms + tree, dot.gallery 2504 ms + tree (keystore on), editor full ladder 326 ms | `compat-k5-keystore` (E5.10 PARTIAL) | K5/E5.10 | 2026-11-13 | **not accepted: 2-run corpus and gates are the next action; default-off keystore intentionally returns element/dot.gallery to the K4 wall until K5b** |
+| Compat first-frame rate after K5 (K1 corpus, real ART, N=1) | **15/42 first frame, 15/42 tree, 9/42 tap, 20/42 `onCreate` completed on the final tree (`ed2ff4d`), 2 rounds, identical in both** — vs main `d7dc8e2` 15/15/9 with 21 `onCreate`; per-app rungs identical between rounds; the only delta is `chat.fluffy.fluffychat` (`onCreate` entered vs completed), unresolved and not K5-attributable. First-frame p50/p90 612–626 / 1422–1428 ms | `compat-k5-keystore` (E5.10b) | K5/E5.10 | 2026-11-14 | **not accepted: security/fidelity review pending; one main-side gate red (`w7-insets-report`, fails on `d7dc8e2` too)** |
 | Agent loop at N=20 | **1460.4 ms/task p50 / 1501.8 p90; 7.41 verified tasks/s; 471.9 (page cache) / 603.0 (anon+shmem) tasks/GiB-min; 73 MiB anon+shmem and 53 MiB ΣPss per session; 21.2 % of one core; 298/300 verified, 0 false passes** | `scale-s3-n20` off main `15849a5` (H2+P12+H17), 20 sessions / one serve, 3 reps, animations on | S3, E3.4 | 2026-11-13 | latency +1.6 % vs N=1 and throughput 11.4×; the 2 losses are the new reset defects S3a/S3b. ‡ The **anon+shmem GiB-min is corrected (S3c/E3.5)**: 427–474 tasks/GiB-min (before 603–768), 66.7–68.1 MiB/session; at 65.6 MiB/session the per-busy-session rate stays 641 |
 | Agent loop at N=20 (animations off, functional-check mode) | **543.8 ms/task p50 / 575.3 p90; 10.49 verified tasks/s; 711.7 / 1414.2 † tasks/GiB-min; 65 MiB/session anon+shmem; 300/300 verified, 0 false passes** | same branch, `--animations off` | S3, E3.4 | 2026-11-13 | 2.7× the on-arm throughput. † The old denominator undercounted guests (S3c): corrected N=20 value **553.5–557.0 tasks/GiB-min** (before 1182–1226) and **66.5–68.9 MiB anon+shmem / 53.1–57.0 MiB ΣPss per session** with 0 zero readings (before 2.7–43.8 / 0.0–55.0); E3.5, `results/bench/S3c.md` |
 | Scale ceiling (verified loop, largest N probed) | **N=30: 600/600 verified (100 %), 0 false passes**; p50 1534–1541 ms on, 5.78–6.79 tasks/s; **job cgroup peak 2.34–2.67 GiB (≈4 % of 61.9 GiB), host used 23–24 %**, no oom_kill | same branch, 24G guarded arm, 4 reps (3 on / 1 off), load1 5.1–13.0 | S3, E3.4 | 2026-11-13 | N=20 used < 50 % of RAM so N=30 was probed and passed; the ceiling is ≥ N=30 and is set by latency stability under external load, not memory. Reset defects S3a/S3b are stochastic (seen at N=10/20, not in this 600) |
@@ -2190,7 +2232,7 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | H8 | Faster PNG (SIMD deflate) / region screenshots | M5 | 24 → 10–15 ms | medium | medium | low | backlog (5.5 % of the animations-off loop, 2 % on) |
 | H3 | Warm exec pool | M3/M4 | −73 ms launch | — | — | +idle memory | **declined by owner 2026-11-12** |
 | K3a | K2 next walls: AndroidKeyStore shim, GL/BLAST natives, WebView provider classification | compat first-frame | +3–5 apps | high (K1/K2 evidence) | medium | medium | **classified (K3, E5.7): all three need a real backend (weeks); no shim, no fake pass** |
-| K5 | K3a continuation: app-uid fidelity + software keystore + location/trust/restrictions read paths + real signing certs | compat first frame | +2–3 apps | high (targeted smokes) | medium | medium | **PARTIAL (E5.10): uid 10192 measured (PMS agreement, `CapEff 0`, own app-data); 34/34 gates (25 pass, 9 expected failures, 0 false passes); corpus r1 21/15/15/9 vs K4 21/16–17/16/9; `gaten-home` now passes (merged main). Joplin single-run SIGABRT is an open regression; r2 only 4 apps** |
+| K5 | K3a continuation: app-uid fidelity + software keystore + location/trust/restrictions read paths + real signing certs | compat first frame | +2–3 apps | high (targeted smokes) | medium | medium | **PARTIAL (E5.10b, final tree `ed2ff4d`): 2×42 corpus — K5 20/15/15/9 vs main 21/15/15/9; per-app rungs identical between rounds; only `fluffychat` differs by one `onCreate` rung (unresolved, not K5-attributable); joplin SIGABRT is 3/3 on main too (connectivity code 42, main `a98e839`), NOT a K5 regression; gates 24 pass + 9 expected-fail + `w7-insets-report` red on main too (density `0e569b5` suspect); uid 10192 measured. Security review pending** |
 | K5b | **Software keystore security/correctness fix list (advisor Q1):** `KeyInfo` software security level; honour/reject purposes, modes, padding, validity, randomized-encryption; import `ProtectionParameter`; explicit attestation refusal; propagate persistence failures; generated RSA/EC certificate chains; key-file retention policy + 0600; reset/restart/crash/SIGKILL/concurrent-session/identical-alias tests; label evidence "software-keystore compatibility" only | keystore compat | element/dot.gallery without lying about security | high | medium | medium | **open (K5b). Not implemented this hour; provider is default-off** |
 | K5c | **RedReader `PackageInfo.signatures` ART decode:** Rust framing passes the real `PackageInfo.CREATOR` in the VM and the reply bytes are byte-exact, but the ART guest still raises `OPENSSL_internal:DECODE_ERROR`. Test: replay the captured reply through the guest transport, compare the received byte range to `.cache/k5/pmsreply.bin`; check >2 KiB peer-pipe delivery | compat first frame | redreader onCreate | high | low | low | **open (E5.10). Smallest next action: instrument the guest's received `PackageInfo` byte range against the captured reply** |
 | K3b | K2 PMS error class (`NameNotFoundException`) and `checkService` null for unknown names | compat | +2 apps (vlc, fdroid) | high | low | low | **accepted `9df9e71` (E5.5): both leave the wall; vlc → `ConstraintLayout` inflate (R2), fdroid → `getSystemAvailableFeatures`** |
