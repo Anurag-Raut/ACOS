@@ -197,6 +197,11 @@ pub struct ArtSession {
     /// (orderly activity lifecycle vs. killed after the bounded grace) and how
     /// long it took. Reported by `acos_destroy`; never guessed.
     last_teardown: Option<(TeardownPath, u64)>,
+    /// S3b: a reset that failed once for a host-transport reason and then
+    /// succeeded. The first failure's evidence is copied to
+    /// `<artifacts>/relaunch-retry-1/` and this record is carried in the reset
+    /// reply. `None` on every ordinary relaunch.
+    relaunch_retry: Option<serde_json::Value>,
 }
 
 /// How an explicit session destruction ended (GL1).
@@ -1253,6 +1258,7 @@ impl ArtSession {
             reset_settle_timeout_ms: None,
             closed: false,
             last_teardown: None,
+            relaunch_retry: None,
         };
         // The ready line is the protocol's first reply. If the session dies
         // before it, there is no live frame at all: say so by name and keep the
@@ -2400,6 +2406,12 @@ impl ArtSession {
         self.last_teardown
     }
 
+    /// S3b: the bounded relaunch retry this session carries, if any. The reset
+    /// reply states it so a host-transport retry is never a silent pass.
+    pub fn relaunch_retry(&self) -> Option<&serde_json::Value> {
+        self.relaunch_retry.as_ref()
+    }
+
     /// GL1: processes that still name this session's artifacts directory on
     /// their command line (the `acos-art` launcher and anything it left).
     ///
@@ -2500,6 +2512,90 @@ impl ArtSession {
             verified: true,
         }
     }
+}
+
+/// S3b: is this failed relaunch a **host transport/host-resource** failure
+/// rather than the app's own startup? Only the named host-class strings are
+/// accepted; a generic `GUEST_EXITED` (a real app wall) never matches.
+fn relaunch_transport_reason(error: &BackendError, artifacts: &Path) -> Option<String> {
+    let mut text = error.to_string();
+    if let Some(doc) = crate::failure::read_session_exit(artifacts) {
+        text.push('\n');
+        text.push_str(&doc.to_string());
+    }
+    let lower = text.to_ascii_lowercase();
+    for (needle, label) in [
+        ("vsync thread:", "host thread limit: vsync thread could not spawn"),
+        (
+            "display event receiver",
+            "host frame clock: DisplayEventReceiver init failed",
+        ),
+        (
+            "ipcsetdatareference",
+            "host transport: malformed binder reply parcel",
+        ),
+        (
+            "unsupported type object",
+            "host transport: malformed binder object table",
+        ),
+        (
+            "adding window failed",
+            "host window add failed (remote reply malformed)",
+        ),
+        ("host_panic", "host launcher panic (harness/host resource)"),
+    ] {
+        if lower.contains(needle) {
+            return Some(label.to_string());
+        }
+    }
+    None
+}
+
+/// Copy the failed relaunch's small evidence aside before the retry replaces
+/// `session-exit.json` in the shared artifacts directory. Returns the directory.
+fn preserve_failed_relaunch(
+    artifacts: &Path,
+    error: &BackendError,
+    reason: &str,
+) -> Option<String> {
+    let dest = artifacts.join("relaunch-retry-1");
+    if std::fs::create_dir_all(&dest).is_err() {
+        return None;
+    }
+    let frames = artifacts.join("art-frames");
+    for name in [
+        "session-exit.json",
+        "live-session.json",
+        "session-timing.json",
+        "native-crash.json",
+        "native-crash.txt",
+        "session.json",
+        "argv",
+        "unsupported.jsonl",
+    ] {
+        let src = frames.join(name);
+        if src.is_file() {
+            let _ = std::fs::copy(&src, dest.join(name));
+        }
+    }
+    let doc = serde_json::json!({
+        "utc_ms": now_unix_ms(),
+        "reason": reason,
+        "error": error.to_string(),
+        "note": "S3b: the first relaunch failed for a host transport/host-resource reason; \
+                 the same APK was relaunched once. The copied files are the first attempt's \
+                 own evidence (session-exit.json holds the guard line and the guest log).",
+    });
+    let path = dest.join("relaunch-retry.json");
+    let _ = std::fs::write(
+        &path,
+        serde_json::to_vec_pretty(&doc).unwrap_or_default(),
+    );
+    let _ = std::fs::write(
+        artifacts.join("relaunch-retry.json"),
+        serde_json::to_vec_pretty(&doc).unwrap_or_default(),
+    );
+    Some(path.display().to_string())
 }
 
 impl ArtSession {
@@ -2838,22 +2934,57 @@ impl SessionBackend for ArtSession {
         }
         let stop_ms = phase_started.elapsed().as_millis() as u64;
         let relaunch_started = Instant::now();
-        let mut fresh = match ArtSession::start_with_options(
-            &apk,
-            &artifacts,
-            self.animations,
-            self.insets(),
-        ) {
-            Ok(fresh) => fresh,
-            Err(error) => {
-                self.invalidate_frame();
-                return Err(error);
+        // S3b: a relaunch can fail because the *host* could not complete a
+        // transport/host resource step (the binder reply was malformed, or the
+        // vsync thread hit the task limit). The guest then exits 1 before its
+        // first frame. That is not app behaviour, so one bounded retry is
+        // allowed; the first failure is preserved verbatim under
+        // `<artifacts>/relaunch-retry-1/` and carried in the reset reply. Any
+        // other startup failure (a real app wall, a broken APK) is returned
+        // immediately and is never retried.
+        let mut retry_info: Option<serde_json::Value> = None;
+        let mut fresh = None;
+        for attempt in 1..=2 {
+            match ArtSession::start_with_options(
+                &apk,
+                &artifacts,
+                self.animations,
+                self.insets(),
+            ) {
+                Ok(session) => {
+                    fresh = Some(session);
+                    break;
+                }
+                Err(error) => {
+                    if attempt == 1 {
+                        if let Some(reason) = relaunch_transport_reason(&error, &artifacts) {
+                            let evidence = preserve_failed_relaunch(&artifacts, &error, &reason);
+                            eprintln!(
+                                "acos: reset: first relaunch failed for a host transport reason \
+                                 ({reason}); retrying once (evidence: {})",
+                                evidence.as_deref().unwrap_or("<not written>")
+                            );
+                            retry_info = Some(serde_json::json!({
+                                "attempts": 2,
+                                "first_failure": error.to_string(),
+                                "reason": reason,
+                                "evidence": evidence,
+                                "utc_ms": now_unix_ms(),
+                            }));
+                            continue;
+                        }
+                    }
+                    self.invalidate_frame();
+                    return Err(error);
+                }
             }
-        };
+        }
+        let mut fresh = fresh.expect("the relaunch loop either returns or yields a session");
         fresh.settle_timeout_ms = self.reset_settle_timeout_ms;
         let start_ms = relaunch_started.elapsed().as_millis() as u64;
         fresh.seq_offset = offset;
         fresh.log_offset = log_offset;
+        fresh.relaunch_retry = retry_info;
         // Session-level cost accounting spans the relaunch.
         fresh.settle = settle;
         fresh.session_start_ms = boot_ms.saturating_add(fresh.session_start_ms);
@@ -4257,4 +4388,208 @@ mod tests {
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);
     }
+    /// S3b: a fake `acos-art` that fails its **second** start (the first reset
+    /// attempt) exactly like the N=20 class-B incident: it writes the session's
+    /// own `session-exit.json` (guest exit 1 after resume, malformed
+    /// `addToDisplayAsUser` reply) and exits 1 before its ready line. Every
+    /// other start serves the ordinary interactive protocol, so the third
+    /// spawn is the retry and is observable through `<dir>/starts.log`.
+    fn transport_failing_art_binary(dir: &Path, attempt_exit_json: &Path) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let png = dir.join("tiny.png");
+        std::fs::write(&png, super::super::fake::TINY_PNG).unwrap();
+        let starts = dir.join("starts.log");
+        let script = dir.join("fake-acos-art-s3b.sh");
+        let mut body = String::new();
+        body.push_str("#!/bin/sh\n");
+        body.push_str(&format!("starts='{}'\n", starts.display()));
+        body.push_str("out=''\n");
+        body.push_str("while [ $# -gt 0 ]; do\n");
+        body.push_str("  case \"$1\" in\n");
+        body.push_str("    --out) out=$2; shift 2 ;;\n");
+        body.push_str("    *) shift ;;\n");
+        body.push_str("  esac\n");
+        body.push_str("done\n");
+        body.push_str("n=0\n");
+        body.push_str("[ -f \"$starts\" ] && n=$(cat \"$starts\")\n");
+        body.push_str("n=$((n+1))\n");
+        body.push_str("printf '%s\\n' \"$n\" > \"$starts\"\n");
+        body.push_str("if [ \"$n\" = 2 ]; then\n");
+        body.push_str(&format!(
+            "  cp '{}' \"$out/session-exit.json\"\n",
+            attempt_exit_json.display()
+        ));
+        body.push_str(&format!(
+            "  cp '{}' \"$out/live-session.json\"\n",
+            attempt_exit_json.display()
+        ));
+        body.push_str("  exit 1\n");
+        body.push_str("fi\n");
+        body.push_str("echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.test\",\"activity\":\"dev.test/.Main\",\"width\":1080,\"height\":2400,\"density\":420}'\n");
+        body.push_str("while IFS= read -r line; do\n");
+        body.push_str("  case \"$line\" in\n");
+        body.push_str("    *'\"cmd\":\"tree\"'*)\n");
+        body.push_str(&format!(
+            "      echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[]}}}}'\n",
+            png.display()
+        ));
+        body.push_str("      ;;\n");
+        body.push_str("    *'\"cmd\":\"close\"'*)\n");
+        body.push_str("      echo '{\"ok\":true,\"cmd\":\"close\"}'\n");
+        body.push_str("      exit 0\n");
+        body.push_str("      ;;\n");
+        body.push_str("    *)\n");
+        body.push_str("      echo '{\"ok\":false,\"code\":\"UNSUPPORTED_ANDROID_API\",\"error\":\"unsupported\"}'\n");
+        body.push_str("      ;;\n");
+        body.push_str("  esac\n");
+        body.push_str("done\n");
+        std::fs::write(&script, body).unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+        script
+    }
+
+    /// S3b: the bounded relaunch retry must **actually fire**. The classifier
+    /// test above only proves the string match; this proves the whole path:
+    /// a host-transport relaunch failure (the N=20 class-B shape) is retried
+    /// exactly once, the first attempt's own evidence is preserved verbatim,
+    /// the reset succeeds on the retry and the retry is stated, never silent.
+    #[test]
+    fn reset_retries_a_host_transport_relaunch_once_and_preserves_the_first_failure() {
+        let dir = o2_scratch_dir("relaunch-retry-fires");
+        // The N=20 evidence verbatim (see results/bench/S3ab-evidence/
+        // repro-n20-binder-parcel/session-exit.json): the guest could not parse
+        // the addToDisplayAsUser reply and exited 1 after the Activity resumed.
+        let injected = concat!(
+            "{\"code\":\"GUEST_EXIT_AFTER_RESUME\",\"guest_exit\":1,\"guest_signal\":null,",
+            "\"stdout_tail\":[\"E/Parcel: ipcSetDataReference: unsupported type object ",
+            "(7209057) at offset 16\",\"Adding window failed\"]}\n"
+        );
+        let exit_json = dir.join("first-attempt-session-exit.json");
+        std::fs::write(&exit_json, injected).unwrap();
+        let script = transport_failing_art_binary(&dir, &exit_json);
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let starts = dir.join("starts.log");
+        let _art_bin_guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        assert_eq!(std::fs::read_to_string(&starts).unwrap().trim(), "1");
+        assert!(session.relaunch_retry().is_none(), "a first start never retries");
+        let before = session.frame().expect("first frame").frame_seq();
+
+        session
+            .reset()
+            .expect("the host-transport relaunch failure is retried and succeeds");
+        // Three spawns: the original guest, the injected failure, the retry.
+        assert_eq!(
+            std::fs::read_to_string(&starts).unwrap().trim(),
+            "3",
+            "the retry must be a real new acos-art process"
+        );
+        let retry = session
+            .relaunch_retry()
+            .expect("the reset must state that it retried");
+        assert_eq!(retry.get("attempts").and_then(|v| v.as_u64()), Some(2));
+        let reason = retry
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .expect("the retry names its reason");
+        assert!(
+            reason.contains("binder") || reason.contains("window add"),
+            "unexpected retry reason: {reason}"
+        );
+        assert!(
+            retry
+                .get("first_failure")
+                .and_then(|v| v.as_str())
+                .is_some_and(|text| text.contains("LIVE_FRAME_UNAVAILABLE")),
+            "the first failure must be carried, not replaced: {retry}"
+        );
+        // The first attempt's own evidence is byte-identical, and the retry
+        // record exists both beside it and at the artifacts root.
+        let preserved = dir.join("relaunch-retry-1/session-exit.json");
+        assert_eq!(
+            std::fs::read(&preserved).expect("preserved session-exit.json"),
+            injected.as_bytes(),
+            "the first failure's session-exit.json must be preserved verbatim"
+        );
+        assert!(dir.join("relaunch-retry-1/relaunch-retry.json").is_file());
+        assert!(dir.join("relaunch-retry.json").is_file());
+
+        // The relaunched guest is live: the retry is a real recovery, not a pass.
+        let after = session.frame().expect("the retried guest serves a frame");
+        assert!(after.frame_seq() > before, "{} -> {}", before, after.frame_seq());
+        session.close().expect("clean close");
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// S3b: the retry is bounded to **host transport**. An ordinary app startup
+    /// wall must fail the reset on the first attempt, with no second spawn and
+    /// no retry record — a bounded retry must never hide an app failure.
+    #[test]
+    fn reset_does_not_retry_an_app_startup_wall() {
+        let dir = o2_scratch_dir("relaunch-retry-app-wall");
+        let injected = concat!(
+            "{\"code\":\"GUEST_EXIT_AFTER_RESUME\",\"guest_exit\":1,\"guest_signal\":null,",
+            "\"stdout_tail\":[\"java.lang.RuntimeException: Application onCreate threw\"]}\n"
+        );
+        let exit_json = dir.join("first-attempt-session-exit.json");
+        std::fs::write(&exit_json, injected).unwrap();
+        let script = transport_failing_art_binary(&dir, &exit_json);
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let starts = dir.join("starts.log");
+        let _art_bin_guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        let error = session.reset().expect_err("an app wall must fail the reset");
+        assert!(
+            error.to_string().contains("LIVE_FRAME_UNAVAILABLE"),
+            "the failure must stay visible: {error}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&starts).unwrap().trim(),
+            "2",
+            "an app wall must not be retried: only the original start and one relaunch"
+        );
+        assert!(session.relaunch_retry().is_none());
+        assert!(!dir.join("relaunch-retry-1").exists());
+        assert!(!dir.join("relaunch-retry.json").exists());
+        // A failed relaunch is a provably dead session (W55), never a stale frame.
+        assert!(session.last_frame().is_none());
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn only_host_transport_startup_failures_are_retryable() {
+        let dir = scratch_dir("relaunch-retry-classify");
+        std::fs::create_dir_all(dir.join("art-frames")).unwrap();
+        let write = |body: &str| {
+            std::fs::write(dir.join("art-frames/session-exit.json"), body).unwrap();
+        };
+        let error = |text: &str| BackendError::Protocol {
+            code: acos_protocol::ErrorCode::GuestExited,
+            detail: text.to_string(),
+            hint: None,
+            details: None,
+        };
+        // A real app wall is never retried.
+        write(r#"{"code":"GUEST_EXITED","guest_exit":1,"stdout_tail":["Application onCreate threw"]}"#);
+        assert!(relaunch_transport_reason(&error("GUEST_EXITED"), &dir).is_none());
+        // The S3b host classes are.
+        write(r#"{"code":"GUEST_EXIT_AFTER_RESUME","guest_exit":1,"logd_tail":["vsync thread: Resource temporarily unavailable (os error 11)"]}"#);
+        assert!(relaunch_transport_reason(&error("GUEST_EXITED"), &dir)
+            .unwrap()
+            .contains("vsync thread"));
+        write(r#"{"code":"GUEST_EXIT_AFTER_RESUME","guest_exit":1,"stdout_tail":["E/Parcel: ipcSetDataReference: unsupported type object (7209057) at offset 16","Adding window failed"]}"#);
+        assert!(relaunch_transport_reason(&error("GUEST_EXITED"), &dir).is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
 }
