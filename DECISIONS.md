@@ -1006,3 +1006,43 @@ ART reference captures (`results/render/`), not against a device GPU.
 content-stable settle (3), H13b cached `shared-fixed` default (4), W7b `report`
 default + w42 re-bless (6). Each is gated as usual (tests + gates green, 0 false
 passes) before merge.
+
+## ADR-0027 — Owner decisions 2026-11-14 night (live view, Metro, T3 Code, screenshots)
+
+**Context.** The owner asked for (1) an optional live view of a session's screen, (2) React Native
+Metro / Fast Refresh in a session, (3) a way to watch what agents are doing from T3 Code, and
+(4) smaller screenshots (each capture is a ~10 MB stored-zlib PNG today). Plan and options were
+explained in chat; the owner chose the recommended option for every decision. All of it must keep
+the tracked benchmark metrics (M4–M8) at parity with the viewer off.
+
+**Decisions.**
+
+1. **Viewer surface = a local browser page** (`acos view`, 127.0.0.1 only, random token in the URL).
+   It works in T3 Code's built-in preview pane, any browser, and needs no native window.
+2. **Frames stream only while a viewer is connected.** Every live session registers cheap metadata
+   (`$XDG_RUNTIME_DIR/acos/live/<id>.json`: agent/client, project dir, APK, activity, stream
+   socket); the launcher's frame tap does nothing (one atomic check) with no subscriber. With a
+   subscriber: half-resolution (540×1200) lossy frames (JPEG/WebP) from the C1 compositor's latest
+   frame, encoded on a separate thread, ≤ 15 fps, drop-latest, never blocking the compositor or an
+   agent command, never forcing a present or changing frame_seq/generation (settle semantics).
+   Each session also emits an action/event stream (tool, coordinates, masked text, result status,
+   activity, agent + project) for overlays (tap ripple, current screen, recent actions).
+3. **T3 Code: use its preview pane, no patch.** T3 Code is a binary install (/opt/t3code-bin); a
+   patched build would break on every update. A docked panel is revisited only if the preview pane
+   is not enough.
+4. **Metro: a single-port forwarder, opt-in per session.** The sandbox keeps `--unshare-net`; one
+   forwarder maps guest 127.0.0.1:8081 to the host Metro port (like `adb reverse`), nothing else.
+   Requires the app's debug build (owner's agents build it; ACOS consumes). Dev-mode RN launch
+   latency is tracked as its own metric (edit→changed-frame target ≤ ~1.5 s), never mixed into the
+   release-build metrics. A one-hour spike answers the risks first (dev-server host detection,
+   Hermes dev mode / Fast Refresh / LogBox inside the sandbox, Gradle debug build offline).
+5. **The viewer is view-only.** Agents are the users; human input in the viewer would race the
+   agent driving the same session.
+6. **Screenshots: compress.** Default capture becomes a compressed lossless PNG (fast deflate +
+   filter), still exact for pixel assertions, with M5 at parity or better (smaller write + hash
+   should offset the encode). Images returned to agents over MCP are additionally size-bounded
+   (downscaled lossy preview + path to the lossless file), since a full-resolution PNG in a tool
+   reply is wasted context.
+
+**Order.** Finish v0.2.0 → screenshot compression and live view (phase 1) in parallel → T3 preview
+pane check → Metro spike → Metro bridge.
