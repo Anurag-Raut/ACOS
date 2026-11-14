@@ -17,7 +17,7 @@ use acos_protocol::assertion::{
 };
 use acos_protocol::commands::ResetScope;
 use acos_protocol::events::{Event, EventBody};
-use acos_protocol::scenario::{Expectation, Scenario, Step, StepRef, StepSettle};
+use acos_protocol::scenario::{Expectation, ExpectedError, Scenario, Step, StepRef, StepSettle};
 use acos_protocol::ui::Bounds;
 use acos_protocol::verdict::{
     AppIdentity, ArtifactRef, FailureClassification, Reproducer, ResourceReport, ScenarioIdentity,
@@ -395,16 +395,11 @@ pub fn run_scenario(
         step_result.error = exec.error.clone();
         // P12: a tap/type/key reply's settle block (including pixels_changed)
         // is step evidence. It is never the pass/fail rule by itself.
-        step_result.settle = exec
-            .observation
-            .as_ref()
-            .and_then(|observation| {
-                observation
-                    .settle
-                    .clone()
-                    .or_else(|| observation.input.as_ref()?.settle.clone())
-            })
-            .or_else(|| exec.settle.clone());
+        // SE2b: prefer the per-action record. `observation.settle` is the
+        // session's sticky bound record and can describe an earlier traversal or
+        // an earlier action's rule; the input's own record is the one this step
+        // actually applied.
+        step_result.settle = step_settle(exec.observation.as_ref(), exec.settle.as_ref());
 
         // Write evidence and declare it.
         let step_artifact = acos_protocol::step_file_name(index, step.kind());
@@ -497,7 +492,13 @@ pub fn run_scenario(
     }
 
     // ---- expectation handling --------------------------------------------
-    apply_expectation(scenario.expectation, &mut status, &mut failure, &mut notes);
+    apply_expectation(
+        scenario.expectation,
+        scenario.expect_error.as_ref(),
+        &mut status,
+        &mut failure,
+        &mut notes,
+    );
 
     // ---- fidelity handling (only relevant to a claim of pass) -------------
     let achieved = backend.fidelity();
@@ -650,6 +651,7 @@ pub fn run_scenario(
 /// harness failure instead.
 fn apply_expectation(
     expectation: Expectation,
+    expect_error: Option<&ExpectedError>,
     status: &mut Status,
     failure: &mut Option<FailureClassification>,
     notes: &mut Vec<String>,
@@ -704,6 +706,60 @@ fn apply_expectation(
             }
         }
     }
+    // SE2b: a negative that declares the failure it expects must produce
+    // exactly that failure. "It went red somehow" is not proof: a control that
+    // fails for another reason (an unapplied settle rule, a stale frame, a
+    // harness timeout) would look green while proving nothing.
+    let Some(expected) = expect_error else {
+        return;
+    };
+    if *status == Status::Pass {
+        // The `fail`/`non_pass` branches above already converted a pass into a
+        // harness error; nothing to pin.
+        return;
+    }
+    let actual_code = failure.as_ref().map(|failure| failure.code.as_str());
+    let actual_reason = failure.as_ref().and_then(|failure| {
+        failure
+            .error
+            .details
+            .as_ref()
+            .and_then(|details| details.get("reason"))
+            .and_then(serde_json::Value::as_str)
+    });
+    let code_matches = actual_code == Some(expected.code.as_str());
+    let reason_matches = expected
+        .reason
+        .as_deref()
+        .map(|reason| actual_reason == Some(reason))
+        .unwrap_or(true);
+    if code_matches && reason_matches {
+        notes.push(format!(
+            "negative control failed exactly as declared ({} / {:?})",
+            expected.code, expected.reason
+        ));
+        return;
+    }
+    let detail = format!(
+        "the scenario declares `expect_error: {{code: {}, reason: {:?}}}` but the run failed with \
+         code {:?} / reason {:?}; a negative that fails for another reason proves nothing",
+        expected.code, expected.reason, actual_code, actual_reason
+    );
+    let error = ProtocolError::new(ErrorCode::Internal, detail.clone())
+        .with_hint("Fix the scenario or the rule it is meant to exercise. Do not widen expect_error to accept this failure.")
+        .with_details(serde_json::json!({
+            "reason": "negative_expectation_mismatch",
+            "expected": {"code": expected.code, "reason": expected.reason},
+            "actual": {"code": actual_code, "reason": actual_reason},
+        }));
+    notes.push("negative_expectation_mismatch".to_string());
+    *status = Status::Error;
+    *failure = Some(FailureClassification {
+        code: ErrorCode::Internal,
+        step_index: failure.as_ref().and_then(|failure| failure.step_index),
+        summary: detail,
+        error,
+    });
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1624,6 +1680,26 @@ fn fast_bound_failure(kind: &str) -> StepExec {
     })
 }
 
+/// SE2b: the settle record a step's evidence publishes.
+///
+/// Order matters: the action's own record first (it names the rule this step
+/// applied and the frame it bound), then the session's sticky bound record, then
+/// a record the backend attached to the step itself.
+fn step_settle(
+    observation: Option<&SessionObservation>,
+    exec_settle: Option<&serde_json::Value>,
+) -> Option<serde_json::Value> {
+    observation
+        .and_then(|observation| {
+            observation
+                .input
+                .as_ref()
+                .and_then(|input| input.settle.clone())
+                .or_else(|| observation.settle.clone())
+        })
+        .or_else(|| exec_settle.cloned())
+}
+
 /// SE2: did a step request `settle: content` without receiving a content
 /// record?
 ///
@@ -1646,18 +1722,30 @@ fn content_settle_unhonored(step: &Step, exec: &StepExec) -> Option<StepExec> {
         .observation
         .as_ref()
         .and_then(|observation| {
+            // SE2b: the per-action record first. `observation.settle` is the
+            // session-sticky bound record, which may describe an earlier
+            // traversal; the input's own record describes *this* action.
             observation
-                .settle
-                .clone()
-                .or_else(|| observation.input.as_ref()?.settle.clone())
+                .input
+                .as_ref()
+                .and_then(|input| input.settle.clone())
+                .or_else(|| observation.settle.clone())
         })
         .or_else(|| exec.settle.clone());
-    if settle
+    // SE2b: a mode string alone is not proof. The record must say the content
+    // window settled AND name the very frame the observation carries; a record
+    // from another traversal (or one that timed out) never honours the step.
+    let observation_frame_seq = exec
+        .observation
         .as_ref()
-        .and_then(|settle| settle.get("mode"))
-        .and_then(serde_json::Value::as_str)
-        == Some("content")
-    {
+        .map(|observation| observation.frame.frame_seq);
+    let honoured = settle.as_ref().is_some_and(|settle| {
+        settle.get("mode").and_then(serde_json::Value::as_str) == Some("content")
+            && settle.get("settled").and_then(serde_json::Value::as_bool) == Some(true)
+            && settle.get("frame_seq").and_then(serde_json::Value::as_u64)
+                == observation_frame_seq
+    });
+    if honoured {
         return None;
     }
     let mut failure = StepExec::failed(Evaluated {
@@ -1666,11 +1754,12 @@ fn content_settle_unhonored(step: &Step, exec: &StepExec) -> Option<StepExec> {
             passed: false,
             diff: Some(AssertionDiff {
                 expected: serde_json::json!({"settle": "content"}),
-                actual: settle.unwrap_or(serde_json::Value::Null),
+                actual: settle.clone().unwrap_or(serde_json::Value::Null),
                 path: Some("step.settle".to_string()),
                 detail: Some(
-                    "the step asked for `settle: content` but the backend returned no content \
-                     record, so the content-stable rule was not applied"
+                    "the step asked for `settle: content` but the backend returned no settled \
+                     content record for the frame it bound, so the content-stable rule was not \
+                     applied to this observation"
                         .to_string(),
                 ),
             }),
@@ -1693,6 +1782,8 @@ fn content_settle_unhonored(step: &Step, exec: &StepExec) -> Option<StepExec> {
             details: Some(serde_json::json!({
                 "reason": "content_settle_unhonored",
                 "step_kind": step.kind(),
+                "observation_frame_seq": observation_frame_seq,
+                "settle": settle,
             })),
         }),
     });
@@ -2745,14 +2836,49 @@ mod content_settle_tests {
     }
 
     fn content_record() -> serde_json::Value {
+        content_record_for(5)
+    }
+
+    /// SE2b: a content record always names the frame it settled.
+    fn content_record_for(frame_seq: u64) -> serde_json::Value {
         serde_json::json!({
             "mode": "content",
             "settled": true,
             "window_ms": 300,
             "traversals": 3,
             "signature": "0f0f0f0f0f0f0f0f",
+            "frame_seq": frame_seq,
             "pixel_evidence": false,
         })
+    }
+
+    fn content_observation(frame_seq: u64, settle: serde_json::Value) -> SessionObservation {
+        use acos_protocol::ui::UiTree;
+        let mut tree = UiTree::new(
+            acos_protocol::FrameMeta::new(
+                frame_seq,
+                "2026-01-01T00:00:00Z",
+                "test",
+                100,
+                100,
+                420,
+                "h",
+                true,
+            ),
+            "dev.acos.fixtures.counter",
+            Vec::new(),
+        );
+        tree.frame.frame_seq = frame_seq;
+        SessionObservation {
+            session_id: "s_test".to_string(),
+            package: "dev.acos.fixtures.counter".to_string(),
+            frame: tree.frame.clone(),
+            tree,
+            screenshot_png: None,
+            crashed: None,
+            input: None,
+            settle: Some(settle),
+        }
     }
 
     fn strict_record() -> serde_json::Value {
@@ -2840,8 +2966,139 @@ mod content_settle_tests {
             failure.error.as_ref().unwrap().code,
             ErrorCode::UnsupportedAssertion
         );
+        // SE2b: a mode string is not enough - the record must be a *settled*
+        // one that names the very frame the step observed.
         exec.settle = Some(content_record());
+        assert!(
+            content_settle_unhonored(step, &exec).is_some(),
+            "a record with no observation frame identity never honours the step"
+        );
+        exec.settle = None;
+        exec.observation = Some(content_observation(5, content_record_for(5)));
         assert!(content_settle_unhonored(step, &exec).is_none());
+    }
+
+    /// SE2b finding 4: the content record must be settled AND bound to the
+    /// observation's own frame. A mode string from a stale record (or an
+    /// unsettled one) is a downgrade, not a pass.
+    #[test]
+    fn content_settle_requires_the_settled_frame_identity() {
+        let parsed = scenario(&format!("{HEADER}  - tap: {{x: 1, y: 2, settle: content}}\n"));
+        let step = &parsed.steps[1];
+        let mut exec = StepExec::pass();
+        // Record for another traversal: refused.
+        exec.observation = Some(content_observation(6, content_record_for(5)));
+        let failure = content_settle_unhonored(step, &exec).expect("another frame is not evidence");
+        assert_eq!(
+            failure.error.as_ref().unwrap().code,
+            ErrorCode::UnsupportedAssertion
+        );
+        let details = failure.error.as_ref().unwrap().details.clone().unwrap();
+        assert_eq!(details["reason"], "content_settle_unhonored");
+        assert_eq!(details["observation_frame_seq"], 6);
+        // An unsettled content record: refused.
+        let mut unsettled = content_record_for(6);
+        unsettled["settled"] = serde_json::json!(false);
+        exec.observation = Some(content_observation(6, unsettled));
+        assert!(content_settle_unhonored(step, &exec).is_some());
+        // No record at all: refused.
+        exec.observation = Some(content_observation(6, strict_record()));
+        assert!(content_settle_unhonored(step, &exec).is_some());
+        // The settled record for exactly this frame: honoured.
+        exec.observation = Some(content_observation(6, content_record_for(6)));
+        assert!(content_settle_unhonored(step, &exec).is_none());
+    }
+
+    /// SE2b finding 8: step evidence publishes the *action's* settle record, not
+    /// the session's sticky bound record from an earlier traversal/action.
+    #[test]
+    fn step_evidence_prefers_the_per_action_settle() {
+        use crate::backend::InputDelivery;
+        let mut observation = content_observation(6, strict_record());
+        observation.input = Some(InputDelivery {
+            delivered: true,
+            visual_change: true,
+            acks: Vec::new(),
+            settle: Some(content_record_for(6)),
+        });
+        let settle = step_settle(Some(&observation), None).expect("a record");
+        assert_eq!(settle["mode"], "content");
+        // Only the sticky record: it is used, but it is the sticky one.
+        observation.input = None;
+        let settle = step_settle(Some(&observation), None).expect("a record");
+        assert_eq!(settle["mode"], "strict");
+        // No observation at all: the step's own record still travels.
+        let settle = step_settle(None, Some(&content_record_for(6))).expect("a record");
+        assert_eq!(settle["mode"], "content");
+    }
+
+    /// SE2b finding 9: a pinned negative expectation is enforced. A negative
+    /// that fails with another code/reason is a harness error, never green.
+    #[test]
+    fn a_negative_failure_must_match_its_pinned_error() {
+        let expected = ExpectedError {
+            code: "ASSERTION_FAILED".to_string(),
+            reason: Some("content_settle_pixel".to_string()),
+        };
+        let failure = |code: ErrorCode, reason: Option<&str>| {
+            let error = ProtocolError::new(code, "boom".to_string()).with_details(
+                serde_json::json!({"reason": reason.unwrap_or("other")}),
+            );
+            FailureClassification {
+                code,
+                step_index: Some(2),
+                summary: "boom".to_string(),
+                error,
+            }
+        };
+        // Matching code + reason: the control is accepted (status untouched).
+        let mut status = Status::Fail;
+        let mut actual = Some(failure(ErrorCode::AssertionFailed, Some("content_settle_pixel")));
+        let mut notes = Vec::new();
+        apply_expectation(Expectation::Fail, Some(&expected), &mut status, &mut actual, &mut notes);
+        assert_eq!(status, Status::Fail);
+        assert!(
+            notes.iter().any(|note| note.contains("exactly as declared")),
+            "{notes:?}"
+        );
+        // Right code, wrong reason: harness error.
+        let mut status = Status::Fail;
+        let mut actual = Some(failure(ErrorCode::AssertionFailed, Some("something_else")));
+        let mut notes = Vec::new();
+        apply_expectation(Expectation::Fail, Some(&expected), &mut status, &mut actual, &mut notes);
+        assert_eq!(status, Status::Error);
+        let actual = actual.expect("failure");
+        assert_eq!(actual.code, ErrorCode::Internal);
+        assert_eq!(
+            actual.error.details.as_ref().unwrap()["reason"],
+            "negative_expectation_mismatch"
+        );
+        // A TIMEOUT control pins the timeout code and its reason.
+        let expected = ExpectedError {
+            code: "TIMEOUT".to_string(),
+            reason: Some("content-not-stable".to_string()),
+        };
+        let mut status = Status::Timeout;
+        let mut actual = Some(failure(ErrorCode::Timeout, Some("content-not-stable")));
+        let mut notes = Vec::new();
+        apply_expectation(
+            Expectation::NonPass,
+            Some(&expected),
+            &mut status,
+            &mut actual,
+            &mut notes,
+        );
+        assert_eq!(status, Status::Timeout);
+        // A scenario that declares both `pass` and a pinned error is invalid.
+        let parsed = Scenario::from_yaml_str_unvalidated(&format!(
+            "{HEADER}expect_error: {{code: ASSERTION_FAILED}}\n"
+        ))
+        .expect("parses");
+        let report = parsed.validate();
+        assert!(
+            report.errors.iter().any(|error| error.path.contains("expect_error")),
+            "expect_error on a pass scenario must be INVALID_SCENARIO: {report:?}"
+        );
     }
 
     /// SE2: `expect_change` (a pixel claim) cannot combine with content settle.

@@ -216,6 +216,26 @@
         }
       ]
     },
+    "ExpectedError": {
+      "description": "A negative scenario's pinned failure (see [`Scenario::expect_error`]).",
+      "properties": {
+        "code": {
+          "description": "Error code the run must report (`ASSERTION_FAILED`, `TIMEOUT`, ...).",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Optional `details.reason` the failing step's error must carry (for example `content_settle_pixel` or `content-not-stable`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "type": "object"
+    },
     "FallbackPolicy": {
       "description": "What to do when the preferred engine cannot run a step.",
       "oneOf": [
@@ -1814,6 +1834,17 @@
       ],
       "default": "native-preferred",
       "description": "Engine preference."
+    },
+    "expect_error": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ExpectedError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "SE2b: the exact failure a **negative** scenario must produce.\n\n`expectation: fail` only says \"the run did not pass\"; it accepts ANY failing step, so a negative control can go red (or green) for the wrong reason and still look like proof. `expect_error` pins the error code and, optionally, the `details.reason` of the failure. A run that fails with another code/reason is a harness error, never a successful negative."
     },
     "expectation": {
       "allOf": [

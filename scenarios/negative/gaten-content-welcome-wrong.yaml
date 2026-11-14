@@ -17,6 +17,10 @@ isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
 animations: off
 expectation: fail
+# SE2b: pin the failure. A content-settled tree still evaluates assertions
+# normally, so the wrong text must be an ASSERTION_FAILED diff - not a timeout
+# and not an unapplied rule.
+expect_error: {code: ASSERTION_FAILED}
 budgets: {memory_mib: 4096, wall_ms: 240000}
 steps:
   - launch:
@@ -24,6 +28,9 @@ steps:
       clear_state: true
       settle: content
       settle_timeout_ms: 20000
+  # SE2b: the assert must re-prove the content window on fresh traversals (the
+  # cached tree is never evidence), so this also covers finding 2 in the
+  # verifier path.
   - assert_text:
       selector: {text: {contains: "Set up Gaten"}}
       text: {contains: "This text does not exist"}

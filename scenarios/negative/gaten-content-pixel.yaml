@@ -20,6 +20,7 @@ isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
 animations: off
 expectation: fail
+expect_error: {code: ASSERTION_FAILED, reason: content_settle_pixel}
 budgets: {memory_mib: 4096, wall_ms: 240000}
 steps:
   - launch: {activity: com.gaten.app.MainActivity, clear_state: true}

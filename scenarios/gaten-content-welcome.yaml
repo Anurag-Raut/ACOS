@@ -45,3 +45,10 @@ steps:
       selector: {text: {contains: "Set up Gaten"}}
       settle: content
       settle_timeout_ms: 20000
+  # SE2b: the content tap must be *usable*. The onboarding page it lands on
+  # carries a "Skip" action on every page, so this assertion checks that the
+  # content-settled post-tap frame is a real, readable tree (and that the step
+  # evidence's per-action record is the one that backs it).
+  - assert_text:
+      selector: {text: {contains: "Skip"}}
+      text: {contains: "Skip"}

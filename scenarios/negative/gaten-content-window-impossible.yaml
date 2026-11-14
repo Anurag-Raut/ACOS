@@ -1,0 +1,36 @@
+# gaten-content-window-impossible: NEGATIVE CONTROL for the content settle's
+# deadline.
+#
+# A content settle that cannot span its own window (here a 1 ms budget against a
+# 300 ms window) must be a structured `TIMEOUT` with
+# `details.reason: "content-not-stable"` - never a "close enough" pass, and never
+# a hang. `expect_error` pins the code and the reason, so this control cannot go
+# green on any other failure.
+#
+# The *changing signature* path (a countdown/alternating screen that resets the
+# window on every traversal) is proven in
+# `acos_verify::settle::tests::a_signature_that_changes_every_traversal_still_times_out`:
+# no shipped fixture screen changes its tree content forever, and inventing one
+# would need a new APK. Both paths end in the same deadline check.
+version: 1
+name: gaten-content-window-impossible
+description: >-
+  SE2 negative: a content settle with a budget shorter than its window is a
+  TIMEOUT (content-not-stable), never a pass.
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: non_pass
+expect_error: {code: TIMEOUT, reason: content-not-stable}
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  # 1 ms cannot prove the 300 ms content window, whatever the screen does.
+  - launch:
+      activity: com.gaten.app.MainActivity
+      clear_state: true
+      settle: content
+      settle_timeout_ms: 1

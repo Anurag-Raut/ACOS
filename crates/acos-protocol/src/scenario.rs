@@ -711,6 +711,17 @@ const fn default_timeout_ms() -> u64 {
     5_000
 }
 
+/// A negative scenario's pinned failure (see [`Scenario::expect_error`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ExpectedError {
+    /// Error code the run must report (`ASSERTION_FAILED`, `TIMEOUT`, ...).
+    pub code: String,
+    /// Optional `details.reason` the failing step's error must carry (for
+    /// example `content_settle_pixel` or `content-not-stable`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
 /// A complete scenario.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Scenario {
@@ -756,6 +767,15 @@ pub struct Scenario {
     /// it is never for animation/transition testing. Launch-time only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub animations: Option<String>,
+    /// SE2b: the exact failure a **negative** scenario must produce.
+    ///
+    /// `expectation: fail` only says "the run did not pass"; it accepts ANY
+    /// failing step, so a negative control can go red (or green) for the wrong
+    /// reason and still look like proof. `expect_error` pins the error code and,
+    /// optionally, the `details.reason` of the failure. A run that fails with
+    /// another code/reason is a harness error, never a successful negative.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect_error: Option<ExpectedError>,
     /// W7b: per-session app-window inset model (`carve`/`report`).
     ///
     /// Selects the model for this scenario exactly as `ACOS_WM_INSETS` does,
@@ -1063,6 +1083,25 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
     }
     if scenario.steps.is_empty() {
         v.push("$.steps", "scenario must contain at least one step");
+    }
+    // SE2b: a pinned failure only makes sense for a negative scenario. A
+    // `pass` scenario that pins an error code would be self-contradictory, and
+    // an empty code could never be satisfied - both are refused here rather than
+    // silently ignored at run time.
+    if let Some(expected) = &scenario.expect_error {
+        if expected.code.trim().is_empty() {
+            v.push("$.expect_error.code", "expect_error.code must not be empty");
+        }
+        if expected.reason.as_deref().is_some_and(|r| r.trim().is_empty()) {
+            v.push("$.expect_error.reason", "expect_error.reason must not be empty");
+        }
+        if scenario.expectation == Expectation::Pass {
+            v.push(
+                "$.expect_error",
+                "expect_error pins a failure; the scenario must declare `expectation: fail` \
+                 (or non_pass)",
+            );
+        }
     }
 
     let mut capture_names: BTreeMap<&str, usize> = BTreeMap::new();
