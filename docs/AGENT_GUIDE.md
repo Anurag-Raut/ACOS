@@ -321,7 +321,15 @@ Two session-specific hints worth memorising:
 
 * **API 34, x86_64.** The runtime is Google's ART from the API-34 ART APEX on
   an x86_64 host image. An APK whose native code has no `lib/x86_64/` entry is
-  `UNSUPPORTED_ABI` on every route (that is a gate, not a silent fallback).
+  `UNSUPPORTED_ABI` on every route (that is a gate, not a silent fallback). On
+  the ART path it is decided **before any guest starts**, so you get
+  `UNSUPPORTED_ABI` (never `GUEST_EXITED`, never `INTERNAL`) with
+  `status: "unsupported"` and `details.apk_abis` / `details.host_abi` /
+  `details.libs_sample` naming exactly what the APK does ship. The decision is
+  AOSP's, per **package**: one `lib/x86_64/` directory is enough to launch, only
+  that directory is installed, and a library that exists solely under another
+  ABI fails later at its own `dlopen` (`UnsatisfiedLinkError`) — an app
+  packaging bug, not an ABI gate. A pure-Java APK (no `lib/` at all) launches.
 * **The MCP session tools run real ART by default.** On the first session tool
   call the server starts its **own** private `acos serve --engine art` on a
   private socket under `$XDG_RUNTIME_DIR/acos/mcp-<pid>-…/` and forwards

@@ -51,6 +51,10 @@ pub fn map_art_code(code: &str) -> ErrorCode {
         "UNSUPPORTED_SYSCALL" => ErrorCode::SeccompUnavailable,
         // Capability refusals from the guest/session.
         "UNSUPPORTED_ANDROID_API" => ErrorCode::UnsupportedAndroidApi,
+        // ABIGATE: the launcher's package-level ABI gate. It refuses *before*
+        // any guest exists, so this is not a guest death (`GUEST_EXITED`) and
+        // never a pass; `details.apk_abis`/`host_abi`/`libs_sample` say why.
+        "UNSUPPORTED_ABI" => ErrorCode::UnsupportedAbi,
         "NO_TEXT" => ErrorCode::NoText,
         "INPUT_UNAVAILABLE" => ErrorCode::UnsupportedBackend,
         "RESOURCE_LIMIT" => ErrorCode::ResourceLimit,
@@ -123,6 +127,9 @@ fn session_exit_facts(doc: &Value, artifacts: &Path) -> Value {
         "native_crash_path": doc.get("native_crash_path").cloned().unwrap_or(Value::Null),
         "cgroup": doc.get("cgroup").cloned().unwrap_or(Value::Null),
         "disk_free_bytes": doc.get("disk_free_bytes").cloned().unwrap_or(Value::Null),
+        // ABIGATE: `{apk_abis, host_abi, libs_sample}` when the launcher refused
+        // the APK's ABI before starting a guest. `Null` on every other exit.
+        "abi": doc.get("abi").cloned().unwrap_or(Value::Null),
         "panic": doc.get("panic").cloned().unwrap_or(Value::Null),
     })
 }
@@ -335,9 +342,27 @@ pub fn art_error(code: &str, message: &str, artifacts: &Path) -> ProtocolError {
     let mut details = json!({"art_code": code});
     if let Some(doc) = read_session_exit(artifacts) {
         details["session_exit"] = session_exit_facts(&doc, artifacts);
+        attach_abi_facts(&mut details, &doc);
     }
     details["session_exit_path"] = json!(session_exit_path(artifacts).display().to_string());
     error.with_details(details)
+}
+
+/// ABIGATE: lift the ABI gate's inventory to the top of `details`.
+///
+/// `apk_abis`, `host_abi` and `libs_sample` are the *whole* evidence of an
+/// `UNSUPPORTED_ABI` refusal — the documented fields an agent reads — so they
+/// must not be buried one level down inside `details.session_exit`.
+fn attach_abi_facts(details: &mut Value, doc: &Value) {
+    let Some(abi) = doc.get("abi").and_then(Value::as_object) else {
+        return;
+    };
+    let Some(object) = details.as_object_mut() else {
+        return;
+    };
+    for (key, value) in abi {
+        object.insert(key.clone(), value.clone());
+    }
 }
 
 /// Is this I/O error a full host filesystem (ENOSPC/EDQUOT)?
@@ -420,6 +445,7 @@ pub fn attach_session_exit(error: &mut ProtocolError, artifacts: &Path) {
             json!(session_exit_path(artifacts).display().to_string()),
         );
     }
+    attach_abi_facts(&mut details, &doc);
     error.details = Some(details);
 }
 
@@ -470,6 +496,9 @@ mod tests {
             ("NO_FRESH_FRAME", ErrorCode::NoFreshFrame),
             ("ART_FATAL_CHECK", ErrorCode::AppCrashed),
             ("BAD_REQUEST", ErrorCode::InvalidArgument),
+            // ABIGATE: the launcher's pre-guest ABI gate is its own code, not a
+            // guest death.
+            ("UNSUPPORTED_ABI", ErrorCode::UnsupportedAbi),
         ] {
             assert_eq!(map_art_code(code), expected, "{code}");
             assert!(is_known_art_code(code), "{code} must be registered");
@@ -478,6 +507,42 @@ mod tests {
         assert!(!ErrorCode::HostPanic.retryable());
         assert!(!ErrorCode::GuestExited.retryable());
         assert!(!is_known_art_code("SOMETHING_NEW"));
+    }
+
+    /// ABIGATE: an ABI refusal before the guest keeps its inventory where the
+    /// documented contract puts it (`details.apk_abis`, `details.host_abi`,
+    /// `details.libs_sample`), maps to `UNSUPPORTED_ABI` rather than
+    /// `GUEST_EXITED`/`INTERNAL`, and is not retryable.
+    #[test]
+    fn the_abi_gate_refusal_carries_its_inventory_and_is_not_a_guest_death() {
+        let dir = std::env::temp_dir().join(format!("acos-abigate-{}", std::process::id()));
+        let frames = dir.join("art-frames");
+        std::fs::create_dir_all(&frames).unwrap();
+        std::fs::write(
+            frames.join(SESSION_EXIT_FILE),
+            r#"{"outcome":"unsupported","code":"UNSUPPORTED_ABI","stage":"native-libs",
+                "guest_exit":null,"guest_signal":null,
+                "abi":{"apk_abis":["arm64-v8a"],"host_abi":"x86_64",
+                       "libs_sample":["lib/arm64-v8a/libfoo.so"]}}"#,
+        )
+        .unwrap();
+
+        let error = art_error("UNSUPPORTED_ABI", "no x86_64 libs", &dir);
+        assert_eq!(error.code, ErrorCode::UnsupportedAbi);
+        assert!(!error.retryable, "an ABI mismatch is not transient");
+        let details = error.details.as_ref().expect("details");
+        assert_eq!(details["apk_abis"], json!(["arm64-v8a"]));
+        assert_eq!(details["host_abi"], json!("x86_64"));
+        assert_eq!(details["libs_sample"], json!(["lib/arm64-v8a/libfoo.so"]));
+        assert_eq!(details["art_code"], json!("UNSUPPORTED_ABI"));
+        assert_eq!(details["session_exit"]["stage"], json!("native-libs"));
+
+        // The session's own record classifies the same way, so no path can fall
+        // back to `INTERNAL` for it.
+        let (code, facts) = classify_session_exit(&dir).expect("a failure record");
+        assert_eq!(code, ErrorCode::UnsupportedAbi);
+        assert_eq!(facts["abi"]["host_abi"], json!("x86_64"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

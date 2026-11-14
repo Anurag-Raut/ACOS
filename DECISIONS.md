@@ -593,6 +593,37 @@ Status: accepted, narrows ADR-0002/ADR-0014 without rewriting them.
 - **One table.** `docs/ERROR_CODES.md` lists code, meaning, component and exit
   status.
 
+### ADR-0018 update — the ART path gates a wrong ABI before the guest (ABIGATE, 2026-11-14)
+
+Status: accepted, implements the W59-A/E1 rule on the ART route without changing it.
+
+- **Context.** The E1 note above made every *route* report one code, but on the
+  ART path `acos-art` still logged `NativeLibInstall::UnsupportedAbi` and started
+  the guest ("the guest must still fail with its own `UnsatisfiedLinkError`").
+  The caller therefore saw `GUEST_EXITED` (or `INTERNAL` on the older path) for
+  an APK the documentation says is `UNSUPPORTED_ABI` (REL3a §3, goal 4).
+- **Decision.** The ABI decision is made from the APK index in `acos-apk`
+  (`Apk::abi_gate()`) and enforced in `acos-art` at the `native-libs` stage —
+  before the image, props, logd or any guest process — so `acos launch/verify
+  --engine art`, `acos serve` sessions and MCP `acos_launch/acos_verify` all get
+  `UNSUPPORTED_ABI`, `status: "unsupported"`, `retryable: false` and
+  `details.apk_abis`/`host_abi`/`libs_sample`. Nothing is a pass.
+- **The rule is AOSP's, per package.** `PackageManager` chooses one ABI for the
+  whole package: `NativeLibraryHelper.findSupportedAbi` keeps the `lib/<abi>/`
+  directory whose index in the device's `SUPPORTED_ABIS` list is lowest
+  (`frameworks/base/core/jni/com_android_internal_content_NativeLibraryHelper.cpp`),
+  `NO_NATIVE_LIBRARIES` for an APK with no `lib/`, and
+  `INSTALL_FAILED_NO_MATCHING_ABIS` for `lib/` with no match;
+  `iterateOverNativeFiles` then extracts only that ABI. Hence: no `lib/` always
+  launches; `lib/x86_64` plus `lib/arm64-v8a` launches as x86_64; and
+  `lib/x86_64/liba.so` with an arm64-only `libb.so` **launches** too — `liba.so`
+  loads and the first `dlopen("libb.so")` is the app's own `UnsatisfiedLinkError`,
+  which is a packaging bug the platform reproduces, not an install gate.
+- **Consequences.** `UNSUPPORTED_ABI` now means "no directory for a host ABI" on
+  every route and at every layer; the mixed case is covered by a unit test so a
+  later "gate any missing library" change cannot silently start refusing apps a
+  real device installs.
+
 ## ADR-0019 — Text rendering: FreeType + HarfBuzz glyph rasterisation; no Skia adoption (supersedes the Skia part of the advisor suggestion)
 
 Status: accepted (2026-11-10), based on research/render-fidelity/REPORT.md.

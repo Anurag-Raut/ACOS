@@ -1,0 +1,57 @@
+{
+  "backend": "acos-native",
+  "error": {
+    "class": "unsupported",
+    "code": "UNSUPPORTED_ABI",
+    "details": {
+      "apk_abis": [
+        "arm64-v8a"
+      ],
+      "art_code": "UNSUPPORTED_ABI",
+      "host_abi": "x86_64",
+      "libs_sample": [
+        "lib/arm64-v8a/libhellojni.so"
+      ],
+      "session_exit": {
+        "abi": {
+          "apk_abis": [
+            "arm64-v8a"
+          ],
+          "host_abi": "x86_64",
+          "libs_sample": [
+            "lib/arm64-v8a/libhellojni.so"
+          ]
+        },
+        "cgroup": null,
+        "code": "UNSUPPORTED_ABI",
+        "disk_free_bytes": 144018165760,
+        "guest_crash": null,
+        "guest_exit": null,
+        "guest_signal": null,
+        "native_crash": null,
+        "native_crash_path": null,
+        "outcome": "unsupported",
+        "panic": null,
+        "path": "/home/Qui/.paseo/worktrees/3oxa6xao/k5/.cache/abigate/out-verify2/art-frames/session-exit.json",
+        "retryable": false,
+        "stage": null
+      },
+      "session_exit_path": "/home/Qui/.paseo/worktrees/3oxa6xao/k5/.cache/abigate/out-verify2/art-frames/session-exit.json",
+      "stderr_tail": "acos-art: guards rss_max=2048MiB rlimit_data=2560MiB stream_cap=8MiB log_cap=50000\nacos-art: build-cache HIT 6b1a5f698439 /home/Qui/.paseo/worktrees/3oxa6xao/k5/.cache/abigate/prefix/share/acos/0.2.0/.cache/art/build-cache/6b1a5f69843990e89dd9edcd17bd81651829684f4e186b37b1cd3b063edca4b4\nacos-art: build-cache HIT 0968d8ddbf99 /home/Qui/.paseo/worktrees/3oxa6xao/k5/.cache/abigate/prefix/share/acos/0.2.0/.cache/art/build-cache/0968d8ddbf992df42d4a8a2d34fbe1ed8f64f1ea091a98d7e3cdc257d656aa1d\nacos-art: launch: UNSUPPORTED_ABI available=[\"arm64-v8a\"]: APK has no native libraries for ABI \"x86_64\"; available: [arm64-v8a]"
+    },
+    "hint": "The APK has native libraries for other ABIs only. Use an ABI-split or universal build that includes the engine ABI (x86_64), or do not request native loading.",
+    "message": "acos-art: UNSUPPORTED_ABI: APK has no native libraries for ABI \"x86_64\"; available: [arm64-v8a]",
+    "retryable": false
+  },
+  "fidelity": "static-analysis",
+  "ok": false,
+  "request_id": "req_29e55b_18e7fa84e9774c6f",
+  "result": {
+    "engine": null,
+    "launched": null,
+    "stage_reached": null,
+    "verdict": null
+  },
+  "session_id": null,
+  "status": "unsupported"
+}

@@ -30,7 +30,7 @@ pub mod error;
 pub mod manifest;
 pub mod signing;
 
-pub use apk::{Apk, ApkEntry, DexFile, NativeLib, HOST_ABI};
+pub use apk::{AbiGate, Apk, ApkEntry, DexFile, NativeLib, HOST_ABI, SUPPORTED_ABIS};
 pub use arsc::{Config, ResValue, ResourceEntry, ResourcePackage, ResourceTable, TypeSpec};
 pub use axml::{TypedValue, XmlAttribute, XmlDocument, XmlNode};
 pub use error::{ApkError, Result};
