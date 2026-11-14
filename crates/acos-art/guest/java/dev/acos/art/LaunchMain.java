@@ -12,6 +12,7 @@ import android.os.Parcel;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.TextView;
 
 import java.io.File;
@@ -1874,23 +1875,61 @@ public final class LaunchMain {
                 }
             }
         }
+        // TREE1: the node's semantic fields come from the framework's own
+        // AccessibilityNodeInfo for this View -- the object UiAutomator and every
+        // accessibility service read. createAccessibilityNodeInfo() runs the
+        // View's accessibility delegate (React Native installs
+        // ReactAccessibilityDelegate on every node) and TextView's/EditText's
+        // own rules, so an EditText reports what the platform reports:
+        //   text  = getText() ?: getHint()   (TextView.getTextForAccessibility)
+        //   hint  = getHint()                (TextView sets setHintText(mHint))
+        //   desc  = getContentDescription()  (the app's accessibilityLabel)
+        // A password field's characters never leave the process.
         String text = "";
         String hint = "";
+        String contentDescription = "";
+        boolean password = false;
+        boolean fromNode = false;
         try {
-            if (v instanceof TextView) {
-                CharSequence cs = ((TextView) v).getText();
+            AccessibilityNodeInfo info = v.createAccessibilityNodeInfo();
+            if (info != null) {
+                CharSequence cs = info.getText();
                 text = cs == null ? "" : cs.toString();
-                CharSequence h = ((TextView) v).getHint();
+                CharSequence h = info.getHintText();
                 hint = h == null ? "" : h.toString();
-                if (text.isEmpty()) text = hint;
+                CharSequence cd = info.getContentDescription();
+                contentDescription = cd == null ? "" : cd.toString();
+                // AOSP API 34 TextView.onInitializeAccessibilityNodeInfoInternal sets
+                // the text unconditionally -- getTextForAccessibility() -- and only
+                // *flags* the node with setPassword(true). So a device (and
+                // `uiautomator dump`) exposes a password field's characters and the
+                // flag. ACOS mirrors that and publishes the flag; redacting the text
+                // here would invent a tree the platform never exposes (and did: it
+                // broke gaten-lesson's typed-token assertion).
+                password = info.isPassword();
+                fromNode = true;
             }
         } catch (Throwable ignored) {
         }
-        String contentDescription = "";
-        try {
-            CharSequence cd = v.getContentDescription();
-            contentDescription = cd == null ? "" : cd.toString();
-        } catch (Throwable ignored) {
+        if (!fromNode) {
+            // No node info (a detached/hostile View): fall back to the View's own
+            // fields, keeping TextView's accessibility text rule explicit rather
+            // than inventing a value the platform would not expose.
+            try {
+                if (v instanceof TextView) {
+                    CharSequence cs = ((TextView) v).getText();
+                    text = cs == null ? "" : cs.toString();
+                    CharSequence h = ((TextView) v).getHint();
+                    hint = h == null ? "" : h.toString();
+                    if (text.isEmpty()) text = hint;
+                }
+            } catch (Throwable ignored) {
+            }
+            try {
+                CharSequence cd = v.getContentDescription();
+                contentDescription = cd == null ? "" : cd.toString();
+            } catch (Throwable ignored) {
+            }
         }
         int[] screen = new int[2];
         try {
@@ -1949,6 +1988,7 @@ public final class LaunchMain {
                 .append(",\"id\":\"").append(jesc(idName)).append('"')
                 .append(",\"text\":\"").append(jesc(text)).append('"')
                 .append(",\"hint\":\"").append(jesc(hint)).append('"')
+                .append(",\"password\":").append(password)
                 .append(",\"content_description\":\"").append(jesc(contentDescription)).append('"')
                 .append(",\"window\":\"").append(jesc(window)).append('"')
                 .append(",\"bounds\":\"[").append(loc[0]).append(',').append(loc[1])

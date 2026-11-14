@@ -55,6 +55,7 @@ import json
 import os
 import re
 import subprocess
+import xml.etree.ElementTree as ET
 import sys
 import time
 
@@ -172,9 +173,16 @@ def node_view(n):
         r = n["rect"]
         b = [r.get("x", 0), r.get("y", 0),
              r.get("x", 0) + r.get("width", 0), r.get("y", 0) + r.get("height", 0)]
+    # TREE1: the raw node carries the platform's fields under their own names --
+    # `contentDescription` is AccessibilityNodeInfo.getContentDescription().
+    # `label` is agent-device's *computed accessible name* (it merges descendant
+    # text and prefers the description), so it is a fallback only: using it as
+    # `content_desc` while dropping `contentDescription` invents a tree the
+    # platform never exposes (that was PHONE2 §5.1).
     return {
-        "text": n.get("text") or "",
-        "content_desc": n.get("content_desc") or n.get("label") or "",
+        "text": n.get("text") or n.get("label") or "",
+        "content_desc": n.get("contentDescription") or n.get("content_desc") or "",
+        "hint": n.get("placeholder") or "",
         "identifier": n.get("identifier") or n.get("resource_id") or "",
         "enabled": n.get("enabled"),
         "checked": n.get("checked"),
@@ -295,8 +303,64 @@ class Phone:
         return {"rc": rc, "stdout": out, "stderr": err, "json": data}
 
     # -- reads -------------------------------------------------------------
+    def dump_nodes(self, timeout=120):
+        """The platform's own tree: `uiautomator dump` -> AccessibilityNodeInfo.
+
+        Each `<node>` is a real AccessibilityNodeInfo: text is getText() (for a
+        TextView/EditText the framework falls back to the hint), content-desc is
+        getContentDescription(), password marks a password field. This is the
+        surface ACOS's guest reads, so both sides are compared on one tree.
+        (agent-device's snapshot is kept only as a fallback: its `label` is a
+        computed name, not a node field -- see node_view.)
+        """
+        remote = "/sdcard/acos-a11y-dump.xml"
+        rc, out, err = self.shell("uiautomator", "dump", remote, timeout=timeout)
+        if rc != 0:
+            return []
+        rc, xml, err = self.shell("cat", remote, timeout=timeout)
+        self.shell("rm", "-f", remote, timeout=60)
+        if rc != 0 or "<hierarchy" not in (xml or ""):
+            return []
+        start = xml.find("<hierarchy")
+        end = xml.rfind("</hierarchy>")
+        if start < 0 or end < 0:
+            return []
+        try:
+            root = ET.fromstring(xml[start:end + len("</hierarchy>")])
+        except ET.ParseError:
+            return []
+        nodes = []
+        for el in root.iter("node"):
+            a = el.attrib
+            nums = [int(x) for x in re.findall(r"-?\d+", a.get("bounds") or "")]
+            if len(nums) != 4:
+                continue
+            nodes.append({
+                "text": a.get("text") or "",
+                "content_desc": a.get("content-desc") or "",
+                "hint": "",
+                "identifier": a.get("resource-id") or "",
+                "enabled": a.get("enabled") == "true",
+                "checked": a.get("checked") == "true",
+                "clickable": a.get("clickable") == "true",
+                "editable": (a.get("class") or "").endswith("EditText"),
+                "password": a.get("password") == "true",
+                "visible": nums[2] > nums[0] and nums[3] > nums[1],
+                "bounds": nums,
+                "bundle": a.get("package") or "",
+                "type": a.get("class") or "",
+            })
+        return nodes
+
     def snapshot(self, timeout=120):
-        """Full accessibility snapshot -> flat node views with bundle filter."""
+        """One accessibility tree read -> flat node views."""
+        dumped = self.dump_nodes(timeout=timeout)
+        if dumped:
+            pkgs = [n["bundle"] for n in dumped if n.get("bundle")]
+            app = max(set(pkgs), key=pkgs.count) if pkgs else None
+            return {"nodes": dumped, "app": app, "raw_ok": True, "error": None,
+                    "source": "uiautomator-dump"}
+        # Fallback: agent-device's snapshot (hosts where `uiautomator dump` fails).
         res = self.ag("snapshot", "--force-full", "--json", timeout=timeout)
         data = (res.get("json") or {}).get("data") or {}
         nodes = (data.get("snapshot") or {}).get("nodes") or data.get("nodes") or []
@@ -317,6 +381,7 @@ class Phone:
             "app": data.get("appBundleId") or data.get("appName"),
             "raw_ok": bool(res.get("json") and res["json"].get("success")),
             "error": (res.get("json") or {}).get("error"),
+            "source": "agent-device-snapshot",
         }
 
     def focused_activity(self):

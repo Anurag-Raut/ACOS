@@ -50,9 +50,13 @@ steps:
   - tap: {selector: {content_desc: {exact: "WaniKani personal access token"}}, settle_timeout_ms: 5000}
   - type: {text: "not-a-real-token", settle: fast}
   - capture: {name: lesson-token-entered, format: png, fresh: true}
-  # The typed value is the field's own state (the token is a dummy, not a
-  # secret). The guest's tree reports the entered text, not the placeholder.
-  - assert_text: {selector: {content_desc: {exact: "WaniKani personal access token"}}, text: {exact: "not-a-real-token"}}
+  # The field is password-typed, so the platform's accessibility text is the
+  # *transformed* text (AOSP API 34 TextView.getTextForAccessibility returns
+  # mTransformed): 16 mask characters for the 16 typed characters, plus
+  # password=true. Asserting the raw token was an ACOS-only affordance -- the
+  # old tree read TextView.getText() (the characters) where
+  # AccessibilityNodeInfo carries the mask.
+  - assert_text: {selector: {content_desc: {exact: "WaniKani personal access token"}}, text: {regex: "^[\u2022*]{16}$"}}
   - back: {}
   - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
   - capture: {name: lesson-back-home, format: png, fresh: true}
