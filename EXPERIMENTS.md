@@ -1834,7 +1834,7 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   animating-screen semantics; R2a/R2b first-paint + SIGSEGV root cause; a real lesson needs
   AnkiDroid or a WaniKani account (data, not ACOS).
 
-## E13.8 — G3d/G3c: the Gaten launch SIGSEGV is libc's GWP-ASan backtrace chase walking off the stack, and the launch's first frame is now the app's content frame — PASS (root cause named, 40/40 launches, 0 thin first frames)
+## E13.8 — G3d/G3c: the Gaten launch SIGSEGV is libc's GWP-ASan backtrace chase walking off the stack, and the launch's first frame is now the app's content frame — PASS (root cause named, 40/40 launches, 0 thin first frames) ; re-verified 2026-11-14: 30/30 launches, 0 SIGSEGV, 0 one-node frame, 9/30 labelled placeholder
 
 - **Date / commit:** 2026-11-13; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/g3cd`, branch
   `fix-g3cd-gaten-launch`, off `main` `11b917c` (branch head recorded in `results/gaten/G3cd.md`).
@@ -1902,6 +1902,22 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   (`ACOS_ART_GWP_ASAN=on` restores it for a debugging run, an explicit `GWP_ASAN_*` value is forwarded
   verbatim, `libc` reproduces the pre-fix lottery). The launch frame now comes from the app's content
   or says it is a placeholder.
+- **Re-verification 2026-11-14 (independent repeat on `32baa78`, same source, fresh binaries and logs):**
+  `acos-cli` 147/147, `acos-services` 302/302, `acos-verify` 66/66 green; `acos-art` 127 passed +
+  1 failed in a single-process run — `sandbox_s5::allocator_bomb_…`, which loses the pid budget to the
+  parallel `fork_bomb` test (48 `/bin/sh: fork: retry` lines in the window) and then sees the
+  `systemd-run --user --scope` probe fail `Failed to connect to bus`; **each `sandbox_s5` test in its
+  own process passes (7/7, rc=0)**, so the failure is the test process's parallelism, not the branch
+  (the user systemd bus is up again: `systemctl --user status` → `State: running`). Gates 8 pass +
+  `ASSERTION_FAILED` + `ELEMENT_OFFSCREEN` + `TIMEOUT` exactly as above; the 5 Gaten flows 15/15 and
+  their 5 negatives `ASSERTION_FAILED`. Launch stability n=30: **30/30 pass, 0 SIGSEGV, 0 one-node
+  frame**, p50 2.309 s / p90 2.430 s — but 9/30 bound the window skeleton as a **labelled placeholder**
+  (`first_frame.placeholder: true`, `meaningful: false`, `waited_ms` ≈1.63 s, 243 nodes 2 s later)
+  versus 0/40 in the after arm above, so the content-aware wait is budget-bound rather than
+  unconditional (fail-closed either way, 0 false passes). Details: `results/gaten/G3cd.md` §Checkpoint 3.
+  Also found (pre-existing, `cgroup.rs` untouched): `host_scope_capability()`'s per-process `OnceLock`
+  makes `refuses_to_run_when_no_cgroup_can_be_created` pass only when it is the first probe in the
+  process — a test-isolation defect in the S5 binary, not a product defect.
 - **Open risks:** (1) the before arm's single loss is an exit-1 `GUEST_EXITED` before the first frame
   with no kept tree — a *different* class from the GWP-ASan SIGSEGV, unnamed and unmeasured at n>60;
   (2) the fix removes the crash by not using the sampled allocator, not by making bionic's chase

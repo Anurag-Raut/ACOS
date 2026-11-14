@@ -246,3 +246,77 @@ verdict, which the pre-existing code never recorded for a launch (it sent a bare
 against `main`'s binary on the same scenario and data dir (main 3/3 pass, this branch 3/3 fail), fixed
 by restoring the pre-launch settle value in `SessionBackend::launch` (`P9` contract unchanged: a
 launch is a *fresh* frame, never a settled one), after which mine 3/3 and main 3/3 pass.
+
+## Checkpoint 3 (2026-11-14 07:40) — independent re-verification of `32baa78` (same source, fresh binaries, fresh logs)
+
+Nothing was changed in code. Every run below is on branch head `32baa78`, release binaries rebuilt from
+it (`cargo build --release --offline -p acos-cli -p acos-art`, "Finished … in 0.39s" = up to date), each
+ART operation under `run-exclusive.sh --task G3CD` + `guarded.sh`, scratch in `.cache/g3cd/`.
+The environment blocker recorded at checkpoint 2 is gone: the user systemd bus is reachable again
+(`systemctl --user status` → `State: running`, `/run/user/1000/bus` present), so the S5 cgroup tests
+were re-run properly (see below).
+
+### Crate tests
+
+| crate | result | log |
+|---|---|---|
+| `acos-cli` (`-p acos-cli`) | **147 passed, 0 failed**, rc=0 | `.cache/g3cd/test-acos-cli-2.log` |
+| `acos-services` (`-p acos-services`) | **302 passed, 0 failed**, rc=0 | `.cache/g3cd/test-acos-services-2.log` |
+| `acos-verify` (`-p acos-verify`) | **66 passed, 0 failed**, rc=0 | `.cache/g3cd/test-acos-verify-2.log` |
+| `acos-art` (`-p acos-art`, one process) | 127 passed, **1 failed** — `sandbox_s5::allocator_bomb_…` (see below) | `.cache/g3cd/art-tests-065834.log` |
+| `acos-art` `sandbox_s5`, **one process per test** | **7/7 pass, rc=0 each** | same log, `S5 rcs: 0 0 0 0 0 0 0` |
+| `acos-art` doc-tests | 0 doc-tests, rc=0 | same acquisition |
+
+**The one `acos-art` failure is a test-process/environment collision, not this branch.** In the
+single-process run the S5 binary runs its tests in parallel, and `allocator_bomb…` loses the race to
+`fork_bomb_is_bounded_by_pids_max`, which deliberately exhausts the pid budget (48 `/bin/sh: fork:
+retry: Resource temporarily unavailable` lines in the same window). `RunCgroup::prepare`'s
+`systemd-run --user --scope` probe then fails
+`CgroupUnavailable("… status Some(1)): Failed to connect to bus")` and the test panics at
+`sandbox_s5.rs:170` — the *same* environmental message as checkpoint 2, now shown to be provoked by
+the sibling test's fork storm rather than by a dead user bus. With each test in its own process (cold
+`OnceLock`, fresh `ACOS_ART_DATA`) all seven pass, including the two cgroup-bounded bombs.
+
+Second, pre-existing test-isolation defect found while doing this (not introduced here, `cgroup.rs` is
+byte-identical to `main`): `host_scope_capability()` caches its probe in a per-process `OnceLock`
+(H15), so `refuses_to_run_when_no_cgroup_can_be_created` — which fakes a failing `systemd-run` on
+`PATH` — only passes when it is the first probe in the process. Serialised after another test it fails
+(`RunCgroup { cg: "" }` returned). That is a test-design issue in the repo, not a product defect; it is
+untouched here (no assertion was changed, nothing was `#[ignore]`d) and is reported for its owner.
+
+### Gates (one `acos verify` each, `.cache/g3cd/suite3/gate-*.json`)
+
+| gate | expected | measured |
+|---|---|---|
+| v2-art-counter, w22-counter-reset, w54-dialog-pixels, w42-back-frame, w15-dialog-menu, form-validation, suite/T03-render-good, v1-offscreen-pager | pass | **8/8 pass** |
+| suite/T03-render-wrong | `ASSERTION_FAILED` | **`ASSERTION_FAILED`** |
+| negative/offscreen-pager-visible | `ELEMENT_OFFSCREEN` | **`ELEMENT_OFFSCREEN`** |
+| p11-progress-timeout | `TIMEOUT` | **`TIMEOUT`** |
+
+### Gaten flows (`.cache/g3cd/suite3/`)
+
+`scenarios/gaten-{home,tabs,settings,search,lesson}.yaml` × 3 runs: **15/15 pass**.
+`scenarios/negative/gaten-*-wrong.yaml`: **5/5 `ASSERTION_FAILED`** → 0 false passes.
+
+### Launch stability, 30 launches (`.cache/g3cd/loop/stab30/reps.jsonl`)
+
+| n | pass | crash | 1-node/blank first frame | content frame (243 nodes) | labelled placeholder (10–15 nodes) | launch p50 / p90 | load1 |
+|---:|---:|---:|---:|---:|---:|---|---|
+| 30 | **30** | **0** | **0** | 21 | **9** | 2.309 s / 2.430 s | 1.55–2.0 |
+
+* 0 `SIGSEGV`, 0 `GUEST_EXITED`, no kept crash tree, no `native_crash` record in any rep.
+* **Honest qualification of checkpoint 2's "0 thin first frames":** in this arm 9/30 launches bound the
+  10–15-node window skeleton, but every one of them was published as a **labelled placeholder**
+  (`result.first_frame.placeholder: true`, `frame.meaningful: false`, `traversals` 2–3, `waited_ms`
+  ≈1.63 s; raw envelopes `.cache/g3cd/loop/stab30/rep{1,10,14,15,19,20,21,24,27}.json`), and the same
+  sessions had 243 nodes when observed 2 s later. So the frame is never *silently* thin and can never
+  satisfy an assertion, but the content-aware wait did **not** reach the painted frame in 30 % of this
+  arm (checkpoint 2's after-arm: 0/40). The 900 ms/4-traversal budget is the binding constraint: two
+  traversals cost ≈1.63 s here, so the retry lands before Gaten's first paint. Latency cost of the
+  placeholder path is visible but small (2.39–2.66 s vs 2.29–2.33 s). This does not change the fix or
+  the honest direction (fail-closed), it bounds what the G3c heuristic buys.
+
+### Diff since `32baa78`
+
+Documentation/results only (this section + the `EXPERIMENTS.md` re-verification bullet). No source,
+test or gate change.
