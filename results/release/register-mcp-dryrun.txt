@@ -1,0 +1,27 @@
+acos      : /home/Qui/.paseo/worktrees/3oxa6xao/gr4/.cache/gr4-target/release/acos
+acos-mcp  : /home/Qui/.paseo/worktrees/3oxa6xao/gr4/.cache/gr4-target/release/acos-mcp
+roots     : /home/Qui
+artifacts : /home/Qui/.acos-mcp-artifacts
+scope     : user
+
+dry run: claude mcp add --scope user acos --env ACOS_BIN=/home/Qui/.paseo/worktrees/3oxa6xao/gr4/.cache/gr4-target/release/acos --env ACOS_ALLOWED_ROOTS=/home/Qui --env ACOS_ARTIFACTS_DIR=/home/Qui/.acos-mcp-artifacts -- /home/Qui/.paseo/worktrees/3oxa6xao/gr4/.cache/gr4-target/release/acos-mcp 
+
+Other MCP clients (Claude Desktop, Cursor, Cline, Continue, Zed, ...) accept an
+mcpServers entry like this:
+
+{
+  "mcpServers": {
+    "acos": {
+      "command": "/home/Qui/.paseo/worktrees/3oxa6xao/gr4/.cache/gr4-target/release/acos-mcp",
+      "args": [],
+      "env": {
+        "ACOS_BIN": "/home/Qui/.paseo/worktrees/3oxa6xao/gr4/.cache/gr4-target/release/acos",
+        "ACOS_ALLOWED_ROOTS": "/home/Qui",
+        "ACOS_ARTIFACTS_DIR": "/home/Qui/.acos-mcp-artifacts"
+      }
+    }
+  }
+}
+
+Then ask the agent to call acos_help (or read the resource acos://guide) before
+its first ACOS call: it returns the whole agent guide.

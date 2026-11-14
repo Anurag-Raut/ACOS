@@ -916,6 +916,13 @@
           "type": "string"
         },
         {
+          "description": "The host does not have room for another ART session right now: admitting it would drop `MemAvailable` below 10% of `MemTotal`. Distinct from `HOST_MEMORY_LIMIT` (a ceiling that was hit *during* a run): nothing ran. Class `host_guard`, retryable; `error.details` carries the measured MemAvailable/MemTotal and the session's memory budget.",
+          "enum": [
+            "HOST_MEMORY_LOW"
+          ],
+          "type": "string"
+        },
+        {
           "description": "The guest seccomp filter (and its proof) could not be installed. The host kernel/configuration cannot provide the isolation layer, so guest code is refused (fail closed). Distinct from `LANDLOCK_UNAVAILABLE`.",
           "enum": [
             "SECCOMP_UNAVAILABLE"

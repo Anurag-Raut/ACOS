@@ -52,6 +52,7 @@ use acos_protocol::{ErrorCode, FrameMeta, LogLevel, Selector};
 use acos_verify::backend::{CrashRecord, InputAck, InputDelivery, LogRecord};
 use acos_verify::{BackendError, LaunchOutcome};
 
+use super::host_mem;
 use super::{
     key_code, live_frame_unavailable, parse_bounds, stale_frame, ui_tree_from_json, Engine,
     FrameEvidence, Mode, ObservedFrame, SessionBackend, SessionCapabilities, TeardownReport,
@@ -1131,6 +1132,24 @@ impl ArtSession {
             return Err(BackendError::Failed {
                 code: acos_protocol::ErrorCode::ApkIo,
                 detail: format!("APK not found: {}", apk.display()),
+            });
+        }
+        // Host memory admission (owner directive, 2026-11-15). Every ART guest
+        // this CLI starts passes through here: `acos launch`, `acos verify`,
+        // `acos serve`/MCP sessions and a `reset` relaunch. There is no queue
+        // and no slot file — a launch either has room right now or it fails
+        // fast with a structured, retryable `HOST_MEMORY_LOW`. The per-session
+        // cgroup cap that `acos-art` applies to the run is unchanged; this only
+        // refuses to *start* a guest that would leave the host under 10% of
+        // MemTotal available. `ACOS_MEMORY_GUARD=off` disables the check.
+        if let Err(denied) = host_mem::check_host() {
+            // Carried as a structured protocol failure so the measured numbers
+            // reach `error.details` unchanged (CLI JSON and MCP `notes`).
+            return Err(BackendError::Protocol {
+                code: ErrorCode::HostMemoryLow,
+                detail: denied.describe(),
+                hint: Some(ErrorCode::HostMemoryLow.hint().to_string()),
+                details: Some(denied.details()),
             });
         }
         let binary = resolve_binary()?;

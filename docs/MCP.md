@@ -29,17 +29,45 @@ whether or not it is implemented yet; each descriptor is annotated with
 The server needs to know where the `acos` binary and the workspace are. Pass
 them as environment variables in the client config.
 
-### Claude Code
+### One command
 
 ```bash
-claude mcp add acos \
+tools/release/register-mcp.sh                # --scope user (default), --dry-run to print
+tools/release/register-mcp.sh --dry-run      # prints the exact claude command + JSON
+```
+
+The script registers the server with Claude Code (`claude mcp add --scope user
+-e ACOS_BIN=… -e ACOS_ALLOWED_ROOTS=… -- <acos-mcp>`), resolves both binaries to
+absolute paths, prints the equivalent `mcpServers` JSON for every other client,
+and registers nothing when `--dry-run` is given. It defaults
+`ACOS_ALLOWED_ROOTS` to `$HOME` — see below for why.
+
+### Claude Code, by hand
+
+```bash
+claude mcp add --scope user acos \
   --env ACOS_BIN="$PWD/target/release/acos" \
-  --env ACOS_ALLOWED_ROOTS="$PWD" \
+  --env ACOS_ALLOWED_ROOTS="$HOME" \
   -- "$PWD/target/release/acos-mcp"
 ```
 
 Use `claude mcp list` to confirm it is connected and `claude mcp remove acos` to
 remove it.
+
+### `ACOS_ALLOWED_ROOTS`: what value an agent in another repo needs
+
+Every path argument (`apk`, `scenario`, `artifacts`, …) is resolved,
+symlinks are resolved, and the result must live under one of the roots in
+`ACOS_ALLOWED_ROOTS` (a `:`-separated list), else the call fails with
+`UNSAFE_PATH`. The default is the server's working directory, which is useless
+for an agent whose APK and scenario live in a *different* repository.
+
+Use `$HOME` for a developer workstation: then an agent working in, say,
+`~/Projects/gaten` can pass `~/Projects/gaten/app/build/outputs/apk/...` and its
+own `scenarios/*.yaml`, and still cannot reach outside the home directory. On a
+shared or multi-user host, list the specific repositories instead
+(`ACOS_ALLOWED_ROOTS=/srv/agent-a:/srv/agent-b`). The artifacts directory
+(`ACOS_ARTIFACTS_DIR`) is always allowed in addition.
 
 ### Generic JSON config
 
@@ -85,6 +113,10 @@ Server limits (all optional):
 | `ACOS_MCP_SESSION_TTL_MS` | `600000` | idle session TTL |
 | `ACOS_MCP_SHUTDOWN_GRACE_MS` | `2000` | how long in-flight calls may finish after stdin closes |
 | `ACOS_MCP_QUIET` | unset | silence stderr logging |
+| `ACOS_ART_MEM_MAX` | `2G` | per-session guest cgroup memory ceiling (also the budget the host admission check accounts for) |
+| `ACOS_MEMORY_GUARD` | on | `off` disables the `HOST_MEMORY_LOW` admission check (the cgroup ceiling still applies) |
+| `ACOS_SESSION_DAEMON` | unset | `1` forwards session tools to a running `acos serve` (by default the server holds sessions in-process on the Rust VM; start `acos serve --engine art` for real-ART sessions) |
+| `ACOS_SESSION_SOCKET` | `<runtime dir>/session.sock` | socket of that daemon |
 
 ---
 
@@ -134,6 +166,31 @@ server.
 
 Regenerate the block with `cargo run -p acos-mcp --example gen-tools-docs`.
 
+### `resources` and `prompts`
+
+The same guide is served as MCP resources, for clients that read resources
+instead of calling tools:
+
+| uri | content |
+|---|---|
+| `acos://guide` | the complete agent guide (markdown) |
+| `acos://guide/workflow`, `/cli`, `/scenarios`, `/errors`, `/limits` | one section |
+| `acos://errors` | the error-code playbook (alias of `/errors`) |
+
+`resources/list` advertises all of them with `mimeType: text/markdown`,
+`resources/templates/list` advertises `acos://guide/{topic}`, and
+`resources/read` returns `contents[0].text`. An unknown URI is JSON-RPC
+`-32602` (never an empty read).
+
+One prompt, `verify_android_flow`, takes `apk` and `goal` and returns the
+instruction for the whole verify loop (write the scenario, run `acos_verify`,
+branch on `error.code`, report what the evidence proves). `prompts/get` without
+its arguments is `-32602`.
+
+`initialize` advertises `capabilities.resources` and `capabilities.prompts`
+alongside `capabilities.tools`; both are supported on `2025-03-26` and
+`2025-06-18`.
+
 The server-local tools are served in-process (they never shell out):
 `acos_launch` boots an APK into a session that persists across calls and returns
 the stage ladder; `acos_observe_tree`/`acos_tap`/`acos_key`/`acos_text`/`acos_swipe`/`acos_logs`/`acos_status`
@@ -172,8 +229,15 @@ generated from the request type, and annotations:
 
 `acos_capabilities` re-probes the backend (`{"refresh": true}`) and reports the
 supported/unsupported set, the resolved binary and version. `acos_help` returns
-the agent workflow (inspect → verify → read verdict → fix → rerun), the
-error-code playbook, and the supported/unsupported lists.
+the **agent guide** — [`docs/AGENT_GUIDE.md`](AGENT_GUIDE.md), embedded into the
+binary at build time (`include_str!`), so the installed server carries it with no
+files to find. It covers the loop (doctor → inspect → launch →
+observe/observe_tree → tap/text/key/swipe → verify → reset → destroy), every CLI
+command with a runnable example, how to write a scenario YAML (step types,
+selectors, settle modes, `expect_change`, assertion kinds), every error code and
+its next action, and the limits (rotate unsupported, Flutter/RN deferred, x86_64
+native libs, API 34, memory admission). `{"topic": "workflow"|"cli"|
+"scenarios"|"errors"|"limits"}` returns just that section.
 
 ---
 
@@ -297,6 +361,15 @@ snapshot is in [`results/mcp/tools.md`](../results/mcp/tools.md) and
   bounded, nesting is bounded.
 * **Resource limits.** Wall-clock, output size, concurrency and memory budgets
   are enforced; timed-out or cancelled children are killed as a process group.
+* **Host memory admission.** Before starting an ART guest, ACOS compares
+  `MemAvailable` (`/proc/meminfo`) with the session's memory budget
+  (`ACOS_ART_MEM_MAX`, default 2 GiB): if admitting it would leave the host
+  under 10% of `MemTotal`, the launch fails fast with `HOST_MEMORY_LOW`
+  (retryable, `error.details` names the measured `MemAvailable`, `MemTotal` and
+  the requested budget). There is **no queue and no session-count limit** —
+  free memory and call again. Each session still runs in its own cgroup with the
+  `ACOS_ART_MEM_MAX` ceiling. `ACOS_MEMORY_GUARD=off` disables only the
+  admission check.
 * **stdout discipline.** Only protocol frames are written to stdout; all logs
   and diagnostics go to stderr.
 
@@ -336,6 +409,7 @@ that the concurrency gate serialises calls; they are not part of the product.
 * The capability probe parses the clap `--help` listing; if the CLI changes its
   help layout, call the `acos_capabilities` tool with `refresh: true` after a
   rebuild. A future CLI could expose a machine-readable `--commands` list.
-* The server does not yet advertise MCP `resources` or `prompts` capabilities;
-  artifacts are returned as tool-result content.
+* MCP `resources` and `prompts` are advertised, but only for the agent guide
+  (`acos://guide…`, `verify_android_flow`); artifacts are still returned as
+  tool-result content, not as resources.
 * No HTTP/SSE transport (stdio only).
