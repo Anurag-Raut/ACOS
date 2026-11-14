@@ -97,14 +97,21 @@ text-field name (§5.1) and the Anki device state (§5.2).
 
 **Negative twins** (`scenarios/negative/gaten-*-wrong`, one per scenario) — both sides must fail:
 
-| twin | ACOS | phone | first failing step |
-|---|---|---|---|
-| `gaten-home-wrong` | fail | fail | 7 on both |
-| `gaten-tabs-wrong` | fail | fail | 7 on both (+12, the Anki card) |
-| `gaten-settings-wrong` | fail | fail | 12 on both |
-| the other six | fail | fail | the same wrongly-asserted step on both sides |
+| twin | ACOS first fail | phone first fail |
+|---|---|---|
+| `gaten-home-wrong` | 7 | 7 |
+| `gaten-tabs-wrong` | 7 | 7 (+12, the Anki card) |
+| `gaten-settings-wrong` | 12 | 12 |
+| `gaten-kanji-wrong` | 19 | 19 |
+| `gaten-recognition-wrong` | 28 | 28 |
+| `gaten-support-wrong` | 13 | 13 |
+| `gaten-search-wrong` | 16 | 7 — the field-label step (§5.1) fails first |
+| `gaten-lesson-wrong` | 10 | 7 — the Anki card (§5.2) fails first |
+| `gaten-backstack-wrong` | 23 | 13 — the token field (§5.1) fails first |
 
-No negative twin passes on either side, so the twins are still wrong for the right reason.
+**All nine fail on both sides**; six at the same step, and the three whose positive twin is affected
+by §5.1/§5.2 fail *earlier* on the phone — the wrongly-asserted step still fails, so a twin never
+turns into a pass.
 
 Evidence: `results/phone/gaten-f344272/<scenario>/phone/observations.json` +
 `phone/screenshot-NN-*.png` (360 px wide, 256-colour PNG), the ACOS side in `<scenario>/acos/observations.json`
