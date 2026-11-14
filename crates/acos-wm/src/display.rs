@@ -107,6 +107,19 @@ pub const NAV_BAR_BOTTOM: i32 = 63;
 /// IME height when visible (`2400 - 2274`).
 pub const IME_VISIBLE_HEIGHT: i32 = 126;
 
+/// The status bar's height **in the rotated configuration**, in dp.
+///
+/// `DisplayPolicy` keeps two different status bar heights: the one the bar
+/// occupies physically (here 128 px, grown by the display cutout) and the one
+/// the app's *configuration* reserves at the top of a rotated display, which is
+/// the framework's `status_bar_height` dimension (24 dp). The reference API-34
+/// phone's `mDecorInsetsInfo` is where both appear at once:
+/// `ROTATION_90={nonDecorInsets=[128,0][0,63], configInsets=[128,63][0,63]}` —
+/// the physical bar is the 128 px left strip in `nonDecorInsets`, and
+/// `configInsets` adds a 63 px (= 24 dp x 2.625) top strip that the app's own
+/// decor draws its status bar background into.
+pub const STATUS_BAR_CONFIG_DP: f32 = 24.0;
+
 /// Bounds of every system bar / gesture inset source on the reference display.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SystemBars {
@@ -130,6 +143,16 @@ pub struct SystemBars {
     pub system_gestures_left: RectI,
     /// `type=systemGestures frame=[1002,0][1080,2400]`, source id `0xfc050024`.
     pub system_gestures_right: RectI,
+    /// The status bar strip **in the rotated configuration** —
+    /// `DisplayPolicy.DecorInsetsInfo.configInsets`'s top strip. Empty at
+    /// rotation 0 (where the status bar is already the top strip) and at the
+    /// natural orientation; `[0,0][frame_w,63]` at every other rotation.
+    ///
+    /// See [`STATUS_BAR_CONFIG_DP`]: this is not a second physical bar, it is
+    /// the height the app's configuration reserves at the top of the window when
+    /// the display is turned, which is why it sits at the top at 90/180/270
+    /// while the physical bar travels to a side/bottom edge.
+    pub status_bar_config: RectI,
 }
 
 impl SystemBars {
@@ -139,6 +162,7 @@ impl SystemBars {
         Self {
             status_bar: RectI::new(0, 0, DISPLAY_WIDTH, STATUS_BAR_TOP),
             status_bar_tappable: RectI::new(0, 0, DISPLAY_WIDTH, STATUS_BAR_TOP),
+            status_bar_config: RectI::new(0, 0, 0, 0),
             nav_bar: RectI::new(0, DISPLAY_HEIGHT - NAV_BAR_BOTTOM, DISPLAY_WIDTH, DISPLAY_HEIGHT),
             nav_bar_tappable: RectI::new(0, 0, 0, 0),
             ime_visible: RectI::new(
@@ -202,6 +226,9 @@ impl SystemBars {
             // The navigation bar cannot move: it stays on the bottom edge of
             // the new frame (`NAV_BAR_BOTTOM`), keeping its thickness.
             nav_bar: RectI::new(0, new_h - self.nav_bar.height(), new_w, new_h),
+            // The config strip is not a rotated rect: it is re-derived from the
+            // new frame's width by `DisplaySpec::rotated`.
+            status_bar_config: RectI::new(0, 0, 0, 0),
             nav_bar_tappable: r(self.nav_bar_tappable),
             ime_visible: r(self.ime_visible),
             display_cutout: r(self.display_cutout),
@@ -343,6 +370,7 @@ impl DisplaySpec {
         let bars = SystemBars {
             status_bar: RectI::new(0, 0, width, status_bar_top),
             status_bar_tappable: RectI::new(0, 0, width, status_bar_top),
+            status_bar_config: RectI::new(0, 0, 0, 0),
             nav_bar: RectI::new(0, height - nav_bar_bottom, width, height),
             nav_bar_tappable: RectI::new(0, 0, 0, 0),
             ime_visible: RectI::new(0, height, width, height),
@@ -416,7 +444,49 @@ impl DisplaySpec {
             out.frame.right - out.bars.app_insets_for(out.frame).right,
             out.frame.bottom - out.bars.app_insets_for(out.frame).bottom,
         );
+        // `DisplayPolicy.DecorInsetsInfo.configInsets`: at every rotation except
+        // the natural one the app's *configuration* reserves a status-bar strip
+        // at the top of the window, `STATUS_BAR_CONFIG_DP` dp tall, regardless of
+        // the edge the physical bar moved to (the reference phone's table:
+        // ROTATION_0 `[0,128][0,63]`, 90 `[128,63][0,63]`, 180 `[0,63][0,191]`,
+        // 270 `[0,63][128,63]`). At rotation 0 there is no such strip: the
+        // physical bar already *is* the top strip.
+        out.bars.status_bar_config = if out.rotation % 4 == 0 {
+            RectI::new(0, 0, 0, 0)
+        } else {
+            let h = out.config_status_bar_height();
+            RectI::new(out.frame.left, out.frame.top, out.frame.right, out.frame.top + h)
+        };
         out
+    }
+
+    /// The config-orientation status bar height in pixels
+    /// (`status_bar_height`, 24 dp; 63 px at the reference density).
+    #[must_use]
+    pub fn config_status_bar_height(&self) -> i32 {
+        (STATUS_BAR_CONFIG_DP * self.density).round() as i32
+    }
+
+    /// AOSP `DisplayPolicy.DecorInsetsInfo.configInsets`: the insets the app's
+    /// configuration reserves — [`Self::app_insets`] (the physical bars, which is
+    /// `nonDecorInsets`) with the config status bar strip on top when the display
+    /// is rotated.
+    ///
+    /// The reference phone's own table (`display.txt`,
+    /// `fixtures/reference/hello-views/art-api34-x86_64/`) is exactly this:
+    /// `nonDecorInsets` `[0,128][0,63]`, `[128,0][0,63]`, `[0,0][0,191]`,
+    /// `[0,0][128,63]` and `configInsets` `[0,128][0,63]`, `[128,63][0,63]`,
+    /// `[0,63][0,191]`, `[0,63][128,63]` for ROTATION 0/90/180/270.
+    #[must_use]
+    pub fn config_insets(&self) -> InsetsI {
+        let base = self.app_insets();
+        let strip = edge_inset(self.bars.status_bar_config, self.frame);
+        InsetsI::new(
+            base.left + strip.left,
+            base.top + strip.top,
+            base.right + strip.right,
+            base.bottom + strip.bottom,
+        )
     }
 
     /// `true` when the display is taller than it is wide (`ORIENTATION_PORTRAIT`
@@ -719,5 +789,78 @@ mod tests {
             RotationRelaunch::for_rotation(CONFIG_ORIENTATION).missing(),
             CONFIG_SCREEN_SIZE | CONFIG_SCREEN_LAYOUT | CONFIG_SMALLEST_SCREEN_SIZE
         );
+    }
+
+    /// ROT6: the **`configInsets`** half of the reference phone's
+    /// `mDecorInsetsInfo` table.
+    ///
+    /// `fixtures/reference/hello-views/art-api34-x86_64/display.txt`:
+    ///
+    /// ```text
+    ///   ROTATION_0  ={nonDecorInsets=[0,128][0,63], configInsets=[0,128][0,63],   configFrame=[0,128][1080,2337]}
+    ///   ROTATION_90 ={nonDecorInsets=[128,0][0,63], configInsets=[128,63][0,63],  configFrame=[128,63][2400,1017]}
+    ///   ROTATION_180={nonDecorInsets=[0,0][0,191],  configInsets=[0,63][0,191],   configFrame=[0,63][1080,2209]}
+    ///   ROTATION_270={nonDecorInsets=[0,0][128,63], configInsets=[0,63][128,63],  configFrame=[0,63][2272,1017]}
+    /// ```
+    ///
+    /// `configInsets` is `nonDecorInsets` plus a top strip of `status_bar_height`
+    /// in the rotated configuration (24 dp x 2.625 = 63 px) at every rotation
+    /// except the natural one. The app's own tree confirms the strip is real:
+    /// `ui_after_recreate.xml` has `statusBarBackground [128,0][2400,63]`,
+    /// `action_bar_container [128,63]`, `content [128,189][2400,1017]`.
+    #[test]
+    fn every_rotation_matches_the_reference_config_insets() {
+        let d = DisplaySpec::reference_1080x2400();
+        assert_eq!(d.config_status_bar_height(), 63);
+        // (rotation, nonDecorInsets, configInsets, configFrame)
+        let table: [(u8, InsetsI, InsetsI, RectI); 4] = [
+            (
+                0,
+                InsetsI::new(0, 128, 0, 63),
+                InsetsI::new(0, 128, 0, 63),
+                RectI::new(0, 128, 1080, 2337),
+            ),
+            (
+                1,
+                InsetsI::new(128, 0, 0, 63),
+                InsetsI::new(128, 63, 0, 63),
+                RectI::new(128, 63, 2400, 1017),
+            ),
+            (
+                2,
+                InsetsI::new(0, 0, 0, 191),
+                InsetsI::new(0, 63, 0, 191),
+                RectI::new(0, 63, 1080, 2209),
+            ),
+            (
+                3,
+                InsetsI::new(0, 0, 128, 63),
+                InsetsI::new(0, 63, 128, 63),
+                RectI::new(0, 63, 2272, 1017),
+            ),
+        ];
+        for (rotation, non_decor, config, config_frame) in table {
+            let r = d.rotated(rotation);
+            assert_eq!(r.app_insets(), non_decor, "rotation {rotation} nonDecorInsets");
+            assert_eq!(r.config_insets(), config, "rotation {rotation} configInsets");
+            // configFrame = frame - configInsets, the row the reference prints
+            // next to configInsets.
+            assert_eq!(
+                RectI::new(
+                    r.frame.left + config.left,
+                    r.frame.top + config.top,
+                    r.frame.right - config.right,
+                    r.frame.bottom - config.bottom,
+                ),
+                config_frame,
+                "rotation {rotation} configFrame"
+            );
+            // The strip is empty exactly at the natural orientation.
+            assert_eq!(
+                r.bars.status_bar_config.is_empty(),
+                rotation % 4 == 0,
+                "rotation {rotation} config strip"
+            );
+        }
     }
 }

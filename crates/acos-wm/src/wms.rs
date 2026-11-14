@@ -53,6 +53,16 @@ pub const RELAYOUT_RES_SURFACE_RESIZED: i32 = 4;
 /// `RELAYOUT_RES_CONSUME_ALWAYS_SYSTEM_BARS`.
 pub const RELAYOUT_RES_CONSUME_ALWAYS_SYSTEM_BARS: i32 = 8;
 
+/// The `InsetsSource` id of the rotated-configuration status-bar strip
+/// ([`DisplaySpec::config_insets`]'s top strip).
+///
+/// It is deliberately outside the reference phone's id space (the status bar is
+/// `0x9b1a0000`, the nav bar `0xfc050001`, the IME `3`, the cutout `27`): the
+/// strip is not a window with a leash, it is the `configInsets` row of
+/// `DisplayPolicy.DecorInsetsInfo`, and the guest needs it as a distinct source
+/// because `InsetsState` is keyed by id (`SparseArray`), not by type.
+pub const CONFIG_STATUS_BAR_SOURCE_ID: i32 = 0x9b1a_0c00u32 as i32;
+
 /// Lifecycle of a window record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowState {
@@ -968,6 +978,19 @@ pub fn empty_insets_state(display: &DisplaySpec) -> InsetsState {
 }
 
 /// The exact ten `InsetsSource` rows from `display.txt`.
+///
+/// ROT6: when the display is rotated, one extra status-bars source carries the
+/// **config status strip** — `DisplayPolicy.DecorInsetsInfo.configInsets`'s top
+/// strip ([`DisplaySpec::config_insets`], 24 dp = 63 px on the reference phone).
+/// The guest only ever sees insets through `InsetsState` (the config/non-decor
+/// split is `WindowManagerService`-internal), so the strip the app's own decor
+/// draws its status bar background into has to arrive as a source: on the
+/// reference phone's ROTATION_90 tree the app reserves *both* the 128 px left
+/// strip (the physical bar, `nonDecorInsets.left`) and a 63 px top strip
+/// (`configInsets.top`) — `ui_after_recreate.xml`: root `[128,0][2400,1080]`,
+/// `statusBarBackground [128,0][2400,63]`, `action_bar [128,63]`,
+/// `content [128,189][2400,1017]`. It has no surface of its own, so no
+/// `InsetsSourceControl` is emitted for it.
 #[must_use]
 pub fn reference_insets_state(display: &DisplaySpec, ime_visible: bool) -> InsetsState {
     let b = display.bars;
@@ -976,7 +999,7 @@ pub fn reference_insets_state(display: &DisplaySpec, ime_visible: bool) -> Inset
     } else {
         RectI::new(0, 0, 0, 0)
     };
-    let sources = vec![
+    let mut sources = vec![
         InsetsSource::new(0x9b1a_0000u32 as i32, inset_type::STATUS_BAR, b.status_bar, true),
         InsetsSource::new(
             0xfc05_0001u32 as i32,
@@ -1036,6 +1059,18 @@ pub fn reference_insets_state(display: &DisplaySpec, ime_visible: bool) -> Inset
             true,
         ),
     ];
+    if !b.status_bar_config.is_empty() {
+        // The config strip is a status-bars inset the app's decor consumes; it is
+        // a second source of the same type, which `InsetsState.calculateInsets`
+        // takes the per-edge maximum of (`Insets.max`), so the window sees the
+        // physical bar's edge *and* the config strip.
+        sources.push(InsetsSource::new(
+            CONFIG_STATUS_BAR_SOURCE_ID,
+            inset_type::STATUS_BAR,
+            b.status_bar_config,
+            true,
+        ));
+    }
     InsetsState {
         display_frame: display.frame,
         display_cutout: reference_cutout(display),
@@ -1477,5 +1512,37 @@ mod tests {
         assert!(matches!(c.callback, WmCallback::ShowInsets { .. }));
         let state = &wm.windows.get(&1).unwrap().insets_state;
         assert!(state.sources.iter().any(|s| s.id == 3 && s.visible));
+    }
+
+    /// The rotated app's `InsetsState` carries the config strip as a status-bars
+    /// source, so the guest's own `InsetsState.calculateInsets` produces
+    /// `configInsets` for the window frame it is given.
+    #[test]
+    fn rotated_insets_state_delivers_the_config_strip() {
+        use crate::codec::inset_type;
+        let portrait = DisplaySpec::reference_1080x2400();
+        let land = portrait.rotated(1);
+        let p = reference_insets_state(&portrait, false);
+        assert_eq!(p.sources.len(), 10, "the reference dump's ten rows");
+        let l = reference_insets_state(&land, false);
+        assert_eq!(l.sources.len(), 11, "ten rows plus the config strip");
+        let strip = l
+            .sources
+            .iter()
+            .find(|s| s.id == CONFIG_STATUS_BAR_SOURCE_ID)
+            .expect("config strip source");
+        assert_eq!(strip.type_, inset_type::STATUS_BAR);
+        assert_eq!(strip.frame, RectI::new(0, 0, 2400, 63));
+        assert!(strip.visible);
+        // The physical left strip is still there: the config insets are both.
+        let physical = l
+            .sources
+            .iter()
+            .find(|s| s.id == 0x9b1a_0000u32 as i32)
+            .expect("physical status bar");
+        assert_eq!(physical.frame, RectI::new(0, 0, 128, 1080));
+        // No control is invented for the strip: it owns no surface.
+        let controls = reference_insets_controls(&land, 0x100);
+        assert!(!controls.0.iter().any(|c| c.id == CONFIG_STATUS_BAR_SOURCE_ID));
     }
 }
