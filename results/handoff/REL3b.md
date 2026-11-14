@@ -239,6 +239,13 @@ Gates, all on `--engine art` (`results/rel3b/`):
 5. The `_meta.acos_mcp.reply_bounded` key is additive; MCP clients ignore unknown
    `_meta`.
 
+6. **Merge note for REL3a.** This branch edits `docs/AGENT_GUIDE.md` in three
+   places outside the engine paragraphs: a new `<!-- topic:overview -->` block
+   at the top (its step 7 mentions `"engine": "art"` — align it with REL3a's
+   final `acos_verify` engine contract), the scenario section's component
+   shorthand paragraph, and nothing else. Expect a possible conflict with
+   REL3a's engine/limits edits in the same file.
+
 ## What is left (not done here)
 
 * REL3a's engine items (session tools → ART by default, `engine` arg/schema,
