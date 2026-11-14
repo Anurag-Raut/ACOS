@@ -494,7 +494,10 @@ def run_mem_phase(args, outdir):
         ping = daemon.call("ping", {})
         doc["ping"] = {"ms": round(ping["wall_ms"], 3),
                        "result": ping["envelope"].get("result")}
-        sampler = WarmSampler(job, os.getpid())
+        sampler = benchlib.ChurnSampler(
+            job, sampler_pid=os.getpid(), root_pid=os.getpid(),
+            scope_parent=Path(job).parent,
+            artifacts=[str(scratch / "sessions")])
         sampler.start()
         # The daemon-only baseline ("bare" for the incremental formula): no
         # session, so no booted framework -- stated as such wherever it is used.
@@ -591,6 +594,7 @@ def run_mem_phase(args, outdir):
             sampler.stop()
             doc["sample_count"] = len(sampler.samples)
             doc["sampler_errors"] = sampler.errors[:5]
+            doc["sampler_summary"] = sampler.summary()
             with open(scratch / "samples.json", "w") as f:
                 json.dump(sampler.samples, f)
         if daemon is not None:

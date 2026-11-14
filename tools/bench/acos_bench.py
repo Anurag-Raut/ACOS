@@ -417,6 +417,20 @@ METRICS = {
     },
 }
 
+# S3c: the corrected (churn-safe) denominator. Same metric shape as
+# `_tasks_per_gib_min_net`, but the guest scopes are discovered on creation
+# (benchlib.ChurnSampler) instead of once a second.
+for _n in (1, 5, 10, 20, 30):
+    METRICS["loop_n%d_tasks_per_gib_min_net_s3c" % _n] = {
+        "metric": "agent loop",
+        "label": "verified tasks/GiB-min, N=%d (anon+shmem, S3c sampler)" % _n,
+        "unit": "tasks/GiB-min", "category": "throughput", "direction": "higher",
+        "method": "verified tasks / anon+shmem GiB-min integral over the cohort, "
+                  "sampled at 20 Hz with guest scopes discovered at creation "
+                  "(benchlib.ChurnSampler); unlike the 1 s-discovery sampler this "
+                  "one keeps every guest that lives < 1 s (S3c)",
+    }
+
 # Old leaderboard (EXPERIMENTS.md before H6) for the .md column. Values are the
 # published best p50 and are NOT re-measured here.
 PREVIOUS = {
@@ -633,10 +647,13 @@ def loop_cohort_stats(doc, captured, cpu0, cpu1, n):
     """
     tasks = [t for t in (doc.get("tasks") or [])
              if t.get("verdict") != "warmup"]
-    vals = [t["loop_ms"] for t in tasks if t.get("loop_ms") is not None]
+    # A failed task is workload evidence, not a latency sample.
+    verified_tasks = [t for t in tasks if t.get("verdict") == "pass"]
+    vals = [t["loop_ms"] for t in verified_tasks if t.get("loop_ms") is not None]
     st = benchlib.stats(vals)
     out = {
         "n_tasks": len(vals),
+        "n_failed_tasks": len(tasks) - len(verified_tasks),
         "ms_p50": st.get("p50"),
         "ms_p90": benchlib.percentile(vals, 90) if vals else None,
         "ms_p95": st.get("p95"),
@@ -661,6 +678,19 @@ def loop_cohort_stats(doc, captured, cpu0, cpu1, n):
         rows = [r for r in rows if window[0] <= r.get("t", 0) <= window[1]]
         samples = [r for r in samples
                    if window[0] <= r.get("t", 0) <= window[1]]
+    # S3c: the corrected (churn-safe) reading of the same cohort window.
+    churn = captured.get("churn")
+    if churn is not None and window:
+        expected = sum(1 for name, st in
+                       ((name, st) for t in tasks
+                        for name, st in (t.get("steps") or {}).items())
+                       if name in ("launch", "reset"))
+        out["memory_s3c"] = churn.summary(window[0], window[1], sessions=n,
+                                          expected_guests=expected)
+        out["memory_s3c"]["guests_expected_rule"] = (
+            "one guest scope per acos_launch and per acos_reset step in the window")
+        if churn.errors:
+            out["memory_s3c"]["errors"] = churn.errors[:5]
 
     def series(items, key):
         return [r[key] for r in items if r.get(key) is not None]
@@ -747,18 +777,63 @@ def destroy(d, base, rows, label):
     return row
 
 
+class StepFailures:
+    """Every failed launch/reset/observe/step, with its error code.
+
+    A harness-level failure is never allowed to become a latency sample or a
+    silent ``ok``. The rows are capped for the JSON, the counters are not.
+    """
+
+    def __init__(self, cap=500):
+        self.cap = cap
+        self.rows = []
+        self.total = 0
+        self.by_code = {}
+
+    def add(self, task, step, reply=None, code=None, detail=None):
+        env = (reply or {}).get("envelope") or {}
+        err = env.get("error") or {}
+        if code is None:
+            code = err.get("code")
+        if code is None:
+            code = "NO_ERROR_CODE" if not env.get("ok") else "CHECK_FAILED"
+        self.total += 1
+        self.by_code[code] = self.by_code.get(code, 0) + 1
+        if len(self.rows) < self.cap:
+            self.rows.append({
+                "task": task,
+                "step": step,
+                "code": code,
+                "message": (err.get("message") or "")[:300],
+                "wall_ms": round((reply or {}).get("wall_ms") or 0.0, 3),
+                "detail": detail,
+            })
+
+    def summary(self):
+        return {"failed_steps": self.total,
+                "failed_by_code": dict(sorted(self.by_code.items())),
+                "rows": self.rows}
+
+
 def add(samples, key, value, ok=True, extra=None):
     if value is None:
         return
     entry = samples.setdefault(key, {"unit": METRICS[key]["unit"], "values": [],
                                      "ok": 0, "bad": 0})
-    entry["values"].append(round(float(value), 3))
+    # A failed task must never contribute a latency sample. For non-latency
+    # metrics (rates, memory, failure counts) keep the observation but mark it
+    # bad, so a failed run is still visible rather than silently empty.
+    if ok or METRICS[key]["category"] != "latency":
+        entry["values"].append(round(float(value), 3))
     if ok:
         entry["ok"] += 1
+        if extra:
+            entry.setdefault("extra", []).append(extra)
     else:
         entry["bad"] += 1
-    if extra:
-        entry.setdefault("extra", []).append(extra)
+        if len(entry.setdefault("bad_values", [])) < 20:
+            entry["bad_values"].append({"value": round(float(value), 3),
+                                        "extra": extra})
 
 
 def finish_samples(samples):
@@ -831,6 +906,7 @@ def phase_latency(args):
     teardowns = []
     checks = {}
     errors = []
+    failures = StepFailures()
     serve = None
     d = None
     try:
@@ -846,7 +922,10 @@ def phase_latency(args):
         for mode in ("strict", "fast"):
             tag = "m4-%s" % mode
             warm = new_base(tag + "-warm", 0)
-            launch(d, warm, mode)
+            wr = launch(d, warm, mode)
+            wok, _wvalue = launch_ok(wr)
+            if not wok:
+                failures.add("m4-warm", "launch", wr)
             destroy(d, warm, None, "m4-warm")
             for i in range(reps):
                 base = new_base(tag, i)
@@ -857,10 +936,15 @@ def phase_latency(args):
                 vr = d.call("acos_observe_tree", {"base": base, "settle": "strict",
                                                   "max_nodes": 2000})
                 vtree = tree_of((vr.get("envelope") or {}).get("result") or {})
+                ok = ok and bool((vr.get("envelope") or {}).get("ok"))
                 ok = ok and count_text(vtree) == "0"
                 # P12: a timed-out settle is not a pass, even when the tree looks
                 # right; the reply says settled:false / bound:timeout.
                 ok = ok and settle.get("settled") is not False
+                if not ok:
+                    failures.add("%s-%d" % (tag, i), "launch", r,
+                                 detail={"verify_ok": count_text(vtree) == "0",
+                                         "settled": settle.get("settled")})
                 add(samples, "m4_launch_%s_ms" % mode, r["wall_ms"], ok,
                     {"bound": settle.get("bound"), "settled": settle.get("settled"),
                      "pixels_changed": settle.get("pixels_changed"),
@@ -876,24 +960,50 @@ def phase_latency(args):
         for mode in ("strict", "fast"):
             tag = "m6-%s" % mode
             base = new_base(tag, 0)
-            launch(d, base, "strict")
+            # H17 follow-up: this launch used to be ignored, so a failed launch
+            # surfaced as 20 fast reset refusals. Check it, and never let any
+            # failed step below contribute a latency sample.
+            lr = launch(d, base, "strict",
+                        apk=Path(getattr(args, "m6_apk", "") or COUNTER))
+            lok, _lvalue = launch_ok(lr)
+            if not lok:
+                failures.add("%s-launch" % tag, "launch", lr)
             for i in range(reps + 1):        # rep 0 is the discarded warm-up
-                d.call("acos_tap", {"base": base, "id": "inc", "settle": "fast"})
-                before = ((d.call("acos_observe_tree",
-                                  {"base": base, "settle": "strict"})[
-                    "envelope"].get("result") or {}).get("tree"))
+                task = "%s-%d" % (tag, i)
+                tr = d.call("acos_tap", {"base": base, "id": "inc",
+                                         "settle": "fast"})
+                tap_ok = bool((tr.get("envelope") or {}).get("ok"))
+                if not tap_ok:
+                    failures.add(task, "tap", tr)
+                br = d.call("acos_observe_tree",
+                            {"base": base, "settle": "strict"})
+                before = ((br.get("envelope") or {}).get("result") or {}).get("tree")
+                before_ok = bool((br.get("envelope") or {}).get("ok"))
+                if not before_ok:
+                    failures.add(task, "before_tree", br)
                 r = d.call("acos_reset", {"base": base, "settle": mode})
                 env = r.get("envelope") or {}
                 value = env.get("result") or {}
                 tree = tree_of(value)
                 vr = d.call("acos_observe_tree", {"base": base, "settle": "strict"})
                 vtree = tree_of((vr.get("envelope") or {}).get("result") or {})
+                verify_ok = bool((vr.get("envelope") or {}).get("ok"))
+                if not verify_ok:
+                    failures.add(task, "verify_tree", vr)
                 settle = value.get("settle") or {}
                 ok = bool(env.get("ok") and value.get("state_reset")
                           and value.get("data_cleared") and count_text(tree) == "0"
-                          and count_text(vtree) == "0"
+                          and verify_ok and count_text(vtree) == "0"
                           and count_text(before) not in (None, "0")
                           and settle.get("settled") is not False)
+                if not ok:
+                    failures.add(task, "reset", r,
+                                 detail={"before": count_text(before),
+                                         "after": count_text(tree),
+                                         "verify_count": count_text(vtree),
+                                         "state_reset": value.get("state_reset"),
+                                         "data_cleared": value.get("data_cleared"),
+                                         "settled": settle.get("settled")})
                 if i == 0:
                     continue
                 add(samples, "m6_reset_%s_ms" % mode, r["wall_ms"], ok,
@@ -914,6 +1024,13 @@ def phase_latency(args):
         for row in shots:
             if row.get("warmup"):
                 continue
+            if not row.get("good"):
+                failures.add("m5-%s" % row.get("tag"), "screenshot",
+                             code=row.get("error") or "SCREENSHOT_NOT_GOOD",
+                             detail={"fresh": row.get("fresh"),
+                                     "meaningful": row.get("meaningful"),
+                                     "png_bytes": row.get("png_bytes"),
+                                     "png_magic": row.get("png_magic")})
             add(samples, "m5_screenshot_ms", row["ms"], row.get("good"),
                 {"png_bytes": row.get("png_bytes")})
         checks["m5_good"] = sum(1 for row in shots if not row.get("warmup")
@@ -939,6 +1056,11 @@ def phase_latency(args):
                                                       "max_nodes": 2000})
                     vtree = tree_of((vr.get("envelope") or {}).get("result") or {})
                     ok = ok and count_text(vtree) == own_count
+                if not ok:
+                    failures.add("m7-%s-%d" % (mode, i), "tree", r,
+                                 detail={"nodes": nodes, "count": own_count,
+                                         "truncated": value.get("truncated"),
+                                         "settled": settle.get("settled")})
                 if i == 0:
                     continue
                 add(samples, "m7_tree_%s_ms" % mode, r["wall_ms"], ok,
@@ -967,6 +1089,11 @@ def phase_latency(args):
                           and (settle.get("frame_ms") is not None
                                or settle.get("first_change_ms") is not None))
                 taps_expected += 1
+                if not ok:
+                    failures.add("m8-counter-%s-%d" % (mode, i), "tap", r,
+                                 detail={"settled": settle.get("settled"),
+                                         "state_changed": settle.get("state_changed"),
+                                         "ack_ms": settle.get("ack_ms")})
                 if i == 0:
                     continue
                 add(samples, "m8_tap_counter_%s_ms" % mode, r["wall_ms"], ok,
@@ -1000,15 +1127,25 @@ def phase_latency(args):
             raise RuntimeError("form session did not launch: %s" % (r["envelope"],))
         for mode in ("strict", "fast"):
             for i in range(reps + 1):
-                d.call("acos_reset", {"base": base, "settle": "fast"})
+                rr = d.call("acos_reset", {"base": base, "settle": "fast"})
+                reset_ok = bool((rr.get("envelope") or {}).get("ok"))
+                if not reset_ok:
+                    failures.add("m8-form-%s-%d" % (mode, i), "reset", rr)
                 r = d.call("acos_tap", {"base": base, "id": "submit",
                                         "settle": mode})
                 env = r.get("envelope") or {}
                 settle = (env.get("result") or {}).get("settle") or {}
                 vr = d.call("acos_observe_tree", {"base": base, "settle": "strict"})
                 vtree = tree_of((vr.get("envelope") or {}).get("result") or {})
-                ok = bool(env.get("ok") and node_text(vtree, "error") == FORM_ERROR
+                ok = bool(reset_ok and env.get("ok")
+                          and bool((vr.get("envelope") or {}).get("ok"))
+                          and node_text(vtree, "error") == FORM_ERROR
                           and settle.get("settled") is not False)
+                if not ok:
+                    failures.add("m8-form-%s-%d" % (mode, i), "tap", r,
+                                 detail={"reset_ok": reset_ok,
+                                         "error": node_text(vtree, "error"),
+                                         "settled": settle.get("settled")})
                 if i == 0:
                     continue
                 add(samples, "m8_tap_form_%s_ms" % mode, r["wall_ms"], ok,
@@ -1042,6 +1179,13 @@ def phase_latency(args):
                 serve.close()
             except Exception:  # noqa: BLE001
                 pass
+    for row in teardowns:
+        if not row.get("ok"):
+            failures.add(row.get("label") or "destroy", "destroy",
+                         code=row.get("code") or "DESTROY_FAILED",
+                         detail={"lifecycle": row.get("lifecycle"),
+                                 "survivors": row.get("survivors"),
+                                 "session_leftovers": row.get("session_leftovers")})
     for key in ("teardown_ms", "teardown_wall_ms"):
         values = [row.get("teardown_ms") if key == "teardown_ms"
                   else row.get("wall_ms") for row in teardowns]
@@ -1049,7 +1193,12 @@ def phase_latency(args):
             if value is not None:
                 add(samples, key, value, True)
     finish_samples(samples)
-    ok = not errors
+    if failures.total:
+        errors.append("%d failed launch/reset/step(s) with codes %s"
+                      % (failures.total, failures.by_code))
+    ok = not errors and not failures.total
+    checks["failed_steps"] = failures.total
+    checks["failed_by_code"] = dict(failures.by_code)
     return {
         "schema": "acos-bench-phase/2", "phase": "latency", "utc": utc(),
         "acos": args.acos, "binary_sha256": benchlib.sha256_file(args.acos),
@@ -1057,6 +1206,7 @@ def phase_latency(args):
         "env": {"ACOS_STRICT_SETTLE": os.environ.get("ACOS_STRICT_SETTLE", "default"),
                 "animations": ARM["animations"]},
         "samples": samples, "teardowns": teardowns, "checks": checks,
+        "failures": failures.summary(),
         "ok": ok, "errors": errors,
         "survivors": d2_warm.survivors(scratch) if Path(scratch).exists() else [],
     }
@@ -1237,6 +1387,10 @@ def phase_loop(args):
                 captured["serve_pid"] = int(self.proc.pid)
                 cg = benchlib.cgroup_path(self.proc.pid)
                 captured["job_cgroup"] = str(cg) if cg else None
+                # S3c: the corrected sampler is owned by the P5 loop (it now
+                # uses ChurnSampler directly); reuse that instance instead of
+                # starting a second 10 Hz sampler over the same cohort.
+                captured["job_cgroup"] = str(cg) if cg else None
 
         class PssSampler(p5.WarmSampler):
             def __init__(self, *a, **kw):
@@ -1272,21 +1426,27 @@ def phase_loop(args):
         loops = args.loops or (22 if args.n == 1 else 6)
         argv = ["--acos", args.acos, "--out", str(out_json),
                 "--scratch", str(scratch), "--n", str(args.n),
-                "--loops", str(loops), "--warmup", "1"]
+                "--loops", str(loops), "--warmup", "1",
+                "--keep-screens", str(getattr(args, "keep_screens", 20))]
         rc = p5.main(argv)
+        captured["churn"] = getattr(p5, "LAST_SAMPLER", None)
         doc = json.loads(out_json.read_text())
         cpu1 = host_cpu_times()
         cohort = loop_cohort_stats(doc, captured, cpu0, cpu1, args.n)
         measured = doc.get("measured_tasks") or 0
         verified = doc.get("verified") or 0
+        if rc != 0:
+            errors.append("P5 loop exited non-zero (rc=%s); it is fail-closed "
+                          "and its failed_tasks carry error codes" % rc)
         if doc.get("false_pass"):
             errors.append("P5 loop reported %s false pass(es)"
                           % doc.get("false_pass"))
         if measured and verified < measured:
-            # A failed verification is a reliability metric, not a false pass.
-            checks_note = ("verified %d/%d tasks; the first failure is recorded "
-                           "in p5.failed_tasks" % (verified, measured))
-            errors.append(checks_note)
+            errors.append("verified %d/%d tasks; every failed task is recorded "
+                          "in p5.failed_tasks with its error codes"
+                          % (verified, measured))
+        if doc.get("sampler_errors"):
+            errors.append("P5 sampler errors: %s" % (doc.get("sampler_errors")[:3],))
         loop_stats = doc.get("loop_total") or {}
         thr = doc.get("throughput") or {}
         add(samples, "loop_n%d_verified_rate" % args.n,
@@ -1307,6 +1467,16 @@ def phase_loop(args):
             thr.get("verified_tasks_per_gib_min_net"), bool(doc.get("ok")),
             {k: thr.get(k) for k in ("verified_tasks_per_gib_min",
                                      "verified_tasks_per_gib_min_net")})
+        # S3c: the corrected denominator (churn-safe sampling). Recorded beside
+        # the legacy one, never instead of it.
+        s3c = cohort.get("memory_s3c") or {}
+        if s3c.get("net_anon_shmem_gib_min"):
+            add(samples, "loop_n%d_tasks_per_gib_min_net_s3c" % args.n,
+                (verified / s3c["net_anon_shmem_gib_min"] if measured else None),
+                bool(doc.get("ok")),
+                {k: s3c.get(k) for k in ("net_anon_shmem_gib_min", "coverage",
+                                         "guests_observed", "guests_expected",
+                                         "samples_per_guest", "sampler_cpu_pct")})
     except Exception as exc:  # noqa: BLE001
         errors.append("%s: %s" % (type(exc).__name__, exc))
     finally:
@@ -1334,7 +1504,9 @@ def phase_loop(args):
                               "tree_bytes": step.get("tree_bytes")}
                        for name, step in (task.get("steps") or {}).items()}}
             for task in (doc.get("tasks") or []) if task.get("verdict") == "fail"],
-        "ok": bool(not doc.get("false_pass") and measured > 0),
+        "failures": doc.get("failed_tasks") or [],
+        "ok": bool(not errors and not doc.get("false_pass")
+                   and measured > 0 and verified == measured),
         "errors": errors,
     }
 
@@ -1962,6 +2134,12 @@ def main(argv=None):
     ap.add_argument("--scratch-root", default="")
     ap.add_argument("--reps", type=int, default=20)
     ap.add_argument("--p11-reps", type=int, default=3)
+    ap.add_argument("--keep-screens", type=int, default=20,
+                    help="max per-task PNG samples retained by the agent loop "
+                         "(default 20; 0 deletes all)")
+    ap.add_argument("--m6-apk", default="",
+                    help="diagnostic: APK path for the M6 launch only (empty = "
+                         "counter); used for fail-closed negative controls")
     ap.add_argument("--loops", type=int, default=0,
                     help="agent-loop iterations (0 = 22 at N=1, 6 at N=5)")
     ap.add_argument("--n", type=int, default=1)

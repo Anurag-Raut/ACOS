@@ -41,6 +41,7 @@ from d2_warm import Serve, WarmSampler, descendants  # noqa: E402
 import agent_loop  # noqa: E402
 
 APK = REPO / "fixtures/build/apps/counter.apk"
+LAST_SAMPLER = None
 TAP_ID = "inc"
 ASSERT_ID = "count"
 PRE_TEXT = "0"
@@ -132,6 +133,7 @@ class TaskRunner:
                      "session_id": session_id}
         self.screens = self.scratch / "screens"
         self.screens.mkdir(parents=True, exist_ok=True)
+        self.keep_screens = 20
         self.req = 0
         self.pids = descendants(self.serve_pid)
 
@@ -219,9 +221,15 @@ class TaskRunner:
                          ((rows["tap"]["_value"] or {}).get("last_frame_seq") or 0)),
         }
         verdict = "pass" if all(checks.values()) else "fail"
+        error_codes = {step: record.get("error")
+                       for step, record in rows.items()
+                       if not record.get("ok") or record.get("error")}
         for step in rows:
             rows[step].pop("_value", None)
             rows[step]["ms_step_total"] = rows[step]["ms"]
+        # Per-task PNGs are diagnostic samples, not a corpus: cap the directory.
+        self.screens_pruned = benchlib.prune_screens(self.screens,
+                                                     self.keep_screens)
         return {
             "index": self.index,
             "tag": self.tag,
@@ -231,9 +239,11 @@ class TaskRunner:
             "loop_wall_ms": ms(loop_s),
             "verdict": verdict,
             "checks": checks,
+            "error_codes": error_codes,
             "pre_text": pre_text,
             "post_text": post_text,
             "screenshot_bytes": shot_bytes,
+            "screens_pruned": getattr(self, "screens_pruned", None),
             "steps": rows,
         }
 
@@ -242,10 +252,20 @@ def run_agent(args, daemon, serve_pid, scratch, agent_index, results, barrier=No
     tag = "n%d-a%d" % (args.n, agent_index)
     session_id = "p5_%s" % tag
     runner = TaskRunner(daemon, serve_pid, scratch, session_id, tag, 0)
+    runner.keep_screens = max(0, int(getattr(args, "keep_screens", 20)))
     base = {"request_id": "p5-launch-%s" % tag, "session_id": session_id}
     launch, value = runner.call("launch0", "acos_launch",
                                {"base": base, "apk": str(APK)},
                                png_inventory(scratch))
+    if not launch.get("ok"):
+        # A bootstrap launch failure is a failed task with a code, never a
+        # warm-up that quietly turns into 22 fast failures.
+        rows = [{"agent": agent_index, "warmup": False, "bootstrap": launch,
+                 "verdict": "fail", "checks": {"launch_ok": False},
+                 "error_codes": {"launch": launch.get("error")},
+                 "loop_ms": launch.get("ms"), "loop_wall_ms": launch.get("ms")}]
+        results[agent_index] = rows
+        return
     rows = [{"agent": agent_index, "warmup": True, "bootstrap": launch,
              "verdict": "warmup"}]
     if barrier is not None:
@@ -308,9 +328,10 @@ def parse_traces(scratch, tasks):
 
 
 def stats_rows(tasks, key="steps"):
+    """Per-step latency over *verified* tasks only (failed tasks never count)."""
     per = {}
     for task in tasks:
-        if task.get("verdict") == "warmup":
+        if task.get("verdict") != "pass":
             continue
         for step, record in task.get(key, {}).items():
             per.setdefault(step, []).append(record["ms"])
@@ -327,6 +348,8 @@ def main(argv=None):
     p.add_argument("--warmup", type=int, default=1)
     p.add_argument("--settle", type=float, default=0.0,
                    help="idle seconds before the measured loops (default 0)")
+    p.add_argument("--keep-screens", type=int, default=20,
+                   help="max per-task PNG samples retained on disk (default 20)")
     args = p.parse_args(argv)
 
     scratch = Path(args.scratch)
@@ -361,8 +384,14 @@ def main(argv=None):
         serve = Serve(args.acos, scratch, max_sessions=max(8, args.n))
         job = benchlib.cgroup_path(serve.proc.pid)
         doc["job_cgroup"] = str(job)
-        sampler = WarmSampler(job, os.getpid(), interval=0.1)
-        sampler.start()
+        if job is not None:
+            sampler = benchlib.ChurnSampler(
+                job, sampler_pid=os.getpid(), root_pid=os.getpid(),
+                scope_parent=Path(job).parent,
+                artifacts=[str(scratch / "sessions")])
+            sampler.start()
+            global LAST_SAMPLER
+            LAST_SAMPLER = sampler
         clients = [serve.client() for _ in range(args.n)]
         if args.settle:
             time.sleep(args.settle)
@@ -391,9 +420,9 @@ def main(argv=None):
     doc["tasks"] = rows
     doc["loop"] = stats_rows(rows)
     doc["loop_total"] = benchlib.stats([r["loop_ms"] for r in rows
-                                        if r.get("verdict") != "warmup"])
+                                        if r.get("verdict") == "pass"])
     doc["loop_wall_total"] = benchlib.stats([r["loop_wall_ms"] for r in rows
-                                             if r.get("verdict") != "warmup"])
+                                             if r.get("verdict") == "pass"])
     doc["trace_events"] = parse_traces(scratch, rows)[0]
     doc["dm6_events"] = parse_traces(scratch, rows)[1]
     passes = sum(1 for r in rows if r.get("verdict") == "pass")
@@ -403,10 +432,21 @@ def main(argv=None):
     doc["false_pass"] = sum(1 for r in rows if r.get("verdict") == "pass"
                             and not all(r.get("checks", {}).values()))
     doc["failed_tasks"] = [{"agent": r.get("agent"), "index": r.get("index"),
-                            "checks": r.get("checks")}
+                            "checks": r.get("checks"),
+                            "error_codes": r.get("error_codes"),
+                            "steps": {name: {"ok": step.get("ok"),
+                                             "error": step.get("error"),
+                                             "status": step.get("status")}
+                                      for name, step in (r.get("steps") or {}).items()}}
                            for r in rows if r.get("verdict") == "fail"]
     if samples:
         t_from, t_to = t_start, t_end
+        expected_guests = args.n + sum(
+            1 for r in rows for name in (r.get("steps") or {})
+            if name in ("launch", "reset"))
+        summary = sampler.summary(t_from, t_to, sessions=args.n,
+                                  expected_guests=expected_guests)
+        doc["sampler_summary"] = summary
         win = [s for s in samples if t_from <= s["t"] <= t_to]
         cur = [{"t": s["t"], "bytes": (s.get("job_memory_current_mib") or 0) * 1048576}
                for s in win]
@@ -416,6 +456,10 @@ def main(argv=None):
         doc["memory"] = {
             "samples": len(win),
             "interval_s": 0.1,
+            "coverage": summary.get("coverage"),
+            "guests_observed": summary.get("guests_observed"),
+            "guests_expected": summary.get("guests_expected"),
+            "samples_per_guest": summary.get("samples_per_guest"),
             "cgroup_memory_current_peak_mib": round(peak, 3) if peak else None,
             "cgroup_gib_min": benchlib.sample_integral(cur, "bytes"),
             "net_anon_shmem_gib_min": benchlib.sample_integral(net, "bytes"),
@@ -433,10 +477,15 @@ def main(argv=None):
             "verified_tasks_per_gib_min_net": (
                 round(passes / doc["memory"]["net_anon_shmem_gib_min"], 4)
                 if doc["memory"]["net_anon_shmem_gib_min"] else None),
+            "coverage": summary.get("coverage"),
+            "guests_observed": summary.get("guests_observed"),
+            "guests_expected": summary.get("guests_expected"),
         }
     doc["host_after"] = benchlib.read_meminfo()
     doc["host_after"].update(benchlib.read_loadavg())
-    doc["ok"] = passes == measured and measured > 0 and doc["false_pass"] == 0
+    doc["ok"] = (passes == measured and measured > 0
+                 and doc["false_pass"] == 0
+                 and not (sampler.errors if sampler else []))
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(doc, indent=1))
     print("p5: n=%d measured=%d pass=%d false_pass=%d ok=%s -> %s"

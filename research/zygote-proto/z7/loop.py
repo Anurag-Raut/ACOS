@@ -119,8 +119,9 @@ def main():
     root = os.path.abspath(args.out)
     os.makedirs(root, exist_ok=True)
     job_cg = benchlib.cgroup_path(os.getpid())
-    sampler = d2_warm.WarmSampler(Path(job_cg), os.getpid(), interval=0.1) \
-        if job_cg else None
+    sampler = benchlib.ChurnSampler(
+        Path(job_cg), sampler_pid=os.getpid(), root_pid=os.getpid(),
+        interval=0.1, scope_parent=Path(job_cg).parent) if job_cg else None
     if sampler:
         sampler.start()
     pss_sampler = PssSampler(os.getpid())
@@ -255,8 +256,13 @@ def main():
                 net_rows.append({"t": s["t"],
                                  "bytes": s["net_anon_shmem_mib"] * 1024.0 * 1024.0})
         net_gib_min = benchlib.sample_integral(net_rows) if net_rows else None
+        sampler_summary = sampler.summary() if sampler else {}
         report["sampler"] = {
             "samples": len(srows),
+            "coverage": sampler_summary.get("coverage"),
+            "guests_observed": sampler_summary.get("guests_observed"),
+            "guests_expected": sampler_summary.get("guests_expected"),
+            "samples_per_guest": sampler_summary.get("samples_per_guest"),
             "memory_current_peak_mib": (round(benchlib.sample_peak(
                 [{"bytes": r["bytes"]} for r in srows]) / 1024.0 / 1024.0, 1)
                 if srows else None),
