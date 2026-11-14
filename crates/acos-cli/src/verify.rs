@@ -46,8 +46,13 @@ pub struct VerifyArgs {
     #[arg(long = "required-fidelity")]
     pub required_fidelity: Option<String>,
 
-    /// Deterministic flags recorded in the reproducer (repeatable).
-    #[arg(long = "flag")]
+    /// Deterministic `NAME=VALUE` flag recorded in the reproducer (repeatable).
+    ///
+    /// Example: `--flag engine=art`. Flags are metadata: they are copied into
+    /// `repro.json` and replayed by `repro.sh`. `--flag --native` is rejected
+    /// (`INVALID_ARGUMENT`) because it is an option, not a `NAME=VALUE` flag —
+    /// use `--native` itself for that, and `--engine art` to pick the engine.
+    #[arg(long = "flag", value_name = "NAME=VALUE")]
     pub flags: Vec<String>,
 
     /// Enable the APK's native libraries (`lib/<host-abi>/`) under confinement.
@@ -121,6 +126,33 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         .artifacts
         .clone()
         .unwrap_or_else(|| default_artifacts(&scenario));
+
+    // F10: `--flag` values are deterministic NAME=VALUE metadata recorded in
+    // the reproducer, not options. A malformed one is a structured
+    // INVALID_ARGUMENT (the run never starts), never a clap usage error that
+    // hides which flag was wrong.
+    for (index, flag) in args.flags.iter().enumerate() {
+        if let Err(reason) = acos_protocol::commands::validate_reproducer_flag(flag) {
+            let envelope = Envelope::failure(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::StaticAnalysis,
+                ProtocolError::new(
+                    ErrorCode::InvalidArgument,
+                    format!("invalid argument `--flag` (`{flag}`): {reason}"),
+                )
+                .with_hint("Use NAME=VALUE (`--flag engine=art`); flags are recorded in the reproducer.")
+                .with_details(serde_json::json!({
+                    "field": "flags",
+                    "index": index,
+                    "value": flag,
+                    "reason": reason,
+                })),
+                Metrics::wall_ms(0),
+            );
+            return finish_run(&envelope, &args, &artifacts, None);
+        }
+    }
 
     let trust = match crate::trust::resolve(args.untrusted, &scenario) {
         Ok(trust) => trust,

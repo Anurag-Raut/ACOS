@@ -1770,7 +1770,7 @@
         },
         "flags": {
           "default": [],
-          "description": "Deterministic flags recorded in the reproducer.",
+          "description": "Deterministic `NAME=VALUE` flags recorded in the reproducer (`repro.json`'s `flags` and the `--flag` lines of `repro.sh`).\n\nA flag is metadata, not a command-line option: it must be `NAME=VALUE` with a name matching `[A-Za-z][A-Za-z0-9_.-]*` and a non-empty value, so a value can never be read as another option. A malformed flag is `INVALID_ARGUMENT` (`details.index` names it).",
           "items": {
             "type": "string"
           },

@@ -150,6 +150,8 @@ fn inspect_result() -> InspectResult {
                         mime_type: Some("text/plain".to_string()),
                     }],
                 }],
+                target_activity: None,
+                enabled: Some(true),
             }],
             services: vec![],
             receivers: vec![],

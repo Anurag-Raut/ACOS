@@ -408,8 +408,42 @@ impl CliBackend {
             argv.push("--engine".to_string());
             argv.push(engine);
         }
-        if let Some(flags) = args.get("flags").and_then(Value::as_array) {
-            for flag in flags.iter().filter_map(Value::as_str) {
+        // F10: `flags` are deterministic `NAME=VALUE` metadata recorded in the
+        // reproducer (`repro.json` + `repro.sh`), not CLI options. A malformed
+        // entry (`--native`, `engine=`) is a structured INVALID_ARGUMENT here,
+        // instead of being passed to the CLI as `--flag --native` (which clap
+        // rejects as "a value is required").
+        if let Some(flags) = args.get("flags") {
+            let Some(flags) = flags.as_array() else {
+                return invalid_argument(request_id, "flags", "`flags` must be an array of NAME=VALUE strings");
+            };
+            for (index, flag) in flags.iter().enumerate() {
+                let Some(flag) = flag.as_str() else {
+                    return invalid_argument(
+                        request_id,
+                        "flags",
+                        &format!("`flags[{index}]` is not a string"),
+                    );
+                };
+                if let Err(reason) = acos_protocol::commands::validate_reproducer_flag(flag) {
+                    return Envelope::failure(
+                        request_id,
+                        ProtocolBackend::AcosNative,
+                        Fidelity::NativeRuntime,
+                        ProtocolError::new(
+                            ErrorCode::InvalidArgument,
+                            format!("invalid argument `flags[{index}]`: {reason}"),
+                        )
+                        .with_hint(
+                            "Flags are recorded in the reproducer as NAME=VALUE (`engine=art`). \
+                             They are not acos options: pass `engine` for the engine.",
+                        )
+                        .with_details(
+                            json!({"field": "flags", "index": index, "value": flag, "reason": reason}),
+                        ),
+                        Metrics::wall_ms(0),
+                    );
+                }
                 argv.push("--flag".to_string());
                 argv.push(flag.to_string());
             }

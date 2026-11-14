@@ -8,9 +8,18 @@ to the `acos` CLI.
 
 The server is deliberately thin: it does not re-implement the runtime. It
 adapts the typed contract in [`crates/acos-protocol`](../crates/acos-protocol)
-and dispatches to the `acos` binary. **Every command appears in `tools/list`**,
-whether or not it is implemented yet; each descriptor is annotated with
-`available: true|false` and its expected `fidelity`.
+and dispatches to the `acos` binary.
+
+`tools/list` advertises **only what this build can run**. The protocol still
+reserves every command name (the descriptors in `acos_protocol::mcp_tools()` are
+unchanged, and the table below lists them all), but a command with no
+implementation on any route — `acos_capture`, `acos_assert`, `acos_events`,
+`acos_profile`, `acos_capability_report` — is hidden: calling one still returns
+the same structured `unsupported` envelope with
+`error.details.available = false`, it is simply not advertised to an agent that
+would otherwise try it. (`acos_run`, `acos_observe`, `acos_action`, `acos_reset`
+and `acos_destroy` **are** advertised: the in-process session backend implements
+them even though the `acos` CLI has no such subcommand.)
 
 | | |
 |---|---|
@@ -143,6 +152,7 @@ Server limits (all optional):
 | `ACOS_MCP_CALL_TIMEOUT_MS` | `120000` | default call budget when the request declares none |
 | `ACOS_MCP_MAX_OUTPUT_BYTES` | `16777216` | maximum captured bytes per child stream |
 | `ACOS_MCP_MAX_IMAGE_BYTES` | `524288` | maximum image inlined as MCP image content |
+| `ACOS_MCP_MAX_TEXT` | `4000` | maximum bytes for one string in a tool reply. A longer string (an error message carrying a 200-frame java tail and a 400-line native tail) is head/tail-capped with a marker naming its original size and the artifact path, and an identical repeat is replaced by a back-reference, so the full text appears once. `0` disables the bound (the raw CLI behaviour). The guide text (`acos_help`) is exempt |
 | `ACOS_MCP_SESSION_TTL_MS` | `600000` | idle session TTL |
 | `ACOS_MCP_SHUTDOWN_GRACE_MS` | `2000` | how long in-flight calls may finish after stdin closes |
 | `ACOS_MCP_QUIET` | unset | silence stderr logging |
@@ -198,10 +208,12 @@ the tool/CLI argument selects the execution engine.
 
 ## 2. Tools
 
-The server advertises 23 tools: the 13 protocol commands in
-`acos_protocol::mcp_tools()` (`acos_<command>`), two meta tools
-(`acos_capabilities`, `acos_help`), and eight server-local tools (the in-process
-session tools plus `acos_doctor`).
+The protocol defines 13 commands (`acos_<command>` in
+`acos_protocol::mcp_tools()`); the server adds two meta tools
+(`acos_capabilities`, `acos_help`) and the server-local tools (the in-process
+session tools plus `acos_doctor`). The number *advertised* in `tools/list`
+depends on what the installed `acos` binary implements — see above; the table
+below is the full structural list.
 
 Whether a protocol command can run **today** is derived at runtime by probing
 `acos --help`, never hard-coded, so new commands appear as available as soon as

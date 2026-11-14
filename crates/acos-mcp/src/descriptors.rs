@@ -244,6 +244,23 @@ pub fn tool_infos(caps: &Capabilities) -> Vec<ToolInfo> {
     tools
 }
 
+/// The tools `tools/list` advertises: every tool this build can actually run.
+///
+/// An unavailable protocol command (`acos_capture`, `acos_assert`,
+/// `acos_events`, `acos_profile`, `acos_capability_report`, ...) is **hidden**
+/// rather than listed and answered with `unsupported`: a fresh agent that sees
+/// 23 tools tries the stubs, pays a round trip for each and learns nothing. The
+/// names stay reserved — [`tool_infos`] (and `docs/MCP.md`) still carry them, the
+/// protocol's `mcp_tools()` descriptors are unchanged, and a call to a hidden
+/// name returns the same structured `unsupported` envelope it always did.
+#[must_use]
+pub fn available_tool_infos(caps: &Capabilities) -> Vec<ToolInfo> {
+    tool_infos(caps)
+        .into_iter()
+        .filter(|tool| tool.available)
+        .collect()
+}
+
 /// The server-local in-process session tools.
 ///
 /// They are marked available unconditionally: the default `acos-mcp` binary
@@ -578,11 +595,13 @@ pub fn help_tool() -> ToolInfo {
         tool_name: HELP_TOOL.to_string(),
         command: None,
         description: concat!(
-            "The ACOS agent guide: the doctor -> inspect -> launch -> observe -> act -> verify loop, ",
-            "every CLI command with a runnable example, how to write a scenario YAML (step types, ",
-            "selectors, settle modes, expect_change, assertions), error codes -> what to do, and the ",
-            "limits (rotate unsupported, Flutter/RN deferred, x86_64 native libs, API 34, memory ",
-            "admission). Call it before your first ACOS call and whenever a call confuses you."
+            "The ACOS agent guide. With no `topic` this returns a SHORT skeleton: the three status ",
+            "rules, the loop in ten lines, and the topic list with one-line descriptions. Call it ",
+            "before your first ACOS call, then ask for one section by name: `workflow` (the loop), ",
+            "`cli` (every command with a runnable example), `scenarios` (writing a verify YAML), ",
+            "`errors` (code -> action), `limits` (rotate unsupported, Flutter/RN deferred, x86_64 ",
+            "native libs, API 34, memory admission). `topic: \"all\"` returns the complete guide; ",
+            "an unknown topic returns the skeleton again."
         )
         .to_string(),
         input_schema: json!({
@@ -590,8 +609,8 @@ pub fn help_tool() -> ToolInfo {
             "properties": {
                 "topic": {
                     "type": "string",
-                    "enum": ["workflow", "cli", "scenarios", "errors", "limits"],
-                    "description": "Optional section of the guide: `workflow` (the loop), `cli` \n(commands + examples), `scenarios` (verify YAML), `errors` (codes -> action), `limits` (what is not supported)."
+                    "enum": ["overview", "workflow", "cli", "scenarios", "errors", "limits", "all"],
+                    "description": "Optional section of the guide: `overview` (the default skeleton), \n`workflow` (the loop), `cli` (commands + examples), `scenarios` (verify YAML), `errors` \n(codes -> action), `limits` (what is not supported), `all` (the whole guide)."
                 }
             },
             "additionalProperties": false

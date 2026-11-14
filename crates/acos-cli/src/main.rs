@@ -405,10 +405,12 @@ fn components_json(components: &[Component], res: Option<&ResourceTable>) -> Vec
                 "kind": kind_name(c.kind),
                 "name": c.name,
                 "exported": c.exported,
+                "enabled": c.enabled,
                 "launch_mode": c.launch_mode,
                 "process": c.process,
                 "permission": c.permission,
                 "label": label,
+                "target_activity": c.target_activity,
                 "intent_filters": c.intent_filters.iter().map(|f| json!({
                     "actions": f.actions,
                     "categories": f.categories,
@@ -430,6 +432,7 @@ fn components_json(components: &[Component], res: Option<&ResourceTable>) -> Vec
 fn kind_name(kind: ComponentKind) -> &'static str {
     match kind {
         ComponentKind::Activity => "activity",
+        ComponentKind::ActivityAlias => "activity_alias",
         ComponentKind::Service => "service",
         ComponentKind::Receiver => "receiver",
         ComponentKind::Provider => "provider",
