@@ -1,0 +1,14 @@
+{
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "ok": true,
+  "request_id": "req_29e800_18e7fa86b600eff9",
+  "result": {
+    "engine": "art",
+    "launched": true,
+    "stage_reached": "first_frame",
+    "verdict": null
+  },
+  "session_id": "s_cli",
+  "status": "pass"
+}

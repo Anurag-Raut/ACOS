@@ -8,7 +8,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use acos_apk::error::{NATIVE_LIB_NOT_FOUND, UNSUPPORTED_ABI, ZIP_SLIP};
-use acos_apk::{Apk, HOST_ABI};
+use acos_apk::{AbiGate, Apk, HOST_ABI};
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -145,4 +145,82 @@ fn hello_jni_fixture_apk_gates_and_extracts() {
     assert_eq!(&bytes[..4], b"\x7fELF");
     assert_eq!(bytes.len() as u64, lib.size);
     let _ = std::fs::remove_dir_all(&dest);
+}
+
+// ---------------------------------------------------------------- ABIGATE
+//
+// The package-level ABI verdict must match AOSP's `PackageManager`
+// (`NativeLibraryHelper.findSupportedAbi`: lowest index in the device's
+// supported list wins; `NO_NATIVE_LIBRARIES` with no `lib/`;
+// `INSTALL_FAILED_NO_MATCHING_ABIS` with `lib/` but no match).
+
+#[test]
+fn abi_gate_refuses_an_arm64_only_apk_with_its_inventory() {
+    let apk = apk_with_libs(&[
+        ("lib/arm64-v8a/libfoo.so", b"\x7fELF arm64"),
+        ("lib/arm64-v8a/libbar.so", b"\x7fELF arm64 bar"),
+        ("lib/armeabi-v7a/libfoo.so", b"\x7fELF arm32"),
+    ]);
+    match apk.abi_gate() {
+        AbiGate::Unsupported { apk_abis, libs_sample } => {
+            assert_eq!(apk_abis, vec!["arm64-v8a", "armeabi-v7a"]);
+            assert_eq!(
+                libs_sample,
+                vec![
+                    "lib/arm64-v8a/libbar.so",
+                    "lib/arm64-v8a/libfoo.so",
+                    "lib/armeabi-v7a/libfoo.so"
+                ]
+            );
+        }
+        other => panic!("expected Unsupported, got {other:?}"),
+    }
+    assert!(apk.abi_gate().is_unsupported());
+    // The sample is bounded, so a huge APK cannot bloat an error envelope.
+    assert_eq!(apk.native_libs_sample(1).len(), 1);
+}
+
+#[test]
+fn abi_gate_passes_a_pure_java_apk() {
+    let apk = apk_with_libs(&[("classes.dex", b"dex\n035\0"), ("res/layout/main.xml", b"<x/>")]);
+    assert_eq!(apk.abi_gate(), AbiGate::NoNative);
+    assert!(!apk.abi_gate().is_unsupported());
+}
+
+#[test]
+fn abi_gate_passes_an_apk_with_both_abis_and_picks_the_host_one() {
+    let apk = apk_with_libs(&[
+        ("lib/x86_64/libfoo.so", b"\x7fELF x86_64"),
+        ("lib/arm64-v8a/libfoo.so", b"\x7fELF arm64"),
+    ]);
+    assert_eq!(
+        apk.abi_gate(),
+        AbiGate::Supported {
+            abi: HOST_ABI.to_string()
+        }
+    );
+}
+
+/// The mixed case the AOSP rule decides: `lib/x86_64` for one library and an
+/// arm64-only *second* library still installs as an x86_64 package, because
+/// `findSupportedAbi` looks at directories and `iterateOverNativeFiles` then
+/// extracts only the chosen one. The arm64-only library is missing at
+/// `dlopen` — the app's own `UnsatisfiedLinkError`, not an install gate.
+#[test]
+fn abi_gate_passes_a_mixed_apk_per_package_like_aosp() {
+    let apk = apk_with_libs(&[
+        ("lib/x86_64/liba.so", b"\x7fELF x86_64 a"),
+        ("lib/arm64-v8a/libb.so", b"\x7fELF arm64 b"),
+    ]);
+    assert_eq!(
+        apk.abi_gate(),
+        AbiGate::Supported {
+            abi: HOST_ABI.to_string()
+        },
+        "AOSP decides per package, not per library"
+    );
+    assert!(!apk.abi_gate().is_unsupported());
+    // And the install step extracts only x86_64, so libb stays missing.
+    assert_eq!(apk.native_abis(), vec!["arm64-v8a", "x86_64"]);
+    assert!(apk.find_native_lib(HOST_ABI, "libb.so").is_none());
 }

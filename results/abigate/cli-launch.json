@@ -1,0 +1,61 @@
+{
+  "backend": "acos-native",
+  "error": {
+    "class": "unsupported",
+    "code": "UNSUPPORTED_ABI",
+    "details": {
+      "apk_abis": [
+        "arm64-v8a"
+      ],
+      "art_code": "UNSUPPORTED_ABI",
+      "engine": "art",
+      "engine_frozen": false,
+      "evidence_label": "none",
+      "host_abi": "x86_64",
+      "libs_sample": [
+        "lib/arm64-v8a/libhellojni.so"
+      ],
+      "session_exit": {
+        "abi": {
+          "apk_abis": [
+            "arm64-v8a"
+          ],
+          "host_abi": "x86_64",
+          "libs_sample": [
+            "lib/arm64-v8a/libhellojni.so"
+          ]
+        },
+        "cgroup": null,
+        "code": "UNSUPPORTED_ABI",
+        "disk_free_bytes": 6099746816,
+        "guest_crash": null,
+        "guest_exit": null,
+        "guest_signal": null,
+        "native_crash": null,
+        "native_crash_path": null,
+        "outcome": "unsupported",
+        "panic": null,
+        "path": "/run/user/1000/acos/art-sessions/s_cli/art-frames/session-exit.json",
+        "retryable": false,
+        "stage": null
+      },
+      "session_exit_path": "/run/user/1000/acos/art-sessions/s_cli/art-frames/session-exit.json",
+      "stderr_tail": "acos-art: guards rss_max=2048MiB rlimit_data=2560MiB stream_cap=8MiB log_cap=50000\nacos-art: build-cache HIT ebe70c7e96ef /home/Qui/.paseo/worktrees/3oxa6xao/k5/.cache/abigate/prefix/share/acos/0.2.0/.cache/art/build-cache/ebe70c7e96ef6095d82d2393d85cd0173655e694841e92cffda987ebddac967a (1 file(s), tree)\nacos-art: build-cache HIT 55075fa8ea38 /home/Qui/.paseo/worktrees/3oxa6xao/k5/.cache/abigate/prefix/share/acos/0.2.0/.cache/art/build-cache/55075fa8ea38799287e49cbcdef115dcd46d87f86577dafe79cfd20a2b0d3d42\nacos-art: build-cache HIT 36079f7950f0 /home/Qui/.paseo/worktrees/3oxa6xao/k5/.cache/abigate/prefix/share/acos/0.2.0/.cache/art/build-cache/36079f7950f02b0a9876fca2661abc7f1262bcdf6e02807e9005703484d9e981\nacos-art: build-cache HIT 6b1a5f698439 /home/Qui/.paseo/worktrees/3oxa6xao/k5/.cache/abigate/prefix/share/acos/0.2.0/.cache/art/build-cache/6b1a5f69843990e89dd9edcd17bd81651829684f4e186b37b1cd3b063edca4b4\nacos-art: build-cache HIT 0968d8ddbf99 /home/Qui/.paseo/worktrees/3oxa6xao/k5/.cache/abigate/prefix/share/acos/0.2.0/.cache/art/build-cache/0968d8ddbf992df42d4a8a2d34fbe1ed8f64f1ea091a98d7e3cdc257d656aa1d\nacos-art: build-cache HIT 463187da38f7 /home/Qui/.paseo/worktrees/3oxa6xao/k5/.cache/abigate/prefix/share/acos/0.2.0/.cache/art/build-cache/463187da38f7884fbd93eab1cf909a144371412cf2846443103a23d3c7cc5f9b",
+      "trust": "trusted"
+    },
+    "hint": "The APK has native libraries for other ABIs only. Use an ABI-split or universal build that includes the engine ABI (x86_64), or do not request native loading.",
+    "message": "acos-art: UNSUPPORTED_ABI: APK has no native libraries for ABI \"x86_64\"; available: [arm64-v8a]",
+    "retryable": false
+  },
+  "fidelity": "art-reference",
+  "ok": false,
+  "request_id": "req_29e54b_18e7fa84e5d12deb",
+  "result": {
+    "engine": null,
+    "launched": null,
+    "stage_reached": null,
+    "verdict": null
+  },
+  "session_id": "s_cli",
+  "status": "unsupported"
+}

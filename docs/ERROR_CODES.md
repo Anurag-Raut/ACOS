@@ -20,6 +20,33 @@ additive: never renamed or reused for a different meaning. Every code means
 backend, Flutter session). `WRONG_ABI` is only the loader-level condition for a
 single ELF whose `e_machine` the in-process loader cannot map.
 
+**The ART path gates it before the guest (ABIGATE).** `acos-art` decides the
+package ABI from the APK index and refuses *before* the image, props, logd or any
+guest process exists, so the envelope is `UNSUPPORTED_ABI` with
+`status: unsupported` — never `GUEST_EXITED` and never `INTERNAL`. The same gate
+covers `acos launch/verify --engine art`, `acos serve` sessions and
+`acos_launch`/`acos_verify` over MCP. `error.details` carries
+`apk_abis: ["arm64-v8a", ...]`, `host_abi: "x86_64"` and `libs_sample:
+["lib/arm64-v8a/libfoo.so", ...]` (a bounded, sorted sample of what the APK does
+ship), so a caller can act without re-reading the APK.
+
+The rule is AOSP's, not ours: `PackageManager` decides **per package**.
+`NativeLibraryHelper.findSupportedAbi` keeps the ABI directory whose index in the
+device's supported list is lowest, returns `NO_NATIVE_LIBRARIES` for an APK with
+no `lib/`, and `INSTALL_FAILED_NO_MATCHING_ABIS` for `lib/` with no match;
+`iterateOverNativeFiles` then extracts only that ABI
+(`frameworks/base/core/jni/com_android_internal_content_NativeLibraryHelper.cpp`).
+Consequences ACOS reproduces deliberately:
+
+* a pure-Java APK (no `lib/`) always launches — there is no ABI question;
+* an APK with both `lib/x86_64/` and `lib/arm64-v8a/` launches as an x86_64
+  package and only `lib/x86_64/*` is installed;
+* an APK with `lib/x86_64/liba.so` **and** an arm64-only `libb.so` also launches:
+  the package has an x86_64 directory, `liba.so` loads, and the first
+  `dlopen("libb.so")` fails with the app's own `UnsatisfiedLinkError`. That is an
+  app-packaging bug the platform reproduces, not an install gate, so it is never
+  reported as `UNSUPPORTED_ABI`.
+
 | Code | Meaning | Component | Exit |
 |---|---|---|---|
 | `UNSUPPORTED_ANDROID_API` | The native engine lacks a required `android.*` API or behaviour. | acos-vm | 70 / 1 |
@@ -29,7 +56,7 @@ single ELF whose `e_machine` the in-process loader cannot map.
 | `NEEDS_REAL_DEVICE` | The behaviour needs a real device, OEM service or hardware target. | engine / CLI | 1 |
 | `REQUIRES_GMS` | The app requires licensed Google Mobile Services. | engine / CLI | 1 |
 | `WRONG_ABI` | One ELF's `e_machine`/class is not what the loader can map (per-library; not an APK ABI inventory miss). | acos-native-loader | 70 / 1 |
-| `UNSUPPORTED_ABI` | The APK ships native code, but none for the host ABI (names the available ABIs). | acos-apk / acos-cli / acos-runtime / acos-jni / acos-mcp | 1 |
+| `UNSUPPORTED_ABI` | The APK ships native code, but none for the host ABI. Names the available ABIs; on the ART path it is decided **before** any guest starts and `details` carries `apk_abis`, `host_abi`, `libs_sample`. | acos-apk / acos-services / acos-art / acos-cli / acos-runtime / acos-jni / acos-mcp | 1 |
 | `NO_DISPLAY` | Capture/observe was requested on a headless session. | acos-runtime / MCP | 1 |
 | `NO_TEXT` | Text/semantics were requested but the chosen route cannot provide them. | acos-runtime / MCP | 1 |
 | `UNSUPPORTED_RELOCATION` | A native relocation kind is not implemented by the loader. | acos-native-loader | 70 / 1 |

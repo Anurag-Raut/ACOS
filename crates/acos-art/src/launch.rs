@@ -211,6 +211,12 @@ pub struct LaunchResult {
     /// caller (and a benchmark row) can tell a warm serve from a cold one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boot_image: Option<crate::boot_image::BootImageReport>,
+    /// ABIGATE: the package-level ABI gate's own evidence when the launch was
+    /// refused before any guest existed (`code: UNSUPPORTED_ABI`):
+    /// `{apk_abis: [...], host_abi: "x86_64", libs_sample: [...]}`. Absent on
+    /// every launch that reached the guest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub abi: Option<serde_json::Value>,
     pub marker: Option<String>,
 }
 
@@ -507,8 +513,7 @@ pub(crate) fn launch_session(
     // and `LoadedApk` puts that directory on the class loader's native search
     // path. ACOS stages the APK read-only and never ran that step, so
     // `dlopen` saw `library "libhellojni.so" not found`. Extract into this
-    // run's own tree (bound read-only at `/data/app-lib`); an arm64-only APK
-    // keeps its honest `UNSUPPORTED_ABI` path in the guest.
+    // run's own tree (bound read-only at `/data/app-lib`).
     let native_lib_root = run.dir("app-lib");
     let native_libs = acos_services::native_libs::install(&opts.apk, &native_lib_root)
         .map_err(|e| Error::Layout(format!("native libs: {e}")))?;
@@ -521,8 +526,39 @@ pub(crate) fn launch_session(
                 acos_services::native_libs::GUEST_NATIVE_LIB_DIR
             );
         }
-        acos_services::native_libs::NativeLibInstall::UnsupportedAbi { available, message } => {
+        acos_services::native_libs::NativeLibInstall::UnsupportedAbi {
+            available,
+            sample,
+            message,
+        } => {
+            // ABIGATE/W59-A: AOSP's `PackageManager` refuses a package whose
+            // native code has no directory for a device ABI
+            // (`INSTALL_FAILED_NO_MATCHING_ABIS`), and so must this launcher.
+            // The pre-fix path logged this and started the guest anyway, so the
+            // caller saw `GUEST_EXITED` (the app's own
+            // `UnsatisfiedLinkError` / a boot failure) instead of the
+            // documented `UNSUPPORTED_ABI`. The gate is package-level, decided
+            // before the image, the props, logd or any guest process exists.
             eprintln!("acos-art: launch: UNSUPPORTED_ABI available={available:?}: {message}");
+            let result = abi_gate_result(opts, &package, available, sample);
+            let out = opts.out.clone().unwrap_or_else(|| run.dir("out").join("launch"));
+            write_session_exit(&out, &result, None, None, None, None);
+            // An interactive caller waits for a *ready line*: refusing without
+            // one would look like a dead session (`INTERNAL`) to it, and the
+            // code it reads is the whole point of the gate.
+            if std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some() {
+                protocol_write(&serde_json::json!({
+                    "ok": false,
+                    "cmd": "ready",
+                    "code": "UNSUPPORTED_ABI",
+                    "retryable": false,
+                    "error": message,
+                    "apk_abis": available,
+                    "host_abi": acos_services::native_libs::HOST_ABI,
+                    "libs_sample": sample,
+                }));
+            }
+            return Ok(result);
         }
         acos_services::native_libs::NativeLibInstall::None => {}
     }
@@ -1755,6 +1791,9 @@ pub(crate) fn launch_session(
         outcome,
         code,
         boot_image: Some(boot_image_report),
+        // ABI gate: `None` on every launch that reached the guest (the gate
+        // returns before this builder).
+        abi: None,
         apk: opts.apk.display().to_string(),
         package,
         until: opts.until.clone(),
@@ -2229,6 +2268,11 @@ fn write_session_exit(
         // W48: which heap configuration this session ran with (the
         // `ACOS_ART_HEAP*` seam, resolved and validated before the guest).
         "heap": crate::props::effective_heap_json(),
+        // ABIGATE: the package-level ABI gate's inventory when the launch was
+        // refused before the guest (`code: UNSUPPORTED_ABI`), so the CLI can
+        // put `apk_abis`/`host_abi`/`libs_sample` in the error's `details`
+        // without re-reading the APK.
+        "abi": result.abi,
         "cgroup": result.notes.iter().find(|n| n.starts_with("cgroup:")),
         "logd": result.notes.iter().find(|n| n.starts_with("logd:")),
         // H17: a guest that exits 126 before its first frame is the guard
@@ -2392,6 +2436,65 @@ fn write_zygote_session(
 }
 
 /// The structured refusal for a scratch disk that cannot hold this run's frames.
+/// ABIGATE: the refusal for an APK whose native code has no `lib/<host-abi>/`.
+///
+/// Shaped like [`disk_full_result`] — no guest ran, nothing is a pass — and it
+/// carries the inventory the caller needs to act on it (`apk_abis`,
+/// `host_abi`, `libs_sample`) in `abi` *and* in `code == UNSUPPORTED_ABI`, the
+/// documented protocol code.
+fn abi_gate_result(
+    opts: &LaunchOpts,
+    package: &str,
+    apk_abis: &[String],
+    libs_sample: &[String],
+) -> LaunchResult {
+    let host_abi = acos_services::native_libs::HOST_ABI;
+    LaunchResult {
+        outcome: Outcome::Unsupported,
+        code: Some("UNSUPPORTED_ABI".to_string()),
+        // Decided from the APK index alone, before the image is resolved.
+        boot_image: None,
+        apk: opts.apk.display().to_string(),
+        package: package.to_string(),
+        until: opts.until.clone(),
+        application_created: false,
+        activity_launched: false,
+        guest_exit: None,
+        guest_signal: None,
+        wall_ms: 0,
+        activity: None,
+        activity_target: None,
+        timeout_ms: None,
+        application_marker: None,
+        activity_marker: None,
+        looper_trace: Vec::new(),
+        bind_application: BindDelivery {
+            request_bytes: None,
+            delivered: false,
+            app_thread_wire: None,
+            code: acos_binder_peer::peer::BIND_APPLICATION_CODE,
+        },
+        service_calls: Vec::new(),
+        unsupported: Vec::new(),
+        stdout: String::new(),
+        stderr: String::new(),
+        logs: Vec::new(),
+        heap: Some(crate::props::effective_heap_json()),
+        notes: vec![format!(
+            "UNSUPPORTED_ABI: the APK ships native code only for [{}], and this engine is \
+             {host_abi}-only; no guest was started (AOSP PackageManager refuses the same \
+             package with INSTALL_FAILED_NO_MATCHING_ABIS)",
+            apk_abis.join(", ")
+        )],
+        abi: Some(serde_json::json!({
+            "apk_abis": apk_abis,
+            "host_abi": host_abi,
+            "libs_sample": libs_sample,
+        })),
+        marker: None,
+    }
+}
+
 fn disk_full_result(opts: &LaunchOpts, package: &str, free: u64, min: u64) -> LaunchResult {
     LaunchResult {
         outcome: Outcome::Unsupported,
@@ -2430,6 +2533,7 @@ fn disk_full_result(opts: &LaunchOpts, package: &str, free: u64, min: u64) -> La
              written (retryable=true)",
             min / 1024 / 1024
         )],
+        abi: None,
         marker: None,
     }
 }
@@ -6337,5 +6441,74 @@ mod skipped_traversal_tests {
                 "the guest must publish `{required}` as evidence"
             );
         }
+    }
+}
+
+/// ABIGATE: the pre-guest ABI refusal is structured, carries its inventory, and
+/// can never be read as a pass.
+///
+/// This is the whole point of the gate: the pre-fix launcher logged
+/// `UNSUPPORTED_ABI` and started the guest anyway, so the caller saw a
+/// `GUEST_EXITED` app failure (or, on the oldest path, an `INTERNAL`) instead
+/// of the documented `UNSUPPORTED_ABI`. `oc` (onCreate) and `resumed` are
+/// false because nothing ran, and the `abi` block is the caller's evidence.
+#[cfg(test)]
+mod abi_gate_tests {
+    use super::*;
+
+    fn opts(apk: &str) -> LaunchOpts {
+        LaunchOpts {
+            apk: PathBuf::from(apk),
+            ..LaunchOpts::default()
+        }
+    }
+
+    #[test]
+    fn the_refusal_names_unsupported_abi_and_the_apk_inventory() {
+        let result = abi_gate_result(
+            &opts("/tmp/arm64-only.apk"),
+            "dev.acos.arm64",
+            &["arm64-v8a".to_string(), "armeabi-v7a".to_string()],
+            &[
+                "lib/arm64-v8a/libfoo.so".to_string(),
+                "lib/armeabi-v7a/libfoo.so".to_string(),
+            ],
+        );
+        assert_eq!(result.outcome, Outcome::Unsupported);
+        assert_ne!(result.outcome, Outcome::Ok, "a gate is never a pass");
+        assert_eq!(result.code.as_deref(), Some("UNSUPPORTED_ABI"));
+        assert!(!result.application_created && !result.activity_launched);
+        assert!(result.guest_exit.is_none() && result.guest_signal.is_none());
+        let abi = result.abi.as_ref().expect("abi inventory");
+        assert_eq!(
+            abi["apk_abis"],
+            serde_json::json!(["arm64-v8a", "armeabi-v7a"])
+        );
+        assert_eq!(abi["host_abi"], serde_json::json!("x86_64"));
+        assert_eq!(
+            abi["libs_sample"],
+            serde_json::json!([
+                "lib/arm64-v8a/libfoo.so",
+                "lib/armeabi-v7a/libfoo.so"
+            ])
+        );
+        assert!(result
+            .notes
+            .iter()
+            .any(|n| n.starts_with("UNSUPPORTED_ABI:") && n.contains("INSTALL_FAILED_NO_MATCHING_ABIS")));
+        // The serialized result carries the same block (a caller that only
+        // keeps the JSON still has the evidence).
+        let json = serde_json::to_value(&result).expect("serialize");
+        assert_eq!(json["code"], serde_json::json!("UNSUPPORTED_ABI"));
+        assert_eq!(json["abi"]["host_abi"], serde_json::json!("x86_64"));
+    }
+
+    /// A launch that reached the guest never carries the gate's block, so its
+    /// presence is unambiguous evidence of a pre-guest refusal.
+    #[test]
+    fn a_guest_launch_record_has_no_abi_block() {
+        let result = disk_full_result(&opts("/tmp/app.apk"), "dev.acos.app", 1, 2);
+        assert!(result.abi.is_none());
+        assert_eq!(result.code.as_deref(), Some("HOST_DISK_FULL"));
     }
 }
