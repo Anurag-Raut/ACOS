@@ -2807,6 +2807,11 @@ public final class LaunchMain {
             Object tx = buildLaunchTransaction(sClient, token, app, sActivity);
             scheduleLocal(tx);
             sCurrentToken = token;
+            // ROT6: the Activity was launched, so it is the top of the task and the
+            // last one: when the app finishes it (`Activity.finish()`), the *server*
+            // side owns the rest of the lifecycle. Start the watcher that delivers
+            // it (see [`startTopFinishWatcher`]).
+            startTopFinishWatcher(token);
             System.out.println("ACOSLAUNCH MARK schedule-transaction-delivered activity="
                     + sActivity + " token=binder:" + Integer.toHexString(System.identityHashCode(token))
                     + " transport=local-iapplicationthread");
@@ -4286,6 +4291,71 @@ public final class LaunchMain {
                 }
             }
         }, "acos-stop-watcher");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /**
+     * ROT6: deliver the lifecycle of a **finished top Activity**.
+     *
+     * <p>`Activity.finish()` only marks the record (`mFinished`) and tells the
+     * server (`IActivityClientController.finishActivity`). Everything an app
+     * observes after that — `onPause`, `onSaveInstanceState`/`onStop`,
+     * `onDestroy` — is a `ClientTransaction` the *server* sends next. ACOS's
+     * ATMS records the finish but has no transaction scheduler for the ART
+     * guest, so a plain `back` on a single-Activity app marked the record and
+     * then did nothing: the guest acked the key as handled (`Activity.onKeyDown`
+     * tracks BACK, `onKeyUp` calls `onBackPressed`), and no lifecycle ran and no
+     * frame changed.
+     *
+     * <p>This is the same shape W38's two-Activity path uses for the Activity it
+     * replaced, extended to the three items stock sends for the last one:
+     * `PauseActivityItem(finished=true)`, `StopActivityItem(showWindow=false)`,
+     * `DestroyActivityItem(finished=true)` — each in its own transaction (a
+     * transaction carries one token and one lifecycle state), executed by the
+     * framework's own `TransactionExecutor` on the main thread, which is what
+     * runs the real `ActivityThread.handlePauseActivity` /
+     * `handleStopActivity` / `handleDestroyActivity` and therefore the app's own
+     * callbacks. Nothing is fabricated: the items are the framework's, and the
+     * trigger is the framework's own `mFinished` flag.
+     */
+    static void startTopFinishWatcher(final IBinder token) {
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    long deadline = System.currentTimeMillis() + 120000;
+                    android.util.Log.i("AcosRot6", "ACOSLAUNCH MARK top-finish-watcher-started");
+                    Object activity = null;
+                    while (System.currentTimeMillis() < deadline) {
+                        activity = activityForToken(token);
+                        if (activity != null && Boolean.TRUE.equals(get(activity, "mFinished"))) break;
+                        Thread.sleep(10);
+                    }
+                    if (activity == null || !Boolean.TRUE.equals(get(activity, "mFinished"))) {
+                        android.util.Log.i("AcosRot6", "ACOSLAUNCH MARK top-finish-watcher-timeout");
+                                                return;
+                    }
+                    Class<?> pauseCls = Class.forName("android.app.servertransaction.PauseActivityItem");
+                    Class<?> stopCls = Class.forName("android.app.servertransaction.StopActivityItem");
+                    Class<?> destroyCls =
+                            Class.forName("android.app.servertransaction.DestroyActivityItem");
+                    // PauseActivityItem.obtain(finished, userLeaving, configChanges, dontReport)
+                    scheduleLocal(lifecycleTransaction(token,
+                            obtainPrimitiveItem(pauseCls, new boolean[]{true, false, false})));
+                    scheduleLocal(lifecycleTransaction(token,
+                            obtainPrimitiveItem(stopCls, new boolean[]{false})));
+                    scheduleLocal(lifecycleTransaction(token,
+                            obtainPrimitiveItem(destroyCls, new boolean[]{true, false, false})));
+                    android.util.Log.i("AcosRot6", "ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:"
+                            + Integer.toHexString(System.identityHashCode(token))
+                            + " order=Pause(finished)->Stop->Destroy");
+                                    } catch (Throwable x) {
+                    android.util.Log.i("AcosRot6", "ACOSLAUNCH MARK top-finish-watcher-error " + x);
+                    x.printStackTrace(System.out);
+                                    }
+            }
+        }, "acos-top-finish-watcher");
         t.setDaemon(true);
         t.start();
     }

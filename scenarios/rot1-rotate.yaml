@@ -22,6 +22,11 @@
 # `ACOSLAUNCH MARK rotate rotation=1 relaunch=true handled=0x3` and the app's
 # own log carries `onPause/onStop/onSaveInstanceState/onDestroy/onCreate/onStart/
 # onResume` (scenarios/counter.yaml asserts that order).
+#
+# ROT6: the landscape y values are the reference phone's (configInsets 63 px top
+# strip), so they moved +63 from the ROT4/ROT5 measurement — from
+# fixtures/reference/counter/art-api34-x86_64/ui_after_recreate.xml, not from a
+# re-bless.
 version: 1
 name: rot1-rotate
 description: >-
@@ -80,30 +85,33 @@ steps:
       fresh: true
 
   # Landscape structure: every content control moved to the landscape geometry
-  # (2400x1080, status band 147 px). A portrait frame cannot report these
-  # bounds. The root DecorView bounds of the same reply are `[0,0][2400,1080]`
-  # (2400 wide x 1080 high), recorded in the rotate step's evidence.
-  # The landscape window is inset by the rotated system bars (nav bar 63 px on
-  # the left, status bar on the right), exactly as `DisplaySpec::rotated` puts
-  # them; portrait has neither inset horizontally. Re-derived from the
-  # reference phone's ROTATION_90 decor insets (status bar 128 left, nav 63
-  # bottom) and re-measured on this image after the ROT5 bar-placement fix:
-  # x = 128 + 16dp(42) = 170, the same 42 px padding the portrait bounds show.
+  # (2400x1080). A portrait frame cannot report these bounds. The root
+  # DecorView bounds of the same reply are `[128,0][2400,1080]` on the reference
+  # phone (2400 wide x 1080 high), recorded in the rotate step's evidence.
+  # The landscape window is inset by the rotated system bars the way the
+  # reference phone's `mDecorInsetsInfo` reports them: ROTATION_90
+  # `configInsets=[128,63][0,63]` — the 128 px status bar on the left AND a
+  # 63 px status strip at the top of the app's configuration — with the
+  # navigation bar still 63 px at the bottom. x = 128 + 16dp(42) = 170, the same
+  # 42 px padding the portrait bounds show; y = 63 (config strip) + 126 (action
+  # bar) + 42 = 231. Source: fixtures/reference/counter/art-api34-x86_64/
+  # ui_after_recreate.xml (`inc [170,282][401,408]`, `reset [170,408][401,534]`,
+  # `count [170,231][191,282]`).
   - assert_text:
       selector: {id: inc}
       text: {exact: Increment}
-      bounds: [170, 219, 401, 345]
+      bounds: [170, 282, 401, 408]
 
   - assert_text:
       selector: {id: reset}
       text: {exact: Reset}
-      bounds: [170, 345, 401, 471]
+      bounds: [170, 408, 401, 534]
 
   # Preserved state: the count set before the rotation is still 1.
   - assert_text:
       selector: {id: count}
       text: {exact: "1"}
-      bounds: [170, 168, 191, 219]
+      bounds: [170, 231, 191, 282]
 
   # ---- rotated input mapping: the same control, its new bounds ----------
   - tap:
@@ -112,7 +120,7 @@ steps:
   - assert_text:
       selector: {id: count}
       text: {exact: "2"}
-      bounds: [170, 168, 191, 219]
+      bounds: [170, 231, 191, 282]
 
   # ---- rotate back to portrait -----------------------------------------
   - rotate:
