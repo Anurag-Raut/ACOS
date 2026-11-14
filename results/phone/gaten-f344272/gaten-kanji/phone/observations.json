@@ -1,0 +1,3907 @@
+{
+  "schema_version": 1,
+  "source": "phone",
+  "fidelity": "physical-device",
+  "scenario": {
+    "name": "gaten-kanji",
+    "path": "scenarios/gaten-kanji.yaml",
+    "sha256": "a6ebba4d79c9f7c560cb3348a599979ca52c85fd75f599d1c856a5c9b42d3a19"
+  },
+  "app": {
+    "package": "com.gaten",
+    "activity": "com.gaten/app.MainActivity",
+    "apk": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk"
+  },
+  "device": {
+    "ro.build.fingerprint": "motorola/manila_g/manila:15/VUOA35.116-151/a43dc2:user/release-keys",
+    "ro.build.version.sdk": "35",
+    "ro.build.version.release": "15",
+    "ro.product.model": "moto g35 5G",
+    "wm_size": "1080x2400",
+    "density_dpi": 400,
+    "font_scale": "1.0"
+  },
+  "started": "2026-11-14T12:05:02.904+00:00",
+  "steps": [
+    {
+      "index": 0,
+      "kind": "launch",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "Gaten looks up words you circle on screen and saves them to Anki.",
+        "Look up Japanese in any app, then study it.",
+        "See a word you don't know",
+        "Set up Gaten",
+        "\u304c\u3044\u3063\u305f\u3002",
+        "\u306a\u308b\u307b\u3069\u3001",
+        "\u5408\u70b9"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-00-launch.png",
+      "error": null,
+      "visible_labels": [
+        "Gaten looks up words you circle on screen and saves them to Anki.",
+        "Look up Japanese in any app, then study it.",
+        "See a word you don't know",
+        "Set up Gaten",
+        "\u304c\u3044\u3063\u305f\u3002",
+        "\u306a\u308b\u307b\u3069\u3001",
+        "\u5408\u70b9"
+      ],
+      "node_count": 29
+    },
+    {
+      "index": 1,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Set up Gaten"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Set up Gaten",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          2130,
+          1025,
+          2260
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "1 / 3",
+        "Android needs Gaten as an accessibility service.",
+        "Choose text recognition",
+        "Look up Japanese anywhere",
+        "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+        "Skip",
+        "Skip lookup mode setup",
+        "Standard or Enhanced",
+        "Step 1 of 2, Turn on lookup mode, current",
+        "Step 2 of 2, Choose text recognition, not started",
+        "Turn on lookup mode"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-01-tap.png",
+      "error": null,
+      "visible_labels": [
+        "1 / 3",
+        "Android needs Gaten as an accessibility service.",
+        "Choose text recognition",
+        "Look up Japanese anywhere",
+        "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+        "Skip",
+        "Skip lookup mode setup",
+        "Standard or Enhanced",
+        "Step 1 of 2, Turn on lookup mode, current",
+        "Step 2 of 2, Choose text recognition, not started",
+        "Turn on lookup mode"
+      ],
+      "node_count": 61
+    },
+    {
+      "index": 2,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Skip"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Skip",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          500,
+          2175,
+          580,
+          2225
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "2 / 3",
+        "Allow Gaten to read your AnkiDroid collection.",
+        "Allow access",
+        "AnkiDroid is installed",
+        "Back",
+        "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+        "Read decks, record answers, add words.",
+        "Skip",
+        "Skip Anki setup",
+        "Step 1 of 2, AnkiDroid is installed, done",
+        "Step 2 of 2, Allow access, current",
+        "Study with Anki"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-02-tap.png",
+      "error": null,
+      "visible_labels": [
+        "2 / 3",
+        "Allow Gaten to read your AnkiDroid collection.",
+        "Allow access",
+        "AnkiDroid is installed",
+        "Back",
+        "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+        "Read decks, record answers, add words.",
+        "Skip",
+        "Skip Anki setup",
+        "Step 1 of 2, AnkiDroid is installed, done",
+        "Step 2 of 2, Allow access, current",
+        "Study with Anki"
+      ],
+      "node_count": 66
+    },
+    {
+      "index": 3,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Skip"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Skip",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          500,
+          2175,
+          580,
+          2225
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "1",
+        "3 / 3",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Back",
+        "Connect",
+        "Connect WaniKani",
+        "Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+        "Create a token",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "Need a token? Show me how",
+        "No recent searches found",
+        "Not connected",
+        "Paste it here",
+        "Paste your token",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Show",
+        "Show token",
+        "Skip",
+        "Skip WaniKani setup and finish",
+        "Step 1 of 2, Create a token, available",
+        "Step 2 of 2, Paste it here, current",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-03-tap.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "1",
+        "3 / 3",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Back",
+        "Connect",
+        "Connect WaniKani",
+        "Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+        "Create a token",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "Need a token? Show me how",
+        "No recent searches found",
+        "Not connected",
+        "Paste it here",
+        "Paste your token",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Show",
+        "Show token",
+        "Skip",
+        "Skip WaniKani setup and finish",
+        "Step 1 of 2, Create a token, available",
+        "Step 2 of 2, Paste it here, current",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 225
+    },
+    {
+      "index": 4,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Skip"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Skip",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          500,
+          2175,
+          580,
+          2225
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-04-tap.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 165
+    },
+    {
+      "index": 5,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Recently looked up"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Recently looked up",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          1343,
+          1025,
+          1398
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-05-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 165
+    },
+    {
+      "index": 6,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-06-capture-kanji-home.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 165
+    },
+    {
+      "index": 7,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "exact": "Settings"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Settings",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          682,
+          2163,
+          847,
+          2320
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-07-tap.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 8,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Screen lookup"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Screen lookup",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          140,
+          446,
+          883,
+          496
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-08-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 9,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-09-capture-kanji-hub.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 10,
+      "kind": "assert_visible",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "exact": "Kanji reference. Remembering the Kanji"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Kanji reference. Remembering the Kanji",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          1126,
+          1025,
+          1276
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "assert_visible",
+        "passed": true,
+        "expected_present": {
+          "content_desc": {
+            "exact": "Kanji reference. Remembering the Kanji"
+          }
+        }
+      },
+      "screenshot": "screenshot-10-assert_visible.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 11,
+      "kind": "assert_not_visible",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "exact": "Kanji reference. WaniKani"
+        }
+      },
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "assert_not_visible",
+        "passed": true,
+        "expected_absent": {
+          "content_desc": {
+            "exact": "Kanji reference. WaniKani"
+          }
+        }
+      },
+      "screenshot": "screenshot-11-assert_not_visible.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 12,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "contains": "Kanji reference."
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Kanji reference. Remembering the Kanji",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          1126,
+          1025,
+          1276
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-12-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "node_count": 42
+    },
+    {
+      "index": 13,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Remembering the Kanji"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Remembering the Kanji",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          592,
+          940,
+          642
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-13-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "node_count": 42
+    },
+    {
+      "index": 14,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-14-capture-kanji-page.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "node_count": 42
+    },
+    {
+      "index": 15,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "bundled, works offline"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "identifier": "",
+        "enabled": true,
+        "checked": true,
+        "clickable": null,
+        "bounds": [
+          55,
+          562,
+          1025,
+          768
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "bundled, works offline",
+        "mode": "contains",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-15-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "node_count": 42
+    },
+    {
+      "index": 16,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "WaniKani"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "WaniKani",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          383,
+          940,
+          433
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "WaniKani",
+        "mode": "exact",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-16-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "node_count": 42
+    },
+    {
+      "index": 17,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "contains": "WaniKani. Your WaniKani account"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": null,
+        "bounds": [
+          55,
+          353,
+          1025,
+          559
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-17-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "node_count": 42
+    },
+    {
+      "index": 18,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-18-capture-kanji-wanikani-selected.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "node_count": 42
+    },
+    {
+      "index": 19,
+      "kind": "assert_not_visible",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "The choice could not be saved. Try again."
+        }
+      },
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "assert_not_visible",
+        "passed": true,
+        "expected_absent": {
+          "text": {
+            "exact": "The choice could not be saved. Try again."
+          }
+        }
+      },
+      "screenshot": "screenshot-19-assert_not_visible.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "node_count": 42
+    },
+    {
+      "index": 20,
+      "kind": "back",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. WaniKani",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-20-back.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. WaniKani",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 21,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Screen lookup"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Screen lookup",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          140,
+          446,
+          883,
+          496
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. WaniKani",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-21-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. WaniKani",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 22,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. WaniKani",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-22-capture-kanji-hub-wanikani.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. WaniKani",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 23,
+      "kind": "assert_visible",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "exact": "Kanji reference. WaniKani"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Kanji reference. WaniKani",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          1126,
+          1025,
+          1276
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. WaniKani",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "assert_visible",
+        "passed": true,
+        "expected_present": {
+          "content_desc": {
+            "exact": "Kanji reference. WaniKani"
+          }
+        }
+      },
+      "screenshot": "screenshot-23-assert_visible.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. WaniKani",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 24,
+      "kind": "assert_not_visible",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "exact": "Kanji reference. Remembering the Kanji"
+        }
+      },
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. WaniKani",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "assert_not_visible",
+        "passed": true,
+        "expected_absent": {
+          "content_desc": {
+            "exact": "Kanji reference. Remembering the Kanji"
+          }
+        }
+      },
+      "screenshot": "screenshot-24-assert_not_visible.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. WaniKani",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 25,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "contains": "Kanji reference."
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Kanji reference. WaniKani",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          1126,
+          1025,
+          1276
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-25-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "node_count": 42
+    },
+    {
+      "index": 26,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "WaniKani"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "WaniKani",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          383,
+          940,
+          433
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-26-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "node_count": 42
+    },
+    {
+      "index": 27,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "contains": "Remembering the Kanji. Keywords"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": null,
+        "bounds": [
+          55,
+          562,
+          1025,
+          768
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-27-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Kanji reference",
+        "Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "Only what a kanji page shows changes. Your WaniKani connection, reviews, lessons and analytics stay exactly as they are.",
+        "Open help",
+        "Remembering the Kanji",
+        "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics \u00b7 bundled, works offline",
+        "WaniKani",
+        "WaniKani. Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account",
+        "Your WaniKani account's kanji pages and radicals \u00b7 needs a connected account"
+      ],
+      "node_count": 42
+    },
+    {
+      "index": 28,
+      "kind": "back",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-28-back.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 29,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Screen lookup"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Screen lookup",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          140,
+          446,
+          883,
+          496
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-29-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 30,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-30-capture-kanji-hub-rtk.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 31,
+      "kind": "assert_visible",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "exact": "Kanji reference. Remembering the Kanji"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Kanji reference. Remembering the Kanji",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          1126,
+          1025,
+          1276
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "assert_visible",
+        "passed": true,
+        "expected_present": {
+          "content_desc": {
+            "exact": "Kanji reference. Remembering the Kanji"
+          }
+        }
+      },
+      "screenshot": "screenshot-31-assert_visible.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 32,
+      "kind": "assert_not_visible",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "exact": "Kanji reference. WaniKani"
+        }
+      },
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "assert_not_visible",
+        "passed": true,
+        "expected_absent": {
+          "content_desc": {
+            "exact": "Kanji reference. WaniKani"
+          }
+        }
+      },
+      "screenshot": "screenshot-32-assert_not_visible.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    }
+  ],
+  "finished": "2026-11-14T12:05:50.920+00:00",
+  "commands": [
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "pm",
+        "list",
+        "packages"
+      ],
+      "ts": "2026-11-14T12:05:00.982+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "input",
+        "keyevent",
+        "KEYCODE_WAKEUP"
+      ],
+      "ts": "2026-11-14T12:05:01.090+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "wm",
+        "dismiss-keyguard"
+      ],
+      "ts": "2026-11-14T12:05:01.176+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "settings",
+        "get",
+        "global",
+        "stay_on_while_plugged_in"
+      ],
+      "ts": "2026-11-14T12:05:01.268+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "svc",
+        "power",
+        "stayon",
+        "true"
+      ],
+      "ts": "2026-11-14T12:05:01.355+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "getprop",
+        "ro.build.fingerprint"
+      ],
+      "ts": "2026-11-14T12:05:02.448+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "getprop",
+        "ro.build.version.sdk"
+      ],
+      "ts": "2026-11-14T12:05:02.505+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "getprop",
+        "ro.build.version.release"
+      ],
+      "ts": "2026-11-14T12:05:02.542+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "getprop",
+        "ro.product.model"
+      ],
+      "ts": "2026-11-14T12:05:02.586+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "wm",
+        "size"
+      ],
+      "ts": "2026-11-14T12:05:02.643+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "wm",
+        "density"
+      ],
+      "ts": "2026-11-14T12:05:02.727+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "settings",
+        "get",
+        "system",
+        "font_scale"
+      ],
+      "ts": "2026-11-14T12:05:02.820+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "pm",
+        "clear",
+        "com.gaten"
+      ],
+      "ts": "2026-11-14T12:05:02.904+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "open",
+        "com.gaten",
+        "--activity",
+        "com.gaten/.app.MainActivity",
+        "--relaunch",
+        "--foreground",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:03.083+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:05.772+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:06.066+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-00-launch.png"
+      ],
+      "ts": "2026-11-14T12:05:06.182+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:06.605+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "2195",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:05:06.830+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:08.471+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:08.675+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-01-tap.png"
+      ],
+      "ts": "2026-11-14T12:05:08.789+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:09.168+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "2200",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:05:09.365+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:10.854+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:11.066+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-02-tap.png"
+      ],
+      "ts": "2026-11-14T12:05:11.162+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:11.520+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "2200",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:05:11.684+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:13.713+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:14.015+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-03-tap.png"
+      ],
+      "ts": "2026-11-14T12:05:14.132+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:14.482+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "2200",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:05:14.688+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:16.361+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:16.600+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-04-tap.png"
+      ],
+      "ts": "2026-11-14T12:05:16.701+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:17.095+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:17.320+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:17.564+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-05-wait_for.png"
+      ],
+      "ts": "2026-11-14T12:05:17.680+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:18.062+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:18.289+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-06-capture-kanji-home.png"
+      ],
+      "ts": "2026-11-14T12:05:18.389+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:18.769+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "764",
+        "2241",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:05:18.993+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:20.444+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:20.685+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-07-tap.png"
+      ],
+      "ts": "2026-11-14T12:05:20.785+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:21.158+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:21.378+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:21.610+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-08-wait_for.png"
+      ],
+      "ts": "2026-11-14T12:05:21.707+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:22.087+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:22.305+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-09-capture-kanji-hub.png"
+      ],
+      "ts": "2026-11-14T12:05:22.413+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:22.795+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:23.112+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:23.354+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-10-assert_visible.png"
+      ],
+      "ts": "2026-11-14T12:05:23.461+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:23.842+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:24.059+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:24.283+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-11-assert_not_visible.png"
+      ],
+      "ts": "2026-11-14T12:05:24.400+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:24.775+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "1201",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:05:25.008+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:26.535+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:26.722+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-12-tap.png"
+      ],
+      "ts": "2026-11-14T12:05:26.825+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:27.203+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:27.372+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:27.564+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-13-wait_for.png"
+      ],
+      "ts": "2026-11-14T12:05:27.667+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:28.033+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:28.202+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-14-capture-kanji-page.png"
+      ],
+      "ts": "2026-11-14T12:05:28.305+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:28.670+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:28.841+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:29.124+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-15-assert_text.png"
+      ],
+      "ts": "2026-11-14T12:05:29.194+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:29.563+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:29.730+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:29.899+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-16-assert_text.png"
+      ],
+      "ts": "2026-11-14T12:05:30.022+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:30.389+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "456",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:05:30.551+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:31.489+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:31.684+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-17-tap.png"
+      ],
+      "ts": "2026-11-14T12:05:31.798+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:32.179+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:32.350+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-18-capture-kanji-wanikani-selected.png"
+      ],
+      "ts": "2026-11-14T12:05:32.449+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:32.821+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:32.995+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:33.177+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-19-assert_not_visible.png"
+      ],
+      "ts": "2026-11-14T12:05:33.289+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "back",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:05:33.686+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:35.616+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:35.846+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-20-back.png"
+      ],
+      "ts": "2026-11-14T12:05:35.947+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:36.329+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:36.539+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:36.759+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-21-wait_for.png"
+      ],
+      "ts": "2026-11-14T12:05:36.874+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:37.254+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:37.483+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-22-capture-kanji-hub-wanikani.png"
+      ],
+      "ts": "2026-11-14T12:05:37.594+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:37.980+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:38.217+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:38.458+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-23-assert_visible.png"
+      ],
+      "ts": "2026-11-14T12:05:38.570+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:38.937+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:39.147+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:39.389+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-24-assert_not_visible.png"
+      ],
+      "ts": "2026-11-14T12:05:39.497+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:39.871+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "1201",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:05:40.072+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:41.367+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:41.565+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-25-tap.png"
+      ],
+      "ts": "2026-11-14T12:05:41.671+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:42.042+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:42.219+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:42.402+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-26-wait_for.png"
+      ],
+      "ts": "2026-11-14T12:05:42.505+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:42.871+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "665",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:05:43.039+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:43.987+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:44.131+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-27-tap.png"
+      ],
+      "ts": "2026-11-14T12:05:44.240+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "back",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:05:44.626+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:46.563+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:46.793+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-28-back.png"
+      ],
+      "ts": "2026-11-14T12:05:46.905+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:47.297+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:47.500+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:47.735+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-29-wait_for.png"
+      ],
+      "ts": "2026-11-14T12:05:47.863+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:48.244+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:48.450+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-30-capture-kanji-hub-rtk.png"
+      ],
+      "ts": "2026-11-14T12:05:48.551+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:48.945+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:49.151+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:49.382+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-31-assert_visible.png"
+      ],
+      "ts": "2026-11-14T12:05:49.486+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:49.879+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:50.097+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:50.431+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-kanji/phone/screenshot-32-assert_not_visible.png"
+      ],
+      "ts": "2026-11-14T12:05:50.535+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "svc",
+        "power",
+        "stayon",
+        "false"
+      ],
+      "ts": "2026-11-14T12:05:50.920+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "settings",
+        "put",
+        "global",
+        "stay_on_while_plugged_in",
+        "15"
+      ],
+      "ts": "2026-11-14T12:05:52.010+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "close"
+      ],
+      "ts": "2026-11-14T12:05:52.102+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "home"
+      ],
+      "ts": "2026-11-14T12:05:52.242+00:00"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+[replay] phone step 00 launch -> pass
+[replay] phone step 01 tap -> pass
+[replay] phone step 02 tap -> pass
+[replay] phone step 03 tap -> pass
+[replay] phone step 04 tap -> pass
+[replay] phone step 05 wait_for -> pass
+[replay] phone step 06 capture -> pass
+[replay] phone step 07 tap -> pass
+[replay] phone step 08 wait_for -> pass
+[replay] phone step 09 capture -> pass
+[replay] phone step 10 tap -> pass
+[replay] phone step 11 wait_for -> pass
+[replay] phone step 12 capture -> pass
+[replay] phone step 13 assert_text -> pass
+[replay] phone step 14 assert_text -> pass
+[replay] phone step 15 assert_text -> pass
+[replay] phone step 16 tap -> pass
+[replay] phone step 17 wait_for -> pass
+[replay] phone step 18 capture -> pass
+[replay] phone step 19 assert_text -> pass
+[replay] phone step 20 assert_text -> pass
+[replay] phone step 21 tap -> pass
+[replay] phone step 22 capture -> pass
+[replay] phone step 23 assert_not_visible -> pass
+[replay] phone step 24 assert_visible -> pass
+[replay] phone step 25 back -> pass
+[replay] phone step 26 wait_for -> pass
+[replay] phone step 27 capture -> pass
+[replay] phone step 28 assert_text -> fail
+{
+  "source": "phone",
+  "out": "results/phone/gaten-f344272/gaten-recognition-wrong/phone",
+  "steps": 29,
+  "failed": [
+    28
+  ]
+}
