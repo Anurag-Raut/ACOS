@@ -127,7 +127,9 @@ running keeper, but no gate run in which they appear in a *passing* reset reply 
 ## Test suites (acceptance 1)
 
 ```
-.cache/zprod3/tests.log:
+.cache/zprod3/cli-final.log   (rerun on the final tree, after the verify/keeper-env fix)
+  cli_final_rc=0    # cargo test --release --offline -p acos-cli → 32 targets, every "test result: ok"
+.cache/zprod3/tests.log       (earlier batch on the wiring commit)
   cli_rc=0            # cargo test --release --offline -p acos-cli  → all targets ok, 0 failed
   art_skip_rc=0       # cargo test -p acos-art -- --test-threads=1 --skip refuses_to_run_when_no_cgroup_can_be_created
   art_exact_rc=101    # the shipped `--exact` sandbox_s5 test FAILED in that batch …
