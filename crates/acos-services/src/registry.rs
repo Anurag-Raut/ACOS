@@ -266,7 +266,7 @@ pub fn install_with_handles(host: &mut ServiceHost) -> LiveHandles {
     let uimode = Arc::new(Mutex::new(crate::declared::UiModeState::new()));
     let notification = Arc::new(Mutex::new(crate::declared::NotificationState::new()));
     let statusbar = Arc::new(Mutex::new(crate::declared::StatusBarState::new()));
-    let connectivity = Arc::new(Mutex::new(crate::declared::ConnectivityState::new()));
+    let connectivity = Arc::new(Mutex::new(crate::connectivity::ConnectivityState::new()));
     let shortcuts = Arc::new(Mutex::new(crate::extras::ShortcutState::new()));
     let jobs = Arc::new(Mutex::new(crate::extras::JobState::new()));
     let power = Arc::new(Mutex::new(crate::extras::PowerState::new()));
@@ -499,7 +499,7 @@ pub fn install_with_handles(host: &mut ServiceHost) -> LiveHandles {
         "connectivity",
         "android.net.IConnectivityManager",
         move |_w| {
-            Box::new(crate::declared::ConnectivityService::new(Arc::clone(
+            Box::new(crate::connectivity::ConnectivityService::new(Arc::clone(
                 &connectivity,
             ))) as Box<dyn ServiceObject>
         },

@@ -2204,3 +2204,71 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | G3c | **First frame can be a near-empty tree** (1 node in GR3, **10 nodes in 34 % of 60 measured launches**, 243 two seconds later). Fixed (E13.8): `ArtSession::bind_first_frame` re-traverses while the tree is still the window skeleton (no text/content-desc/hint, ≤ 40 nodes) within 900 ms / 4 traversals; a retry that does not settle rolls the frame *and* its settle verdict back, so no launch turns into a TIMEOUT; a frame that never gains content is `first_frame.placeholder` + `meaningful:false` | first-frame predicate / Gaten first paint | launch frame is the app's content | medium | medium | medium | **done, E13.8** (34 % thin → 0/40; launch p50 2.336 → 2.433 s) |
 | G3d | **Gaten launch SIGSEGV** (1 of 6 `gaten-tabs` runs in GR3): `SIGSEGV code 2 (SEGV_ACCERR)`, thread 2 `com.gaten`, libc frame. Root cause named (E13.8): GWP-ASan's sampled-allocation backtrace, `android_unsafe_frame_pointer_chase+0x117` (`mov 0x8(%r12),%rcx`) reading a stack guard page; the only GOT consumer of that function in libc is `MaybeInitGwpAsan`. Fixed by keeping the sampled allocator out of guests | ART guest native fault | name the faulting frame, then 10/10 | high | low | low | **done, E13.8** (forced-on 4/4 crash reproduces it; default 40/40 clean) |
 | G3e | **No verification semantics for a screen that animates forever in a region that does not matter.** Options (stable tree content, region mask, navigation-only fast, explicit non-settle assertion) + false-pass analysis in `results/gaten/GR3.md` §4.3 | verify semantics | owner decision | — | — | — | **owner decision; do not weaken until then** |
+
+## E5.10 — NET1: `IConnectivityManager` callbacks (the RN NetInfo wall) — MEASURED (Joplin 3/3, gates pending)
+
+**Question.** `main` (`3e11d9c`) aborts every React Native app at launch:
+`RNCNetInfo` → `IConnectivityManager` code 42 `requestNetwork` →
+`UnsupportedOperationException` → `JniException` → SIGABRT on the JS thread
+(3/3, identical logd, `results/compat/K5.md`). The connectivity state machine
+that `a98e839` (T-38/T-39) added answered queries only. Can ACOS serve the
+`NetworkCallback` protocol AOSP serves, without inventing a network it cannot
+back?
+
+**Setup.** Real ART, API-34 image, stock `android.net.ConnectivityManager` and
+`NetworkRequest`/`NetworkCapabilities`/`LinkProperties` marshalling. The guest
+runs `--unshare-net` (no interface, no sockets). One launch per acquisition
+through `run-exclusive.sh --task NET1` + `guarded.sh --mem 8G`.
+
+**What was tried.**
+1. *Echo the caller's `NetworkCapabilities` in the reply.* Wrong: RN's
+   `registerDefaultNetworkCallback` sends `null` capabilities with
+   `TRACK_DEFAULT`, and AOSP replaces them
+   (`ConnectivityService.requestNetwork`: "the passed networkCapabilities is
+   unused and will be replaced"). The first real launch panicked in the callback
+   bundle writer (`bad reply for parcelable::null`), which the harness classified
+   as `HOST_PANIC` — a useful failure, and the reason the null-capabilities rule
+   is now explicit and tested.
+2. *Answer a legacy `NetworkInfo` for the emulated network.* After the
+   registration and the four callbacks worked, Joplin's
+   `NetworkCallbackConnectivityReceiver.updateAndSend` called
+   `getNetworkInfoForUid` (code 6) and the app died on the refusal. Implementing
+   it is what moved `application_on_create` from false to true.
+3. *`VALIDATED`.* Kept unset: AOSP sets it after a captive-portal probe reached
+   the internet; ACOS cannot probe, so claiming it would be a false success.
+   Apps see `isConnected` true, `isInternetReachable` false.
+
+**Measurement** (`results/compat/NET1/run{1,2,3}`, `.cache/net1/runs-r{1,2,3}`).
+
+| run | process_start | on_create | first_frame | tree | screenshot | unsupported.jsonl |
+|---|---|---|---|---|---|---|
+| 1 | ✓ | ✓ | 1633.5 ms | ✓ | ✓ | empty |
+| 2 | ✓ | ✓ | 1630.9 ms | ✓ | ✓ | empty |
+| 3 | ✓ | ✓ | 1821.2 ms | ✓ | ✓ | empty |
+
+All three: `activity_resumed: true`, `guest_crash: null`, no SIGABRT.
+`cargo test -p acos-services --test net1_connectivity`: 9/9.
+
+**Interpretation.** The wall was ACOS policy, not RN: the framework's
+`NetworkCallback` machinery works unchanged against a declared network. The
+callback path provably ran in the app (the pre-fix run's `session-exit.json`
+carries `NetworkCallbackConnectivityReceiver.updateAndSend` in its stack), and
+the parcel shapes are asserted against the framework's own readers in the unit
+tests.
+
+**Not proven.** The JS-level NetInfo state (no guest logd is persisted by
+`tools/compat/k1-run.py`), the gate battery, the crate suites and the 2×42-app
+corpus. A non-null `getActiveNetwork` is the one plausible regression vector
+(an app that now believes it is online can block on a socket it cannot open),
+so the corpus diff is required before this is called accepted.
+
+**Found in passing.** `parcelable::write_dynamic`/`read_dynamic` put a length
+word after `VAL_PARCELABLE`; API 34's `Parcel.writeValue` does not. ACOS is
+self-consistent but not framework-compatible for a `Bundle` containing a
+parcelable. The callback messages avoid the shared path
+(`write_parcelable_bundle`), and the defect is reported rather than silently
+changed inside this track.
+
+**Files.** `crates/acos-services/src/{connectivity.rs,parcelable.rs,declared.rs,
+registry.rs,lib.rs}`, `crates/acos-services/tests/net1_connectivity.rs`,
+`results/compat/NET1.md`, `results/handoff/NET1.md`.
