@@ -89,14 +89,22 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    `clickable/enabled/focused/scrollable`. Use those bounds and ids for the
    next step. Before the app has a window the reply is `unsupported` with
    `details.reason = "not_ready"` — never an empty tree.
-5. **Act.** `acos_tap {"text": "Increment"}` (preferred), `acos_tap {"x":..,
-   "y":..}`, `acos_key {"code": "back"}`, `acos_text {"text": "hello"}` (types
-   into the focused editor through the real `InputConnection`),
-   `acos_swipe {"from":[x1,y1], "to":[x2,y2]}`. `text` names a node the way the
-   platform does — its text, else its content description — so a React Native
-   pressable (`accessibilityLabel`, e.g. a bottom tab) is reachable by the label
-   you read on screen; `content_desc`/`id` select exactly one field when you want
-   that. A node that is not visible to the user is never tapped: `ELEMENT_OFFSCREEN`
+5. **Act.** `acos_tap {"text": "Increment"}` (preferred),
+   `acos_tap {"content_desc": "Search Japanese dictionary"}`,
+   `acos_tap {"id": "inc"}`, `acos_tap {"x":.., "y":..}`,
+   `acos_key {"code": "back"}`, `acos_text {"text": "hello"}` (types into the
+   focused editor — the same guest `type_text` command a scenario `type` step
+   sends), `acos_swipe {"from":[x1,y1], "to":[x2,y2]}`. `text` names a node the
+   way the platform does — its text, else its content description — so a React
+   Native pressable (`accessibilityLabel`, e.g. a bottom tab) is reachable by the
+   label you read on screen. `content_desc` and `id` are the *explicit* fields:
+   use them when the label lives in a content description while the node's text
+   is something else (an RN `TextInput` whose text is its placeholder), or simply
+   when you want the model to be exact. A selector that matches **several** nodes
+   the user can see is refused (`AMBIGUOUS_SELECTOR`, `error.details.candidates`
+   lists every match with id/text/content_desc/bounds) — narrow it with
+   `content_desc`/`id`/`bounds`, or pass `index`; nothing is tapped on a guess.
+   A node that is not visible to the user is never tapped: `ELEMENT_OFFSCREEN`
    names its bounds. Re-observe after every action;
    `state_changed: false` with `accepted: true` means the event was delivered
    but the screen did not change — read the in-band `note`.
@@ -115,6 +123,40 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    an empty app-data directory) and `acos_destroy` (idempotent). Sessions also
    die with the `acos-mcp` process.
 
+### Recipe: type into a search field
+
+A live session can type — the same path a scenario `type` step uses — so a
+search flow no longer has to become a scenario. In four calls:
+
+```
+1. acos_observe_tree                      # read the field's name from the tree
+2. acos_tap {"content_desc": "Search Japanese dictionary"}
+3. acos_text {"text": "kayou"}
+4. acos_observe_tree                      # the query is in the field, results below
+```
+
+* **Pick the field by `content_desc`, not by `text`.** A React Native
+  `TextInput` reports its *placeholder* as `text` (AOSP's accessibility mapping
+  takes the hint when the field is empty) and keeps the accessibility label in
+  `content_desc`. So `acos_tap {"text": "Search Japanese dictionary"}` is
+  `ELEMENT_NOT_FOUND` while `acos_tap {"content_desc": "..."}` hits the field —
+  the same value works in a scenario selector.
+* **Tap first, then type.** Typing goes to the focused editor. The tap's
+  `accepted: true` + `state_changed: true` is the delivery evidence; the next
+  tree's `focused: true` on the field node is the focus evidence.
+* **No class check is needed.** RN inputs are obfuscated subclasses
+  (`Z4.g`), not `android.widget.EditText`; `acos_text` does not care what the
+  class is called — it sends the guest's `type_text` command and judges the
+  settled result, exactly like `type:` in YAML.
+* **The tree proves it.** After `acos_text {"text": "kayou"}` on Gaten, the next
+  tree carries `kayou` in the field and the result list (`19 results`, `歌謡`,
+  `かよう`, ...). Assert on those texts (or in a scenario with
+  `assert_text`) — never on the call's `status` alone.
+* **Password fields are masked.** When the focused field is a password
+  (`password: true` in the tree), `acos_text`'s reply carries
+  `target.text_masked: true`, `target.chars` and `target.text: "*"` instead of
+  the characters; the engine never echoes a typed secret.
+
 <!-- /topic:workflow -->
 
 <!-- topic:cli -->
@@ -130,6 +172,7 @@ acos observe --tree --apk fixtures/build/apps/counter.apk --json         # one-s
 acos observe --screenshot out/counter.png --json
 acos tap --text Increment --json
 acos tap --id inc --json
+acos tap --content-desc "Search Japanese dictionary" --json
 acos tap 100 400 --json
 acos key back --json
 acos swipe 540 1800 540 600 --duration-ms 300 --json
@@ -269,7 +312,10 @@ to the user at all). The tap lands at the centre of the target's *visible* rect
 (or `x`/`y`), and a node that is not visible to the user is never a tap target:
 if only such a node matches, the reply is `ELEMENT_OFFSCREEN` with its bounds,
 never a tap. When several nodes match, the first in document order wins;
-`index` picks another.
+`index` picks another. (The **live** channel — `acos_tap`/`acos_assert` on a
+`acos serve` session and the CLI `tap` that forwards to it — refuses several
+user-visible matches instead: `AMBIGUOUS_SELECTOR` with the candidates listed.
+A scenario step is a fixed document: it keeps first-match-plus-`index`.)
 
 **Settle modes (the part that decides whether a pass is real).**
 
@@ -317,7 +363,7 @@ first failing step, its `error.code`, the diff and the linked frame.
 | code(s) | what it means | what to do |
 |---|---|---|
 | `UNSUPPORTED_ANDROID_API`, `UNSUPPORTED_JAVA_API`, `UNSUPPORTED_BYTECODE`, `UNSUPPORTED_NATIVE_SYMBOL`, `UNSUPPORTED_RELOCATION`, `UNSUPPORTED_BACKEND`, `NEEDS_REAL_DEVICE`, `REQUIRES_GMS`, `WRONG_ABI`, `NO_DISPLAY`, `NO_TEXT` | the engine cannot do this | read `details.api`/`details.at`/`details.symbol`/`details.reason`, avoid the API, or report unsupported. Never rewrite the app to hide it |
-| `ASSERTION_FAILED`, `ELEMENT_NOT_FOUND`, `ELEMENT_OFFSCREEN`, `TREE_TRUNCATED` | the app ran, a check did not hold | read the diff, re-observe the tree, fix the app or the expectation |
+| `ASSERTION_FAILED`, `ELEMENT_NOT_FOUND`, `ELEMENT_OFFSCREEN`, `AMBIGUOUS_SELECTOR`, `TREE_TRUNCATED` | the app ran, a check did not hold | read the diff, re-observe the tree, fix the app or the expectation. `AMBIGUOUS_SELECTOR` means several visible nodes match: pick one with `id`/`content_desc`/`bounds` or `index` (`error.details.candidates` lists them) |
 | `APP_CRASHED`, `APP_NOT_RESPONDING`, `JAVA_EXCEPTION` | the app crashed or hung | read `details.root_cause` (deepest `caused by:`) and `acos_logs`; fix the app |
 | `APK_*`, `AXML_MALFORMED`, `ARSC_MALFORMED`, `DEX_*`, `ELF_MALFORMED`, `NATIVE_*` | the build artifact is broken | rebuild/re-sign/repackage, then `acos inspect` again. Not an app verdict |
 | `UNSUPPORTED_ABI` | the APK ships native code but no `lib/x86_64/` | rebuild with the x86_64 ABI, or run the pure-Java path |

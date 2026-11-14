@@ -172,9 +172,9 @@ pub enum ErrorCode {
     /// say which one it meant.
     ///
     /// Input and assertion verbs on the live channel refuse a silent pick: the
-    /// error's candidates (`id`, `text`, `content_desc`, `bounds`, `class`) plus
-    /// a `field`/`value` pair say exactly what matched, so the caller can pass a
-    /// narrower selector (`id`, `content_desc`, `bounds`) or `index`.
+    /// error's `details.candidates` (`id`, `text`, `content_desc`, `class`,
+    /// `bounds`) plus `details.selector` say exactly what matched, so the caller
+    /// can pass a narrower selector (`id`, `content_desc`, `bounds`) or `index`.
     AmbiguousSelector,
     /// A selector matched nothing in a tree the probe reported as truncated
     /// (`UiTree::truncated`, any window). The node may exist beyond the

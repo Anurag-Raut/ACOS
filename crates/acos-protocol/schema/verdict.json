@@ -706,6 +706,13 @@
           "type": "string"
         },
         {
+          "description": "A selector matched **several** user-visible nodes and the caller did not say which one it meant.\n\nInput and assertion verbs on the live channel refuse a silent pick: the error's `details.candidates` (`id`, `text`, `content_desc`, `class`, `bounds`) plus `details.selector` say exactly what matched, so the caller can pass a narrower selector (`id`, `content_desc`, `bounds`) or `index`.",
+          "enum": [
+            "AMBIGUOUS_SELECTOR"
+          ],
+          "type": "string"
+        },
+        {
           "description": "A selector matched nothing in a tree the probe reported as truncated (`UiTree::truncated`, any window). The node may exist beyond the sampled prefix, so this is not proof of absence.",
           "enum": [
             "TREE_TRUNCATED"

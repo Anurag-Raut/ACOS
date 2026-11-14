@@ -205,6 +205,38 @@ def named_texts(env: dict) -> list[str]:
     return out
 
 
+def content_desc_nodes(env: dict, needle: str) -> list[dict]:
+    """Every node whose `content_desc` contains `needle` (visible ones first).
+
+    The *name* an agent reads is the platform's accessible name: a node's text,
+    else its content description. A React Native `TextInput` is the awkward case
+    -- its `text` is the placeholder it draws -- so the field is only reachable
+    by its explicit `content_desc` ("Search Japanese dictionary"). This helper
+    reads that field so the smoke can tap by the value the tree reports instead
+    of hard-coding a label.
+    """
+    found: list[dict] = []
+
+    def walk(value):
+        if isinstance(value, dict):
+            if "content_desc" in value or "class" in value:
+                desc = value.get("content_desc") or ""
+                if needle.lower() in desc.lower():
+                    found.append(value)
+                for item in value.get("children") or []:
+                    walk(item)
+                return
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    walk(env.get("result", {}))
+    found.sort(key=lambda node: node.get("visible") is not True)
+    return found
+
+
 def clickable_texts(env: dict) -> list[str]:
     """Texts of nodes the user can actually tap (visible and clickable)."""
     nodes: list[dict] = []
@@ -273,10 +305,24 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=600.0, help="per tool call, seconds")
     ap.add_argument(
         "--mode",
-        choices=["counter", "gaten"],
+        choices=["counter", "gaten", "gaten-search"],
         default="counter",
         help="counter: 0 -> tap Increment -> 1 -> reset -> 0; gaten: launch, read the "
-        "real RN tree, tap a bottom tab and require the tree to change",
+        "real RN tree, tap a bottom tab and require the tree to change; "
+        "gaten-search: focus the search field by its `content_desc`, type with "
+        "`acos_text`, and require the query/results in the next tree",
+    )
+    ap.add_argument(
+        "--search-text",
+        default="kayou",
+        help="gaten-search mode: text to type into the search field",
+    )
+    ap.add_argument(
+        "--search-content-desc",
+        default="Search Japanese dictionary",
+        help="gaten-search mode: the field's content description, as read from "
+        "the tree (the RN TextInput's text is its placeholder, so this is the "
+        "explicit selector)",
     )
     ap.add_argument(
         "--tap-text",
@@ -491,31 +537,129 @@ def main() -> int:
                 present[0],
             )
 
-        if tap_text is None:
+        if args.mode == "gaten-search":
+            # FB1: the live channel types. Three claims, each an agent call:
+            #  1. the field is named by its `content_desc` (its `text` is the
+            #     placeholder), and the tap lands on it;
+            #  2. `acos_text` types after that tap -- the same guest `type_text`
+            #     command a scenario `type` step sends;
+            #  3. the next tree carries the query and the result list, so the
+            #     flow is proven by the app's state, never by the call's status.
+            fields = content_desc_nodes(tree0, args.search_content_desc)
+            check(
+                "gaten_search_field_present",
+                tree0.get("status") == "pass" and bool(fields),
+                {
+                    "content_desc": args.search_content_desc,
+                    "matched": [f.get("text") for f in fields[:5]],
+                    "texts": texts0[:40],
+                },
+            )
+            field = fields[0]
+            focused_tap = envelope(
+                client.call_tool(
+                    "acos_tap",
+                    {"session_id": sid, "content_desc": field["content_desc"]},
+                    timeout=args.timeout,
+                )
+            )
+            check(
+                "gaten_search_tap_by_content_desc",
+                focused_tap.get("status") == "pass"
+                and focused_tap.get("result", {}).get("accepted") is True
+                and focused_tap.get("result", {}).get("state_changed") is True,
+                {
+                    "content_desc": field["content_desc"],
+                    "status": focused_tap.get("status"),
+                    "accepted": focused_tap.get("result", {}).get("accepted"),
+                    "state_changed": focused_tap.get("result", {}).get("state_changed"),
+                    "error": focused_tap.get("error"),
+                },
+            )
+            typed = envelope(
+                client.call_tool(
+                    "acos_text",
+                    {"session_id": sid, "text": args.search_text},
+                    timeout=args.timeout,
+                )
+            )
+            check(
+                "acos_text_live",
+                typed.get("status") == "pass"
+                and typed.get("result", {}).get("action") == "text"
+                and typed.get("result", {}).get("accepted") is True
+                and (typed.get("result", {}).get("target") or {}).get("text")
+                == args.search_text,
+                {
+                    "text": args.search_text,
+                    "status": typed.get("status"),
+                    "accepted": typed.get("result", {}).get("accepted"),
+                    "target": typed.get("result", {}).get("target"),
+                    "error": typed.get("error"),
+                },
+            )
+            # The query and the result list mount on later frames: poll the tree
+            # (bounded, never forever) for both. A field that never shows the
+            # query, or a list that never arrives, still fails.
+            result_markers = ("results", "通う", "歌謡")
+            typed_texts = tree_texts(
+                envelope(
+                    client.call_tool(
+                        "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
+                    )
+                )
+            )
+            for _ in range(TAB_WAIT_SECONDS):
+                if args.search_text in typed_texts and any(
+                    marker in text for text in typed_texts for marker in result_markers
+                ):
+                    break
+                time.sleep(1)
+                typed_texts = tree_texts(
+                    envelope(
+                        client.call_tool(
+                            "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
+                        )
+                    )
+                )
+            check(
+                "gaten_search_results_after_typing",
+                args.search_text in typed_texts
+                and any(
+                    marker in text for text in typed_texts for marker in result_markers
+                ),
+                {"query": args.search_text, "texts": typed_texts[:40]},
+            )
+
+        if tap_text is None and args.mode != "gaten-search":
             raise SmokeError("no node text to tap")
+        tap_args = None
         if args.mode == "gaten":
             # Tap by the label read off the tree, never by bounds: this is the
             # claim (an RN tab is reachable by the name an agent reads).
             tap_args = {"session_id": sid, "text": tap_text}
-        else:
+        elif args.mode == "counter":
             tap_args = {"session_id": sid, "text": tap_text}
-        tapped = envelope(
-            client.call_tool("acos_tap", tap_args, timeout=args.timeout)
+        tapped = (
+            envelope(client.call_tool("acos_tap", tap_args, timeout=args.timeout))
+            if tap_args is not None
+            else None
         )
-        check(
-            "acos_tap",
-            tapped.get("status") == "pass"
-            and tapped.get("result", {}).get("accepted") is True,
-            {
-                "text": tap_text,
-                "args": tap_args,
-                "status": tapped.get("status"),
-                "accepted": tapped.get("result", {}).get("accepted"),
-                "state_changed": tapped.get("result", {}).get("state_changed"),
-                "error": tapped.get("error"),
-            },
-        )
-        if args.mode == "gaten":
+        if tapped is not None:
+            check(
+                "acos_tap",
+                tapped.get("status") == "pass"
+                and tapped.get("result", {}).get("accepted") is True,
+                {
+                    "text": tap_text,
+                    "args": tap_args,
+                    "status": tapped.get("status"),
+                    "accepted": tapped.get("result", {}).get("accepted"),
+                    "state_changed": tapped.get("result", {}).get("state_changed"),
+                    "error": tapped.get("error"),
+                },
+            )
+        if args.mode == "gaten" and tapped is not None:
             check(
                 "gaten_tab_tap_state_changed",
                 tapped.get("result", {}).get("state_changed") is True,
@@ -534,6 +678,10 @@ def main() -> int:
                 tree1.get("status") == "pass" and "1" in texts1 and "0" not in texts1,
                 {"texts": texts1},
             )
+        elif args.mode == "gaten-search":
+            # The search flow already proved its own state (`acos_text_live` +
+            # `gaten_search_results_after_typing`); nothing else is claimed here.
+            pass
         else:
             if tap_text in tab_expect:
                 # A tab press navigates and the new screen mounts on its own
