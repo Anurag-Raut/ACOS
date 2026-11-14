@@ -7,6 +7,7 @@
 //! false-pass prevention can be exercised on this host.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::process::ExitCode;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -371,11 +372,20 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                     return finish_run(&envelope, &args, &artifacts, Some(trust));
                 }
             };
-            match crate::engine::art::ArtSession::start_with_options(
+            // ZPROD3: a `verify` run uses the same engine path as `acos serve`.
+            // With `ACOS_ART_ZYGOTE=on` that means a persistent-zygote child
+            // (`start_with_zygote`); with the flag off the host is disabled and
+            // this is exactly `start_with_options`. One host per run: its `Drop`
+            // closes the keeper, so a verify run never leaves a zygote behind.
+            let zygote = Arc::new(crate::engine::zygote_host::ZygoteHost::from_env(
+                artifacts.join("zygote"),
+            ));
+            match crate::engine::art::ArtSession::start_with_zygote(
                 &apk,
                 &artifacts,
                 animations,
                 &insets_owned,
+                Some(zygote),
             ) {
                 Ok(session) => {
                     session_boot_ms = Some(session.session_start_ms());

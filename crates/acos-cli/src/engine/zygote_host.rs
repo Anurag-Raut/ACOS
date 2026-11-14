@@ -155,10 +155,33 @@ impl ZygoteHost {
                 build.display()
             )));
         }
+        // The keeper's zygote (and therefore every forked child) inherits this
+        // environment, so it must carry the *guest* seams the session launcher
+        // sets for the exec path: the interactive live tree probe, the input
+        // ack window and the guest settle window. Without them the child runs
+        // but publishes no probe, and the session dies with `NO_LIVE_FRAME`
+        // (measured on the first flag-on gate run of this increment).
+        let frame_wait = std::env::var("ACOS_ART_FRAME_WAIT_SECS")
+            .ok()
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "3".to_string());
+        let keeper_env: Vec<(String, String)> = vec![
+            ("ACOSLAUNCH_INTERACTIVE".into(), "1".into()),
+            ("ACOSLAUNCH_LIVE_PROBE".into(), "1".into()),
+            ("ACOSLAUNCH_FRAME_WAIT_SECS".into(), frame_wait),
+            ("ACOS_INPUT_ACK_MS".into(), "2500".into()),
+            ("ACOS_ZYGOTE_PROBE".into(), "1".into()),
+        ];
         let mut keepers = self.lock();
         if keepers.keeper_mut(key).is_none() {
-            let keeper =
-                PersistentZygote::start(&self.root, key.clone(), binary, apk, &[], &build)?;
+            let keeper = PersistentZygote::start(
+                &self.root,
+                key.clone(),
+                binary,
+                apk,
+                &keeper_env,
+                &build,
+            )?;
             keepers.insert(key.clone(), keeper);
         }
         let tag = match reuse_tag {
