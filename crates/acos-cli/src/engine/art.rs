@@ -2609,15 +2609,45 @@ impl ArtSession {
             Some(raw) => raw.saturating_add(self.seq_offset),
             None => self.cached.as_ref().map(|frame| frame.seq).unwrap_or(0),
         };
+        // ROT8: the guest proved the app's task finished (its last Activity
+        // is destroyed, no window root remains). Nothing draws then, so the
+        // reply carries no frame: the observation is the empty window forest
+        // bound to the LAST COMMITTED pixels (the display keeps its last frame;
+        // ACOS has no launcher to draw). `settle.task_finished` and
+        // `pixels_changed:false` say so; no frame is invented.
+        let window_gone = reply.get("window_gone").and_then(|v| v.as_bool()) == Some(true)
+            && reply.get("tree").is_some();
+        let gone_pixels = if window_gone && reply.get("png").is_none() {
+            self.last_pixel.clone()
+        } else {
+            None
+        };
         let md5 = reply
             .get("md5")
             .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+            .map(str::to_string)
+            .or_else(|| gone_pixels.as_ref().map(|frame| frame.md5.clone()))
+            .unwrap_or_default();
         let digest = FrameDigest::from_reply(reply, &md5);
         let buffer_generation = reply.get("buffer_generation").and_then(|v| v.as_u64());
         let frame_number = reply.get("frame_number").and_then(|v| v.as_u64());
         let png = match reply.get("png").and_then(|v| v.as_str()) {
+            None if gone_pixels.is_some() => {
+                let last = gone_pixels
+                    .as_ref()
+                    .and_then(|frame| frame.png.as_ref())
+                    .map(|artifact| artifact.path.clone());
+                match last {
+                    Some(path) => Some(FrameArtifact::bind(
+                        &path,
+                        seq,
+                        self.width,
+                        self.height,
+                        self.density,
+                    )?),
+                    None => None,
+                }
+            }
             Some(path) => Some(match digest {
                 Some(claimed) => FrameArtifact::bind_claimed(
                     Path::new(path),

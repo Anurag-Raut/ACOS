@@ -690,6 +690,7 @@ public final class LaunchMain {
     // reports whether the framework's own UI work is finished, so the host can
     // bind a settled observation without a fixed delay.
     // The checks are read-only field reads / getters on the UI thread.
+    static volatile Object sLastLiveActivity;
     static volatile long sLastDrawMs = 0;
     static volatile long sDrawSeq = 0;
     static volatile String sWindowSignature = "";
@@ -715,6 +716,8 @@ public final class LaunchMain {
         long windowStableMs;
         /** H15: the window's touch-mode answer when this sample was built. */
         boolean inTouchMode;
+        /** ROT8: the app's last window is gone and every Activity is destroyed. */
+        boolean windowGone;
 
         void add(String reason) {
             for (int i = 0; i < pending.size(); i++) {
@@ -1786,7 +1789,14 @@ public final class LaunchMain {
                                         // describe the *resumed* Activity, not
                                         // the instance captured at launch.
                                         Object live = resumedActivity(sThread);
-                                        emitProbe(live != null ? live : activity, n, why);
+                                        // ROT8: remember the newest resumed
+                                        // Activity; once it is finished and
+                                        // destroyed the framework drops its
+                                        // record, and `taskFinished` needs it.
+                                        if (live != null) sLastLiveActivity = live;
+                                        emitProbe(live != null ? live
+                                                : (sLastLiveActivity != null ? sLastLiveActivity
+                                                        : activity), n, why);
                                         // H2: the first emitted sample is the
                                         // host's `ready` (first frame). Request
                                         // ART's own background collection now
@@ -1973,9 +1983,17 @@ public final class LaunchMain {
         // same main-window nodes before any dialog duplicate. Every node carries
         // a `window` label and screen bounds (`bounds_on_screen`).
         java.util.List<View> roots = windowViews();
-        if (roots == null || roots.isEmpty()) {
+        // ROT8: the task is finished when the framework itself says so: this
+        // Activity finished and was destroyed, no Activity record of the
+        // process is alive, and WindowManagerGlobal holds no live root. A
+        // phone would show the launcher; ACOS has none, so the honest state is
+        // an empty window forest, reported as settled (never a timeout, never a
+        // synthetic frame).
+        boolean gone = taskFinished(activity, roots);
+        if (!gone && (roots == null || roots.isEmpty())) {
             roots = java.util.Collections.singletonList((View) decor);
         }
+        if (gone) roots = java.util.Collections.emptyList();
         StringBuilder nodes = new StringBuilder(2048);
         StringBuilder windows = new StringBuilder(256);
         // W31: the per-window node budget is a hard cap, so the sample must say
@@ -2017,7 +2035,7 @@ public final class LaunchMain {
             }
             z++;
         }
-        if (!sawMain) {
+        if (!sawMain && !gone) {
             // The Activity decor was not in mViews (window not attached yet):
             // keep the old single-window sample rather than an empty tree.
             int[] budget = new int[]{PROBE_NODE_BUDGET};
@@ -2036,9 +2054,17 @@ public final class LaunchMain {
         }
         // P10: a new window root (dialog/menu/popup) is registered for dirty
         // events here, on the main thread and outside any draw dispatch.
-        watchProbeRoots((View) decor);
+        if (!gone) watchProbeRoots((View) decor);
         // P11/P12: strict settle is always the event rule.
-        SettleSignals settle = checkSettle(roots, (View) decor);
+        SettleSignals settle;
+        if (gone) {
+            settle = new SettleSignals();
+            settle.horizonMs = settleHorizonMs();
+            settle.windowGone = true;
+            settle.settled = true;
+        } else {
+            settle = checkSettle(roots, (View) decor);
+        }
         StringBuilder j = new StringBuilder(nodes.length() + 512);
         j.append("ACOSPROBE {\"seq\":").append(seq)
                 .append(",\"time\":").append(System.currentTimeMillis())
@@ -2068,6 +2094,8 @@ public final class LaunchMain {
                     .append(",\"draw_seq\":").append(sDrawSeq)
                     .append(",\"window_stable_ms\":").append(settle.windowStableMs)
                     .append(",\"in_touch_mode\":").append(settle.inTouchMode)
+                    .append(",\"window_gone\":").append(settle.windowGone)
+                    .append(",\"task_finished\":").append(settle.windowGone)
                     .append(",\"view_generation\":").append(sViewGeneration)
                     .append('}');
         }
@@ -2080,6 +2108,42 @@ public final class LaunchMain {
         j.append('}');
         System.out.println(j);
         System.out.flush();
+    }
+
+    /**
+     * ROT8: is the app's task finished? True only when (a) `activity` was
+     * finished and destroyed by the framework (`mFinished` + `isDestroyed()`),
+     * (b) no Activity record in this process holds a live (non-destroyed)
+     * Activity, and (c) no window root in WindowManagerGlobal is still attached.
+     * All three are the framework's own state, read on the UI thread.
+     */
+    static boolean taskFinished(Object activity, java.util.List<View> roots) {
+        try {
+            if (!Boolean.TRUE.equals(get(activity, "mFinished"))) return false;
+            if (!Boolean.TRUE.equals(activity.getClass().getMethod("isDestroyed").invoke(activity))) {
+                return false;
+            }
+            Object activities = get(sThread, "mActivities");
+            if (activities instanceof java.util.Map) {
+                for (Object rec : ((java.util.Map<?, ?>) activities).values()) {
+                    Object a = get(rec, "activity");
+                    if (a == null) continue;
+                    if (!Boolean.TRUE.equals(a.getClass().getMethod("isDestroyed").invoke(a))) {
+                        return false;
+                    }
+                }
+            }
+            if (roots != null) {
+                for (View root : roots) {
+                    if (root == null) continue;
+                    Object vr = viewRootOf(root);
+                    if (vr != null && !Boolean.FALSE.equals(get(vr, "mAdded"))) return false;
+                }
+            }
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     /** All attached root views, via the stock WindowManagerGlobal API. */

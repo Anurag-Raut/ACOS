@@ -116,18 +116,20 @@ steps:
   # ---- Back finishes the activity --------------------------------------
   - back: {}
 
-  # Back finishes the activity. Scanned over the whole session log (like the
-  # launch assertion above): the destroy sequence is the *last* occurrence of
-  # these lines, and the step-local window is consumed by the step's own
-  # observation.
+  # Back finishes the activity: onPause -> onStop -> onDestroy since the step
+  # (a FINISHING Activity is not asked to save state: AOSP android-14
+  # ActivityThread.performStopActivityInner `!r.activity.mFinished`). The step
+  # binds on the settled empty window forest (`window-gone`).
   - assert_log:
       tag: AcosFixture
-      since_previous_step: false
+      since_previous_step: true
       ordered: true
       patterns:
         - '^onPause$'
         - '^onStop$'
-        - '^onSaveInstanceState clicks=2$'
         - '^onDestroy$'
+
+  - assert_not_visible:
+      selector: {id: result}
 
   - assert_no_crash: {}
