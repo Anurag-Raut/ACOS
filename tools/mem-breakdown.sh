@@ -36,7 +36,7 @@
 # this script only adds the per-phase/per-process breakdown. Usage (one ART run
 # per lock):
 #
-#   tools/art-runtime/run-exclusive.sh --task W41 -- \
+#   tools/art-runtime/run-exclusive.sh --task W41 --exclusive -- \
 #     tools/guarded.sh --mem 8G --time 900 -- \
 #     tools/mem-breakdown.sh --task T07 --reps 1 \
 #       --out results/bench/mem-T07-$(date -u +%Y%m%dT%H%M%SZ).json
