@@ -27,6 +27,7 @@
 pub mod artifacts;
 pub mod assertion;
 pub mod commands;
+pub mod diff;
 pub mod envelope;
 pub mod error;
 pub mod events;
@@ -55,6 +56,9 @@ pub use commands::{
     ObserveRequest, ObserveResponse, Orientation, Point, ProfileRequest, ProfileResponse,
     RequestBase, ResetRequest, ResetResponse, ResetScope, RunDexRequest, RunDexResult, RunRequest,
     RunResponse, VerifyEngine, VerifyRequest, VerifyResponse,
+};
+pub use diff::{
+    ChangeCounts, ChangedNode, DiffFrames, FieldChange, NodeRef, TreeChanges, MAX_DIFF_NODES,
 };
 pub use envelope::{Backend, Envelope, EnvelopeError, Evidence, Fidelity, Metrics, Status};
 pub use error::{

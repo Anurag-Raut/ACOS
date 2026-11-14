@@ -207,6 +207,67 @@ the tool/CLI argument selects the execution engine.
 
 ---
 
+## 1c. `changes`: what an action did
+
+`acos_tap`, `acos_text` and `acos_key` (and `acos_swipe` on a backend that can
+swipe — the ART engine cannot, so it answers `UNSUPPORTED_BACKEND` instead)
+return `result.changes` **by default**: the settled UI-tree diff of the action,
+so the ordinary step is one call instead of tap-then-observe.
+
+```json
+"changes": {
+  "baseline": "session",
+  "frames": {"before": 7, "after": 9},
+  "activity": "dev.acos.fixtures.counter.MainActivity",
+  "focused": {"id": "n6", "text": "", "content_desc": "",
+              "class": "android.widget.Button", "bounds": [42, 368, 273, 494]},
+  "added": [{"id": "n9", "text": "Settings", "content_desc": "Settings tab",
+             "class": "android.widget.TextView", "bounds": [0, 2200, 360, 2337]}],
+  "removed": [{"id": "n5", "text": "Home", "content_desc": "Home tab",
+               "class": "android.widget.TextView", "bounds": [0, 2200, 360, 2337]}],
+  "changed": [{"id": "n3", "text": "1", "content_desc": "",
+               "class": "android.widget.TextView", "bounds": [42, 317, 63, 368],
+               "fields": {"text": {"old": "0", "new": "1"}}}],
+  "counts": {"added": 1, "removed": 1, "changed": 1},
+  "truncated": false
+}
+```
+
+Rules (they are part of the contract, not implementation detail):
+
+* **No extra cost.** The diff is computed from two trees the session already
+  holds — the tree bound before the input was injected and the tree the
+  action's own settle produced. It never triggers a traversal, an extra capture
+  or an extra guest round trip, and it does not change the settle the action was
+  going to take anyway.
+* **No invented diffs.** When the session held no pre-action tree (an action
+  right after a launch that bound none, or after a reset) the reply carries
+  `changes: {"baseline": "none"}` with empty lists and zero counts. It never
+  reports the whole tree as "added".
+* **Identity is the stable id path, not list position.** A node's identity is a
+  chain of segments joined with `/` from the root: the Android `resource_id`
+  when the node has one, else `class#N` where `N` is its ordinal among
+  same-class *unnamed* siblings. A duplicate identity inside one tree is
+  disambiguated `~N` in document order. A named node therefore keeps its
+  identity when a different sibling is added or removed, while a node that
+  really moved (or was replaced) is reported as removed + added — never as an
+  edit of its neighbour.
+* **Compared fields** for a matched node: `text`, `content_desc`, `hint`,
+  `class`, `resource_id`, `bounds`, `visible_bounds`, `visible`, `enabled`,
+  `focused`, `clickable`, `scrollable`, `checked`, `selected`. Each changed one
+  is reported as `{"old": …, "new": …}`; a `changed` entry always has at
+  least one field.
+* **Bounded.** Each of `added`/`removed`/`changed` stops at **40 entries**.
+  `counts` always carries the true totals and `truncated: true` says a list was
+  cut, so a whole-screen navigation still fits the MCP reply bound (REL3b) and
+  a capped list can never be read as "that was everything".
+* **`diff: false`** returns the pre-FB3 reply **byte for byte** (no `changes`
+  key). A non-boolean `diff` is `INVALID_ARGUMENT`. The same reply is what a
+  CLI `acos tap`/`acos key`/`acos text` prints through the session daemon
+  (`acos serve`), since both share one engine.
+
+---
+
 ## 2. Tools
 
 The protocol defines 13 commands (`acos_<command>` in

@@ -166,6 +166,14 @@ pub struct ArtSession {
     /// [`SessionBackend::begin_input`], before the traversal a selector tap
     /// needs to resolve its point): its content hash and its tree signature.
     input_baseline: Option<(String, u64)>,
+    /// FB3: the tree the session held immediately before the current input
+    /// action, snapshotted by [`Self::begin_input`] from the already-bound
+    /// frame (no traversal, no extra guest round trip). `None` when the action
+    /// asked for no diff, when no baseline exists, or before any action.
+    diff_baseline: Option<DiffBaseline>,
+    /// FB3: whether the reply for the *current* action carries `changes`.
+    /// Serve sets it per verb (`diff: true` is the default).
+    diff_requested: bool,
     /// Input settle accounting, written next to the guest evidence.
     settle: SettleStats,
     /// Host-observed phase timings of the most recent input command (W55).
@@ -710,6 +718,15 @@ pub(crate) struct CapturedFrame {
     pub bytes: u64,
 }
 
+/// FB3: the tree a session held before the current input action.
+///
+/// Cloned from the already-bound frame in [`ArtSession::begin_input`]: the diff
+/// must never cost a traversal or a guest round trip.
+struct DiffBaseline {
+    tree: UiTree,
+    seq: u64,
+}
+
 #[derive(Clone)]
 struct CachedFrame {
     seq: u64,
@@ -727,8 +744,7 @@ struct CachedFrame {
     captured_at: String,
 }
 
-impl CachedFrame {
-    /// Load this frame's PNG, verifying that the artifact is the bound one.
+impl CachedFrame {    /// Load this frame's PNG, verifying that the artifact is the bound one.
     fn png_bytes(&self) -> Result<Vec<u8>, BackendError> {
         let artifact = self.png.as_ref().ok_or_else(|| {
             live_frame_unavailable(
@@ -1649,6 +1665,8 @@ impl ArtSession {
             settle_budget,
             settle_polls,
             input_baseline: None,
+            diff_baseline: None,
+            diff_requested: false,
             settle: SettleStats::default(),
             last_input_timing: None,
             last_phase: None,
@@ -3810,6 +3828,46 @@ pub(crate) fn ensure_launch_tree(
     }
 }
 
+impl ArtSession {
+    /// FB3: ask the next input command's reply for a settled tree diff.
+    pub fn set_diff_requested(&mut self, requested: bool) {
+        self.diff_requested = requested;
+    }
+
+    /// FB3: whether the current action's reply carries `changes`.
+    pub fn diff_requested(&self) -> bool {
+        self.diff_requested
+    }
+
+    /// FB3: the settled tree diff of the action that just ran.
+    ///
+    /// `before` is the tree snapshotted before the input was injected and
+    /// `after` is the tree the action's own settle bound -- both were already in
+    /// the session, so this reads and compares, nothing more. With no pre-action
+    /// tree the reply says `baseline: "none"`; no diff is ever invented.
+    pub fn tree_changes(&self) -> acos_protocol::TreeChanges {
+        let after = self.cached.as_ref();
+        let frames = acos_protocol::DiffFrames {
+            before: self.diff_baseline.as_ref().map_or(0, |b| b.seq),
+            after: after.map_or(0, |frame| frame.seq),
+        };
+        let activity = self.activity.as_deref().unwrap_or("");
+        match (self.diff_baseline.as_ref(), after) {
+            (Some(baseline), Some(after)) => acos_protocol::TreeChanges::diff(
+                Some(&baseline.tree),
+                &after.tree,
+                frames,
+                activity,
+            ),
+            // A tree is required on both sides. Without an `after` tree the
+            // action bound no observation, so the honest answer is "no
+            // baseline" rather than a diff against nothing.
+            _ => acos_protocol::TreeChanges::none(frames, activity),
+        }
+    }
+
+}
+
 impl SessionBackend for ArtSession {
     fn engine(&self) -> Engine {
         Engine::Art
@@ -4084,6 +4142,18 @@ impl SessionBackend for ArtSession {
             .cached
             .as_ref()
             .map(|frame| (frame.md5.clone(), frame.signature));
+        // FB3: the "before" side of the action's diff is the tree this session
+        // already holds -- the bound frame of the previous observation. It is
+        // only cloned when the caller asked for a diff (`diff:false` costs
+        // nothing), and it never triggers a traversal or a guest round trip.
+        self.diff_baseline = if self.diff_requested {
+            self.cached.as_ref().map(|frame| DiffBaseline {
+                tree: frame.tree.clone(),
+                seq: frame.seq,
+            })
+        } else {
+            None
+        };
     }
 
     fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {

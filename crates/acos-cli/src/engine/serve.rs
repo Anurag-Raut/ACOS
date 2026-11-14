@@ -1396,6 +1396,8 @@ fn observe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError
 
 fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let settle = requested_settle(args)?;
+    // FB3: the reply describes what the action changed (default on).
+    session.set_diff_requested(diff_requested(args)?);
     // SE1: reject an unverifiable pass before the input is injected.
     reject_expect_change_without_pixel_evidence(args)?;
     let result = if let Some(id) = args.get("id").and_then(Value::as_str) {
@@ -1431,6 +1433,7 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
 
 fn type_text(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let settle = requested_settle(args)?;
+    session.set_diff_requested(diff_requested(args)?);
     reject_expect_change_without_pixel_evidence(args)?;
     let Some(text) = args.get("text").and_then(Value::as_str) else {
         return Err(BackendError::Failed {
@@ -1484,6 +1487,7 @@ fn is_editable_class(class: &str) -> bool {
 
 fn key(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let settle = requested_settle(args)?;
+    session.set_diff_requested(diff_requested(args)?);
     reject_expect_change_without_pixel_evidence(args)?;
     let code = args.get("code").cloned().unwrap_or(Value::Null);
     let value = if let Some(name) = code.as_str() {
@@ -1514,6 +1518,10 @@ fn action(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError>
     // A top-level `settle` applies to the inner input verb as well.
     if let (Some(settle), Some(object)) = (args.get("settle"), action.as_object_mut()) {
         object.entry("settle").or_insert_with(|| settle.clone());
+    }
+    // FB3: so does a top-level `diff`.
+    if let (Some(diff), Some(object)) = (args.get("diff"), action.as_object_mut()) {
+        object.entry("diff").or_insert_with(|| diff.clone());
     }
     // SE1: so does a top-level `expect_change`.
     if let (Some(flag), Some(object)) = (args.get("expect_change"), action.as_object_mut()) {
@@ -1962,6 +1970,19 @@ fn settle_timeout_arg(args: &Value) -> Option<u64> {
         .map(|ms| ms.clamp(1, 600_000))
 }
 
+/// FB3: parse the per-action `diff` flag. Default **on**; a non-bool is an
+/// argument error, never silently ignored.
+fn diff_requested(args: &Value) -> Result<bool, BackendError> {
+    match args.get("diff") {
+        None => Ok(true),
+        Some(Value::Bool(value)) => Ok(*value),
+        Some(other) => Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: format!("`diff` must be a boolean (got {other})"),
+        }),
+    }
+}
+
 fn input_result(session: &ArtSession, kind: &str, target: Value) -> Value {
     let delivery = session.last_input_delivery();
     let settle = session.last_input_settle().cloned();
@@ -1981,6 +2002,27 @@ fn input_result(session: &ArtSession, kind: &str, target: Value) -> Value {
         ),
         None => (true, false, json!([])),
     };
+    let mut result = input_reply(kind, delivered, state_changed, acks, target, settle);
+    // FB3: what the action changed, from the two trees the session already
+    // holds (the pre-action tree and the tree this action's settle bound). Only
+    // present when asked for: `diff:false` is the pre-FB3 reply, byte for byte.
+    if session.diff_requested() {
+        result["changes"] = serde_json::to_value(session.tree_changes()).unwrap_or(Value::Null);
+    }
+    result
+}
+
+/// The action reply every backend has always produced (FB3 adds `changes` to it,
+/// and nothing else): kept as its own function so "`diff:false` is byte for
+/// byte today's reply" is checkable without a live guest.
+fn input_reply(
+    kind: &str,
+    delivered: bool,
+    state_changed: bool,
+    acks: Value,
+    target: Value,
+    settle: Option<Value>,
+) -> Value {
     json!({
         "action": kind,
         "accepted": delivered,
@@ -2633,9 +2675,62 @@ mod tests {
         assert!(value["nodes"][0]["children"].as_array().unwrap().is_empty());
     }
 
+    /// FB3: `diff:false` must be the pre-FB3 reply, byte for byte; the diff is
+    /// only ever an *added* key after the existing ones.
     #[test]
-    fn frozen_label_and_default_engine_are_distinct_strings() {
-        // The gate W50 exists for: a caller can tell the frozen Rust VM apart
+    fn fb3_diff_false_reply_is_byte_identical_and_changes_are_appended() {
+        let base = input_reply(
+            "tap",
+            true,
+            true,
+            json!([{"seq": 3, "handled": true, "latency_us": 1200}]),
+            json!({"id": "inc"}),
+            Some(json!({"mode": "strict", "settled": true})),
+        );
+        let expected = concat!(
+            "{\"accepted\":true,\"acks\":[{\"handled\":true,\"latency_us\":1200,\"seq\":3}],",
+            "\"action\":\"tap\",\"input_evidence\":\"guest-asserted acks; state_changed is ",
+            "the host's own pixel+tree comparison in strict mode; in fast mode it is the ",
+            "guest's tree-change verdict and a fast frame may be mid-animation\",",
+            "\"settle\":{\"mode\":\"strict\",\"settled\":true},\"state_changed\":true,",
+            "\"target\":{\"id\":\"inc\"}}"
+        );
+        assert_eq!(serde_json::to_string(&base).unwrap(), expected);
+        // The diff path only adds one key: strip it and the reply is the same
+        // object, byte for byte.
+        let mut with_changes = base.clone();
+        with_changes["changes"] = json!({"baseline": "none"});
+        let serialized = serde_json::to_string(&with_changes).unwrap();
+        assert!(
+            serialized.contains("\"changes\":{\"baseline\":\"none\"}"),
+            "the changes block must be present: {serialized}"
+        );
+        let mut round_tripped: Value = serde_json::from_str(&serialized).unwrap();
+        round_tripped
+            .as_object_mut()
+            .unwrap()
+            .remove("changes")
+            .expect("the diff is the only added key");
+        assert_eq!(
+            serde_json::to_string(&round_tripped).unwrap(),
+            expected,
+            "removing `changes` must give back the pre-FB3 reply exactly"
+        );
+    }
+
+    /// FB3: `diff` defaults on and a non-boolean is a typed argument error.
+    #[test]
+    fn fb3_diff_defaults_on_and_rejects_non_booleans() {
+        assert!(diff_requested(&json!({})).unwrap());
+        assert!(diff_requested(&json!({"diff": true})).unwrap());
+        assert!(!diff_requested(&json!({"diff": false})).unwrap());
+        let err = diff_requested(&json!({"diff": "no"})).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidArgument);
+        assert!(err.to_string().contains("`diff` must be a boolean"), "{err}");
+    }
+
+    #[test]
+    fn frozen_label_and_default_engine_are_distinct_strings() {        // The gate W50 exists for: a caller can tell the frozen Rust VM apart
         // from real ART in every reply.
         assert_eq!(ENGINE_ART, "art");
         assert_eq!(ENGINE_RUST_VM, "rust-vm, frozen");

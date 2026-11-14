@@ -518,6 +518,29 @@ def main() -> int:
                 tapped.get("result", {}).get("state_changed") is True,
                 {"text": tap_text, "result": tapped.get("result", {}).get("settle")},
             )
+            # FB3: the tab tap's own reply describes the screen change, so an
+            # agent that only needs "did the screen change and how" makes one
+            # call. A whole-screen navigation is additions + removals; a
+            # re-render may also be pure field changes, so require the diff to
+            # be non-empty rather than dictating which list it lands in.
+            changes = (tapped.get("result") or {}).get("changes") or {}
+            counts = changes.get("counts") or {}
+            check(
+                "gaten_tab_tap_changes",
+                changes.get("baseline") == "session"
+                and (
+                    counts.get("added", 0)
+                    + counts.get("removed", 0)
+                    + counts.get("changed", 0)
+                )
+                > 0,
+                {
+                    "counts": counts,
+                    "truncated": changes.get("truncated"),
+                    "activity": changes.get("activity"),
+                    "frames": changes.get("frames"),
+                },
+            )
 
         tree1 = envelope(
             client.call_tool(
@@ -530,6 +553,51 @@ def main() -> int:
                 "observe_tree after tap",
                 tree1.get("status") == "pass" and "1" in texts1 and "0" not in texts1,
                 {"texts": texts1},
+            )
+            # FB3: the tap reply itself says what changed, so the observe above
+            # is confirmation rather than the only way to learn the count moved.
+            changes = (tapped.get("result") or {}).get("changes")
+            check(
+                "acos_tap_changes",
+                isinstance(changes, dict)
+                and changes.get("baseline") == "session"
+                and changes.get("truncated") is False
+                and isinstance(changes.get("activity"), str)
+                and changes.get("activity") != "",
+                changes,
+            )
+            text_changes = [
+                entry
+                for entry in (changes or {}).get("changed", [])
+                if "text" in (entry.get("fields") or {})
+            ]
+            check(
+                "acos_tap_changes_count_text",
+                len(text_changes) == 1
+                and text_changes[0]["fields"]["text"] == {"old": "0", "new": "1"}
+                and (changes or {}).get("added") == []
+                and (changes or {}).get("removed") == []
+                and (changes or {}).get("counts", {}).get("changed", 0) >= 1,
+                {"text_changes": text_changes, "counts": (changes or {}).get("counts")},
+            )
+            # `diff: false` is the pre-FB3 reply: no `changes` key at all.
+            no_diff = envelope(
+                client.call_tool(
+                    "acos_tap",
+                    {"session_id": sid, "text": tap_text, "diff": False},
+                    timeout=args.timeout,
+                )
+            )
+            check(
+                "acos_tap_diff_false",
+                no_diff.get("status") == "pass"
+                and no_diff.get("result", {}).get("accepted") is True
+                and "changes" not in (no_diff.get("result") or {}),
+                {
+                    "status": no_diff.get("status"),
+                    "result_keys": sorted((no_diff.get("result") or {}).keys()),
+                    "error": no_diff.get("error"),
+                },
             )
         else:
             if tap_text in tab_expect:
