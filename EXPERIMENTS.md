@@ -2272,3 +2272,53 @@ changed inside this track.
 **Files.** `crates/acos-services/src/{connectivity.rs,parcelable.rs,declared.rs,
 registry.rs,lib.rs}`, `crates/acos-services/tests/net1_connectivity.rs`,
 `results/compat/NET1.md`, `results/handoff/NET1.md`.
+
+## E5.10b — NET1 verification (crate suites, gates, Gaten, guest logd) — MEASURED
+
+**Question.** `E5.10` left three gaps: the crate suites, the gate battery and the
+app-side NetInfo state had not been run on the connectivity tree. Do they hold,
+and does answering `getActiveNetwork`/`getNetworkCapabilities` non-null move any
+gate?
+
+**Setup.** Branch `compat-net1-connectivity` at `e5eeba3`, binaries built from it
+in `.cache/s3ab-target/release`, every ART run under
+`run-exclusive.sh --task NET1B` + `guarded.sh --mem 8–10G`. Gate/Gaten runner
+copied from the int reference (`run_suite.sh`) with paths retargeted. Host was
+shared the whole window (queue waits of 30–170 s per acquisition).
+
+**Measured.**
+
+| check | result |
+|---|---|
+| `acos-services` (41 binaries) | 312 passed, 0 failed |
+| `acos-verify` (3) | 66 passed, 0 failed |
+| `acos-art` (14 + 1 alone) | 150 passed, 0 failed |
+| `acos-cli` (15) | 60 passed, 0 failed, 5 pre-existing ignored |
+| gates, 8 positive | pass 8/8 |
+| gates, 3 negative | `ASSERTION_FAILED` (T03-render-wrong), `ELEMENT_OFFSCREEN` (offscreen-pager-visible), `TIMEOUT` (p11-progress-timeout) — 3/3 as designed |
+| Gaten flows | 5/5 pass (`home`, `tabs`, `settings`, `search`, `lesson`), ~67 s each; `gaten-home` is the K4-era red and is green here |
+| Gaten negatives | 5/5 fail `ASSERTION_FAILED` |
+| Joplin + guest logd | 266 records, `ReactNativeJS` ×105, JS reached `go: initial route`, no connectivity refusal |
+
+**Interpretation.** A declared network that answers the framework's own
+`NetworkCallback` protocol changes no measured behaviour: every positive gate
+and flow passes, every negative one still fails with its designed code (0 false
+passes), and the crate suites are unaffected. The one class the gates cannot
+rule out — an app that now believes it is online and blocks on a socket — is the
+corpus's job (§E5.10c).
+
+**Found in passing (harness).** `tools/compat/k1-run.py` threw the guest logd
+away with the guest, so no app-side evidence survived a run. It now calls
+`acos_logs` before destroy and writes `06-logs.json` (bounded by
+`--logs-limit`, default 3000, `--no-logs` to skip). Joplin's release bundle
+does not log NetInfo, so the JS `isConnected` value is still not quoted; the logd
+proves instead that the JS bundle evaluated past the module init that aborted on
+`main`, and that no connectivity call was refused.
+
+**Found in passing (flake recipe).** The documented `acos-art` recipe (skip
+`sandbox_s5::refuses_to_run_when_no_cgroup_can_be_created` in the batch, then run
+it alone `--exact`) fails on a warm host: `RunCgroup::prepare` reads a per-boot
+capability stamp under `ACOS_ART_DATA` (H15), so the fake-`systemd-run` probe the
+test installs is never consulted and `prepare` returns `Ok(cg:"")`. Running it
+with a cold `ACOS_ART_DATA` exercises the intended path and passes. The recipe
+should say so.

@@ -1,9 +1,14 @@
 # NET1 — `IConnectivityManager` network callbacks (RN NetInfo / Joplin)
 
 **Branch:** `compat-net1-connectivity` (base `main` = `3e11d9c`).
-**Status: PARTIAL** — the implementation and unit tests are done and Joplin now
-launches 3/3 with a frame. The gate battery, the crate suites and the 2×42-app
-corpus were **not** run in this 60-minute window (see "Remaining").
+**Status: PARTIAL (verified)** — the implementation and unit tests are done and
+Joplin now launches with a frame. The NET1B window closed the three verification
+gaps: the four crate suites are green (§7.1), all 8 positive gates plus the 5
+Gaten flows pass and all 3 negative gates plus the 5 Gaten negatives fail with
+their designed codes (§7.2, §7.3), and the guest logd is now persisted by
+`tools/compat/k1-run.py` (§7.4). The 2×42-app corpus is **round 1 only** in this
+window (§7.5): the host ART lock was contended and 42 apps × 2 arms does not fit
+in 60 minutes.
 
 ## 1. The wall
 
@@ -126,7 +131,7 @@ than a fabricated address.
 
 ## 4. Verification
 
-### Unit tests (acceptance 1) — PASS
+### Unit tests (acceptance 1) — PASS (all four crates in §7.1)
 
 ```
 cargo test -p acos-services --test net1_connectivity   → 10 passed, 0 failed
@@ -185,7 +190,7 @@ persist the guest logd, so there is no NetInfo log line to quote.
 `tap` is false for this app in the corpus at every rung on main and here, so it
 is not a regression (it needs a text target the runner does not have).
 
-## 5. Remaining (ranked, smallest first)
+## 5. Remaining (ranked, smallest first) — see §7 for what NET1B closed
 
 1. **Capture NetInfo's JS state.** Persist the guest logd (or add a one-off RN
    console tee) and grep `RNCNetInfo`/`isConnected` for a launch — ~10 minutes
@@ -217,3 +222,127 @@ is not a regression (it needs a text target the runner does not have).
   cross-boundary bundles (see §2). It is unused by this track and was left
   alone; it should be fixed with its own test because `Intent` extras containing
   parcelables would mis-parse.
+
+## 7. NET1B verification window
+
+Everything below was measured on this branch at `e5eeba3` with binaries built
+from it into `.cache/s3ab-target/release` (`cargo build --release --offline`,
+12 s incremental, no source drift). Every ART-touching command ran under
+`tools/art-runtime/run-exclusive.sh --task NET1B -- tools/guarded.sh …`.
+
+### 7.1 Crate suites (acceptance 1) — PASS
+
+`cargo test --release --offline`, one binary at a time, `--test-threads=1`,
+logs in `.cache/net1b/tests/` (runner: `.cache/net1b/run_tests.sh`).
+
+| crate | test binaries | passed | failed | ignored |
+|---|---:|---:|---:|---:|
+| `acos-services` | 41 | **312** | 0 | 0 |
+| `acos-verify` | 3 | **66** | 0 | 0 |
+| `acos-art` | 14 + 1 alone | **150** | 0 | 0 |
+| `acos-cli` | 15 | **60** | 0 | 5 |
+
+* `acos-art` uses the documented flake recipe: the batch run skips
+  `refuses_to_run_when_no_cgroup_can_be_created`, then it runs alone. Running it
+  alone is **not sufficient**: `RunCgroup::prepare` reads a per-boot capability
+  stamp (`cgroup-capability.json` under `ACOS_ART_DATA`, H15) and the stamp from
+  the batch run makes the fake-`systemd-run` probe unreachable, so the test fails
+  with `RunCgroup { cg: "" }`. The honest invocation points `ACOS_ART_DATA` at a
+  cold directory so the probe path actually executes:
+  `env ACOS_ART_DATA=.cache/net1b/tests/cold-cg cargo test -p acos-art --test
+  sandbox_s5 -- --exact refuses_to_run_when_no_cgroup_can_be_created` → 1 passed
+  (`.cache/net1b/tests/acos-art-cgroup-coldcache.log`). No test was skipped,
+  weakened or `#[ignore]`d.
+* The 5 ignored tests are pre-existing in the tree, not this track:
+  `gl1_kept_session` 4/4 ignored, `w50_serve_art` 1 ignored.
+* `0 passed / 0 failed` binaries in the logs are the doctest and empty-binary
+  stubs cargo emits; the per-crate totals above are the sum over all binaries.
+
+### 7.2 Gates (acceptance 2a) — 8/8 green, 3/3 red as designed
+
+`acos verify scenarios/<gate>.yaml --engine art --json`, JSON in
+`.cache/net1b/suite/`, runner `.cache/net1b/run_suite.sh gates` (copied from the
+int reference runner, paths retargeted):
+
+| gate | rc | status | code |
+|---|---:|---|---|
+| `v2-art-counter` | 0 | pass | — |
+| `w22-counter-reset` | 0 | pass | — |
+| `w54-dialog-pixels` | 0 | pass | — |
+| `w42-back-frame` | 0 | pass | — |
+| `w15-dialog-menu` | 0 | pass | — |
+| `form-validation` | 0 | pass | — |
+| `suite/T03-render-good` | 0 | pass | — |
+| `v1-offscreen-pager` | 0 | pass | — |
+| `suite/T03-render-wrong` | 1 | fail | **`ASSERTION_FAILED`** (`region differs from …/T03-hello-views-top.png (568029 differing bytes)`) |
+| `negative/offscreen-pager-visible` | 1 | fail | **`ELEMENT_OFFSCREEN`** |
+| `p11-progress-timeout` | 1 | timeout | **`TIMEOUT`** |
+
+**0 false passes:** every positive gate passed *and* every negative gate failed
+with its own designed code, so no assertion was satisfied by accident. The
+known main-side red `w7-insets-report` (track W7B) is outside this battery.
+
+### 7.3 Gaten flows and negatives (acceptance 2b) — 5/5 and 5/5
+
+`acos verify scenarios/gaten-*.yaml --apk <gaten apk> --engine art --json`
+
+| flow | rc | status |
+|---|---:|---|
+| `gaten-home` | 0 | pass |
+| `gaten-tabs` | 0 | pass |
+| `gaten-settings` | 0 | pass |
+| `gaten-search` | 0 | pass |
+| `gaten-lesson` | 0 | pass |
+| `negative/gaten-home-wrong` | 1 | fail `ASSERTION_FAILED` |
+| `negative/gaten-tabs-wrong` | 1 | fail `ASSERTION_FAILED` |
+| `negative/gaten-settings-wrong` | 1 | fail `ASSERTION_FAILED` |
+| `negative/gaten-search-wrong` | 1 | fail `ASSERTION_FAILED` |
+| `negative/gaten-lesson-wrong` | 1 | fail `ASSERTION_FAILED` |
+
+`gaten-home` timing out was the pre-existing red in K4 (`results/compat/K4.md`
+§5.1); it passes here, 5/5 flows in one acquisition (09:40:04→09:45:50 UTC,
+~67 s per flow).
+
+### 7.4 NetInfo state evidence (acceptance 3) — logd persisted, JS state not logged by Joplin
+
+`tools/compat/k1-run.py` now reads `acos_logs` before destroying the guest and
+writes `06-logs.json` (last `--logs-limit` records, default 3000; `--no-logs`
+disables). `report["logs"]` carries `total`, `kept`, the tag census and the
+engine's own `note`. This is what used to be thrown away with the guest, and it
+is the only place an app's JS-level state can be observed.
+
+One Joplin launch on this branch (`.cache/net1b/joplin/run-095315`, evidence
+copied to `results/compat/NET1/netinfo-run/`): first frame, full ladder, 266
+logd records, `ReactNativeJS` ×105 of them. What the log says:
+
+```
+I ReactNativeJS Running "main"
+I ReactNativeJS '…', 'Starting application net.cozic.joplin-mobile v3.7.8 (prod)'
+I ReactNativeJS '…', 'Client ID: 266d4d2d40e648529f427f2f59d83c0f'
+I ReactNativeJS '…', 'Performance: buildStartupTasks/go: initial route: End at 0.51s'
+```
+
+i.e. the JS bundle evaluated past module init — the exact point where `main`
+aborted (`Exception in HostObject::get for prop 'RNCNetInfo'`) — and the app
+went on to open its database and route to its first screen.
+
+**What it does not show, honestly:** Joplin's release bundle logs no
+`NetInfo`/`isConnected` line, and none of the 266 records mentions `netinfo`,
+`isInternetReachable` or a connectivity callback. The NetInfo *values* are
+therefore still not quoted from the app's own console. Whole-log census
+(`results/compat/NET1/netinfo-run/logd.txt`, grep for
+`netinfo|connect|online|offline|reach|network|sync`): 5 hits, none from NetInfo —
+`nativeloader` ×2 (library preload), `SystemServiceRegistry E No service
+published for: wifi` (the WifiManager wall, unchanged by this track), and
+`SQLitePlugin` write errors on the fresh app-data dir (`no such table: version`,
+`no such module: spellfix1` — first-run schema, the app recovers and keeps
+running). No `JniException`, no SIGABRT, `unsupported.jsonl` empty.
+
+The honest chain for the state is therefore: the parcel shapes are asserted
+against the image's own readers (§2, §4), the callback protocol is asserted
+through the real dispatcher (`net1_connectivity`, 10 tests), and the app-side
+proof is that the receiver ran and the app continued — with
+`isConnected=true` / `isInternetReachable=false` the declared, decidable
+outcome (§3). Quoting the JS value itself needs either a NetInfo probe app that
+logs it, or an ACOS-side trace of the `IConnectivityManager` transactions the
+module receives; both are small, neither fit in this window.
