@@ -150,6 +150,16 @@ build_apk() {
     echo "build-apps: [$name] -> $out ($(stat -c '%s' "$out") bytes)"
 }
 
+# K5b: `ACOS_APP_ONLY="a b"` builds just the named fixtures, so one app can be
+# iterated without rebuilding the whole corpus.
+if [ -n "${ACOS_APP_ONLY:-}" ]; then
+    for app in $ACOS_APP_ONLY; do
+        build_apk "$app"
+    done
+    echo "build-apps: done (ACOS_APP_ONLY=$ACOS_APP_ONLY) -> $BUILD_DIR"
+    exit 0
+fi
+
 # --- hello-views -------------------------------------------------------------
 build_apk hello-views
 
@@ -206,6 +216,11 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 for app in counter todo-list multi-activity form-validation settle-lab thread-heavy svg-viewbox offscreen-pager; do
     build_apk "$app"
 done
+
+# keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
+# the cross-session reach probe. One launcher activity; the mode comes from
+# ACOS_ART_KEYPROBE_MODE (see results/compat/K5.md).
+build_apk keystore-probe
 
 # insets-probe is the W7 window-model fixture: an edge-to-edge Activity that
 # prints the frame and the reported system-bar insets. It is the only fixture

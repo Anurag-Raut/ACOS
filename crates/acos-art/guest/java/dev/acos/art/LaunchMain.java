@@ -12,6 +12,7 @@ import android.os.Parcel;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.TextView;
 
 import java.io.File;
@@ -200,6 +201,25 @@ public final class LaunchMain {
         System.out.println("ACOSLAUNCH MARK resume-budget ms=" + sResumeMs
                 + " ready_ms=" + sResumeReadyMs);
         System.out.flush();
+        // A device's zygote installs the AndroidKeyStore provider once, before
+        // any app process exists (ZygoteInit.warmUpJcaProviders). ACOS starts
+        // dalvikvm64 directly, so the software provider is installed here —
+        // before app code, which is where the platform has it. Session-private
+        // storage: keys live under this run's /data/app-data only.
+        //
+        // OPT-IN: the provider is a compatibility shim (exportable software
+        // keys, no KeyInfo/attestation claims), not device security. It is off
+        // unless `ACOS_ART_KEYSTORE=on` so a normal run keeps the honest
+        // "AndroidKeyStore not found" failure until the K5b fix list lands.
+        try {
+            String ks = System.getenv("ACOS_ART_KEYSTORE");
+            String mode = ks == null ? "" : ks.trim();
+            if ("on".equalsIgnoreCase(mode) || "1".equals(mode) || "software".equalsIgnoreCase(mode)) {
+                SoftwareKeyStore.install("/data/app-data/" + sPkg);
+            }
+        } catch (Throwable t) {
+            System.out.println("ACOSLAUNCH WARN keystore install: " + t);
+        }
         try {
             run(t0);
         } catch (Throwable t) {
@@ -343,7 +363,6 @@ public final class LaunchMain {
         // which `Parcel.marshall()` refuses to carry over the peer byte pipe).
         sThread = thread;
         sClient = iatClient(appThread);
-
         byte[] bind = buildBindApplicationRequest();
         pushToPeer(1, bind);
         System.out.println("ACOSLAUNCH MARK bind-request-pushed bytes=" + bind.length);
@@ -2306,23 +2325,61 @@ public final class LaunchMain {
                 }
             }
         }
+        // TREE1: the node's semantic fields come from the framework's own
+        // AccessibilityNodeInfo for this View -- the object UiAutomator and every
+        // accessibility service read. createAccessibilityNodeInfo() runs the
+        // View's accessibility delegate (React Native installs
+        // ReactAccessibilityDelegate on every node) and TextView's/EditText's
+        // own rules, so an EditText reports what the platform reports:
+        //   text  = getText() ?: getHint()   (TextView.getTextForAccessibility)
+        //   hint  = getHint()                (TextView sets setHintText(mHint))
+        //   desc  = getContentDescription()  (the app's accessibilityLabel)
+        // A password field's characters never leave the process.
         String text = "";
         String hint = "";
+        String contentDescription = "";
+        boolean password = false;
+        boolean fromNode = false;
         try {
-            if (v instanceof TextView) {
-                CharSequence cs = ((TextView) v).getText();
+            AccessibilityNodeInfo info = v.createAccessibilityNodeInfo();
+            if (info != null) {
+                CharSequence cs = info.getText();
                 text = cs == null ? "" : cs.toString();
-                CharSequence h = ((TextView) v).getHint();
+                CharSequence h = info.getHintText();
                 hint = h == null ? "" : h.toString();
-                if (text.isEmpty()) text = hint;
+                CharSequence cd = info.getContentDescription();
+                contentDescription = cd == null ? "" : cd.toString();
+                // AOSP API 34 TextView.onInitializeAccessibilityNodeInfoInternal sets
+                // the text unconditionally -- getTextForAccessibility() -- and only
+                // *flags* the node with setPassword(true). So a device (and
+                // `uiautomator dump`) exposes a password field's characters and the
+                // flag. ACOS mirrors that and publishes the flag; redacting the text
+                // here would invent a tree the platform never exposes (and did: it
+                // broke gaten-lesson's typed-token assertion).
+                password = info.isPassword();
+                fromNode = true;
             }
         } catch (Throwable ignored) {
         }
-        String contentDescription = "";
-        try {
-            CharSequence cd = v.getContentDescription();
-            contentDescription = cd == null ? "" : cd.toString();
-        } catch (Throwable ignored) {
+        if (!fromNode) {
+            // No node info (a detached/hostile View): fall back to the View's own
+            // fields, keeping TextView's accessibility text rule explicit rather
+            // than inventing a value the platform would not expose.
+            try {
+                if (v instanceof TextView) {
+                    CharSequence cs = ((TextView) v).getText();
+                    text = cs == null ? "" : cs.toString();
+                    CharSequence h = ((TextView) v).getHint();
+                    hint = h == null ? "" : h.toString();
+                    if (text.isEmpty()) text = hint;
+                }
+            } catch (Throwable ignored) {
+            }
+            try {
+                CharSequence cd = v.getContentDescription();
+                contentDescription = cd == null ? "" : cd.toString();
+            } catch (Throwable ignored) {
+            }
         }
         int[] screen = new int[2];
         try {
@@ -2381,6 +2438,7 @@ public final class LaunchMain {
                 .append(",\"id\":\"").append(jesc(idName)).append('"')
                 .append(",\"text\":\"").append(jesc(text)).append('"')
                 .append(",\"hint\":\"").append(jesc(hint)).append('"')
+                .append(",\"password\":").append(password)
                 .append(",\"content_description\":\"").append(jesc(contentDescription)).append('"')
                 .append(",\"window\":\"").append(jesc(window)).append('"')
                 .append(",\"bounds\":\"[").append(loc[0]).append(',').append(loc[1])
@@ -2626,6 +2684,64 @@ public final class LaunchMain {
         t.start();
     }
 
+    /**
+     * The uid facts a phone reports to an app: kernel uid/gid/groups/caps,
+     * the user-namespace map, PMS's own uid answer, and which of the run's
+     * mounts are writable. Printed once in the application-created marker.
+     */
+    static String uidFacts(android.content.Context base) {
+        StringBuilder b = new StringBuilder();
+        try {
+            b.append("\nguest_uid=").append(android.os.Process.myUid());
+        } catch (Throwable t) {
+            b.append("\nguest_uid=error:").append(t);
+        }
+        try {
+            b.append("\npms_uid=").append(base.getPackageManager().getPackageUid(sPkg, 0));
+        } catch (Throwable t) {
+            b.append("\npms_uid=error:").append(t);
+        }
+        try {
+            b.append("\nuid_map=").append(readText("/proc/self/uid_map").trim());
+        } catch (Throwable t) {
+            b.append("\nuid_map=error:").append(t);
+        }
+        try {
+            for (String line : readText("/proc/self/status").split("\n")) {
+                for (String key : new String[]{"Uid:", "Gid:", "Groups:", "CapEff:"}) {
+                    if (line.startsWith(key)) b.append("\nstatus_").append(line.trim());
+                }
+            }
+        } catch (Throwable t) {
+            b.append("\nstatus=error:").append(t);
+        }
+        try {
+            java.io.File files = base.getFilesDir();
+            b.append("\nfiles_dir=").append(files).append(" writable=")
+                    .append(files != null && files.canWrite());
+        } catch (Throwable t) {
+            b.append("\nfiles_dir=error:").append(t);
+        }
+        try {
+            String[] names = new java.io.File("/data/app-data").list();
+            b.append("\napp_data_entries=").append(java.util.Arrays.toString(names));
+        } catch (Throwable t) {
+            b.append("\napp_data_entries=error:").append(t);
+        }
+        return b.toString();
+    }
+
+    static String readText(String path) throws java.io.IOException {
+        java.io.FileInputStream in = new java.io.FileInputStream(path);
+        try {
+            byte[] buf = new byte[4096];
+            int n = in.read(buf);
+            return n <= 0 ? "" : new String(buf, 0, n, "UTF-8");
+        } finally {
+            in.close();
+        }
+    }
+
     static void watch(Object thread, Class<?> at, IBinder appThread) throws Exception {
         long deadline = System.currentTimeMillis() + 20000;
         Object app = get(thread, "mInitialApplication");
@@ -2656,7 +2772,8 @@ public final class LaunchMain {
                 // they came from (manifest-derived vs the historical default).
                 + "\napp_flags=0x" + Integer.toHexString(sAppFlags >= 0 ? sAppFlags : (0x4 | 0x800000))
                 + "\napp_flags_source=" + (sAppFlags >= 0 ? sAppFlagsSource : "default")
-                + "\nsourceDir=" + sApk + "\n";
+                + "\nsourceDir=" + sApk
+                + uidFacts((android.content.Context) get(app, "mBase")) + "\n";
         write(new File(sOut, "application-created.marker"), marker);
         System.out.println("ACOSLAUNCH MARK application-created package=" + sPkg
                 + " application=" + app.getClass().getName()

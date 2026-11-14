@@ -1,0 +1,6 @@
+KEYPROBE start mode=create
+ACOSLAUNCH MARK keystore provider=software dir=/data/app-data/dev.acos.fixtures.keystoreprobe/acos-keystore
+KEYPROBE {"check":"create.key","ok":true,"detail":"alias=k_a size=256"}
+KEYPROBE {"check":"create.private_file","ok":true,"detail":"/data/app-data/dev.acos.fixtures.keystoreprobe/files/keystore-probe/private-a.txt"}
+KEYPROBE {"check":"create.paths","ok":true,"detail":"/data/app-data/dev.acos.fixtures.keystoreprobe/files/keystore-probe/private-a.txt|/data/app-data/dev.acos.fixtures.keystoreprobe/acos-keystore/entries.properties"}
+KEYPROBE {"activity":"MainActivity","mode":"create","pass":3,"fail":0}

@@ -55,6 +55,7 @@ import json
 import os
 import re
 import subprocess
+import xml.etree.ElementTree as ET
 import sys
 import time
 
@@ -67,7 +68,7 @@ NOW = lambda: _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="millisecond
 log = lambda *a: print("[replay]", *a, file=sys.stderr, flush=True)
 
 PHONE_LOCK = "/home/Qui/Projects/acos/.cache/phone.lock"
-EVIDENCE_MAX_WIDTH = 540
+EVIDENCE_MAX_WIDTH = 360
 
 
 def sha256_file(path):
@@ -172,9 +173,16 @@ def node_view(n):
         r = n["rect"]
         b = [r.get("x", 0), r.get("y", 0),
              r.get("x", 0) + r.get("width", 0), r.get("y", 0) + r.get("height", 0)]
+    # TREE1: the raw node carries the platform's fields under their own names --
+    # `contentDescription` is AccessibilityNodeInfo.getContentDescription().
+    # `label` is agent-device's *computed accessible name* (it merges descendant
+    # text and prefers the description), so it is a fallback only: using it as
+    # `content_desc` while dropping `contentDescription` invents a tree the
+    # platform never exposes (that was PHONE2 §5.1).
     return {
-        "text": n.get("text") or "",
-        "content_desc": n.get("content_desc") or n.get("label") or "",
+        "text": n.get("text") or n.get("label") or "",
+        "content_desc": n.get("contentDescription") or n.get("content_desc") or "",
+        "hint": n.get("placeholder") or "",
         "identifier": n.get("identifier") or n.get("resource_id") or "",
         "enabled": n.get("enabled"),
         "checked": n.get("checked"),
@@ -295,8 +303,64 @@ class Phone:
         return {"rc": rc, "stdout": out, "stderr": err, "json": data}
 
     # -- reads -------------------------------------------------------------
+    def dump_nodes(self, timeout=120):
+        """The platform's own tree: `uiautomator dump` -> AccessibilityNodeInfo.
+
+        Each `<node>` is a real AccessibilityNodeInfo: text is getText() (for a
+        TextView/EditText the framework falls back to the hint), content-desc is
+        getContentDescription(), password marks a password field. This is the
+        surface ACOS's guest reads, so both sides are compared on one tree.
+        (agent-device's snapshot is kept only as a fallback: its `label` is a
+        computed name, not a node field -- see node_view.)
+        """
+        remote = "/sdcard/acos-a11y-dump.xml"
+        rc, out, err = self.shell("uiautomator", "dump", remote, timeout=timeout)
+        if rc != 0:
+            return []
+        rc, xml, err = self.shell("cat", remote, timeout=timeout)
+        self.shell("rm", "-f", remote, timeout=60)
+        if rc != 0 or "<hierarchy" not in (xml or ""):
+            return []
+        start = xml.find("<hierarchy")
+        end = xml.rfind("</hierarchy>")
+        if start < 0 or end < 0:
+            return []
+        try:
+            root = ET.fromstring(xml[start:end + len("</hierarchy>")])
+        except ET.ParseError:
+            return []
+        nodes = []
+        for el in root.iter("node"):
+            a = el.attrib
+            nums = [int(x) for x in re.findall(r"-?\d+", a.get("bounds") or "")]
+            if len(nums) != 4:
+                continue
+            nodes.append({
+                "text": a.get("text") or "",
+                "content_desc": a.get("content-desc") or "",
+                "hint": "",
+                "identifier": a.get("resource-id") or "",
+                "enabled": a.get("enabled") == "true",
+                "checked": a.get("checked") == "true",
+                "clickable": a.get("clickable") == "true",
+                "editable": (a.get("class") or "").endswith("EditText"),
+                "password": a.get("password") == "true",
+                "visible": nums[2] > nums[0] and nums[3] > nums[1],
+                "bounds": nums,
+                "bundle": a.get("package") or "",
+                "type": a.get("class") or "",
+            })
+        return nodes
+
     def snapshot(self, timeout=120):
-        """Full accessibility snapshot -> flat node views with bundle filter."""
+        """One accessibility tree read -> flat node views."""
+        dumped = self.dump_nodes(timeout=timeout)
+        if dumped:
+            pkgs = [n["bundle"] for n in dumped if n.get("bundle")]
+            app = max(set(pkgs), key=pkgs.count) if pkgs else None
+            return {"nodes": dumped, "app": app, "raw_ok": True, "error": None,
+                    "source": "uiautomator-dump"}
+        # Fallback: agent-device's snapshot (hosts where `uiautomator dump` fails).
         res = self.ag("snapshot", "--force-full", "--json", timeout=timeout)
         data = (res.get("json") or {}).get("data") or {}
         nodes = (data.get("snapshot") or {}).get("nodes") or data.get("nodes") or []
@@ -317,6 +381,7 @@ class Phone:
             "app": data.get("appBundleId") or data.get("appName"),
             "raw_ok": bool(res.get("json") and res["json"].get("success")),
             "error": (res.get("json") or {}).get("error"),
+            "source": "agent-device-snapshot",
         }
 
     def focused_activity(self):
@@ -334,6 +399,8 @@ class Phone:
         path = os.path.join(out_dir, f"screenshot-{base}.png")
         self.ag("screenshot", path, timeout=120)
         if os.path.exists(path) and os.path.getsize(path) > 0:
+            # evidence budget: the device captures at 1080x2400, keep <=540 px
+            _downscale(path, path)
             return os.path.basename(path)
         return None
 
@@ -359,6 +426,15 @@ def replay_phone(args, doc, steps, out_dir):
     if not pkg:
         raise SystemExit("scenario has no resolvable launch component; cannot resolve package")
     os.makedirs(out_dir, exist_ok=True)
+
+    # The accessibility tree only marks nodes visible while the app's window is
+    # the one the user is looking at; a dozing display or the keyguard makes a
+    # whole replay read an empty/invisible tree (0 texts, every selector
+    # ELEMENT_NOT_FOUND). Wake the device first, and keep it awake for the run.
+    dev.shell("input", "keyevent", "KEYCODE_WAKEUP")
+    dev.shell("wm", "dismiss-keyguard")
+    rc, before_stayon, _ = dev.shell("settings", "get", "global", "stay_on_while_plugged_in")
+    dev.shell("svc", "power", "stayon", "true")
 
     facts = {}
     for key in (
@@ -549,16 +625,17 @@ def replay_phone(args, doc, steps, out_dir):
                 # it covers the list; ACOS's offscreen guest has no IME window.
                 # Dismissing it is what an agent does before reading the screen.
                 dev.ag("keyboard", "dismiss", timeout=60)
-            elif kind == "assert_not_visible":
+            elif kind in ("assert_visible", "assert_not_visible"):
                 snap = dev.snapshot()
                 nodes = dev.app_nodes(snap, pkg)
                 node = find_best(nodes, selector, pkg)
                 rec["target"] = None if node is None else {
                     k: node.get(k) for k in ("text", "content_desc", "identifier",
                                              "enabled", "checked", "clickable", "bounds")}
-                rec["assertion"] = {"kind": "not_visible", "passed": node is None,
-                                    "expected_absent": selector}
-                if node is not None:
+                want = kind == "assert_visible"
+                key = "expected_present" if want else "expected_absent"
+                rec["assertion"] = {"kind": kind, "passed": (node is not None) == want, key: selector}
+                if (node is not None) != want:
                     rec["status"] = "fail"
                     rec["error"] = "ASSERTION_FAILED"
             elif kind in ("assert_no_crash",):
@@ -614,6 +691,11 @@ def replay_phone(args, doc, steps, out_dir):
 
     observations["finished"] = NOW()
     observations["commands"] = dev.commands
+    # restore the display setting this run changed
+    keep = (before_stayon or "0").strip()
+    dev.shell("svc", "power", "stayon", "false")
+    if keep not in ("", "0", "null"):
+        dev.shell("settings", "put", "global", "stay_on_while_plugged_in", keep)
     # leave the device tidy: close the session and go home
     dev.ag("close", timeout=120)
     dev.ag("home", timeout=120)
@@ -743,7 +825,12 @@ def replay_acos(args, doc, steps, out_dir):
 
 
 def _downscale(src, dst, width=EVIDENCE_MAX_WIDTH):
-    """Copy a screenshot as a <=540px-wide PNG (evidence budget)."""
+    """Copy a screenshot as a <=360px-wide, 256-colour PNG (evidence budget).
+
+    A 1080x2400 device capture is ~650 KB; at 360 px with a 256-colour palette the
+    same screen is ~30 KB, so a full 19-scenario reference stays well under the
+    30 MB evidence budget while remaining readable at a glance.
+    """
     try:
         from PIL import Image
     except ImportError:  # pragma: no cover
@@ -756,6 +843,8 @@ def _downscale(src, dst, width=EVIDENCE_MAX_WIDTH):
             im = im.resize((width, h), Image.LANCZOS)
         if im.mode not in ("RGB", "RGBA"):
             im = im.convert("RGB")
+        # 256-colour palette: ~4x smaller, and flat UI screens keep their look
+        im = im.convert("RGB").quantize(colors=256, method=Image.MEDIANCUT)
         im.save(dst, "PNG", optimize=True)
     except Exception as e:  # pragma: no cover
         log(f"downscale failed for {src}: {e}")

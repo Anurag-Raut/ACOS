@@ -70,7 +70,8 @@ Backend selection:
 |---|---|
 | `ACOS_BIN` | path to the `acos` binary (default: `acos` on `PATH`, else `target/{release,debug}/acos` walking up from the cwd) |
 | `ACOS_ALLOWED_ROOTS` | `:`-separated path roots that path arguments may live under (default: the process cwd, plus the artifacts dir) |
-| `ACOS_ARTIFACTS_DIR` | directory that holds produced artifacts (default `<cwd>/.acos-mcp-artifacts`) |
+| `ACOS_ARTIFACTS_DIR` | directory that holds produced artifacts (default `<cwd>/.acos-mcp-artifacts`). `acos_verify` writes `out/<scenario>/` inside it, bounded by retention (below) |
+| `ACOS_KEEP_ARTIFACTS` | artifact retention for runs started through this server: `all`, `referenced` (default) or `none-on-pass` (see `docs/AGENT_API.md` §10.2). A non-pass run always keeps everything |
 
 Server limits (all optional):
 
@@ -210,6 +211,33 @@ always carries an `error` with a stable `code`, an actionable `hint`,
 Evidence paths under the artifacts directory are returned as MCP
 `resource_link` items (2025-06-18) or text lines; small PNG/JPEG/WebP images are
 inlined as MCP `image` content.
+
+### Artifacts and retention
+
+`acos_verify` writes one run directory per scenario under `ACOS_ARTIFACTS_DIR`
+(§10 of `docs/AGENT_API.md`). Retention applies to MCP runs automatically:
+
+* a **passing** run keeps the verdict, `engine.json`, `retention.json`, the step
+  documents, the UI trees, the logs, the events and the frames its assertions or
+  captures declare (plus the first and last frame). Retained frames are
+  re-encoded losslessly, so a run that used to cost 0.5–2 GB costs single-digit
+  MiB;
+* a **failing, timing-out, erroring or unsupported** run keeps every artifact —
+  that is the diagnosis an agent reads next;
+* no retained JSON names a pruned file. `retention.json` says what was kept or
+  pruned (`decision`, `kept_bytes`, `pruned_bytes`,
+  `kept_because_referenced`), and the verdict's `notes` repeat the summary.
+
+The server never prunes the collection itself. To bound old runs (a long agent
+session accumulates them), run the CLI against the same root:
+
+```bash
+acos artifacts gc --dir "$ACOS_ARTIFACTS_DIR" --older-than 24h --keep-last 2 --dry-run
+```
+
+It never touches a non-pass run younger than `--older-than` nor the newest
+`--keep-last` runs per scenario, and prints the freed bytes. Drop `--dry-run` to
+prune.
 
 ### Example session
 

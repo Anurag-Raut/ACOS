@@ -176,10 +176,19 @@ pub struct ArtSession {
     /// (`mode`, `settled`, `probe_seq`, `tree_age_ms`, `bound`). Copied into
     /// the `acos_observe_tree` result; never synthesised.
     last_tree_settle: Option<serde_json::Value>,
+    /// G3f1: the raw probe tree of the most recent tree reply, byte-for-byte as
+    /// the guest produced it. The launch's content wait hands this back to the
+    /// guest as `baseline_tree`, so "the next tree state" is an exact guest-side
+    /// comparison (no host re-serialisation, no signature that could differ).
+    last_tree_json: Option<serde_json::Value>,
     /// G3c: how the most recent launch bound its first frame (traversals, wait,
     /// node count and whether it is only the window skeleton). Serve publishes
     /// it in the launch reply so a placeholder is visible, never silent.
     first_frame_report: Option<FirstFrameReport>,
+    /// G3f1: `(settled, bound)` of the frame a launch finally bound, so serve
+    /// can publish `result.settle` for exactly that frame (a `change-draw` launch
+    /// frame says `settled:false` instead of inheriting the pre-launch block).
+    first_frame_bound: Option<(bool, Option<String>)>,
     /// P9: the settle mode the **next** `reset` binds its fresh tree with
     /// (`strict` by default). Serve sets it per `acos_reset` call; the reset
     /// body reads it before it replaces the session.
@@ -823,12 +832,24 @@ fn settle_state_changed(reply: &serde_json::Value) -> Option<bool> {
 }
 
 /// G3c: how a launch bound its first frame.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FirstFrameReport {
     /// Traversals spent on the launch frame (1 = the first one was content).
     pub traversals: usize,
     /// Wall time those traversals took.
     pub waited_ms: u64,
+    /// G3f1: how many of those traversals were event-gated content waits (a
+    /// request that waits for the guest's next committed tree state, not a
+    /// timed re-traversal). `0` means the app's first frame was already content
+    /// and the launch paid nothing extra.
+    pub event_waits: usize,
+    /// G3f1: did the guest report the bound traversal as *settled* (no pending
+    /// framework work)? A `change-draw` bind is fresh but not settled, and the
+    /// reply says so instead of implying a quiet screen.
+    pub settled: bool,
+    /// G3f1: the guest's own bind rule for the bound frame
+    /// (`strict-event`, `change-draw`, `probe-fresh`), when it reported one.
+    pub bound: Option<String>,
     /// Nodes in the bound tree.
     pub nodes: usize,
     /// True when the bound tree is still only the window skeleton after the
@@ -839,20 +860,26 @@ pub(crate) struct FirstFrameReport {
 impl FirstFrameReport {
     /// The report for a launch whose first traversal is the frame (no wait,
     /// no claim about content).
-    fn one_traversal(tree: &UiTree) -> Self {
+    fn one_traversal(tree: &UiTree, settled: bool, bound: Option<String>) -> Self {
         FirstFrameReport {
             traversals: 1,
             waited_ms: 0,
+            event_waits: 0,
+            settled,
+            bound,
             nodes: ui_tree_node_count(&tree.nodes),
             placeholder: first_frame_is_bare_skeleton(tree),
         }
     }
 
     /// The evidence object a launch reply publishes (`result.first_frame`).
-    pub(crate) fn to_json(self) -> serde_json::Value {
+    pub(crate) fn to_json(&self) -> serde_json::Value {
         serde_json::json!({
             "traversals": self.traversals,
             "waited_ms": self.waited_ms,
+            "event_waits": self.event_waits,
+            "settled": self.settled,
+            "bound": self.bound,
             "nodes": self.nodes,
             "placeholder": self.placeholder,
         })
@@ -888,7 +915,12 @@ fn ui_tree_has_app_text(nodes: &[UiNode]) -> bool {
 const FIRST_FRAME_SKELETON_MAX_NODES: usize = 40;
 
 /// G3c: how many traversals a launch may spend waiting for app content.
-const FIRST_FRAME_MAX_ATTEMPTS: usize = 4;
+///
+/// G3f1: this is now only a runaway guard, not the binding budget — a content
+/// wait is an *event* request that returns when the guest commits its next tree
+/// state, so the wall-clock budget below is what decides. Kept generous so a
+/// pathologically repainting screen cannot loop forever.
+const FIRST_FRAME_MAX_ATTEMPTS: usize = 8;
 
 /// G3c: at or below this node count a text-free tree is the *bare* window
 /// skeleton measured on Gaten (1–10 nodes), so a launch frame that never grew
@@ -897,13 +929,24 @@ const FIRST_FRAME_MAX_ATTEMPTS: usize = 4;
 /// waited for, never labelled.
 const FIRST_FRAME_PLACEHOLDER_MAX_NODES: usize = 16;
 
-/// G3c: the launch's first-frame content budget (`ACOS_ART_FIRST_FRAME_MS`,
-/// default 900 ms — the app's own mounting work, not a settle deadline).
+/// G3c/G3f1: the launch's first-frame content budget (`ACOS_ART_FIRST_FRAME_MS`,
+/// default 5000 ms).
+///
+/// G3f1: measured **from the end of the launch's own traversal**, because the
+/// wait it bounds is event-driven: it ends as soon as the guest commits the
+/// app's next content state (a changed tree after a real draw, plus its settle
+/// when the screen goes quiet), and is only fully spent by an app that never
+/// gains content at all. The pre-G3f1 value (900 ms, from launch entry) was the
+/// binding constraint: two strict re-traversals cost ~1.63 s on Gaten, so the
+/// retry landed *before* the first content paint and the launch published a
+/// labelled placeholder (E13.8, 9/30 launches). Measured on Gaten in this
+/// branch, the RN bundle's first content paint lands 1–3 s after the skeleton,
+/// so a smaller budget only reproduces the placeholder.
 fn first_frame_budget_ms() -> u64 {
     std::env::var("ACOS_ART_FIRST_FRAME_MS")
         .ok()
         .and_then(|value| value.trim().parse::<u64>().ok())
-        .unwrap_or(900)
+        .unwrap_or(5000)
 }
 
 /// G3c: is this tree the window skeleton with nothing of the app's mounted yet?
@@ -926,6 +969,45 @@ fn first_frame_is_unmounted(tree: &UiTree) -> bool {
 fn first_frame_is_bare_skeleton(tree: &UiTree) -> bool {
     ui_tree_node_count(&tree.nodes) <= FIRST_FRAME_PLACEHOLDER_MAX_NODES
         && !ui_tree_has_app_text(&tree.nodes)
+}
+
+/// G3f1: did the guest report this traversal as settled?
+///
+/// Missing/unknown means settled, which is the pre-existing reading of a reply
+/// that carries no settle block (the launch's own traversal is then treated
+/// exactly as it always was). A `change-draw` bind is explicitly **not** settled
+/// (fresh, not quiet) and says so.
+fn tree_settle_settled(settle: &Option<serde_json::Value>) -> bool {
+    settle
+        .as_ref()
+        .and_then(|block| block.get("settled"))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true)
+}
+
+/// G3f1: the guest's own bind rule for the most recent traversal, if it named
+/// one (`strict-event`, `change-draw`, `probe-fresh`, `timeout`).
+fn settle_bound(settle: &Option<serde_json::Value>) -> Option<String> {
+    settle
+        .as_ref()
+        .and_then(|block| block.get("bound"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+}
+
+/// G3f1: did the guest bind this traversal to the app's next **draw commit**
+/// after the tree we handed it (`bound:"change-draw"`)?
+///
+/// That is the launch's content event on a screen that never goes quiet: the
+/// tree changed and its draw is stored by C1, while the framework may still be
+/// animating. It is a fresh frame (P9's launch contract), never a settled one,
+/// and the reply's settle block keeps `settled:false` so no assertion can use it.
+fn tree_bound_draw_commit(settle: &Option<serde_json::Value>) -> bool {
+    settle
+        .as_ref()
+        .and_then(|block| block.get("bound"))
+        .and_then(serde_json::Value::as_str)
+        == Some("change-draw")
 }
 
 /// Structural signature of a UI tree: its nodes and their attributes, with no
@@ -1365,7 +1447,9 @@ impl ArtSession {
             last_input_settle: None,
             settle_mode: "strict",
             last_tree_settle: None,
+            last_tree_json: None,
             first_frame_report: None,
+            first_frame_bound: None,
             reset_settle: "strict",
             reset_pixels: true,
             insets,
@@ -2343,17 +2427,50 @@ impl ArtSession {
     }
 
     fn request_tree_with(&mut self, settle: &str, pixels: bool) -> Result<(), BackendError> {
+        self.request_tree_params(settle, pixels, None, None)
+    }
+
+    /// G3f1: a tree request that waits for the guest's **next** tree state.
+    ///
+    /// `baseline_tree` is the raw probe tree this engine already holds; the
+    /// guest only reports settled when the sample's tree differs from it, so the
+    /// reply is the app's next committed state (a real draw the guest itself
+    /// observed), not the same skeleton again. `timeout_ms` bounds the wait from
+    /// now; the reply still carries the latest tree with `settled:false` when it
+    /// expires, exactly as the P12b rule says.
+    fn request_tree_after(
+        &mut self,
+        settle: &str,
+        pixels: bool,
+        baseline_tree: serde_json::Value,
+        timeout_ms: u64,
+    ) -> Result<(), BackendError> {
+        self.request_tree_params(settle, pixels, Some(baseline_tree), Some(timeout_ms))
+    }
+
+    fn request_tree_params(
+        &mut self,
+        settle: &str,
+        pixels: bool,
+        baseline_tree: Option<serde_json::Value>,
+        timeout_ms: Option<u64>,
+    ) -> Result<(), BackendError> {
         let started = Instant::now();
         let t0 = m5_now_us();
         let mut request = serde_json::json!({"cmd":"tree", "settle": settle});
-        if let Some(timeout) = self.settle_timeout_ms {
+        let settle_timeout = timeout_ms.or(self.settle_timeout_ms);
+        if let Some(timeout) = settle_timeout {
             request["settle_timeout_ms"] = serde_json::json!(timeout);
         }
         if !pixels {
             request["pixels"] = serde_json::json!(false);
         }
+        if let Some(baseline) = baseline_tree {
+            request["baseline_tree"] = baseline;
+        }
         let reply = self.command(request)?;
         self.last_tree_settle = reply.get("settle").cloned();
+        self.last_tree_json = reply.get("tree").cloned();
         let t1 = m5_now_us();
         let mut timing = PhaseTiming {
             guest_ms: started.elapsed().as_millis() as u64,
@@ -2757,7 +2874,14 @@ impl ArtSession {
     /// G3c: how the most recent launch bound its first frame (serve publishes
     /// it in the launch reply, so a placeholder is visible and never silent).
     pub(crate) fn first_frame_report(&self) -> Option<FirstFrameReport> {
-        self.first_frame_report
+        self.first_frame_report.clone()
+    }
+
+    /// G3f1: the settle verdict of the frame the last launch bound
+    /// (`(settled, bound)`), so serve publishes `result.settle` for that frame
+    /// rather than for the pre-launch traversal.
+    pub(crate) fn first_frame_bound(&self) -> Option<(bool, Option<String>)> {
+        self.first_frame_bound.clone()
     }
 
     /// P9: the tree a **launch** reply binds.
@@ -2792,105 +2916,273 @@ pub(crate) fn ensure_launch_tree(
         Ok(tree)
     }
 
-    /// G3c: bind a launch's first frame, waiting past an unmounted window
+    /// G3c/G3f1: bind a launch's first frame, waiting past an unmounted window
     /// skeleton.
     ///
     /// One traversal is the normal case (`settle` already waits for the frame
-    /// the request produced). When that traversal returns the window skeleton —
-    /// no text/content-description anywhere and at most
-    /// [`FIRST_FRAME_SKELETON_MAX_NODES`] nodes — the app's own mounting work is
-    /// still in flight (measured on Gaten: 10 nodes at the launch frame, 243 two
-    /// seconds later), so the traversal is repeated until the tree carries app
-    /// content, `FIRST_FRAME_MAX_ATTEMPTS` is reached, or the
-    /// `ACOS_ART_FIRST_FRAME_MS` budget (default 900 ms) expires. The report
-    /// says which happened; `placeholder` is true only for a frame that never
-    /// gained content, and such a frame is never claimed as app content
-    /// (`FrameMeta::meaningful` is cleared by the caller).
+    /// the request produced) and an app whose first frame already carries
+    /// content pays **nothing** extra: no second request is ever sent.
+    ///
+    /// When that traversal returns the window skeleton — no text/content-
+    /// description anywhere and at most [`FIRST_FRAME_SKELETON_MAX_NODES`] nodes
+    /// — the app's own mounting work is still in flight (measured on Gaten: 10
+    /// nodes at the launch frame, 243 two seconds later). The launch then waits
+    /// for an **event**, not a traversal count: it sends the skeleton back as
+    /// `baseline_tree` and the guest's strict settle rule only accepts a sample
+    /// whose tree differs from it (one real draw, its own confirmation window,
+    /// no pending framework work — the same signal the launch's own traversal
+    /// uses), bounded by the `ACOS_ART_FIRST_FRAME_MS` wall clock (default
+    /// 3000 ms, measured from the end of the launch's own traversal). The
+    /// request is repeated only while the guest keeps committing *further*
+    /// still-unmounted states inside that budget (a cap of
+    /// [`FIRST_FRAME_MAX_ATTEMPTS`] traversals is a runaway guard, never the
+    /// budget).
+    ///
+    /// Every guarantee of the pre-G3f1 wait is preserved:
+    ///
+    /// * a frame that never gains content is still published with
+    ///   `placeholder: true` and `meaningful: false` (fail-closed, never a
+    ///   claim, never an assertion's evidence);
+    /// * a wait that does not settle (an endlessly repainting screen, a guest
+    ///   error, the budget) rolls the frame **and** its settle verdict back to
+    ///   the last settled traversal, so the wait can never turn a passing launch
+    ///   into a `TIMEOUT`;
+    /// * the launch step's P9 contract is untouched: the caller restores the
+    ///   pre-launch settle block, so the launch step is judged exactly as before.
+    ///
+    /// `fast` mode (navigation, never assertion evidence) has no change gate —
+    /// the guest's fast path already binds the first probe sample newer than the
+    /// request — so it keeps a plain re-traversal bounded by the same wall
+    /// clock.
     fn bind_first_frame(
         &mut self,
         settle: &'static str,
         pixels: bool,
     ) -> Result<(UiTree, FirstFrameReport), BackendError> {
-        let deadline = Instant::now() + Duration::from_millis(first_frame_budget_ms());
         let mut traversals = 0usize;
         let mut waited_ms = 0u64;
+        let mut event_waits = 0usize;
+
+        // 1. The launch's own traversal. Its failure is the launch's failure,
+        // exactly as before.
+        let started = Instant::now();
+        let first = self.request_tree_with(settle, pixels);
+        traversals += 1;
+        waited_ms += started.elapsed().as_millis() as u64;
+        first?;
+        let mut tree = self.require_cached_tree()?;
+        if !tree_settle_settled(&self.last_tree_settle) {
+            // Pre-existing behaviour: a first traversal that did not settle is
+            // handed back as-is (the caller's settle deadline decides).
+            let bound = settle_bound(&self.last_tree_settle);
+            let report =
+                FirstFrameReport::one_traversal(&tree, false, bound.clone());
+            self.first_frame_bound = Some((false, bound));
+            return Ok((tree, report));
+        }
         // The last **settled** binding. A retry is an optimisation, never a new
-        // failure mode: when it does not settle (a screen that keeps drawing —
-        // Gaten's welcome loop — or an engine error), the launch frame and its
-        // settle verdict roll back to this one, exactly as a launch without the
-        // retry would have.
-        let mut settled: Option<(CachedFrame, Option<serde_json::Value>)> = None;
-        loop {
-            let started = Instant::now();
-            let result = self.request_tree_with(settle, pixels);
-            traversals += 1;
-            waited_ms += started.elapsed().as_millis() as u64;
-            let is_settled = self
-                .last_tree_settle
-                .as_ref()
-                .and_then(|block| block.get("settled"))
-                .and_then(serde_json::Value::as_bool)
-                .unwrap_or(true);
-            if let Err(error) = result {
-                // The first traversal is the launch's own traversal: its failure
-                // is the launch's failure, as before.
-                if traversals == 1 {
-                    return Err(error);
+        // failure mode: when it does not settle, the launch frame and its settle
+        // verdict roll back to this one, exactly as a launch without the wait
+        // would have.
+        let mut settled_binding = (
+            self.require_cached_frame()?.clone(),
+            self.last_tree_settle.clone(),
+        );
+
+        // 2. The content wait. Only an unmounted skeleton reaches it.
+        if first_frame_is_unmounted(&tree) {
+            let deadline = Instant::now() + Duration::from_millis(first_frame_budget_ms());
+            while first_frame_is_unmounted(&tree) && traversals < FIRST_FRAME_MAX_ATTEMPTS {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    break;
                 }
-                break;
-            }
-            let tree = self.require_cached_tree()?;
-            if is_settled {
-                settled = Some((
-                    self.require_cached_frame()?.clone(),
-                    self.last_tree_settle.clone(),
-                ));
-            } else if traversals == 1 {
-                // Pre-existing behaviour: a first traversal that did not settle
-                // is handed back as-is (the caller's settle deadline decides).
-                let report = FirstFrameReport::one_traversal(&tree);
-                return Ok((tree, report));
-            }
-            let done = !first_frame_is_unmounted(&tree)
-                || Instant::now() >= deadline
-                || traversals >= FIRST_FRAME_MAX_ATTEMPTS
-                || !is_settled;
-            if done {
-                break;
+                let budget = match self.settle_timeout_ms {
+                    // A caller's own settle deadline is a ceiling on the wait.
+                    Some(caller) => (remaining.as_millis() as u64).min(caller),
+                    None => remaining.as_millis().max(1) as u64,
+                };
+                // The raw probe tree this engine holds. `strict` hands it to the
+                // guest as the change baseline; `fast` has no gate.
+                let baseline = if settle == "strict" {
+                    self.last_tree_json.clone()
+                } else {
+                    None
+                };
+                let gated = baseline.is_some();
+                let started = Instant::now();
+                let result = match baseline {
+                    Some(baseline) => self.request_tree_after(settle, pixels, baseline, budget),
+                    None => self.request_tree_params(settle, pixels, None, Some(budget)),
+                };
+                traversals += 1;
+                if gated {
+                    event_waits += 1;
+                }
+                waited_ms += started.elapsed().as_millis() as u64;
+                if result.is_err() {
+                    // Never a new failure mode: keep the last settled binding.
+                    break;
+                }
+                let settled_now = tree_settle_settled(&self.last_tree_settle);
+                let draw_commit = tree_bound_draw_commit(&self.last_tree_settle);
+                tree = self.require_cached_tree()?;
+                if settled_now {
+                    settled_binding = (
+                        self.require_cached_frame()?.clone(),
+                        self.last_tree_settle.clone(),
+                    );
+                } else if draw_commit {
+                    // G3f1: a fresh draw-committed content frame. It is accepted
+                    // as the launch frame (P9's contract is a *fresh* frame, and
+                    // the guest's settle verdict stays in the reply as
+                    // `settled:false`), so an animating screen stops producing a
+                    // skeleton placeholder. `settled_binding` intentionally keeps
+                    // the last *settled* traversal: if a later wait commits
+                    // nothing, the rollback target is unchanged.
+                    if !first_frame_is_unmounted(&tree) {
+                        break;
+                    }
+                } else {
+                    // The wait hit its budget (or the guest kept reporting the
+                    // same tree): the rollback below restores the last settled
+                    // traversal, so the wait can never turn a pass into a
+                    // TIMEOUT.
+                    break;
+                }
             }
         }
-        // Keep the settled binding as the launch frame whenever the last
-        // traversal did not leave one of its own.
-        let tree = if let Some((frame, block)) = settled {
-            let last_unsettled = !self
-                .last_tree_settle
-                .as_ref()
-                .and_then(|b| b.get("settled"))
-                .and_then(serde_json::Value::as_bool)
-                .unwrap_or(true);
-            if last_unsettled {
-                self.cached = Some(frame.clone());
-                self.last_tree_settle = block;
-            }
-            frame.tree.clone()
-        } else {
-            self.require_cached_tree()?
-        };
+
+        // 3. Keep the settled binding as the launch frame whenever the last
+        // traversal did not leave a usable one of its own (a settle timeout or a
+        // guest error). A `change-draw` bind *is* usable and stays.
+        let mut settled = tree_settle_settled(&self.last_tree_settle);
+        let mut bound = settle_bound(&self.last_tree_settle);
+        if !settled && !tree_bound_draw_commit(&self.last_tree_settle) {
+            self.cached = Some(settled_binding.0.clone());
+            self.last_tree_settle = settled_binding.1;
+            tree = settled_binding.0.tree.clone();
+            settled = tree_settle_settled(&self.last_tree_settle);
+            bound = settle_bound(&self.last_tree_settle);
+        }
         let unmounted = first_frame_is_unmounted(&tree);
+        self.first_frame_bound = Some((settled, bound.clone()));
         let report = FirstFrameReport {
             traversals,
             waited_ms,
+            event_waits,
+            settled,
+            bound,
             nodes: ui_tree_node_count(&tree.nodes),
             placeholder: unmounted && first_frame_is_bare_skeleton(&tree),
         };
         if report.placeholder {
             eprintln!(
                 "acos serve: launch first frame is a window skeleton ({} nodes, no app text) \
-                 after {} traversal(s)/{} ms; reported as placeholder, never as app content",
-                report.nodes, report.traversals, report.waited_ms
+                 after {} traversal(s)/{} ms ({} event wait(s)); reported as placeholder, \
+                 never as app content",
+                report.nodes, report.traversals, report.waited_ms, report.event_waits
             );
         }
         Ok((tree, report))
+    }
+
+    /// G3f1: keep the evidence of a launch whose guest died **before its first
+    /// frame**, and classify it in the reply.
+    ///
+    /// A pre-fix Gaten run lost 1/60 launches to `GUEST_EXITED` exit 1 before
+    /// any frame with no evidence kept (E13.8, unclassified). The launcher does
+    /// write `session-exit.json` (guest exit status, logd tail, stdout/stderr
+    /// tails, native-crash record) — but only as it tears down, i.e. *after* the
+    /// `GUEST_EXITED` reply the engine already classified, so the reply could
+    /// carry `session_exit: null`. This closes and reaps the launcher first
+    /// (bounded, idempotent), then reads the record, writes a consolidated
+    /// `launch-failure.json` next to it under the session's artifacts, and
+    /// returns the facts an envelope can carry.
+    ///
+    /// Nothing here invents a cause: a status without a crash record is
+    /// reported as exactly that (`class: "guest-exited-before-first-frame"`).
+    pub(crate) fn keep_launch_failure_evidence(
+        &mut self,
+        error: &BackendError,
+    ) -> serde_json::Value {
+        // Bounded close: it delivers the lifecycle, kills the group if needed
+        // and reaps the launcher, which is what makes its record readable.
+        let _ = self.close();
+        let out = self.artifacts.join("art-frames");
+        let exit_doc = crate::failure::read_session_exit(&self.artifacts);
+        let protocol = error.to_protocol_error();
+        let child = self.lost_child_exit_status();
+        let facts = crate::failure::prelaunch_exit_facts(
+            exit_doc.as_ref(),
+            child.and_then(|status| status.code()),
+            {
+                use std::os::unix::process::ExitStatusExt;
+                child.and_then(|status| status.signal())
+            },
+        );
+        let evidence_files = {
+            let mut files = serde_json::Map::new();
+            for name in [
+                "session-exit.json",
+                "live-session.json",
+                "native-crash.json",
+                "native-crash.txt",
+                "session-timing.json",
+                "unsupported.jsonl",
+            ] {
+                let path = out.join(name);
+                if path.is_file() {
+                    files.insert(name.to_string(), serde_json::json!(path.display().to_string()));
+                }
+            }
+            files
+        };
+        let logd_tail = exit_doc
+            .as_ref()
+            .and_then(|doc| doc.get("logd_tail"))
+            .and_then(|value| value.as_array())
+            .map(|lines| {
+                let start = lines.len().saturating_sub(12);
+                lines[start..].to_vec()
+            })
+            .unwrap_or_default();
+        let doc = serde_json::json!({
+            "utc_ms": crate::failure::host_ms_now(),
+            "route": "launch",
+            "stage": "before-first-frame",
+            "error_code": protocol.code.as_str(),
+            "error": protocol.message,
+            "session_exit_path": crate::failure::session_exit_path(&self.artifacts)
+                .display().to_string(),
+            "classification": facts,
+            "logd_tail": logd_tail,
+            "session_exit": exit_doc.as_ref().map(|doc| {
+                crate::failure::session_exit_facts_for(doc, &self.artifacts)
+            }),
+            "evidence_files": evidence_files.clone(),
+        });
+        let kept = out.join("launch-failure.json");
+        let _ = std::fs::create_dir_all(&out);
+        if serde_json::to_vec_pretty(&doc)
+            .ok()
+            .and_then(|bytes| std::fs::write(&kept, bytes).ok())
+            .is_none()
+        {
+            eprintln!(
+                "acos serve: cannot write the launch-failure evidence at {}",
+                kept.display()
+            );
+        }
+        serde_json::json!({
+            "kept_path": kept.display().to_string(),
+            "kept": kept.is_file(),
+            "session_exit_path": crate::failure::session_exit_path(&self.artifacts)
+                .display().to_string(),
+            "classification": facts,
+            "logd_tail": logd_tail,
+            "evidence_files": evidence_files,
+        })
     }
 
     /// P9: choose the settle mode and pixel capture the next `reset` binds its
@@ -4993,4 +5285,358 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    // ---- G3f1: the launch's content wait ---------------------------------- //
+    //
+    // A fake `acos-art` that answers the interactive protocol with the *launch
+    // skeleton* first and, for a request that carries `baseline_tree`, with the
+    // app's content — or with nothing at all. It records every request so a test
+    // can prove how many traversals a launch actually paid for.
+
+    const FAKE_SKELETON: &str = concat!(
+        r#"{"nodes":[{"class":"com.android.internal.policy.DecorView","children":[{"class":"android.widget.FrameLayout","children":[{"class":"android.widget.LinearLayout","children":[{"class":"android.widget.FrameLayout","children":[{"class":"com.facebook.react.ReactRootView"}]}]}]}]}]}"#
+    );
+    const FAKE_CONTENT: &str = concat!(
+        r#"{"nodes":[{"class":"com.android.internal.policy.DecorView","children":[{"class":"android.widget.FrameLayout","children":[{"class":"android.widget.TextView","text":"Set up Gaten","children":[]}]}]}]}"#
+    );
+
+    fn g3f1_scratch(name: &str) -> PathBuf {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/g3f1-tests");
+        let dir = root.join(format!(
+            "{}-{}-{name}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// `mode`: `content-first` | `late` | `never` | `unsettled-change`.
+    fn fake_first_frame_art(dir: &Path, mode: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let png = dir.join("tiny.png");
+        std::fs::write(&png, super::super::fake::TINY_PNG).unwrap();
+        let script = dir.join("fake-acos-art.sh");
+        let requests = dir.join("requests.log");
+        let mut body = String::new();
+        body.push_str("#!/bin/sh\n");
+        body.push_str("echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.test\",\"activity\":\"dev.test/.Main\",\"width\":1080,\"height\":2400,\"density\":420}'\n");
+        body.push_str("seq=0\ngated=0\n");
+        body.push_str(&format!("requests='{}'\n", requests.display()));
+        body.push_str(&format!("png='{}'\n", png.display()));
+        body.push_str(&format!("mode='{mode}'\n"));
+        body.push_str(&format!("skeleton='{FAKE_SKELETON}'\n"));
+        body.push_str(&format!("content='{FAKE_CONTENT}'\n"));
+        body.push_str("while IFS= read -r line; do\n");
+        body.push_str("  printf '%s\\n' \"$line\" >> \"$requests\"\n");
+        body.push_str("  case \"$line\" in\n");
+        body.push_str("    *'\"cmd\":\"tree\"'*)\n");
+        body.push_str("      seq=$((seq+1))\n");
+        body.push_str("      case \"$line\" in\n");
+        body.push_str("        *'baseline_tree'*)\n");
+        body.push_str("          gated=$((gated+1))\n");
+        body.push_str("          case \"$mode\" in\n");
+        body.push_str("            late)\n");
+        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$seq,\\\"md5\\\":\\\"m$seq\\\",\\\"png\\\":\\\"$png\\\",\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"strict-event\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("              ;;\n");
+        body.push_str("            never)\n");
+        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$seq,\\\"md5\\\":\\\"m$seq\\\",\\\"png\\\":\\\"$png\\\",\\\"tree\\\":$skeleton,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"tree-unchanged\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("              ;;\n");
+        body.push_str("            late-change-draw)\n");
+        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$seq,\\\"md5\\\":\\\"m$seq\\\",\\\"png\\\":\\\"$png\\\",\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"change-draw\\\",\\\"awaited\\\":\\\"tree-change\\\",\\\"changed_since_baseline\\\":true}}\"\n");
+        body.push_str("              ;;\n");
+        body.push_str("            unsettled-change)\n");
+        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$seq,\\\"md5\\\":\\\"m$seq\\\",\\\"png\\\":\\\"$png\\\",\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"animating\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("              ;;\n");
+        body.push_str("          esac\n");
+        body.push_str("          ;;\n");
+        body.push_str("        *)\n");
+        body.push_str("          tree=$skeleton\n");
+        body.push_str("          [ \"$mode\" = content-first ] && tree=$content\n");
+        body.push_str("          echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$seq,\\\"md5\\\":\\\"m$seq\\\",\\\"png\\\":\\\"$png\\\",\\\"tree\\\":$tree,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"strict-event\\\"}}\"\n");
+        body.push_str("          ;;\n");
+        body.push_str("      esac\n");
+        body.push_str("      ;;\n");
+        body.push_str("    *'\"cmd\":\"close\"'*)\n");
+        body.push_str("      echo '{\"ok\":true,\"cmd\":\"close\"}'\n");
+        body.push_str("      exit 0\n");
+        body.push_str("      ;;\n");
+        body.push_str("    *)\n");
+        body.push_str("      echo '{\"ok\":false,\"code\":\"BAD_REQUEST\",\"error\":\"no\"}'\n");
+        body.push_str("      ;;\n");
+        body.push_str("  esac\n");
+        body.push_str("done\n");
+        std::fs::write(&script, body).unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+        script
+    }
+
+    fn start_fake_first_frame(dir: &Path, mode: &str) -> ArtSession {
+        let script = fake_first_frame_art(dir, mode);
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        ArtSession::start(&apk, dir).expect("fake session starts")
+    }
+
+    /// Late content: the launch's own traversal binds the skeleton, the event
+    /// wait returns the app's content frame, and the launch reports one wait.
+    #[test]
+    fn g3f1_late_content_binds_the_content_frame() {
+        let dir = g3f1_scratch("late");
+        let _guard = art_bin_env_lock();
+        let mut session = start_fake_first_frame(&dir, "late");
+        let tree = session
+            .ensure_launch_tree("strict", true)
+            .expect("launch binds");
+        let report = session.first_frame_report().expect("report");
+        assert_eq!(report.traversals, 2, "{report:?}");
+        assert_eq!(report.event_waits, 1, "{report:?}");
+        assert!(!report.placeholder, "content must not be a placeholder: {report:?}");
+        assert!(report.settled, "a settled content bind says so: {report:?}");
+        assert_eq!(report.bound.as_deref(), Some("strict-event"), "{report:?}");
+        assert_eq!(report.nodes, ui_tree_node_count(&tree.nodes));
+        assert!(
+            ui_tree_has_app_text(&tree.nodes),
+            "the bound tree is the content frame"
+        );
+        assert!(
+            !first_frame_is_unmounted(&tree),
+            "content must not be treated as unmounted"
+        );
+        // The wait is a *change* request: it carried the skeleton as its
+        // baseline and the remaining wall-clock budget.
+        let requests = std::fs::read_to_string(dir.join("requests.log")).unwrap();
+        assert_eq!(
+            requests.matches("\"cmd\":\"tree\"").count(),
+            2,
+            "exactly one launch traversal + one event wait: {requests}"
+        );
+        assert!(
+            requests.contains("\"baseline_tree\""),
+            "the wait must hand the skeleton back as the baseline: {requests}"
+        );
+        assert!(
+            requests.contains("\"settle_timeout_ms\""),
+            "the wait must be bounded by the wall clock: {requests}"
+        );
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Content never arrives: the label is a placeholder, the frame is the
+    /// skeleton and the settle verdict is rolled back to the last settled
+    /// traversal (never the timed-out one).
+    #[test]
+    fn g3f1_missing_content_stays_a_labelled_placeholder() {
+        let dir = g3f1_scratch("never");
+        let _guard = art_bin_env_lock();
+        let mut session = start_fake_first_frame(&dir, "never");
+        std::env::set_var("ACOS_ART_FIRST_FRAME_MS", "60");
+        let tree = session
+            .ensure_launch_tree("strict", true)
+            .expect("launch binds a placeholder");
+        std::env::remove_var("ACOS_ART_FIRST_FRAME_MS");
+        let report = session.first_frame_report().expect("report");
+        assert!(report.placeholder, "an unmounted frame is a placeholder: {report:?}");
+        assert_eq!(report.traversals, 2, "{report:?}");
+        assert_eq!(report.event_waits, 1, "{report:?}");
+        assert!(
+            report.settled,
+            "the rolled-back frame is the settled skeleton: {report:?}"
+        );
+        assert_eq!(report.bound.as_deref(), Some("strict-event"), "{report:?}");
+        assert!(
+            first_frame_is_bare_skeleton(&tree),
+            "the placeholder is the skeleton itself, not invented content"
+        );
+        let settle = session.last_tree_settle().expect("settle block");
+        assert_eq!(
+            settle.get("settled").and_then(|v| v.as_bool()),
+            Some(true),
+            "a timed-out retry must roll the settle verdict back to the settled one: {settle}"
+        );
+        assert_eq!(
+            settle.get("bound").and_then(|v| v.as_str()),
+            Some("strict-event"),
+            "{settle}"
+        );
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A screen that never goes quiet (Gaten's welcome timeline) still commits
+    /// draws: the wait ends on the app's next draw commit, the frame is the
+    /// content frame, and the reply says `settled:false` instead of pretending a
+    /// quiet screen.
+    #[test]
+    fn g3f1_draw_commit_binds_content_and_says_it_is_not_settled() {
+        let dir = g3f1_scratch("change-draw");
+        let _guard = art_bin_env_lock();
+        let mut session = start_fake_first_frame(&dir, "late-change-draw");
+        let tree = session
+            .ensure_launch_tree("strict", true)
+            .expect("launch binds");
+        let report = session.first_frame_report().expect("report");
+        assert_eq!(report.traversals, 2, "{report:?}");
+        assert_eq!(report.event_waits, 1, "{report:?}");
+        assert!(!report.placeholder, "content is content: {report:?}");
+        assert!(
+            !report.settled,
+            "a draw-commit bind is fresh, not settled, and must say so: {report:?}"
+        );
+        assert_eq!(report.bound.as_deref(), Some("change-draw"), "{report:?}");
+        assert!(ui_tree_has_app_text(&tree.nodes));
+        // The frame is not assertion evidence: the settle block keeps
+        // `settled:false`, so an assertion can never rest on it.
+        let settle = session.last_tree_settle().expect("settle block");
+        assert_eq!(
+            settle.get("settled").and_then(|v| v.as_bool()),
+            Some(false),
+            "{settle}"
+        );
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A changed but unsettled retry also rolls back: the wait can never turn a
+    /// passing launch into a TIMEOUT, and never binds a frame it cannot prove.
+    #[test]
+    fn g3f1_unsettled_retry_rolls_back_to_the_settled_traversal() {
+        let dir = g3f1_scratch("unsettled");
+        let _guard = art_bin_env_lock();
+        let mut session = start_fake_first_frame(&dir, "unsettled-change");
+        let tree = session
+            .ensure_launch_tree("strict", true)
+            .expect("launch binds");
+        let report = session.first_frame_report().expect("report");
+        assert!(report.placeholder, "{report:?}");
+        assert_eq!(report.traversals, 2, "{report:?}");
+        assert!(
+            first_frame_is_bare_skeleton(&tree),
+            "an unsettled retry rolls the frame back to the settled skeleton"
+        );
+        let settle = session.last_tree_settle().expect("settle block");
+        assert_eq!(
+            settle.get("settled").and_then(|v| v.as_bool()),
+            Some(true),
+            "the rolled-back verdict is the settled one: {settle}"
+        );
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An app whose first frame already carries content pays ZERO extra
+    /// traversals: no baseline request is ever sent.
+    #[test]
+    fn g3f1_content_first_pays_no_extra_traversal() {
+        let dir = g3f1_scratch("content-first");
+        let _guard = art_bin_env_lock();
+        let mut session = start_fake_first_frame(&dir, "content-first");
+        let tree = session
+            .ensure_launch_tree("strict", true)
+            .expect("launch binds");
+        let report = session.first_frame_report().expect("report");
+        assert_eq!(report.traversals, 1, "{report:?}");
+        assert_eq!(report.event_waits, 0, "{report:?}");
+        assert_eq!(report.waited_ms, 0, "{report:?}");
+        assert!(!report.placeholder, "{report:?}");
+        assert!(report.settled, "{report:?}");
+        assert!(ui_tree_has_app_text(&tree.nodes));
+        let requests = std::fs::read_to_string(dir.join("requests.log")).unwrap();
+        assert_eq!(
+            requests.matches("\"cmd\":\"tree\"").count(),
+            1,
+            "a content-first launch must not re-traverse: {requests}"
+        );
+        assert!(
+            !requests.contains("\"baseline_tree\""),
+            "{requests}"
+        );
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A guest that dies before its first frame keeps its evidence under the
+    /// session's artifacts and is classified (G3f1/b).
+    #[test]
+    fn g3f1_prelaunch_guest_exit_keeps_evidence_and_is_classified() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = g3f1_scratch("prelaunch-exit");
+        let script = dir.join("fake-acos-art.sh");
+        let out = dir.join("art-frames");
+        std::fs::create_dir_all(&out).unwrap();
+        let mut body = String::new();
+        body.push_str("#!/bin/sh\n");
+        body.push_str("echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.test\",\"activity\":\"dev.test/.Main\",\"width\":1080,\"height\":2400,\"density\":420}'\n");
+        body.push_str("while IFS= read -r line; do\n");
+        body.push_str("  case \"$line\" in\n");
+        body.push_str("    *'\"cmd\":\"tree\"'*)\n");
+        // The reply comes first and the exit record only as the launcher tears
+        // down: exactly the pre-fix race that lost the evidence.
+        body.push_str("      echo '{\"ok\":false,\"cmd\":\"tree\",\"code\":\"GUEST_EXITED\",\"error\":\"the guest ended while binding the tree (status exit status: 1)\"}'\n");
+        body.push_str("      sleep 0.2\n");
+        body.push_str(&format!(
+            "      printf '%s' '{{\"route\":\"launch\",\"outcome\":\"crash\",\"code\":\"GUEST_EXITED\",\"stage\":\"teardown-evidence\",\"guest_exit\":1,\"guest_signal\":null,\"native_crash\":null,\"native_crash_path\":null,\"logd_tail\":[\"I/ActivityManager: start\",\"E/AndroidRuntime: FATAL EXCEPTION: main\"],\"stdout_tail\":[\"ACOSLAUNCH TRACE\"],\"stderr_tail\":[\"boom\"]}}' > '{}'\n",
+            out.join("session-exit.json").display()
+        ));
+        body.push_str("      exit 1\n");
+        body.push_str("      ;;\n");
+        body.push_str("    *) echo '{\"ok\":false,\"code\":\"BAD_REQUEST\",\"error\":\"no\"}'; ;;\n");
+        body.push_str("  esac\n");
+        body.push_str("done\n");
+        std::fs::write(&script, body).unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        let error = session
+            .ensure_launch_tree("strict", false)
+            .expect_err("a dead guest cannot bind a first frame");
+        let evidence = session.keep_launch_failure_evidence(&error);
+        let class = evidence["classification"]["class"]
+            .as_str()
+            .unwrap_or_default();
+        assert_eq!(class, "guest-exited-before-first-frame", "{evidence}");
+        assert_eq!(
+            evidence["classification"]["guest_exit"].as_i64(),
+            Some(1),
+            "{evidence}"
+        );
+        assert_eq!(
+            evidence["classification"]["crash_record"].as_bool(),
+            Some(false),
+            "{evidence}"
+        );
+        let logd = evidence["logd_tail"].as_array().cloned().unwrap_or_default();
+        assert!(
+            logd.iter().any(|line| line
+                .as_str()
+                .unwrap_or_default()
+                .contains("FATAL EXCEPTION")),
+            "the guest's last logd lines must be kept: {evidence}"
+        );
+        let kept = evidence["kept_path"].as_str().unwrap_or_default().to_string();
+        assert!(evidence["kept"].as_bool().unwrap_or(false), "{evidence}");
+        let doc: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&kept).unwrap()).unwrap();
+        assert_eq!(
+            doc["classification"]["class"].as_str(),
+            Some("guest-exited-before-first-frame")
+        );
+        assert!(
+            doc["evidence_files"]["session-exit.json"].is_string(),
+            "the evidence file list names what was kept: {doc}"
+        );
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
