@@ -528,8 +528,8 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
         "acos_swipe" => (
             "Swipe in the held session from `from` to `to`; each point is an object with integer \
              `x` and `y`. `duration_ms` defaults to 300. The ART engine has no swipe command \
-             (UNSUPPORTED_BACKEND, `input.swipe`); where a backend can swipe the reply carries \
-             `changes` like `acos_tap`. Common errors: ELEMENT_NOT_FOUND with \
+             (UNSUPPORTED_BACKEND, `input.swipe`), so it returns no `changes` there. `changes` \
+             (the `diff` argument) applies when the engine supports the action. Common errors: ELEMENT_NOT_FOUND with \
              `details.kind=NoWindowAtPoint` (no frame yet), INVALID_ARGUMENT (a point missing x/y).",
             with_base(json!({
                 "diff": {

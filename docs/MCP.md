@@ -209,9 +209,10 @@ the tool/CLI argument selects the execution engine.
 
 ## 1c. `changes`: what an action did
 
-`acos_tap`, `acos_text` and `acos_key` (and `acos_swipe` on a backend that can
-swipe — the ART engine cannot, so it answers `UNSUPPORTED_BACKEND` instead)
-return `result.changes` **by default**: the settled UI-tree diff of the action,
+`acos_tap`, `acos_text` and `acos_key` return `result.changes` **by default**
+(`acos_swipe` takes the same `diff` argument and returns `changes` when the engine
+supports the action; the ART engine has no swipe, so it answers
+`UNSUPPORTED_BACKEND` and there is no reply to annotate): the settled UI-tree diff of the action,
 so the ordinary step is one call instead of tap-then-observe.
 
 ```json
