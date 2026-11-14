@@ -86,6 +86,22 @@ From each run's own `retention.json` (`before = kept + pruned + reencode_saved`)
 Pixel gates keep their frames because a gate's frames are exactly what its
 verdict declares, and declared evidence is never a prune candidate.
 
+## Suite artifacts after the final run (evidence roots)
+
+`.cache/artgc/suite-art` (33 runs: 15 gates + 5 Gaten flows + 5 Gaten negatives
++ GR4 4 flows + 4 negatives): **2641 MiB total — 153.0 MiB of it passing runs
+(~10 MiB each), 2488.1 MiB non-passing** (kept in full by design; that is the
+diagnosis). The old behaviour wrote 0.5–2 GB *per passing* run.
+
+`python3 -I tools/check-artifact-references.py .cache/artgc/suite-art
+.cache/artgc/art` → `36 run(s) checked, 0 dangling`.
+
+`acos artifacts gc --dir .cache/artgc/suite-art --older-than 0s --keep-last 0
+--dry-run` → `33 run(s) pruned, 0 run(s) kept, 2.6 GiB freed (1797 file(s))`;
+with the default `--keep-last 2` (one run per scenario here) → `0 pruned`,
+which is the point of the keep-last rule. A real (non-dry) run over
+`.cache/artgc/art` freed `141.0 MiB (126 file(s))`.
+
 ## Tests
 
 `cargo test --release --offline -p acos-cli -p acos-verify` — green.
