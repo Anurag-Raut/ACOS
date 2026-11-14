@@ -85,6 +85,7 @@ single ELF whose `e_machine` the in-process loader cannot map.
 | `ASSERTION_FAILED` | An assertion ran and did not hold. Also used by SE1's opt-in `expect_change` on an input step: the action was delivered and the strict settle completed, but the settled frame is pixel-identical to the pre-action frame, so the step proved no visual change. The error carries `details.reason = "expect_change"`, `details.pixels_changed = false`, `details.step_kind`, and the `details.before`/`details.after` frame refs (`frame_seq` + `frames/<seq>.png` when captured). | acos-verify / acos-cli | 1 |
 | `ELEMENT_NOT_FOUND` | A selector matched no node (the tree was complete). | acos-runtime / acos-verify | 1 |
 | `ELEMENT_OFFSCREEN` | A selector matched only nodes that are **not visible to the user**: present in the tree (attached, `VISIBLE`) but off screen or clipped away by an ancestor scroll/pager/hidden window, so its clipped visible rect is empty. `wait_for`/`assert_text`/`assert_visible`/`tap` match user-visible nodes by default, so this is a failure, never a pass; the error details carry the node's `bounds` and (empty) `visible_bounds`. Scroll it into view first (or use `selector.include_invisible` for a deliberate diagnostic). | acos-verify / acos-cli | 1 |
+| `AMBIGUOUS_SELECTOR` | A live-channel selector (`acos_tap`, `acos_assert`, `acos_action`'s tap, and the CLI `tap` that forwards to the daemon) matched **several** user-visible nodes, so the verb refuses to pick one silently. `error.details` carries `field`, `value`, `count` and `candidates` (each with `id`, `text`, `content_desc`, `class`, `bounds`). Narrow the selector (`id`, `content_desc`, `bounds`) or pass `index`. Never a pass; nothing was tapped or asserted. | acos-cli / MCP | 1 |
 | `TREE_TRUNCATED` | A selector matched nothing in a tree the probe reported as truncated (`UiTree.truncated`, any window). Non-pass, non-retryable; the hint names the node budget. Never `ELEMENT_NOT_FOUND`. | acos-verify / acos-cli | 1 |
 | `STALE_REF` | A UI node reference is no longer valid. | acos-runtime | 1 |
 | `INSUFFICIENT_HOST_EVIDENCE` | A guest-asserted channel was asked to justify a pass on an untrusted APK run: the UI tree (`UNTRUSTED_TREE_ASSERTION`), the guest log (`UNTRUSTED_LOG_ASSERTION`, an `assert_log` step), or crash reports. Fail closed and require host-observed evidence. The run itself is allowed (untrusted is an explicit opt-in); only the evidence class is refused. | acos-cli / acos-verify | 1 |
@@ -142,7 +143,7 @@ owner. Values:
 
 | `class` | Owner | Examples |
 |---|---|---|
-| `assertion` | The check or the app's observed behaviour | `ASSERTION_FAILED`, `ELEMENT_NOT_FOUND`, `ELEMENT_OFFSCREEN`, `TREE_TRUNCATED` |
+| `assertion` | The check or the app's observed behaviour | `ASSERTION_FAILED`, `ELEMENT_NOT_FOUND`, `ELEMENT_OFFSCREEN`, `AMBIGUOUS_SELECTOR`, `TREE_TRUNCATED` |
 | `app_crash` | The app process | `APP_CRASHED`, `JAVA_EXCEPTION`, `APP_NOT_RESPONDING` |
 | `unsupported` | A capability the engine/host cannot provide (never a pass) | every `UNSUPPORTED_*`, `SECCOMP_UNAVAILABLE`, `LANDLOCK_UNAVAILABLE` |
 | `harness` | The ACOS harness itself, or a failure that still needs triage | `INTERNAL`, `HOST_PANIC`, `GUEST_EXITED` |

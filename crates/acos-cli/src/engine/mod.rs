@@ -1249,6 +1249,13 @@ fn ui_node_from_json(value: &serde_json::Value, depth: usize) -> UiNode {
         .get("selected")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+    // AccessibilityNodeInfo.isPassword(): the probe reports it and the platform
+    // does not redact the text, so the flag is what lets an input verb mask the
+    // characters it types.
+    node.password = value
+        .get("password")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     node.scrollable = value
         .get("scrollable")
         .and_then(|v| v.as_bool())

@@ -446,6 +446,15 @@ pub struct UiNode {
     /// Whether the node is selected (`View.isSelected()`).
     #[serde(default)]
     pub selected: bool,
+    /// Whether this is a password field (`AccessibilityNodeInfo.isPassword()`,
+    /// i.e. the view's `inputType` carries `TYPE_TEXT_VARIATION_PASSWORD`).
+    ///
+    /// The platform still reports the field's text (AOSP `TextView` sets the
+    /// node text unconditionally and only *flags* the node), so this is what an
+    /// input verb uses to decide to **mask** the typed text in its reply, logs
+    /// and events. It never hides the tree.
+    #[serde(default)]
+    pub password: bool,
     /// Child nodes, in layout order.
     #[serde(default)]
     pub children: Vec<UiNode>,
@@ -478,6 +487,7 @@ impl UiNode {
             scrollable: false,
             checked: false,
             selected: false,
+            password: false,
             children: Vec::new(),
             package: String::new(),
             window: String::new(),
@@ -517,6 +527,18 @@ impl UiNode {
     /// Builder: set the clipped (user-visible) rect.
     pub fn with_visible_bounds(mut self, visible_bounds: Bounds) -> Self {
         self.visible_bounds = Some(visible_bounds);
+        self
+    }
+
+    /// Builder: flag a password field.
+    pub fn with_password(mut self, password: bool) -> Self {
+        self.password = password;
+        self
+    }
+
+    /// Builder: set the framework's focus flag.
+    pub fn with_focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
         self
     }
 
@@ -658,25 +680,55 @@ impl UiTree {
     /// node tappable, and a node that is not visible to the user resolves to
     /// nothing here (callers report `ELEMENT_OFFSCREEN`).
     pub fn find_input_target(&self, selector: &Selector) -> Option<&UiNode> {
-        if let Some(node) = self.find_one(selector) {
-            return Some(node);
+        self.find_input_candidates(selector).into_iter().next()
+    }
+
+    /// Every node [`UiTree::find_input_candidates`] would consider a target for
+    /// `selector`, so a caller can refuse an **ambiguous** selector instead of
+    /// silently picking one.
+    ///
+    /// Resolution is two-staged and the stages are never mixed:
+    ///
+    /// 1. the ordinary field match among user-visible nodes ([`UiTree::find_all`]);
+    /// 2. only when stage 1 is empty **and** the selector is a `text` selector:
+    ///    user-visible nodes whose own text is empty and whose `content_desc`
+    ///    matches (the RN accessible-name case).
+    ///
+    /// An exact field match therefore always outranks a content-description
+    /// match: the drawn label of the active bottom tab wins over the text-less
+    /// pressable that carries the same name. Within the stage that wins, every
+    /// match is returned in document order, so a caller that gets more than one
+    /// knows the selector does not name a single node.
+    ///
+    /// `selector.index`, when set, is honoured by stage 1 (it is an explicit
+    /// pick) and makes the result that one node.
+    pub fn find_input_candidates(&self, selector: &Selector) -> Vec<&UiNode> {
+        let direct = self.find_all(selector);
+        if !direct.is_empty() {
+            return direct;
         }
-        let text = selector.text.as_ref()?;
+        let Some(text) = selector.text.as_ref() else {
+            return Vec::new();
+        };
+        // A caller that pinned an occurrence gets exactly that one; never a
+        // second-stage list that ignores the pin.
+        if selector.index.is_some() {
+            return Vec::new();
+        }
         // The other selector fields (id/content_desc/class/bounds) still have to
         // match; only the text field is answered by the content description.
         let mut probe = selector.clone();
         probe.text = None;
         probe.index = None;
-        let mut hits = self.all_nodes().into_iter().filter(|node| {
-            node.visible
-                && node.text.is_empty()
-                && probe.matches_node(node)
-                && text.matches(&node.content_desc)
-        });
-        match selector.index {
-            Some(index) => hits.nth(index),
-            None => hits.next(),
-        }
+        self.all_nodes()
+            .into_iter()
+            .filter(|node| {
+                node.visible
+                    && node.text.is_empty()
+                    && probe.matches_node(node)
+                    && text.matches(&node.content_desc)
+            })
+            .collect()
     }
 
     /// The canonical `observe --text` rendering, one line per node with text or
@@ -846,6 +898,101 @@ mod tests {
         };
         assert!(policy_only.is_empty());
         assert!(!policy_only.validation_errors().is_empty());
+    }
+
+    /// The Gaten search field as the API-34 guest reports it: an RN
+    /// `TextInput` whose `text` is its placeholder (AOSP takes the hint when the
+    /// field is empty) and whose accessible *name* is the content description.
+    fn rn_search_field(collapsed_text: bool) -> UiNode {
+        UiNode::new("n27_", "Z4.g", Bounds::new(189, 366, 978, 482))
+            .with_text(if collapsed_text { "猫, ねこ, neko..." } else { "" })
+            .with_password(false)
+    }
+
+    fn with_content_desc(mut node: UiNode, desc: &str) -> UiNode {
+        node.content_desc = desc.to_string();
+        node
+    }
+
+    #[test]
+    fn content_desc_is_an_explicit_selector_field() {
+        // FB1: an agent must be able to name the field by the label it read,
+        // without hand-computing bounds. `text` cannot: the node's text is the
+        // placeholder, so the accessible-name stage never reaches it either.
+        let tree = UiTree::new(
+            frame(),
+            "com.gaten",
+            vec![with_content_desc(rn_search_field(true), "Search Japanese dictionary")],
+        );
+        let desc = Selector {
+            content_desc: Some(TextMatch::exact("Search Japanese dictionary")),
+            ..Selector::default()
+        };
+        assert_eq!(tree.find_all(&desc).len(), 1);
+        assert_eq!(tree.find_input_candidates(&desc).len(), 1);
+        assert!(tree
+            .find_input_target(&Selector::by_text("Search Japanese dictionary"))
+            .is_none());
+    }
+
+    #[test]
+    fn several_visible_matches_are_all_returned_as_candidates() {
+        // Two user-visible buttons that share a label: the caller must be able
+        // to see that the selector is ambiguous (and refuse), not get a pick.
+        let first = UiNode::new("n1", "android.widget.Button", Bounds::new(0, 0, 100, 60))
+            .with_text("Continue");
+        let second = UiNode::new("n2", "android.widget.Button", Bounds::new(0, 60, 100, 120))
+            .with_text("Continue");
+        let hidden = UiNode::new("n3", "android.widget.Button", Bounds::new(0, 120, 100, 180))
+            .with_text("Continue");
+        let mut hidden = hidden;
+        hidden.visible = false;
+        let tree = UiTree::new(frame(), "dev.test", vec![first, second, hidden]);
+        let selector = Selector::by_text("Continue");
+        let candidates = tree.find_input_candidates(&selector);
+        assert_eq!(
+            candidates.len(),
+            2,
+            "only the user-visible matches count: {candidates:#?}"
+        );
+        assert_eq!(candidates[0].id, "n1");
+        assert_eq!(candidates[1].id, "n2");
+        // `index` is an explicit pick and collapses the list to one.
+        let pinned = Selector {
+            index: Some(1),
+            ..Selector::by_text("Continue")
+        };
+        assert_eq!(tree.find_input_candidates(&pinned).len(), 1);
+        assert_eq!(tree.find_input_candidates(&pinned)[0].id, "n2");
+    }
+
+    #[test]
+    fn the_text_stage_wins_over_the_content_desc_stage() {
+        // RNTAP: an exact text match outranks a content-description match, and
+        // the stages are never mixed, so the candidates of one answer belong to
+        // one field.
+        let label = UiNode::new("n1", "X4.e", Bounds::new(362, 2214, 445, 2251))
+            .with_text("Home");
+        let pressable = with_content_desc(
+            UiNode::new("n2", "b5.g", Bounds::new(280, 2151, 453, 2316)),
+            "Home",
+        );
+        let tree = UiTree::new(frame(), "com.gaten", vec![label, pressable]);
+        let candidates = tree.find_input_candidates(&Selector::by_text("Home"));
+        assert_eq!(candidates.len(), 1, "the drawn label is the only text match");
+        assert_eq!(candidates[0].class, "X4.e");
+        // With no text match at all, the content description answers alone.
+        let tree = UiTree::new(
+            frame(),
+            "com.gaten",
+            vec![with_content_desc(
+                UiNode::new("n2", "b5.g", Bounds::new(280, 2151, 453, 2316)),
+                "Home",
+            )],
+        );
+        let candidates = tree.find_input_candidates(&Selector::by_text("Home"));
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].class, "b5.g");
     }
 
     #[test]

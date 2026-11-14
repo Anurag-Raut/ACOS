@@ -387,18 +387,27 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
         "acos_tap" => (
             "Tap in the held session. Identify the target by `id` (a node whose `resource_id` \
              equals it, or its bare local name after `/`, exactly what `acos_observe_tree` \
-             exposes), by `text` (a node whose text or content-desc equals it), by a React Native \
-             `testID` (resolves to the nearest clickable ancestor), or by a point `x`,`y` (both \
-             required). Precedence is `id`, then `text`, then `testID`, then `x`/`y`. Requires \
+             exposes), by `content_desc` (a node's accessibility label — what a React Native \
+             pressable carries its whole name in, e.g. \"Search Japanese dictionary\"), by \
+             `text` (the platform's *accessible name*: the node's text, else its content \
+             description among nodes the user can see), by a React Native `testID` (resolves \
+             to the nearest clickable ancestor), or by a point `x`,`y` (both required). \
+             Precedence is `id`, then `content_desc`, then `text`, then `testID`, then `x`/`y`. \
+             A selector that matches more than one user-visible node is refused as \
+             `AMBIGUOUS_SELECTOR` with every candidate (`id`, `text`, `content_desc`, `bounds`) \
+             — narrow it or pass `index`; nothing is tapped silently. Requires \
              `acos_observe_tree` first for selector taps. Returns action/accepted/input_ack_seq. \
-             Common errors: ELEMENT_NOT_FOUND with `details.kind=NoSuchNode`/`NoUiTree` (observe \
-             first), `NoWindowAtPoint` (no frame yet), TIMEOUT. A React Native session has no View \
-             tree and no pixel frame, so point taps are unsupported there.",
+             Common errors: AMBIGUOUS_SELECTOR (several matches), ELEMENT_NOT_FOUND with \
+             `details.kind=NoSuchNode`/`NoUiTree` (observe first), ELEMENT_OFFSCREEN (only an \
+             invisible node matches), TIMEOUT. A React Native session has no View tree and no \
+             pixel frame, so point taps are unsupported there.",
             with_base(json!({
                 "x": {"type": "integer", "description": "X coordinate for a point tap (requires `y`)."},
                 "y": {"type": "integer", "description": "Y coordinate for a point tap (requires `x`)."},
-                "text": {"type": "string", "description": "Node label to tap."},
-                "id": {"type": "string", "description": "Node `resource_id` (or bare local name) to tap; takes precedence over text and x/y."},
+                "text": {"type": "string", "description": "Node label to tap: the platform's accessible name (text, else content description) among visible nodes."},
+                "content_desc": {"type": "string", "description": "Node `content_desc` to tap (exact). Prefer it for React Native `accessibilityLabel`s; takes precedence over `text`."},
+                "id": {"type": "string", "description": "Node `resource_id` (or bare local name) to tap; takes precedence over content_desc/text and x/y."},
+                "index": {"type": "integer", "minimum": 0, "description": "Pick the Nth match of the other fields, document order. Use it only when the same label is legitimately repeated."},
                 "testID": {"type": "string", "description": "React Native testID to tap (resolves to the nearest clickable ancestor); used when `id` and `text` are absent."},
                 "settle": {
                     "type": "string", "enum": ["fast", "strict"],
@@ -445,16 +454,17 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             })),
         ),
         "acos_text" => (
-            "Type `text` into the session's focused editor. Prefers the real framework IME \
-             commit path (`View.onCreateInputConnection` -> `InputConnection.commitText`), so \
-             `TextWatcher`s, the selection and the cursor update exactly as on a device; falls \
-             back to a `KeyEvent` sequence through the input dispatcher only when the focused \
-             view has no editable connection. `result.text_path` is `input-connection` or \
-             `key-events`. The field must already have input focus: observe the tree and tap it \
-             first. Common errors: ELEMENT_NOT_FOUND with `details.kind=NoFocusedEditor` (tap the \
-             field first) or `NoFocusedWindow`; UNSUPPORTED_BACKEND when a character cannot be \
-             represented on the key-event fallback. Composing text and IME actions are not \
-             modelled.",
+            "Type `text` into the session's focused editor — the same path a scenario `type` \
+             step takes: the guest's own `type_text` command drives the focused text field \
+             (real `InputConnection.commitText`/virtual-keyboard path), so `TextWatcher`s, the \
+             selection and the cursor update as on a device. There is no need for the node's \
+             class to be `EditText`: React Native `TextInput`s are obfuscated subclasses, so a \
+             field you focused by `content_desc` accepts text. Focus the field first (observe, \
+             then `acos_tap`), then type. The reply's `target.text` is the typed text, except on \
+             a password field (`result.target.text_masked = true`, `chars` only) — never echoed. \
+             Common errors: UNSUPPORTED_BACKEND when a character cannot be represented on the \
+             key-event fallback, TIMEOUT when the screen never settles. Composing text and IME \
+             actions are not modelled.",
             with_base(json!({
                 "text": {"type": "string", "description": "Text to type into the focused field."},
                 "expect_change": {

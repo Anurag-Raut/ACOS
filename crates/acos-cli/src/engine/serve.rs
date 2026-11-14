@@ -1375,18 +1375,19 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let settle = requested_settle(args)?;
     // SE1: reject an unverifiable pass before the input is injected.
     reject_fast_expect_change(args)?;
-    let result = if let Some(id) = args.get("id").and_then(Value::as_str) {
-        let target = resolve_selector(session, &Selector::by_id(id), "id", id)?;
+    let result = if let Some((selector, describe)) = args_selector(args) {
+        // Input resolution, not evidence resolution: a `text` selector reaches
+        // the platform's accessible name (text, else content description among
+        // nodes the user can see) -- see `UiTree::find_input_target`. An
+        // explicit `content_desc` selector names that field exactly instead.
+        // Either way several user-visible matches are refused, never silently
+        // picked.
+        let target = resolve_input_node(session, &selector, &describe)?;
         session.set_settle_mode(settle);
         session.begin_input();
         let (x, y) = target.tap_point();
         session.tap_in_window(&target.window, x, y)?;
-        input_result(session, "tap", json!({"id": id}))
-    } else if let Some(text) = args.get("text").and_then(Value::as_str) {
-        session.set_settle_mode(settle);
-        session.begin_input();
-        session.tap_text(text)?;
-        input_result(session, "tap", json!({"text": text}))
+        input_result(session, "tap", describe)
     } else {
         let (Some(x), Some(y)) = (
             args.get("x").and_then(Value::as_i64),
@@ -1394,7 +1395,8 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
         ) else {
             return Err(BackendError::Failed {
                 code: ErrorCode::InvalidArgument,
-                detail: "acos_tap needs `id`, `text`, or both `x` and `y`".to_string(),
+                detail: "acos_tap needs `id`, `text`, `content_desc`, or both `x` and `y`"
+                    .to_string(),
             });
         };
         session.set_settle_mode(settle);
@@ -1406,6 +1408,188 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     Ok(result)
 }
 
+/// The selector an input/assert argument names, with the JSON that describes it.
+///
+/// Precedence is `id` > `content_desc` > `text` (an id is the narrowest thing an
+/// agent can name, a content description the platform's other *explicit* field,
+/// and `text` the accessible-name convenience). `index`, when given, is ANDed
+/// with whichever field was used, so `{"text": "Continue", "index": 1}` is the
+/// escape hatch for a legitimately repeated label.
+fn args_selector(args: &Value) -> Option<(Selector, Value)> {
+    let index = args.get("index").and_then(Value::as_u64).map(|i| i as usize);
+    let mut selector = if let Some(id) = args.get("id").and_then(Value::as_str) {
+        Selector::by_id(id)
+    } else if let Some(desc) = args.get("content_desc").and_then(Value::as_str) {
+        Selector {
+            content_desc: Some(acos_protocol::ui::TextMatch::exact(desc)),
+            ..Selector::default()
+        }
+    } else {
+        let text = args.get("text").and_then(Value::as_str)?;
+        Selector::by_text(text)
+    };
+    selector.index = index;
+    let mut describe = json!({});
+    let map = describe.as_object_mut().expect("object");
+    if let Some(id) = selector.id.clone() {
+        map.insert("id".into(), json!(id));
+    }
+    if let Some(text) = selector.text.as_ref().and_then(|t| t.exact.clone()) {
+        map.insert("text".into(), json!(text));
+    }
+    if let Some(desc) = selector.content_desc.as_ref().and_then(|t| t.exact.clone()) {
+        map.insert("content_desc".into(), json!(desc));
+    }
+    if let Some(index) = index {
+        map.insert("index".into(), json!(index));
+    }
+    Some((selector, describe))
+}
+
+/// Resolve a selector to exactly one node the user can see.
+///
+/// One match is the answer. Several are **refused** with `AMBIGUOUS_SELECTOR` and
+/// the full candidate list, because a silent first match is how an agent taps
+/// the wrong control (two React Native tabs can share a label); the caller can
+/// then name one with `id`/`content_desc`/`bounds` or `index`. No match keeps the
+/// established ladder: a node that exists but is not visible is
+/// `ELEMENT_OFFSCREEN` (with its bounds), a complete tree with nothing is
+/// `ELEMENT_NOT_FOUND`, a truncated tree is `TREE_TRUNCATED`.
+fn resolve_input_node(
+    session: &mut ArtSession,
+    selector: &Selector,
+    describe: &Value,
+) -> Result<UiNode, BackendError> {
+    let tree = session.ensure_bound_tree()?;
+    let candidates = tree.find_input_candidates(selector);
+    match candidates.len() {
+        1 => return Ok(candidates[0].clone()),
+        0 => {}
+        _ => return Err(ambiguous_selector(describe, &candidates)),
+    }
+    if let Some(offscreen) = tree.find_invisible(selector) {
+        return Err(BackendError::Failed {
+            code: ErrorCode::ElementOffscreen,
+            detail: format!(
+                "{describe} matches only a node that is not visible to the user (text {:?}, bounds {}, visible_bounds {}); scroll it into view first",
+                offscreen.text,
+                offscreen.bounds,
+                offscreen
+                    .visible_bounds
+                    .map_or_else(|| "<none>".to_string(), |b| b.to_string())
+            ),
+        });
+    }
+    Err(BackendError::Failed {
+        code: if tree.truncated {
+            ErrorCode::TreeTruncated
+        } else {
+            ErrorCode::ElementNotFound
+        },
+        detail: format!(
+            "no node matching {describe} in the live ART tree{}",
+            if tree.truncated {
+                " (the tree was truncated: absence is not proven)"
+            } else {
+                ""
+            }
+        ),
+    })
+}
+
+/// The structured refuse for a selector that names more than one visible node.
+///
+/// `BackendError::Protocol` keeps the shape: `error.details.candidates` is the
+/// machine-readable list (`id`, `resource_id`, `text`, `content_desc`, `class`,
+/// `bounds`), so an agent can pick one without re-observing and without ever
+/// having to parse a message.
+fn ambiguous_selector(describe: &Value, candidates: &[&UiNode]) -> BackendError {
+    let listed: Vec<Value> = candidates
+        .iter()
+        .map(|node| {
+            json!({
+                "id": node.id,
+                "resource_id": node.resource_id,
+                "text": node.text,
+                "content_desc": node.content_desc,
+                "class": node.class,
+                "bounds": node.bounds.to_string(),
+                "visible": node.visible,
+                "clickable": node.clickable,
+            })
+        })
+        .collect();
+    BackendError::Protocol {
+        code: ErrorCode::AmbiguousSelector,
+        detail: format!(
+            "{describe} matches {} nodes the user can see; nothing was tapped or asserted. \
+             Name one with `id`, `content_desc`, `bounds`, or `index` (candidates: {})",
+            candidates.len(),
+            listed
+                .iter()
+                .map(|c| format!(
+                    "{} text={:?} content_desc={:?} {}",
+                    c["id"], c["text"], c["content_desc"], c["bounds"]
+                ))
+                .collect::<Vec<_>>()
+                .join("; ")
+        ),
+        hint: Some(
+            "A silent first match is how an agent acts on the wrong control. Pass `id`, \
+             `content_desc` or `index`, or narrow with `content_desc`; the candidates are in \
+             `error.details.candidates`."
+                .to_string(),
+        ),
+        details: Some(json!({
+            "selector": describe,
+            "count": candidates.len(),
+            "candidates": listed,
+        })),
+    }
+}
+
+/// A focused password field, when the tree says the typing will land in one.
+///
+/// AOSP reports a password field's text like any other (the node carries
+/// `AccessibilityNodeInfo.isPassword()` instead of redacting), so the input verb
+/// must know it is typing into one in order to keep the **typed text** out of
+/// its reply, logs and events. Three cases count as "the typing goes here":
+/// the focused password node; a password node when nothing in the tree has focus
+/// (the guest commits to whatever field holds the connection); and a password
+/// node that is the tree's only editable candidate. Anything else is unmasked.
+fn password_target(tree: &UiTree) -> Option<&UiNode> {
+    let nodes = tree.all_nodes();
+    let focused_password = nodes
+        .iter()
+        .copied()
+        .find(|node| node.visible && node.password && node.focused);
+    if focused_password.is_some() {
+        return focused_password;
+    }
+    let any_focus = nodes.iter().any(|node| node.focused);
+    let passwords: Vec<&UiNode> = nodes
+        .iter()
+        .copied()
+        .filter(|node| node.visible && node.password)
+        .collect();
+    match passwords.len() {
+        0 => None,
+        1 if !any_focus => passwords.first().copied(),
+        _ => None,
+    }
+}
+
+/// Mask typed text for a password target: the count is honest, the characters
+/// are not. Used for the reply, the evidence/event echo and the log line.
+fn mask_text(text: &str) -> Value {
+    json!({
+        "text": "*",
+        "text_masked": true,
+        "chars": text.chars().count(),
+        "reason": "password field (the platform flags the node and still reports its text; ACOS never echoes typed characters)",
+    })
+}
+
 fn type_text(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let settle = requested_settle(args)?;
     reject_fast_expect_change(args)?;
@@ -1415,48 +1599,30 @@ fn type_text(session: &mut ArtSession, args: &Value) -> Result<Value, BackendErr
             detail: "acos_text needs a string `text`".to_string(),
         });
     };
-    // Typing needs a focused editable target. Without one there is no IME to
-    // commit into, and raw key events would be delivered to whatever view the
-    // window happens to focus next (the counter fixture's Increment button, for
-    // example, which then also reacts to a following ENTER). That is a real
-    // state mutation no agent asked for, so the engine says what is missing
-    // instead of injecting it.
+    // Typing is the *same* path the scenario `type` step takes: the guest's
+    // `type_text` command drives the focused editor through the real input
+    // connection (or its virtual-keyboard fallback), and the settle decides what
+    // changed. The live channel used to refuse before trying whenever no node
+    // ended in `EditText`, which is every React Native `TextInput` (obfuscated
+    // class, placeholder as its text), so an agent could launch Gaten, focus the
+    // search field and still be told `text.input` does not exist. Parity is the
+    // fix: inject, then judge the settled result.
+    //
+    // The tree still matters for one thing: a password field must not echo the
+    // typed characters anywhere.
     let tree = session.ensure_bound_tree()?;
-    if focused_editable(&tree).is_none() {
-        return Err(BackendError::unsupported(
-            "text.input",
-            "no focused editable view in the live ART tree; typing needs an EditText \
-             (tap it first). Raw keys are not injected into a non-editable view.",
-        ));
-    }
+    let masked = password_target(&tree).is_some();
     session.set_settle_mode(settle);
     session.begin_input();
     session.type_text(text)?;
-    let result = input_result(session, "text", json!({"text": text}));
+    let target = if masked {
+        mask_text(text)
+    } else {
+        json!({"text": text})
+    };
+    let result = input_result(session, "text", target);
     check_expect_change(args, session, &result)?;
     Ok(result)
-}
-
-/// The focused editable node, if any. A text-typing command needs one.
-fn focused_editable(tree: &UiTree) -> Option<&UiNode> {
-    fn walk(nodes: &[UiNode]) -> Option<&UiNode> {
-        for node in nodes {
-            if node.focused && is_editable_class(&node.class) {
-                return Some(node);
-            }
-            if let Some(found) = walk(&node.children) {
-                return Some(found);
-            }
-        }
-        None
-    }
-    walk(&tree.nodes)
-}
-
-fn is_editable_class(class: &str) -> bool {
-    class.ends_with("EditText")
-        || class.ends_with("AutoCompleteTextView")
-        || class.ends_with("MultiAutoCompleteTextView")
 }
 
 fn key(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
@@ -1570,34 +1736,11 @@ fn assert(session: &mut ArtSession, args: &Value, trust: Trust) -> Result<Value,
             });
         }
     }
-    let (selector, describe) = if let Some(id) = args.get("id").and_then(Value::as_str) {
-        (Selector::by_id(id), json!({"id": id}))
-    } else if let Some(text) = args.get("text").and_then(Value::as_str) {
-        (Selector::by_text(text), json!({"text": text}))
-    } else {
-        return Err(BackendError::Failed {
-            code: ErrorCode::InvalidArgument,
-            detail: "acos_assert needs `id` (or `text`) to select the node".to_string(),
-        });
-    };
-    let node = tree
-        .find_one(&selector)
-        .ok_or_else(|| BackendError::Failed {
-            code: if tree.truncated {
-                ErrorCode::TreeTruncated
-            } else {
-                ErrorCode::ElementNotFound
-            },
-            detail: format!(
-                "no node matching {} in the live ART tree{}",
-                describe,
-                if tree.truncated {
-                    " (the tree was truncated: absence is not proven)"
-                } else {
-                    ""
-                }
-            ),
-        })?;
+    let (selector, describe) = args_selector(args).ok_or_else(|| BackendError::Failed {
+        code: ErrorCode::InvalidArgument,
+        detail: "acos_assert needs `id`, `content_desc`, or `text` to select the node".to_string(),
+    })?;
+    let node = resolve_assert_node(&tree, &selector, &describe)?;
     let actual = node.text.clone();
     let matched = match (mode, expect.as_deref()) {
         ("contains", Some(expect)) => actual.contains(expect),
@@ -1988,45 +2131,52 @@ fn check_expect_change(
     })
 }
 
-fn resolve_selector(
-    session: &mut ArtSession,
+/// Resolve an **assertion** selector to exactly one visible node.
+///
+/// Assertions stay field-exact: `text` matches a node's own text (or hint), never
+/// its content description, so nothing that is a failure today can become a pass
+/// (RNTAP's accessible-name rule is an *input* rule). What is shared with input
+/// is the refusal to pick silently: several user-visible matches are
+/// `AMBIGUOUS_SELECTOR` with the candidate list, not the first one.
+fn resolve_assert_node(
+    tree: &UiTree,
     selector: &Selector,
-    field: &str,
-    value: &str,
+    describe: &Value,
 ) -> Result<UiNode, BackendError> {
-    let tree = session.ensure_bound_tree()?;
-    if let Some(node) = tree.find_one(selector) {
-        return Ok(node.clone());
+    let candidates = tree.find_all(selector);
+    match candidates.len() {
+        1 => return Ok(candidates[0].clone()),
+        0 => {}
+        _ => return Err(ambiguous_selector(describe, &candidates)),
     }
     if let Some(offscreen) = tree.find_invisible(selector) {
         return Err(BackendError::Failed {
             code: ErrorCode::ElementOffscreen,
             detail: format!(
-                "{field}={value:?} matches only a node that is not visible to the user (text {:?}, bounds {}, visible_bounds {}); scroll it into view first",
+                "{describe} matches only a node that is not visible to the user (text {:?}, bounds {}, visible_bounds {}); scroll it into view first",
                 offscreen.text,
                 offscreen.bounds,
-                offscreen.visible_bounds
+                offscreen
+                    .visible_bounds
                     .map_or_else(|| "<none>".to_string(), |b| b.to_string())
             ),
         });
     }
-    tree.find_one(selector)
-        .cloned()
-        .ok_or_else(|| BackendError::Failed {
-            code: if tree.truncated {
-                ErrorCode::TreeTruncated
+    Err(BackendError::Failed {
+        code: if tree.truncated {
+            ErrorCode::TreeTruncated
+        } else {
+            ErrorCode::ElementNotFound
+        },
+        detail: format!(
+            "no node matching {describe} in the live ART tree{}",
+            if tree.truncated {
+                " (the tree was truncated: absence is not proven)"
             } else {
-                ErrorCode::ElementNotFound
-            },
-            detail: format!(
-                "no node with {field}={value:?} in the live ART tree{}",
-                if tree.truncated {
-                    " (the tree was truncated: absence is not proven)"
-                } else {
-                    ""
-                }
-            ),
-        })
+                ""
+            }
+        ),
+    })
 }
 
 // -- tree serialization ----------------------------------------------------- //
@@ -2092,6 +2242,7 @@ fn node_json(
         "scrollable": node.scrollable,
         "checked": node.checked,
         "selected": node.selected,
+        "password": node.password,
         "window": node.window,
         "package": node.package,
         "children": children,
@@ -2490,6 +2641,111 @@ mod tests {
             "dev.acos.fixtures.counter",
             nodes,
         )
+    }
+
+    /// FB1: the live channel's selector precedence, field by field.
+    #[test]
+    fn live_selectors_prefer_id_then_content_desc_then_text() {
+        let (selector, describe) = args_selector(&json!({
+            "id": "search", "content_desc": "Search Japanese dictionary", "text": "kayou"
+        }))
+        .expect("a selector");
+        assert_eq!(selector.id.as_deref(), Some("search"));
+        assert_eq!(describe, json!({"id": "search"}));
+
+        let (selector, describe) =
+            args_selector(&json!({"content_desc": "Search Japanese dictionary", "text": "x"}))
+                .expect("a selector");
+        assert!(selector.id.is_none() && selector.text.is_none());
+        assert_eq!(
+            selector.content_desc.and_then(|t| t.exact).as_deref(),
+            Some("Search Japanese dictionary")
+        );
+        assert_eq!(describe, json!({"content_desc": "Search Japanese dictionary"}));
+
+        let (selector, describe) = args_selector(&json!({"text": "kayou", "index": 1}))
+            .expect("a selector");
+        assert_eq!(selector.text.and_then(|t| t.exact).as_deref(), Some("kayou"));
+        assert_eq!(selector.index, Some(1), "index is ANDed with the field");
+        assert_eq!(describe, json!({"text": "kayou", "index": 1}));
+
+        // A point-only tap is not a selector.
+        assert!(args_selector(&json!({"x": 10, "y": 20})).is_none());
+    }
+
+    /// FB1: two visible nodes with the same label are refused with both
+    /// candidates in `details`, for input and for assertions.
+    #[test]
+    fn several_live_matches_are_refused_with_their_candidates() {
+        let a = node("continue-a", "Continue", vec![]);
+        let b = node("continue-b", "Continue", vec![]);
+        let both = tree(vec![a, b]);
+        let selector = Selector::by_text("Continue");
+        let describe = json!({"text": "Continue"});
+
+        let error = resolve_assert_node(&both, &selector, &describe)
+            .expect_err("two matches must not resolve silently");
+        match error {
+            BackendError::Protocol {
+                code, details, hint, ..
+            } => {
+                assert_eq!(code, ErrorCode::AmbiguousSelector);
+                let details = details.expect("structured candidates");
+                assert_eq!(details["count"], json!(2));
+                let candidates = details["candidates"].as_array().expect("candidates");
+                assert_eq!(candidates.len(), 2);
+                assert_eq!(candidates[0]["resource_id"], json!("continue-a"));
+                assert_eq!(candidates[1]["resource_id"], json!("continue-b"));
+                assert_eq!(candidates[0]["text"], json!("Continue"));
+                assert!(candidates[0]["bounds"].as_str().unwrap().contains("]["));
+                assert!(hint.unwrap_or_default().contains("index"));
+            }
+            other => panic!("expected a structured ambiguous-selector error, got {other:?}"),
+        }
+
+        // One match still resolves; `index` picks explicitly.
+        let single = tree(vec![node("only", "Continue", vec![])]);
+        assert!(resolve_assert_node(&single, &selector, &describe).is_ok());
+    }
+
+    /// FB1: only a password field's typed text is masked, and only when the
+    /// typing lands there.
+    #[test]
+    fn typed_text_is_masked_only_for_a_password_target() {
+        let mut focused_password =
+            UiNode::new("n1", "android.widget.EditText", Bounds::new(0, 0, 10, 10))
+                .with_password(true)
+                .with_focused(true);
+        focused_password.window = "main".to_string();
+        let password_tree = tree(vec![focused_password]);
+        assert!(
+            password_target(&password_tree).is_some(),
+            "focused password field"
+        );
+        let masked = mask_text("s3cret");
+        assert_eq!(masked["text"], json!("*"));
+        assert_eq!(masked["text_masked"], json!(true));
+        assert_eq!(masked["chars"], json!(6));
+        assert!(!masked.to_string().contains("s3cret"));
+
+        // A focused ordinary field: no masking, the text is the agent's own.
+        let focused_text = UiNode::new("n1", "android.widget.EditText", Bounds::new(0, 0, 10, 10))
+            .with_focused(true);
+        assert!(password_target(&tree(vec![focused_text])).is_none());
+
+        // No focus plus exactly one password field: the typing goes there.
+        let unfocused_password =
+            UiNode::new("n1", "android.widget.EditText", Bounds::new(0, 0, 10, 10))
+                .with_password(true);
+        assert!(password_target(&tree(vec![unfocused_password])).is_some());
+
+        // No focus and two password fields: we cannot say which one, so the
+        // reply is not masked on a guess.
+        let first = UiNode::new("n1", "android.widget.EditText", Bounds::new(0, 0, 10, 10))
+            .with_password(true);
+        let second = UiNode::new("n2", "android.widget.EditText", Bounds::new(0, 10, 10, 20))
+            .with_password(true);
+        assert!(password_target(&tree(vec![first, second])).is_none());
     }
 
     #[test]
