@@ -246,6 +246,12 @@ pub enum ErrorCode {
     /// hit. Reduce concurrency or run on a host with more headroom; retry is
     /// safe once memory is available.
     HostMemoryLimit,
+    /// The host does not have room for another ART session right now: admitting
+    /// it would drop `MemAvailable` below 10% of `MemTotal`. Distinct from
+    /// `HOST_MEMORY_LIMIT` (a ceiling that was hit *during* a run): nothing ran.
+    /// Class `host_guard`, retryable; `error.details` carries the measured
+    /// MemAvailable/MemTotal and the session's memory budget.
+    HostMemoryLow,
     /// The guest seccomp filter (and its proof) could not be installed. The
     /// host kernel/configuration cannot provide the isolation layer, so guest
     /// code is refused (fail closed). Distinct from `LANDLOCK_UNAVAILABLE`.
@@ -428,6 +434,7 @@ impl ErrorCode {
             ErrorCode::HostDiskFull => "HOST_DISK_FULL",
             ErrorCode::HostPanic => "HOST_PANIC",
             ErrorCode::HostMemoryLimit => "HOST_MEMORY_LIMIT",
+            ErrorCode::HostMemoryLow => "HOST_MEMORY_LOW",
             ErrorCode::SeccompUnavailable => "SECCOMP_UNAVAILABLE",
             ErrorCode::GuestExited => "GUEST_EXITED",
             ErrorCode::ZygoteDead => "ZYGOTE_DEAD",
@@ -657,6 +664,9 @@ impl ErrorCode {
             ErrorCode::HostMemoryLimit => {
                 "A host memory ceiling was hit (launcher watchdog, cgroup limit or memcg OOM). Reduce N/concurrency or run on a host with more MemAvailable, then retry; do not lower the guest limit silently."
             }
+            ErrorCode::HostMemoryLow => {
+                "No ART session was started: the host has no room for another guest right now (MemAvailable - this session's budget would be under 10% of MemTotal). Free memory (stop a session, free scratch) and call again; nothing is queued and no session was created. Do not treat this as app behaviour."
+            }
             ErrorCode::SeccompUnavailable => {
                 "The guest seccomp filter could not be installed or proven (`OK guard=active` absent). Guest code is refused (fail closed): fix the host seccomp configuration (or the filter), then retry. This is not an app failure."
             }
@@ -692,6 +702,7 @@ impl ErrorCode {
                 | ErrorCode::HostDiskFull
                 | ErrorCode::HostMemoryLimit
                 | ErrorCode::ZygoteDead
+                | ErrorCode::HostMemoryLow
         )
     }
 
@@ -746,7 +757,8 @@ impl ErrorCode {
             | ErrorCode::ResourceLimit
             | ErrorCode::HostDiskFull
             | ErrorCode::HostMemoryLimit
-            | ErrorCode::ZygoteDead => ErrorClass::HostGuard,
+            | ErrorCode::ZygoteDead
+            | ErrorCode::HostMemoryLow => ErrorClass::HostGuard,
 
             // Harness/parse/protocol/invariant failures and codes that need
             // triage before they can be attributed (GuestExited, HostPanic).
@@ -787,6 +799,7 @@ impl ErrorCode {
             | ErrorCode::SeccompUnavailable
             | ErrorCode::HostDiskFull
             | ErrorCode::HostMemoryLimit
+            | ErrorCode::HostMemoryLow
             | ErrorCode::UntrustedApkNotCertified => Status::Blocked,
             ErrorCode::UnsupportedAndroidApi
             | ErrorCode::UnsupportedJavaApi
@@ -1017,6 +1030,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::HostDiskFull,
     ErrorCode::HostPanic,
     ErrorCode::HostMemoryLimit,
+    ErrorCode::HostMemoryLow,
     ErrorCode::SeccompUnavailable,
     ErrorCode::GuestExited,
     ErrorCode::ZygoteDead,

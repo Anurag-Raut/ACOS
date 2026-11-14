@@ -32,6 +32,8 @@ use acos_verify::{
 pub mod art;
 #[cfg(test)]
 pub mod fake;
+/// Host memory admission before an ART guest is spawned.
+pub mod host_mem;
 pub mod rust_vm;
 pub mod serve;
 pub mod zygote_host;

@@ -18,6 +18,7 @@ mod observe_tree;
 mod parity;
 mod prewarm;
 mod provenance;
+mod root;
 mod sandbox_probe;
 mod serve;
 mod session;

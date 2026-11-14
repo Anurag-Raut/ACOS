@@ -231,25 +231,10 @@ pub fn candidates() -> Vec<PathBuf> {
     out
 }
 
-/// `repo_root()` as `acos-art` resolves it: `ACOS_ROOT`, then the binary's
-/// ancestors, then the working directory's.
+/// `acos-art::repo_root()`'s rule, shared: `$ACOS_HOME` (an installed layout),
+/// then `ACOS_ROOT`, then the binary's ancestors, then the working directory's.
 fn repo_root() -> Option<PathBuf> {
-    if let Some(dir) = std::env::var_os("ACOS_ROOT") {
-        let dir = PathBuf::from(dir);
-        if dir.join("Cargo.toml").is_file() {
-            return Some(dir);
-        }
-    }
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        candidates.extend(exe.ancestors().map(Path::to_path_buf));
-    }
-    if let Ok(cwd) = std::env::current_dir() {
-        candidates.extend(cwd.ancestors().map(Path::to_path_buf));
-    }
-    candidates
-        .into_iter()
-        .find(|dir| dir.join("Cargo.toml").is_file() && dir.join("crates").is_dir())
+    crate::root::runtime_root()
 }
 
 /// `ArtRoot::resolve`'s sysroot rule: `ACOS_ART_SYSROOT`, then the productised
@@ -337,7 +322,8 @@ fn boot_image(sysroot: &Path) -> Vec<PathBuf> {
 }
 
 /// H13b: the `shared-fixed` cache root, the same chain `acos-art` uses:
-/// `ACOS_BOOT_IMAGE_CACHE`, else `ACOS_CACHE_DIR`, else `$XDG_CACHE_HOME/acos`,
+/// `ACOS_BOOT_IMAGE_CACHE`, else `ACOS_CACHE_DIR`, else `$ACOS_HOME/.cache/acos`
+/// (an installed layout stays self-contained), else `$XDG_CACHE_HOME/acos`,
 /// else `~/.cache/acos`; then `art/boot-images`.
 fn shared_cache_root() -> Option<PathBuf> {
     if let Some(explicit) = std::env::var_os("ACOS_BOOT_IMAGE_CACHE") {
@@ -347,6 +333,8 @@ fn shared_cache_root() -> Option<PathBuf> {
     }
     let base = if let Some(dir) = std::env::var_os("ACOS_CACHE_DIR") {
         PathBuf::from(dir)
+    } else if let Some(home) = std::env::var_os("ACOS_HOME").filter(|h| !h.is_empty()) {
+        PathBuf::from(home).join(".cache/acos")
     } else if let Some(xdg) = std::env::var_os("XDG_CACHE_HOME") {
         PathBuf::from(xdg).join("acos")
     } else {

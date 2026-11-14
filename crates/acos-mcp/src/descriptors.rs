@@ -578,9 +578,11 @@ pub fn help_tool() -> ToolInfo {
         tool_name: HELP_TOOL.to_string(),
         command: None,
         description: concat!(
-            "Self-description for agents: the ACOS inspect -> verify -> read-verdict -> fix loop, ",
-            "the error-code playbook, the currently supported vs unsupported commands, and the ",
-            "fidelity rules. Start here when you are unsure which tool to call next."
+            "The ACOS agent guide: the doctor -> inspect -> launch -> observe -> act -> verify loop, ",
+            "every CLI command with a runnable example, how to write a scenario YAML (step types, ",
+            "selectors, settle modes, expect_change, assertions), error codes -> what to do, and the ",
+            "limits (rotate unsupported, Flutter/RN deferred, x86_64 native libs, API 34, memory ",
+            "admission). Call it before your first ACOS call and whenever a call confuses you."
         )
         .to_string(),
         input_schema: json!({
@@ -588,7 +590,8 @@ pub fn help_tool() -> ToolInfo {
             "properties": {
                 "topic": {
                     "type": "string",
-                    "description": "Optional topic: `workflow`, `errors`, `fidelity` or `commands`."
+                    "enum": ["workflow", "cli", "scenarios", "errors", "limits"],
+                    "description": "Optional section of the guide: `workflow` (the loop), `cli` \n(commands + examples), `scenarios` (verify YAML), `errors` (codes -> action), `limits` (what is not supported)."
                 }
             },
             "additionalProperties": false
@@ -602,7 +605,8 @@ pub fn help_tool() -> ToolInfo {
 /// Instructions returned by `initialize` (and embedded in `acos_help`).
 pub const INSTRUCTIONS: &str = concat!(
     "ACOS exposes an agent-oriented Android verification API. ",
-    "Start with acos_help for the workflow and acos_capabilities for what is implemented. ",
+    "Start with acos_help (the full agent guide: loop, CLI examples, scenario YAML, error playbook, limits) ",
+    "and acos_capabilities for what is implemented. ",
     "The core loop is inspect -> verify -> read the verdict -> fix -> rerun. ",
     "`unsupported` means the engine cannot do it: never rewrite the app to hide it, never call it a pass. ",
     "`fail` means the app ran and a check did not hold: read the assertion diff. ",
