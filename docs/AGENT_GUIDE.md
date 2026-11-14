@@ -327,6 +327,22 @@ Two session-specific hints worth memorising:
   `stream_socket` for local viewers (half-resolution frames + an action feed,
   ≤ 15 fps). Agents never need it; `docs/LIVE_VIEW.md` has the protocol and the
   measured cost. Nothing an agent reads or asserts comes from the stream.
+  To actually **watch** one (yours, or an agent's, from a browser or T3 Code),
+  run `acos view` in a terminal and open the one line it prints:
+
+  ```
+  $ acos view
+  acos view: http://127.0.0.1:54321/?t=<token>
+  ```
+
+  The page lists every live session (agent/client, project, APK, activity, age)
+  and streams the one you click with tap ripples and the action feed. It is
+  127.0.0.1 only and every request needs the token, so treat the URL as a
+  secret: no other route exists, no input reaches the guest, and the frames stop
+  the moment the last tab closes. `acos view --once --json` lists the sessions
+  and exits (for scripts and tests). In **T3 Code**, open that URL in the
+  built-in preview pane (paste it in the pane's address bar); no patch or
+  plugin is needed, per ADR-0027.
 * **The MCP session tools run real ART by default.** On the first session tool
   call the server starts its **own** private `acos serve --engine art` on a
   private socket under `$XDG_RUNTIME_DIR/acos/mcp-<pid>-…/` and forwards

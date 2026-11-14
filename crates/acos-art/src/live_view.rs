@@ -1040,19 +1040,25 @@ fn writer_loop(inner: Arc<Inner>) {
     // before it can exit cleanly.
     let stats_path = std::env::var_os("ACOS_VIEW_STATS_FILE");
     let mut stats_at = Instant::now();
+    let mut was_watching = false;
     loop {
         if inner.shutdown.load(Ordering::Acquire) {
             return;
         }
         if let Some(path) = stats_path.as_ref() {
-            if stats_at.elapsed() >= Duration::from_secs(2)
-                && inner.subscriber_count.load(Ordering::Acquire) > 0
-            {
+            let subscribers = inner.subscriber_count.load(Ordering::Acquire);
+            // While a viewer is attached, refresh every 2 s; and once when the
+            // last one leaves, so the seam can show the count back at zero
+            // (a teardown write is not guaranteed: the launcher may be killed).
+            let due = (subscribers > 0 && stats_at.elapsed() >= Duration::from_secs(2))
+                || (subscribers == 0 && was_watching);
+            if due {
                 if let Ok(text) = serde_json::to_string(&inner.stats_json()) {
                     let _ = std::fs::write(path, text);
                 }
                 stats_at = Instant::now();
             }
+            was_watching = subscribers > 0;
         }
         if inner.subscriber_count.load(Ordering::Acquire) == 0 {
             // No viewer: block until one attaches (or the session ends). No

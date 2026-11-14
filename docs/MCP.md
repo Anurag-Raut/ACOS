@@ -219,6 +219,24 @@ handling — is `docs/LIVE_VIEW.md`; `tools/view/stream_probe.py` is a stdlib
 reference consumer. The MCP tools themselves are unchanged and do not expose the
 stream.
 
+To watch it, start the browser hub in a terminal:
+
+```
+$ acos view
+acos view: http://127.0.0.1:54321/?t=<token>
+```
+
+It binds 127.0.0.1 only, requires that random token on every request (no token
+or a wrong one is `403`), and serves one self-contained page: the grid of live
+sessions (client/agent, project dir, APK, activity, age) and, for the session
+you click, its live screen with tap ripples, the current activity and the recent
+action feed. Open the printed URL in any browser, or paste it into **T3 Code's
+preview pane** (ADR-0027: no patch, no plugin). The page is view-only — no input
+is ever forwarded to a guest — and the hub subscribes to a session's
+`stream_socket` only while a tab has it open, one upstream subscription shared by
+every tab, so an unwatched session still costs nothing. `acos view --once
+--json` prints the session list and exits. Details: `docs/LIVE_VIEW.md` §8.
+
 ## 2. Tools
 
 The protocol defines 13 commands (`acos_<command>` in

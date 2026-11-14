@@ -1,8 +1,8 @@
 # Live view — protocol v1 (producer side)
 
-Status: **implemented** (track VIEW1a; owner decision ADR-0027). The consumer
-(`acos view`, the local browser hub) is track VIEW1b and is built against exactly
-this document. Nothing here changes an agent-facing reply, the settle rules or a
+Status: **implemented** (producer: track VIEW1a; browser hub: track VIEW1b; owner
+decision ADR-0027). §1–§7 are the producer contract; §8 is the hub,
+`acos view`. Nothing here changes an agent-facing reply, the settle rules or a
 tracked benchmark metric.
 
 A live ART session can stream its screen and an action/event feed to local
@@ -278,3 +278,70 @@ A subscriber only receives events that happen **while it is connected**; the
 current activity is in the registry entry and the `H` hello names the display
 and the active format/scale. See `results/handoff/VIEW1a.md` for the viewer-on
 benchmark table and the viewer-off A/B.
+
+## 8. The browser hub (`acos view`, VIEW1b)
+
+`acos view` is the consumer the owner uses: one process that serves a single
+self-contained page and proxies the sessions' streams to it. It is the **only**
+subscriber a session has while someone watches, and it holds no session open on
+its own.
+
+```bash
+acos view                 # prints one line, then serves until it is stopped
+acos view --json          # same, as one JSON record {url, bind, port, token}
+acos view --once --json   # list the live sessions and exit (tests, agents)
+```
+
+```
+acos view: http://127.0.0.1:54321/?t=<token>
+```
+
+* **127.0.0.1 only.** `--bind` accepts exactly `127.0.0.1`; any other address is
+  refused before a socket exists (ADR-0027 §1). `--port 0` (the default) picks a
+  free port and prints it.
+* **Token on every request.** A fresh 32-byte token (256 bits, hex) is read from
+  `/dev/urandom` at startup and compared in constant time; `/?t=` missing or
+  wrong is `HTTP 403` on the page, the JSON API and both streams. Only `GET` is
+  answered (`405` otherwise). The token is printed once and never logged again.
+* **Browsing.** The page polls `/api/sessions` every 2 s: a grid of live
+  sessions from the registry (agent/client, project dir, APK/package, current
+  activity, age, display, watchers) with stale entries swept and hidden. Clicking
+  one opens it.
+* **Watching one session.** The page opens two streams for the clicked session:
+  `/api/frames/<session_id>` (one `multipart/x-mixed-replace` MJPEG response of
+  the producer's PNG/JPEG frames, with `X-Frame-Seq`/`X-Frame-Size` and only the
+  newest frame, so a slow browser skips frames) and `/api/events/<session_id>`
+  (SSE: one `state` event — registry entry + `hello` — then one `ev` per `E`
+  message, a `lag` event when the bounded ring dropped history, and a
+  keep-alive). Overlays are drawn client-side from those events: a tap ripple at
+  the event's `x/y` (display space, scaled to the frame), the current activity
+  and the recent actions (tool, masked text, status). The page is ~15 KB of
+  inline HTML/CSS/JS: no CDN, no external request, nothing served from disk, and
+  no path parameter is used as a filesystem path (a session id is only matched
+  against the registry).
+* **View-only.** There is no request shape that forwards input to a guest: the
+  hub has no input path at all (ADR-0027 §5), and nothing in it writes to a
+  session socket after the subscribe line.
+* **One upstream per session, only while watched.** The first browser
+  connection to a session makes the hub connect to its `stream_socket` and send
+  the one subscribe line; later connections join the same subscription (one
+  encode per frame, per §3.3). When the **last** connection for that session
+  ends the hub closes the socket and joins the thread before returning, so the
+  producer's subscriber count goes back to zero and an unviewed session costs
+  what it cost before. A browser that stalls a write for more than 2 s is
+  dropped; it never blocks the producer or another browser. A closed tab is
+  noticed by an EOF poll on the idle stream, not by waiting for the next frame.
+* **Registry only.** `--registry-dir` overrides the directory
+  (`$XDG_RUNTIME_DIR/acos/live` by default); `ACOS_VIEW_REGISTRY_DIR` has the
+  same effect. The hub reads exactly that directory, sweeps entries whose
+  `daemon_pid` is dead, lists a `stream_socket: null` entry as metadata only
+  (not clickable), and reconnects by itself when a producer restarts.
+* **T3 Code.** Paste the printed URL into T3 Code's preview pane. No patch and
+  no plugin (ADR-0027 §3).
+* **Cost.** `acos view` is a separate process that only runs when it is started;
+  it changes nothing on the producer's command path, so the tracked M4–M8
+  metrics are unaffected when nobody views (see `results/handoff/VIEW1b.md`).
+
+The dev-only `ACOS_VIEW_STATS_FILE` seam (§3, measurement only) now also writes
+once when the last subscriber leaves, so a consumer test can show the producer's
+subscriber count back at zero.
