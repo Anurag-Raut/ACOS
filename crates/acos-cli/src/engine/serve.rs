@@ -1548,37 +1548,58 @@ fn ambiguous_selector(describe: &Value, candidates: &[&UiNode]) -> BackendError 
     }
 }
 
-/// The password field the typing lands in, when the tree can say so.
-///
-/// AOSP reports a password field's text like any other (the node carries
-/// `AccessibilityNodeInfo.isPassword()` instead of redacting), so the input verb
-/// must know it is typing into one in order to keep the **typed text** out of
-/// its reply, logs and events. Two cases count as "the typing goes here":
-/// the focused password node, and -- when nothing in the tree reports focus
-/// (React Native trees often do not) -- the single visible password node, since
-/// the guest commits to whatever field holds the connection. Several password
-/// nodes with no focus are ambiguous and are not picked. The bias is deliberate:
-/// over-masking only hides an echo, under-masking leaks a secret. The caller can
-/// always force masking with `acos_text {"mask": true}`.
-fn password_target(tree: &UiTree) -> Option<&UiNode> {
-    let nodes = tree.all_nodes();
-    let focused_password = nodes
-        .iter()
-        .copied()
-        .find(|node| node.visible && node.password && node.focused);
-    if focused_password.is_some() {
-        return focused_password;
-    }
-    let any_focus = nodes.iter().any(|node| node.focused);
-    let passwords: Vec<&UiNode> = nodes
-        .iter()
-        .copied()
-        .filter(|node| node.visible && node.password)
-        .collect();
-    match passwords.len() {
-        1 if !any_focus => passwords.first().copied(),
-        _ => None,
-    }
+/// The node the typed text lands in, by the tree's own evidence: the visible node
+/// that reports `focused`. `None` means the tree names no focused field, so the
+/// target is unknown. No other node is ever substituted: a screen can show an
+/// unfocused credential field next to the one being typed into, and reporting
+/// it as the target would be wrong evidence.
+fn focused_input_node(tree: &UiTree) -> Option<&UiNode> {
+    tree.all_nodes()
+        .into_iter()
+        .find(|node| node.visible && node.focused)
+}
+
+/// The reply's echo decision for `acos_text`: the node the input went to (as the
+/// tree shows it) and, when the typed characters must be withheld, why.
+struct EchoDecision<'a> {
+    node: Option<&'a UiNode>,
+    /// `None` = the typed text may be echoed. `Some(reason)` = it is masked.
+    mask_reason: Option<&'static str>,
+}
+
+/// Mask unless the typed text is known to land in a non-password field:
+/// - `mask: true` always masks (the caller knows it is a secret);
+/// - a focused `password` node masks;
+/// - no focused node at all (target unknown) masks, never a guess.
+/// Only a focused, non-password node is echoed.
+fn echo_decision(tree: &UiTree, forced: bool) -> EchoDecision<'_> {
+    let node = focused_input_node(tree);
+    let mask_reason = if forced {
+        Some("requested with mask: true")
+    } else {
+        match node {
+            Some(focused) if focused.password => Some(
+                "password field (the platform flags the node and still reports its text; ACOS never echoes typed characters)",
+            ),
+            Some(_) => None,
+            None => Some(
+                "target unknown: the tree names no focused field, so the typed text is withheld",
+            ),
+        }
+    };
+    EchoDecision { node, mask_reason }
+}
+
+/// The node as the reply describes it. A password node's own text is withheld
+/// too: it is the secret the field holds, not the agent's typing.
+fn node_summary(node: &UiNode, withhold_text: bool) -> Value {
+    json!({
+        "id": node.id,
+        "class": node.class,
+        "content_desc": node.content_desc,
+        "text": if withhold_text { Value::Null } else { json!(node.text) },
+        "password": node.password,
+    })
 }
 
 /// `mask: true` on `acos_text`: the caller knows the field is a secret even when
@@ -1594,15 +1615,23 @@ fn mask_requested(args: &Value) -> Result<bool, BackendError> {
     }
 }
 
-/// Mask typed text for a password target: the count is honest, the characters
-/// are not. Used for the reply, the evidence/event echo and the log line.
-fn mask_text(text: &str) -> Value {
-    json!({
-        "text": "*",
-        "text_masked": true,
-        "chars": text.chars().count(),
-        "reason": "password field (the platform flags the node and still reports its text; ACOS never echoes typed characters)",
-    })
+/// The reply's `target` for `acos_text`. The typed text is echoed only when the
+/// decision allows it; otherwise the count is honest and the characters are not.
+/// `node` is the field the input went to, or null when the target is unknown.
+fn input_target(text: &str, decision: &EchoDecision<'_>) -> Value {
+    match decision.mask_reason {
+        Some(reason) => json!({
+            "text": "*",
+            "text_masked": true,
+            "chars": text.chars().count(),
+            "reason": reason,
+            "node": decision.node.map(|node| node_summary(node, true)),
+        }),
+        None => json!({
+            "text": text,
+            "node": decision.node.map(|node| node_summary(node, false)),
+        }),
+    }
 }
 
 fn type_text(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
@@ -1626,15 +1655,11 @@ fn type_text(session: &mut ArtSession, args: &Value) -> Result<Value, BackendErr
     // The tree still matters for one thing: a password field must not echo the
     // typed characters anywhere.
     let tree = session.ensure_bound_tree()?;
-    let masked = password_target(&tree).is_some() || mask_requested(args)?;
+    let decision = echo_decision(&tree, mask_requested(args)?);
     session.set_settle_mode(settle);
     session.begin_input();
     session.type_text(text)?;
-    let target = if masked {
-        mask_text(text)
-    } else {
-        json!({"text": text})
-    };
+    let target = input_target(text, &decision);
     let result = input_result(session, "text", target);
     check_expect_change(args, session, &result)?;
     Ok(result)
@@ -2723,58 +2748,81 @@ mod tests {
         assert!(resolve_assert_node(&single, &selector, &describe).is_ok());
     }
 
-    /// FB1: only a password field's typed text is masked, and only when the
-    /// typing lands there.
+    /// FB1: the reply's target is the node that received the input, as the tree
+    /// shows it; the echo is masked only for a focused password node, or when
+    /// the target is unknown, or when the caller forces it.
+    fn typing_node(id: &str, focused: bool, password: bool) -> UiNode {
+        let mut node = UiNode::new(id, "android.widget.EditText", Bounds::new(0, 0, 10, 10))
+            .with_password(password)
+            .with_focused(focused);
+        node.window = "main".to_string();
+        node
+    }
+
     #[test]
-    fn typed_text_is_masked_only_for_a_password_target() {
-        let mut focused_password =
-            UiNode::new("n1", "android.widget.EditText", Bounds::new(0, 0, 10, 10))
-                .with_password(true)
-                .with_focused(true);
-        focused_password.window = "main".to_string();
-        let password_tree = tree(vec![focused_password]);
-        assert!(
-            password_target(&password_tree).is_some(),
-            "focused password field"
-        );
-        let masked = mask_text("s3cret");
-        assert_eq!(masked["text"], json!("*"));
-        assert_eq!(masked["text_masked"], json!(true));
-        assert_eq!(masked["chars"], json!(6));
-        assert!(!masked.to_string().contains("s3cret"));
+    fn focused_search_field_is_echoed_and_named_as_the_target() {
+        // Gaten's case: the search field holds focus; an unfocused credential
+        // field sits on the same screen. The reply names the search field and
+        // echoes the text -- never the credential field.
+        let search = typing_node("search", true, false);
+        let token = typing_node("token", false, true);
+        let screen = tree(vec![search, token]);
+        let decision = echo_decision(&screen, false);
+        assert!(decision.mask_reason.is_none(), "a focused non-password field echoes");
+        let target = input_target("kayou", &decision);
+        assert_eq!(target["text"], json!("kayou"));
+        assert!(target.get("text_masked").is_none());
+        assert_eq!(target["node"]["id"], json!("search"));
+        assert_eq!(target["node"]["password"], json!(false));
+    }
 
-        // A focused ordinary field: no masking, the text is the agent's own.
-        let focused_text = UiNode::new("n1", "android.widget.EditText", Bounds::new(0, 0, 10, 10))
-            .with_focused(true);
-        assert!(password_target(&tree(vec![focused_text])).is_none());
+    #[test]
+    fn focused_password_field_is_masked_and_its_text_withheld() {
+        let secret = typing_node("pw", true, true);
+        let screen = tree(vec![secret]);
+        let decision = echo_decision(&screen, false);
+        assert!(decision.mask_reason.is_some());
+        let target = input_target("s3cret", &decision);
+        assert_eq!(target["text"], json!("*"));
+        assert_eq!(target["text_masked"], json!(true));
+        assert_eq!(target["chars"], json!(6));
+        assert_eq!(target["node"]["id"], json!("pw"));
+        assert_eq!(target["node"]["text"], Value::Null, "password text is withheld");
+        assert!(!target.to_string().contains("s3cret"));
+    }
 
-        // No focus at all and exactly one password field: the typing goes
-        // there (the guest commits to the one field), so it is masked.
-        let unfocused_password =
-            UiNode::new("n1", "android.widget.EditText", Bounds::new(0, 0, 10, 10))
-                .with_password(true);
-        assert!(password_target(&tree(vec![unfocused_password])).is_some());
+    #[test]
+    fn unknown_target_is_masked_and_names_no_node() {
+        // No focused node at all: even a single password field elsewhere is not
+        // substituted as the target; the reply withholds the text with the
+        // reason "target unknown" and claims no node.
+        let lone_password = typing_node("pw", false, true);
+        let tree_with_password = tree(vec![lone_password]);
+        let decision = echo_decision(&tree_with_password, false);
+        let target = input_target("kayou", &decision);
+        assert_eq!(target["text_masked"], json!(true));
+        assert!(target["reason"].as_str().unwrap().starts_with("target unknown"));
+        assert_eq!(target["node"], Value::Null, "no node is claimed");
+        assert!(!target.to_string().contains("kayou"));
 
-        // No focus and two password fields: we cannot say which one, so the
-        // reply is not masked on a guess (the caller can force it with `mask`).
-        let first = UiNode::new("n1", "android.widget.EditText", Bounds::new(0, 0, 10, 10))
-            .with_password(true);
-        let second = UiNode::new("n2", "android.widget.EditText", Bounds::new(0, 10, 10, 20))
-            .with_password(true);
-        assert!(password_target(&tree(vec![first, second])).is_none());
+        let plain_unfocused = typing_node("plain", false, false);
+        let plain_tree = tree(vec![plain_unfocused]);
+        let decision = echo_decision(&plain_tree, false);
+        assert!(decision.mask_reason.is_some(), "unknown target is masked by default");
+    }
 
-        // A focus elsewhere (an ordinary field has focus) with a password field
-        // present: the typing is not in the password field, so no masking.
-        let focused_search = UiNode::new("n1", "android.widget.EditText", Bounds::new(0, 0, 10, 10))
-            .with_focused(true);
-        let token = UiNode::new("n2", "android.widget.EditText", Bounds::new(0, 10, 10, 20))
-            .with_password(true);
-        assert!(password_target(&tree(vec![focused_search, token])).is_none());
-        // ... and `mask: true` is the caller's explicit escape hatch.
+    #[test]
+    fn mask_true_forces_masking_on_a_focused_plain_field() {
+        let search = typing_node("search", true, false);
+        let screen = tree(vec![search]);
+        let decision = echo_decision(&screen, true);
+        let target = input_target("abc", &decision);
+        assert_eq!(target["text_masked"], json!(true));
+        assert!(target["reason"].as_str().unwrap().starts_with("requested"));
+        assert_eq!(target["node"]["id"], json!("search"));
         assert!(mask_requested(&json!({"mask": true})).unwrap());
         assert!(!mask_requested(&json!({"text": "x"})).unwrap());
         assert!(mask_requested(&json!({"mask": "yes"})).is_err());
-
     }
 
     #[test]

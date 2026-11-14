@@ -50,6 +50,22 @@ class SmokeError(Exception):
     pass
 
 
+def reply_names_search_field(target, content_desc):
+    """When the reply names a node, it must be the search field (no other field)."""
+    node = target.get("node")
+    return not node or node.get("content_desc") == content_desc
+
+
+def typed_reply_is_honest(target, query):
+    """The reply to `acos_text` either echoes the typed text, or -- when the engine
+    masks the field as a password -- carries `text_masked` and the exact count.
+    Either is honest; a masked reply never proves the query by itself, so the
+    flow's proof is the query in the next tree (checked separately)."""
+    if target.get("text") == query:
+        return True
+    return target.get("text_masked") is True and target.get("chars") == len(query)
+
+
 def emit(obj):
     sys.stdout.write(json.dumps(obj, sort_keys=True) + "\n")
     sys.stdout.flush()
@@ -499,10 +515,18 @@ def main() -> int:
                 "Settings": "Screen lookup",
                 "Home": "Recently looked up",
             }
-            for _ in range(6):
+            for _ in range(8):
                 names = named_texts(tree0)
-                if any(tab in names for tab in tab_expect) and any(
-                    hint in names for hint in tab_expect.values()
+                # Home is proven only when no onboarding control is left: an
+                # onboarding page can carry the tab words ("Screen lookup", ...),
+                # so the tab names alone do not mean the app reached Home.
+                onboarding_left = any(
+                    control in names for control in ("Skip", "Set up Gaten", "Open Gaten")
+                )
+                if (
+                    not onboarding_left
+                    and any(tab in names for tab in tab_expect)
+                    and any(hint in names for hint in tab_expect.values())
                 ):
                     break
                 cta = next((c for c in ctas if c in names), None)
@@ -556,6 +580,28 @@ def main() -> int:
                 },
             )
             field = fields[0]
+            # Onboarding can end while Home is still settling (the tab bar is
+            # already in the tree). Tap only once the field's bounds hold still
+            # across two consecutive trees, bounded, so the tap lands on the
+            # laid-out field and not on a transition frame.
+            def field_geometry(env):
+                return [
+                    (node.get("bounds"), node.get("text"))
+                    for node in content_desc_nodes(env, args.search_content_desc)
+                ]
+
+            previous = field_geometry(tree0)
+            for _ in range(TAB_WAIT_SECONDS):
+                time.sleep(1)
+                current_env = envelope(
+                    client.call_tool(
+                        "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
+                    )
+                )
+                current = field_geometry(current_env)
+                if current and current == previous:
+                    break
+                previous = current
             focused_tap = envelope(
                 client.call_tool(
                     "acos_tap",
@@ -593,6 +639,31 @@ def main() -> int:
                     "error": focused_tap.get("error"),
                 },
             )
+            # The field must hold focus before typing: the typed text lands in the
+            # focused node, so the tree's own focus flag is the precondition. The
+            # focus flag can arrive a frame after the tap's settle, so poll (bounded).
+            focus_nodes = []
+            for _ in range(10):
+                focus_env = envelope(
+                    client.call_tool(
+                        "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
+                    )
+                )
+                focus_nodes = content_desc_nodes(focus_env, args.search_content_desc)
+                if any(node.get("focused") is True for node in focus_nodes):
+                    break
+                time.sleep(1)
+            check(
+                "gaten_search_field_focused_after_tap",
+                any(node.get("focused") is True for node in focus_nodes),
+                {
+                    "content_desc": args.search_content_desc,
+                    "nodes": [
+                        {k: n.get(k) for k in ("id", "text", "focused", "password")}
+                        for n in focus_nodes[:3]
+                    ],
+                },
+            )
             typed = envelope(
                 client.call_tool(
                     "acos_text",
@@ -605,8 +676,12 @@ def main() -> int:
                 typed.get("status") == "pass"
                 and typed.get("result", {}).get("action") == "text"
                 and typed.get("result", {}).get("accepted") is True
-                and (typed.get("result", {}).get("target") or {}).get("text")
-                == args.search_text,
+                and typed_reply_is_honest(
+                    (typed.get("result", {}).get("target") or {}), args.search_text
+                )
+                and reply_names_search_field(
+                    (typed.get("result", {}).get("target") or {}), args.search_content_desc
+                ),
                 {
                     "text": args.search_text,
                     "status": typed.get("status"),
@@ -618,33 +693,49 @@ def main() -> int:
             # The query and the result list mount on later frames: poll the tree
             # (bounded, never forever) for both. A field that never shows the
             # query, or a list that never arrives, still fails.
+            # The proof of typing is the TREE, never the reply echo: the search
+            # field's own text holds the query, and the results mount later.
             result_markers = ("results", "通う", "歌謡")
-            typed_texts = tree_texts(
-                envelope(
+
+            def field_has_query(env):
+                return any(
+                    args.search_text in (node.get("text") or "")
+                    for node in content_desc_nodes(env, args.search_content_desc)
+                )
+
+            def has_results(env):
+                texts = tree_texts(env)
+                return any(marker in text for text in texts for marker in result_markers)
+
+            typed_env = envelope(
+                client.call_tool(
+                    "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
+                )
+            )
+            for _ in range(TAB_WAIT_SECONDS):
+                if field_has_query(typed_env) and has_results(typed_env):
+                    break
+                time.sleep(1)
+                typed_env = envelope(
                     client.call_tool(
                         "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
                     )
                 )
+            typed_texts = tree_texts(typed_env)
+            check(
+                "gaten_search_field_text_in_tree",
+                field_has_query(typed_env),
+                {
+                    "query": args.search_text,
+                    "field": [
+                        {k: n.get(k) for k in ("id", "text", "focused", "password")}
+                        for n in content_desc_nodes(typed_env, args.search_content_desc)[:3]
+                    ],
+                },
             )
-            for _ in range(TAB_WAIT_SECONDS):
-                if args.search_text in typed_texts and any(
-                    marker in text for text in typed_texts for marker in result_markers
-                ):
-                    break
-                time.sleep(1)
-                typed_texts = tree_texts(
-                    envelope(
-                        client.call_tool(
-                            "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
-                        )
-                    )
-                )
             check(
                 "gaten_search_results_after_typing",
-                args.search_text in typed_texts
-                and any(
-                    marker in text for text in typed_texts for marker in result_markers
-                ),
+                args.search_text in typed_texts and has_results(typed_env),
                 {"query": args.search_text, "texts": typed_texts[:40]},
             )
 

@@ -152,15 +152,16 @@ search flow no longer has to become a scenario. In four calls:
   tree carries `kayou` in the field and the result list (`19 results`, `歌謡`,
   `かよう`, ...). Assert on those texts (or in a scenario with
   `assert_text`) — never on the call's `status` alone.
-* **Password fields are masked.** When the typing lands in a password field,
-  `acos_text`'s reply carries `target.text_masked: true`, `target.chars` and
-  `target.text: "*"` instead of the characters; the engine never echoes a typed
-  secret. The field is the focused `password: true` node, or the single
-  password field when the tree reports no focus at all. When several password
-  fields exist and none is focused, the engine cannot say which one takes the
-  text, so it does not mask on a guess: pass `acos_text {"text": "...",
-  "mask": true}` for a secret. Masking only hides the echo; the tree still shows
-  what the app displays.
+* **The reply names the field, and masks unless it is known to be plain.**
+  `acos_text`'s `result.target.node` is the focused field the input went to, as
+  the tree shows it. The typed text is echoed (`target.text`) only when that
+  field is focused and is not a password. Otherwise the reply carries
+  `target.text_masked: true`, `target.chars` (the honest count), `target.text:
+  "*"` and a `reason`: a focused password field, `mask: true`, or an
+  **unknown target** (the tree names no focused field; nothing is guessed, and no
+  other field is ever reported in its place). Masking only hides the echo: the
+  tree still shows what the app displays, so prove typing with the next
+  `acos_observe_tree`, not with the reply.
 
 <!-- /topic:workflow -->
 

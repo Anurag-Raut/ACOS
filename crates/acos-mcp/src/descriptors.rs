@@ -460,15 +460,16 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              selection and the cursor update as on a device. There is no need for the node's \
              class to be `EditText`: React Native `TextInput`s are obfuscated subclasses, so a \
              field you focused by `content_desc` accepts text. Focus the field first (observe, \
-             then `acos_tap`), then type. The reply's `target.text` is the typed text, except on \
-             a password field (`result.target.text_masked = true`, `chars` only) — never echoed; \
-             pass `mask: true` when several password fields exist and none is focused. \
-             Common errors: UNSUPPORTED_BACKEND when a character cannot be represented on the \
-             key-event fallback, TIMEOUT when the screen never settles. Composing text and IME \
+             then `acos_tap`), then type. The reply's `result.target.node` is the field the input went to, \
+             as the tree shows it (the focused node). The typed text is echoed only for a focused non-password field; \
+             otherwise it is masked (`target.text_masked = true`, `chars` only, `reason`): a \
+             password field, `mask: true`, or an unknown target (the tree names no focused field \
+             -- nothing is guessed). Common errors: UNSUPPORTED_BACKEND when a character cannot be \
+             represented on the key-event fallback, TIMEOUT when the screen never settles. Composing text and IME \
              actions are not modelled.",
             with_base(json!({
                 "text": {"type": "string", "description": "Text to type into the focused field."},
-                "mask": {"type": "boolean", "description": "Withhold the typed text from the reply (`target.text_masked`, `target.chars`). Set it when several password fields exist and none is focused; a focused `password: true` node, or the single password field when nothing is focused, is masked automatically."},
+                "mask": {"type": "boolean", "description": "Withhold the typed text from the reply (`target.text_masked`, `target.chars`). Use it for a secret whose field the tree does not report as focused. Without it, a focused non-password field is echoed and any other target is masked."},
                 "expect_change": {
                     "type": "boolean",
                     "description": "SE1: opt-in verification of the action's effect. After the \
