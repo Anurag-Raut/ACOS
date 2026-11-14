@@ -242,3 +242,40 @@ Each verdict also reports `artifact_validation.ok: true` and
 * **Left running:** nothing. The private `acos-mcp`/`acos serve`/`acos-art` of
   the proof and the `acos view` process were all terminated by the driver; no
   session registry entry remains.
+
+---
+
+## §Review — VIEW1 security review findings (Opus review, as given in the VIEW1c brief)
+
+* **M1** `view.sock` was bound in `sockets.0`, which is bind-mounted rw into the guest as `/dev/socket`: the APK could subscribe (read unmasked typed text), evict the hub (`MAX_SUBSCRIBERS` drops the oldest), exhaust host threads (unbounded accept threads + byte-wise 5 s reads), replace the socket (spoof frames/events), or race `set_permissions` through a symlink.
+* **L1** typed text/key codes unmasked when focus state is unknown or stale; `FLAG_SECURE` windows streamed; password echo undocumented.
+* **L2** no `Host` check (DNS rebinding). **L3** no hub connection cap / head deadline. **L4** attach/detach race in the hub. **L5** frames larger than `SO_SNDBUF` always dropped the subscriber. **L6** `/dev/shm` fallback and registry dirs not 0700/owner-checked.
+
+## §VIEW1c — fixes (branch `live-view-2`, checkpoint f0184e06 + docs/evidence commit)
+
+Started from a previous agent's uncommitted ~510-line draft (it did not compile: `struct Inner` unclosed). Kept the right parts (M1 relocation, `private_dir`, `FLAG_SECURE` plumbing, subscribe cap, per-subscriber write offset), fixed the rest.
+
+| finding | fix | tests |
+|---|---|---|
+| M1 | `view.sock` now in `acos-view-<pid>-<seq>/` (0700, ours, verified; never mounted; guest mounts only `acos-art-*` at `/dev/socket`). Socket 0600 via `fchmodat(dirfd, name, AT_SYMLINK_NOFOLLOW)` — **not** the draft's process `umask`, which raced with other threads (made test dirs 0600) and is gone. Symlink/non-socket at the path refused. Subscribe threads capped at 8 (extras closed at accept), one 5 s total deadline for the line, `SO_PEERCRED` uid check in producer (`subscribe`) and hub (`verify_peer_uid` on upstream connect) | `the_view_socket_is_private_…`, `peer_credentials_report_our_own_uid`, `subscribe_threads_are_capped_and_a_trickling_peer_is_cut_off_by_one_deadline`, `the_view_directory_is_not_the_guest_mounted_socket_directory`, `private_dir_tightens_ours_and_refuses_a_file_or_a_symlink`, hub `the_hub_reads_the_peer_uid_…` |
+| L1 | text **and** key codes masked by default; unmasked only when this command's reply carries a fresh tree with a focused non-password node (`tree_proves_non_password_focus`; a tree with no focus masks; staleness cleared per input command). `FLAG_SECURE`: `LayerPlacement.secure` from WMS `LayoutParams.flags`, `SurfaceState::has_secure_window()`; source emits an all-zero 1/8 placeholder with header `"secure":true`; `tap_once` zeroes secure frames again (defence in depth). Password-echo caveat documented in `docs/LIVE_VIEW.md` §3 | `typed_input_is_masked_unless_a_fresh_tree_proves_a_non_password_focus`, `a_secure_frame_is_published_blank_and_flagged`, services `a_visible_flag_secure_window_is_reported_…` |
+| L2 | `Host` must be exactly `127.0.0.1:<port>` else 403 before any route | `a_host_other_than_the_loopback_literal_and_port_is_refused` |
+| L3 | hub cap 64 connections (closed at accept), 5 s total head deadline | `connections_are_capped_and_a_stalled_head_is_cut_off_by_one_deadline` |
+| L4 | slot keeps its socket; after the last detach's join, if `watchers > 0` the upstream is restarted | `a_browser_that_attaches_while_the_last_one_detaches_still_gets_a_stream` |
+| L5 | per-subscriber pending buffer + offset, drop only on error or >8 MiB queued; writer flushes every 1 ms while queued | `a_frame_larger_than_the_socket_buffer_is_delivered_to_a_slow_reader` (2.9 MB frame, subscriber kept) |
+| L6 | registry dir created 0700 via `DirBuilder`, owner/dir/symlink verified, loose own dir tightened; reader refuses a dir another uid owns or that is group/world-writable; `/dev/shm` fallback goes through the same `private_dir` | `the_registry_directory_is_private_owned_and_never_a_symlink` |
+
+Note: the slow-subscriber drop test now waits for the 8 MiB cap (loop 4000 ticks). A viewer slower than frame production is still dropped once 8 MiB is queued (a deliberate bound, `MAX_QUEUED_BYTES`).
+
+### Acceptance
+
+* **Unit tests:** `cargo test --release --offline --no-fail-fast -p acos-cli -p acos-art -p acos-mcp -p acos-services` → all green, 0 failed (`.cache/view1c-tests.log`).
+* **Live proof** (counter via MCP private daemon, `ACOS_VIEW_REGISTRY_DIR` redirected; `results/handoff/VIEW1c-evidence/live-proof-report.json`, driver `drive.py`): **verdict pass, 20/20 checks** — session socket `/run/user/1000/acos-view-<pid>-1/view.sock` dir 0700 / sock 0600; none in this session's `acos-art-<pid>-0` dir; guest inspection through `/proc/<guest pid>/root`: `/dev/socket` = `[logdw, peer.sock]`, host socket path not present, no `view.sock` found under guest `/dev,/data,/run,/tmp`; Host check live (200 / 403 / 403); 27 MJPEG parts, 3 distinct decoded PNGs; tap events; producer subscribers 1 while watched, **0 after** (`subscribers_dropped ≥ 1`); session leaves the registry on destroy.
+* **A/B viewer OFF** (`tools/bench/acos-bench.sh --reps 1 --groups "a:latency:8G:300"`, ACOS_BENCH_TASK=VIEW1c, interleaved base,cand,base,cand… actual order base1, cand1, cand2, base2; base built in its own linked worktree, compile paths checked 0 foreign): vs main 477e99c, M4/M6/M7/M8-strict/teardown within noise; **M5 screenshot 11.9→24.3 ms and M8 fast +14…36 % are NOT from VIEW1**: the branch merged main only at 74e4ee9 and lacks main's SHOTZ (M5 24→12, `results/bench/SHOTZ-evidence`) and PERF-REL3 changes (and the brief forbids merging main). Proof: the branch's own pre-VIEW1c commit 1221dfe vs this candidate (2 reps each) is **all within noise** (M5 24.04 vs 24.26, M8 fast 46.4 vs 47.5 / 44.7 vs 44.4, M4 fast 159.3 vs 159.2) — `ab-vs-pre-1221dfe.txt`. Both arms 2 reps; the pre arm ran after the main arm, not strictly interleaved with the candidate. **Re-measure against main after the orchestrator merges main.**
+* **Gates** (`--engine art`, `.cache/view1c-gates/`): `v2-art-counter`, `form-validation`, `gaten-home` → pass, fidelity art-reference.
+
+### Remains / decisions for the orchestrator
+1. Merge main (not done, per brief) and re-run the viewer-off A/B vs main — the M5/M8-fast deltas should vanish.
+2. `launch.rs` also got a `cargo fmt` pass (≈+100 lines of formatting noise in the diff).
+3. Stale `/run/user/1000/acos-art-*/view.sock` dirs from earlier killed sessions exist on the host (old layout); harmless, not cleaned.
+4. Hub does not forward the frame header's `secure` flag to the page (the placeholder is simply black).

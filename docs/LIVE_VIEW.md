@@ -10,9 +10,15 @@ viewers. The stream exists only while a viewer is connected: with no subscriber
 the session's frame path does **one atomic load** and nothing else.
 
 * Producer: `acos-art` (the launcher owns the C1 compositor state).
-* Socket: one Unix `SOCK_STREAM` per session, bound in the session's short
-  runtime directory (`/run/user/<uid>/acos-art-<pid>-<seq>/view.sock`, the same
-  directory as the session's peer socket, `sun_path` ≤ 107 bytes, mode 0600).
+* Socket: one Unix `SOCK_STREAM` per session, bound in its **own host-only
+  directory** (`/run/user/<uid>/acos-view-<pid>-<seq>/view.sock`, `sun_path`
+  ≤ 107 bytes, directory 0700 and owned by this uid, socket 0600). **It is not in
+  the session's socket directory** (`acos-art-<pid>-<seq>`, which is bind-mounted
+  into the guest as `/dev/socket`): the app under test and a shared zygote cannot
+  see, connect to or replace it (VIEW1c M1). The producer refuses a directory it
+  does not own or cannot make 0700, never `chmod`s by path (the mode is set with
+  `fchmodat(AT_SYMLINK_NOFOLLOW)` on the directory fd), and serves a subscribe
+  line only after `SO_PEERCRED` shows the peer is the same uid.
 * Path published in the launcher's ready line as **`stream_socket`** (a string,
   or `null` when the socket could not be bound — a session without a stream is
   still a normal session).
@@ -84,7 +90,7 @@ Payload = a JSON header **line terminated by `\n`**, immediately followed by the
 encoded image bytes (no length prefix of their own: the rest of the payload).
 
 ```json
-{"seq":42,"generation":41,"w":540,"h":1200,"format":"png","ts_ms":1763158000123}
+{"seq":42,"generation":41,"w":540,"h":1200,"format":"png","ts_ms":1763158000123,"secure":false}
 ```
 
 | field | meaning |
@@ -94,6 +100,13 @@ encoded image bytes (no length prefix of their own: the rest of the payload).
 | `w`,`h` | the encoded image size (`display * scale`, rounded) |
 | `format` | `"jpeg"` or `"png"` |
 | `ts_ms` | host wall clock at capture (ms since the Unix epoch) |
+| `secure` | `true` when a visible window carries `FLAG_SECURE`: the image is then an **all-black placeholder** (1/8 of the display), never the app's pixels. The producer blanks it even if the source hands over content |
+
+**`FLAG_SECURE`** is the window manager's flag (`LayoutParams.flags`); the host
+`WmsState` publishes it to the compositor on every `relayout`, so the stream
+knows it. While any non-hidden window has it the stream shows the placeholder,
+like Android's own screenshot/screen-record blanking. A window the guest
+positions itself (no WMS placement) can neither set nor hide it.
 
 Frames are **not** acknowledged, ordered relative to events beyond `seq`/`ts_ms`,
 or re-sent. Intermediate frames are dropped: the producer always encodes the
@@ -114,8 +127,8 @@ JSON object, one per line of the feed:
 | `kind` | `"action"` \| `"activity"` \| `"lifecycle"` \| `"settle"` |
 | `cmd` | for `action`/`lifecycle`: `tap` \| `key` \| `text` \| `swipe` \| `tree` \| `screenshot` \| `reset` \| `close` \| `launch` \| `session` |
 | `x`,`y`,`x2`,`y2` | input coordinates (display space) when the command had them |
-| `key` | key code for `key` |
-| `text` | typed text: **masked** (`"[masked]"`) when the focused field is a password field, otherwise always truncated to 64 characters (+ `…`) |
+| `key` | key code for `key`: **masked** (`"[masked]"`) exactly when `text` is (a key code is a keystroke, and `KEYCODE_A`…`KEYCODE_Z` spell a secret) |
+| `text` | typed text: **masked** (`"[masked]"`) by default; shown (truncated to 64 characters + `…`) only when the reply of that very command carries a fresh tree that proves a **focused, non-password** field. A tree with no focused node, a password field, no tree at all, or a tree from an earlier command all mask |
 | `status` | `"ok"` or the launcher's structured code (`ELEMENT_OFFSCREEN`, `NO_FRESH_FRAME`, …) |
 | `activity` | focused activity (`<package>/<Class>`) on `activity`/`lifecycle` events |
 | `frame_seq` | the launcher's logical frame id of the reply this event describes, when it has one |
@@ -161,8 +174,26 @@ stats, never a block.
    would block (or that closed) is dropped; the encoder never waits for it.
 4. At most 4 subscribers; a fifth connection drops the oldest, so a viewer that
    reconnects is never locked out.
-5. Text in the feed is masked for password fields and truncated; the producer
-   never sends full-resolution pixels.
+5. Text and key codes in the feed are masked unless a fresh tree proves a
+   non-password focus, and truncated; the producer never sends full-resolution
+   pixels.
+6. At most `MAX_SUBSCRIBE_THREADS` (8) connections are in the subscribe phase at
+   once (a connection beyond the cap is closed at accept, with no thread), and
+   the whole subscribe line must arrive within one 5 s deadline: a peer that
+   trickles bytes cannot hold a slot.
+7. A message larger than the socket buffer (a large frame) is queued per
+   subscriber with a write offset and delivered across several non-blocking
+   writes; a viewer is dropped only on a write error or when more than 8 MiB is
+   queued for it, so a slow-but-alive reader is not disconnected by a big frame.
+
+**Password echo caveat.** Masking covers the *event feed* and the *frames of a
+`FLAG_SECURE` window*. A password field that does not set `FLAG_SECURE` is drawn
+by the framework as bullets (and, like Android, the *last typed character* may
+be echoed in clear for about a second while typing). That glyph is in the
+pixels, and the stream is those pixels; only `FLAG_SECURE` removes it. Apps that
+handle credentials should set `FLAG_SECURE` on those screens (it also hides them
+from the stream), and `acos view` is for the owner's own sessions on a loopback
+port with a token, not for sessions that carry real credentials.
 
 ## 4. Consumer rules
 
@@ -299,6 +330,16 @@ acos view: http://127.0.0.1:54321/?t=<token>
 * **127.0.0.1 only.** `--bind` accepts exactly `127.0.0.1`; any other address is
   refused before a socket exists (ADR-0027 §1). `--port 0` (the default) picks a
   free port and prints it.
+* **Host check, connection cap, head deadline (VIEW1c).** A request whose
+  `Host` header is not exactly `127.0.0.1:<port>` (this hub's own port) gets
+  `403` before any route, which stops DNS-rebinding pages. At most 64
+  connections are served at once (a connection beyond that is closed at accept)
+  and the request head must arrive within one 5 s deadline. The hub verifies
+  the upstream socket's server uid with `SO_PEERCRED` before it reads a frame
+  from it, restarts the upstream if a browser attaches while the last one is
+  detaching, and only reads a registry directory that this uid owns and that is
+  not group/world-writable; the registry directory is created 0700 and an
+  existing one that is another uid's, not a directory or a symlink is refused.
 * **Token on every request.** A fresh 32-byte token (256 bits, hex) is read from
   `/dev/urandom` at startup and compared in constant time; `/?t=` missing or
   wrong is `HTTP 403` on the page, the JSON API and both streams. Only `GET` is

@@ -1,0 +1,484 @@
+{
+  "agentview_url": "http://127.0.0.1:35075/?t=24915b5d7d582d4b246f8d524e508e2bb43650cc023f916efc80e3c40acfa9a0",
+  "checks": [
+    {
+      "check": "mcp_initialize",
+      "detail": {
+        "name": "acos-mcp",
+        "version": "0.2.0"
+      },
+      "ok": true
+    },
+    {
+      "check": "launch",
+      "detail": {
+        "error": null,
+        "session_id": "mcp-3960142",
+        "status": "pass"
+      },
+      "ok": true
+    },
+    {
+      "check": "view_sock_in_private_host_only_dir",
+      "detail": {
+        "dir_mode": "0o700",
+        "sock_mode": "0o600",
+        "socket": "/run/user/1000/acos-view-3960157-1/view.sock"
+      },
+      "ok": true
+    },
+    {
+      "check": "no_view_sock_in_any_guest_mounted_socket_dir",
+      "detail": {
+        "guest_dirs": [
+          "/run/user/1000/acos-art-3960157-0"
+        ],
+        "leaked": []
+      },
+      "ok": true
+    },
+    {
+      "check": "guest_cannot_see_view_sock",
+      "detail": [
+        {
+          "dev_socket": [
+            "logdw",
+            "peer.sock"
+          ],
+          "host_path_visible": false,
+          "pid": 3960168,
+          "view_sock_found_at": []
+        },
+        {
+          "dev_socket": [
+            "logdw",
+            "peer.sock"
+          ],
+          "host_path_visible": false,
+          "pid": 3960172,
+          "view_sock_found_at": []
+        }
+      ],
+      "ok": true
+    },
+    {
+      "check": "once_json_lists_session",
+      "detail": {
+        "ok": true,
+        "registry_dir": "/home/Qui/Projects/acos/.cache/wt-view1/.cache/view1c-proof/run/registry",
+        "sessions": [
+          {
+            "activity": "dev.acos.fixtures.counter.MainActivity",
+            "age_ms": 15,
+            "apk": "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk",
+            "client": {
+              "name": "view1c-proof",
+              "version": "1.0"
+            },
+            "connected": false,
+            "daemon_pid": 3960151,
+            "display": {
+              "h": 2400,
+              "w": 1080
+            },
+            "launcher_pid": 3960157,
+            "package": "dev.acos.fixtures.counter",
+            "project_dir": "/home/Qui/Projects/acos/.cache/wt-view1",
+            "session_id": "mcp-3960142",
+            "started_ms": 1794697835344,
+            "stream": true,
+            "watchers": 0
+          }
+        ]
+      },
+      "ok": true
+    },
+    {
+      "check": "prints_one_line_url",
+      "detail": {
+        "line": "{\"bind\":\"127.0.0.1\",\"port\":35075,\"token\":\"24915b5d7d582d4b246f8d524e508e2bb43650cc023f916efc80e3c40acfa9a0\",\"url\":\"http://127.0.0.1:35075/?t=24915b5d7d582d4b246f8d524e508e2bb43650cc023f916efc80e3c40acfa9a0\"}",
+        "url": "http://127.0.0.1:35075/?t=24915b5d7d582d4b246f8d524e508e2bb43650cc023f916efc80e3c40acfa9a0"
+      },
+      "ok": true
+    },
+    {
+      "check": "no_token_is_403",
+      "detail": {
+        "body": "403 forbidden: a valid ?t=<token> is required\n",
+        "without": 403,
+        "wrong": 403
+      },
+      "ok": true
+    },
+    {
+      "check": "host_header_must_be_loopback_literal_and_port",
+      "detail": {
+        "ok": 200,
+        "rebind": 403
+      },
+      "ok": true
+    },
+    {
+      "check": "page_is_self_contained",
+      "detail": {
+        "bytes": 15129,
+        "cdn": false,
+        "status": 200
+      },
+      "ok": true
+    },
+    {
+      "check": "sessions_listed",
+      "detail": {
+        "activity": "dev.acos.fixtures.counter.MainActivity",
+        "age_ms": 21,
+        "apk": "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk",
+        "client": {
+          "name": "view1c-proof",
+          "version": "1.0"
+        },
+        "connected": false,
+        "daemon_pid": 3960151,
+        "display": {
+          "h": 2400,
+          "w": 1080
+        },
+        "launcher_pid": 3960157,
+        "package": "dev.acos.fixtures.counter",
+        "project_dir": "/home/Qui/Projects/acos/.cache/wt-view1",
+        "session_id": "mcp-3960142",
+        "started_ms": 1794697835344,
+        "stream": true,
+        "watchers": 0
+      },
+      "ok": true
+    },
+    {
+      "check": "frames_content_type",
+      "detail": {
+        "Cache-Control": "no-store",
+        "Connection": "close",
+        "Content-Type": "multipart/x-mixed-replace; boundary=acosframe",
+        "X-Content-Type-Options": "nosniff"
+      },
+      "ok": true
+    },
+    {
+      "check": "taps_accepted",
+      "detail": [
+        {
+          "accepted": true,
+          "status": "pass"
+        },
+        {
+          "accepted": true,
+          "status": "pass"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "check": "producer_sees_one_subscriber_while_watched",
+      "detail": {
+        "encodes": 27,
+        "frames_sent": 27,
+        "subscribers": 1
+      },
+      "ok": true
+    },
+    {
+      "check": "frames_decode",
+      "detail": {
+        "bytes": 537054,
+        "decoded_distinct": 3,
+        "distinct": 4,
+        "parts": 27,
+        "png_ok": true
+      },
+      "ok": true
+    },
+    {
+      "check": "sse_state_and_tap_events",
+      "detail": {
+        "event_count": 2,
+        "state": [
+          {
+            "connected": false,
+            "entry": {
+              "activity": "dev.acos.fixtures.counter.MainActivity",
+              "apk": "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk",
+              "client": {
+                "name": "view1c-proof",
+                "version": "1.0"
+              },
+              "daemon_pid": 3960151,
+              "display": {
+                "h": 2400,
+                "w": 1080
+              },
+              "launcher_pid": 3960157,
+              "package": "dev.acos.fixtures.counter",
+              "project_dir": "/home/Qui/Projects/acos/.cache/wt-view1",
+              "session_id": "mcp-3960142",
+              "started_ms": 1794697835344,
+              "stream": true
+            },
+            "hello": null
+          }
+        ],
+        "taps": [
+          {
+            "cmd": "tap",
+            "status": "ok",
+            "x": 157,
+            "y": 431
+          },
+          {
+            "cmd": "tap",
+            "status": "ok",
+            "x": 157,
+            "y": 431
+          }
+        ]
+      },
+      "ok": true
+    },
+    {
+      "check": "hub_reports_zero_watchers_after_close",
+      "detail": {
+        "activity": "dev.acos.fixtures.counter.MainActivity",
+        "age_ms": 22415,
+        "apk": "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk",
+        "client": {
+          "name": "view1c-proof",
+          "version": "1.0"
+        },
+        "connected": false,
+        "daemon_pid": 3960151,
+        "display": {
+          "h": 2400,
+          "w": 1080
+        },
+        "launcher_pid": 3960157,
+        "package": "dev.acos.fixtures.counter",
+        "project_dir": "/home/Qui/Projects/acos/.cache/wt-view1",
+        "session_id": "mcp-3960142",
+        "started_ms": 1794697835344,
+        "stream": true,
+        "watchers": 0
+      },
+      "ok": true
+    },
+    {
+      "check": "destroy",
+      "detail": {
+        "error": null,
+        "status": "pass"
+      },
+      "ok": true
+    },
+    {
+      "check": "producer_back_to_zero_subscribers",
+      "detail": {
+        "events_sent": 2,
+        "frames_sent": 28,
+        "subscribers": 0,
+        "subscribers_dropped": 1
+      },
+      "ok": true
+    },
+    {
+      "check": "session_disappears_after_destroy",
+      "detail": {
+        "files": [],
+        "sessions": []
+      },
+      "ok": true
+    }
+  ],
+  "decode_error": "OSError('image file is truncated')",
+  "frames": {
+    "bytes": 537054,
+    "decoded_distinct": 3,
+    "distinct": 4,
+    "parts": 27,
+    "png_ok": true
+  },
+  "guest_inspection": [
+    {
+      "dev_socket": [
+        "logdw",
+        "peer.sock"
+      ],
+      "host_path_visible": false,
+      "pid": 3960168,
+      "view_sock_found_at": []
+    },
+    {
+      "dev_socket": [
+        "logdw",
+        "peer.sock"
+      ],
+      "host_path_visible": false,
+      "pid": 3960172,
+      "view_sock_found_at": []
+    }
+  ],
+  "scratch": "/home/Qui/Projects/acos/.cache/wt-view1/.cache/view1c-proof/run",
+  "sse": {
+    "error": null,
+    "events": [
+      {
+        "event": {
+          "cmd": "tap",
+          "frame_seq": 2,
+          "kind": "action",
+          "status": "ok",
+          "ts_ms": 1794697837824,
+          "x": 157,
+          "y": 431
+        },
+        "index": 1,
+        "kind": "action",
+        "ts_ms": 1794697837824
+      },
+      {
+        "event": {
+          "cmd": "tap",
+          "frame_seq": 3,
+          "kind": "action",
+          "status": "ok",
+          "ts_ms": 1794697839487,
+          "x": 157,
+          "y": 431
+        },
+        "index": 2,
+        "kind": "action",
+        "ts_ms": 1794697839487
+      }
+    ],
+    "state": [
+      {
+        "connected": false,
+        "entry": {
+          "activity": "dev.acos.fixtures.counter.MainActivity",
+          "apk": "/home/Qui/Projects/acos/fixtures/build/apps/counter.apk",
+          "client": {
+            "name": "view1c-proof",
+            "version": "1.0"
+          },
+          "daemon_pid": 3960151,
+          "display": {
+            "h": 2400,
+            "w": 1080
+          },
+          "launcher_pid": 3960157,
+          "package": "dev.acos.fixtures.counter",
+          "project_dir": "/home/Qui/Projects/acos/.cache/wt-view1",
+          "session_id": "mcp-3960142",
+          "started_ms": 1794697835344,
+          "stream": true
+        },
+        "hello": null
+      }
+    ],
+    "tap_events": [
+      {
+        "event": {
+          "cmd": "tap",
+          "frame_seq": 2,
+          "kind": "action",
+          "status": "ok",
+          "ts_ms": 1794697837824,
+          "x": 157,
+          "y": 431
+        },
+        "index": 1,
+        "kind": "action",
+        "ts_ms": 1794697837824
+      },
+      {
+        "event": {
+          "cmd": "tap",
+          "frame_seq": 3,
+          "kind": "action",
+          "status": "ok",
+          "ts_ms": 1794697839487,
+          "x": 157,
+          "y": 431
+        },
+        "index": 2,
+        "kind": "action",
+        "ts_ms": 1794697839487
+      }
+    ]
+  },
+  "stats_final": {
+    "display": {
+      "h": 2400,
+      "w": 1080
+    },
+    "format": "png",
+    "jpeg_quality": 75,
+    "max_fps": 15,
+    "scale": 0.5,
+    "stats": {
+      "captures_rate_limited": 49,
+      "encodes": 28,
+      "events_dropped": 0,
+      "events_sent": 2,
+      "frames_captured": 28,
+      "frames_dropped_latest": 0,
+      "frames_sent": 28,
+      "last_encode_bytes": 20149,
+      "last_encode_us": 1569,
+      "mean_bytes": 20044.964285714286,
+      "mean_encode_ms": 1.2241785714285713,
+      "source_calls": 115,
+      "subscribe_rejected": 0,
+      "subscribers": 0,
+      "subscribers_dropped": 1,
+      "ticks": 164
+    }
+  },
+  "stats_while_watching": {
+    "display": {
+      "h": 2400,
+      "w": 1080
+    },
+    "format": "png",
+    "jpeg_quality": 75,
+    "max_fps": 15,
+    "scale": 0.5,
+    "stats": {
+      "captures_rate_limited": 49,
+      "encodes": 27,
+      "events_dropped": 0,
+      "events_sent": 2,
+      "frames_captured": 27,
+      "frames_dropped_latest": 0,
+      "frames_sent": 27,
+      "last_encode_bytes": 20149,
+      "last_encode_us": 1262,
+      "mean_bytes": 20041.11111111111,
+      "mean_encode_ms": 1.2114074074074075,
+      "source_calls": 44,
+      "subscribe_rejected": 0,
+      "subscribers": 1,
+      "subscribers_dropped": 0,
+      "ticks": 93
+    }
+  },
+  "taps": [
+    {
+      "accepted": true,
+      "status": "pass"
+    },
+    {
+      "accepted": true,
+      "status": "pass"
+    }
+  ],
+  "verdict": "pass",
+  "view_stderr": ""
+}
