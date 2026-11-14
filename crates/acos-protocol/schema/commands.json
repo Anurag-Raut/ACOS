@@ -1776,7 +1776,7 @@
           ]
         },
         "artifacts": {
-          "description": "Artifacts output directory.",
+          "description": "Artifacts output directory.\n\nA run owns its directory: a non-empty directory written by another run is refused with `INVALID_ARGUMENT` naming the previous run id, unless [`VerifyRequest::overwrite`] is set.",
           "type": "string"
         },
         "base": {
@@ -1803,6 +1803,11 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "overwrite": {
+          "default": false,
+          "description": "Replace artifacts left by another run in `artifacts` (`--overwrite`).\n\nOff by default: two runs never interleave evidence in one directory, so a stale frame can never be mistaken for this run's.",
+          "type": "boolean"
         },
         "reference": {
           "description": "Optional art-reference directory to compare against.",

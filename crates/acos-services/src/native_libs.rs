@@ -20,9 +20,14 @@
 
 use std::path::{Path, PathBuf};
 
-use acos_apk::{Apk, HOST_ABI};
+use acos_apk::{AbiGate, Apk};
 
 use crate::error::{ServiceError, Result};
+
+/// The ABI this host can execute, re-exported from [`acos_apk::HOST_ABI`] so a
+/// caller (the launcher) can name it in a refusal's `details` without taking a
+/// direct `acos-apk` dependency.
+pub const HOST_ABI: &str = acos_apk::HOST_ABI;
 
 /// Guest directory the per-run app lib tree is bound at.
 pub const GUEST_NATIVE_LIB_ROOT: &str = "/data/app-lib";
@@ -47,10 +52,13 @@ pub enum NativeLibInstall {
         /// File names, in the APK's deterministic order.
         libs: Vec<String>,
     },
-    /// The APK has native code, but none for [`HOST_ABI`].
+    /// The APK has native code, but none for [`HOST_ABI`] (the AOSP
+    /// `INSTALL_FAILED_NO_MATCHING_ABIS` case: the package cannot be installed).
     UnsupportedAbi {
-        /// ABIs the APK does carry.
+        /// ABIs the APK does carry, sorted.
         available: Vec<String>,
+        /// A bounded `lib/<abi>/<name>` sample of what the APK does ship.
+        sample: Vec<String>,
         /// The `acos-apk` structured message (`UNSUPPORTED_ABI: ...`).
         message: String,
     },
@@ -72,18 +80,34 @@ pub fn install(apk_path: &Path, dest_root: &Path) -> Result<NativeLibInstall> {
     let apk = Apk::open(apk_path).map_err(|e| {
         ServiceError::Internal(format!("native libs: open {}: {e}", apk_path.display()))
     })?;
-    if !apk.has_native_libs() {
-        return Ok(NativeLibInstall::None);
-    }
-    let available: Vec<String> = apk.native_abis();
-    if let Err(e) = apk.check_native_abi(HOST_ABI) {
-        // Deliberately not an error: the guest must still start (and fail with
-        // its own structured `UnsatisfiedLinkError`), exactly as an arm64-only
-        // APK did before this install step existed.
-        return Ok(NativeLibInstall::UnsupportedAbi {
-            available,
-            message: e.to_string(),
-        });
+    // AOSP's per-package ABI choice (`Apk::abi_gate`): one host ABI directory is
+    // enough for the package to install, and only *that* directory is extracted
+    // — a library that exists solely under another ABI stays missing at
+    // `dlopen`, exactly as on the platform.
+    match apk.abi_gate() {
+        AbiGate::NoNative => return Ok(NativeLibInstall::None),
+        AbiGate::Supported { .. } => {}
+        AbiGate::Unsupported {
+            apk_abis,
+            libs_sample,
+        } => {
+            // Deliberately not an error: the decision belongs to the launcher,
+            // which refuses the launch before any guest exists (ABIGATE). This
+            // step must not spawn, guess or silently install another ABI.
+            //
+            // The message names the host ABI and the APK's own inventory; the
+            // code is the variant, so it is not repeated in the prose (the CLI
+            // prefixes its own `acos-art: UNSUPPORTED_ABI: …`).
+            let message = format!(
+                "APK has no native libraries for ABI {HOST_ABI:?}; available: [{}]",
+                apk_abis.join(", ")
+            );
+            return Ok(NativeLibInstall::UnsupportedAbi {
+                available: apk_abis,
+                sample: libs_sample,
+                message,
+            });
+        }
     }
     let total: u64 = apk
         .native_libs

@@ -45,6 +45,7 @@ use serde_json::{json, Value};
 use crate::trust::Trust;
 
 use super::art::{m5_now_us, m5_trace, p3_enabled, p3_trace, ArtSession, GuestExit};
+use super::zygote_host::ZygoteHost;
 use super::{Engine, SessionBackend};
 
 /// The engine label every ART reply carries.
@@ -125,6 +126,10 @@ pub struct ServeEngine {
     artifacts_root: PathBuf,
     art: Mutex<HashMap<String, Arc<HeldArtSession>>>,
     routes: Mutex<HashMap<String, Route>>,
+    /// ZPROD3: the daemon owns the persistent zygote keepers (`ACOS_ART_ZYGOTE=on`).
+    /// One keeper per `ZygoteKey`, closed on serve exit: a keeper outlives
+    /// sessions, never a serve.
+    zygote: Arc<ZygoteHost>,
 }
 
 impl ServeEngine {
@@ -139,6 +144,8 @@ impl ServeEngine {
         max_sessions: usize,
         artifacts_root: PathBuf,
     ) -> Self {
+        // ZPROD3: keepers live inside the daemon's private runtime directory.
+        let zygote = Arc::new(ZygoteHost::for_artifacts(&artifacts_root));
         ServeEngine {
             legacy,
             default_engine,
@@ -146,8 +153,10 @@ impl ServeEngine {
             artifacts_root,
             art: Mutex::new(HashMap::new()),
             routes: Mutex::new(HashMap::new()),
+            zygote,
         }
     }
+
 
     /// Number of sessions held (ART + legacy). Used by the idle-exit check and
     /// the `--max-sessions` cap; it never probes a guest.
@@ -173,6 +182,10 @@ impl ServeEngine {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clear();
+        // ZPROD3 (design §3/§6): the keeper outlives sessions, never a serve.
+        // Closing every keeper ends the zygote and every child it forked, so no
+        // keeper or app child pid survives serve exit.
+        self.zygote.shutdown_all();
         count
     }
 
@@ -632,7 +645,13 @@ impl ServeEngine {
             );
         }
         let artifacts = self.artifacts_root.join(sanitize_session_id(id));
-        match ArtSession::start_with_options(&apk, &artifacts, animations, insets) {
+        match ArtSession::start_with_zygote(
+            &apk,
+            &artifacts,
+            animations,
+            insets,
+            Some(Arc::clone(&self.zygote)),
+        ) {
             Ok(mut session) => {
                 session.set_settle_timeout(settle_timeout_ms);
                 let started = match session.ensure_launch_tree(settle, pixels) {
@@ -1273,6 +1292,10 @@ fn launch_reply(
         ],
     });
     label_meta(&mut result, ENGINE_ART, held.trust, EVIDENCE_HOST_PIXEL);
+    // ZPROD3: a session that really runs a zygote child says so, with the facts
+    // the keeper acked. With the flag off `merge_zygote_fields` changes nothing,
+    // so the launch reply is unchanged byte for byte.
+    merge_zygote_fields(&mut result, session);
     result["animations"] = json!(session.animations());
     result["insets"] = json!(session.insets());
     // H13b: which boot image this session booted and whether its cache hit.
@@ -1439,7 +1462,7 @@ fn observe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError
 fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let settle = requested_settle(args)?;
     // SE1: reject an unverifiable pass before the input is injected.
-    reject_fast_expect_change(args)?;
+    reject_expect_change_without_pixel_evidence(args)?;
     let result = if let Some(id) = args.get("id").and_then(Value::as_str) {
         let target = resolve_selector(session, &Selector::by_id(id), "id", id)?;
         session.set_settle_mode(settle);
@@ -1473,7 +1496,7 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
 
 fn type_text(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let settle = requested_settle(args)?;
-    reject_fast_expect_change(args)?;
+    reject_expect_change_without_pixel_evidence(args)?;
     let Some(text) = args.get("text").and_then(Value::as_str) else {
         return Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
@@ -1526,7 +1549,7 @@ fn is_editable_class(class: &str) -> bool {
 
 fn key(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let settle = requested_settle(args)?;
-    reject_fast_expect_change(args)?;
+    reject_expect_change_without_pixel_evidence(args)?;
     let code = args.get("code").cloned().unwrap_or(Value::Null);
     let value = if let Some(name) = code.as_str() {
         let name = name.to_ascii_lowercase();
@@ -1573,6 +1596,20 @@ fn action(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError>
     }
 }
 
+/// SE2b: does `acos_assert` have to re-prove the content window first?
+///
+/// A content-settled bound frame is only evidence while it is the frame being
+/// asserted. `bound_settle` records the *last* tree reply's rule, so in content
+/// mode an assert must take a new content settle (fresh, distinct traversals)
+/// instead of reading the cached tree. Strict/fast-bound sessions keep their
+/// existing single-traversal behaviour.
+fn assert_needs_fresh_content_settle(bound_settle: Option<&Value>) -> bool {
+    bound_settle
+        .and_then(|settle| settle.get("mode"))
+        .and_then(Value::as_str)
+        == Some("content")
+}
+
 /// The server-side assertion over the live tree.
 ///
 /// One round trip instead of "observe_tree then compare in the client". It is
@@ -1612,7 +1649,17 @@ fn assert(session: &mut ArtSession, args: &Value, trust: Trust) -> Result<Value,
         .or_else(|| args.get("text"))
         .and_then(Value::as_str)
         .map(str::to_string);
-    let tree = session.tree()?;
+    // SE2/SE2b: after a `settle: content` step the ONLY honest evidence is a
+    // **new** content settle. The bound settle record is session-sticky (it
+    // describes the last tree reply), so serving the cached tree here let an
+    // `acos_assert` pass on a screen that had moved since: the assert must
+    // re-prove the content window on fresh traversals, and never read the cache.
+    let tree = if assert_needs_fresh_content_settle(session.bound_settle()) {
+        session.content_settle()?;
+        session.ensure_bound_tree()?
+    } else {
+        session.tree()?
+    };
     // P12b: a settle timeout is an observation, not evidence. Assertions stay
     // strict: the tree may be mid-animation, so it can never justify a pass.
     if let Some(settle) = session.last_tree_settle() {
@@ -1764,8 +1811,24 @@ fn logs(session: &mut ArtSession) -> Result<Value, BackendError> {
     }))
 }
 
+/// ZPROD3: copy the zygote fields into a reply (flag-on sessions only). With the
+/// flag off the map is `None` and the reply object is untouched; with it on the
+/// fields replace the generic `isolation` string, because a reset/status reply
+/// must never describe a zygote child as an ordinary fresh process.
+fn merge_zygote_fields(result: &mut Value, session: &ArtSession) {
+    let Some(fields) = session.zygote_reply_fields() else {
+        return;
+    };
+    let Some(object) = result.as_object_mut() else {
+        return;
+    };
+    for (key, value) in fields {
+        object.insert(key, value);
+    }
+}
+
 fn status_value(session: &ArtSession) -> Value {
-    json!({
+    let mut status = json!({
         "launched": true,
         "package": session.package(),
         "activity": session.activity(),
@@ -1782,7 +1845,9 @@ fn status_value(session: &ArtSession) -> Value {
             "assert": true, "swipe": false, "environment": false,
         },
         "unsupported": ["acos_swipe"],
-    })
+    });
+    merge_zygote_fields(&mut status, session);
+    status
 }
 
 fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
@@ -1790,7 +1855,11 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
     // default and unchanged (150 ms quiet window + capture); `fast` binds the
     // relaunched guest's first traversal from a fresh probe sample, with no
     // quiet window and no PNG.
-    let (settle, pixels) = launch_bind(args)?;
+    // SE2b: lo, `settle: content` on `acos_reset`. The reset binds the
+    // relaunched guest's first frame with a strict/fast traversal; a content
+    // rule there was silently coerced to strict, which is exactly the kind of
+    // quiet downgrade the rule must never allow. Refuse it instead.
+    let (settle, pixels) = reset_bind(args)?;
     let before = session.last_frame_seq();
     session.set_reset_bind(settle, pixels, settle_timeout_arg(args));
     session.reset()?;
@@ -1815,6 +1884,7 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
         "settle": session.last_tree_settle().cloned().unwrap_or(Value::Null),
         "note": "the guest process was stopped and the same APK relaunched with empty app-data",
     });
+    merge_zygote_fields(&mut reply, session);
     // S3b: never a silent retry. The first host-transport failure and the path
     // to its preserved evidence travel with the successful reset reply.
     if let Some(retry) = session.relaunch_retry() {
@@ -1901,11 +1971,30 @@ fn launch_bind(args: &Value) -> Result<(&'static str, bool), BackendError> {
             })
         }
     };
-    if settle == "fast" && pixels {
+    if (settle == "fast" || settle == "content") && pixels {
         return Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
-            detail: "settle:fast is a tree-only mode; a fast frame may be mid-animation and \
-                     cannot back a PNG capture (pass pixels:false, or settle:strict)"
+            detail: format!(
+                "settle:{settle} is a tree-only mode; its pixels may still be animating and \
+                 cannot back a PNG capture (pass pixels:false, or settle:strict)"
+            ),
+        });
+    }
+    Ok((settle, pixels))
+}
+
+/// SE2b: `acos_reset` binds the relaunched guest's first frame with a
+/// strict/fast traversal only. `settle:content` is refused as a structured
+/// `INVALID_ARGUMENT` instead of being silently mapped to strict (it would
+/// otherwise claim a rule the reset never applied).
+fn reset_bind(args: &Value) -> Result<(&'static str, bool), BackendError> {
+    let (settle, pixels) = launch_bind(args)?;
+    if settle == "content" {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: "acos_reset does not bind a content-stable frame: the reset's first frame \
+                     is strict (or fast navigation). Use settle:\"content\" on acos_launch, \
+                     acos_observe/acos_observe_tree or an input verb instead"
                 .to_string(),
         });
     }
@@ -1916,9 +2005,14 @@ fn requested_settle(args: &Value) -> Result<&'static str, BackendError> {
     match args.get("settle").and_then(Value::as_str) {
         None | Some("strict") => Ok("strict"),
         Some("fast") => Ok("fast"),
+        // SE2: the content-stable rule for a screen that animates forever in
+        // pixels (ADR-0026 decision 3). Backs UI/text observations only.
+        Some("content") => Ok("content"),
         Some(other) => Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
-            detail: format!("settle must be \"fast\" or \"strict\" (got {other:?})"),
+            detail: format!(
+                "settle must be \"strict\", \"fast\" or \"content\" (got {other:?})"
+            ),
         }),
     }
 }
@@ -1976,22 +2070,33 @@ fn expect_change_arg(args: &Value) -> Result<bool, BackendError> {
     }
 }
 
-/// SE1: `expect_change: true` with `settle: fast` would be an unverifiable pass
-/// (a fast frame may be mid-animation and is never verification evidence), so
-/// it is rejected before any input is injected.
-fn reject_fast_expect_change(args: &Value) -> Result<(), BackendError> {
-    if expect_change_arg(args)?
-        && matches!(args.get("settle").and_then(Value::as_str), Some("fast"))
-    {
-        return Err(BackendError::Failed {
-            code: ErrorCode::InvalidArgument,
-            detail: "`expect_change: true` cannot be combined with `settle: fast`: a fast frame \
-                     may be mid-animation and is never verification evidence; use `settle: \
-                     strict` (the default)"
-                .to_string(),
-        });
+/// SE1/SE2b: `expect_change: true` is a **pixel** claim. Neither a fast frame
+/// (mid-animation, never verification evidence) nor a content-settled frame
+/// (content stable, pixels may still be animating) can measure it, so both are
+/// rejected before any input is injected, exactly like the scenario parser
+/// rejects `expect_change` + `settle: content` as `INVALID_SCENARIO`.
+fn reject_expect_change_without_pixel_evidence(args: &Value) -> Result<(), BackendError> {
+    let Some(settle) = args.get("settle").and_then(Value::as_str) else {
+        return Ok(());
+    };
+    if !expect_change_arg(args)? {
+        return Ok(());
     }
-    Ok(())
+    let why = match settle {
+        "fast" => {
+            "a fast frame may be mid-animation and is never verification evidence; use \
+             `settle: strict` (the default)"
+        }
+        "content" => {
+            "a content-stable frame proves the UI tree content, never the pixels; a pixel-change \
+             claim needs `settle: strict` (the default)"
+        }
+        _ => return Ok(()),
+    };
+    Err(BackendError::Failed {
+        code: ErrorCode::InvalidArgument,
+        detail: format!("`expect_change: true` cannot be combined with `settle: {settle}`: {why}"),
+    })
 }
 
 /// SE1: enforce `expect_change: true` on a per-action reply.
@@ -2670,5 +2775,87 @@ mod tests {
             err.to_string().contains("tree-only mode"),
             "fast+pixels must be refused, got {err}"
         );
+        // SE2: content settle is tree-content evidence only; a PNG claim from it
+        // is refused exactly like fast.
+        assert_eq!(
+            launch_bind(&json!({"settle": "content"})).unwrap(),
+            ("content", false)
+        );
+        let err = launch_bind(&json!({"settle": "content", "pixels": true})).unwrap_err();
+        assert!(
+            err.to_string().contains("tree-only mode"),
+            "content+pixels must be refused, got {err}"
+        );
+    }
+
+    /// SE2b finding 2: a content-mode `acos_assert` must take a **new** content
+    /// settle, never the cached bound tree. Before the fix the assert served the
+    /// sticky cache, so it could pass on a screen that had moved since the
+    /// content step.
+    #[test]
+    fn a_content_assert_reproves_the_settle_instead_of_reading_the_cache() {
+        let content = json!({"mode": "content", "settled": true, "frame_seq": 5});
+        assert!(
+            assert_needs_fresh_content_settle(Some(&content)),
+            "a content-bound assert must re-settle"
+        );
+        // An *unsettled* content record is still a content session (the rule is
+        // the one in force) - re-settling is what says whether it holds now.
+        let unsettled = json!({"mode": "content", "settled": false});
+        assert!(assert_needs_fresh_content_settle(Some(&unsettled)));
+        // Strict/fast sessions keep their single traversal.
+        assert!(!assert_needs_fresh_content_settle(Some(
+            &json!({"mode": "strict", "settled": true})
+        )));
+        assert!(!assert_needs_fresh_content_settle(Some(
+            &json!({"mode": "fast", "settled": true})
+        )));
+        assert!(!assert_needs_fresh_content_settle(None));
+    }
+
+    /// SE2b finding 6: `acos_reset{settle:"content"}` must be a structured
+    /// INVALID_ARGUMENT, never a silent mapping to strict.
+    #[test]
+    fn reset_refuses_a_content_settle_instead_of_silently_binding_strict() {
+        let err = reset_bind(&json!({"settle": "content"})).expect_err("content reset is refused");
+        assert_eq!(err.code(), ErrorCode::InvalidArgument);
+        assert!(
+            err.to_string().contains("does not bind a content-stable frame"),
+            "the refusal must say why: {err}"
+        );
+        // The accepted shapes are unchanged.
+        assert_eq!(reset_bind(&json!({})).unwrap(), ("strict", false));
+        assert_eq!(reset_bind(&json!({"settle": "strict"})).unwrap(), ("strict", false));
+        assert_eq!(reset_bind(&json!({"settle": "fast"})).unwrap(), ("fast", false));
+    }
+
+    /// SE2b finding 7: `expect_change` is a pixel claim, so BOTH unmeasured
+    /// settle rules are refused up front (before any input is injected) - the
+    /// content combination was previously refused only by accident, at the
+    /// pixel-change check after the tap.
+    #[test]
+    fn expect_change_is_refused_with_every_unmeasured_settle() {
+        let err = reject_expect_change_without_pixel_evidence(
+            &json!({"settle": "content", "expect_change": true}),
+        )
+        .expect_err("content + expect_change is a pixel claim with no pixel evidence");
+        assert_eq!(err.code(), ErrorCode::InvalidArgument);
+        assert!(err.to_string().contains("settle: content"), "{err}");
+        let err = reject_expect_change_without_pixel_evidence(
+            &json!({"settle": "fast", "expect_change": true}),
+        )
+        .expect_err("fast + expect_change is refused as before");
+        assert_eq!(err.code(), ErrorCode::InvalidArgument);
+        // Strict (the default) still measures the pixels, and a content step
+        // that does not claim a pixel change is fine.
+        assert!(reject_expect_change_without_pixel_evidence(
+            &json!({"settle": "strict", "expect_change": true})
+        )
+        .is_ok());
+        assert!(reject_expect_change_without_pixel_evidence(
+            &json!({"settle": "content"})
+        )
+        .is_ok());
+        assert!(reject_expect_change_without_pixel_evidence(&json!({"expect_change": true})).is_ok());
     }
 }

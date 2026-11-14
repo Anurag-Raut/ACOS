@@ -246,6 +246,8 @@ fn verdict() -> Verdict {
     step.assertions.push(AssertionResult {
         kind: "text".to_string(),
         passed: true,
+        expected: Some(serde_json::json!({"text": "clicks: 0"})),
+        actual: Some(serde_json::json!({"text": "clicks: 0"})),
         diff: Some(AssertionDiff {
             expected: serde_json::json!("clicks: 0"),
             actual: serde_json::json!("clicks: 0"),
@@ -480,6 +482,8 @@ fn assertion_round_trips() {
     round_trip(&AssertionResult {
         kind: "text".to_string(),
         passed: false,
+        expected: Some(serde_json::json!("a")),
+        actual: Some(serde_json::json!("b")),
         diff: Some(AssertionDiff {
             expected: serde_json::json!("a"),
             actual: serde_json::json!("b"),
@@ -645,6 +649,7 @@ fn command_requests_and_responses_round_trip() {
             apk: Some("a.apk".to_string()),
             scenario: "s.yaml".to_string(),
             artifacts: "out/".to_string(),
+            overwrite: false,
             reference: Some("ref/".to_string()),
             required_fidelity: Some(Fidelity::NativeRuntime),
             engine: VerifyEngine::RustVm,
@@ -770,6 +775,8 @@ fn command_requests_and_responses_round_trip() {
             result: AssertionResult {
                 kind: "text".to_string(),
                 passed: true,
+                expected: Some(serde_json::json!({"text": "ok"})),
+                actual: Some(serde_json::json!({"text": "ok"})),
                 diff: None,
                 matched_node_ids: vec!["n1".to_string()],
                 message: None,
@@ -884,6 +891,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
         extras: BTreeMap::new(),
         clear_state: true,
         settle_timeout_ms: None,
+        settle: None,
     }));
     steps.push(Step {
         wait_for: Some(WaitForStep {
@@ -1077,6 +1085,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
         capabilities: vec!["ui.text".to_string()],
         budgets: Some(ResourceBudget::wall_ms(1000)),
         expectation: Expectation::Pass,
+        expect_error: None,
         steps,
         output: OutputOptions::default(),
         animations: None,

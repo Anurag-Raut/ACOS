@@ -175,9 +175,26 @@ fn an_arm64_only_apk_is_structured_unsupported_abi() {
     let dest = dir.join("app-lib");
     let got = native_libs::install(&apk, &dest).expect("decision");
     match got {
-        NativeLibInstall::UnsupportedAbi { available, message } => {
+        NativeLibInstall::UnsupportedAbi {
+            available,
+            sample,
+            message,
+        } => {
             assert_eq!(available, vec!["arm64-v8a", "armeabi-v7a"]);
-            assert!(message.contains("UNSUPPORTED_ABI"), "{message}");
+            assert_eq!(
+                sample,
+                vec![
+                    "lib/arm64-v8a/libfoo.so",
+                    "lib/armeabi-v7a/libfoo.so"
+                ]
+            );
+            // The message names the host ABI and every ABI the APK does ship; the
+            // `UNSUPPORTED_ABI` code itself is the variant (and the launcher's
+            // `code`), so it is not repeated in the prose.
+            assert!(
+                message.contains("x86_64") && message.contains("arm64-v8a"),
+                "{message}"
+            );
         }
         other => panic!("expected UnsupportedAbi, got {other:?}"),
     }

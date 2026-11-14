@@ -19,6 +19,48 @@ use crate::signing::{self, SigningInfo};
 /// structured [`UNSUPPORTED_ABI`] error, never a silent fallback.
 pub const HOST_ABI: &str = "x86_64";
 
+/// The device ABI list in preference order — this host's `Build.SUPPORTED_ABIS`.
+///
+/// AOSP's `PackageManager` is the authority here, not a guess of ours:
+/// `NativeLibraryHelper.findSupportedAbi` walks the APK's `lib/<abi>/` entries
+/// and keeps the ABI whose index in this list is **lowest** ("The entry that
+/// comes in first (i.e. with a lower index) has the higher priority."), returns
+/// `NO_NATIVE_LIBRARIES` when the APK has no `lib/` at all, and
+/// `INSTALL_FAILED_NO_MATCHING_ABIS` when it has `lib/` but no match
+/// (`frameworks/base/core/jni/com_android_internal_content_NativeLibraryHelper.cpp`).
+/// The decision is **per package**, and
+/// `iterateOverNativeFiles` then extracts only the chosen ABI's directory.
+pub const SUPPORTED_ABIS: [&str; 1] = [HOST_ABI];
+
+/// The package-level ABI verdict for one APK, as an AOSP install would decide it.
+///
+/// See [`Apk::abi_gate`] for the rule and [`SUPPORTED_ABIS`] for the citation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AbiGate {
+    /// The APK has no `lib/` entries (pure Java/Kotlin): no ABI question.
+    NoNative,
+    /// A host ABI directory exists, so that ABI is the package's ABI.
+    Supported {
+        /// The host ABI the package installs under ([`HOST_ABI`] today).
+        abi: String,
+    },
+    /// The APK ships native code, but no directory for any host ABI.
+    Unsupported {
+        /// Every ABI directory the APK does provide, sorted.
+        apk_abis: Vec<String>,
+        /// A bounded, deterministic `lib/<abi>/<name>` sample as evidence.
+        libs_sample: Vec<String>,
+    },
+}
+
+impl AbiGate {
+    /// Whether this verdict refuses the APK (the documented `UNSUPPORTED_ABI`).
+    #[must_use]
+    pub fn is_unsupported(&self) -> bool {
+        matches!(self, Self::Unsupported { .. })
+    }
+}
+
 /// A single zip entry.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ApkEntry {
@@ -339,6 +381,59 @@ impl Apk {
     /// Whether the APK ships any native code at all.
     pub fn has_native_libs(&self) -> bool {
         self.native_libs.values().any(|libs| !libs.is_empty())
+    }
+
+    /// The package-level ABI decision, exactly as AOSP's `PackageManager` makes
+    /// it (see [`SUPPORTED_ABIS`]).
+    ///
+    /// The decision is **per package, never per library**: the first ABI in
+    /// [`SUPPORTED_ABIS`] that has a `lib/<abi>/` directory wins and *that*
+    /// directory is the one an install would extract. An APK that carries
+    /// `lib/x86_64/liba.so` and `lib/arm64-v8a/libb.so` therefore installs as an
+    /// x86_64 package — `liba.so` works and the first `dlopen("libb.so")` fails
+    /// with the app's own `UnsatisfiedLinkError`, which is what the platform
+    /// does and what ACOS reproduces. Only an APK with **no** directory for a
+    /// host ABI is [`AbiGate::Unsupported`].
+    #[must_use]
+    pub fn abi_gate(&self) -> AbiGate {
+        let abis: Vec<String> = self
+            .native_libs
+            .iter()
+            .filter(|(_, libs)| !libs.is_empty())
+            .map(|(abi, _)| abi.clone())
+            .collect();
+        if abis.is_empty() {
+            return AbiGate::NoNative;
+        }
+        for host in SUPPORTED_ABIS {
+            if abis.iter().any(|a| a == host) {
+                return AbiGate::Supported { abi: host.to_string() };
+            }
+        }
+        AbiGate::Unsupported {
+            apk_abis: abis,
+            libs_sample: self.native_libs_sample(8),
+        }
+    }
+
+    /// Up to `max` `lib/<abi>/<name>` entries, ABI then name order.
+    ///
+    /// Evidence for an ABI refusal: a caller sees *which* libraries exist and
+    /// under which ABI, instead of a bare "arm64" claim.
+    #[must_use]
+    pub fn native_libs_sample(&self, max: usize) -> Vec<String> {
+        let mut names: Vec<String> = Vec::new();
+        for (abi, libs) in &self.native_libs {
+            let mut files: Vec<&str> = libs.iter().map(|l| l.name.as_str()).collect();
+            files.sort_unstable();
+            for name in files {
+                if names.len() >= max {
+                    return names;
+                }
+                names.push(format!("lib/{abi}/{name}"));
+            }
+        }
+        names
     }
 
     /// Refuse to run an APK whose native code cannot execute on this host.

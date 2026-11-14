@@ -20,6 +20,11 @@ acos-binder-peer = { path = "../acos-binder-peer" }
 acos-render = { path = "../acos-render" }
 acos-services = { path = "../acos-services" }
 libc = "0.2"
+fdeflate = "0.3"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+# SHOTZ: the round-trip tests decode the PNG the capture path wrote.
+png = "0.17"

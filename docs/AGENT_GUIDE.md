@@ -92,7 +92,12 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
 5. **Act.** `acos_tap {"text": "Increment"}` (preferred), `acos_tap {"x":..,
    "y":..}`, `acos_key {"code": "back"}`, `acos_text {"text": "hello"}` (types
    into the focused editor through the real `InputConnection`),
-   `acos_swipe {"from":[x1,y1], "to":[x2,y2]}`. Re-observe after every action;
+   `acos_swipe {"from":[x1,y1], "to":[x2,y2]}`. `text` names a node the way the
+   platform does — its text, else its content description — so a React Native
+   pressable (`accessibilityLabel`, e.g. a bottom tab) is reachable by the label
+   you read on screen; `content_desc`/`id` select exactly one field when you want
+   that. A node that is not visible to the user is never tapped: `ELEMENT_OFFSCREEN`
+   names its bounds. Re-observe after every action;
    `state_changed: false` with `accepted: true` means the event was delivered
    but the screen did not change — read the in-band `note`.
 6. **Read the app's own words.** `acos_logs` returns the guest log buffer and
@@ -136,6 +141,7 @@ acos session status --json
 acos session reset --json
 acos session destroy --json
 acos verify scenarios/counter.yaml --artifacts out/counter --json
+acos verify scenarios/counter.yaml --artifacts out/counter --overwrite --json  # replace a prior run's evidence
 acos verify scenarios/form-validation.yaml --engine art --json
 acos serve                                       # unix-socket session daemon; stop it when done
 acos frame-diff reference.png candidate.png --json
@@ -159,7 +165,15 @@ Notes that save a run:
 * `acos run-dex <path> --main Main` executes a DEX `main` on the Rust
   interpreter: console-tier checks only, not UI evidence.
 * Every command takes `--json` and prints the same envelope the MCP tools
-  return.
+  return. With `--json`, **stdout carries only the JSON document**; progress,
+  warnings and the one-line failure summary go to **stderr**. So
+  `acos verify … --json > out.json 2>&1` is *not* JSON — send stderr elsewhere
+  (`2>err.txt`). Text mode prints the human summary on stdout.
+* `acos verify --artifacts <dir>` gives one run ownership of that directory. A
+  non-empty dir written by another run is refused (`INVALID_ARGUMENT` naming the
+  previous run id); use a fresh dir, or `--overwrite` to replace that evidence
+  deliberately. Without `--artifacts` the run uses `out/<scenario stem>`, and a
+  rerun there simply replaces the previous run (the fix -> rerun loop needs no flag).
 
 <!-- /topic:cli -->
 
@@ -245,6 +259,27 @@ selector:
   index: 0                                  # 0-based, pre-order document order
 ```
 
+**Visited vs. named: what a `tap` selector resolves to.** `visible` in a tree is
+Android's own `View.isVisibleToUser()` answer — attached, the view and every
+ancestor `VISIBLE`, alpha > 0, and an on-screen clipped rect — copied verbatim,
+never recomputed by ACOS. `assert_visible`/`assert_text`/`wait_for` match only
+the nodes that answer yes to it. A **tap** additionally resolves the selector
+against the platform's *accessible name*, which is the node's text, else its
+content description (`AccessibilityNodeInfo.getText()`, else
+`getContentDescription()`), because that is the name an agent (and UiAutomator's
+`By.desc`, and an `agent-device` `label`) targets. Concretely, `acos_tap
+{"text": "Settings"}` finds a visible node whose own text is `Settings`, or — when
+no visible node has that text — a visible node with no text of its own whose
+`content_desc` is `Settings`. React Native renders every pressable as a
+text-less `ViewGroup` carrying its `accessibilityLabel` in the content
+description, so this is what makes tap-by-label work on RN apps (`text` is empty
+on the tab pressable, and the tab's decorative label `TextView` is not visible
+to the user at all). The tap lands at the centre of the target's *visible* rect
+(or `x`/`y`), and a node that is not visible to the user is never a tap target:
+if only such a node matches, the reply is `ELEMENT_OFFSCREEN` with its bounds,
+never a tap. When several nodes match, the first in document order wins;
+`index` picks another.
+
 **Settle modes (the part that decides whether a pass is real).**
 
 * `settle: "strict"` (the default) waits for a *settled* observation after the
@@ -280,8 +315,27 @@ it. `expectation: non_pass` accepts any non-pass. If a negative scenario
 "passes", the runner is broken; report a harness bug.
 
 **Read the evidence.** `--artifacts out/<name>` writes `verdict.json`,
-`steps/NN-*.json`, frames and events. On a non-pass, read the step file for the
-first failing step, its `error.code`, the diff and the linked frame.
+`steps/NN-*.json`, frames and events. `verdict.json` carries both `verdict` and
+`status` (the envelope's field name), and every assertion echoes `expected` and
+`actual` on a pass as well as a failure, so the artifacts say *what* was checked.
+A `capture: {name: x}` step writes `frames/<seq>-x.png` and adds
+`captures: {"x": "frames/<seq>-x.png"}` to the verdict. On a non-pass, read the
+step file for the first failing step, its `error.code`, the diff and the linked
+frame. Reusing another run's `--artifacts` directory is `INVALID_ARGUMENT`
+(`--overwrite` replaces it).
+
+**Screenshots are compressed, losslessly.** A capture is a PNG with real deflate
+and adaptive row filtering: the same pixels as the compositor's buffer (region
+and frame assertions decode it, so nothing about them changed) in roughly
+**60-100 KB** instead of the old 10.4 MB stored-block file. `png_bytes` in the
+reply says which. Read the file for exact pixels:
+`acos observe --screenshot out/counter.png`.
+
+**In an MCP reply the image is a bounded preview.** `acos_observe` (and any tool
+that returns a screenshot) inlines at most 1280 px on the long side and 512 KiB
+(`ACOS_MCP_PREVIEW_MAX_SIDE`, `ACOS_MCP_MAX_IMAGE_BYTES`); a 1080x2400 capture
+arrives as a 576x1280 PNG plus the path of the lossless file. Use the file when
+you need to compare pixels, and the inline preview for "is it the right screen".
 
 <!-- /topic:scenarios -->
 
@@ -321,7 +375,15 @@ Two session-specific hints worth memorising:
 
 * **API 34, x86_64.** The runtime is Google's ART from the API-34 ART APEX on
   an x86_64 host image. An APK whose native code has no `lib/x86_64/` entry is
-  `UNSUPPORTED_ABI` on every route (that is a gate, not a silent fallback).
+  `UNSUPPORTED_ABI` on every route (that is a gate, not a silent fallback). On
+  the ART path it is decided **before any guest starts**, so you get
+  `UNSUPPORTED_ABI` (never `GUEST_EXITED`, never `INTERNAL`) with
+  `status: "unsupported"` and `details.apk_abis` / `details.host_abi` /
+  `details.libs_sample` naming exactly what the APK does ship. The decision is
+  AOSP's, per **package**: one `lib/x86_64/` directory is enough to launch, only
+  that directory is installed, and a library that exists solely under another
+  ABI fails later at its own `dlopen` (`UnsatisfiedLinkError`) — an app
+  packaging bug, not an ABI gate. A pure-Java APK (no `lib/` at all) launches.
 * **The MCP session tools run real ART by default.** On the first session tool
   call the server starts its **own** private `acos serve --engine art` on a
   private socket under `$XDG_RUNTIME_DIR/acos/mcp-<pid>-…/` and forwards

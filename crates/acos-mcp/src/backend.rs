@@ -177,8 +177,8 @@ impl BackendConfig {
         }
     }
 
-    /// Discover the binary from the environment: `ACOS_BIN`, then `acos` on
-    /// `PATH`, then `target/release/acos` walking up from the cwd/executable.
+    /// Discover the binary: `ACOS_BIN`, then the `acos` next to this
+    /// executable, then `acos` on `PATH`, then `target/release/acos` walking up from the cwd/executable.
     pub fn discover() -> Self {
         BackendConfig {
             binary: discover_binary(),
@@ -194,10 +194,24 @@ pub fn discover_binary() -> Option<PathBuf> {
             return Some(PathBuf::from(value));
         }
     }
+    // The `acos` installed next to this server (same prefix, same version)
+    // wins over whatever `acos` happens to be first on PATH: an install that is
+    // not first on PATH (a scratch prefix, a newer version beside an older one)
+    // must never silently drive another version's daemon.
+    if let Some(path) = sibling_binary() {
+        return Some(path);
+    }
     if let Some(path) = find_on_path("acos") {
         return Some(path);
     }
     find_repo_binary()
+}
+
+/// `acos` in the same directory as the running `acos-mcp` executable.
+fn sibling_binary() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let candidate = exe.parent()?.join("acos");
+    (candidate.is_file() && candidate != exe).then_some(candidate)
 }
 
 fn find_on_path(name: &str) -> Option<PathBuf> {
@@ -385,6 +399,16 @@ impl CliBackend {
                 }
                 Err(reason) => return unsafe_path(request_id, artifacts, &reason),
             }
+        }
+        // FB4: a run owns its artifacts directory. The CLI refuses a non-empty
+        // directory another run wrote unless `--overwrite` is passed; relay the
+        // caller's explicit choice (default: refuse) unchanged.
+        if args
+            .get("overwrite")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            argv.push("--overwrite".to_string());
         }
         if let Some(reference) = args.get("reference").and_then(Value::as_str) {
             match safety::validate_path(reference, &ctx.allowed_roots) {
@@ -1069,6 +1093,74 @@ mod tests {
         let error = env.error().unwrap();
         assert_eq!(error.code, ErrorCode::UnsupportedJavaApi);
         assert!(!error.hint.is_empty());
+    }
+
+    /// FB4: the MCP `acos_verify` tool runs the CLI, so the run-owns-its-dir
+    /// rule and its explicit `--overwrite` opt-in must be relayed verbatim. A
+    /// fake binary records the argv it receives.
+    #[test]
+    fn verify_relays_the_explicit_overwrite_choice() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!(
+            "acos-mcp-verify-argv-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let argv_file = dir.join("argv.txt");
+        let script = dir.join("fake-acos.sh");
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\n\
+                 case \"$1\" in\n\
+                   --help) echo 'Usage: acos <COMMAND>'; echo 'Commands:'; echo '  verify  Run a scenario'; exit 0;;\n\
+                   --version) echo 'acos 0.2.0'; exit 0;;\n\
+                 esac\n\
+                 printf '%s\\n' \"$@\" > {}\n\
+                 echo '{{}}'\n",
+                argv_file.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let scenario = dir.join("s.yaml");
+        std::fs::write(&scenario, "version: 1\n").unwrap();
+        let backend = CliBackend::new(BackendConfig::for_binary(&script));
+        let ctx = CallContext {
+            cancel: crate::CancelToken::new(),
+            deadline: Instant::now() + Duration::from_secs(10),
+            budget: ResourceBudget::default(),
+            allowed_roots: vec![dir.clone()],
+            artifacts_dir: dir.clone(),
+            max_arg_chars: 4096,
+            max_output_bytes: 4096,
+        };
+        let args = json!({
+            "base": {"request_id": "req_1"},
+            "scenario": scenario.display().to_string(),
+            "artifacts": dir.join("art").display().to_string(),
+        });
+        backend.call(CommandName::Verify, &args, &ctx);
+        let argv = std::fs::read_to_string(&argv_file).expect("the fake binary ran");
+        assert!(argv.contains("--engine\nart"), "ART stays the MCP default: {argv}");
+        assert!(
+            !argv.split('\n').any(|arg| arg == "--overwrite"),
+            "overwrite is off by default: {argv}"
+        );
+
+        let mut explicit = args.clone();
+        explicit["overwrite"] = json!(true);
+        backend.call(CommandName::Verify, &explicit, &ctx);
+        let argv = std::fs::read_to_string(&argv_file).unwrap();
+        assert!(
+            argv.split('\n').any(|arg| arg == "--overwrite"),
+            "the caller's explicit overwrite is relayed: {argv}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

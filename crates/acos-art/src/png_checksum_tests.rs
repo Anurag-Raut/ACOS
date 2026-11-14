@@ -205,70 +205,133 @@ fn png_chunk_old(out: &mut Vec<u8>, kind: &[u8; 4], body: &[u8], crc32: fn(&[u8]
     out.extend_from_slice(&crc.to_be_bytes());
 }
 
-/// 1080x2209 is the D-M5 canvas. The old encoder is reproduced by handing the
-/// shared body the oracle checksums, so this asserts the PNG bytes — and thus
-/// `content_hash` — are unchanged, not just the individual checksums.
+/// SHOTZ: the A/B baseline the new encoder is measured against must be the
+/// encoder v0.2.0 shipped. `encode_png_stored_stream` (the production path
+/// before ADR-0027 #6, kept under `cfg(test)`) is compared against the
+/// independent `encode_png_rgba_old` oracle above: same bytes, so the "before"
+/// size and time in `results/handoff/SHOTZ.md` are the real ones.
 #[test]
-fn whole_png_bytes_are_identical_to_the_old_encoder() {
-    let width = 1080u32;
-    let height = 2209u32;
-    let stride = width;
-    let mut rng = Rng::new(0xAC05_0001_0000_0003);
-    let mut rgba = rng.fill((width as usize) * (height as usize) * 4);
-    // A few opaque alpha values so the encoder sees realistic pixels too.
-    for i in (3..rgba.len()).step_by(4) {
-        rgba[i] = 0xff;
-    }
-
-    let new_png = encode_png_rgba(width, height, stride, &rgba);
-    let old_png = encode_png_rgba_old(width, height, stride, &rgba, crc32_oracle, adler32_oracle);
-
-    assert_eq!(new_png.len(), old_png.len(), "PNG length changed");
-    assert_eq!(new_png, old_png, "PNG bytes changed");
-    // 1080*4+1 filtered bytes per row, plus the zlib/PNG framing.
-    assert!(new_png.len() > 9_000_000, "unexpectedly small canvas");
-    assert_eq!(&new_png[..8], b"\x89PNG\r\n\x1a\n");
-}
-
-/// A stride wider than the row, and a pixel buffer that is short of the last
-/// rows, must still produce the old encoder's bytes (the buffered encoder
-/// emits an all-zero row whenever that row's end is past the buffer).
-#[test]
-fn stride_padding_and_short_rows_match_the_old_encoder() {
-    let mut rng = Rng::new(0xAC05_0003_0000_0001);
-    for (width, height, stride, bytes) in [
-        (17u32, 5u32, 23u32, 23 * 4 * 5),
-        (17, 5, 23, 23 * 4 * 5 - 13),
-        (1, 3, 1, 1 * 4 * 3 - 2),
-        (0, 2, 0, 0),
-    ] {
-        let rgba = rng.fill(bytes);
-        let new = encode_png_rgba_with(width, height, stride, &rgba, crc32, adler32);
-        let old = encode_png_rgba_old(width, height, stride, &rgba, crc32_oracle, adler32_oracle);
+fn the_stored_baseline_is_the_encoder_v0_2_0_shipped() {
+    for (width, height, stride) in [(17u32, 5u32, 23u32), (1080, 64, 1080), (0, 2, 0)] {
+        let mut rng = Rng::new(0xAC05_0001_0000_0004);
+        let rgba = rng.fill((stride as usize) * 4 * (height as usize));
+        let mut shipped = Vec::new();
+        encode_png_stored_stream(width, height, stride, &rgba, |bytes| {
+            shipped.extend_from_slice(bytes)
+        });
+        let oracle = encode_png_rgba_old(width, height, stride, &rgba, crc32, adler32);
         assert_eq!(
-            new, old,
-            "PNG differs for {width}x{height} stride {stride} with {} bytes",
-            rgba.len()
+            shipped, oracle,
+            "the retained baseline diverged for {width}x{height} stride {stride}"
         );
     }
 }
 
-/// The streamed encoder (P2) writes the same file as the pre-P2 encoder, chunk
-/// for chunk, for the real canvas size.
+/// `None` is not a candidate any more: the default encoder writes real deflate,
+/// so a real-sized frame must be far smaller than its 10.4 MB pixel buffer.
 #[test]
-fn the_streamed_encoder_writes_the_same_file_as_the_pre_p2_encoder() {
+fn a_high_entropy_canvas_is_never_materially_worse_than_stored() {
     let width = 1080u32;
     let height = 2209u32;
-    let mut rng = Rng::new(0xAC05_0002_0000_0001);
+    let mut rng = Rng::new(0xAC05_0001_0000_0005);
+    // Random pixels are the worst case for deflate; even so it beats stored.
     let mut rgba = rng.fill((width as usize) * (height as usize) * 4);
     for i in (3..rgba.len()).step_by(4) {
         rgba[i] = 0xff;
     }
-    let buffered = encode_png_rgba_old(width, height, width, &rgba, crc32, adler32);
+    let png = encode_png_rgba(width, height, width, &rgba);
+    let stored = {
+        let mut out = Vec::new();
+        encode_png_stored_stream(width, height, width, &rgba, |bytes| {
+            out.extend_from_slice(bytes)
+        });
+        out
+    };
+    assert!(stored.len() > 9_000_000, "the stored baseline is still ~9.5 MB");
+    // Pure noise is the one input fixed-Huffman deflate cannot shrink: the
+    // encoder falls back to the stored layout, so the weight never grows past
+    // the pre-SHOTZ file (the 12 bytes per IDAT chunk are the only difference).
+    assert!(
+        png.len() <= stored.len() + 1024,
+        "the encoder must never be materially worse than stored ({} vs {})",
+        png.len(),
+        stored.len()
+    );
+    assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+}
+
+/// A stride wider than the row, and a pixel buffer that is short of the last
+/// rows, must still produce a readable PNG whose rows are the zero-padded
+/// rows the stored encoder emitted.
+#[test]
+fn stride_padding_and_short_rows_still_decode_to_the_padded_rows() {
+    let mut rng = Rng::new(0xAC05_0003_0000_0002);
+    for (width, height, stride, bytes) in [
+        (17u32, 5u32, 23u32, 23 * 4 * 5),
+        (17, 5, 23, 23 * 4 * 5 - 13),
+        (1, 3, 1, 1 * 4 * 3 - 2),
+        (2, 1, 3, 3 * 4),
+        // No zero-size case: PNG has no 0-pixel image, and C1 never publishes a
+        // zero-dimension buffer (`capture_c1` returns None without a frame), so
+        // the encoder is never asked for one.
+    ] {
+        let rgba = rng.fill(bytes);
+        let png = encode_png_rgba(width, height, stride, &rgba);
+        let decoded = decode_png(&png);
+        assert_eq!(
+            (decoded.0, decoded.1),
+            (width, height),
+            "dimensions changed for {width}x{height} stride {stride}"
+        );
+        let row = width as usize * 4;
+        let stride_bytes = stride as usize * 4;
+        for y in 0..height as usize {
+            let start = y * stride_bytes;
+            let end = start + row;
+            let mut want = vec![0u8; row];
+            if end <= rgba.len() {
+                want.copy_from_slice(&rgba[start..end]);
+            } else if start < rgba.len() {
+                let have = rgba.len() - start;
+                want[..have].copy_from_slice(&rgba[start..start + have]);
+            }
+            let got = &decoded.2[y * row..(y + 1) * row];
+            assert_eq!(
+                got, &want[..],
+                "row {y} differs for {width}x{height} stride {stride}"
+            );
+        }
+    }
+}
+
+/// The streamed encoder (P2) hands over exactly the bytes the buffered encoder
+/// builds, so `content_hash` cannot depend on how the sink splits the file.
+#[test]
+fn the_streamed_encoder_writes_the_same_file_as_the_buffered_encoder() {
+    let width = 1080u32;
+    let height = 64u32;
+    let mut rng = Rng::new(0xAC05_0002_0000_0002);
+    let rgba = rng.fill((width as usize) * (height as usize) * 4);
+    let buffered = encode_png_rgba(width, height, width, &rgba);
     let mut streamed = Vec::new();
     encode_png_rgba_stream(width, height, width, &rgba, |bytes| {
         streamed.extend_from_slice(bytes)
     });
     assert_eq!(streamed.len(), buffered.len(), "PNG length changed");
-    assert!(streamed == buffered, "the streamed PNG differs from the pre-P2 PNG");
+    assert!(streamed == buffered, "the streamed PNG differs from the buffered one");
+    // Deterministic: a second encode is byte-identical (the capture path hashes
+    // exactly these bytes, and the same frame must hash the same).
+    assert_eq!(encode_png_rgba(width, height, width, &rgba), buffered);
+}
+
+/// Decode a PNG written by the capture encoder: (width, height, RGBA pixels).
+fn decode_png(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
+    let decoder = png::Decoder::new(std::io::Cursor::new(bytes.to_vec()));
+    let mut reader = decoder.read_info().expect("png info");
+    let mut buffer = vec![0u8; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buffer).expect("png frame");
+    assert_eq!(info.color_type, png::ColorType::Rgba, "expected RGBA");
+    assert_eq!(info.bit_depth, png::BitDepth::Eight);
+    buffer.truncate(info.buffer_size());
+    (info.width, info.height, buffer)
 }

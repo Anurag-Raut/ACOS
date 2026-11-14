@@ -7,9 +7,11 @@
 //! false-pass prevention can be exercised on this host.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::process::ExitCode;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use acos_protocol::artifacts::RunMarker;
 use acos_protocol::commands::VerifyRequest;
 use acos_protocol::{
     Backend as ProtocolBackend, Envelope, ErrorCode, Fidelity, Metrics, ProtocolError, RequestBase,
@@ -99,6 +101,16 @@ pub struct VerifyArgs {
     #[arg(long)]
     pub untrusted: bool,
 
+    /// Replace artifacts left by another run in the same `--artifacts` directory.
+    ///
+    /// Off by default. A non-empty directory written by another run is refused
+    /// with `INVALID_ARGUMENT` naming the previous run id, so two runs can never
+    /// interleave steps/frames in one directory (a stale frame is exactly the
+    /// evidence an agent must never ship). `--overwrite` is the explicit consent
+    /// to discard the existing evidence first.
+    #[arg(long)]
+    pub overwrite: bool,
+
     /// Artifact retention for this run: `all`, `referenced` (default) or
     /// `none-on-pass`.
     ///
@@ -126,6 +138,47 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         .artifacts
         .clone()
         .unwrap_or_else(|| default_artifacts(&scenario));
+    // The default directory (`out/<scenario stem>`) belongs to the scenario, not
+    // to one run: the inspect -> verify -> fix -> rerun loop replaces the previous
+    // run there (recorded as `overwrote_run_id` / `artifacts_overwrote_run`, never
+    // an interleave). A directory the caller names explicitly keeps the refusal
+    // and needs `--overwrite`.
+    let overwrite = args.overwrite || args.artifacts.is_none();
+
+    // A run owns its artifacts directory (FB4). Claim it **before** any session,
+    // step or frame is written: a directory another run owns is refused with a
+    // structured INVALID_ARGUMENT naming that run (`--overwrite` is the explicit
+    // opt-in to replace it). This is one funnel for every front door: the CLI,
+    // `acos serve`'s delegated tools and MCP `acos_verify` (which spawns this
+    // command).
+    let started_at = acos_verify::clock::rfc3339_from_unix_ms(
+        std::time::SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as i64)
+            .unwrap_or(0),
+    );
+    let marker = RunMarker::new(
+        request_id.clone(),
+        started_at,
+        scenario.display().to_string(),
+        args.apk
+            .as_ref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_default(),
+        env!("CARGO_PKG_VERSION"),
+    );
+    if let Err(error) = acos_protocol::artifacts::claim_run_dir(&artifacts, &marker, overwrite) {
+        let envelope = Envelope::failure(
+            request_id,
+            ProtocolBackend::AcosNative,
+            Fidelity::StaticAnalysis,
+            error,
+            Metrics::wall_ms(0),
+        );
+        // `finish_run` must not try to write into the directory it just refused,
+        // so report through the same printer with the claimed path only.
+        return finish(&crate::trust::stamp_envelope(&envelope, None), &args, &artifacts);
+    }
 
     // F10: `--flag` values are deterministic NAME=VALUE metadata recorded in
     // the reproducer, not options. A malformed one is a structured
@@ -366,6 +419,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         apk: args.apk.as_ref().map(|path| path.display().to_string()),
         scenario: scenario.display().to_string(),
         artifacts: artifacts.display().to_string(),
+        overwrite,
         reference: args
             .reference
             .as_ref()
@@ -448,11 +502,20 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                     return finish_run(&envelope, &args, &artifacts, Some(trust));
                 }
             };
-            match crate::engine::art::ArtSession::start_with_options(
+            // ZPROD3: a `verify` run uses the same engine path as `acos serve`.
+            // With `ACOS_ART_ZYGOTE=on` that means a persistent-zygote child
+            // (`start_with_zygote`); with the flag off the host is disabled and
+            // this is exactly `start_with_options`. One host per run: its `Drop`
+            // closes the keeper, so a verify run never leaves a zygote behind.
+            let zygote = Arc::new(crate::engine::zygote_host::ZygoteHost::for_artifacts(
+                &artifacts,
+            ));
+            match crate::engine::art::ArtSession::start_with_zygote(
                 &apk,
                 &artifacts,
                 animations,
                 &insets_owned,
+                Some(zygote),
             ) {
                 Ok(session) => {
                     session_boot_ms = Some(session.session_start_ms());
@@ -596,6 +659,24 @@ pub(crate) fn annotate(
         "insets": session_insets
             .unwrap_or(acos_services::wms::DEFAULT_INSETS_MODE.as_str()),
     });
+    // FB4: a run owns its artifacts directory. When `--overwrite` replaced a
+    // previous run's evidence, say so in the verdict itself (the marker records
+    // the id too), so "what was here before" is never silent.
+    if let Some(previous) = acos_protocol::artifacts::read_run_marker(artifacts)
+        .and_then(|marker| marker.overwrote_run_id)
+    {
+        if let Some(object) = verdict.as_object_mut() {
+            object.insert(
+                "artifacts_overwrote_run".to_string(),
+                serde_json::json!(previous),
+            );
+            if let Some(notes) = object.get_mut("notes").and_then(|v| v.as_array_mut()) {
+                notes.push(serde_json::json!(format!(
+                    "artifacts: --overwrite replaced the evidence of run {previous}"
+                )));
+            }
+        }
+    }
     if let Some(object) = verdict.as_object_mut() {
         object.insert("engine".to_string(), engine_block["engine"].clone());
         object.insert("mode".to_string(), engine_block["mode"].clone());

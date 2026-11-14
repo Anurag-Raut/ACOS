@@ -241,7 +241,7 @@ impl FakeSession {
         let tree = self.build_tree();
         let node = tree.find_one(selector).ok_or_else(|| BackendError::Failed {
             code: acos_protocol::ErrorCode::AssertionFailed,
-            detail: format!("fake tree has no node {selector:?}"),
+            detail: format!("fake tree has no node {selector}"),
         })?;
         let previous = self.seq;
         match node.resource_id.as_str() {
@@ -292,6 +292,8 @@ impl SessionBackend for FakeSession {
             tap_text: true,
             type_text: self.supports_type,
             key: true,
+            // The fake session has no display-rotation command.
+            rotate: false,
             reset: true,
             close: true,
             logs: false,

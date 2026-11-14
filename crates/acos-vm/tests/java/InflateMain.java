@@ -89,6 +89,25 @@ public class InflateMain {
             return 0;
         }
 
+        // `TextView.<init>` -> `readTextAppearance` asks the context whether the
+        // caller is *restricted*. `android.test.mock.MockContext.isRestricted()`
+        // throws `UnsupportedOperationException` by design (AOSP's mock answers
+        // "the screen may be captured" by throwing), so a MockContext-derived
+        // context cannot inflate a `TextView` at all. A real app's context is an
+        // `Activity`/`ContextWrapper`, whose `isRestricted()` is `false`.
+        @Override
+        public boolean isRestricted() {
+            return false;
+        }
+
+        // `TextView.readTextAppearance` also asks whether the app may load
+        // "unsafe" (non-public) resources; `MockContext` answers that by
+        // throwing too. A normal app answers `false`.
+        @Override
+        public boolean canLoadUnsafeResources() {
+            return false;
+        }
+
         android.content.pm.PackageManager mPm;
 
         @Override

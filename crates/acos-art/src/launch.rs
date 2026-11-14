@@ -211,6 +211,12 @@ pub struct LaunchResult {
     /// caller (and a benchmark row) can tell a warm serve from a cold one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boot_image: Option<crate::boot_image::BootImageReport>,
+    /// ABIGATE: the package-level ABI gate's own evidence when the launch was
+    /// refused before any guest existed (`code: UNSUPPORTED_ABI`):
+    /// `{apk_abis: [...], host_abi: "x86_64", libs_sample: [...]}`. Absent on
+    /// every launch that reached the guest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub abi: Option<serde_json::Value>,
     pub marker: Option<String>,
 }
 
@@ -475,6 +481,21 @@ pub(crate) fn launch_session(
     // Z4 (research seam, off by default): `ACOS_ZYGOTE_SESSION=<dir>` makes this
     // launcher a *foreign-guest* session of a shared zygote. Unset => production.
     let session_dir: Option<PathBuf> = std::env::var_os("ACOS_ZYGOTE_SESSION").map(PathBuf::from);
+    // ZPROD3b: the demand-probe channel of a zygote child. The keeper's stdin
+    // is `/dev/null` (`PersistentZygote::start`), so a `PROBE` wake written to
+    // this launcher's stub stdin could never reach the forked app: measured as
+    // `capture: strict settle timed out (probe-floor)` right after a tap (the
+    // last event-driven sample stayed the newest, `tree_age_ms` ~1.6 s). The
+    // guest reads `PROBE` from fd 0, so the session publishes
+    // `<session>/probe.fifo` here — before `<session>/argv`, i.e. before the
+    // host can send `spawn <tag>` — and `ZygoteApp.z4ForkOne` opens it and
+    // `System.setIn`s it before its namespace/fork chain. Opened read-write
+    // like the keeper's `cmd` FIFO: neither side blocks on open and the child
+    // never sees a spurious EOF when this launcher restarts.
+    let probe_fifo = match &session_dir {
+        Some(dir) => Some(open_guest_probe_fifo(dir)?),
+        None => None,
+    };
     // Private per-run data root (S4): app data, out staging and the importer
     // socket are this run's; everything else under /data is read-only.
     let run = match &session_dir {
@@ -507,8 +528,7 @@ pub(crate) fn launch_session(
     // and `LoadedApk` puts that directory on the class loader's native search
     // path. ACOS stages the APK read-only and never ran that step, so
     // `dlopen` saw `library "libhellojni.so" not found`. Extract into this
-    // run's own tree (bound read-only at `/data/app-lib`); an arm64-only APK
-    // keeps its honest `UNSUPPORTED_ABI` path in the guest.
+    // run's own tree (bound read-only at `/data/app-lib`).
     let native_lib_root = run.dir("app-lib");
     let native_libs = acos_services::native_libs::install(&opts.apk, &native_lib_root)
         .map_err(|e| Error::Layout(format!("native libs: {e}")))?;
@@ -521,8 +541,39 @@ pub(crate) fn launch_session(
                 acos_services::native_libs::GUEST_NATIVE_LIB_DIR
             );
         }
-        acos_services::native_libs::NativeLibInstall::UnsupportedAbi { available, message } => {
+        acos_services::native_libs::NativeLibInstall::UnsupportedAbi {
+            available,
+            sample,
+            message,
+        } => {
+            // ABIGATE/W59-A: AOSP's `PackageManager` refuses a package whose
+            // native code has no directory for a device ABI
+            // (`INSTALL_FAILED_NO_MATCHING_ABIS`), and so must this launcher.
+            // The pre-fix path logged this and started the guest anyway, so the
+            // caller saw `GUEST_EXITED` (the app's own
+            // `UnsatisfiedLinkError` / a boot failure) instead of the
+            // documented `UNSUPPORTED_ABI`. The gate is package-level, decided
+            // before the image, the props, logd or any guest process exists.
             eprintln!("acos-art: launch: UNSUPPORTED_ABI available={available:?}: {message}");
+            let result = abi_gate_result(opts, &package, available, sample);
+            let out = opts.out.clone().unwrap_or_else(|| run.dir("out").join("launch"));
+            write_session_exit(&out, &result, None, None, None, None);
+            // An interactive caller waits for a *ready line*: refusing without
+            // one would look like a dead session (`INTERNAL`) to it, and the
+            // code it reads is the whole point of the gate.
+            if std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some() {
+                protocol_write(&serde_json::json!({
+                    "ok": false,
+                    "cmd": "ready",
+                    "code": "UNSUPPORTED_ABI",
+                    "retryable": false,
+                    "error": message,
+                    "apk_abis": available,
+                    "host_abi": acos_services::native_libs::HOST_ABI,
+                    "libs_sample": sample,
+                }));
+            }
+            return Ok(result);
         }
         acos_services::native_libs::NativeLibInstall::None => {}
     }
@@ -971,7 +1022,13 @@ pub(crate) fn launch_session(
     // seccomp/Landlock guard is applied per forked child (the child loads the
     // same `libacos_seccomp_guest.so` after its bind mounts, exactly AOSP's
     // order). The production path keeps the preload-at-start ordering.
-    sb.seccomp_guest(session_dir.is_none());
+    // ZPROD1: a zygote host is a process *without* app code; the guard belongs to
+    // every forked child (which loads it after its mounts — AOSP order), so the
+    // zygote itself must not carry the guest seccomp/Landlock preload either: a
+    // Landlock ruleset in the pre-fork process would deny the child's writes to
+    // its own contract directory (`/sessions/<tag>`, measured: EACCES). With
+    // the zygote seam unset this expression is exactly `session_dir.is_none()`.
+    sb.seccomp_guest(session_dir.is_none() && zygote_app.is_none());
     sb.with_shim(false);
     sb.ro_bind(&shims.art_shim, "/data/shim/libartshim.so");
     // The per-run extracted native libraries (installd's `nativeLibraryDir`).
@@ -1013,13 +1070,22 @@ pub(crate) fn launch_session(
         if let Ok(n) = std::env::var("ACOS_ZYGOTE_N") {
             sb.env("ACOS_ZYGOTE_N", &n);
         }
+        // ZPROD1: the persistent zygote. `spawn`/`kill`/`exit` arrive on
+        // `<plan>/cmd`, so the zygote outlives one session's reset instead of
+        // forking a fixed cohort once (Z7 §7 item 2: the cohort restart was the
+        // whole throughput loss). Off unless the caller asks for it.
+        if std::env::var_os("ACOS_ZYGOTE_PERSIST").is_some() {
+            sb.env("ACOS_ZYGOTE_PERSIST", "1");
+        }
     }
-    if session_dir.is_some() {
+    if session_dir.is_some() || zygote_app.is_some() {
         // ZS/Z4: forward the research security-probe switch into the child.
         if std::env::var_os("ACOS_ZYGOTE_PROBE").is_some() {
             sb.env("ACOS_ZYGOTE_PROBE", "1");
         }
         // The child loads the production guard itself; it must see the blob.
+        // ZPROD1: a zygote host keeps no session of its own, but its forked
+        // children still need the blob and the loadable `.so`.
         sb.ro_bind(&root.data.join("seccomp"), "/data/seccomp");
         if let Some(dir) = &zygote_app {
             // Z4: same source, same blob, but loadable via System.load from a
@@ -1077,6 +1143,18 @@ pub(crate) fn launch_session(
         "ACOSLAUNCH_SCREEN_LAYOUT",
         &acos_services::wms::REFERENCE_SCREEN_LAYOUT.to_string(),
     );
+    // ROT2: the Activity's `android:configChanges` bitmask, resolved from the
+    // binary manifest the way `PackageParser.getActivityConfigChanges` builds it
+    // (declared bits + the forced `CONFIG_MCC|CONFIG_MNC`). `LaunchMain` puts it
+    // on the `ActivityInfo` it hands `Activity.attach`, so
+    // `ActivityInfo.configChanges` is the manifest's value instead of a
+    // hardcoded 0 — that field is what `ActivityRecord
+    // .getRealConfigChanged()` compares when a rotation has to decide between a
+    // re-create (`ActivityRelaunchItem`) and `onConfigurationChanged`.
+    let config_changes = acos_services::manifest_resolve::launcher_activity(&apk)
+        .map(|l| l.config_changes)
+        .unwrap_or(0);
+    sb.env("ACOSLAUNCH_CONFIG_CHANGES", &config_changes.to_string());
     if std::env::var_os("E3G_DEBUG").is_some() {
         sb.env("E3G_DEBUG", "1");
     }
@@ -1472,6 +1550,7 @@ pub(crate) fn launch_session(
             &mut cgroup,
             &live,
             &probe_state,
+            probe_fifo,
             started,
             opts.timeout,
             &frames_dir,
@@ -1756,6 +1835,9 @@ pub(crate) fn launch_session(
         outcome,
         code,
         boot_image: Some(boot_image_report),
+        // ABI gate: `None` on every launch that reached the guest (the gate
+        // returns before this builder).
+        abi: None,
         apk: opts.apk.display().to_string(),
         package,
         until: opts.until.clone(),
@@ -2027,6 +2109,9 @@ struct ProbeState {
     trace: Option<TraceSink>,
     /// P9: event-driven wake for the startup loop (see [`ProbeWake`]).
     wake: Arc<ProbeWake>,
+    /// ROT4: the guest's own diagnostic lines (`ACOSLAUNCH MARK …`), oldest
+    /// first, so an interactive reply can carry the rungs that ran for it.
+    marks: std::collections::VecDeque<String>,
 }
 
 /// W59 latency trace: `elapsed_us tag text` per line, written under one lock
@@ -2230,6 +2315,11 @@ fn write_session_exit(
         // W48: which heap configuration this session ran with (the
         // `ACOS_ART_HEAP*` seam, resolved and validated before the guest).
         "heap": crate::props::effective_heap_json(),
+        // ABIGATE: the package-level ABI gate's inventory when the launch was
+        // refused before the guest (`code: UNSUPPORTED_ABI`), so the CLI can
+        // put `apk_abis`/`host_abi`/`libs_sample` in the error's `details`
+        // without re-reading the APK.
+        "abi": result.abi,
         "cgroup": result.notes.iter().find(|n| n.starts_with("cgroup:")),
         "logd": result.notes.iter().find(|n| n.starts_with("logd:")),
         // H17: a guest that exits 126 before its first frame is the guard
@@ -2393,6 +2483,65 @@ fn write_zygote_session(
 }
 
 /// The structured refusal for a scratch disk that cannot hold this run's frames.
+/// ABIGATE: the refusal for an APK whose native code has no `lib/<host-abi>/`.
+///
+/// Shaped like [`disk_full_result`] — no guest ran, nothing is a pass — and it
+/// carries the inventory the caller needs to act on it (`apk_abis`,
+/// `host_abi`, `libs_sample`) in `abi` *and* in `code == UNSUPPORTED_ABI`, the
+/// documented protocol code.
+fn abi_gate_result(
+    opts: &LaunchOpts,
+    package: &str,
+    apk_abis: &[String],
+    libs_sample: &[String],
+) -> LaunchResult {
+    let host_abi = acos_services::native_libs::HOST_ABI;
+    LaunchResult {
+        outcome: Outcome::Unsupported,
+        code: Some("UNSUPPORTED_ABI".to_string()),
+        // Decided from the APK index alone, before the image is resolved.
+        boot_image: None,
+        apk: opts.apk.display().to_string(),
+        package: package.to_string(),
+        until: opts.until.clone(),
+        application_created: false,
+        activity_launched: false,
+        guest_exit: None,
+        guest_signal: None,
+        wall_ms: 0,
+        activity: None,
+        activity_target: None,
+        timeout_ms: None,
+        application_marker: None,
+        activity_marker: None,
+        looper_trace: Vec::new(),
+        bind_application: BindDelivery {
+            request_bytes: None,
+            delivered: false,
+            app_thread_wire: None,
+            code: acos_binder_peer::peer::BIND_APPLICATION_CODE,
+        },
+        service_calls: Vec::new(),
+        unsupported: Vec::new(),
+        stdout: String::new(),
+        stderr: String::new(),
+        logs: Vec::new(),
+        heap: Some(crate::props::effective_heap_json()),
+        notes: vec![format!(
+            "UNSUPPORTED_ABI: the APK ships native code only for [{}], and this engine is \
+             {host_abi}-only; no guest was started (AOSP PackageManager refuses the same \
+             package with INSTALL_FAILED_NO_MATCHING_ABIS)",
+            apk_abis.join(", ")
+        )],
+        abi: Some(serde_json::json!({
+            "apk_abis": apk_abis,
+            "host_abi": host_abi,
+            "libs_sample": libs_sample,
+        })),
+        marker: None,
+    }
+}
+
 fn disk_full_result(opts: &LaunchOpts, package: &str, free: u64, min: u64) -> LaunchResult {
     LaunchResult {
         outcome: Outcome::Unsupported,
@@ -2431,6 +2580,7 @@ fn disk_full_result(opts: &LaunchOpts, package: &str, free: u64, min: u64) -> La
              written (retryable=true)",
             min / 1024 / 1024
         )],
+        abi: None,
         marker: None,
     }
 }
@@ -2578,8 +2728,19 @@ fn drain_tee_lines<R: std::io::Read>(
         // W59: keep the guest's own timing evidence (its `ACOSLAUNCH TRACE`
         // looper lines and stall dumps) next to the host's input markers. Only
         // small, human-readable lines go in; probe JSON is already in the tree.
+        // ROT4: the guest's diagnostic lines (`ACOSLAUNCH MARK …`, one per
+        // lifecycle/config rung, and its stall dumps) are forwarded to the
+        // launcher's stderr unconditionally, so the interactive session trace
+        // names a failing rung instead of swallowing it (ROT3 could not tell
+        // why the Activity-level rotate sequence did not run). Not env-gated:
+        // a swallowed diagnostic is a correctness cost, not a debug nicety.
         if trimmed.starts_with("ACOSLAUNCH ") || trimmed.starts_with("ACOSPROBE-STALL") {
+            eprintln!("acos-art: guest: {trimmed}");
             let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+            state.marks.push_back(trimmed.to_string());
+            while state.marks.len() > 64 {
+                state.marks.pop_front();
+            }
             if let Some(trace) = state.trace.as_mut() {
                 trace.line("GUEST", trimmed);
             }
@@ -2808,9 +2969,11 @@ fn capture_c1(
         frame.layer_id, frame.frame_number, frame.generation, *seq
     ));
     // P2: the PNG is written once and hashed once, in the same pass, on the
-    // caller's thread while a second thread encodes it (the encode is ~7 ms and
-    // the write+MD5 over 9.5 MB is ~11 ms, so they overlap). `content_hash` is
-    // still the MD5 of exactly the bytes in this file.
+    // caller's thread while a second thread encodes it. SHOTZ (ADR-0027 #6)
+    // made the file ~130x smaller (real deflate instead of stored blocks), so
+    // the write+MD5 that used to cost ~11 ms over 9.5 MB is now ~0.1 ms over
+    // ~80 KB and the encode is the only part left to overlap. `content_hash`
+    // is still the MD5 of exactly the bytes in this file.
     let (bytes, md5, encode_us, write_us, hash_us) =
         encode_write_and_hash(frame.width, frame.height, frame.stride, &frame.rgba, &path)?;
     let t_end = m5_now_us();
@@ -3302,7 +3465,7 @@ fn wait_for_event_settled(
     cgroup: &mut crate::cgroup::RunCgroup,
     live: &acos_services::registry::LiveHandles,
     probe_state: &Arc<std::sync::Mutex<ProbeState>>,
-    guest_stdin: &mut Option<std::process::ChildStdin>,
+    guest_stdin: &mut Option<GuestProbeChannel>,
     deadline: Instant,
     min_generation: u64,
     min_probe_seq: u64,
@@ -3615,7 +3778,7 @@ fn wait_for_settled_observation(
     cgroup: &mut crate::cgroup::RunCgroup,
     live: &acos_services::registry::LiveHandles,
     probe_state: &Arc<std::sync::Mutex<ProbeState>>,
-    guest_stdin: &mut Option<std::process::ChildStdin>,
+    guest_stdin: &mut Option<GuestProbeChannel>,
     deadline: Instant,
     min_generation: u64,
     min_probe_seq: u64,
@@ -3845,10 +4008,62 @@ fn probe_usable_for_fast_tree(
     probe.seq > min_probe_seq && probe.generation >= entry_generation
 }
 
+/// The demand-probe channel: the guest reads `PROBE` lines from fd 0.
+///
+/// * `Pipe` — the exec path: the guest process's own stdin.
+/// * `Fifo` — a zygote session (Z4/ZPROD): the keeper's stdin is `/dev/null`,
+///   so the forked child `System.setIn`s `<session>/probe.fifo` instead
+///   (`ZygoteApp.z4ProbeStdin`), and this is the writer half.
+pub(crate) enum GuestProbeChannel {
+    Pipe(std::process::ChildStdin),
+    Fifo(std::fs::File),
+}
+
+impl std::io::Write for GuestProbeChannel {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            GuestProbeChannel::Pipe(writer) => writer.write(buf),
+            GuestProbeChannel::Fifo(writer) => writer.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            GuestProbeChannel::Pipe(writer) => writer.flush(),
+            GuestProbeChannel::Fifo(writer) => writer.flush(),
+        }
+    }
+}
+
+/// The FIFO name a zygote child opens for its demand-probe channel. Kept here
+/// so the guest source and this writer cannot drift (`ZygoteApp.z4ProbeStdin`).
+pub(crate) const GUEST_PROBE_FIFO: &str = "probe.fifo";
+
+/// Create (or reset) and open a session's probe FIFO for the host writer.
+///
+/// Read+write, exactly like the keeper's `cmd` FIFO: the child's blocking
+/// `open` never waits on this side, and a reader that goes away cannot turn
+/// the next wake into `EPIPE` (this process is its own reader).
+fn open_guest_probe_fifo(dir: &Path) -> Result<std::fs::File> {
+    fs::create_dir_all(dir)?;
+    let path = dir.join(GUEST_PROBE_FIFO);
+    let _ = fs::remove_file(&path);
+    let c = std::ffi::CString::new(path.to_string_lossy().to_string())
+        .map_err(|e| Error::Layout(e.to_string()))?;
+    if unsafe { libc::mkfifo(c.as_ptr(), 0o600) } != 0 {
+        return Err(Error::Io(std::io::Error::last_os_error()));
+    }
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&path)
+        .map_err(Error::Io)
+}
+
 /// Ask the guest for one probe sample on its main looper, out of its 50 ms
 /// cadence. The guest reads `PROBE` lines from stdin (interactive sessions only)
 /// and wakes the probe thread immediately; this never changes the view tree.
-fn request_guest_probe(stdin: &mut Option<std::process::ChildStdin>) {
+fn request_guest_probe(stdin: &mut Option<GuestProbeChannel>) {
     if let Some(writer) = stdin.as_mut() {
         use std::io::Write;
         let _ = writeln!(writer, "PROBE");
@@ -3872,7 +4087,7 @@ fn wait_for_fast_tree(
     cgroup: &mut crate::cgroup::RunCgroup,
     live: &acos_services::registry::LiveHandles,
     probe_state: &Arc<std::sync::Mutex<ProbeState>>,
-    guest_stdin: &mut Option<std::process::ChildStdin>,
+    guest_stdin: &mut Option<GuestProbeChannel>,
     deadline: Instant,
     min_probe_seq: u64,
 ) -> FastTreeEnd {
@@ -4017,6 +4232,7 @@ fn interactive_serve(
     cgroup: &mut crate::cgroup::RunCgroup,
     live: &acos_services::registry::LiveHandles,
     probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+    probe_fifo: Option<std::fs::File>,
     started: Instant,
     startup_budget: Duration,
     frames_dir: &Path,
@@ -4033,7 +4249,12 @@ fn interactive_serve(
     // tree can wake the probe thread instead of waiting for its 50 ms tick.
     // Interactive sessions are spawned with a piped stdin; non-interactive ones
     // have none and the request is a no-op.
-    let mut guest_stdin = child.stdin.take();
+    // ZPROD3b: a zygote session's probe channel is its own FIFO (the stub's
+    // stdin is a dead end); every other session keeps the guest's own pipe.
+    let mut guest_stdin = match probe_fifo {
+        Some(fifo) => Some(GuestProbeChannel::Fifo(fifo)),
+        None => child.stdin.take().map(GuestProbeChannel::Pipe),
+    };
     let startup_deadline = started + startup_budget;
     // P9: the drain thread signals this on every parsed probe sample, so the
     // loop below is woken by the guest instead of polling on a fixed 10 ms
@@ -4384,6 +4605,15 @@ fn interactive_serve(
                     evidence.push(reply);
                     continue;
                 }
+                // SE2b: a caller may pin the sample floor (`min_probe_seq`), so
+                // the guest can only answer with a probe sample *newer* than the
+                // one the caller already consumed. The content-stable settle
+                // requires strictly increasing samples across its window; a
+                // request without the floor keeps the legacy behaviour.
+                let min_probe_seq = request
+                    .get("min_probe_seq")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0);
                 let mut tree_timeout: Option<SettleTiming> = None;
                 // G3f1: how a successful strict settle bound the reply (a fully
                 // settled sample, or a draw commit after the caller's baseline).
@@ -4398,15 +4628,16 @@ fn interactive_serve(
                         probe_state,
                         &mut guest_stdin,
                         deadline,
-                        0,
+                        min_probe_seq,
                     ) {
                         FastTreeEnd::Ready(probe) => probe,
                         FastTreeEnd::Timeout { probe_seq } => {
                             let reply = serde_json::json!({
                                 "ok": false, "cmd": "tree", "code": "NO_FRESH_TREE",
                                 "error": format!(
-                                    "no guest probe sample newer than the frame store that was current at request entry arrived within 750 ms (last probe_seq {probe_seq}); a fast tree never serves the pre-request sample"
+                                    "no guest probe sample newer than the floor {min_probe_seq} and the frame store that was current at request entry arrived within 750 ms (last probe_seq {probe_seq}); a fast tree never serves the pre-request sample"
                                 ),
+                                "min_probe_seq": min_probe_seq,
                                 "settle": {
                                     "mode": "fast", "settled": false,
                                     "probe_seq": probe_seq, "tree_age_ms": null,
@@ -4761,6 +4992,99 @@ fn interactive_serve(
                     evidence.push(reply);
                 }
             },
+            "rotate" => {
+                // ROT3: a display rotation is a WMS operation plus a
+                // configuration change in the guest. The host rotates the
+                // live `WmsState` display first (so every later `relayout`
+                // reply carries the new frame + MergedConfiguration), then
+                // asks the guest to build the new `Configuration` and let
+                // `ActivityThread.handleConfigurationChanged` decide
+                // relaunch vs `onConfigurationChanged` from the manifest's
+                // real `ActivityInfo.configChanges`.
+                let rotation = request
+                    .get("rotation")
+                    .and_then(|v| v.as_i64())
+                    .or_else(|| {
+                        request.get("orientation").and_then(|v| v.as_str()).map(|o| {
+                            if o.eq_ignore_ascii_case("landscape") { 1 } else { 0 }
+                        })
+                    });
+                let Some(rotation) = rotation.filter(|r| (0..=3).contains(r)) else {
+                    let reply = serde_json::json!({
+                        "ok": false, "cmd": "rotate", "code": "BAD_REQUEST",
+                        "error": "rotate needs rotation 0..3 or orientation portrait|landscape",
+                    });
+                    protocol_write(&reply);
+                    evidence.push(reply);
+                    continue;
+                };
+                let display = live
+                    .wms
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .rotate(rotation as u8);
+                let before = latest_probe(probe_state).map(|p| p.seq).unwrap_or(0);
+                if let Some(writer) = guest_stdin.as_mut() {
+                    use std::io::Write;
+                    let _ = writeln!(writer, "ROTATE {rotation}");
+                    let _ = writer.flush();
+                }
+                // The reply is bound to a *new* probe sample: the guest posts
+                // the rotation on its main looper and emits one sample at the
+                // new size, so a sample older than the request can never back
+                // the answer.
+                let deadline = Instant::now() + frame_wait;
+                let mut fresh = None;
+                while Instant::now() < deadline {
+                    if let Some(sample) = latest_probe(probe_state) {
+                        if sample.seq > before {
+                            fresh = Some(sample);
+                            break;
+                        }
+                    }
+                    if let Ok(Some(status)) = child.try_wait() {
+                        let reply = serde_json::json!({
+                            "ok": false, "cmd": "rotate", "code": "GUEST_EXITED",
+                            "error": format!("the guest exited before it published a rotated probe: {status}"),
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                match fresh {
+                    Some(sample) => {
+                        let reply = serde_json::json!({
+                            "ok": true, "cmd": "rotate",
+                            "rotation": rotation,
+                            "width": display.frame.width(),
+                            "height": display.frame.height(),
+                            "probe_seq": sample.seq,
+                            "tree": sample.tree,
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                    }
+                    None => {
+                        // No fresh sample: the rotation did not reach the
+                        // guest (no reader, or the guest refused). Fail closed
+                        // with a structured error, never a pass.
+                        if !evidence
+                            .last()
+                            .map(|r| r.get("cmd") == Some(&serde_json::json!("rotate")))
+                            .unwrap_or(false)
+                        {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": "rotate", "code": "NO_FRESH_TREE",
+                                "error": "the guest published no probe sample at the rotated size",
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                        }
+                    }
+                }
+            }
             "tap" | "key" | "type_text" => {
                 let text_arg = request
                     .get("text")
@@ -5189,19 +5513,53 @@ fn interactive_serve(
 //
 // `acos-art` deliberately has no image dependency (the render path uses the
 // guest's own Bitmap encoder). A live capture has no guest-side bitmap, so a
-// minimal RGBA8 PNG writer lives here: filter type 0 per row, zlib "stored"
-// deflate blocks, real CRC32/Adler-32. Deterministic and byte-checkable.
+// minimal RGBA8 PNG writer lives here: real deflate (fdeflate, the fast deflate
+// tuned for PNG) over a per-row adaptive Sub/Up filter, real CRC32/Adler-32.
+// Deterministic and byte-checkable.
+//
+// ADR-0027 #6: the encoder used to write zlib *stored* blocks with filter 0 —
+// pixel-exact but 10 371 258 B for a 1080x2400 frame, so every capture wrote
+// (and hashed) 9.9 MB. Same pixels, real deflate: ~80 KB (measured on the
+// counter/form-validation/dialog-menu frames), and the encode is *faster* than
+// the stored-block framing it replaces because the 9.9 MB write+MD5 is gone.
+// The file stays losslessly exact: pixel assertions decode it, so the bytes
+// inside are unchanged.
 
+/// PNG filter types this encoder emits: 1 = Sub, 2 = Up.
+const FILTER_SUB: u8 = 1;
+const FILTER_UP: u8 = 2;
+
+/// Every Nth byte is sampled when choosing a row's filter (SHOTZ: `step_by`
+/// sampling picks the same filter as the exhaustive sum for these frames at
+/// ~1/8 the cost, so the choice costs ~0.05 ms instead of ~0.4 ms per row).
+const FILTER_SAMPLE_STEP: usize = 8;
+
+/// Filtered rows are handed to the deflater in blocks of this size, so `rgba`
+/// is never copied into a frame-sized buffer and the deflater is called ~160
+/// times per frame instead of once per row.
+const DEFLATE_BLOCK: usize = 64 * 1024;
+
+/// IDAT payloads are emitted in chunks of at most this size. A real frame's
+/// zlib stream is ~80 KB (one chunk); the size keeps the 12-byte-per-chunk
+/// framing irrelevant even for the stored-block floor.
+const IDAT_CHUNK: usize = 1 << 20;
+
+/// The buffered encoder, `#[cfg(test)]` only: the reference the streamed
+/// encoder is compared against.
 #[cfg(test)]
 fn encode_png_rgba(width: u32, height: u32, stride: u32, rgba: &[u8]) -> Vec<u8> {
-    encode_png_rgba_with(width, height, stride, rgba, crc32, adler32)
+    let mut out = Vec::with_capacity(128 * 1024);
+    encode_png_rgba_stream(width, height, stride, rgba, |bytes| {
+        out.extend_from_slice(bytes)
+    });
+    out
 }
 
 /// Encode the frame and hand its bytes to `sink` as they are produced.
 ///
-/// The bytes are the same as [`encode_png_rgba`]'s; the only difference is that
-/// the caller sees the PNG in order, so it can write and hash it without a
-/// second pass over a finished 9.5 MB buffer (P2).
+/// The caller writes and hashes the PNG in the same pass (P2), so the finished
+/// file is never held in memory as a second copy: the sink sees the signature,
+/// the header, each IDAT chunk and the trailer in order.
 fn encode_png_rgba_stream<S: FnMut(&[u8])>(
     width: u32,
     height: u32,
@@ -5209,32 +5567,7 @@ fn encode_png_rgba_stream<S: FnMut(&[u8])>(
     rgba: &[u8],
     mut sink: S,
 ) {
-    encode_png_rgba_into(width, height, stride, rgba, crc32, adler32, &mut sink)
-}
-
-/// The buffered encoder: `#[cfg(test)]` only, kept as the reference the streamed
-/// encoder is compared against, and parameterised by its two checksums so the
-/// oracle (the original bit-serial CRC32 and the `%`-per-byte Adler-32) can
-/// produce the exact bytes the encoder is required to preserve.
-#[cfg(test)]
-fn encode_png_rgba_with(
-    width: u32,
-    height: u32,
-    stride: u32,
-    rgba: &[u8],
-    crc32: fn(&[u8]) -> u32,
-    adler32: fn(&[u8]) -> u32,
-) -> Vec<u8> {
-    let mut out = Vec::with_capacity(
-        (width as usize)
-            .saturating_mul(height as usize)
-            .saturating_mul(4)
-            .saturating_add(1024),
-    );
-    encode_png_rgba_into(width, height, stride, rgba, crc32, adler32, &mut |bytes| {
-        out.extend_from_slice(bytes)
-    });
-    out
+    encode_png_rgba_into(width, height, stride, rgba, &mut sink)
 }
 
 fn encode_png_rgba_into(
@@ -5242,16 +5575,11 @@ fn encode_png_rgba_into(
     height: u32,
     stride: u32,
     rgba: &[u8],
-    crc32: fn(&[u8]) -> u32,
-    adler32: fn(&[u8]) -> u32,
     sink: &mut dyn FnMut(&[u8]),
 ) {
     let t0 = m5_now_us();
     let row = (width as usize).saturating_mul(4);
     let stride_bytes = (stride as usize).saturating_mul(4);
-    let filtered_len = row.saturating_add(1).saturating_mul(height as usize);
-    let t_filter = m5_now_us();
-    m5_trace("art.encode_filter", t0, t_filter, "streamed=1");
     sink(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
     let mut ihdr = Vec::with_capacity(13);
     ihdr.extend_from_slice(&width.to_be_bytes());
@@ -5259,19 +5587,225 @@ fn encode_png_rgba_into(
     ihdr.extend_from_slice(&[8, 6, 0, 0, 0]); // 8-bit RGBA, no interlace
     png_chunk(sink, b"IHDR", &ihdr, crc32);
 
-    // The zlib stream is written straight to the sink in stored blocks: the
-    // logical "filtered" byte stream (a zero filter byte then one row of pixels
-    // per row) is read straight from `rgba`, so no full-frame copy exists. Both
-    // the IDAT CRC and the Adler-32 are folded over the same bytes as they are
-    // emitted (W1 removed the last frame-sized `filtered` buffer).
+    // Filter + deflate. The zlib stream is deflated into a small buffer (~80 KB
+    // at 1080x2400) and then written as one or more IDAT chunks: the row that
+    // is filtered lives in `row_buf`, and only the compressed bytes are held.
+    let t_filter = m5_now_us();
+    let mut zlib: Vec<u8> = Vec::with_capacity(row.saturating_mul(height as usize) / 64 + 4096);
+    {
+        let mut deflater = fdeflate::Compressor::new(&mut zlib).expect("fdeflate header");
+        let mut prev = vec![0u8; row];
+        let mut cur = vec![0u8; row];
+        let mut block: Vec<u8> = Vec::with_capacity(DEFLATE_BLOCK + row + 1);
+        for y in 0..height as usize {
+            let start = y.saturating_mul(stride_bytes);
+            let end = start.saturating_add(row);
+            if end <= rgba.len() {
+                cur.copy_from_slice(&rgba[start..end]);
+            } else if start < rgba.len() {
+                // A row whose end is past the buffer is zero-padded, exactly as
+                // the stored-block encoder did: the frame is never refused for a
+                // short last row.
+                let have = rgba.len() - start;
+                cur[..have].copy_from_slice(&rgba[start..]);
+                cur[have..].fill(0);
+            } else {
+                cur.fill(0);
+            }
+            // Filter straight into the deflate block: `block` gets the filter
+            // byte and then the deltas, so no row-sized scratch buffer and no
+            // second copy of the row exist.
+            let kind = choose_filter(&cur, &prev);
+            block.push(kind);
+            let base = block.len();
+            block.resize(base + row, 0);
+            let deltas = &mut block[base..];
+            if kind == FILTER_SUB {
+                for i in 0..row {
+                    let left = if i >= 4 { cur[i - 4] } else { 0 };
+                    deltas[i] = cur[i].wrapping_sub(left);
+                }
+            } else {
+                for i in 0..row {
+                    deltas[i] = cur[i].wrapping_sub(prev[i]);
+                }
+            }
+            if block.len() >= DEFLATE_BLOCK {
+                deflater.write_data(&block).expect("fdeflate write");
+                block.clear();
+            }
+            std::mem::swap(&mut prev, &mut cur);
+        }
+        if !block.is_empty() {
+            deflater.write_data(&block).expect("fdeflate write");
+            block.clear();
+        }
+        deflater.finish().expect("fdeflate finish");
+    }
+    // Never worse than the stored blocks this replaced: deflate cannot expand
+    // *real* UI frames (they shrink ~130x), but a pathological high-entropy
+    // frame would (fixed-Huffman overhead), so the stored layout is the floor.
+    let filtered_len = row.saturating_add(1).saturating_mul(height as usize);
+    let stored_len = 2 + filtered_len.div_ceil(65_535) * 5 + filtered_len + 4;
+    // Compare what the file would cost, including the per-IDAT-chunk framing
+    // (12 bytes each): the choice is about the artifact, not the stream.
+    let framed = |len: usize| len + 12 * len.max(1).div_ceil(IDAT_CHUNK);
+    let mut fallback = false;
+    if framed(zlib.len()) > framed(stored_len) {
+        zlib.clear();
+        zlib_stored_rows(&mut zlib, width, height, stride, rgba);
+        fallback = true;
+    }
+    let t_deflate = m5_now_us();
+    m5_trace(
+        "art.encode_deflate",
+        t_filter,
+        t_deflate,
+        &format!(
+            "fdeflate={} zlib_bytes={} row_filter=sample{FILTER_SAMPLE_STEP}",
+            if fallback { 0 } else { 1 },
+            zlib.len()
+        ),
+    );
+    m5_trace("art.encode_filter", t0, t_filter, "streamed=1");
+    for chunk in zlib.chunks(IDAT_CHUNK) {
+        png_chunk(sink, b"IDAT", chunk, crc32);
+    }
+    m5_trace(
+        "art.encode_idat_chunk",
+        t_deflate,
+        m5_now_us(),
+        &format!("chunks={} body_bytes={}", zlib.len().div_ceil(IDAT_CHUNK), zlib.len()),
+    );
+    png_chunk(sink, b"IEND", &[], crc32);
+    m5_trace(
+        "art.encode_total",
+        t0,
+        m5_now_us(),
+        &format!("png_bytes={}", zlib.len()),
+    );
+}
+
+/// The stored-block zlib stream for a frame: filter 0 per row, no compression.
+///
+/// Only used as the floor for a frame deflate cannot shrink (and by the tests
+/// as the pre-SHOTZ baseline). It reads rows straight out of `rgba` in 64 KiB
+/// blocks with the same zero-padding rule as the encoder, so it never holds a
+/// frame-sized buffer.
+fn zlib_stored_rows(out: &mut Vec<u8>, width: u32, height: u32, stride: u32, rgba: &[u8]) {
+    let row = (width as usize).saturating_mul(4);
+    let stride_bytes = (stride as usize).saturating_mul(4);
+    let filtered_row = row.saturating_add(1);
+    let filtered_len = filtered_row.saturating_mul(height as usize);
+    out.extend_from_slice(&[0x78, 0x01]);
+    let mut adler = Adler32::new();
+    let mut block: Vec<u8> = Vec::with_capacity(65_535);
+    let mut offset = 0usize;
+    while offset < filtered_len {
+        let len = (filtered_len - offset).min(65_535);
+        let final_block = offset + len == filtered_len;
+        block.clear();
+        block.push(u8::from(final_block));
+        block.extend_from_slice(&(len as u16).to_le_bytes());
+        block.extend_from_slice(&(!(len as u16)).to_le_bytes());
+        for index in offset..offset + len {
+            if filtered_row == 0 {
+                block.push(0);
+                continue;
+            }
+            let y = index / filtered_row;
+            let within = index % filtered_row;
+            let byte = if within == 0 {
+                0
+            } else {
+                let at = y
+                    .saturating_mul(stride_bytes)
+                    .saturating_add(within - 1);
+                if y < height as usize && within - 1 < row && at < rgba.len() {
+                    rgba[at]
+                } else {
+                    0
+                }
+            };
+            block.push(byte);
+        }
+        adler.update(&block[5..]);
+        out.extend_from_slice(&block);
+        offset += len;
+    }
+    out.extend_from_slice(&adler.finish().to_be_bytes());
+}
+
+/// Pick the PNG filter for one row: Sub (1) or Up (2), whichever leaves the
+/// smaller sum of absolute deltas over a sampled subset of the row.
+///
+/// Sampling is what makes the choice nearly free. On the four real frames this
+/// was measured on (counter, form-validation, dialog-menu, text-input) the
+/// sampled choice produced the same decision as the exhaustive sum and the same
+/// PNG size to within 4 % (`results/handoff/SHOTZ.md`).
+fn choose_filter(cur: &[u8], prev: &[u8]) -> u8 {
+    let mut sub = 0u64;
+    let mut up = 0u64;
+    for i in (0..cur.len()).step_by(FILTER_SAMPLE_STEP) {
+        let left = if i >= 4 { cur[i - 4] } else { 0 };
+        sub += (cur[i].wrapping_sub(left) as i8).unsigned_abs() as u64;
+        up += (cur[i].wrapping_sub(prev[i]) as i8).unsigned_abs() as u64;
+    }
+    if sub <= up {
+        FILTER_SUB
+    } else {
+        FILTER_UP
+    }
+}
+
+/// The historic catch encoder: filter 0 per row, zlib stored blocks.
+///
+/// Kept under `cfg(test)` as the A/B baseline the new encoder is measured
+/// against (`png_encoder_candidates_on_real_frames`), so the "before" numbers in
+/// `results/handoff/SHOTZ.md` come from the code v0.2.0 shipped, not from a
+/// separate tool.
+#[cfg(test)]
+fn encode_png_stored_stream<S: FnMut(&[u8])>(
+    width: u32,
+    height: u32,
+    stride: u32,
+    rgba: &[u8],
+    mut sink: S,
+) {
+    let row = (width as usize).saturating_mul(4);
+    let stride_bytes = (stride as usize).saturating_mul(4);
+    let filtered_len = row.saturating_add(1).saturating_mul(height as usize);
+    sink(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
+    let mut ihdr = Vec::with_capacity(13);
+    ihdr.extend_from_slice(&width.to_be_bytes());
+    ihdr.extend_from_slice(&height.to_be_bytes());
+    ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
+    png_chunk(&mut sink, b"IHDR", &ihdr, crc32);
     let block_count = filtered_len.div_ceil(65_535);
     let idat_len = 2 + block_count * 5 + filtered_len + 4;
     sink(&(idat_len as u32).to_be_bytes());
     sink(b"IDAT");
     let mut crc = Crc32Stream::new();
     crc.update(b"IDAT");
-    emit_checked(sink, &mut crc, &[0x78, 0x01]);
+    sink(&[0x78, 0x01]);
+    crc.update(&[0x78, 0x01]);
     let mut adler = Adler32::new();
+    let mut bytes = Vec::with_capacity(filtered_len + block_count * 5);
+    for y in 0..height as usize {
+        let start = y.saturating_mul(stride_bytes);
+        let end = start.saturating_add(row);
+        bytes.push(0);
+        if end <= rgba.len() {
+            bytes.extend_from_slice(&rgba[start..end]);
+        } else if start < rgba.len() {
+            let have = rgba.len() - start;
+            bytes.extend_from_slice(&rgba[start..start + have]);
+            bytes.resize(bytes.len() + (row - have), 0);
+        } else {
+            bytes.resize(bytes.len() + row, 0);
+        }
+    }
+    adler.update(&bytes);
     let mut offset = 0usize;
     while offset < filtered_len {
         let len = (filtered_len - offset).min(65_535);
@@ -5280,110 +5814,17 @@ fn encode_png_rgba_into(
         header[0] = if final_block { 1 } else { 0 };
         header[1..3].copy_from_slice(&(len as u16).to_le_bytes());
         header[3..5].copy_from_slice(&(!(len as u16)).to_le_bytes());
-        emit_checked(sink, &mut crc, &header);
-        emit_filtered_range(
-            sink,
-            &mut crc,
-            &mut adler,
-            rgba,
-            row,
-            stride_bytes,
-            height as usize,
-            offset,
-            len,
-        );
+        sink(&header);
+        crc.update(&header);
+        sink(&bytes[offset..offset + len]);
+        crc.update(&bytes[offset..offset + len]);
         offset += len;
     }
-    let t_stored = m5_now_us();
-    m5_trace("art.encode_stored", t_filter, t_stored, "");
-    let adler = adler.finish();
-    let t_adler = m5_now_us();
-    m5_trace("art.encode_adler32", t_stored, t_adler, "streamed=1");
-    emit_checked(sink, &mut crc, &adler.to_be_bytes());
-    let t_crc = m5_now_us();
-    let crc = crc.finish();
-    m5_trace(
-        "art.encode_crc32",
-        t_crc,
-        m5_now_us(),
-        &format!("chunk=IDAT body_bytes={idat_len}"),
-    );
-    sink(&crc.to_be_bytes());
-    let t_idat = m5_now_us();
-    m5_trace("art.encode_idat_chunk", t_adler, t_idat, "");
-    png_chunk(sink, b"IEND", &[], crc32);
-    m5_trace("art.encode_total", t0, m5_now_us(), "");
-}
-
-/// Emit `len` bytes of the logical filtered stream starting at `offset`.
-///
-/// The stream is `[0, row pixels]` per row, with `stride_bytes - row` bytes of
-/// the source skipped between rows. A row whose end is past `rgba` is emitted
-/// as zeros, exactly as the old buffered encoder did. Each piece is folded into
-/// the IDAT CRC and the Adler-32 in the same pass, so `rgba` is never copied
-/// into a frame-sized buffer.
-#[allow(clippy::too_many_arguments)]
-fn emit_filtered_range(
-    sink: &mut dyn FnMut(&[u8]),
-    crc: &mut Crc32Stream,
-    adler: &mut Adler32,
-    rgba: &[u8],
-    row: usize,
-    stride_bytes: usize,
-    height: usize,
-    mut offset: usize,
-    mut len: usize,
-) {
-    const ZEROS: [u8; 4096] = [0u8; 4096];
-    let filtered_row = row.saturating_add(1);
-    if filtered_row == 0 {
-        return;
-    }
-    while len > 0 {
-        let y = offset / filtered_row;
-        let within = offset % filtered_row;
-        let take = (filtered_row - within).min(len);
-        if within == 0 {
-            emit_checked_adler(sink, crc, adler, &[0u8]);
-        }
-        let pixel_off = within.saturating_sub(1);
-        let pixel_len = take - usize::from(within == 0);
-        if pixel_len > 0 {
-            let row_start = y.saturating_mul(stride_bytes);
-            let row_end = row_start.saturating_add(row);
-            let start = row_start.saturating_add(pixel_off);
-            if y < height && row_end <= rgba.len() && start + pixel_len <= rgba.len() {
-                emit_checked_adler(sink, crc, adler, &rgba[start..start + pixel_len]);
-            } else {
-                let mut left = pixel_len;
-                while left > 0 {
-                    let n = left.min(ZEROS.len());
-                    emit_checked_adler(sink, crc, adler, &ZEROS[..n]);
-                    left -= n;
-                }
-            }
-        }
-        offset += take;
-        len -= take;
-    }
-}
-
-/// Emit `bytes`, folding them into both the chunk CRC and the zlib Adler-32.
-fn emit_checked_adler(
-    sink: &mut dyn FnMut(&[u8]),
-    crc: &mut Crc32Stream,
-    adler: &mut Adler32,
-    bytes: &[u8],
-) {
-    sink(bytes);
-    crc.update(bytes);
-    adler.update(bytes);
-}
-
-/// Emit `bytes` and fold them into the chunk CRC in the same call.
-fn emit_checked(sink: &mut dyn FnMut(&[u8]), crc: &mut Crc32Stream, bytes: &[u8]) {
-    sink(bytes);
-    crc.update(bytes);
+    let adler = adler.finish().to_be_bytes();
+    sink(&adler);
+    crc.update(&adler);
+    sink(&crc.finish().to_be_bytes());
+    png_chunk(&mut sink, b"IEND", &[], crc32);
 }
 
 fn png_chunk(sink: &mut dyn FnMut(&[u8]), kind: &[u8; 4], body: &[u8], crc32: fn(&[u8]) -> u32) {
@@ -6016,6 +6457,7 @@ mod probe_line_tests {
                 oversized_lines: self.oversized_lines,
                 bad_probe_lines: self.bad_probe_lines,
                 trace: None,
+                marks: self.marks.clone(),
                 wake: Arc::clone(&self.wake),
                 anim_traced: self.anim_traced.clone(),
                 touch_traced: self.touch_traced,
@@ -6197,10 +6639,17 @@ mod crash_evidence_tests {
 #[cfg(test)]
 #[path = "png_checksum_tests.rs"]
 mod png_checksum_tests;
+#[cfg(test)]
+#[path = "shotz_png_tests.rs"]
+mod shotz_png_tests;
 
 #[cfg(test)]
 #[path = "md5_frame_tests.rs"]
 mod md5_frame_tests;
+
+#[cfg(test)]
+#[path = "probe_channel_tests.rs"]
+mod probe_channel_tests;
 
 /// S3PERF (E2.17): the skipped-draw evidence is never a readiness gate.
 ///
@@ -6320,16 +6769,34 @@ mod skipped_traversal_tests {
     #[test]
     fn the_guest_ready_path_has_no_forced_traversal_and_publishes_the_evidence() {
         let src = include_str!("../guest/java/dev/acos/art/LaunchMain.java");
+        // App-visibility replay is wrong on *every* guest path.
         for forbidden in [
             "redeliverAppVisibility",
             "requesting one redraw",
             ".dispatchAppVisibility(",
             "\"dispatchAppVisibility\"",
-            "requestLayout()",
-            "invalidate()",
         ] {
             assert!(
                 !src.contains(forbidden),
+                "the guest must not contain `{forbidden}` (S3PERF E2.16)"
+            );
+        }
+        // Forced traversals are the measured one-frame regression *on the ready
+        // path*, so the guard is scoped to that path: ROT4's rotation path must
+        // force a relayout (`mForceNextWindowRelayout` + `requestLayout()`) to
+        // pick up the rotated frame, and that is a different path from the
+        // launch/ready one this test protects.
+        let ready_start = src
+            .find("static boolean awaitFirstTraversal")
+            .expect("the ready path function must exist");
+        let ready_end = src[ready_start + 1..]
+            .find("\n    static ")
+            .map(|offset| ready_start + 1 + offset)
+            .expect("the ready path function must end before the next static method");
+        let ready = &src[ready_start..ready_end];
+        for forbidden in ["requestLayout()", "invalidate()"] {
+            assert!(
+                !ready.contains(forbidden),
                 "the guest ready path must not contain `{forbidden}` (S3PERF E2.16)"
             );
         }
@@ -6344,5 +6811,74 @@ mod skipped_traversal_tests {
                 "the guest must publish `{required}` as evidence"
             );
         }
+    }
+}
+
+/// ABIGATE: the pre-guest ABI refusal is structured, carries its inventory, and
+/// can never be read as a pass.
+///
+/// This is the whole point of the gate: the pre-fix launcher logged
+/// `UNSUPPORTED_ABI` and started the guest anyway, so the caller saw a
+/// `GUEST_EXITED` app failure (or, on the oldest path, an `INTERNAL`) instead
+/// of the documented `UNSUPPORTED_ABI`. `oc` (onCreate) and `resumed` are
+/// false because nothing ran, and the `abi` block is the caller's evidence.
+#[cfg(test)]
+mod abi_gate_tests {
+    use super::*;
+
+    fn opts(apk: &str) -> LaunchOpts {
+        LaunchOpts {
+            apk: PathBuf::from(apk),
+            ..LaunchOpts::default()
+        }
+    }
+
+    #[test]
+    fn the_refusal_names_unsupported_abi_and_the_apk_inventory() {
+        let result = abi_gate_result(
+            &opts("/tmp/arm64-only.apk"),
+            "dev.acos.arm64",
+            &["arm64-v8a".to_string(), "armeabi-v7a".to_string()],
+            &[
+                "lib/arm64-v8a/libfoo.so".to_string(),
+                "lib/armeabi-v7a/libfoo.so".to_string(),
+            ],
+        );
+        assert_eq!(result.outcome, Outcome::Unsupported);
+        assert_ne!(result.outcome, Outcome::Ok, "a gate is never a pass");
+        assert_eq!(result.code.as_deref(), Some("UNSUPPORTED_ABI"));
+        assert!(!result.application_created && !result.activity_launched);
+        assert!(result.guest_exit.is_none() && result.guest_signal.is_none());
+        let abi = result.abi.as_ref().expect("abi inventory");
+        assert_eq!(
+            abi["apk_abis"],
+            serde_json::json!(["arm64-v8a", "armeabi-v7a"])
+        );
+        assert_eq!(abi["host_abi"], serde_json::json!("x86_64"));
+        assert_eq!(
+            abi["libs_sample"],
+            serde_json::json!([
+                "lib/arm64-v8a/libfoo.so",
+                "lib/armeabi-v7a/libfoo.so"
+            ])
+        );
+        assert!(result
+            .notes
+            .iter()
+            .any(|n| n.starts_with("UNSUPPORTED_ABI:") && n.contains("INSTALL_FAILED_NO_MATCHING_ABIS")));
+        // The serialized result carries the same block (a caller that only
+        // keeps the JSON still has the evidence).
+        let json = serde_json::to_value(&result).expect("serialize");
+        assert_eq!(json["code"], serde_json::json!("UNSUPPORTED_ABI"));
+        assert_eq!(json["abi"]["host_abi"], serde_json::json!("x86_64"));
+    }
+
+    /// A launch that reached the guest never carries the gate's block, so its
+    /// presence is unambiguous evidence of a pre-guest refusal.
+    #[test]
+    fn a_guest_launch_record_has_no_abi_block() {
+        let result = disk_full_result(&opts("/tmp/app.apk"), "dev.acos.app", 1, 2);
+        assert!(result.abi.is_none());
+        assert_eq!(result.code.as_deref(), Some("HOST_DISK_FULL"));
     }
 }

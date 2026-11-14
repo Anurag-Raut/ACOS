@@ -156,6 +156,7 @@ impl ReferenceBackend {
             screenshot_png: self.screenshot_png.clone(),
             crashed: self.crashed.clone(),
             input: None,
+        settle: None,
         })
     }
 }

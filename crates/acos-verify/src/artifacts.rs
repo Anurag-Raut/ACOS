@@ -111,6 +111,28 @@ pub fn write_frame(dir: &Path, seq: u64, png: &[u8]) -> Result<(), VerifyError> 
     write_bytes(dir, &frame_file_name(seq), png)
 }
 
+/// Write the named copy of a capture frame (`frames/<seq>-<name>.png`).
+///
+/// Same bytes as `frames/<seq>.png` (the file `steps[].frame_seq` names): a
+/// hardlink when the filesystem allows it (no extra bytes), a copy otherwise.
+/// The label is what makes "the screenshot for X" answerable from the artifacts.
+pub fn write_capture_frame(
+    dir: &Path,
+    canonical: &str,
+    named: &str,
+) -> Result<(), VerifyError> {
+    let source = dir.join(canonical);
+    let target = dir.join(named);
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| artifact_error(named, &e))?;
+    }
+    if std::fs::hard_link(&source, &target).is_ok() {
+        return Ok(());
+    }
+    let bytes = std::fs::read(&source).map_err(|e| artifact_error(canonical, &e))?;
+    write_bytes(dir, named, &bytes)
+}
+
 /// Write `logs/logcat.txt` in Android logcat form.
 pub fn write_logcat(dir: &Path, logs: &[LogRecord]) -> Result<(), VerifyError> {
     let mut text = String::from("--------- beginning of main\n");
@@ -153,14 +175,18 @@ pub fn write_resources(dir: &Path, report: &ResourceReport) -> Result<(), Verify
 ///
 /// `repro.sh` is the runnable form of the same request: the same APK, scenario,
 /// artifacts directory, required fidelity **and** every deterministic flag, so
-/// a replay is the run that produced the verdict. Flags are `NAME=VALUE` (see
+/// a replay is the run that produced the verdict. The artifacts directory is
+/// the script's first argument (required): replaying into the run's own
+/// directory would be refused, because a run owns its artifacts directory. Flags are `NAME=VALUE` (see
 /// `acos_protocol::commands::validate_reproducer_flag`).
 pub fn write_reproducer(dir: &Path, reproducer: &Reproducer) -> Result<(), VerifyError> {
     write_json(dir, REPRO_JSON, reproducer)?;
     let mut lines = vec![
         format!("  --apk {}", shell_quote(&reproducer.apk_path)),
         format!("  --scenario {}", shell_quote(&reproducer.scenario_path)),
-        format!("  --artifacts {}", shell_quote(".")),
+        // A run owns its artifacts directory (FB4), so a replay never writes back
+        // into the directory it came from: the caller names a fresh one.
+        "  --artifacts \"${1:?usage: sh repro.sh <new-artifacts-dir>}\"".to_string(),
         format!(
             "  --required-fidelity {}",
             shell_quote(reproducer.fidelity.as_str())
@@ -262,6 +288,39 @@ mod tests {
         write_reproducer(&dir, &repro).unwrap();
         let script = std::fs::read_to_string(dir.join(REPRO_SH)).unwrap();
         assert!(!script.contains("--flag"), "{script}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// FB4: a run owns its artifacts directory, so `repro.sh` never replays
+    /// into the directory it came from: the replay directory is a required
+    /// argument, and running it without one stops before `acos` is invoked.
+    #[test]
+    fn repro_sh_requires_a_fresh_artifacts_dir() {
+        let dir = test_dir("replay-dir");
+        prepare(&dir).unwrap();
+        let repro = Reproducer::new(
+            "0.2.0",
+            "fixtures/build/apps/counter.apk",
+            "0".repeat(64),
+            "scenarios/counter.yaml",
+            "1".repeat(64),
+            acos_protocol::IsolationLevel::Process,
+            acos_protocol::identity::DisplaySpec::offscreen(1080, 2400, 420),
+            acos_protocol::Fidelity::NativeRuntime,
+            acos_protocol::Backend::AcosNative,
+        );
+        write_reproducer(&dir, &repro).unwrap();
+        let script = std::fs::read_to_string(dir.join(REPRO_SH)).unwrap();
+        assert!(!script.contains("--artifacts ."), "{script}");
+        assert!(script.contains("--artifacts \"${1:?"), "{script}");
+        let out = std::process::Command::new("/bin/sh")
+            .arg(dir.join(REPRO_SH))
+            .env("PATH", "/nonexistent")
+            .output()
+            .expect("run sh");
+        assert!(!out.status.success(), "a replay without a directory must not run");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(stderr.contains("usage: sh repro.sh <new-artifacts-dir>"), "{stderr}");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -155,14 +155,46 @@ struct sockaddr_un {
   char sun_path[108];
 };
 
+/* ZPROD7: the sink path. `/dev/socket` is a *per-session bind mount* of a
+ * zygote child (the keeper binds its own socket directory before it forks), so
+ * the path is the only per-session fact the logger needs. The default is the
+ * production one; a host test overrides it at build time (`-D`) to point the
+ * shipped shim at throwaway sinks, which is the only way to exercise this code
+ * outside a guest (no code path sets it at run time). */
+#ifndef ACOSART_LOGD_SOCK
+#define ACOSART_LOGD_SOCK "/dev/socket/logdw"
+#endif
+
 static int log_fd = -2; /* -2 = not tried, -1 = unavailable */
+static long log_pid = -1; /* the process `log_fd` was resolved in (ZPROD7) */
 
 static int log_socket(void) {
-  if (log_fd != -2) return log_fd;
+  /* ZPROD7: a fork child inherits the *descriptor*, not the path. The keeper
+   * connects to its own sink before it forks, so a forked app's entries were
+   * delivered to the keeper's buffer instead of its session's (measured: the
+   * flag-on `form-validation` gate failed at step 5 `assert_log` with an empty
+   * session log buffer while the lines were in the keeper's). A zygote child
+   * re-binds `/dev/socket` to its own session socket directory, so
+   * re-resolving the path in the new process puts every entry in exactly that
+   * session's sink, and never in a sibling's: two concurrent children have two
+   * different mounts and two different pids.
+   *
+   * One `getpid()` per formatted entry; the dump paths (`CHECK`, aborts) are
+   * not hot, and the alternative (hooking `fork`) is a bigger surface than the
+   * one syscall it saves. A failed connect is also no longer sticky: the next
+   * entry retries, so an entry written before the session launcher bound its
+   * sink is lost, not the whole stream. */
+  long pid = sys0(SYS_getpid);
+  if (pid != log_pid) {
+    if (log_fd >= 0) sys1(SYS_close, log_fd);
+    log_fd = -2;
+    log_pid = pid;
+  }
+  if (log_fd >= 0) return log_fd;
   long fd = sys3(SYS_socket, AF_UNIX, SOCK_DGRAM, 0);
   if (fd < 0) { log_fd = -1; return -1; }
   struct sockaddr_un sa;
-  const char *path = "/dev/socket/logdw";
+  const char *path = ACOSART_LOGD_SOCK;
   usize i = 0;
   sa.sun_family = AF_UNIX;
   while (path[i] && i + 1 < sizeof(sa.sun_path)) { sa.sun_path[i] = path[i]; i++; }

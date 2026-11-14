@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -59,6 +59,10 @@ pub struct ServerConfig {
     pub max_output_bytes: usize,
     /// Maximum image size to inline as MCP image content.
     pub max_image_bytes: usize,
+    /// Long edge of an inlined image preview, in pixels (`ACOS_MCP_PREVIEW_MAX_SIDE`,
+    /// default 1280). A bigger image is downscaled before it is inlined; the
+    /// reply still names the lossless file (SHOTZ, ADR-0027 #6).
+    pub max_image_side: u32,
     /// Maximum bytes for one string inside a tool reply (`ACOS_MCP_MAX_TEXT`,
     /// default 4000). A longer string is head/tail-capped and its full text is
     /// kept once on disk in the run's artifacts; see [`crate::bound`].
@@ -80,7 +84,8 @@ impl Default for ServerConfig {
             session_ttl: Duration::from_secs(600),
             shutdown_grace: Duration::from_secs(2),
             max_output_bytes: crate::backend::DEFAULT_MAX_OUTPUT_BYTES,
-            max_image_bytes: 512 * 1024,
+            max_image_bytes: crate::preview::DEFAULT_MAX_BYTES,
+            max_image_side: crate::preview::DEFAULT_MAX_SIDE,
             max_text_bytes: crate::bound::DEFAULT_MAX_TEXT_BYTES,
         }
     }
@@ -109,6 +114,10 @@ impl ServerConfig {
         }
         if let Some(value) = env_usize("ACOS_MCP_MAX_IMAGE_BYTES") {
             config.max_image_bytes = value;
+        }
+        if let Some(value) = env_usize("ACOS_MCP_PREVIEW_MAX_SIDE") {
+            // A preview of zero pixels is not a preview.
+            config.max_image_side = value.max(1) as u32;
         }
         // F11: `ACOS_MCP_MAX_TEXT` bounds every string in a reply. `0` disables
         // the bound (the CLI behaviour, unbounded).
@@ -665,18 +674,25 @@ fn append_evidence_content(
         if !full.is_file() {
             continue;
         }
-        if let Some(mime) = image_mime(path) {
-            if let Ok(metadata) = std::fs::metadata(&full) {
-                if metadata.len() as usize <= config.max_image_bytes {
-                    if let Ok(bytes) = std::fs::read(&full) {
-                        content.push(json!({
-                            "type": "image",
-                            "data": crate::base64::encode(&bytes),
-                            "mimeType": mime,
-                        }));
-                        continue;
-                    }
-                }
+        // SHOTZ: an image is inlined as a *bounded preview* (long side
+        // `ACOS_MCP_PREVIEW_MAX_SIDE`, file `ACOS_MCP_MAX_IMAGE_BYTES`) and the
+        // reply still names the lossless file below, because a full-frame PNG in
+        // a tool reply is context spent on pixels the agent cannot read.
+        if image_mime(path).is_some() {
+            if let Some(preview) = crate::preview::image_preview(
+                &full,
+                config.max_image_side,
+                config.max_image_bytes,
+            ) {
+                content.push(json!({
+                    "type": "image",
+                    "data": crate::base64::encode(&preview.data),
+                    "mimeType": preview.mime,
+                }));
+                content.push(json!({
+                    "type": "text",
+                    "text": preview_note(kind, &full, &preview),
+                }));
             }
         }
         if supports_structured_content(protocol_version) {
@@ -685,13 +701,35 @@ fn append_evidence_content(
                 "uri": format!("file://{}", full.display()),
                 "name": kind,
             }));
-        } else {
+        } else if image_mime(path).is_none() {
+            // An image already carried its own line (`preview_note`), which
+            // names the lossless path; a second bare path would be noise.
             content.push(json!({
                 "type": "text",
                 "text": format!("{kind}: {}", full.display()),
             }));
         }
     }
+}
+
+/// One line describing the inline image: which file it came from, whether it is
+/// downscaled, and the pixel size of both.
+fn preview_note(kind: &str, full: &Path, preview: &crate::preview::Preview) -> String {
+    let scale = if preview.scaled {
+        format!(
+            "downscaled preview of {}x{}",
+            preview.source_width, preview.source_height
+        )
+    } else {
+        "full-size preview".to_string()
+    };
+    format!(
+        "{kind}: {}x{} {scale}; lossless file: {} ({} bytes)",
+        preview.width,
+        preview.height,
+        full.display(),
+        preview.source_bytes
+    )
 }
 
 fn image_mime(path: &str) -> Option<&'static str> {
@@ -926,13 +964,33 @@ mod tests {
         assert!(!capabilities_of(&server).probed);
     }
 
+    /// A 32x24 PNG: the smallest thing the preview path will inline.
+    fn tiny_png() -> Vec<u8> {
+        let mut rgba = vec![0u8; 32 * 24 * 4];
+        for (i, byte) in rgba.iter_mut().enumerate() {
+            *byte = (i % 251) as u8;
+        }
+        let mut out = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut out, 32, 24);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder.write_header().unwrap();
+            writer.write_image_data(&rgba).unwrap();
+            writer.finish().unwrap();
+        }
+        out
+    }
+
     #[test]
     fn evidence_becomes_image_and_resource_link() {
         use acos_protocol::Evidence;
         let dir = std::env::temp_dir().join(format!("acos-mcp-evidence-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("frames")).unwrap();
-        std::fs::write(dir.join("frames/1.png"), b"fakepng").unwrap();
+        // SHOTZ: an image is inlined only when it decodes (a preview needs real
+        // pixels) — a file that merely ends in `.png` is linked, never inlined.
+        std::fs::write(dir.join("frames/1.png"), tiny_png()).unwrap();
         std::fs::write(dir.join("events.jsonl"), b"{}\n").unwrap();
         let config = ServerConfig::for_roots(vec![dir.clone()], dir.clone());
 
@@ -953,11 +1011,24 @@ mod tests {
         assert!(content
             .iter()
             .any(|c| c["type"] == "image" && c["mimeType"] == "image/png"));
-        let link = content
+        // Every evidence file gets a link — including the image, whose inline
+        // copy is only a preview (SHOTZ): the lossless path must stay reachable.
+        let links: Vec<&str> = content
             .iter()
-            .find(|c| c["type"] == "resource_link")
-            .expect("resource link");
-        assert!(link["uri"].as_str().unwrap().ends_with("events.jsonl"));
+            .filter(|c| c["type"] == "resource_link")
+            .filter_map(|link| link["uri"].as_str())
+            .collect();
+        assert!(
+            links.iter().any(|uri| uri.ends_with("events.jsonl")),
+            "the events file needs a link: {links:?}"
+        );
+        assert!(
+            links.iter().any(|uri| uri.ends_with("frames/1.png")),
+            "the lossless frame needs a link: {links:?}"
+        );
+        // The inline image is described in text too (size, scale, path).
+        assert!(content.iter().any(|c| c["type"] == "text"
+            && c["text"].as_str().unwrap().contains("lossless file:")));
         assert!(modern.pointer("/result/structuredContent").is_some());
 
         let legacy = tool_result(&json!(8), &envelope, "2025-03-26", &config);

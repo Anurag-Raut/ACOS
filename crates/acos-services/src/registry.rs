@@ -185,6 +185,10 @@ pub struct LiveHandles {
     pub input: crate::window_session::input_dispatch::InputHost,
     /// The compositor-client (C1) state that keeps the newest buffer.
     pub compositor: std::sync::Arc<std::sync::Mutex<crate::surface_client::SurfaceState>>,
+    /// ROT3: the live `IWindowManager` state (`WmsState`). A display rotation
+    /// is a WMS operation, so the interactive session drives the same state the
+    /// `IWindowSession` relayout replies are computed from.
+    pub wms: std::sync::Arc<std::sync::Mutex<crate::wms::WmsState>>,
 }
 
 /// Install the standard ACOS service set on `host`.
@@ -243,6 +247,7 @@ pub fn install_with_handles_and_insets(
     let live = LiveHandles {
         input: input_host.clone(),
         compositor: Arc::clone(&compositor),
+        wms: Arc::clone(&wms_state),
     };
     let session_binder = host.register_dynamic(
         "android.view.IWindowSession",

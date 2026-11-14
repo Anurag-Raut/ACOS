@@ -220,6 +220,17 @@ impl TextMatch {
             _ => "invalid text matcher".to_string(),
         }
     }
+
+    /// Compact selector-field form: `text=="Increment"` (exact),
+    /// `text*="crement"` (contains), `text~/^Incr/` (regex).
+    fn field_form(&self, field: &str) -> String {
+        match (&self.exact, &self.contains, &self.regex) {
+            (Some(s), None, None) => format!("{field}=={s:?}"),
+            (None, Some(s), None) => format!("{field}*={s:?}"),
+            (None, None, Some(s)) => format!("{field}~/{s}/"),
+            _ => format!("{field}==<invalid matcher>"),
+        }
+    }
 }
 
 /// A node selector. See the module docs for the stable matching rules.
@@ -390,6 +401,52 @@ impl Selector {
     /// unless it explicitly opts into invisible ones).
     pub fn accepts_node(&self, node: &UiNode) -> bool {
         (self.include_invisible || node.visible) && self.matches_node(node)
+    }
+
+    /// The human form used in error messages and the stderr trailer.
+    ///
+    /// `text=="Nonexistent"`, `content_desc=="X"`, `id=="pkg:id/btn"`,
+    /// `class==android.widget.TextView`, `bounds=[0,0][100,100]`,
+    /// `index=1 include_invisible=true`. Fields are space-separated in a stable
+    /// order, so an agent can copy one straight back into a YAML scenario.
+    pub fn human(&self) -> String {
+        let mut fields: Vec<String> = Vec::new();
+        if let Some(id) = &self.id {
+            fields.push(format!("id=={id:?}"));
+        }
+        if let Some(text) = &self.text {
+            fields.push(text.field_form("text"));
+        }
+        if let Some(hint) = &self.hint {
+            fields.push(hint.field_form("hint"));
+        }
+        if let Some(desc) = &self.content_desc {
+            fields.push(desc.field_form("content_desc"));
+        }
+        if let Some(class) = &self.class {
+            fields.push(format!("class=={class}"));
+        }
+        if let Some(bounds) = self.bounds {
+            fields.push(format!("bounds={bounds}"));
+        }
+        if let Some(index) = self.index {
+            fields.push(format!("index={index}"));
+        }
+        if self.include_invisible {
+            fields.push("include_invisible=true".to_string());
+        }
+        if fields.is_empty() {
+            return "<empty selector>".to_string();
+        }
+        fields.join(" ")
+    }
+}
+
+impl std::fmt::Display for Selector {
+    /// Never a Rust `Debug` dump: an error line an agent reads says
+    /// `text=="Nonexistent"`, not `Selector { id: None, text: Some(..) }`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.human())
     }
 }
 
@@ -637,6 +694,48 @@ impl UiTree {
             .find(|node| !node.visible && probe.matches_node(node))
     }
 
+    /// Find the node a pointer action should target for `selector`.
+    ///
+    /// This is the *input* resolution rule, and it differs from [`UiTree::find_one`]
+    /// (evidence resolution) in exactly one way, the one the platform makes: what
+    /// a pointer reaches is decided by the node's **accessible name**, and the
+    /// platform composes that name as the node's text, else its content
+    /// description (`AccessibilityNodeInfo.getText()`, else
+    /// `getContentDescription()` — the same name UiAutomator's `By.desc` and an
+    /// `agent-device` `label` resolve to).
+    ///
+    /// 1. the ordinary field match among user-visible nodes ([`UiTree::find_one`]);
+    /// 2. for a `text` selector, a user-visible node whose own text is empty and
+    ///    whose content description matches — a React Native `Pressable` is a
+    ///    text-less `ViewGroup` whose whole name is its accessibility label, so
+    ///    `tap {"text": "Settings"}` must reach the pressable the way the device
+    ///    does instead of stopping at a decorative `TextView` underneath it.
+    ///
+    /// Only user-visible nodes are ever returned: this never makes an off-screen
+    /// node tappable, and a node that is not visible to the user resolves to
+    /// nothing here (callers report `ELEMENT_OFFSCREEN`).
+    pub fn find_input_target(&self, selector: &Selector) -> Option<&UiNode> {
+        if let Some(node) = self.find_one(selector) {
+            return Some(node);
+        }
+        let text = selector.text.as_ref()?;
+        // The other selector fields (id/content_desc/class/bounds) still have to
+        // match; only the text field is answered by the content description.
+        let mut probe = selector.clone();
+        probe.text = None;
+        probe.index = None;
+        let mut hits = self.all_nodes().into_iter().filter(|node| {
+            node.visible
+                && node.text.is_empty()
+                && probe.matches_node(node)
+                && text.matches(&node.content_desc)
+        });
+        match selector.index {
+            Some(index) => hits.nth(index),
+            None => hits.next(),
+        }
+    }
+
     /// The canonical `observe --text` rendering, one line per node with text or
     /// a content description, in document order.
     pub fn text_lines(&self) -> Vec<String> {
@@ -812,5 +911,55 @@ mod tests {
         assert!(!TextMatch::regex("^World").matches("Hello, World!"));
         assert!(TextMatch::regex("(").validate().is_some());
         assert!(TextMatch::exact("").validate().is_some());
+    }
+
+    #[test]
+    fn selector_human_form_is_not_a_debug_dump() {
+        // The exact line an agent reads when a selector misses.
+        let by_text = Selector::by_text("Nonexistent");
+        assert_eq!(by_text.human(), "text==\"Nonexistent\"");
+        assert_eq!(format!("{by_text}"), "text==\"Nonexistent\"");
+        assert!(!format!("{by_text}").contains("Selector {"));
+
+        let mut desc = Selector::default();
+        desc.content_desc = Some(TextMatch::exact("X"));
+        assert_eq!(desc.human(), "content_desc==\"X\"");
+
+        let mut by_id = Selector::by_id("dev.acos.fixtures.helloviews:id/btn");
+        by_id.index = Some(1);
+        assert_eq!(
+            by_id.human(),
+            "id==\"dev.acos.fixtures.helloviews:id/btn\" index=1"
+        );
+
+        // Contains/regex keep their distinct semantics visible.
+        assert_eq!(
+            Selector {
+                text: Some(TextMatch::contains("crement")),
+                ..Selector::default()
+            }
+            .human(),
+            "text*=\"crement\""
+        );
+        assert_eq!(
+            Selector {
+                hint: Some(TextMatch::regex("^Incr")),
+                ..Selector::default()
+            }
+            .human(),
+            "hint~/^Incr/"
+        );
+
+        // Bounds + invisible policy are part of the description.
+        let bounds = Selector {
+            bounds: Some(Bounds::new(0, 0, 100, 100)),
+            include_invisible: true,
+            ..Selector::default()
+        };
+        assert_eq!(
+            bounds.human(),
+            "bounds=[0,0][100,100] include_invisible=true"
+        );
+        assert_eq!(Selector::default().human(), "<empty selector>");
     }
 }

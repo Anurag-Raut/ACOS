@@ -20,6 +20,33 @@ additive: never renamed or reused for a different meaning. Every code means
 backend, Flutter session). `WRONG_ABI` is only the loader-level condition for a
 single ELF whose `e_machine` the in-process loader cannot map.
 
+**The ART path gates it before the guest (ABIGATE).** `acos-art` decides the
+package ABI from the APK index and refuses *before* the image, props, logd or any
+guest process exists, so the envelope is `UNSUPPORTED_ABI` with
+`status: unsupported` — never `GUEST_EXITED` and never `INTERNAL`. The same gate
+covers `acos launch/verify --engine art`, `acos serve` sessions and
+`acos_launch`/`acos_verify` over MCP. `error.details` carries
+`apk_abis: ["arm64-v8a", ...]`, `host_abi: "x86_64"` and `libs_sample:
+["lib/arm64-v8a/libfoo.so", ...]` (a bounded, sorted sample of what the APK does
+ship), so a caller can act without re-reading the APK.
+
+The rule is AOSP's, not ours: `PackageManager` decides **per package**.
+`NativeLibraryHelper.findSupportedAbi` keeps the ABI directory whose index in the
+device's supported list is lowest, returns `NO_NATIVE_LIBRARIES` for an APK with
+no `lib/`, and `INSTALL_FAILED_NO_MATCHING_ABIS` for `lib/` with no match;
+`iterateOverNativeFiles` then extracts only that ABI
+(`frameworks/base/core/jni/com_android_internal_content_NativeLibraryHelper.cpp`).
+Consequences ACOS reproduces deliberately:
+
+* a pure-Java APK (no `lib/`) always launches — there is no ABI question;
+* an APK with both `lib/x86_64/` and `lib/arm64-v8a/` launches as an x86_64
+  package and only `lib/x86_64/*` is installed;
+* an APK with `lib/x86_64/liba.so` **and** an arm64-only `libb.so` also launches:
+  the package has an x86_64 directory, `liba.so` loads, and the first
+  `dlopen("libb.so")` fails with the app's own `UnsatisfiedLinkError`. That is an
+  app-packaging bug the platform reproduces, not an install gate, so it is never
+  reported as `UNSUPPORTED_ABI`.
+
 | Code | Meaning | Component | Exit |
 |---|---|---|---|
 | `UNSUPPORTED_ANDROID_API` | The native engine lacks a required `android.*` API or behaviour. | acos-vm | 70 / 1 |
@@ -29,7 +56,7 @@ single ELF whose `e_machine` the in-process loader cannot map.
 | `NEEDS_REAL_DEVICE` | The behaviour needs a real device, OEM service or hardware target. | engine / CLI | 1 |
 | `REQUIRES_GMS` | The app requires licensed Google Mobile Services. | engine / CLI | 1 |
 | `WRONG_ABI` | One ELF's `e_machine`/class is not what the loader can map (per-library; not an APK ABI inventory miss). | acos-native-loader | 70 / 1 |
-| `UNSUPPORTED_ABI` | The APK ships native code, but none for the host ABI (names the available ABIs). | acos-apk / acos-cli / acos-runtime / acos-jni / acos-mcp | 1 |
+| `UNSUPPORTED_ABI` | The APK ships native code, but none for the host ABI. Names the available ABIs; on the ART path it is decided **before** any guest starts and `details` carries `apk_abis`, `host_abi`, `libs_sample`. | acos-apk / acos-services / acos-art / acos-cli / acos-runtime / acos-jni / acos-mcp | 1 |
 | `NO_DISPLAY` | Capture/observe was requested on a headless session. | acos-runtime / MCP | 1 |
 | `NO_TEXT` | Text/semantics were requested but the chosen route cannot provide them. | acos-runtime / MCP | 1 |
 | `UNSUPPORTED_RELOCATION` | A native relocation kind is not implemented by the loader. | acos-native-loader | 70 / 1 |
@@ -82,12 +109,15 @@ single ELF whose `e_machine` the in-process loader cannot map.
 | `JAVA_EXCEPTION` | A live Java exception escaped the entry point. | acos-vm | 70 / 1 |
 | `APP_CRASHED` | The app process crashed (uncaught exception / signal / abort). | acos-vm / acos-runtime | 1 |
 | `APP_NOT_RESPONDING` | The app is not responding (ANR / main-thread stall). | acos-runtime | 1 |
+| `ASSERTION_FAILED` (SE2 `content_settle_pixel`) | A pixel/frame assertion (`assert_screenshot`, `assert_region`) was bound to a frame settled only by `settle: content`. The step fails closed: details carry `reason: "content_settle_pixel"`, `pixel_evidence: false`, `step_kind` and the content `settle` record (`mode`, `window_ms`, `traversals`, `signature`). Content stability says nothing about pixels; a strict capture rebinds the frame. |
+| `ASSERTION_FAILED` (SE2b `content_settle_geometry`) | An assertion that names a rectangle — its own `bounds` or `selector.bounds`, for `assert_text`/`assert_visible`/`assert_not_visible`/`assert_state` — was bound to a frame settled only by `settle: content`. The content signature deliberately does not hash geometry (an animating view's rect drifts ~1 px per traversal), so a bounds claim fails closed: `details.reason: "content_settle_geometry"`, `geometry_evidence: false`, `bounds_claim.{assertion,selector}`, `step_kind`, the content `settle` record and `signature_geometry_fields`. Assert without a rectangle, or settle strictly. (Steps that *resolve* a target — `wait_for`/`tap`/`type` — are not refused: they match on a traversal they take themselves.) |
 | `ASSERTION_FAILED` | An assertion ran and did not hold. Also used by SE1's opt-in `expect_change` on an input step: the action was delivered and the strict settle completed, but the settled frame is pixel-identical to the pre-action frame, so the step proved no visual change. The error carries `details.reason = "expect_change"`, `details.pixels_changed = false`, `details.step_kind`, and the `details.before`/`details.after` frame refs (`frame_seq` + `frames/<seq>.png` when captured). | acos-verify / acos-cli | 1 |
 | `ELEMENT_NOT_FOUND` | A selector matched no node (the tree was complete). | acos-runtime / acos-verify | 1 |
 | `ELEMENT_OFFSCREEN` | A selector matched only nodes that are **not visible to the user**: present in the tree (attached, `VISIBLE`) but off screen or clipped away by an ancestor scroll/pager/hidden window, so its clipped visible rect is empty. `wait_for`/`assert_text`/`assert_visible`/`tap` match user-visible nodes by default, so this is a failure, never a pass; the error details carry the node's `bounds` and (empty) `visible_bounds`. Scroll it into view first (or use `selector.include_invisible` for a deliberate diagnostic). | acos-verify / acos-cli | 1 |
 | `TREE_TRUNCATED` | A selector matched nothing in a tree the probe reported as truncated (`UiTree.truncated`, any window). Non-pass, non-retryable; the hint names the node budget. Never `ELEMENT_NOT_FOUND`. | acos-verify / acos-cli | 1 |
 | `STALE_REF` | A UI node reference is no longer valid. | acos-runtime | 1 |
 | `INSUFFICIENT_HOST_EVIDENCE` | A guest-asserted channel was asked to justify a pass on an untrusted APK run: the UI tree (`UNTRUSTED_TREE_ASSERTION`), the guest log (`UNTRUSTED_LOG_ASSERTION`, an `assert_log` step), or crash reports. Fail closed and require host-observed evidence. The run itself is allowed (untrusted is an explicit opt-in); only the evidence class is refused. | acos-cli / acos-verify | 1 |
+| `UNSUPPORTED_ASSERTION` (SE2 `content_settle_unhonored`) | A step asked for `settle: content` but the backend returned no content settle record, so the requested rule was never applied. Fails closed (never downgraded to strict/fast): `details.reason: "content_settle_unhonored"`, `details.step_kind`, and the record actually returned in the diff's `actual`. |
 | `UNSUPPORTED_ASSERTION` | The requested assertion kind has no implementation in this build (for example `assert_region.text_ocr` with no OCR engine). Also SE1's `expect_change` on a backend/settle rule that reports no measured `settle.pixels_changed`: the pixel claim cannot be tied to evidence, so the step is `unsupported`, never a pass. | acos-verify | 1 |
 | `SESSION_NOT_FOUND` | The requested session does not exist (or was already destroyed). | acos-runtime / MCP | 1 |
 | `SESSION_BUSY` | The session is busy with another request. | acos-runtime / MCP | 1 |
@@ -97,6 +127,7 @@ single ELF whose `e_machine` the in-process loader cannot map.
 | `ISOLATION_UNSATISFIED` | The requested isolation level is advertised but its guarantees are unmet. | acos-runtime / acos-sandbox | 1 |
 | `RAM_GUARD` | A memory admission/guard rule was triggered. | acos-runtime / acos-art | 1 / 2 |
 | `RAM_ABORT` | Execution was aborted by the RAM guard. | acos-runtime / acos-art | 1 / 2 |
+| `TIMEOUT` (settle `content`) | `settle: content` could not see the tree content signature unchanged for the window (>= 300 ms across >= 2 traversals) inside the step's timeout. Details carry `reason: "content-not-stable"`, the last `settle` record (`window_ms`, `traversals`, `signature`, `bound:"content-timeout"`). The screen's text/nodes/bounds/state kept changing — an animating value (a countdown, a progress percentage) is never content-stable, and a timeout is never a pass. |
 | `TIMEOUT` | The operation exceeded its wall/CPU budget. `wait_for` also uses it when its live-tree condition is never satisfied by `timeout_ms`; the failure details carry `timeout_ms`, `elapsed_ms`, `polls`, and `last_frame_seq`. | acos-runtime / acos-art / acos-verify | 1 / 2 |
 | `RESOURCE_LIMIT` | A declared resource budget was exhausted. | acos-runtime / acos-art | 1 / 2 |
 | `UNTRUSTED_APK_NOT_CERTIFIED` | Reserved for a **certification downgrade**. An explicit `--untrusted` / `trust: untrusted` is allowed today (sandbox verdict CERTIFIED-WITH-LIMITS, product policy `docs/SANDBOX_CERTIFICATION.md` §8.8), so this code is unreachable in a normal build. It is produced by `trust::untrusted_gate` only when the const flag `trust::CERTIFICATION` is `Certification::NotCertified`; `ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1` is an accepted but redundant alias and no longer bypasses anything. | acos-cli | 1 |

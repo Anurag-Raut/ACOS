@@ -3,6 +3,8 @@
 //! A verdict is only valid when the artifacts directory backs every claimed
 //! pass. See [`crate::artifacts::validate_artifacts_dir`].
 
+use std::collections::BTreeMap;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -50,6 +52,12 @@ pub struct StepResult {
     /// Frame produced/used by this step.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frame_seq: Option<u64>,
+    /// `capture` step name (the scenario's own label for this screenshot).
+    ///
+    /// Written into the step JSON so "the screenshot for X" is answerable from
+    /// the artifacts; the same name keys `verdict.json`'s `captures` map.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     /// Assertion results (empty for non-assertion steps).
     #[serde(default)]
     pub assertions: Vec<AssertionResult>,
@@ -74,6 +82,7 @@ impl StepResult {
             status,
             duration_ms,
             frame_seq: None,
+            name: None,
             assertions: Vec::new(),
             settle: None,
             evidence: Vec::new(),
@@ -227,6 +236,12 @@ pub struct Verdict {
     pub schema_version: u32,
     /// Overall verdict.
     pub verdict: Status,
+    /// The same outcome as [`Verdict::verdict`], under the envelope's field name
+    /// and vocabulary (`pass`/`fail`/`unsupported`/`blocked`/`error`/`timeout`/
+    /// `crash`). `verdict` is kept for compatibility; a reader that checks
+    /// `status` (as it does on every envelope) gets the same answer.
+    #[serde(default = "legacy_status")]
+    pub status: Status,
     /// Fidelity actually achieved.
     pub fidelity: Fidelity,
     /// Fidelity required by the caller, when stated.
@@ -251,6 +266,11 @@ pub struct Verdict {
     pub scenario: ScenarioIdentity,
     /// Per-step results, in execution order.
     pub steps: Vec<StepResult>,
+    /// `capture` step names mapped to the PNG that step wrote
+    /// (`{"meanings-collapsed": "frames/16-meanings-collapsed.png"}`).
+    /// Relative to the artifacts directory, like every other evidence path.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub captures: BTreeMap<String, String>,
     /// Failure classification, present for every non-pass verdict.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure: Option<FailureClassification>,
@@ -281,6 +301,7 @@ impl Verdict {
         Verdict {
             schema_version: VERDICT_SCHEMA_VERSION,
             verdict,
+            status: verdict,
             fidelity,
             required_fidelity: None,
             backend,
@@ -292,6 +313,7 @@ impl Verdict {
             app,
             scenario,
             steps: Vec::new(),
+            captures: BTreeMap::new(),
             failure: None,
             resources: ResourceReport::default(),
             reproducer,
@@ -310,9 +332,113 @@ impl Verdict {
     }
 }
 
+/// A `verdict.json` written before the `status` field existed deserialises as
+/// `fail`: never as a pass. The artifacts validator reports the mismatch, so an
+/// old document can never be read as a green by accident.
+fn legacy_status() -> Status {
+    Status::Fail
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn status_mirrors_verdict_with_the_envelope_vocabulary() {
+        use crate::envelope::{Backend, Fidelity};
+        use crate::identity::{DisplaySpec, IsolationLevel};
+
+        for status in [
+            Status::Pass,
+            Status::Fail,
+            Status::Unsupported,
+            Status::Blocked,
+            Status::Error,
+            Status::Timeout,
+        ] {
+            let repro = Reproducer::new(
+                "0.2.0",
+                "a.apk",
+                "sha",
+                "s.yaml",
+                "sha2",
+                IsolationLevel::Sandbox,
+                DisplaySpec::offscreen(1080, 2400, 420),
+                Fidelity::NativeRuntime,
+                Backend::AcosNative,
+            );
+            let verdict = Verdict::new(
+                status,
+                Fidelity::NativeRuntime,
+                Backend::AcosNative,
+                IsolationLevel::Sandbox,
+                "req_1",
+                "2026-11-15T00:00:00Z",
+                "2026-11-15T00:00:01Z",
+                AppIdentity {
+                    path: "a.apk".to_string(),
+                    package: Some("pkg".to_string()),
+                    sha256: "sha".to_string(),
+                },
+                ScenarioIdentity {
+                    path: "s.yaml".to_string(),
+                    name: "s".to_string(),
+                    sha256: "sha2".to_string(),
+                },
+                repro,
+            );
+            let value = serde_json::to_value(&verdict).unwrap();
+            assert_eq!(value["verdict"], status.as_str());
+            assert_eq!(value["status"], status.as_str());
+            assert_eq!(verdict.status, verdict.verdict);
+        }
+    }
+
+    #[test]
+    fn a_verdict_without_status_reads_as_fail_never_pass() {
+        use crate::envelope::{Backend, Fidelity};
+        use crate::identity::{DisplaySpec, IsolationLevel};
+        let repro = Reproducer::new(
+            "0.2.0",
+            "a.apk",
+            "sha",
+            "s.yaml",
+            "sha2",
+            IsolationLevel::Sandbox,
+            DisplaySpec::offscreen(1080, 2400, 420),
+            Fidelity::NativeRuntime,
+            Backend::AcosNative,
+        );
+        let verdict = Verdict::new(
+            Status::Pass,
+            Fidelity::NativeRuntime,
+            Backend::AcosNative,
+            IsolationLevel::Sandbox,
+            "req_1",
+            "2026-11-15T00:00:00Z",
+            "2026-11-15T00:00:01Z",
+            AppIdentity {
+                path: "a.apk".to_string(),
+                package: None,
+                sha256: "sha".to_string(),
+            },
+            ScenarioIdentity {
+                path: "s.yaml".to_string(),
+                name: "s".to_string(),
+                sha256: "sha2".to_string(),
+            },
+            repro,
+        );
+        let mut value = serde_json::to_value(&verdict).unwrap();
+        value.as_object_mut().unwrap().remove("status");
+        let legacy: Verdict = serde_json::from_value(value).unwrap();
+        assert_eq!(legacy.verdict, Status::Pass);
+        assert_eq!(
+            legacy.status,
+            Status::Fail,
+            "a document without status must never be read as a pass"
+        );
+    }
 
     #[test]
     fn reproducer_flags_are_deterministic() {

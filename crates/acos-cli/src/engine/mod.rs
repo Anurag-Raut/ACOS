@@ -36,6 +36,7 @@ pub mod fake;
 pub mod host_mem;
 pub mod rust_vm;
 pub mod serve;
+pub mod zygote_host;
 
 /// The explicit execution engine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -114,6 +115,8 @@ pub struct SessionCapabilities {
     pub type_text: bool,
     /// `key(name)`.
     pub key: bool,
+    /// `rotate(orientation)` — a real display rotation.
+    pub rotate: bool,
     /// `reset()`.
     pub reset: bool,
     /// `close()`.
@@ -157,6 +160,7 @@ impl SessionCapabilities {
             ("tap_text", self.tap_text),
             ("type_text", self.type_text),
             ("key", self.key),
+            ("rotate", self.rotate),
             ("reset", self.reset),
             ("close", self.close),
             ("logs", self.logs),
@@ -330,6 +334,20 @@ pub trait SessionBackend {
     /// Traverse now and return the live tree bound to the new frame.
     fn tree(&mut self) -> Result<UiTree, BackendError>;
 
+    /// SE2c: the tree a **content-settled input** resolves its target on: ONE
+    /// fresh traversal, never the cached tree of the previous step.
+    ///
+    /// The content signature deliberately does not hash `bounds` (they drift
+    /// ~1 px per traversal on an animated screen), so the cached tree is not
+    /// proof of position for the *next* action: a layout shift between two steps
+    /// would land the tap on a neighbour. The engine therefore takes one new
+    /// tree-only traversal whose sample is provably newer than everything it has
+    /// consumed so far, with no quiet window. A backend without a stale-cache
+    /// hazard keeps the plain traversal.
+    fn fresh_input_tree(&mut self) -> Result<UiTree, BackendError> {
+        self.tree()
+    }
+
     /// A **fresh** capture: a new capture command, and evidence that the frame
     /// sequence advanced. The default has no capture command of its own and says so.
     ///
@@ -368,6 +386,28 @@ pub trait SessionBackend {
     /// P12c: the settle rule for the next input action (`fast` for a scenario
     /// that must drive a screen which never settles). Assertions never use it.
     fn set_input_settle_mode(&mut self, _fast: bool) {}
+
+    /// SE2: the content-stable rule for the next input action (`content` for a
+    /// screen that animates forever in pixels). Mutually exclusive with
+    /// [`Self::set_input_settle_mode`].
+    fn set_input_content_settle(&mut self, _content: bool) {}
+
+    /// SE2b: the settle rule the next input action will apply (`strict`,
+    /// `fast` or `content`). Target resolution reads it so a content action
+    /// resolves against the content-settled tree instead of a strict wait.
+    fn input_settle_mode(&self) -> &'static str {
+        "strict"
+    }
+
+    /// SE2: the settle rule a `launch` binds its first tree with (`strict`
+    /// default, `content` opt-in).
+    fn set_launch_settle_mode(&mut self, _mode: &'static str) {}
+
+    /// SE2: how the bound frame was settled (`strict`, `fast` or `content`),
+    /// when the engine reports it. `None` means no record.
+    fn bound_settle(&self) -> Option<&serde_json::Value> {
+        None
+    }
 
     /// P12b: the settle block of the most recent input when its strict settle
     /// timed out (`settled:false`, `bound:"timeout"`), or `None`.
@@ -461,6 +501,20 @@ pub trait SessionBackend {
 
     /// Press a symbolic key (`back`, `enter`, ...).
     fn key(&mut self, key: &str) -> Result<(), BackendError>;
+
+    /// Rotate the display to a target rotation (0 = portrait, 1 = landscape,
+    /// 2 = reverse portrait, 3 = reverse landscape; a quarter-turn value, not a
+    /// delta).
+    ///
+    /// The default has no rotation command and says so, naming `input.rotate`
+    /// so a scenario `rotate` step on such an engine is a structured
+    /// `UNSUPPORTED_*`, never a silent no-op.
+    fn rotate(&mut self, _rotation: u8) -> Result<(), BackendError> {
+        Err(BackendError::unsupported(
+            "input.rotate",
+            "this session engine has no display-rotation command",
+        ))
+    }
 
     /// Reset app state (fresh Activity).
     fn reset(&mut self) -> Result<(), BackendError>;
@@ -600,9 +654,11 @@ impl EngineBackend {
         } else {
             package
         };
-        let crashed = match self {
-            EngineBackend::Session { session, .. } => session.last_crash(),
-            EngineBackend::Native(_) => None,
+        let (crashed, settle) = match self {
+            EngineBackend::Session { session, .. } => {
+                (session.last_crash(), session.bound_settle().cloned())
+            }
+            EngineBackend::Native(_) => (None, None),
         };
         Ok(SessionObservation {
             session_id: format!("s_art_{seq}"),
@@ -612,6 +668,7 @@ impl EngineBackend {
             screenshot_png: Some(png),
             crashed,
             input: None,
+            settle,
         })
     }
 
@@ -678,9 +735,39 @@ impl EngineBackend {
 
     /// Resolve a selector to a screen point and the window it belongs to, from
     /// the current tree.
+    /// SE2b: is the input rule in force the content-stable one?
+    fn input_settle_is_content(&self) -> bool {
+        match self {
+            EngineBackend::Session { session, .. } => session.input_settle_mode() == "content",
+            EngineBackend::Native(_) => false,
+        }
+    }
+
     fn point_for(&mut self, selector: &Selector) -> Result<(String, i32, i32), BackendError> {
+        // SE2b: a `settle: content` input never resolves its target with a new
+        // **strict** traversal: on a screen that never goes quiet that waits the
+        // step's whole `settle_timeout_ms` (20 s on the reference screen) before
+        // the input is even injected - a strict wait that can never succeed.
+        //
+        // SE2c: it must not read the cached tree either. The content signature
+        // does not hash `bounds` (a translated view's rect drifts ~1 px per
+        // traversal), so the previous step's tree is not position evidence for
+        // this action: a layout shift between the two steps would aim at a
+        // neighbour. One fresh fast traversal, floored above every sample
+        // already consumed and with no quiet window, is the cheapest honest
+        // answer.
+        let content = match self {
+            EngineBackend::Session { .. } => self.input_settle_is_content(),
+            EngineBackend::Native(_) => false,
+        };
         let tree = match self {
-            EngineBackend::Session { session, .. } => session.tree()?,
+            EngineBackend::Session { session, .. } => {
+                if content {
+                    session.fresh_input_tree()?
+                } else {
+                    session.tree()?
+                }
+            }
             EngineBackend::Native(_) => unreachable!("native path forwards input"),
         };
         let node = match tree.find_one(selector) {
@@ -692,7 +779,7 @@ impl EngineBackend {
                     return Err(BackendError::Failed {
                         code: ErrorCode::ElementOffscreen,
                         detail: format!(
-                            "selector {selector:?} matched only a node that is not visible to the user (text {:?}, bounds {}, visible_bounds {}); scroll it into view first",
+                            "selector {selector} matched only a node that is not visible to the user (text {:?}, bounds {}, visible_bounds {}); scroll it into view first",
                             offscreen.text,
                             offscreen.bounds,
                             offscreen.visible_bounds
@@ -708,10 +795,10 @@ impl EngineBackend {
                     },
                     detail: if tree.truncated {
                         format!(
-                            "no node matches selector {selector:?}, but the tree was truncated at the node budget"
+                            "no node matches selector {selector}, but the tree was truncated at the node budget"
                         )
                     } else {
-                        format!("no node matches selector {selector:?}")
+                        format!("no node matches selector {selector}")
                     },
                 });
             }
@@ -794,6 +881,13 @@ impl Backend for EngineBackend {
                 ..
             } => {
                 *cause_id = request.cause_id.clone();
+                // SE2: the launch's first tree may be bound by the content rule
+                // (a screen whose pixels animate forever); strict stays the
+                // default and every other step is unaffected.
+                session.set_launch_settle_mode(match request.settle {
+                    acos_protocol::scenario::StepSettle::Content => "content",
+                    _ => "strict",
+                });
                 let outcome = session.launch(&request.apk)?;
                 if let Some(settle) = session.tree_settle_timeout() {
                     return Err(settle_timeout_error(
@@ -817,6 +911,12 @@ impl Backend for EngineBackend {
     fn set_input_settle(&mut self, fast: bool) {
         if let EngineBackend::Session { session, .. } = self {
             session.set_input_settle_mode(fast);
+        }
+    }
+
+    fn set_input_content_settle(&mut self, content: bool) {
+        if let EngineBackend::Session { session, .. } = self {
+            session.set_input_content_settle(content);
         }
     }
 
@@ -978,10 +1078,27 @@ impl Backend for EngineBackend {
                         }
                         self.action_result(previous, action.kind())
                     }
-                    InputAction::Rotate(_) => Err(BackendError::unsupported(
-                        "input.rotate",
-                        "the ART session protocol has no rotate command yet",
-                    )),
+                    InputAction::Rotate(orientation) => {
+                        if !caps.rotate {
+                            return Err(BackendError::unsupported(
+                                "input.rotate",
+                                "this session engine has no display-rotation command",
+                            ));
+                        }
+                        // Portrait -> rotation 0, landscape -> 1. A Reverse
+                        // variant would be 2/3; the scenario schema has only
+                        // the two named orientations (the same pair the Rust VM
+                        // maps to its own relaunch codes).
+                        let rotation = match orientation {
+                            acos_protocol::commands::Orientation::Portrait => 0u8,
+                            acos_protocol::commands::Orientation::Landscape => 1u8,
+                        };
+                        let previous = self.current_frame_seq();
+                        if let EngineBackend::Session { session, .. } = self {
+                            session.rotate(rotation)?;
+                        }
+                        self.action_result(previous, action.kind())
+                    }
                 }
             }
         }
@@ -1367,6 +1484,7 @@ mod tests {
                 "tap_text",
                 "type_text",
                 "key",
+                "rotate",
                 "logs",
                 "environment",
                 "crash_reports"
@@ -1562,12 +1680,181 @@ mod tests {
 
     #[test]
     fn key_names_map_to_android_keycodes() {
-        assert_eq!(key_code(key_name(KeyName::Back)), 4);
         assert_eq!(key_code(key_name(KeyName::Enter)), 66);
+        assert_eq!(key_code(key_name(KeyName::Back)), 4);
         assert_eq!(key_code("nope"), -1);
     }
-}
 
+    /// RNTAP: the Gaten bottom tab bar as the API-34 guest reports it
+    /// (`.cache/rntap/tabs-home.json`, 1080x2400). The real device shows a
+    /// label only for the *active* tab (moto g35 screenshot of the same screen),
+    /// and React Native implements each tab as a text-less pressable whose whole
+    /// name is its `accessibilityLabel` -> `contentDescription`:
+    ///
+    /// ```text
+    /// pressable  text="" cd="Settings"  bounds [689,2151][862,2316] visible clickable
+    /// label Text text="Settings" cd=""   bounds [251,2214][367,2251] NOT visible
+    /// ```
+    fn gaten_tab_bar() -> serde_json::Value {
+        serde_json::json!({
+            "nodes": [{
+                "class": "android.view.ViewGroup",
+                "text": "",
+                "bounds": "[0,2151][1080,2400]",
+                "visibility": 0,
+                "visible": true,
+                "visible_bounds": "[0,2151][1080,2400]",
+                "children": [
+                    {
+                        // The inactive labels the tab bar lays out but does not
+                        // draw: on screen, but not visible to the user.
+                        "class": "b5.g",
+                        "text": "",
+                        "bounds": "[203,2151][532,2188]",
+                        "visibility": 0,
+                        "visible": false,
+                        "visible_bounds": "[203,2151][532,2188]",
+                        "children": [
+                            {
+                                "class": "X4.e",
+                                "text": "Settings",
+                                "bounds": "[416,2151][532,2188]",
+                                "visibility": 0,
+                                "visible": false,
+                                "visible_bounds": "[416,2151][532,2188]"
+                            }
+                        ]
+                    },
+                    {
+                        "class": "b5.g",
+                        "text": "",
+                        "bounds": "[689,2151][862,2316]",
+                        "visibility": 0,
+                        "visible": true,
+                        "visible_bounds": "[689,2151][862,2316]",
+                        "clickable": true,
+                        "content_description": "Settings",
+                        "children": [
+                            {
+                                "class": "X4.e",
+                                "text": "Home",
+                                "bounds": "[362,2214][445,2251]",
+                                "visibility": 0,
+                                "visible": true,
+                                "visible_bounds": "[362,2214][445,2251]"
+                            }
+                        ]
+                    }
+                ]
+            }]
+        })
+    }
+
+    fn frame() -> FrameMeta {
+        FrameMeta::new(1, "2026-11-11T00:00:00Z", "req", 1080, 2400, 400, "h", true)
+    }
+
+    #[test]
+    fn rn_tab_labels_keep_the_frameworks_visibility_answer() {
+        // The `visible` flag is the guest's `View.isVisibleToUser()` answer and is
+        // copied verbatim: the labels the bar lays out but does not draw stay
+        // invisible even though they have on-screen geometry, and the pressable
+        // stays visible. Nothing here invents visibility for a prettier tree.
+        let tree = ui_tree_from_json("com.gaten", frame(), &gaten_tab_bar()).unwrap();
+        let label = tree
+            .find_one(&Selector {
+                content_desc: Some(acos_protocol::TextMatch::exact("Settings")),
+                ..Selector::default()
+            })
+            .expect("the tab pressable is visible and carries the name");
+        assert!(label.visible);
+        assert!(label.clickable);
+        assert_eq!(label.text, "");
+
+        let invisible: Vec<&UiNode> = tree
+            .all_nodes()
+            .into_iter()
+            .filter(|node| node.text == "Settings")
+            .collect();
+        assert_eq!(invisible.len(), 1);
+        assert!(
+            !invisible[0].visible,
+            "a label the bar does not draw is not visible to the user"
+        );
+        assert!(
+            invisible[0].visible_bounds.is_some(),
+            "...and its geometry is still reported, so the reason is not clipping"
+        );
+    }
+
+    #[test]
+    fn tap_by_text_resolves_the_accessible_name_not_a_decorative_label() {
+        // What an agent does on the device: tap the tab by the name it reads.
+        // `find_one` (evidence) still resolves only real text, so the selector
+        // resolution for *input* uses the platform's accessible name.
+        let tree = ui_tree_from_json("com.gaten", frame(), &gaten_tab_bar()).unwrap();
+        let selector = Selector::by_text("Settings");
+        assert!(
+            tree.find_one(&selector).is_none(),
+            "no visible node carries this text: the drawn label is another tab's"
+        );
+        let target = tree
+            .find_input_target(&selector)
+            .expect("the pressable's accessible name is the tab's name");
+        assert_eq!(target.content_desc, "Settings");
+        assert!(target.visible && target.clickable);
+        assert_eq!(target.bounds, Bounds::new(689, 2151, 862, 2316));
+        assert_eq!(target.tap_point(), (775, 2233), "the centre of the tab");
+    }
+
+    #[test]
+    fn a_real_text_match_still_wins_over_a_content_description() {
+        // On the active tab the drawn label *is* visible: the text match must win
+        // (its centre lies inside the tab's pressable, so the touch lands there).
+        let tree = ui_tree_from_json("com.gaten", frame(), &gaten_tab_bar()).unwrap();
+        let target = tree
+            .find_input_target(&Selector::by_text("Home"))
+            .expect("the drawn label");
+        assert_eq!(target.class, "X4.e");
+        assert_eq!(target.bounds, Bounds::new(362, 2214, 445, 2251));
+        assert_eq!(target.tap_point(), (403, 2232));
+    }
+
+    #[test]
+    fn an_off_screen_node_is_never_a_tap_target() {
+        // The GR2 W4 / `negative/offscreen-pager-visible` shape: a warm-mounted
+        // page at x=+displayWidth. It is in the tree (with a name, and with a
+        // content description), it is NOT visible to the user, and it must stay
+        // untappable -- `tap_text` reports ELEMENT_OFFSCREEN for it.
+        let value = serde_json::json!({
+            "nodes": [{
+                "class": "android.widget.TextView",
+                "text": "Hidden",
+                "content_description": "Hidden page action",
+                "bounds": "[1138,800][1318,853]",
+                "visibility": 0,
+                "visible": false,
+                "visible_bounds": ""
+            }, {
+                "class": "android.widget.Button",
+                "text": "",
+                "content_description": "Hidden page action",
+                "bounds": "[1138,900][1318,953]",
+                "visibility": 0,
+                "visible": false,
+                "visible_bounds": ""
+            }]
+        });
+        let tree = ui_tree_from_json("dev.acos.fixtures.offscreenpager", frame(), &value).unwrap();
+        assert!(tree.find_input_target(&Selector::by_text("Hidden")).is_none());
+        assert!(tree
+            .find_input_target(&Selector::by_text("Hidden page action"))
+            .is_none());
+        // ...and the off-screen probe that produces ELEMENT_OFFSCREEN still sees
+        // both nodes, so the refusal names the node instead of "not found".
+        assert!(tree.find_invisible(&Selector::by_text("Hidden")).is_some());
+    }
+}
 #[cfg(test)]
 mod engine_tests {
     use super::*;
@@ -1576,7 +1863,7 @@ mod engine_tests {
 
     use acos_protocol::commands::VerifyRequest;
     use acos_protocol::{RequestBase, ResetScope, Status};
-    use acos_verify::backend::{Capability, LaunchRequest};
+    use acos_verify::backend::{Capability, InputAction, LaunchRequest};
     use acos_verify::{Backend, ManifestInfo};
 
     use crate::engine::fake::FakeSession;
@@ -1616,6 +1903,7 @@ mod engine_tests {
             ),
             scenario: repo().join(scenario).display().to_string(),
             artifacts: artifacts.display().to_string(),
+            overwrite: false,
             reference: None,
             required_fidelity: None,
             engine: acos_protocol::VerifyEngine::Art,
@@ -1642,6 +1930,7 @@ mod engine_tests {
             animations: None,
             insets: None,
             untrusted: false,
+            overwrite: true,
             keep_artifacts: Some("all".to_string()),
             json,
         }
@@ -1827,6 +2116,255 @@ mod engine_tests {
         assert_eq!(tap["status"], "pass");
     }
 
+    /// SE2c: a session whose cached (previous step's) tree carries a different
+    /// layout from a fresh traversal, so a content-mode input can be caught
+    /// aiming at the stale rect — the review's "layout shift between steps lands
+    /// the tap on a neighbour" scenario.
+    ///
+    /// The content signature never hashes `bounds`, so nothing in the settle
+    /// record can tell these two trees apart: only taking a new traversal can.
+    struct ContentResolutionSession {
+        /// Top edge of the Increment button in the **cached** tree (centre y 431).
+        cached_top: i32,
+        /// Top edge in every **fresh** traversal (centre y 631: the button moved
+        /// down 200 px since the previous step).
+        fresh_top: i32,
+        seq: u64,
+        settle_mode: &'static str,
+        cached: Option<ObservedFrame>,
+        calls: Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    fn resolution_tree(seq: u64, top: i32) -> UiTree {
+        let inc = UiNode::new(
+            "n1",
+            "android.widget.Button",
+            Bounds::new(42, top, 273, top + 126),
+        )
+        .with_resource_id("dev.acos.fixtures.counter:id/inc")
+        .with_text("Increment")
+        .clickable(true);
+        let root = UiNode::new(
+            "n0",
+            "android.widget.LinearLayout",
+            Bounds::new(0, 0, 1080, 2400),
+        )
+        .with_children(vec![inc]);
+        UiTree::new(
+            FrameMeta::new(
+                seq,
+                "2026-11-01T00:00:00Z",
+                "fake",
+                1080,
+                2400,
+                420,
+                format!("resolution-{seq}"),
+                true,
+            ),
+            "dev.acos.fixtures.counter",
+            vec![root],
+        )
+    }
+
+    impl ContentResolutionSession {
+        fn new(settle_mode: &'static str) -> Self {
+            let mut session = ContentResolutionSession {
+                cached_top: 368,
+                fresh_top: 568,
+                seq: 0,
+                settle_mode,
+                cached: None,
+                calls: Arc::new(std::sync::Mutex::new(Vec::new())),
+            };
+            session.publish(session.cached_top);
+            session
+        }
+
+        fn calls(&self) -> Arc<std::sync::Mutex<Vec<String>>> {
+            Arc::clone(&self.calls)
+        }
+
+        fn record(&self, call: impl Into<String>) {
+            self.calls.lock().unwrap().push(call.into());
+        }
+
+        fn publish(&mut self, top: i32) -> UiTree {
+            self.seq += 1;
+            let tree = resolution_tree(self.seq, top);
+            let captured_at_ms = 0;
+            self.cached = Some(ObservedFrame {
+                tree: tree.clone(),
+                frame: FrameEvidence {
+                    frame_seq: tree.frame.frame_seq,
+                    previous_seq: tree.frame.frame_seq.saturating_sub(1),
+                    captured_at_ms,
+                    captured_at: "2026-11-01T00:00:00Z".to_string(),
+                    md5: format!("fake-{}-{}", top, tree.frame.frame_seq),
+                    png: crate::engine::fake::TINY_PNG.to_vec(),
+                },
+            });
+            tree
+        }
+    }
+
+    impl SessionBackend for ContentResolutionSession {
+        fn engine(&self) -> Engine {
+            Engine::Art
+        }
+
+        fn mode(&self) -> Mode {
+            Mode::Live
+        }
+
+        fn capabilities(&self) -> SessionCapabilities {
+            SessionCapabilities {
+                launch: true,
+                tree: true,
+                screenshot: true,
+                tap: true,
+                tap_text: true,
+                key: true,
+                reset: true,
+                close: true,
+                ..SessionCapabilities::default()
+            }
+        }
+
+        fn launch(&mut self, _apk: &Path) -> Result<LaunchOutcome, BackendError> {
+            self.record("launch");
+            let tree = self.publish(self.cached_top);
+            Ok(LaunchOutcome {
+                session_id: "s_resolution".to_string(),
+                package: "dev.acos.fixtures.counter".to_string(),
+                frame: Some(tree.frame.clone()),
+                screenshot_png: Some(crate::engine::fake::TINY_PNG.to_vec()),
+                crashed: None,
+                detail: serde_json::json!({"engine": "fake"}),
+            })
+        }
+
+        fn tree(&mut self) -> Result<UiTree, BackendError> {
+            self.record("tree");
+            Ok(self.publish(self.fresh_top))
+        }
+
+        fn fresh_input_tree(&mut self) -> Result<UiTree, BackendError> {
+            self.record("fresh_input_tree");
+            Ok(self.publish(self.fresh_top))
+        }
+
+        fn input_settle_mode(&self) -> &'static str {
+            self.settle_mode
+        }
+
+        fn frame(&mut self) -> Result<ObservedFrame, BackendError> {
+            self.record("frame");
+            self.publish(self.fresh_top);
+            Ok(self.cached.clone().expect("just published"))
+        }
+
+        fn last_frame(&self) -> Option<ObservedFrame> {
+            self.cached.clone()
+        }
+
+        fn last_frame_seq(&self) -> u64 {
+            self.seq
+        }
+
+        fn tap_in_window(
+            &mut self,
+            window: &str,
+            x: i32,
+            y: i32,
+        ) -> Result<(), BackendError> {
+            self.record(format!("tap_in_window({window},{x},{y})"));
+            self.publish(self.fresh_top);
+            Ok(())
+        }
+
+        fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {
+            self.tap_in_window("", x, y)
+        }
+
+        fn tap_text(&mut self, _text: &str) -> Result<(), BackendError> {
+            self.record("tap_text");
+            Ok(())
+        }
+
+        fn type_text(&mut self, _text: &str) -> Result<(), BackendError> {
+            Err(BackendError::unsupported("input.type_text", "the fake has no text"))
+        }
+
+        fn key(&mut self, _key: &str) -> Result<(), BackendError> {
+            self.record("key");
+            self.publish(self.fresh_top);
+            Ok(())
+        }
+
+        fn reset(&mut self) -> Result<(), BackendError> {
+            self.record("reset");
+            self.publish(self.cached_top);
+            Ok(())
+        }
+
+        fn close(&mut self) -> Result<(), BackendError> {
+            self.record("close");
+            Ok(())
+        }
+    }
+
+    /// SE2c: a `settle: content` input resolves its target on ONE fresh
+    /// traversal, never on the previous step's cached tree.
+    ///
+    /// The content signature does not hash `bounds` (a translated view's rect
+    /// drifts ~1 px per traversal), so the cached tree is not position evidence
+    /// for the next action: here it says the Increment button is at y 368-494
+    /// while every fresh traversal says 568-694. Before the fix the content path
+    /// read the cached tree and tapped (157, 431), a neighbour 200 px up.
+    #[test]
+    fn a_content_input_resolves_its_target_on_a_fresh_traversal() {
+        let session = ContentResolutionSession::new("content");
+        let calls = session.calls();
+        let mut backend = EngineBackend::session(Box::new(session));
+        let tap = InputAction::Tap {
+            selector: Some(Selector::by_id("inc")),
+            x: None,
+            y: None,
+        };
+        backend.input(&tap).expect("content tap");
+        let log = calls.lock().unwrap().clone();
+        assert!(
+            log.contains(&"fresh_input_tree".to_string()),
+            "a content input must resolve on a fresh traversal: {log:?}"
+        );
+        assert!(
+            log.iter()
+                .filter(|call| *call == "fresh_input_tree" || *call == "tree")
+                .count()
+                == 1,
+            "a content input resolves on exactly one fresh traversal: {log:?}"
+        );
+        assert!(
+            log.iter().any(|call| call == "tap_in_window(,157,631)"),
+            "the tap must land on the fresh bounds (157,631), not the cached (157,431): {log:?}"
+        );
+
+        // A strict input is unchanged: it keeps its own strict traversal.
+        let session = ContentResolutionSession::new("strict");
+        let calls = session.calls();
+        let mut backend = EngineBackend::session(Box::new(session));
+        backend.input(&tap).expect("strict tap");
+        let log = calls.lock().unwrap().clone();
+        assert!(
+            !log.iter().any(|call| call == "fresh_input_tree"),
+            "a strict input has no fresh-resolution path: {log:?}"
+        );
+        assert!(
+            log.iter().any(|call| call == "tree"),
+            "a strict input resolves on a strict traversal: {log:?}"
+        );
+    }
+
     #[test]
     fn preview_backend_never_yields_a_pass() {
         let dir = artifacts("preview");
@@ -1899,6 +2437,34 @@ mod engine_tests {
         assert_eq!(unsupported["error"]["code"], "UNSUPPORTED_BACKEND");
     }
 
+    /// ROT4: a backend without a rotation command must answer the `rotate`
+    /// step with a structured `UNSUPPORTED_BACKEND` naming `input.rotate`, never
+    /// a silent no-op and never a pass (the frozen Rust VM and the test fake are
+    /// both in this class).
+    #[test]
+    fn rotate_on_a_session_without_the_command_is_a_structured_unsupported() {
+        let mut backend = EngineBackend::session(Box::new(FakeSession::live()));
+        assert!(
+            !backend.session_capabilities().unwrap().rotate,
+            "the fake session must not claim a rotation command"
+        );
+        let error = backend
+            .input(&InputAction::Rotate(
+                acos_protocol::commands::Orientation::Landscape,
+            ))
+            .expect_err("a rotate step without a command must not succeed");
+        match error {
+            BackendError::Unsupported { capability, detail } => {
+                assert_eq!(capability, "input.rotate");
+                assert!(
+                    detail.contains("rotation"),
+                    "the detail must name the missing rotation command: {detail}"
+                );
+            }
+            other => panic!("expected a structured unsupported, got {other:?}"),
+        }
+    }
+
     #[test]
     fn art_session_capabilities_report_the_protocol_gaps() {
         let backend = EngineBackend::session(Box::new(FakeSession::live()));
@@ -1939,6 +2505,7 @@ mod engine_tests {
             isolation: acos_protocol::identity::IsolationLevel::Process,
             display: acos_protocol::identity::DisplaySpec::offscreen(1080, 2400, 420),
             cause_id: "req_engine_test:launch:0".to_string(),
+            settle: acos_protocol::scenario::StepSettle::Strict,
         }
     }
 
@@ -1997,7 +2564,7 @@ mod engine_tests {
             assert_eq!(error.code(), ErrorCode::NoFreshFrame);
             assert!(
                 error.to_string().contains(STALE_FRAME),
-                "the error must name the stale frame ({selector:?}): {error}"
+                "the error must name the stale frame ({selector}): {error}"
             );
             assert!(!error.status().is_pass());
         }

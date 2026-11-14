@@ -20,6 +20,8 @@ acos-protocol = { path = "../acos-protocol" }
 acos-runtime = { path = "../acos-runtime" }
 acos-sandbox = { path = "../acos-sandbox" }
 libc = "0.2"
+# SHOTZ: decode + downscale an image for a bounded MCP image reply.
+png = "0.17"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

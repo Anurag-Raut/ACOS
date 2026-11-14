@@ -41,7 +41,9 @@ dependencies = [
  "acos-render",
  "acos-sandbox",
  "acos-services",
+ "fdeflate",
  "libc",
+ "png",
  "serde",
  "serde_json",
  "thiserror",
@@ -63,6 +65,7 @@ name = "acos-cli"
 version = "0.2.0"
 dependencies = [
  "acos-apk",
+ "acos-art",
  "acos-dex",
  "acos-jni",
  "acos-mcp",
@@ -142,6 +145,7 @@ dependencies = [
  "acos-sandbox",
  "acos-test-support",
  "libc",
+ "png",
  "serde",
  "serde_json",
  "thiserror",

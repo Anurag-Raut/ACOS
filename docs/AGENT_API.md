@@ -14,8 +14,12 @@ The contract is normative in these places:
 | `scenarios/*.yaml` | executable examples with ART-reference values |
 | this document | workflow + interpretation rules |
 
-Every command writes exactly **one JSON object** to stdout (logs to stderr) and
-the same object is returned as MCP tool content.
+Every command writes exactly **one JSON object** to stdout and the same object is
+returned as MCP tool content. With `--json`, **stdout is only that JSON
+document** — no summary, no progress lines. Human diagnostics (and, on a
+non-pass run, the one-line `verify: CODE (class): message` trailer) go to
+**stderr**, so `acos verify … --json > out.json 2>&1` produces invalid JSON.
+Redirect stderr separately (`2>err.txt`) when you capture the envelope.
 
 ---
 
@@ -43,6 +47,8 @@ cat out/hello-views/steps/03-assert_text.json
 cat out/hello-views/events.jsonl
 
 # 5. Fix the app or the scenario, then rerun into a fresh directory
+#    (a run owns its artifacts dir: reusing another run's dir is INVALID_ARGUMENT;
+#     pass --overwrite only when you mean to discard that evidence)
 ```
 
 Rules for the loop:
@@ -449,7 +455,8 @@ Common errors: `ELEMENT_NOT_FOUND`, `SESSION_NOT_FOUND`, `TIMEOUT`,
 ### 8.6.1 Settle modes: `fast` navigation vs `strict` verification (P1)
 
 `acos_tap`, `acos_text`, `acos_key` and an input `acos_action` accept an
-optional `settle` argument:
+optional `settle` argument (`strict` default, `fast` navigation,
+`content` content-stable — see §8.6.4a):
 
 ```json
 {"base": {"request_id": "req_6", "session_id": "s_views"},
@@ -514,7 +521,7 @@ Every input reply carries a `settle` object (also copied into
 
 | field | meaning |
 |---|---|
-| `mode` | `fast` or `strict`; the mode this observation was taken with |
+| `mode` | `fast`, `strict` or `content`; the mode this observation was taken with |
 | `settled` | `true` only when a settled observation was returned; `false` on a settle timeout (the tree/frame are still present for inspection; `acos verify` fails the step as `TIMEOUT`; see §8.6.4) or the documented no-fresh-frame failure |
 | `ack_ms` | publish → this gesture's own `FINISHED` acknowledgment. Focus/touch-mode acks queued at window attach are drained and discarded, never counted |
 | `first_change_ms` | publish → the first tree-probe sample that differs from the pre-action baseline (`null` when no change was seen / no baseline) |
@@ -612,6 +619,10 @@ for every tree verb remains `strict`, so existing callers see no change.
   newest for the confirmation window. This is the mode every assertion and
   pixel check runs on. `settle_timeout_ms` (§8.6.4) bounds it; a timeout still
   returns the latest tree with `settled:false`.
+* **`content`** — SE2 (§8.6.4a): the reply binds the first traversal, then proves
+  the tree content stable for the window. It is tree-only (a content-settled
+  frame is never pixel evidence), so `pixels:true` with `settle:"content"` is
+  refused with `INVALID_ARGUMENT`.
 * **`fast`** — the reply binds the app's **first traversal** from a probe sample
   whose C1 generation is at least the generation current when the request began
   (P3b's freshness rule). No quiet window, no second probe period. A fast launch
@@ -707,6 +718,100 @@ On an indeterminate `ProgressBar` (or any forever-animating screen) use
 full default deadline. If the screen is animating for real, `animations:"off"`
 (see §8.6.5) is the functional-check answer; do not turn it on for
 animation/transition tests.
+
+### 8.6.4a Content-stable settle: the forever-animating screen (SE2, ADR-0026 #3)
+
+Some screens animate forever in a way that does not change what the user can
+read: an endless Reanimated/SVG loop behind a form, a spinner beside a heading.
+Gaten's welcome/onboarding pages are the reference (GR3 §4.3, backlog G3e: a
+10 s looping timeline plus a 200 ms auto-advance retry). On such a screen the
+strict event rule never reaches a verdict — it is an honest `TIMEOUT` — and
+`fast` is navigation only, so no text could be *proven*.
+
+`settle:"content"` is the opt-in third rule (scenario step or serve verb,
+**strict stays the default everywhere**). It is settled when the UI tree
+**content signature** is unchanged across fresh traversals spanning at least
+**300 ms**, with at least **2 traversals**, inside the step's timeout:
+
+* the signature is a hash over, in visible/tree order, each node's
+  `(class, resource_id, text, content_desc, hint, checked, selected, enabled,
+  focused, clickable, scrollable, visible, window, package)` plus the child
+  structure and the tree's `package`/`truncated`/`text_available`. Nothing else
+  is hashed, and no field is silently dropped from that list. A text value that
+  an animation keeps updating (a countdown, a progress percentage) therefore
+  changes the signature: the screen is *not* content-stable and the step is a
+  `TIMEOUT`, which is the correct answer;
+* **geometry (`bounds`, `visible_bounds`) is deliberately not hashed.** On the
+  screen this rule exists for (ADR-0026 decision 3), an animating view's
+  reported rect drifts ~1 px from one fresh traversal to the next while every
+  content field is identical, so hashing it would make the window impossible to
+  span. The consequence is the other way round: geometry is **never evidence**
+  on a content-settled frame. An assertion that names a rectangle fails closed
+  with `ASSERTION_FAILED`, `details.reason:"content_settle_geometry"` — in
+  *either* position, the assertion's own `bounds` **or** `selector.bounds`
+  (which is compared exactly), for `assert_text`, `assert_visible`,
+  `assert_not_visible` and `assert_state`. Assert without a rectangle, or settle
+  strictly;
+* the window is configurable upward with `ACOS_CONTENT_SETTLE_WINDOW_MS`
+  (never below 300 ms); the step's `settle_timeout_ms` (default 10 s) bounds
+  the wait;
+* pixels are **never** consulted. Content stability says nothing about the
+  pixels, which may still be animating.
+
+Where it is accepted:
+
+| surface | `settle: content` |
+|---|---|
+| scenario `tap` / `type` / `key` | yes — the action is delivered, then its tree content is proven stable |
+| scenario `launch` | yes — the first tree is bound by the content rule, and its frame is **not** pixel evidence |
+| serve/MCP `acos_observe`, `acos_observe_tree`, `acos_launch`, `acos_reset` | yes (tree-only; `pixels:true` with `content` is refused like `fast`) |
+| serve/MCP `acos_tap`, `acos_text`, `acos_key`, `acos_action` | yes |
+| `acos_assert` | no argument needed: an assertion after a content step evaluates the **content-settled bound tree** (no strict re-traversal, which would only time out) |
+| scenario `assert_screenshot` / `assert_region` (pixel/frame claims) | **never** — a pixel assertion bound only by content settle fails closed, see below |
+| any assertion naming `bounds` (the assertion's or the selector's) | **never** — geometry is not hashed, so a rectangle claim on a content-settled frame is `ASSERTION_FAILED` / `content_settle_geometry`; assert without a rectangle or settle strictly |
+| `wait_for` / `tap` / `type` with `selector.bounds` | allowed: these resolve their selector on a traversal they take themselves (a content input's resolution traversal is proven fresh), not on the bound frame |
+
+Provenance: the step result and every observation it backs records the rule
+that bound it. A content settle reply is
+
+```json
+"settle": {"mode": "content", "settled": true, "bound": "content-stable",
+           "window_ms": 300, "traversals": 3,
+           "signature": "0f0f0f0f0f0f0f0f", "frame_seq": 41,
+           "elapsed_ms": 812, "pixel_evidence": false}
+```
+
+`window_ms`, `traversals` and `signature` are the measured facts; the same
+object is written into `steps/<i>-<kind>.json` (`settle`). A timeout carries
+`settled:false`, `bound:"content-timeout"`, the last signature and
+`reason:"content-not-stable"`, and the step fails `TIMEOUT` like any other
+settle timeout.
+
+**Pixel assertions stay honest.** A screenshot comparison, a region pixel check
+or any other frame/pixel claim cannot be justified by content stability. In
+`acos verify`, `assert_screenshot`/`assert_region` bound to a content-settled
+frame fail closed with `ASSERTION_FAILED`, `details.reason:
+"content_settle_pixel"`, `details.pixel_evidence: false` and the content
+`settle` record; in serve, `pixels:true` together with `settle:"content"` is
+`INVALID_ARGUMENT`. A fresh strict `capture` (or any strict step) rebinds the
+frame and pixel assertions work again — pixels are settled by pixels.
+
+**Bounds claims stay honest too.** Content stability is text/nodes/state, not
+geometry. `assert_text`/`assert_visible`/`assert_not_visible`/`assert_state`
+with a `bounds` — inside the assertion *or* inside its `selector` — bound to a
+content-settled frame fail closed with `ASSERTION_FAILED`, `details.reason:
+"content_settle_geometry"`, `details.geometry_evidence: false` and
+`details.bounds_claim.{assertion,selector}`. This is the false-pass class it
+closes: a drifting node reports `0,101,…` instead of `0,100,…`, so
+`assert_not_visible {selector: {text: "Error", bounds: [0,100,200,140]}}` would
+otherwise report "node absent" and pass while the banner is on screen.
+
+`settle:"fast"` is unchanged: it is immediate navigation and never backs a
+pass. `expect_change: true` (a pixel claim) with `settle: content` is
+`INVALID_SCENARIO`, exactly like `fast`. If a backend cannot supply a content
+record for a step that asked for `settle: content`, the step fails closed with
+`UNSUPPORTED_ASSERTION`, `details.reason:"content_settle_unhonored"` — the rule
+is never silently downgraded to strict/fast.
 
 ### 8.6.5 `animations:"on"|"off"` (P12)
 
@@ -1140,11 +1245,13 @@ non-passes. The same flag is available per action on the serve/MCP input tools
 
 ```text
 out/
+  run.json                  # who owns this directory (request_id + started_at)
   verdict.json
   steps/00-launch.json
   steps/01-wait_for.json
   steps/02-assert_text.json
   frames/<frame_seq>.png
+  frames/<frame_seq>-<capture-name>.png   # named copy for every `capture` step
   tree/<frame_seq>.json
   logs/logcat.txt
   events.jsonl              # one JSON Event per line, increasing seq
@@ -1159,12 +1266,16 @@ out/
 (`03-assert_text.json`). Artifact paths in the verdict are **relative** and must
 not contain `..`.
 
+`run.json` is written **before** the first step and names the run that owns the
+directory (`request_id`). See §10.4 for the ownership rule.
+
 `verdict.json`:
 
 ```json
 {
   "schema_version": 1,
   "verdict": "pass",
+  "status": "pass",
   "fidelity": "native-runtime",
   "required_fidelity": "native-runtime",
   "backend": "acos-native",
@@ -1203,14 +1314,35 @@ not contain `..`.
       "duration_ms": 4,
       "frame_seq": 2,
       "assertions": [
-        {"kind": "text", "passed": true, "matched_node_ids": ["n4"]}
+        {
+          "kind": "text",
+          "passed": true,
+          "matched_node_ids": ["n4"],
+          "expected": {"selector": {"id": "result"}, "text": {"exact": "Hello, World! clicks: 0"}, "bounds": [42, 612, 392, 663]},
+          "actual": {"node": "n4", "text": "Hello, World! clicks: 0", "hint": "", "bounds": [42, 612, 392, 663], "visible": true}
+        }
       ],
       "evidence": [
         {"kind": "frame", "path": "frames/2.png"},
         {"kind": "tree", "path": "tree/2.json"}
       ]
+    },
+    {
+      "index": 3,
+      "step": "capture",
+      "status": "pass",
+      "duration_ms": 9,
+      "frame_seq": 3,
+      "name": "meanings-collapsed",
+      "assertions": [],
+      "evidence": [
+        {"kind": "frame", "path": "frames/3.png"},
+        {"kind": "capture", "path": "frames/3-meanings-collapsed.png"},
+        {"kind": "tree", "path": "tree/3.json"}
+      ]
     }
   ],
+  "captures": {"meanings-collapsed": "frames/3-meanings-collapsed.png"},
   "failure": null,
   "resources": {"wall_ms": 1250, "cpu_ms": 980, "peak_rss_bytes": 75497472, "memory_mib": 72, "frames_captured": 4, "events": 44, "sessions": 1, "steps": 24},
   "reproducer": {
@@ -1229,6 +1361,25 @@ not contain `..`.
 }
 ```
 
+`status` and `verdict` carry the same answer in the envelope's vocabulary
+(`pass`, `fail`, `unsupported`, `blocked`, `error`, `timeout`, `crash`).
+`verdict` is the historical field; `status` is the one every other ACOS reply
+uses, so a `jq .status` check works on `verdict.json` too. They are validated to
+agree (a mismatch is `ARTIFACTS_INVALID`).
+
+Every assertion result echoes **`expected` and `actual` on pass as well as on
+failure**: the selector, matcher, bounds and flags that were asserted, and the
+node text/hint/bounds/flags that were seen. A reviewer can therefore prove *what*
+was checked from the artifacts alone, not only that it held. On failure the same
+data is also in `diff` (with `path` and a human `detail`).
+
+A `capture` step's own `name` is persisted in three places: the step JSON
+(`"name"`), the PNG file name (`frames/<frame_seq>-<name>.png`, sanitised to
+`[A-Za-z0-9._-]`, max 64 chars, with the frame sequence kept for uniqueness) and
+`verdict.json`'s `captures` map (`{name: path}`). The canonical
+`frames/<frame_seq>.png` is still written (it is what `frame_seq` names); the
+named copy is the same bytes under a second name.
+
 A non-pass verdict has `failure` populated:
 
 ```json
@@ -1246,7 +1397,8 @@ A non-pass verdict has `failure` populated:
 
 `validate_artifacts_dir(path)` (in `acos-protocol`) enforces:
 
-* `verdict.json` exists, parses, and has `schema_version: 1`.
+* `verdict.json` exists, parses, and has `schema_version: 1`; `status` and
+  `verdict` agree.
 * Reproducer hashes are non-empty and match `app.sha256` / `scenario.sha256`;
   flags are sorted and de-duplicated.
 * For a claimed **pass**:
@@ -1257,7 +1409,9 @@ A non-pass verdict has `failure` populated:
   * every `frame_seq` has `frames/<seq>.png` and `tree/<seq>.json`;
   * `steps/NN-<kind>.json` exists and parses for every step;
   * `events.jsonl`, `resources.json`, `repro.json`, `repro.sh` exist;
-    `events.jsonl` lines and `resources.json`/`repro.json` parse.
+    `events.jsonl` lines and `resources.json`/`repro.json` parse;
+  * every `captures` path exists, and every step that carries a `name` has a
+    `captures` entry (a name without a file is a dangling declaration).
 * A missing artifact for a claimed pass makes the verdict **invalid**
   (`ARTIFACTS_INVALID`), even if the JSON says `pass`.
 
@@ -1327,6 +1481,39 @@ acos artifacts gc [--dir <out>] [--older-than <dur>] [--keep-last <n>] [--dry-ru
 * `--dry-run` prints the same freed-byte figure and removes nothing. The text
   output ends with `N run(s) pruned, M kept, X freed`; `--json` returns the same
   as the per-run list.
+
+### 10.4 One run owns its artifacts directory (`--overwrite`)
+
+Before this rule, a second `acos verify --artifacts <same dir>` appended to the
+first run's `steps/` and `frames/`; a frame number from the first run could be
+mistaken for the second run's evidence. That is the stale-evidence failure mode
+an agent must never ship, so:
+
+* A run **claims** its directory before writing anything (`run.json` names the
+  owning `request_id`).
+* A non-empty directory written by another run is refused with
+  **`INVALID_ARGUMENT`**. The message and `details` name the previous run id
+  (`details.previous_run_id`, `details.artifacts`, `details.run_id`), and the
+  `hint` says to use a fresh directory or `--overwrite`.
+* `--overwrite` (MCP `acos_verify {"overwrite": true}`) is the explicit consent:
+  the existing contents are removed first, then the new run writes its own. The
+  new `run.json` records `overwrote_run_id`, and the verdict carries
+  `artifacts_overwrote_run` plus a note.
+* The **default** directory (no `--artifacts`: `out/<scenario stem>`) belongs to
+  the scenario, so a rerun replaces the previous run there exactly as
+  `--overwrite` would (recorded in `run.json` / the verdict). Only a directory
+  you name explicitly is refused.
+* An **empty** directory (for example one a runner just `mkdir`-ed) is claimed
+  without complaint. A partially written directory from a crashed run is not
+  fresh either: it is refused as "an incomplete earlier run" (no run id to name).
+* `repro.sh` therefore takes the replay's artifacts directory as its required
+  first argument (`sh repro.sh /path/to/new-dir`) and never writes back into the
+  directory it came from.
+
+The check is in the CLI entry point, so every front door shares it: the CLI,
+`acos serve`'s delegated `verify`, and MCP `acos_verify` (which runs
+`acos verify`). A refused run writes nothing and leaves the previous evidence
+byte-identical.
 
 ---
 
@@ -1675,14 +1862,17 @@ The scenario runner lives in `crates/acos-verify` and is exposed as
 `acos verify`. It is the entry point an agent calls in the verification loop:
 
 ```bash
-acos verify <scenario.yaml> [--apk <apk>] [--artifacts <dir>] \
+acos verify <scenario.yaml> [--apk <apk>] [--artifacts <dir>] [--overwrite] \
   [--keep-artifacts all|referenced|none-on-pass] \
   [--reference <art-ref-dir>] [--required-fidelity <f>] [--flag <f>] [--json]
 ```
 
 * `--apk` overrides the scenario's `app`; otherwise the scenario path is used.
 * `--artifacts` defaults to `out/<scenario stem>` and receives the full evidence
-  directory (§10).
+  directory (§10). The run owns that directory. A rerun into the default
+  directory replaces the previous run; a non-empty directory you name explicitly
+  is refused (`INVALID_ARGUMENT`, naming the previous run id) unless
+  `--overwrite` is passed (§10.4).
 * `--reference` selects the **reference-replay** backend (below). Without it the
   *native* backend runs.
 * `--keep-artifacts` selects artifact retention (§10.2). Default `referenced`
@@ -1694,6 +1884,10 @@ acos verify <scenario.yaml> [--apk <apk>] [--artifacts <dir>] \
   pass.
 * Exactly one JSON envelope is written to stdout and the same object is returned
   by MCP `acos_verify`. A non-pass verdict exits non-zero.
+* With `--json`, **stdout is only the envelope**. Progress, warnings and the
+  on-failure summary line go to stderr; `2>&1` therefore corrupts the JSON —
+  capture stderr in its own file (`2>err.txt`). In text mode the summary is on
+  stdout.
 
 ### 17.1 The `Backend` trait
 

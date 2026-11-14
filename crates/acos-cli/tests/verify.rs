@@ -133,6 +133,112 @@ fn verify_json_matches_the_envelope_schema() {
     let _ = std::fs::remove_dir_all(&artifacts);
 }
 
+/// Run the same reference-replay verify twice into one `--artifacts` directory.
+fn run_reference_verify(artifacts: &Path, extra: &[&str]) -> std::process::Output {
+    let mut command = Command::cargo_bin("acos").unwrap();
+    command
+        .arg("verify")
+        .arg(workspace().join("scenarios/negative/wrong-text.yaml"))
+        .arg("--apk")
+        .arg(require_hello_views_apk())
+        .arg("--reference")
+        .arg(workspace().join("fixtures/reference/hello-views/art-api34-x86_64"))
+        .arg("--artifacts")
+        .arg(artifacts)
+        .arg("--json");
+    for arg in extra {
+        command.arg(arg);
+    }
+    command.output().expect("run acos verify")
+}
+
+#[test]
+fn a_second_run_into_the_same_artifacts_dir_is_refused_until_overwrite() {
+    let artifacts = scratch("owned");
+    let first = run_reference_verify(&artifacts, &[]);
+    assert!(!first.status.success(), "the negative scenario fails by design");
+    let first_verdict: Value =
+        serde_json::from_slice(&std::fs::read(artifacts.join("verdict.json")).unwrap())
+            .expect("first run wrote a verdict");
+    let first_run = first_verdict["request_id"]
+        .as_str()
+        .expect("a run id")
+        .to_string();
+    // The marker names the owner before any step runs.
+    let marker: Value =
+        serde_json::from_slice(&std::fs::read(artifacts.join("run.json")).unwrap())
+            .expect("run.json");
+    assert_eq!(marker["request_id"], first_run.as_str());
+
+    // A second run into the same directory is a structured refusal, not a
+    // silent interleave of two runs' steps/frames.
+    let second = run_reference_verify(&artifacts, &[]);
+    assert!(!second.status.success(), "the second run must fail");
+    let envelope: Value = serde_json::from_slice(&second.stdout).expect("JSON envelope");
+    assert_eq!(envelope["ok"], false);
+    assert_eq!(envelope["error"]["code"], "INVALID_ARGUMENT");
+    let details = &envelope["error"]["details"];
+    assert_eq!(details["previous_run_id"], first_run.as_str());
+    assert_eq!(details["overwrite"], false);
+    assert!(
+        envelope["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains(&first_run),
+        "the refusal names the previous run: {}",
+        envelope["error"]["message"]
+    );
+    // The refused run wrote nothing: the first run's evidence is intact and
+    // still the directory's verdict.
+    let after_refusal: Value =
+        serde_json::from_slice(&std::fs::read(artifacts.join("verdict.json")).unwrap()).unwrap();
+    assert_eq!(after_refusal["request_id"], first_run.as_str());
+
+    // `--overwrite` is the explicit consent: the old evidence is replaced and
+    // the new marker records which run it replaced.
+    let third = run_reference_verify(&artifacts, &["--overwrite"]);
+    let third_envelope: Value = serde_json::from_slice(&third.stdout).expect("JSON envelope");
+    assert_eq!(third_envelope["status"], "fail"); // the scenario fails by design
+    let third_verdict: Value =
+        serde_json::from_slice(&std::fs::read(artifacts.join("verdict.json")).unwrap()).unwrap();
+    assert_ne!(third_verdict["request_id"], first_run.as_str());
+    assert_eq!(
+        third_verdict["artifacts_overwrote_run"],
+        first_run.as_str()
+    );
+    let marker: Value =
+        serde_json::from_slice(&std::fs::read(artifacts.join("run.json")).unwrap()).unwrap();
+    assert_eq!(marker["overwrote_run_id"], first_run.as_str());
+    assert_eq!(
+        marker["request_id"],
+        third_verdict["request_id"].as_str().unwrap()
+    );
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+#[test]
+fn json_stdout_is_one_document_and_human_diagnostics_go_to_stderr() {
+    let artifacts = scratch("stdout-only");
+    let output = run_reference_verify(&artifacts, &[]);
+    // stdout: exactly one JSON document, nothing else.
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let envelope: Value = serde_json::from_str(stdout.trim()).expect("stdout is exactly JSON");
+    assert_eq!(envelope["status"], "fail");
+    assert!(
+        !stdout.contains("verify: fail"),
+        "no human summary on stdout in --json mode: {stdout}"
+    );
+    // stderr: the human line a triaging agent reads, including the human
+    // selector form (never a Rust Debug dump).
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("verify: ASSERTION_FAILED"), "{stderr}");
+    assert!(
+        !stderr.contains("Selector {") && !stderr.contains("TextMatch {"),
+        "no Rust Debug dump on stderr: {stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
 #[test]
 fn verify_without_apk_uses_the_scenario_app() {
     let artifacts = scratch("no-apk");
@@ -153,4 +259,43 @@ fn verify_without_apk_uses_the_scenario_app() {
     let value: Value = serde_json::from_slice(&output.stdout).expect("stdout is JSON");
     assert_eq!(value["status"], "fail");
     let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+/// FB4 follow-up: without `--artifacts` the run writes `out/<scenario stem>`,
+/// and the rerun loop replaces the previous run there (recorded), instead of
+/// being refused on the second iteration.
+#[test]
+fn a_rerun_into_the_default_artifacts_dir_replaces_the_previous_run() {
+    let cwd = scratch("default-dir");
+    std::fs::create_dir_all(&cwd).unwrap();
+    let run = || {
+        Command::cargo_bin("acos")
+            .unwrap()
+            .current_dir(&cwd)
+            .arg("verify")
+            .arg(workspace().join("scenarios/negative/wrong-text.yaml"))
+            .arg("--apk")
+            .arg(require_hello_views_apk())
+            .arg("--reference")
+            .arg(workspace().join("fixtures/reference/hello-views/art-api34-x86_64"))
+            .arg("--json")
+            .output()
+            .expect("run acos verify")
+    };
+    let dir = cwd.join("out/wrong-text");
+    let first = run();
+    assert!(!first.status.success(), "the negative scenario fails by design");
+    let first_run = serde_json::from_slice::<Value>(&std::fs::read(dir.join("verdict.json")).unwrap())
+        .unwrap()["request_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let second = run();
+    let envelope: Value = serde_json::from_slice(&second.stdout).expect("JSON envelope");
+    assert_eq!(envelope["status"], "fail", "a rerun is a real run, not a refusal: {envelope}");
+    assert_ne!(envelope["error"]["code"], "INVALID_ARGUMENT");
+    let verdict: Value = serde_json::from_slice(&std::fs::read(dir.join("verdict.json")).unwrap()).unwrap();
+    assert_ne!(verdict["request_id"], first_run.as_str());
+    assert_eq!(verdict["artifacts_overwrote_run"], first_run.as_str());
+    let _ = std::fs::remove_dir_all(&cwd);
 }
