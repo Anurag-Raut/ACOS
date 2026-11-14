@@ -29,7 +29,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use crate::daemon::{self, DaemonClient};
 
@@ -68,6 +68,9 @@ pub struct PrivateDaemon {
     child: Child,
     client: Option<DaemonClient>,
     engine: String,
+    /// Set once the child has been reaped: a second `shutdown` must not signal
+    /// the pid again (SERVELEAK2/F4: a reaped pid can be recycled).
+    stopped: bool,
 }
 
 impl std::fmt::Debug for PrivateDaemon {
@@ -104,6 +107,13 @@ impl PrivateDaemon {
             .arg(&socket)
             .arg("--engine")
             .arg(engine)
+            // SERVELEAK's own-owner binding: a daemon spawned for one process
+            // must exit when that process is gone, even after `kill -9` (the
+            // accept loop checks the owner once a second). `PR_SET_PDEATHSIG`
+            // below is the kernel-level backstop; this one also covers a parent
+            // whose *thread* outlived it or a `PDEATHSIG` the kernel dropped.
+            .arg("--owner-pid")
+            .arg(std::process::id().to_string())
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -122,6 +132,15 @@ impl PrivateDaemon {
                 if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM as libc::c_ulong) != 0 {
                     return Err(io::Error::last_os_error());
                 }
+                // FB5: the server blocks SIGTERM/SIGINT so its `sigwait` thread
+                // can run the same teardown as stdin EOF. A child inherits that
+                // mask across exec, and the daemon's own SIGTERM handler would
+                // never fire — so the daemon gets an unblocked mask back.
+                let mut set: libc::sigset_t = std::mem::zeroed();
+                libc::sigemptyset(&mut set);
+                libc::sigaddset(&mut set, libc::SIGTERM);
+                libc::sigaddset(&mut set, libc::SIGINT);
+                libc::pthread_sigmask(libc::SIG_UNBLOCK, &set, std::ptr::null_mut());
                 Ok(())
             });
         }
@@ -132,6 +151,7 @@ impl PrivateDaemon {
             child,
             client: None,
             engine: engine.to_string(),
+            stopped: false,
         };
         daemon.wait_ready(Duration::from_secs(30))?;
         Ok(daemon)
@@ -198,18 +218,32 @@ impl PrivateDaemon {
         self.child.id()
     }
 
-    /// Destroy held sessions, terminate the daemon and reap it.
+    /// Terminate the daemon and reap it (idempotent).
     ///
-    /// The daemon's own `SIGTERM` handler closes every ART guest, so the
-    /// explicit destroy calls are best effort (and make the teardown visible in
-    /// the daemon log) before the signal.
+    /// The sessions it still holds are destroyed by the daemon itself: `acos
+    /// serve` handles `SIGTERM` by running `engine.shutdown()`, which closes
+    /// every ART guest and proves its process group gone before the socket
+    /// disappears (SERVELEAK). The explicit per-session destroys happen *before*
+    /// this in [`crate::SessionBackend`]'s teardown, through the owned-session
+    /// set and the launch token, so nothing here has to guess at ownership —
+    /// and this function deliberately never lists-and-destroys "everything the
+    /// daemon knows about", which is not a proof of ownership (SERVELEAK2).
     pub fn shutdown(&mut self) {
-        if let Some(mut client) = self.client.take() {
-            let _ = destroy_all(&mut client);
+        if self.stopped {
+            return;
         }
-        // SAFETY: `kill` on a pid we own; a failure (already exited) is ignored.
-        unsafe {
-            libc::kill(self.child.id() as libc::pid_t, libc::SIGTERM);
+        self.stopped = true;
+        self.client.take();
+        // Signal only a child that is provably still unreaped: `try_wait`
+        // returns the remembered status once the child was reaped (for example
+        // by `wait_ready` when the daemon died before its socket was ready), and
+        // a reaped pid may already belong to another process. While the child is
+        // unreaped (`Ok(None)`) its pid cannot have been recycled.
+        if matches!(self.child.try_wait(), Ok(None)) {
+            // SAFETY: `kill` on our own child, which is not yet reaped.
+            unsafe {
+                libc::kill(self.child.id() as libc::pid_t, libc::SIGTERM);
+            }
         }
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
@@ -262,30 +296,6 @@ fn spawn_on_lifetime_thread(mut command: Command) -> io::Result<Child> {
     }
 }
 
-/// Ask the daemon for its sessions, then destroy each one. Best effort.
-fn destroy_all(client: &mut DaemonClient) -> io::Result<()> {
-    let envelope = client.call(daemon::TOOL_LIST, &json!({}))?;
-    let ids: Vec<String> = envelope
-        .result()
-        .and_then(|result| result.get("sessions"))
-        .and_then(Value::as_array)
-        .map(|sessions| {
-            sessions
-                .iter()
-                .filter_map(|session| session.get("session_id").and_then(Value::as_str))
-                .map(ToString::to_string)
-                .collect()
-        })
-        .unwrap_or_default();
-    for id in ids {
-        let _ = client.call(
-            "acos_destroy",
-            &json!({"base": {"request_id": "req_mcp_shutdown", "session_id": id}}),
-        );
-    }
-    Ok(())
-}
-
 /// `$XDG_RUNTIME_DIR/acos/mcp-<pid>-<rand>` (falling back like the daemon does).
 fn private_runtime_dir() -> io::Result<PathBuf> {
     static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -302,10 +312,41 @@ fn private_runtime_dir() -> io::Result<PathBuf> {
     )))
 }
 
+/// Create the per-process directory 0700 and make sure the **base** it sits in
+/// is ours (FB5: the `/tmp/acos-<uid>` fallback is verified, never assumed).
 fn prepare_dir(dir: &Path) -> io::Result<()> {
-    std::fs::create_dir_all(dir)?;
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
+    if let Some(base) = dir.parent() {
+        // The base is either the user's runtime dir (repaired to 0700) or the
+        // `/tmp/acos-<uid>` fallback (verified, never repaired by us).
+        if base == daemon::fallback_runtime_dir() {
+            daemon::ensure_private_dir(base)?;
+        } else {
+            daemon::ensure_runtime_base(base)?;
+        }
+    }
+    daemon::ensure_private_dir(dir)
+}
+
+/// A private daemon whose child is already reaped and whose socket is gone.
+///
+/// A test seam for the FB5 no-restart rule: teardown must not respawn a dead
+/// private daemon, and this is the state "the daemon died before shutdown".
+#[cfg(test)]
+pub(crate) fn dead_for_test(dir: PathBuf) -> PrivateDaemon {
+    let child = Command::new("/bin/true")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn /bin/true");
+    PrivateDaemon {
+        socket: dir.join(daemon::SOCKET_FILE),
+        dir,
+        child,
+        client: None,
+        engine: ENGINE_ART.to_string(),
+        stopped: false,
+    }
 }
 
 #[cfg(test)]

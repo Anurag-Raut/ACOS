@@ -39,6 +39,7 @@ pub mod safety;
 pub mod server;
 pub mod session;
 pub mod session_backend;
+pub mod signals;
 pub mod transport;
 
 pub use backend::{Backend, BackendConfig, BackendInfo, CallContext, Capabilities, CliBackend};

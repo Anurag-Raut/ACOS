@@ -31,8 +31,14 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
 
 1. `acos_doctor` — host preflight; fix every failing check's `fix:` first.
 2. `acos_inspect {"apk": ...}` — static: package, launcher, SDK, DEX/native.
-3. `acos_launch {"apk": ...}` — boot it, read `reached_stage`; the first
-   non-ok rung carries the blocker.
+3. `acos_launch {"apk": ...}` — boot it (paths must be **absolute**: the
+   server's cwd is not your shell's, and a relative path is
+   `INVALID_ARGUMENT` with `details.resolved_path`), read `reached_stage`; the
+   first non-ok rung carries the blocker. Each rung carries `ms`. Pass
+   `"label": "..."` and, if you will park the session, `"idle_ttl_s": N`: the
+   server destroys its own sessions after the idle TTL (default 600 s,
+   `ACOS_SESSION_IDLE_TTL_S`) and the next call on an expired one returns
+   `SESSION_NOT_FOUND` with `details.reason=idle_ttl_expired` and the TTL.
 4. `acos_observe_tree` — nodes with `id`/`text`/`bounds`; act on those.
 5. `acos_tap` / `acos_text` / `acos_key` / `acos_swipe` — then re-observe.
 6. `acos_logs` — the app's own words; `launched`/`stage_reached` included.
@@ -349,7 +355,7 @@ you need to compare pixels, and the inline preview for "is it the right screen".
 | `APP_CRASHED`, `APP_NOT_RESPONDING`, `JAVA_EXCEPTION` | the app crashed or hung | read `details.root_cause` (deepest `caused by:`) and `acos_logs`; fix the app |
 | `APK_*`, `AXML_MALFORMED`, `ARSC_MALFORMED`, `DEX_*`, `ELF_MALFORMED`, `NATIVE_*` | the build artifact is broken | rebuild/re-sign/repackage, then `acos inspect` again. Not an app verdict |
 | `UNSUPPORTED_ABI` | the APK ships native code but no `lib/x86_64/` | rebuild with the x86_64 ABI, or run the pure-Java path |
-| `SESSION_NOT_FOUND`, `SESSION_BUSY`, `STALE_REF` | session misuse | create the session first, serialise mutations on one session, re-observe before using a node |
+| `SESSION_NOT_FOUND`, `SESSION_BUSY`, `STALE_REF` | session misuse — or the session **expired**: `details.reason=idle_ttl_expired` means the server destroyed it after `details.idle_ttl_s` seconds of idleness | create/relaunch the session (`acos_launch`), serialise mutations on one session, re-observe before using a node; pass a longer `idle_ttl_s` if you intend to park it |
 | `TIMEOUT`, `NO_FRESH_FRAME`, `RESOURCE_LIMIT`, `RAM_GUARD`, `RAM_ABORT` | a deadline or budget was hit | raise the explicit budget, wait for the next frame, reduce concurrency. A timeout is never a pass |
 | `HOST_MEMORY_LOW` | **no** session was started: `MemAvailable` minus this session's budget would leave the host under 10% of `MemTotal` | free memory (destroy a session, clear scratch) and call again. Nothing is queued; `error.details` carries `mem_available_mib`, `mem_total_mib`, `requested_mib`, `min_free_mib` |
 | `HOST_MEMORY_LIMIT` | a memory ceiling was hit **while** the guest ran | reduce concurrency or run on a host with more headroom; the guest was capped by its cgroup |

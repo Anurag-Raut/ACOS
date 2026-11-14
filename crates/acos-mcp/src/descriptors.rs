@@ -363,6 +363,22 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     single-threaded child session process that enters the \
                                     sandbox before launching; later observe/action calls are \
                                     proxied to that confined child."
+                },
+                "label": {
+                    "type": "string",
+                    "description": "FB5: a name for this session, echoed in the launch reply and in \
+                                    `acos_status` (`sessions[].label`). Give each session you park a \
+                                    label you can recognise — the server destroys its own idle \
+                                    sessions, and the label is how you tell which one went."
+                },
+                "idle_ttl_s": {
+                    "type": "integer", "minimum": 0,
+                    "description": "FB5: seconds of idleness before this server destroys the session \
+                                    (default 600 = 10 min, or ACOS_SESSION_IDLE_TTL_S; `0` disables). \
+                                    Any later MCP call on the session renews the clock. An expired \
+                                    session's guest is gone and the next call returns \
+                                    SESSION_NOT_FOUND with `details.reason=idle_ttl_expired` and the \
+                                    TTL, so a parked session fails loudly instead of eating memory."
                 }
             })),
         ),
@@ -505,7 +521,11 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
         "acos_status" => (
             "Report whether the held session has launched, the last launch stage reached, and the \
              published frame count. Use it to tell 'app never started' from 'app started but no \
-             window/frame yet' before reading logs or observing.",
+             window/frame yet' before reading logs or observing. Also lists **this server's** \
+             sessions under `sessions[]` (FB5): `session_id`, `label`, `package`, `activity`, \
+             `age_s`, `idle_s`, the applicable `idle_ttl_s`, the guest's `guest_pid` and \
+             `guest_rss_kb`, and `live`. Use it to find and clean up every session you left \
+             behind — the server also reclaims its own after the idle TTL.",
             with_base(json!({})),
         ),
         "acos_doctor" => (

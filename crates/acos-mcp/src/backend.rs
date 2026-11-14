@@ -134,6 +134,42 @@ pub trait Backend: Send + Sync + 'static {
     fn session_call(&self, _name: &str, _args: &Value, _ctx: &CallContext) -> Option<Envelope> {
         None
     }
+    /// Destroy the sessions this process created (SERVELEAK).
+    ///
+    /// Called once when the transport ends (stdin EOF on stdio), so a client
+    /// that exits cannot leave the backend holding a live guest it will never
+    /// address again. A backend that holds no sessions keeps the default no-op;
+    /// sessions a *different* process created (a shared daemon's) are never
+    /// touched.
+    fn shutdown(&self) {}
+}
+
+/// A shared backend is a backend: `main` holds the `Arc` for its SIGTERM
+/// handler while the server serves from the same instance (FB5).
+impl<T: Backend + ?Sized> Backend for std::sync::Arc<T> {
+    fn call(&self, command: CommandName, args: &Value, ctx: &CallContext) -> Envelope {
+        (**self).call(command, args, ctx)
+    }
+
+    fn capabilities(&self) -> Capabilities {
+        (**self).capabilities()
+    }
+
+    fn refresh_capabilities(&self) -> Capabilities {
+        (**self).refresh_capabilities()
+    }
+
+    fn info(&self) -> BackendInfo {
+        (**self).info()
+    }
+
+    fn session_call(&self, name: &str, args: &Value, ctx: &CallContext) -> Option<Envelope> {
+        (**self).session_call(name, args, ctx)
+    }
+
+    fn shutdown(&self) {
+        (**self).shutdown();
+    }
 }
 
 /// Configuration for [`CliBackend`].
@@ -607,6 +643,13 @@ impl Backend for CliBackend {
 
         if let Err(reason) = safety::check_arg_limits(args, ctx.max_arg_chars) {
             return invalid_argument(&request_id, "$", &reason);
+        }
+        // FB5: a relative path names a file in the *client's* cwd, which is not
+        // this server's cwd. Refuse it and say what the server would have used.
+        if let Some(envelope) =
+            safety::relative_path_envelope(&request_id, args, Fidelity::StaticAnalysis)
+        {
+            return envelope;
         }
 
         let caps = self.capabilities();

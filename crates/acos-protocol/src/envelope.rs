@@ -601,6 +601,14 @@ impl Envelope {
         self.result.as_ref()
     }
 
+    /// Mutable access to the result, for a server that annotates a **forwarded**
+    /// reply with its own bookkeeping (FB5: `label`/`idle_ttl_s` on a launch,
+    /// and the owning server's session list on `acos_status`). It never invents
+    /// a result on a failure envelope.
+    pub fn result_mut(&mut self) -> Option<&mut Value> {
+        self.result.as_mut()
+    }
+
     /// The metrics.
     pub fn metrics(&self) -> Metrics {
         self.metrics

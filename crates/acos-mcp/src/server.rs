@@ -267,6 +267,11 @@ impl<B: Backend> Server<B> {
             }
         }
         self.shutdown_and_join();
+        // SERVELEAK: after stdin EOF the process is about to go away, so the
+        // sessions it created are destroyed here (and with them their guests)
+        // instead of being left to whatever holds them. Nothing another process
+        // created is touched.
+        self.backend.shutdown();
         Ok(())
     }
 

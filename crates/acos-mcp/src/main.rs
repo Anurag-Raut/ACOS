@@ -104,8 +104,29 @@ fn main() {
 
     // stdin EOF is the MCP client exiting: tear the private daemon (and every
     // ART guest it holds) down before this process exits.
+    //
+    // FB5: a client that is *killed* never closes stdin, and a supervisor stops
+    // the server with SIGTERM — neither reaches that path, so the same teardown
+    // also runs from a `sigwait` thread. The backend is shared (`Arc`) so the
+    // handler and the server are the same instance: exactly the sessions this
+    // server launched are destroyed, and nothing a foreign daemon holds.
     let teardown = backend.art_daemon_handle();
+    let backend = Arc::new(backend);
+    if let Err(error) = acos_mcp::signals::install_teardown({
+        let backend = Arc::clone(&backend);
+        move || Backend::shutdown(&*backend)
+    }) {
+        log(&format!(
+            "signal teardown unavailable ({error}); stdin EOF still tears down"
+        ));
+    }
+    // FB5: the idle reaper (default 10 min; `ACOS_SESSION_IDLE_TTL_S` or
+    // `acos_launch {idle_ttl_s}` overrides it) holds only a `Weak`.
+    backend.start_idle_reaper();
     serve(backend);
+    // FB5b/L3: a SIGTERM racing stdin EOF owns a teardown that may still be
+    // running; returning now would end the process mid-teardown.
+    acos_mcp::signals::join_teardown();
     teardown.shutdown();
 }
 
