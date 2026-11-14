@@ -411,6 +411,12 @@ pub struct LaunchStep {
     /// P12b: strict/fast settle deadline for the first tree (milliseconds).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settle_timeout_ms: Option<u64>,
+    /// SE2: settle rule for the launch's first tree (`strict` default,
+    /// `content` for a screen whose tree is stable while its pixels animate).
+    /// A launch's frame is never pixel evidence under `content`, so a later
+    /// pixel assertion bound to it fails closed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle: Option<StepSettle>,
 }
 
 /// `wait_for`.
@@ -426,10 +432,14 @@ pub struct WaitForStep {
     pub require_visible: bool,
 }
 
-/// The settle rule an input step asks for. `strict` is the default and the
-/// only rule an assertion may use; `fast` is the navigation rule for a screen
-/// that never settles (a JS auto-advance timer, an endless animation). It is
-/// accepted only on input steps and is labelled in the step evidence.
+/// The settle rule an input step asks for. `strict` is the default and
+/// evidence for every assertion; `fast` is the navigation rule for a screen
+/// that never settles (a JS auto-advance timer, an endless animation) and
+/// never backs a pass; `content` (SE2, ADR-0026 decision 3) is the
+/// content-stable rule for a screen that animates forever in pixels: it is
+/// settled when the UI tree content signature is unchanged for a bounded
+/// window. Content settle backs UI/text assertions only; a pixel/frame
+/// assertion bound to it fails closed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum StepSettle {
@@ -438,6 +448,10 @@ pub enum StepSettle {
     Strict,
     /// Fast navigation settle (never assertion evidence).
     Fast,
+    /// Content-stable settle: the UI tree content signature is unchanged for
+    /// the bounded window even if pixels keep animating (SE2). Backs UI/text
+    /// assertions; never a pixel/frame assertion.
+    Content,
 }
 
 /// `tap`.
@@ -697,6 +711,17 @@ const fn default_timeout_ms() -> u64 {
     5_000
 }
 
+/// A negative scenario's pinned failure (see [`Scenario::expect_error`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ExpectedError {
+    /// Error code the run must report (`ASSERTION_FAILED`, `TIMEOUT`, ...).
+    pub code: String,
+    /// Optional `details.reason` the failing step's error must carry (for
+    /// example `content_settle_pixel` or `content-not-stable`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
 /// A complete scenario.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Scenario {
@@ -742,6 +767,15 @@ pub struct Scenario {
     /// it is never for animation/transition testing. Launch-time only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub animations: Option<String>,
+    /// SE2b: the exact failure a **negative** scenario must produce.
+    ///
+    /// `expectation: fail` only says "the run did not pass"; it accepts ANY
+    /// failing step, so a negative control can go red (or green) for the wrong
+    /// reason and still look like proof. `expect_error` pins the error code and,
+    /// optionally, the `details.reason` of the failure. A run that fails with
+    /// another code/reason is a harness error, never a successful negative.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect_error: Option<ExpectedError>,
     /// W7b: per-session app-window inset model (`carve`/`report`).
     ///
     /// Selects the model for this scenario exactly as `ACOS_WM_INSETS` does,
@@ -933,12 +967,23 @@ fn validate_expect_change(
     expect_change: bool,
     settle: Option<StepSettle>,
 ) {
-    if expect_change && matches!(settle, Some(StepSettle::Fast)) {
+    // SE2: `expect_change` is a pixel claim. A content-stable frame is never
+    // pixel evidence (the pixels may still be animating), so the combination
+    // is rejected at parse time exactly like fast.
+    if expect_change && matches!(settle, Some(StepSettle::Fast | StepSettle::Content)) {
+        let mode = if matches!(settle, Some(StepSettle::Content)) {
+            "content"
+        } else {
+            "fast"
+        };
         validation.push(
             format!("{path}.expect_change"),
-            "`expect_change: true` cannot be combined with `settle: fast`: a fast frame may be \
-             mid-animation and is never verification evidence. Drop `settle` (strict is the \
-             default) or use `settle: strict`; an unverifiable pass is never accepted.",
+            format!(
+                "`expect_change: true` cannot be combined with `settle: {mode}`: that rule is \
+                 not pixel evidence (the frame may still be animating), so the claim could never \
+                 be verified. Drop `settle` (strict is the default) or use `settle: strict`; an \
+                 unverifiable pass is never accepted."
+            ),
         );
     }
 }
@@ -1038,6 +1083,25 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
     }
     if scenario.steps.is_empty() {
         v.push("$.steps", "scenario must contain at least one step");
+    }
+    // SE2b: a pinned failure only makes sense for a negative scenario. A
+    // `pass` scenario that pins an error code would be self-contradictory, and
+    // an empty code could never be satisfied - both are refused here rather than
+    // silently ignored at run time.
+    if let Some(expected) = &scenario.expect_error {
+        if expected.code.trim().is_empty() {
+            v.push("$.expect_error.code", "expect_error.code must not be empty");
+        }
+        if expected.reason.as_deref().is_some_and(|r| r.trim().is_empty()) {
+            v.push("$.expect_error.reason", "expect_error.reason must not be empty");
+        }
+        if scenario.expectation == Expectation::Pass {
+            v.push(
+                "$.expect_error",
+                "expect_error pins a failure; the scenario must declare `expectation: fail` \
+                 (or non_pass)",
+            );
+        }
     }
 
     let mut capture_names: BTreeMap<&str, usize> = BTreeMap::new();

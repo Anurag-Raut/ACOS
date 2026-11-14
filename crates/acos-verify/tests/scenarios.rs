@@ -412,6 +412,7 @@ fn slice_observation(
         screenshot_png: Some(screenshot.to_vec()),
         crashed: None,
         input: None,
+        settle: None,
     }
 }
 
@@ -811,6 +812,7 @@ impl WaitBackend {
             screenshot_png: Some(b"waiting".to_vec()),
             crashed: None,
             input: None,
+            settle: None,
         }
     }
 }

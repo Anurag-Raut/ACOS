@@ -884,6 +884,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
         extras: BTreeMap::new(),
         clear_state: true,
         settle_timeout_ms: None,
+        settle: None,
     }));
     steps.push(Step {
         wait_for: Some(WaitForStep {
@@ -1077,6 +1078,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
         capabilities: vec!["ui.text".to_string()],
         budgets: Some(ResourceBudget::wall_ms(1000)),
         expectation: Expectation::Pass,
+        expect_error: None,
         steps,
         output: OutputOptions::default(),
         animations: None,

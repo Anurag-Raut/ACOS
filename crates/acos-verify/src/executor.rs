@@ -17,7 +17,7 @@ use acos_protocol::assertion::{
 };
 use acos_protocol::commands::ResetScope;
 use acos_protocol::events::{Event, EventBody};
-use acos_protocol::scenario::{Expectation, Scenario, Step, StepRef, StepSettle};
+use acos_protocol::scenario::{Expectation, ExpectedError, Scenario, Step, StepRef, StepSettle};
 use acos_protocol::ui::Bounds;
 use acos_protocol::verdict::{
     AppIdentity, ArtifactRef, FailureClassification, Reproducer, ResourceReport, ScenarioIdentity,
@@ -87,6 +87,9 @@ struct StepExec {
     observation: Option<SessionObservation>,
     produced_frame: Option<acos_protocol::FrameMeta>,
     session: Option<String>,
+    /// SE2: the settle record the step bound its frame with, when the backend
+    /// reported one (a `launch` carries it in its detail).
+    settle: Option<serde_json::Value>,
 }
 
 impl StepExec {
@@ -98,6 +101,7 @@ impl StepExec {
             observation: None,
             produced_frame: None,
             session: None,
+            settle: None,
         }
     }
 
@@ -119,6 +123,7 @@ impl StepExec {
             observation: None,
             produced_frame: None,
             session: None,
+            settle: None,
         }
     }
 
@@ -137,6 +142,7 @@ impl StepExec {
             observation: None,
             produced_frame: None,
             session: None,
+            settle: None,
         }
     }
 
@@ -166,6 +172,7 @@ impl StepExec {
             observation: None,
             produced_frame: None,
             session: None,
+            settle: None,
         }
     }
 
@@ -180,6 +187,7 @@ impl StepExec {
             observation: None,
             produced_frame: None,
             session: None,
+            settle: None,
         }
     }
 
@@ -191,6 +199,7 @@ impl StepExec {
             observation: None,
             produced_frame: None,
             session: None,
+            settle: None,
         }
     }
 }
@@ -233,6 +242,9 @@ pub fn run_scenario(
     // navigation only, so an assertion may not describe that frame; a strict
     // `wait_for`/`capture`/input must bind a new one first.
     let mut bound_is_fast = false;
+    // SE2: how the bound frame was settled, when the backend reported it. A
+    // `content` bound frame may back UI/text assertions but never a pixel one.
+    let mut bound_settle: Option<serde_json::Value> = None;
 
     // A log fetch that failed (for example the untrusted-run refusal from
     // `TrustGuard`) is remembered so an `assert_log` step reports that exact
@@ -312,6 +324,17 @@ pub fn run_scenario(
         let cause_id = format!("{}:{}:{}", options.request_id, step.kind(), index);
         let exec = if bound_is_fast && binds_to_bound_frame(step) {
             fast_bound_failure(step.kind())
+        } else if let Some(failure) = content_settle_pixel_failure(step, bound_settle.as_ref()) {
+            // SE2: content stability says nothing about pixels (they may still
+            // be animating). A pixel/frame assertion bound to a content-settled
+            // frame is a failed binding, never a comparison.
+            failure
+        } else if let Some(failure) = content_settle_geometry_failure(step, bound_settle.as_ref()) {
+            // SE2b: nor does it say anything about geometry - a view translated
+            // by an animation changes its reported rect every frame (measured on
+            // the reference screen). A bounds claim on a content-settled frame is
+            // a failed binding too.
+            failure
         } else {
             execute_step(
             backend,
@@ -331,6 +354,15 @@ pub fn run_scenario(
             last_frame_seq,
             &mut capabilities_used,
         )
+        };
+        // ---- SE2: a requested content settle must be honoured ----------------
+        // If a step asked for `settle: content` and the backend returned a
+        // frame with no content record (or another rule's record), the step did
+        // not get the rule it asked for. Fail closed instead of letting a
+        // strict/fast observation stand in for a content-stable one.
+        let exec = match content_settle_unhonored(step, &exec) {
+            Some(failure) => failure,
+            None => exec,
         };
         // ---- SE1: the opt-in `expect_change` rule ---------------------------
         // P12 keeps "a step whose action changed no pixels still settles and
@@ -372,11 +404,11 @@ pub fn run_scenario(
         step_result.error = exec.error.clone();
         // P12: a tap/type/key reply's settle block (including pixels_changed)
         // is step evidence. It is never the pass/fail rule by itself.
-        step_result.settle = exec
-            .observation
-            .as_ref()
-            .and_then(|observation| observation.input.as_ref())
-            .and_then(|delivery| delivery.settle.clone());
+        // SE2b: prefer the per-action record. `observation.settle` is the
+        // session's sticky bound record and can describe an earlier traversal or
+        // an earlier action's rule; the input's own record is the one this step
+        // actually applied.
+        step_result.settle = step_settle(exec.observation.as_ref(), exec.settle.as_ref());
 
         // Write evidence and declare it.
         let step_artifact = acos_protocol::step_file_name(index, step.kind());
@@ -421,6 +453,9 @@ pub fn run_scenario(
                 if frame_advancing_step(step) {
                     bound_frame_seq = Some(observation.frame.frame_seq);
                     bound_is_fast = fast_input_step(step);
+                    bound_settle = observation.settle.clone().or_else(|| {
+                        observation.input.as_ref().and_then(|input| input.settle.clone())
+                    });
                 }
                 previous_observation = Some(observation.clone());
             } else if let Some(frame) = &exec.produced_frame {
@@ -428,6 +463,7 @@ pub fn run_scenario(
                 if matches!(step.as_step(), Some(StepRef::Launch(_))) {
                     bound_frame_seq = Some(frame.frame_seq);
                     bound_is_fast = false;
+                    bound_settle = exec.settle.clone();
                 }
             }
         }
@@ -465,7 +501,13 @@ pub fn run_scenario(
     }
 
     // ---- expectation handling --------------------------------------------
-    apply_expectation(scenario.expectation, &mut status, &mut failure, &mut notes);
+    apply_expectation(
+        scenario.expectation,
+        scenario.expect_error.as_ref(),
+        &mut status,
+        &mut failure,
+        &mut notes,
+    );
 
     // ---- fidelity handling (only relevant to a claim of pass) -------------
     let achieved = backend.fidelity();
@@ -660,6 +702,7 @@ pub fn run_scenario(
 /// harness failure instead.
 fn apply_expectation(
     expectation: Expectation,
+    expect_error: Option<&ExpectedError>,
     status: &mut Status,
     failure: &mut Option<FailureClassification>,
     notes: &mut Vec<String>,
@@ -714,6 +757,60 @@ fn apply_expectation(
             }
         }
     }
+    // SE2b: a negative that declares the failure it expects must produce
+    // exactly that failure. "It went red somehow" is not proof: a control that
+    // fails for another reason (an unapplied settle rule, a stale frame, a
+    // harness timeout) would look green while proving nothing.
+    let Some(expected) = expect_error else {
+        return;
+    };
+    if *status == Status::Pass {
+        // The `fail`/`non_pass` branches above already converted a pass into a
+        // harness error; nothing to pin.
+        return;
+    }
+    let actual_code = failure.as_ref().map(|failure| failure.code.as_str());
+    let actual_reason = failure.as_ref().and_then(|failure| {
+        failure
+            .error
+            .details
+            .as_ref()
+            .and_then(|details| details.get("reason"))
+            .and_then(serde_json::Value::as_str)
+    });
+    let code_matches = actual_code == Some(expected.code.as_str());
+    let reason_matches = expected
+        .reason
+        .as_deref()
+        .map(|reason| actual_reason == Some(reason))
+        .unwrap_or(true);
+    if code_matches && reason_matches {
+        notes.push(format!(
+            "negative control failed exactly as declared ({} / {:?})",
+            expected.code, expected.reason
+        ));
+        return;
+    }
+    let detail = format!(
+        "the scenario declares `expect_error: {{code: {}, reason: {:?}}}` but the run failed with \
+         code {:?} / reason {:?}; a negative that fails for another reason proves nothing",
+        expected.code, expected.reason, actual_code, actual_reason
+    );
+    let error = ProtocolError::new(ErrorCode::Internal, detail.clone())
+        .with_hint("Fix the scenario or the rule it is meant to exercise. Do not widen expect_error to accept this failure.")
+        .with_details(serde_json::json!({
+            "reason": "negative_expectation_mismatch",
+            "expected": {"code": expected.code, "reason": expected.reason},
+            "actual": {"code": actual_code, "reason": actual_reason},
+        }));
+    notes.push("negative_expectation_mismatch".to_string());
+    *status = Status::Error;
+    *failure = Some(FailureClassification {
+        code: ErrorCode::Internal,
+        step_index: failure.as_ref().and_then(|failure| failure.step_index),
+        summary: detail,
+        error,
+    });
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -769,12 +866,19 @@ fn execute_step(
                 isolation: scenario.isolation,
                 display: scenario.display,
                 cause_id: cause_id.to_string(),
+                settle: launch.settle.unwrap_or_default(),
             };
             match backend.launch(&request) {
                 Ok(outcome) => {
                     let mut exec = StepExec::pass();
                     exec.produced_frame = outcome.frame.clone();
                     exec.session = Some(outcome.session_id.clone());
+                    // SE2: the launch's settle record travels with the frame
+                    // binding so a pixel assertion on a content-launched frame
+                    // fails closed.
+                    exec.settle = outcome.detail.get("settle").cloned().filter(|settle| {
+                        settle.get("mode").and_then(serde_json::Value::as_str) == Some("content")
+                    });
                     if let Some(record) = outcome.crashed {
                         let error = BackendError::Crash {
                             exception: record.exception.clone(),
@@ -922,6 +1026,7 @@ fn execute_step(
             }
             backend.set_settle_timeout(tap.settle_timeout_ms);
             backend.set_input_settle(matches!(tap.settle, Some(StepSettle::Fast)));
+            backend.set_input_content_settle(matches!(tap.settle, Some(StepSettle::Content)));
             let action = InputAction::Tap {
                 selector: tap.selector.clone(),
                 x: tap.x,
@@ -936,6 +1041,7 @@ fn execute_step(
             }
             backend.set_settle_timeout(ty.settle_timeout_ms);
             backend.set_input_settle(matches!(ty.settle, Some(StepSettle::Fast)));
+            backend.set_input_content_settle(matches!(ty.settle, Some(StepSettle::Content)));
             let action = InputAction::Type {
                 selector: ty.selector.clone(),
                 text: ty.text.clone(),
@@ -950,6 +1056,7 @@ fn execute_step(
             }
             backend.set_settle_timeout(key.settle_timeout_ms);
             backend.set_input_settle(matches!(key.settle, Some(StepSettle::Fast)));
+            backend.set_input_content_settle(matches!(key.settle, Some(StepSettle::Content)));
             input_step(
                 backend,
                 &InputAction::Key(key.key),
@@ -1380,6 +1487,7 @@ fn observation_binding_error(backend: &str, observation: &SessionObservation) ->
         observation: None,
         produced_frame: None,
         session: None,
+        settle: None,
     })
 }
 
@@ -1421,6 +1529,7 @@ fn meaningful_error(observation: &SessionObservation) -> Option<StepExec> {
         observation: None,
         produced_frame: None,
         session: None,
+        settle: None,
     })
 }
 
@@ -1626,6 +1735,293 @@ fn fast_bound_failure(kind: &str) -> StepExec {
     })
 }
 
+/// SE2b: the settle record a step's evidence publishes.
+///
+/// Order matters: the action's own record first (it names the rule this step
+/// applied and the frame it bound), then the session's sticky bound record, then
+/// a record the backend attached to the step itself.
+fn step_settle(
+    observation: Option<&SessionObservation>,
+    exec_settle: Option<&serde_json::Value>,
+) -> Option<serde_json::Value> {
+    observation
+        .and_then(|observation| {
+            observation
+                .input
+                .as_ref()
+                .and_then(|input| input.settle.clone())
+                .or_else(|| observation.settle.clone())
+        })
+        .or_else(|| exec_settle.cloned())
+}
+
+/// SE2: did a step request `settle: content` without receiving a content
+/// record?
+///
+/// A backend that cannot implement the content rule must not answer as if it
+/// had: the scenario asked for content-stable evidence, and a strict/fast (or
+/// absent) record is not that. This is the one place the mode is enforced from
+/// the scenario side, so no future backend can silently downgrade it.
+fn content_settle_unhonored(step: &Step, exec: &StepExec) -> Option<StepExec> {
+    let requested = match step.as_step() {
+        Some(StepRef::Tap(tap)) => matches!(tap.settle, Some(StepSettle::Content)),
+        Some(StepRef::Type(ty)) => matches!(ty.settle, Some(StepSettle::Content)),
+        Some(StepRef::Key(key)) => matches!(key.settle, Some(StepSettle::Content)),
+        Some(StepRef::Launch(launch)) => matches!(launch.settle, Some(StepSettle::Content)),
+        _ => false,
+    };
+    if !requested || exec.status != Status::Pass {
+        return None;
+    }
+    let settle = exec
+        .observation
+        .as_ref()
+        .and_then(|observation| {
+            // SE2b: the per-action record first. `observation.settle` is the
+            // session-sticky bound record, which may describe an earlier
+            // traversal; the input's own record describes *this* action.
+            observation
+                .input
+                .as_ref()
+                .and_then(|input| input.settle.clone())
+                .or_else(|| observation.settle.clone())
+        })
+        .or_else(|| exec.settle.clone());
+    // SE2b: a mode string alone is not proof. The record must say the content
+    // window settled AND name the very frame the observation carries; a record
+    // from another traversal (or one that timed out) never honours the step.
+    // The frame identity is the observation's own frame; a `launch` step hands
+    // back `produced_frame` instead of a full observation, so that frame is the
+    // one the record must name.
+    let observation_frame_seq = exec
+        .observation
+        .as_ref()
+        .map(|observation| observation.frame.frame_seq)
+        .or_else(|| exec.produced_frame.as_ref().map(|frame| frame.frame_seq));
+    let honoured = settle.as_ref().is_some_and(|settle| {
+        settle.get("mode").and_then(serde_json::Value::as_str) == Some("content")
+            && settle.get("settled").and_then(serde_json::Value::as_bool) == Some(true)
+            && settle.get("frame_seq").and_then(serde_json::Value::as_u64)
+                == observation_frame_seq
+    });
+    if honoured {
+        return None;
+    }
+    let mut failure = StepExec::failed(Evaluated {
+        result: AssertionResult {
+            kind: "settle".to_string(),
+            passed: false,
+            diff: Some(AssertionDiff {
+                expected: serde_json::json!({"settle": "content"}),
+                actual: settle.clone().unwrap_or(serde_json::Value::Null),
+                path: Some("step.settle".to_string()),
+                detail: Some(
+                    "the step asked for `settle: content` but the backend returned no settled \
+                     content record for the frame it bound, so the content-stable rule was not \
+                     applied to this observation"
+                        .to_string(),
+                ),
+            }),
+            matched_node_ids: Vec::new(),
+            message: None,
+        },
+        error: Some(BackendError::Protocol {
+            code: ErrorCode::UnsupportedAssertion,
+            detail: format!(
+                "{}: `settle: content` was requested but this backend supplied no content \
+                 settle record",
+                step.kind()
+            ),
+            hint: Some(
+                "An unapplied settle rule never passes. Run the step on the ART engine \
+                 (which implements `settle: content`), or drop the option and say what rule \
+                 actually backs the observation."
+                    .to_string(),
+            ),
+            details: Some(serde_json::json!({
+                "reason": "content_settle_unhonored",
+                "step_kind": step.kind(),
+                "observation_frame_seq": observation_frame_seq,
+                "settle": settle,
+            })),
+        }),
+    });
+    failure.observation = exec.observation.clone();
+    Some(failure)
+}
+
+/// SE2: a pixel/frame assertion whose bound frame was only content-settled.
+///
+/// `settle: content` proves that the UI tree content (text, nodes, bounds,
+/// state) stopped changing for the window. It says nothing about the pixels,
+/// which may still be animating, so a screenshot comparison, a region pixel
+/// check or any other frame-pixel claim backed only by content stability is a
+/// failed binding. The structured failure names the reason
+/// (`content_settle_pixel`) and the content record that bound the frame, so the
+/// caller cannot mistake it for a pixel mismatch.
+fn content_settle_pixel_failure(
+    step: &Step,
+    bound_settle: Option<&serde_json::Value>,
+) -> Option<StepExec> {
+    let settle = bound_settle?;
+    if settle.get("mode").and_then(serde_json::Value::as_str) != Some("content") {
+        return None;
+    }
+    if !pixel_assertion_step(step) {
+        return None;
+    }
+    let detail = format!(
+        "{}: the bound frame was settled by `settle: content` (UI tree content stable), which \
+         is not pixel evidence - the pixels may still be animating",
+        step.kind()
+    );
+    let mut exec = StepExec::failed(Evaluated {
+        result: AssertionResult {
+            kind: "frame_binding".to_string(),
+            passed: false,
+            diff: Some(AssertionDiff {
+                expected: serde_json::json!({"settle": "strict", "pixel_evidence": true}),
+                actual: serde_json::json!({"settle": "content", "pixel_evidence": false}),
+                path: Some("frame.settle".to_string()),
+                detail: Some(
+                    "content settle proves the tree's text/nodes/bounds/state stopped changing; \
+                     it never proves the pixels stopped changing"
+                        .to_string(),
+                ),
+            }),
+            matched_node_ids: Vec::new(),
+            message: None,
+        },
+        error: Some(BackendError::Protocol {
+            code: ErrorCode::AssertionFailed,
+            detail,
+            hint: Some(
+                "A pixel/frame assertion needs a pixel-settled frame: use `settle: strict` \
+                 (the default) and let the screen stop animating, or assert on the UI tree \
+                 (assert_text/assert_visible/assert_state) which content settle may back."
+                    .to_string(),
+            ),
+            details: Some(serde_json::json!({
+                "reason": "content_settle_pixel",
+                "step_kind": step.kind(),
+                "settle": settle,
+                "pixel_evidence": false,
+            })),
+        }),
+    });
+    exec.observation = None;
+    Some(exec)
+}
+
+/// SE2b/SE2c: a **geometry** claim bound only to a content-settled frame.
+///
+/// The content signature cannot hash `bounds`/`visible_bounds`: on the very
+/// screen ADR-0026 decision 3 names, a Reanimated timeline translates four views
+/// and their reported rects differ by 1 px from one fresh traversal to the next
+/// while every content field is identical
+/// (`.cache/se2b/probe-trees.json`). Geometry therefore animates with the
+/// pixels, so an assertion that reads it needs a strict (geometry-settled)
+/// frame.
+///
+/// **Both** places a step can name a rectangle are geometry claims, and both are
+/// refused (SE2c): an assertion's own `bounds` (`assert_text`/`assert_visible`/
+/// `assert_not_visible`) **and** `selector.bounds`, which
+/// [`acos_protocol::ui::Selector::matches_node`] compares exactly. The selector
+/// position is the dangerous one: on a still-drifting node the reported rect is
+/// `0,101,…` instead of `0,100,…`, so the selector does not match, and
+/// `assert_not_visible {selector: {text: "Error", bounds: [0,100,200,140]}}`
+/// would report "node absent" — a pass — while the banner is on screen. The
+/// same drift makes a *matching* selector-backed pass a single-frame
+/// coincidence. `assert_state` has no `bounds` of its own but takes a selector,
+/// so it is enumerated too.
+///
+/// Steps that *resolve* a target (`wait_for`, `tap`, `type`) are deliberately
+/// NOT refused here: they compare their selector against a fresh traversal they
+/// take themselves, not against the bound frame this guard is about (a content
+/// input's own resolution is proven fresh by SE2c's fresh-resolution rule in the
+/// engine).
+fn content_settle_geometry_failure(
+    step: &Step,
+    bound_settle: Option<&serde_json::Value>,
+) -> Option<StepExec> {
+    let settle = bound_settle?;
+    if settle.get("mode").and_then(serde_json::Value::as_str) != Some("content") {
+        return None;
+    }
+    // Every assertion that takes a selector is enumerated; a new one must be
+    // added here or its bounds claim would ride an un-hashed frame.
+    let (claims_assertion_bounds, claims_selector_bounds) = match step.as_step() {
+        Some(StepRef::AssertText(assertion)) => {
+            (assertion.bounds.is_some(), assertion.selector.bounds.is_some())
+        }
+        Some(StepRef::AssertVisible(assertion) | StepRef::AssertNotVisible(assertion)) => {
+            (assertion.bounds.is_some(), assertion.selector.bounds.is_some())
+        }
+        Some(StepRef::AssertState(assertion)) => (false, assertion.selector.bounds.is_some()),
+        _ => (false, false),
+    };
+    if !(claims_assertion_bounds || claims_selector_bounds) {
+        return None;
+    }
+    let detail = format!(
+        "{}: the bound frame was settled by `settle: content` (UI tree content stable), which \
+         is not geometry evidence - an animating view's reported bounds change every frame",
+        step.kind()
+    );
+    let mut exec = StepExec::failed(Evaluated {
+        result: AssertionResult {
+            kind: "frame_binding".to_string(),
+            passed: false,
+            diff: Some(AssertionDiff {
+                expected: serde_json::json!({"settle": "strict", "geometry_evidence": true}),
+                actual: serde_json::json!({"settle": "content", "geometry_hashed": false}),
+                path: Some("frame.settle".to_string()),
+                detail: Some(
+                    "content settle proves the tree's text/nodes/state stopped changing; a \
+                     translated view's bounds keep changing with the pixels"
+                        .to_string(),
+                ),
+            }),
+            matched_node_ids: Vec::new(),
+            message: None,
+        },
+        error: Some(BackendError::Protocol {
+            code: ErrorCode::AssertionFailed,
+            detail,
+            hint: Some(
+                "A bounds claim needs a geometry-settled frame: use `settle: strict` (the \
+                 default) and wait for the animation to stop. Assert text/state instead, which \
+                 content settle may back. A `bounds` inside the selector is a geometry claim \
+                 too - drop it (the text/id/class match is enough) or settle strictly."
+                    .to_string(),
+            ),
+            details: Some(serde_json::json!({
+                "reason": "content_settle_geometry",
+                "step_kind": step.kind(),
+                "settle": settle,
+                "signature_geometry_fields": crate::settle::SIGNATURE_GEOMETRY_FIELDS,
+                "geometry_evidence": false,
+                // Which of the two rectangle positions made the claim.
+                "bounds_claim": {
+                    "assertion": claims_assertion_bounds,
+                    "selector": claims_selector_bounds,
+                },
+            })),
+        }),
+    });
+    exec.observation = None;
+    Some(exec)
+}
+
+/// Steps that assert about the frame's pixels (never satisfied by a
+/// content-settled frame alone).
+fn pixel_assertion_step(step: &Step) -> bool {
+    matches!(
+        step.as_step(),
+        Some(StepRef::AssertScreenshot(_) | StepRef::AssertRegion(_))
+    )
+}
+
 /// A UI-tree observation that must be bound to `bound` (the frame a preceding
 /// `launch`/`wait_for`/`input`/`capture` completed). A newer frame without one
 /// of those steps means the screenshot and the tree describe different
@@ -1782,6 +2178,7 @@ fn no_fresh_frame_failure(
         observation: Some(observation.clone()),
         produced_frame: None,
         session: None,
+        settle: None,
     }
 }
 
@@ -2212,6 +2609,7 @@ fn static_launch_assertion(
                 observation: None,
                 produced_frame: None,
                 session: None,
+                settle: None,
             });
         }
     } else if launch.intent_action.is_none() && manifest.launcher_activity.is_none() {
@@ -2231,6 +2629,7 @@ fn static_launch_assertion(
             observation: None,
             produced_frame: None,
             session: None,
+            settle: None,
         });
     }
     None
@@ -2322,6 +2721,7 @@ mod region_tests {
             screenshot_png: Some(png(width, height, pixels)),
             crashed: None,
             input: None,
+            settle: None,
         }
     }
 
@@ -2476,6 +2876,7 @@ mod region_tests {
             screenshot_png: Some(png(width, frame_height, pixels)),
             crashed: None,
             input: None,
+            settle: None,
         }
     }
 
@@ -2704,5 +3105,416 @@ mod launch_gate_tests {
         assert_eq!(failure.status, Status::Error);
         let error = failure.error.expect("error");
         assert_eq!(error.code, ErrorCode::InvalidScenario);
+    }
+}
+
+#[cfg(test)]
+mod content_settle_tests {
+    use super::*;
+    use acos_protocol::scenario::Scenario;
+
+    fn scenario(yaml: &str) -> Scenario {
+        Scenario::from_yaml_str(yaml).expect("scenario parses")
+    }
+
+    fn content_record() -> serde_json::Value {
+        content_record_for(5)
+    }
+
+    /// SE2b: a content record always names the frame it settled.
+    fn content_record_for(frame_seq: u64) -> serde_json::Value {
+        serde_json::json!({
+            "mode": "content",
+            "settled": true,
+            "window_ms": 300,
+            "traversals": 3,
+            "signature": "0f0f0f0f0f0f0f0f",
+            "frame_seq": frame_seq,
+            "pixel_evidence": false,
+        })
+    }
+
+    fn content_observation(frame_seq: u64, settle: serde_json::Value) -> SessionObservation {
+        use acos_protocol::ui::UiTree;
+        let mut tree = UiTree::new(
+            acos_protocol::FrameMeta::new(
+                frame_seq,
+                "2026-01-01T00:00:00Z",
+                "test",
+                100,
+                100,
+                420,
+                "h",
+                true,
+            ),
+            "dev.acos.fixtures.counter",
+            Vec::new(),
+        );
+        tree.frame.frame_seq = frame_seq;
+        SessionObservation {
+            session_id: "s_test".to_string(),
+            package: "dev.acos.fixtures.counter".to_string(),
+            frame: tree.frame.clone(),
+            tree,
+            screenshot_png: None,
+            crashed: None,
+            input: None,
+            settle: Some(settle),
+        }
+    }
+
+    fn strict_record() -> serde_json::Value {
+        serde_json::json!({"mode": "strict", "settled": true})
+    }
+
+    const HEADER: &str = "version: 1\nname: se2\napp: dev.acos.fixtures.counter\nisolation: process\ndisplay: {mode: offscreen, width: 100, height: 100, density_dpi: 420}\nsteps:\n  - launch: {activity: .MainActivity}\n";
+
+    /// SE2: a pixel/frame assertion bound to a content-settled frame must fail
+    /// closed with the structured reason, never compare pixels.
+    #[test]
+    fn pixel_assertion_backed_by_content_settle_fails_closed() {
+        let parsed = scenario(&format!(
+            "{HEADER}  - assert_region: {{x: 0, y: 0, w: 10, h: 10, min_distinct_colors: 1}}\n"
+        ));
+        let step = &parsed.steps[1];
+        let failure = content_settle_pixel_failure(step, Some(&content_record()))
+            .expect("a content-bound pixel assertion is a failed binding");
+        assert_eq!(failure.status, Status::Fail);
+        let error = failure.error.as_ref().expect("structured error");
+        assert_eq!(error.code, ErrorCode::AssertionFailed);
+        let details = error.details.as_ref().expect("details");
+        assert_eq!(details["reason"], "content_settle_pixel");
+        assert_eq!(details["pixel_evidence"], false);
+        assert_eq!(failure.assertions[0].kind, "frame_binding");
+        assert!(!failure.assertions[0].passed);
+
+        // A screenshot comparison is the same pixel claim.
+        let parsed = scenario(&format!(
+            "{HEADER}  - assert_screenshot: {{baseline: baseline.png, tolerance: 0.0}}\n"
+        ));
+        let failure = content_settle_pixel_failure(&parsed.steps[1], Some(&content_record()))
+            .expect("a content-bound screenshot comparison is a failed binding");
+        assert_eq!(failure.error.as_ref().unwrap().code, ErrorCode::AssertionFailed);
+    }
+
+    /// SE2b: a bounds claim on a content-settled frame fails closed, exactly
+    /// like a pixel claim. Before the fix the signature omitted every geometry
+    /// field an assertion could read, so `assert_text {bounds: ...}` passed on a
+    /// frame whose views were still being translated.
+    #[test]
+    fn geometry_claims_are_refused_on_content_settle() {
+        let parsed = scenario(&format!(
+            "{HEADER}  - assert_text: {{selector: {{id: title}}, text: {{contains: Welcome}}, bounds: [0, 0, 10, 10]}}\n"
+        ));
+        let step = &parsed.steps[1];
+        let failure = content_settle_geometry_failure(step, Some(&content_record()))
+            .expect("a content-bound bounds claim is a failed binding");
+        assert_eq!(failure.status, Status::Fail);
+        let error = failure.error.as_ref().expect("structured error");
+        assert_eq!(error.code, ErrorCode::AssertionFailed);
+        let details = error.details.as_ref().expect("details");
+        assert_eq!(details["reason"], "content_settle_geometry");
+        assert_eq!(details["geometry_evidence"], false);
+        assert_eq!(failure.assertions[0].kind, "frame_binding");
+        // Without a bounds claim the same assertion is fine, and a strict frame
+        // may back the bounds claim.
+        let parsed = scenario(&format!(
+            "{HEADER}  - assert_text: {{selector: {{id: title}}, text: {{contains: Welcome}}}}\n"
+        ));
+        assert!(content_settle_geometry_failure(&parsed.steps[1], Some(&content_record())).is_none());
+        let parsed = scenario(&format!(
+            "{HEADER}  - assert_visible: {{selector: {{id: title}}, bounds: [0, 0, 10, 10]}}\n"
+        ));
+        assert!(
+            content_settle_geometry_failure(&parsed.steps[1], Some(&strict_record())).is_none(),
+            "a strict settle may back a bounds claim"
+        );
+        assert!(content_settle_geometry_failure(&parsed.steps[1], Some(&content_record())).is_some());
+    }
+
+    /// SE2c: `selector.bounds` is a geometry claim on every assertion kind.
+    ///
+    /// `Selector::matches_node` compares `selector.bounds` exactly, so a
+    /// selector carrying a rectangle reads the same un-hashed geometry an
+    /// assertion's own `bounds` does. The false-pass this closes: on a
+    /// still-drifting node the reported rect is `0,101,...` instead of
+    /// `0,100,...`, so
+    /// `assert_not_visible {selector: {text: "Error", bounds: [...]}}` sees "no
+    /// match" and passes while the banner is on screen.
+    #[test]
+    fn selector_bounds_is_a_geometry_claim_on_every_assertion_kind() {
+        // One case per assertion kind that takes a selector.
+        for yaml in [
+            "  - assert_text: {selector: {text: {contains: Welcome}, bounds: [0, 100, 200, 140]}, \
+             text: {contains: Welcome}}\n",
+            "  - assert_visible: {selector: {text: {contains: Welcome}, bounds: [0, 100, 200, 140]}}\n",
+            "  - assert_not_visible: {selector: {text: {contains: Error}, bounds: [0, 100, 200, 140]}}\n",
+            "  - assert_state: {selector: {id: title, bounds: [0, 100, 200, 140]}, visible: true}\n",
+        ] {
+            let parsed = scenario(&format!("{HEADER}{yaml}"));
+            let step = &parsed.steps[1];
+            let failure = content_settle_geometry_failure(step, Some(&content_record()))
+                .unwrap_or_else(|| {
+                    panic!("selector.bounds must be refused on {}: {yaml}", step.kind())
+                });
+            assert_eq!(failure.status, Status::Fail);
+            let error = failure.error.as_ref().expect("structured error");
+            assert_eq!(error.code, ErrorCode::AssertionFailed);
+            let details = error.details.as_ref().expect("details");
+            assert_eq!(details["reason"], "content_settle_geometry");
+            assert_eq!(details["geometry_evidence"], false);
+            assert_eq!(details["bounds_claim"]["assertion"], false);
+            assert_eq!(details["bounds_claim"]["selector"], true);
+            // A strict-settled frame may back the same claim.
+            assert!(
+                content_settle_geometry_failure(step, Some(&strict_record())).is_none(),
+                "a strict settle may back a selector bounds claim on {}",
+                step.kind()
+            );
+            // No settle record at all changes nothing.
+            assert!(content_settle_geometry_failure(step, None).is_none());
+        }
+        // The *absence* of a rectangle in either position is still allowed: the
+        // guard must not refuse ordinary content-settled assertions.
+        for yaml in [
+            "  - assert_text: {selector: {text: {contains: Welcome}}, text: {contains: Welcome}}\n",
+            "  - assert_visible: {selector: {text: {contains: Welcome}}}\n",
+            "  - assert_not_visible: {selector: {text: {contains: Error}}}\n",
+            "  - assert_state: {selector: {id: title}, visible: true}\n",
+        ] {
+            let parsed = scenario(&format!("{HEADER}{yaml}"));
+            assert!(
+                content_settle_geometry_failure(&parsed.steps[1], Some(&content_record())).is_none(),
+                "an assertion without a rectangle must stay evaluable: {yaml}"
+            );
+        }
+        // The assertion's own `bounds` still reports itself as the claim.
+        let parsed = scenario(&format!(
+            "{HEADER}  - assert_text: {{selector: {{id: title, bounds: [0, 0, 10, 10]}}, text: {{contains: Welcome}}, bounds: [0, 0, 10, 10]}}\n"
+        ));
+        let failure = content_settle_geometry_failure(&parsed.steps[1], Some(&content_record()))
+            .expect("both rectangle positions are refused");
+        let details = failure
+            .error
+            .as_ref()
+            .and_then(|error| error.details.as_ref())
+            .expect("details");
+        assert_eq!(details["bounds_claim"]["assertion"], true);
+        assert_eq!(details["bounds_claim"]["selector"], true);
+    }
+
+    /// SE2: a UI/text assertion may be backed by content settle.
+    #[test]
+    fn text_assertions_are_allowed_on_content_settle() {
+        let parsed = scenario(&format!(
+            "{HEADER}  - assert_text: {{selector: {{id: title}}, text: {{contains: Welcome}}}}\n"
+        ));
+        assert!(
+            content_settle_pixel_failure(&parsed.steps[1], Some(&content_record())).is_none(),
+            "a text assertion must be evaluable on a content-stable tree"
+        );
+        // A strict-settled bound frame is unaffected as well.
+        assert!(content_settle_pixel_failure(&parsed.steps[1], Some(&strict_record())).is_none());
+        // No settle record: unchanged behaviour (nothing new is refused).
+        assert!(content_settle_pixel_failure(&parsed.steps[1], None).is_none());
+    }
+
+    /// SE2: `fast` still never backs a pass. The fast guard is unchanged and
+    /// independent of the content guard.
+    #[test]
+    fn fast_still_never_backs_a_pass() {
+        let failure = fast_bound_failure("assert_text");
+        assert_eq!(failure.status, Status::Fail);
+        assert_eq!(
+            failure.error.as_ref().unwrap().code,
+            ErrorCode::AssertionFailed
+        );
+        // And a pixel assertion on a fast-bound frame is still refused by the
+        // existing fast guard (`fast` never backs a pass).
+        let parsed = scenario(&format!(
+            "{HEADER}  - assert_region: {{x: 0, y: 0, w: 10, h: 10, min_distinct_colors: 1}}\n"
+        ));
+        let fast = fast_bound_failure(parsed.steps[1].kind());
+        assert_eq!(fast.error.as_ref().unwrap().code, ErrorCode::AssertionFailed);
+    }
+
+    /// SE2: a step that asks for content settle and gets no content record
+    /// fails closed (no backend can silently downgrade the rule).
+    #[test]
+    fn a_content_step_without_a_content_record_fails_closed() {
+        let parsed = scenario(&format!(
+            "{HEADER}  - tap: {{x: 1, y: 2, settle: content}}\n"
+        ));
+        let step = &parsed.steps[1];
+        let mut exec = StepExec::pass();
+        exec.settle = Some(serde_json::json!({"mode": "strict", "settled": true}));
+        let failure = content_settle_unhonored(step, &exec).expect("downgrade is refused");
+        assert_eq!(failure.status, Status::Unsupported);
+        assert_eq!(
+            failure.error.as_ref().unwrap().code,
+            ErrorCode::UnsupportedAssertion
+        );
+        // SE2b: a mode string is not enough - the record must be a *settled*
+        // one that names the very frame the step observed.
+        exec.settle = Some(content_record());
+        assert!(
+            content_settle_unhonored(step, &exec).is_some(),
+            "a record with no observation frame identity never honours the step"
+        );
+        exec.settle = None;
+        exec.observation = Some(content_observation(5, content_record_for(5)));
+        assert!(content_settle_unhonored(step, &exec).is_none());
+    }
+
+    /// SE2b finding 4: the content record must be settled AND bound to the
+    /// observation's own frame. A mode string from a stale record (or an
+    /// unsettled one) is a downgrade, not a pass.
+    #[test]
+    fn content_settle_requires_the_settled_frame_identity() {
+        let parsed = scenario(&format!("{HEADER}  - tap: {{x: 1, y: 2, settle: content}}\n"));
+        let step = &parsed.steps[1];
+        let mut exec = StepExec::pass();
+        // Record for another traversal: refused.
+        exec.observation = Some(content_observation(6, content_record_for(5)));
+        let failure = content_settle_unhonored(step, &exec).expect("another frame is not evidence");
+        assert_eq!(
+            failure.error.as_ref().unwrap().code,
+            ErrorCode::UnsupportedAssertion
+        );
+        let details = failure.error.as_ref().unwrap().details.clone().unwrap();
+        assert_eq!(details["reason"], "content_settle_unhonored");
+        assert_eq!(details["observation_frame_seq"], 6);
+        // An unsettled content record: refused.
+        let mut unsettled = content_record_for(6);
+        unsettled["settled"] = serde_json::json!(false);
+        exec.observation = Some(content_observation(6, unsettled));
+        assert!(content_settle_unhonored(step, &exec).is_some());
+        // No record at all: refused.
+        exec.observation = Some(content_observation(6, strict_record()));
+        assert!(content_settle_unhonored(step, &exec).is_some());
+        // The settled record for exactly this frame: honoured.
+        exec.observation = Some(content_observation(6, content_record_for(6)));
+        assert!(content_settle_unhonored(step, &exec).is_none());
+    }
+
+    /// SE2b finding 8: step evidence publishes the *action's* settle record, not
+    /// the session's sticky bound record from an earlier traversal/action.
+    #[test]
+    fn step_evidence_prefers_the_per_action_settle() {
+        use crate::backend::InputDelivery;
+        let mut observation = content_observation(6, strict_record());
+        observation.input = Some(InputDelivery {
+            delivered: true,
+            visual_change: true,
+            acks: Vec::new(),
+            settle: Some(content_record_for(6)),
+        });
+        let settle = step_settle(Some(&observation), None).expect("a record");
+        assert_eq!(settle["mode"], "content");
+        // Only the sticky record: it is used, but it is the sticky one.
+        observation.input = None;
+        let settle = step_settle(Some(&observation), None).expect("a record");
+        assert_eq!(settle["mode"], "strict");
+        // No observation at all: the step's own record still travels.
+        let settle = step_settle(None, Some(&content_record_for(6))).expect("a record");
+        assert_eq!(settle["mode"], "content");
+    }
+
+    /// SE2b finding 9: a pinned negative expectation is enforced. A negative
+    /// that fails with another code/reason is a harness error, never green.
+    #[test]
+    fn a_negative_failure_must_match_its_pinned_error() {
+        let expected = ExpectedError {
+            code: "ASSERTION_FAILED".to_string(),
+            reason: Some("content_settle_pixel".to_string()),
+        };
+        let failure = |code: ErrorCode, reason: Option<&str>| {
+            let error = ProtocolError::new(code, "boom".to_string()).with_details(
+                serde_json::json!({"reason": reason.unwrap_or("other")}),
+            );
+            FailureClassification {
+                code,
+                step_index: Some(2),
+                summary: "boom".to_string(),
+                error,
+            }
+        };
+        // Matching code + reason: the control is accepted (status untouched).
+        let mut status = Status::Fail;
+        let mut actual = Some(failure(ErrorCode::AssertionFailed, Some("content_settle_pixel")));
+        let mut notes = Vec::new();
+        apply_expectation(Expectation::Fail, Some(&expected), &mut status, &mut actual, &mut notes);
+        assert_eq!(status, Status::Fail);
+        assert!(
+            notes.iter().any(|note| note.contains("exactly as declared")),
+            "{notes:?}"
+        );
+        // Right code, wrong reason: harness error.
+        let mut status = Status::Fail;
+        let mut actual = Some(failure(ErrorCode::AssertionFailed, Some("something_else")));
+        let mut notes = Vec::new();
+        apply_expectation(Expectation::Fail, Some(&expected), &mut status, &mut actual, &mut notes);
+        assert_eq!(status, Status::Error);
+        let actual = actual.expect("failure");
+        assert_eq!(actual.code, ErrorCode::Internal);
+        assert_eq!(
+            actual.error.details.as_ref().unwrap()["reason"],
+            "negative_expectation_mismatch"
+        );
+        // A TIMEOUT control pins the timeout code and its reason.
+        let expected = ExpectedError {
+            code: "TIMEOUT".to_string(),
+            reason: Some("content-not-stable".to_string()),
+        };
+        let mut status = Status::Timeout;
+        let mut actual = Some(failure(ErrorCode::Timeout, Some("content-not-stable")));
+        let mut notes = Vec::new();
+        apply_expectation(
+            Expectation::NonPass,
+            Some(&expected),
+            &mut status,
+            &mut actual,
+            &mut notes,
+        );
+        assert_eq!(status, Status::Timeout);
+        // A scenario that declares both `pass` and a pinned error is invalid.
+        let parsed = Scenario::from_yaml_str_unvalidated(&format!(
+            "{HEADER}expect_error: {{code: ASSERTION_FAILED}}\n"
+        ))
+        .expect("parses");
+        let report = parsed.validate();
+        assert!(
+            report.errors.iter().any(|error| error.path.contains("expect_error")),
+            "expect_error on a pass scenario must be INVALID_SCENARIO: {report:?}"
+        );
+    }
+
+    /// SE2: `expect_change` (a pixel claim) cannot combine with content settle.
+    #[test]
+    fn expect_change_with_content_settle_is_invalid() {
+        let yaml = format!(
+            "{HEADER}  - tap: {{x: 1, y: 2, settle: content, expect_change: true}}\n"
+        );
+        let parsed = Scenario::from_yaml_str_unvalidated(&yaml).expect("parses");
+        let report = parsed.validate();
+        assert!(
+            report.errors.iter().any(|error| error.path.contains("expect_change")),
+            "content settle + expect_change must be INVALID_SCENARIO: {report:?}"
+        );
+    }
+
+    #[test]
+    fn content_settle_parses_on_inputs_and_launch() {
+        let yaml = "version: 1\nname: se2\napp: dev.acos.fixtures.counter\nisolation: process\ndisplay: {mode: offscreen, width: 100, height: 100, density_dpi: 420}\nsteps:\n  - launch: {activity: .MainActivity, settle: content}\n  - tap: {x: 1, y: 2, settle: content}\n  - type: {text: hi, settle: content}\n  - key: {key: enter, settle: content}\n";
+        let parsed = scenario(yaml);
+        assert_eq!(parsed.validate().errors, Vec::new());
+        assert!(matches!(
+            parsed.steps[0].launch.as_ref().unwrap().settle,
+            Some(StepSettle::Content)
+        ));
+        assert!(matches!(
+            parsed.steps[1].tap.as_ref().unwrap().settle,
+            Some(StepSettle::Content)
+        ));
     }
 }

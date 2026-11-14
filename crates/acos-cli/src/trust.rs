@@ -366,6 +366,10 @@ impl Backend for TrustGuard {
     fn set_input_settle(&mut self, fast: bool) {
         self.inner.set_input_settle(fast);
     }
+
+    fn set_input_content_settle(&mut self, content: bool) {
+        self.inner.set_input_content_settle(content);
+    }
 }
 
 #[cfg(test)]

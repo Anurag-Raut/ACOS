@@ -3073,6 +3073,357 @@ wire/native bugs, and keep a bounded `HostGuard` in `render_views` so a future
 guest loop fails loudly. File the five real failures as T1a–T1e; do not weaken
 any verify/assertion or mark a real failure `#[ignore]`.
 
+## E13.16 — SE2: `settle: content` gives the forever-animating screen a verification answer (ADR-0026 decision 3; Gaten G3e) — PASS
+
+**Date:** 2026-11-14. **Branch:** `settle-se2-content-stable` (worktree
+`3oxa6xao/k5`, base `main` `0c0b322`). **Responsible agent:** SE2. One ART-lock
+acquisition per batch; APK read-only `e04c7ffc…`; scratch `.cache/se2`.
+
+- **Question / goal:** ADR-0026 decision 3, verbatim: *"Forever-animating
+  screens: add a content-stable settle. Settled when the UI tree content
+  signature (text, nodes, bounds) is unchanged for a bounded window (~300 ms)
+  even if pixels keep animating. Pixel assertions on such screens stay strict
+  (honest TIMEOUT). Existing navigation-only `settle: fast` stays but is no
+  longer the documented answer for these screens."* This closes GR3 §4.3 /
+  backlog G3e: Gaten's welcome and onboarding pages run a 10 s Reanimated loop
+  and a 200 ms auto-advance retry, so strict settle there is an honest
+  `TIMEOUT` and the only route past them was `fast`, which never backs a pass.
+- **Design (as shipped):**
+  * **signature** = hash over, in visible/tree order, each node's `class`,
+    `text`, `content_desc`, `hint`, `checked`, `selected`, `enabled`,
+    `focused`, `bounds`, `visible`, plus the child structure/order. No field is
+    silently dropped from that list; a text value an animation updates (a
+    countdown, a progress percentage) changes it, and the screen is then not
+    content-stable (`TIMEOUT`, correctly).
+  * **window** = same signature across at least **2 traversals** spanning
+    **≥ 300 ms** (`ContentWindow`; floor 300 ms, configurable upward with
+    `ACOS_CONTENT_SETTLE_WINDOW_MS`). A different signature resets both the span
+    and the traversal count, so A→B→A never settles. The step's
+    `settle_timeout_ms` (default 10 s) bounds it; expiry is `TIMEOUT`,
+    `details.reason:"content-not-stable"`, with the last signature — never a
+    pass.
+  * **surface**: scenario `tap`/`type`/`key`/`launch`; serve/MCP
+    `acos_observe`, `acos_observe_tree`, `acos_launch`, `acos_reset`,
+    `acos_tap`/`acos_text`/`acos_key`/`acos_action`. `acos_assert` needs no
+    argument after a content step: it evaluates the content-settled bound tree
+    (no strict re-traversal that would only time out).
+  * **pixels fail closed**: content stability never proves pixels. In
+    `acos verify`, `assert_screenshot`/`assert_region` bound to a content-settled
+    frame fail with `ASSERTION_FAILED`, `details.reason:"content_settle_pixel"`,
+    `pixel_evidence:false` and the content record, before any capture. In serve,
+    `pixels:true` + `settle:"content"` is `INVALID_ARGUMENT` (same as fast). A
+    fresh strict `capture` rebinds the frame.
+  * **provenance**: the step's `settle` object is
+    `{mode:"content", settled, bound:"content-stable", window_ms, traversals,
+    signature, frame_seq, elapsed_ms, pixel_evidence:false, signature_fields}`
+    and travels with every observation it backs (assertions included).
+  * **strict default everywhere; fast unchanged** (never backs a pass);
+    `expect_change: true` (a pixel claim) + `settle: content` is
+    `INVALID_SCENARIO`, exactly like fast. A step that asked for content and
+    received no content record fails closed (`UNSUPPORTED_ASSERTION`,
+    `reason:"content_settle_unhonored"`), so no backend can silently downgrade
+    the rule.
+  * **implementation seam (honest):** each content traversal is a strict tree
+    request with a 1 ms deadline — the guest returns the latest tree *and its
+    PNG* with `settled:false` (P12b's documented observation). That gives real
+    pixels bound to the traversal the signature came from without waiting for a
+    quiet window that never comes; the host's content window is the verdict and
+    the host replaces the guest's unsettled block with the content record before
+    publishing. A content `launch` binds its first content frame via the normal
+    skeleton retry, then the content window; its frame is
+    `pixel_evidence:false` and claims no PNG.
+- **Unit tests (green in `cargo test --release --offline -p acos-verify -p acos-cli`):**
+  `settle::tests` — same tree → same signature (different node ids/frame
+  seq/pixels → same), every text/bounds/checked/selected/enabled/focused/
+  content-desc/hint change → different, child structure and order → different,
+  window settles only after ≥2 traversals over the span, a change resets the
+  window, A→B→A never settles, the floor clamps at 300 ms;
+  `executor::content_settle_tests` — a content-bound `assert_region` and
+  `assert_screenshot` fail closed with the structured reason, a text assertion
+  is allowed, `fast` still never backs a pass, content+`expect_change` is
+  `INVALID_SCENARIO`, and `settle: content` parses on launch/tap/type/key.
+  87 acos-cli bin tests + 56 acos-verify lib tests green; `acos-protocol` green
+  after `UPDATE_SCHEMA=1` (schema `scenario.json` refreshed); `acos-art` green
+  with the cgroup-test split (`--test-threads=1 --skip
+  refuses_to_run_when_no_cgroup_can_be_created`, 14 suites, 0 failed,
+  `art-tests.log` RC=0).
+- **Gaten (real ART, `--engine art`, APK read-only):**
+
+  | scenario | runs | result |
+  |---|---:|---|
+  | `scenarios/gaten-content-welcome.yaml` (launch content → assert welcome copy → content tap) | 3 | **pass 3/3** (`content-reps.log`); launch, `assert_text` and `tap` each record `settle.mode:"content"`, `window_ms:300`, `traversals:15` and signature `470c294c658e68bd`; content settle p50 **740 ms** (730/740/743), scenario wall p50 3.11 s |
+  | `scenarios/negative/gaten-content-welcome-wrong.yaml` (wrong text on the content-settled tree) | 3 | **fail / `ASSERTION_FAILED` 3/3** |
+  | `scenarios/negative/gaten-content-pixel.yaml` (region pixels after content settle) | 3 | **fail / `ASSERTION_FAILED` 3/3** with `details.reason:"content_settle_pixel"` |
+
+  Before this rule those two taps were strict `TIMEOUT`s (GR3), and `fast` was
+  the workaround that could not back an assertion.
+- **No regression (one ART-lock acquisition per batch):** the 15 gates exactly
+  as listed (v2-art-counter, w22-counter-reset, w54-dialog-pixels,
+  w42-back-frame, w15-dialog-menu, form-validation, T03-render-good,
+  v1-offscreen-pager, w7-insets-report, se1-expect-change-tap pass;
+  T03-render-wrong, w7-insets-carve-negative, negative/se1-expect-change-noop
+  fail `ASSERTION_FAILED`; negative/offscreen-pager-visible `ELEMENT_OFFSCREEN`;
+  p11-progress-timeout `TIMEOUT`), the 5 Gaten flows ×3 **pass 15/15**, the 5
+  negatives **fail `ASSERTION_FAILED` 5/5**, and GR4 (support/kanji/
+  recognition/backstack **pass**, their 4 negatives **fail `ASSERTION_FAILED`**)
+  — `sweep.log`.
+- **Latency:** strict default path untouched (no extra traversal, no extra
+  field on the strict path; the only added work is a `None`-check and the
+  content-mode branch, which is never taken by a strict step). Interleaved A/B
+  (main arm `/home/Qui/Projects/acos/.cache/wt-abmain2`, target
+  `.cache/ab-target`, never built there; branch arm `.cache/k5-target`),
+  `ACOS_BENCH_TASK=SE2 acos-bench.sh --reps 1 --groups "a:latency:8G:300"
+  --latency-reps 12 --no-build`, 3 interleaved rounds, strict p50 per round:
+
+  | metric | main p50 (r1,r2,r3) | branch p50 (r1,r2,r3) | Δ p50 |
+  |---|---:|---:|---:|
+  | M4 launch strict | 308.4 / 321.9 / 308.9 | 349.9 / 308.5 / 308.8 | **−0.0 %** (−0.1 ms) |
+  | M5 screenshot | 26.4 / 26.9 / 25.0 | 24.6 / 23.8 / 23.7 | −9.8 % |
+  | M6 reset strict | 335.6 / 335.9 / 332.3 | 335.2 / 337.5 / 348.9 | +0.6 % (+1.9 ms) |
+  | M7 UI tree strict | 41.1 / 41.0 / 41.1 | 41.4 / 41.3 / 41.2 | +0.5 % (+0.2 ms) |
+  | M8 tap→settled counter strict | 967.5 / 950.8 / 954.9 | 958.5 / 953.0 / 951.3 | −0.2 % (−1.9 ms) |
+  | M8 tap→settled form strict | 944.4 / 949.3 / 941.3 | 952.4 / 949.6 / 941.4 | +0.6 % (+5.2 ms) |
+
+  Every M4–M8 strict p50 is inside +5 % (the largest is M6 +0.6 % / +1.9 ms;
+  M8-form +5.2 ms is 0.55 % and smaller than that metric's own rep spread of
+  8 ms), and the launch/tap fast rows are unchanged too (M4 fast +0.1 %, tap
+  fast +4.2 % within its 4.3 ms spread). The branch binary in this A/B is the
+  final one (`content_settle_unhonored` present; `strings` verified).
+  **Content settle on the Gaten welcome screen: p50 740 ms** over the 3 runs
+  (signature-identical), **versus strict on the same screen: `TIMEOUT`** — a
+  strict fresh capture fails after 1555 ms with `reason:"newer-store"`
+  (`.cache/se2/strict-timeout.json`), i.e. the rule replaces an honest
+  non-pass with a measured content verdict.
+- **Conclusion / next:** G3e has an answer that never weakens an assertion: a
+  content-stable screen can now back UI/text claims (`settle: content` is the
+  documented rule), while every pixel claim on it fails closed. `settle: fast`
+  remains navigation only. Scenario authors can upgrade GR3's onboarding taps
+  from `fast` to `content` once the page-text visibility classification (GR4
+  G4a) is aligned.
+
+### E13.16b — SE2b: read-only review said DO-NOT-MERGE; every finding fixed (same number, review pass)
+
+**Date:** 2026-11-14. **Branch:** `settle-se2-content-stable`, worktree
+`3oxa6xao/s3ab` (HEAD base `7837894`, commits `4ecaea8`, `cd8b644`, `…`).
+**Responsible agent:** SE2b. This is the *same* experiment, not a new one: a
+read-only review of the SE2 landing above rejected it (9 findings), and this
+pass fixes each one with a test that fails before it and passes after. The
+headline: the content rule had **no proof its traversals were fresh**, so the
+740 ms / `traversals:15` result above was partly measured on *stale probe
+samples*, and one of its hashed fields (`bounds`) was only stable because of
+that same staleness.
+
+- **1 (CRITICAL) traversals not proven fresh/distinct.** `content_settle` asked
+  the guest for a strict `tree` with a 1 ms deadline; on timeout the guest
+  answers with `latest_probe()`, which has **no freshness floor**, while
+  `frame_seq` advances per reply. Two "traversals" could therefore be the same
+  sample, and a busy UI thread could "settle" the departing screen. Fix: every
+  window traversal is now a **fast, tree-only** request (`settle:fast`,
+  `pixels:false`) with a one-shot `min_probe_seq` floor — the guest answers only
+  with a sample strictly newer than the last consumed one or refuses with
+  `NO_FRESH_TREE`. The host re-proves it in `settle::ContentProbeWindow`: a reply
+  with no `probe_seq` (or one at/below the floor) is `content-probe-unproven`
+  (fail closed), a repeat is never a second traversal, and the window's floor
+  starts at the newest sample bound **before** the window (pre-request /
+  pre-input). `launch.rs` learned `min_probe_seq` in the fast-tree request.
+  Test: `settle::tests::a_stale_probe_sample_never_counts_toward_the_window`,
+  `a_reply_without_probe_seq_fails_closed`,
+  `a_repeated_probe_sample_does_not_count_as_a_distinct_traversal`,
+  `the_next_floor_is_the_last_consumed_sample` (PASS).
+- **2 (HIGH) `acos_assert` served a stale cached tree.** Serve's content branch
+  used `ensure_bound_tree()` (the cache). Now a content-mode assert runs a
+  **new** content settle (`assert_needs_fresh_content_settle`) and only then
+  reads the traversal it just completed; `begin_input`/`capture_frame` clear
+  `bound_settle` so a record never outlives the frame it described. Test:
+  `engine::serve::tests::a_content_assert_reproves_the_settle_instead_of_reading_the_cache`
+  (PASS).
+- **3 (HIGH, hang) the deadline needed a traversal count.** The loop only timed
+  out at `traversals >= MIN && elapsed >= deadline`, and every signature change
+  reset the count to 1 → a countdown never timed out. The deadline is now
+  checked on **every** traversal inside `ContentProbeWindow::attempt`. Test:
+  `settle::tests::a_signature_that_changes_every_traversal_still_times_out`
+  (PASS); the ART control `scenarios/negative/gaten-content-window-impossible.yaml`
+  pins `TIMEOUT` / `content-not-stable` 3/3.
+- **4 (MEDIUM) "honoured" checked only the mode string.** `content_settle_unhonored`
+  now requires `settled: true` **and** `frame_seq == the observation's frame`
+  (a `launch` uses `produced_frame`), and the `NoFreshFrame`-with-gesture
+  recovery branch runs `content_settle` too instead of only failing closed by
+  accident. Tests: `executor::content_settle_tests::content_settle_requires_the_settled_frame_identity`
+  (PASS).
+- **5 (MEDIUM) the signature missed fields assertions read.** Added
+  `resource_id`, `clickable`, `scrollable`, `window`, node `package` and the
+  tree-level `package`/`truncated`/`text_available` (`settle::SIGNATURE_FIELDS`
+  is now the audited list, published with every record). Test:
+  `settle::tests::signature_covers_every_field_an_assertion_reads` (PASS).
+  **Geometry is the one deliberate exclusion, and it is a *rule*, not an
+  omission:** measured on the reference screen
+  (`.cache/se2b/probe-trees.json`, `probe_fields.py`), four nodes' `bounds` /
+  `visible_bounds` differ by 1 px from one fresh traversal to the next while
+  every content field is identical — the Reanimated timeline translates the
+  artwork, so the reported rect animates with the pixels. Hashing it makes the
+  rule permanently unable to answer its own reference case (770 proven
+  traversals, `TIMEOUT`). Instead, a **bounds claim** (`assert_text` /
+  `assert_visible` / `assert_not_visible` with `bounds`) on a content-settled
+  frame fails closed with `ASSERTION_FAILED` / `details.reason:
+  "content_settle_geometry"`, the same shape as the pixel rule. Test:
+  `executor::content_settle_tests::geometry_claims_are_refused_on_content_settle`
+  (PASS). The old stability of `bounds` was an artefact of finding 1.
+- **6 (LOW) `acos_reset{settle:"content"}` was silently strict.** Now a
+  structured `INVALID_ARGUMENT` (`serve::reset_bind`), plus a `debug_assert` in
+  `set_reset_bind` so no future caller can coerce it. Test:
+  `engine::serve::tests::reset_refuses_a_content_settle_instead_of_silently_binding_strict`
+  (PASS).
+- **7 (LOW) `expect_change` + `settle:"content"` failed closed only by accident.**
+  `reject_expect_change_without_pixel_evidence` refuses both unmeasured rules
+  before any input is injected. Test:
+  `engine::serve::tests::expect_change_is_refused_with_every_unmeasured_settle`
+  (PASS).
+- **8 (LOW) step evidence preferred the sticky record.** `step_settle` prefers
+  the per-action record (`observation.input.settle`) over the session's bound
+  record, and `begin_input` clears it per action. Test:
+  `executor::content_settle_tests::step_evidence_prefers_the_per_action_settle`
+  (PASS).
+- **9 (LOW) weak negatives.** The scenario format had no expected-failure field,
+  so `expect_error: {code, reason}` was added (protocol + validation +
+  `apply_expectation`): a negative that fails with another code/reason becomes a
+  harness `INTERNAL` (`details.reason: "negative_expectation_mismatch"`) instead
+  of a green control. Tests:
+  `executor::content_settle_tests::a_negative_failure_must_match_its_pinned_error`
+  (PASS). New controls: `negative/gaten-content-assert-screenshot.yaml`
+  (`ASSERTION_FAILED` / `content_settle_pixel`),
+  `negative/gaten-content-window-impossible.yaml` (`TIMEOUT` /
+  `content-not-stable`, on the calm counter fixture so the deadline is the only
+  variable), and `gaten-content-welcome.yaml` now asserts text **after** the
+  content tap.
+- **Found while fixing 3 (not in the review): `settle_timeout_ms` was silently
+  ignored on the session engine path.** The verifier's
+  `Backend::set_settle_timeout` reached `Box<dyn SessionBackend>`, whose default
+  is a no-op; `ArtSession` only had an inherent setter. Every scenario's declared
+  settle budget was therefore never applied (the engine default was used). Fixed
+  with a trait override. Two follow-ons the fix exposed and this pass also fixes:
+  a content input now resolves its target on the **content-settled bound tree**
+  (`SessionBackend::bound_tree`) instead of a strict re-traversal, and the
+  step's budget is applied to the **content window**, not forwarded to the
+  guest's navigation settle (a 20 s tap on the reference screen before this).
+  Net effect on the reference scenario: wall **3.11 s → 1.33 s**.
+- **Measured content settle on the Gaten welcome screen: p50 584 ms** (launch
+  p50 504 ms, post-tap p50 674 ms; 3 runs, signature `093391200e7c957a` before
+  the tap and `eb920a0ee9eb2635` after, `window_ms:300`, 31–70 proven fresh
+  traversals). That is **lower** than the pre-review 740 ms even though every
+  traversal must now be distinct and fresh: the window traversals are tree-only
+  (no PNG encode per traversal) and the guest-side navigation settle no longer
+  burns the step's whole budget. Strict settle on the same screen is still an
+  honest `TIMEOUT`.
+- **No regression (final binary, one ART-lock acquisition per batch):** the 15
+  gates exactly as listed (10 pass; `T03-render-wrong`/`w7-insets-carve-negative`
+  `ASSERTION_FAILED`; `offscreen-pager-visible` `ELEMENT_OFFSCREEN`;
+  `p11-progress-timeout` `TIMEOUT`; `se1-expect-change-noop` `ASSERTION_FAILED`
+  / `expect_change`), the 5 Gaten flows **pass 5/5**, the 5 negatives
+  **`ASSERTION_FAILED` 5/5** with pinned codes, the content set **15/15**
+  (positive 3/3 pass, four negatives 3/3 with their pinned code/reason) —
+  `.cache/se2b/suite/*.json`, `.cache/se2b/suite3..5/impossible-*.json`. GR4
+  (support/kanji/recognition/backstack pass, their 4 negatives
+  `ASSERTION_FAILED`) ran on the immediately preceding binary whose only later
+  delta is content-mode-only.
+- **Latency, 5 interleaved rounds** (main arm
+  `/home/Qui/Projects/acos/.cache/wt-abmain2`, target `.cache/ab-target`, never
+  built there; branch arm `.cache/s3ab-target`),
+  `ACOS_BENCH_TASK=SE2b acos-bench.sh --reps 1 --groups "a:latency:8G:300"
+  --latency-reps 12 --no-build`; rounds 4–5 reversed the arm order because the
+  first three showed an ordering effect (main always ran first):
+
+  | metric | main p50 (5 rounds) | branch p50 (5 rounds) | Δ p50 |
+  |---|---:|---:|---:|
+  | M4 launch strict | 308.1 | 307.9 | −0.2 ms (−0.1 %) |
+  | M5 screenshot | 24.4 | 23.9 | −2.0 % |
+  | M6 reset strict | 347.4 | 346.4 | −1.0 ms (−0.3 %) |
+  | M7 UI tree strict | 41.2 | 41.2 | 0.0 ms |
+  | M8 tap→settled counter strict | 959.3 | 957.1 | −2.2 ms (−0.2 %) |
+  | M8 tap→settled form strict | 948.1 | 948.8 | +0.7 ms (+0.07 %) |
+
+  Every strict metric is inside +5 %/2 ms. One round's branch M4 (372.6 vs
+  314.5) and two rounds' M6 (+26 ms) are host/ordering noise, not the branch:
+  reversed rounds put the two arms within 0.2 ms (M4) and the branch *below*
+  main (M6 336.4/347.5 vs 347.9/349.3).
+- **Conclusion / next:** the review's finding was right about the mechanism, and
+  fixing it changed what the rule can honestly hash: content is text, nodes and
+  state (plus the facts that make a read meaningful), geometry is animation and
+  is refused. `settle: content` still never backs a pixel or bounds claim, never
+  backs a pass on an unproven sample, and now cannot hang or read the cache.
+
+### E13.16c — SE2c: a fresh re-check said MERGE-WITH-FIXES — every finding fixed (same number, second review pass)
+
+**Date / commit:** 2026-11-14, branch `settle-se2-content-stable` on top of the
+`main` `c517a76` merge (HEAD before this pass `04292df`); worktree
+`t3-d41b3b08-5ea0b20149a5a9a9`; scratch `.cache/se2c`. A *fresh* read-only
+review of the landed SE2b tree (Opus, no memory of the first review) returned
+**MERGE-WITH-FIXES** with one HIGH, one MEDIUM and one LOW.
+
+| # | Finding | Fix | Test (fails before, passes after) |
+|---|---|---|---|
+| 1 | **HIGH** the geometry refusal only looked at the assertion's own `bounds`; `Selector::matches_node` compares `selector.bounds` exactly too, so `assert_not_visible {selector: {text: "Error", bounds: [0,100,200,140]}}` read a 1 px-drifting banner as "node absent" and **passed** | `content_settle_geometry_failure` enumerates every assertion that takes a selector (`AssertText`, `AssertVisible`, `AssertNotVisible`, `AssertState`) and refuses `assertion.bounds` **or** `selector.bounds`; the details name which position claimed (`bounds_claim.{assertion,selector}`) | `executor::content_settle_tests::selector_bounds_is_a_geometry_claim_on_every_assertion_kind` (one case per kind + the no-rectangle cases stay allowed); ART `negative/gaten-content-selector-bounds.yaml` `ASSERTION_FAILED`/`content_settle_geometry` **3/3** |
+| 2 | **MEDIUM** a content-mode tap aimed at the previous step's cached tree (`bound_tree()`), whose `bounds` the signature deliberately does not hash — a layout shift between steps would land the tap on a neighbour | content inputs resolve on **one fresh `fast` traversal** with the one-shot `min_probe_seq` floor and no quiet window (`SessionBackend::fresh_input_tree` → `ArtSession::fresh_input_tree`, `engine::point_for`); a reply without `probe_seq` fails closed (`NO_FRESH_FRAME`, `content_resolution_unproven`) | `engine::engine_tests::a_content_input_resolves_its_target_on_a_fresh_traversal` (fake whose cached rect is 200 px from every fresh traversal: before the fix the tap lands at (157,431), after at (157,631)) |
+| 3 | **LOW** a content launch reply carried the *pre-settle* skeleton tree from `ensure_launch_tree` | the content path returns the **content-settled** tree and re-describes its `first_frame` evidence with it (`FirstFrameReport::describes_tree`), in both `ensure_launch_tree` and the session `launch` reply, so `nodes`/`placeholder`/`frame.meaningful` all describe the tree that is published | `engine::art::tests::a_content_launch_report_describes_the_tree_the_reply_publishes` |
+
+- **How the HIGH false pass was proven on ART, not just reasoned:** with the
+  guard reverted the new control's `assert_not_visible` step **passes** on the
+  content-settled Gaten frame (`step assert_not_visible pass`; only the
+  scenario's `expect_error` pin turns the run into `INTERNAL`, i.e. the harness
+  reporting a false pass) — `.cache/se2c/suite-prefix/prefix-selector-bounds.json`.
+  With the fix it is `ASSERTION_FAILED`/`content_settle_geometry` **3/3**
+  (`.cache/se2c/suite/content-neg-gaten-content-selector-bounds-{1,2,3}.json`).
+- **Steps that resolve a target (`wait_for`, `tap`, `type`) are deliberately not
+  refused** by the geometry guard: they match their selector against a
+  traversal they take themselves, not against the bound frame the guard is
+  about. The content input's own resolution is proven fresh by fix 2.
+- **Strict timing change (carried over from SE2b, recorded here as asked):**
+  `SessionBackend::set_settle_timeout` now forwards `settle_timeout_ms` on the
+  **strict** path too (the trait default used to swallow it, so every scenario's
+  declared settle budget was silently ignored). Strict steps therefore honour a
+  declared `settle_timeout_ms` where they previously used the engine default —
+  a behaviour change on the strict path, not only on the content path.
+- **Seam change:** `SessionBackend::bound_tree` is **removed**. It existed only
+  so a content input could resolve on the cached tree; keeping a callable
+  "resolve on the cache" seam next to a fix that forbids exactly that would be a
+  standing invitation to regress. `ArtSession::bound_tree` (the pure accessor
+  used by serve's assert path via `ensure_bound_tree`) is unchanged.
+- **Docs synced (they had drifted, not just been incomplete):**
+  `docs/AGENT_API.md` §8.6.4 still listed `bounds` as part of the content
+  signature and `docs/ERROR_CODES.md` had no `content_settle_geometry` row, i.e.
+  the agent-facing contract described the pre-SE2b rule. Both now say geometry is
+  not hashed, that a rectangle in *either* position is refused on a
+  content-settled frame, and which steps resolve instead of claiming.
+- **Test-infra fix (environmental, not a product change):** in this worktree
+  (`.../t3/worktrees/acos/<long-id>`) the W50 serve test's socket path lands on
+  exactly 108 characters, one over `sun_path`'s limit, so `acos serve` exits
+  with `path must be shorter than SUN_LEN` and
+  `an_unknown_session_is_not_routed_to_the_frozen_rust_vm` could not start a
+  daemon. `tests/w50_serve_art.rs` now falls back to a shorter socket name
+  inside the same scratch dir (only the socket is length-limited); no assertion
+  changed. Proven: the binary refuses the 108-char path and binds the fallback.
+- **Measured (final binary, `.cache/se2c/suite/`):** the SE2b content set again —
+  `gaten-content-welcome` **3/3 pass** (launch content settle 446/456/505 ms,
+  post-tap 703/666/670 ms, 20–25 and 61–65 proven fresh traversals,
+  `window_ms:300`); its negatives **3/3 each** with pinned codes/reasons
+  (`selector-bounds` `ASSERTION_FAILED`/`content_settle_geometry`, `pixel` and
+  `assert-screenshot` `ASSERTION_FAILED`/`content_settle_pixel`, `wrong-text`
+  `ASSERTION_FAILED`, `window-impossible` `TIMEOUT`/`content-not-stable`). The
+  post-tap wall rose 674 → ~680–785 ms: the extra cost is exactly one fresh
+  resolution traversal, and it buys a target that is provably not stale.
+- **No regression:** 15 gates exactly as expected (10 pass; `T03-render-wrong`,
+  `w7-insets-carve-negative`, `negative/se1-expect-change-noop`
+  `ASSERTION_FAILED`; `negative/offscreen-pager-visible` `ELEMENT_OFFSCREEN`;
+  `p11-progress-timeout` `TIMEOUT`), 5 Gaten flows **pass 5/5**, their 5
+  negatives **`ASSERTION_FAILED` 5/5**; `cargo test --release --offline -p
+  acos-verify -p acos-cli -p acos-protocol` green (77 + 118 unit, every
+  integration suite 0 failed, schemas unchanged so no `UPDATE_SCHEMA`).
+- **Conclusion / next:** with the selector position guarded, the rule can no
+  longer be turned into a pass by 1 px of drift in either direction; with the
+  fresh resolution the tap's target is as fresh as the frame it acts on. What
+  remains is by design: no bounds claim (in either position) is ever backed by
+  content settle, and the extra resolution traversal is the price of acting on a
+  screen whose geometry is not hashed.
+
 ## E9.2 — HYG1: an order-dependent S5 refusal test, and the `writeValue` length word that `VAL_MAP` was missing — PASS (all suites, gates and Gaten flows as expected)
 
 - **Date / commit:** 2026-11-14; branch `hyg1-tests-parcel` off `main` `863def1`
@@ -3156,7 +3507,6 @@ any verify/assertion or mark a real failure `#[ignore]`.
   open item is that no verified flow exercises a *non-empty* `HashMap` value
   through a real framework client (`LIST_config` is empty on this image), so the
   new map layout is proven at the byte level, not yet end-to-end from the guest.
-
 ## Backlog (optimization hypotheses; rank = impact × confidence ÷ (cost × risk))
 
 Re-ranked by B2 (E3.2) on the measured objective: **verified tasks per second per
@@ -3207,7 +3557,7 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | G3b | **Strict-settle probe wake over-driven the guest**: 20 ms host requests re-asked even after a sample arrived (~50 full tree walks/s under the 10 s Reanimated loop); likely the `probe-floor` starvation. Fixed to 50 ms and no re-ask until the probe sequence moves | probe liveness / tree age | no probe-floor at long n | medium | low | low | **fixed in code, E13.7; still prove at a 60 s pathological n** |
 | G3c | **First frame can be a near-empty tree** (1 node in GR3, **10 nodes in 34 % of 60 measured launches**, 243 two seconds later). Fixed (E13.8): `ArtSession::bind_first_frame` re-traverses while the tree is still the window skeleton (no text/content-desc/hint, ≤ 40 nodes) within 900 ms / 4 traversals; a retry that does not settle rolls the frame *and* its settle verdict back, so no launch turns into a TIMEOUT; a frame that never gains content is `first_frame.placeholder` + `meaningful:false` | first-frame predicate / Gaten first paint | launch frame is the app's content | medium | medium | medium | **done, E13.8** (34 % thin → 0/40; launch p50 2.336 → 2.433 s) |
 | G3d | **Gaten launch SIGSEGV** (1 of 6 `gaten-tabs` runs in GR3): `SIGSEGV code 2 (SEGV_ACCERR)`, thread 2 `com.gaten`, libc frame. Root cause named (E13.8): GWP-ASan's sampled-allocation backtrace, `android_unsafe_frame_pointer_chase+0x117` (`mov 0x8(%r12),%rcx`) reading a stack guard page; the only GOT consumer of that function in libc is `MaybeInitGwpAsan`. Fixed by keeping the sampled allocator out of guests | ART guest native fault | name the faulting frame, then 10/10 | high | low | low | **done, E13.8** (forced-on 4/4 crash reproduces it; default 40/40 clean) |
-| G3e | **No verification semantics for a screen that animates forever in a region that does not matter.** Options (stable tree content, region mask, navigation-only fast, explicit non-settle assertion) + false-pass analysis in `results/gaten/GR3.md` §4.3 | verify semantics | owner decision | — | — | — | **owner decision; do not weaken until then** |
+| G3e | **No verification semantics for a screen that animates forever in a region that does not matter.** Options (stable tree content, region mask, navigation-only fast, explicit non-settle assertion) + false-pass analysis in `results/gaten/GR3.md` §4.3 | verify semantics | owner decision | — | — | — | **done, E13.16 (ADR-0026 #3): `settle: content`** — content-stable window backs UI/text assertions; pixel assertions fail closed; `fast` stays navigation-only |
 | G4a | **The tree reports `visible=false` for a node whose pixels the app painted** (GR4). `tree/18.json`: the bottom bar's active label `[512,2214][642,2251]` is `visible: false` because it lies below the root's `visible_bounds` bottom (`2209`) in a `insets: carve` session, while the bound frame `frames/18.png` paints its glyphs at png `y 2088–2122`, `x 513–640` (bounds − `display_origin.y` 128). AOSP's `View.getGlobalVisibleRect` intersects with the display and ancestor clips, not with the nav-bar band, so a real a11y tree reports it visible (a tap there would still land on the system bar, so fail-closed is defensible — the *classification* is what is inconsistent). Lowest layer: per-node `visible`/`visible_bounds` vs the carved visible frame, surfaced as `ELEMENT_OFFSCREEN` (`crates/acos-verify/src/native.rs`). Verification false-negative only, **never a false pass**. Worked around in scenarios: target the tab pressable's `content_desc`, never the label (`results/gaten/GR4.md` §2.2, §5) | node visibility vs frame | classification matches the pixels | high (tree + frame, same bound frame) | low (decide the policy, then align) | low | **open, found by GR4 (E13.9)** |
 | G4b | **Tree frame metadata reports `density: 420` for a `density_dpi: 400` run** (GR4): every `tree/*.json` frame record says 420 while `repro.json`/`verdict.json` echo the scenario's 400. Either the guest boots at the reference 420 on this path or the tree's `FrameMeta` is stamped from the reference default; not root-caused. Consequence: density-dependent geometry cannot be audited from tree metadata, which is exactly the density-fix area. Pixels are correct either way (116 px wordmark glyphs, GR4 §4) | tree/frame metadata integrity | metadata agrees with the launch spec | high (36 runs, all 420) | low (thread the launch density into the tree record) | low | **open, found by GR4 (E13.9)** |
 | G4c | **A scenario can pass 3/3 while proving nothing, and nothing in the harness notices** (GR4). A `tap` on a control that is already in the asserted state writes nothing — Gaten's Kanji reference `select()` returns early when `next === source`, and the guest's default was already the asserted value — so the post-tap assertions hold on state that never changed. The only evidence was pixel-level: the before/after bound captures were byte-identical (0 changed px) where the claim needs a change. Candidate: an explicit step (`expect_change` / `assert_frame_differs`) or a writer-side rule that a `capture` pair around a mutating tap must differ, so a vacuous flow fails instead of passing. Worked around in GR4 by asserting the hub label's *other* value is absent at each hop and by diffing the captures by hand (`results/gaten/GR4.md` §2.3) | verify semantics / false-pass class | no vacuous pass | high (reproduced + rewritten) | medium (new step + schema + provenance rule) | medium (a legitimate no-op must stay expressible) | **open, found by GR4 (E13.9)** |

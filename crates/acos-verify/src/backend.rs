@@ -420,6 +420,11 @@ pub struct SessionObservation {
     /// Host-observed delivery for the input action that produced this
     /// observation (`None` for launch/tree/capture observations).
     pub input: Option<InputDelivery>,
+    /// SE2: how this observation was bound to the tree it carries. `None` when
+    /// the backend reports no settle record. A `mode: "content"` record means
+    /// the tree was proven content-stable (not pixel-stable): UI/text
+    /// assertions may describe it, pixel assertions may not.
+    pub settle: Option<serde_json::Value>,
 }
 
 /// The parameters for a `launch` step.
@@ -443,6 +448,9 @@ pub struct LaunchRequest {
     pub display: DisplaySpec,
     /// Cause id for the first frame.
     pub cause_id: String,
+    /// SE2: the settle rule the launch's first tree must satisfy (`strict`
+    /// default; `content` proves tree content stability, never pixels).
+    pub settle: acos_protocol::scenario::StepSettle,
 }
 
 /// One input action. Mirrors the scenario step payloads (not the `action`
@@ -766,6 +774,12 @@ pub trait Backend {
     /// The settle rule for the next input action (a scenario's `settle: fast`).
     /// Assertions never use this: they observe the action's own bound frame.
     fn set_input_settle(&mut self, _fast: bool) {}
+
+    /// SE2: request the content-stable rule for the next input action (a
+    /// scenario's `settle: content`). A backend without the rule keeps the
+    /// default no-op and reports no content settle record, so a step that
+    /// asked for it can never be mistaken for one that was bound by it.
+    fn set_input_content_settle(&mut self, _content: bool) {}
 }
 
 #[cfg(test)]

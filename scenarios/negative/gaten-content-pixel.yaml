@@ -1,0 +1,32 @@
+# gaten-content-pixel: NEGATIVE CONTROL for SE2's pixel rule.
+#
+# `settle: content` proves the UI tree content stable; it never proves the
+# pixels stable (the welcome screen's artwork keeps animating). A pixel/frame
+# assertion bound only by content settle must therefore FAIL CLOSED with a
+# structured error (`ASSERTION_FAILED`, `details.reason:
+# "content_settle_pixel"`, `details.pixel_evidence: false`), not compare pixels
+# and not time out ambiguously. The expectation is `fail`: this control passes
+# only when the runner refuses the pixel claim.
+version: 1
+name: gaten-content-pixel
+description: >-
+  SE2 negative: an assert_region on a content-settled forever-animating screen is
+  refused as a failed binding (pixels are never content-settled).
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: fail
+expect_error: {code: ASSERTION_FAILED, reason: content_settle_pixel}
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  - tap:
+      selector: {text: {contains: "Set up Gaten"}}
+      settle: content
+      settle_timeout_ms: 20000
+  # Content settle, then a pixel claim: must fail closed.
+  - assert_region: {x: 0, y: 0, w: 1080, h: 400, min_distinct_colors: 1}

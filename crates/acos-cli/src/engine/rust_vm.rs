@@ -125,6 +125,7 @@ impl SessionBackend for RustVmSession {
             isolation: acos_protocol::identity::IsolationLevel::Process,
             display: acos_protocol::identity::DisplaySpec::offscreen(1080, 2400, 420),
             cause_id: "launch".to_string(),
+            settle: acos_protocol::scenario::StepSettle::Strict,
         };
         let outcome = self.backend.launch(&request)?;
         if !outcome.package.is_empty() {

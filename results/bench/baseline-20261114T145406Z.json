@@ -1,0 +1,486 @@
+{
+  "acos": "/home/Qui/.paseo/worktrees/3oxa6xao/s3ab/.cache/s3ab-target/release/acos",
+  "binary_sha256": "1d10cc8735da4ea14383c3c9b7a9f417edd639d40b5cf36447e13a1823975038",
+  "branch": "settle-se2-content-stable",
+  "commit": "cd8b6448d8acf3ac1ba74becd153a8e48b6219d1",
+  "commit_subject": "SE2b: geometry claims refused on content settle; honour settle_timeout_ms on the session path; counter-based deadline control",
+  "env": {
+    "ACOS_FONT_DIR": "/home/Qui/Projects/acos/.cache/boot/android-34/fonts",
+    "ACOS_STRICT_SETTLE": "default",
+    "animations": "on",
+    "host": "AMD Ryzen 9 9950X, 32 threads, 61908 MiB"
+  },
+  "metrics": {
+    "cpu_active_tap_strict_pct": {
+      "bad": 0,
+      "capped": false,
+      "category": "cpu",
+      "direction": "lower",
+      "label": "active CPU, 20 strict counter taps",
+      "max": 37.604,
+      "mean": 37.604,
+      "method": "utime+stime delta over the serve tree during the M8 strict counter cohort (20 taps, ~20 s)",
+      "metric": "CPU",
+      "min": 37.604,
+      "min_pct": 10.0,
+      "n": 1,
+      "ok": 1,
+      "p50": 37.604,
+      "p95": 37.604,
+      "rep_deviation_pct": 0.0,
+      "rep_p50": [
+        37.604
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": null,
+      "threshold_abs": 0.2,
+      "threshold_pct": 10.0,
+      "unit": "% of one core"
+    },
+    "m4_launch_fast_ms": {
+      "bad": 0,
+      "capped": false,
+      "category": "latency",
+      "direction": "lower",
+      "label": "M4 warm launch (fast)",
+      "max": 333.841,
+      "mean": 210.0704166666667,
+      "method": "acos_launch settle=fast (probe-fresh label recorded) -> reply tree count=0 + post-frame strict tree count=0",
+      "metric": "M4",
+      "min": 169.662,
+      "min_pct": 5.0,
+      "n": 12,
+      "ok": 12,
+      "p50": 200.9975,
+      "p95": 278.04184999999995,
+      "rep_deviation_pct": 0.0,
+      "rep_p50": [
+        200.9975
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": 51.67691140437067,
+      "threshold_abs": 2.0,
+      "threshold_pct": 5.0,
+      "unit": "ms"
+    },
+    "m4_launch_strict_ms": {
+      "bad": 0,
+      "capped": false,
+      "category": "latency",
+      "direction": "lower",
+      "label": "M4 warm launch (strict)",
+      "max": 471.477,
+      "mean": 377.14983333333333,
+      "method": "warm daemon, app not running -> acos_launch settle=strict -> reply tree count=0 + post-frame strict tree count=0; destroy between reps",
+      "metric": "M4",
+      "min": 298.807,
+      "min_pct": 5.0,
+      "n": 12,
+      "ok": 12,
+      "p50": 372.60850000000005,
+      "p95": 461.78215,
+      "rep_deviation_pct": 0.0,
+      "rep_p50": [
+        372.60850000000005
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": 42.672362546748126,
+      "threshold_abs": 2.0,
+      "threshold_pct": 5.0,
+      "unit": "ms"
+    },
+    "m5_screenshot_ms": {
+      "bad": 0,
+      "capped": false,
+      "category": "latency",
+      "direction": "lower",
+      "label": "M5 fresh screenshot (PNG)",
+      "max": 26.215,
+      "mean": 25.482833333333332,
+      "method": "acos_observe {png:true} on a held session; PNG magic + newer frame_seq + meaningful frame required",
+      "metric": "M5",
+      "min": 24.432,
+      "min_pct": 5.0,
+      "n": 12,
+      "ok": 12,
+      "p50": 25.622999999999998,
+      "p95": 26.15615,
+      "rep_deviation_pct": 0.0,
+      "rep_p50": [
+        25.622999999999998
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": 6.299613628380747,
+      "threshold_abs": 2.0,
+      "threshold_pct": 5.0,
+      "unit": "ms"
+    },
+    "m6_reset_fast_ms": {
+      "bad": 0,
+      "capped": false,
+      "category": "latency",
+      "direction": "lower",
+      "label": "M6 reset -> first correct screen (fast)",
+      "max": 196.238,
+      "mean": 186.5148333333333,
+      "method": "acos_reset settle=fast; state_reset + data_cleared + count=0 in the reply and in a following strict tree",
+      "metric": "M6",
+      "min": 179.517,
+      "min_pct": 5.0,
+      "n": 12,
+      "ok": 12,
+      "p50": 184.9015,
+      "p95": 194.54399999999998,
+      "rep_deviation_pct": 0.0,
+      "rep_p50": [
+        184.9015
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": 7.792392165558409,
+      "threshold_abs": 2.0,
+      "threshold_pct": 5.0,
+      "unit": "ms"
+    },
+    "m6_reset_strict_ms": {
+      "bad": 0,
+      "capped": false,
+      "category": "latency",
+      "direction": "lower",
+      "label": "M6 reset -> first correct screen (strict)",
+      "max": 401.196,
+      "mean": 356.4340833333333,
+      "method": "count=1 strictly read -> acos_reset settle=strict -> reply tree count=0 + following strict tree count=0",
+      "metric": "M6",
+      "min": 333.293,
+      "min_pct": 5.0,
+      "n": 12,
+      "ok": 12,
+      "p50": 346.435,
+      "p95": 400.4216,
+      "rep_deviation_pct": 0.0,
+      "rep_p50": [
+        346.435
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": 18.82591250884005,
+      "threshold_abs": 2.0,
+      "threshold_pct": 5.0,
+      "unit": "ms"
+    },
+    "m7_tree_fast_ms": {
+      "bad": 0,
+      "capped": false,
+      "category": "latency",
+      "direction": "lower",
+      "label": "M7 UI tree with text (fast)",
+      "max": 0.768,
+      "mean": 0.53925,
+      "method": "acos_observe_tree settle=fast; the fast tree must show the same count text as a strict read (no stale tree)",
+      "metric": "M7",
+      "min": 0.373,
+      "min_pct": 5.0,
+      "n": 12,
+      "ok": 12,
+      "p50": 0.524,
+      "p95": 0.69485,
+      "rep_deviation_pct": 0.0,
+      "rep_p50": [
+        0.524
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": 53.234732824427475,
+      "threshold_abs": 2.0,
+      "threshold_pct": 5.0,
+      "unit": "ms"
+    },
+    "m7_tree_strict_ms": {
+      "bad": 0,
+      "capped": false,
+      "category": "latency",
+      "direction": "lower",
+      "label": "M7 UI tree with text (strict)",
+      "max": 41.625,
+      "mean": 41.37325,
+      "method": "acos_observe_tree settle=strict on a held session; tree has nodes and text, not truncated",
+      "metric": "M7",
+      "min": 41.2,
+      "min_pct": 5.0,
+      "n": 12,
+      "ok": 12,
+      "p50": 41.373999999999995,
+      "p95": 41.590900000000005,
+      "rep_deviation_pct": 0.0,
+      "rep_p50": [
+        41.373999999999995
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": 0.9315028762024563,
+      "threshold_abs": 2.0,
+      "threshold_pct": 5.0,
+      "unit": "ms"
+    },
+    "m8_tap_counter_fast_ms": {
+      "bad": 0,
+      "capped": false,
+      "category": "latency",
+      "direction": "lower",
+      "label": "M8 tap -> settled, counter (fast)",
+      "max": 60.304,
+      "mean": 50.688583333333334,
+      "method": "acos_tap settle=fast; same state_changed/final-count checks",
+      "metric": "M8",
+      "min": 43.529,
+      "min_pct": 5.0,
+      "n": 12,
+      "ok": 12,
+      "p50": 44.686,
+      "p95": 60.25615,
+      "rep_deviation_pct": 0.0,
+      "rep_p50": [
+        44.686
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": 37.040012531889175,
+      "threshold_abs": 2.0,
+      "threshold_pct": 5.0,
+      "unit": "ms"
+    },
+    "m8_tap_counter_strict_ms": {
+      "bad": 0,
+      "capped": false,
+      "category": "latency",
+      "direction": "lower",
+      "label": "M8 tap -> settled, counter (strict)",
+      "max": 1017.042,
+      "mean": 957.8623333333334,
+      "method": "acos_tap {id:inc} settle=strict on counter, one session; every tap must report state_changed and the final strict count must equal the tap count",
+      "metric": "M8",
+      "min": 940.053,
+      "min_pct": 5.0,
+      "n": 12,
+      "ok": 12,
+      "p50": 957.1105,
+      "p95": 986.3124,
+      "rep_deviation_pct": 0.0,
+      "rep_p50": [
+        957.1105
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": 4.786228967292708,
+      "threshold_abs": 2.0,
+      "threshold_pct": 5.0,
+      "unit": "ms"
+    },
+    "m8_tap_form_fast_ms": {
+      "bad": 0,
+      "capped": false,
+      "category": "latency",
+      "direction": "lower",
+      "label": "M8 tap -> settled, form (fast)",
+      "max": 48.454,
+      "mean": 45.81641666666667,
+      "method": "empty form, tap submit settle=fast; same strict post-check",
+      "metric": "M8",
+      "min": 43.422,
+      "min_pct": 5.0,
+      "n": 12,
+      "ok": 12,
+      "p50": 46.229,
+      "p95": 48.14985,
+      "rep_deviation_pct": 0.0,
+      "rep_p50": [
+        46.229
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": 9.556014622855804,
+      "threshold_abs": 2.0,
+      "threshold_pct": 5.0,
+      "unit": "ms"
+    },
+    "m8_tap_form_strict_ms": {
+      "bad": 0,
+      "capped": false,
+      "category": "latency",
+      "direction": "lower",
+      "label": "M8 tap -> settled, form (strict)",
+      "max": 955.095,
+      "mean": 943.688,
+      "method": "empty form, tap submit settle=strict; following strict tree must read error='Name is required'; fast reset (unmeasured) before each rep",
+      "metric": "M8",
+      "min": 928.703,
+      "min_pct": 5.0,
+      "n": 12,
+      "ok": 12,
+      "p50": 944.2215,
+      "p95": 952.7069000000001,
+      "rep_deviation_pct": 0.0,
+      "rep_p50": [
+        944.2215
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": 2.3185131878484104,
+      "threshold_abs": 2.0,
+      "threshold_pct": 5.0,
+      "unit": "ms"
+    },
+    "tap_ack_ms": {
+      "bad": 0,
+      "capped": false,
+      "category": "latency",
+      "direction": "lower",
+      "label": "tap acknowledgement (settle.ack_ms)",
+      "max": 5.0,
+      "mean": 5.0,
+      "method": "input ack latency reported in the tap reply's settle block (counter + form, strict and fast)",
+      "metric": "tap ack",
+      "min": 5.0,
+      "min_pct": 5.0,
+      "n": 48,
+      "ok": 48,
+      "p50": 5.0,
+      "p95": 5.0,
+      "rep_deviation_pct": 0.0,
+      "rep_p50": [
+        5.0
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": 0.0,
+      "threshold_abs": 2.0,
+      "threshold_pct": 5.0,
+      "unit": "ms"
+    },
+    "teardown_ms": {
+      "bad": 0,
+      "capped": false,
+      "category": "latency",
+      "direction": "lower",
+      "label": "acos_destroy teardown_ms (GL1)",
+      "max": 23.0,
+      "mean": 15.107142857142858,
+      "method": "reply teardown.teardown_ms for a live counter session (lifecycle label recorded); 20 samples",
+      "metric": "teardown",
+      "min": 12.0,
+      "min_pct": 5.0,
+      "n": 28,
+      "ok": 28,
+      "p50": 14.0,
+      "p95": 20.65,
+      "rep_deviation_pct": 0.0,
+      "rep_p50": [
+        14.0
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": 61.78571428571428,
+      "threshold_abs": 2.0,
+      "threshold_pct": 5.0,
+      "unit": "ms"
+    },
+    "teardown_wall_ms": {
+      "bad": 0,
+      "capped": false,
+      "category": "latency",
+      "direction": "lower",
+      "label": "acos_destroy wall",
+      "max": 34.91,
+      "mean": 23.764142857142854,
+      "method": "client wall of acos_destroy incl. teardown evidence",
+      "metric": "teardown",
+      "min": 17.512,
+      "min_pct": 5.0,
+      "n": 28,
+      "ok": 28,
+      "p50": 21.243000000000002,
+      "p95": 33.4491,
+      "rep_deviation_pct": 0.0,
+      "rep_p50": [
+        21.243000000000002
+      ],
+      "rule": "max(min_pct, 2 x worst rep-to-rep deviation), capped at 40 %; a regression must exceed both threshold_pct and threshold_abs",
+      "spread_pct": 72.96803652968035,
+      "threshold_abs": 2.0,
+      "threshold_pct": 5.0,
+      "unit": "ms"
+    }
+  },
+  "mode": "full",
+  "noisy_phases": [
+    {
+      "phase": "latency",
+      "rep": 1
+    }
+  ],
+  "notes": [
+    "value = p50 pooled over every sample in every rep; p95 pooled the same way; per-rep p50s are kept for the threshold derivation.",
+    "threshold = max(category floor, 2 x worst rep-to-rep deviation), capped at 40 %; a delta must exceed both the relative and the absolute threshold to be called a regression.",
+    "memory rows are label-matched (cgroup anon+shmem vs Pss); they are never mixed.",
+    "M3 is measured with the launch working set evicted per rep; the warm-cache variant is M4 + daemon spawn (P7)."
+  ],
+  "ok": true,
+  "phases": [
+    {
+      "bundle": "a",
+      "errors": [],
+      "host_after_loadavg1": 5.67,
+      "host_before_loadavg1": 5.67,
+      "host_before_mem_avail_gib": 35.42,
+      "noisy": true,
+      "ok": true,
+      "other_acos": [
+        {
+          "cmd": "/home/Qui/.local/share/acos/0.2.0/bin/acos serve",
+          "comm": "acos",
+          "pid": 2186162
+        },
+        {
+          "cmd": "/home/Qui/.local/share/acos/0.2.0/bin/acos-art launch --apk /home/Qui/Projects/acos/.cache/gaten/gaten-dev-current-x86_64-release.apk --until activity-resumed -",
+          "comm": "acos-art",
+          "pid": 2212581
+        },
+        {
+          "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+          "comm": "bwrap",
+          "pid": 2212594
+        },
+        {
+          "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+          "comm": "bwrap",
+          "pid": 2212596
+        },
+        {
+          "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9 && CARGO_TARGET_DIR=$PWD/.cache/g3f1-target /home/Qui/Projects/acos/tools/guarded.sh -",
+          "comm": "bash",
+          "pid": 2237601
+        },
+        {
+          "cmd": "bash /home/Qui/Projects/acos/tools/guarded.sh --mem 12G --vmem 40000000 --time 1200 -- cargo build --release --offline -j 8 -p acos-cli -p acos-art",
+          "comm": "bash",
+          "pid": 2237602
+        },
+        {
+          "cmd": "/usr/bin/timeout -k 5 1200 cargo build --release --offline -j 8 -p acos-cli -p acos-art",
+          "comm": "timeout",
+          "pid": 2237612
+        },
+        {
+          "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo build --release --offline -j 8 -p acos-cli -p acos-art",
+          "comm": "cargo",
+          "pid": 2237613
+        },
+        {
+          "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc --crate-name acos_art --edition=2021 crates/acos-art/src/lib.rs --error-format=json --jso",
+          "comm": "rustc",
+          "pid": 2237769
+        }
+      ],
+      "phase": "latency",
+      "queue_wait_s": null,
+      "rep": 1,
+      "wall_s": 90.919
+    }
+  ],
+  "profile": "release",
+  "reps": 1,
+  "schema": "acos-bench-baseline/2",
+  "tool": "tools/bench/acos-bench.sh",
+  "utc": "2026-11-14T14:57:59+00:00"
+}

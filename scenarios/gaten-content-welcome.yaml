@@ -1,0 +1,58 @@
+# gaten-content-welcome: SE2 — the content-stable settle on a screen that never
+# pixel-settles.
+#
+# Gaten's welcome/onboarding screens run a 10 s looping Reanimated timeline and
+# each page arms a 200 ms auto-advance retry, so a strict settle there honestly
+# times out (GR3 §4.3, backlog G3e). Until SE2 the only way past them was
+# `settle: fast` navigation, which never backs a pass. ADR-0026 decision 3 adds
+# the opt-in `settle: content`: settled when the UI tree content signature
+# (class, resource-id, text, content-desc, hint, checked/selected/enabled/
+# focused/clickable/scrollable state, window, package — in visible order) is
+# unchanged for a >= 300 ms window, even though the pixels keep animating. The
+# traversals must be provably fresh samples (strictly increasing probe_seq), and
+# geometry (bounds) is never part of the signature: a translated view's rect
+# animates, so a bounds claim on a content-settled frame fails closed
+# (`content_settle_geometry`).
+#
+# Here the launch and the "Set up Gaten" press are both content-stable, and the
+# text assertions describe that same content-settled tree. Their step evidence
+# records `settle: content`, `window_ms`, `traversals` and the `signature`. No
+# pixel assertion may be backed by it; `scenarios/negative/gaten-content-pixel.yaml`
+# proves that it fails closed.
+version: 1
+name: gaten-content-welcome
+description: >-
+  Gaten's forever-animating welcome screen: bind it with settle: content, assert
+  its own copy, then press "Set up Gaten" with the same content-stable rule.
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: pass
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  # The forever-animating screen: content-stable, never pixel-stable.
+  - launch:
+      activity: com.gaten.app.MainActivity
+      clear_state: true
+      settle: content
+      settle_timeout_ms: 20000
+  - assert_text:
+      selector: {text: {contains: "Set up Gaten"}}
+      text: {contains: "Set up Gaten"}
+  # The press that GR3 had to run as `settle: fast` navigation: now content-stable,
+  # and the step's evidence records the measured content record.
+  - tap:
+      selector: {text: {contains: "Set up Gaten"}}
+      settle: content
+      settle_timeout_ms: 20000
+  # SE2b: the content tap must be *usable*. The onboarding page it lands on
+  # carries a "Skip" action on every page, so this assertion checks that the
+  # content-settled post-tap frame is a real, readable tree (and that the step
+  # evidence's per-action record is the one that backs it).
+  - assert_text:
+      selector: {text: {contains: "Skip"}}
+      text: {contains: "Skip"}

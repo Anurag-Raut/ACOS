@@ -86,6 +86,11 @@ const DEFAULT_SETTLE_BUDGET_MS: u64 = 15_000;
 const DEFAULT_SETTLE_NOCHANGE_POLLS: u32 = 2;
 /// Pause between settle polls (a poll already costs ~1 s of guest work).
 const SETTLE_POLL_GAP_MS: u64 = 250;
+/// SE2: how long a `settle: content` step may keep traversing before its
+/// content signature must have been stable for the window. The window itself
+/// is ~300 ms; the budget bounds the wait, and running out is an honest
+/// `TIMEOUT` (the screen kept changing its content), never a pass.
+const DEFAULT_CONTENT_SETTLE_TIMEOUT_MS: u64 = 10_000;
 
 /// One ART session.
 pub struct ArtSession {
@@ -208,8 +213,24 @@ pub struct ArtSession {
     /// `None` keeps the engine's documented default; on timeout the guest still
     /// returns the latest tree and frame identity with `settled:false`.
     settle_timeout_ms: Option<u64>,
+    /// SE2: how the bound frame was settled (`strict`, `fast` or `content`).
+    /// Published on the observation so the verifier can refuse a pixel claim
+    /// that only content stability backs.
+    bound_settle: Option<serde_json::Value>,
     /// P12b: deadline for the tree the next `reset` binds.
     reset_settle_timeout_ms: Option<u64>,
+    /// SE2b: the probe sample floor for the *next* tree request. The guest's
+    /// fast tree only answers with a sample strictly newer than this, so a
+    /// content-settle traversal can never be the sample an earlier traversal
+    /// (or the pre-input state) already consumed.
+    next_min_probe_seq: Option<u64>,
+    /// SE2b: the newest `probe_seq` this session has *consumed* (any tree
+    /// reply). A content window starts strictly above it.
+    last_probe_seq: Option<u64>,
+    /// SE2b: the `probe_seq` of the most recent tree reply, `None` when the
+    /// reply carried none. Read straight from the reply (not carried over), so
+    /// a reply without a sample is detectable and fails closed.
+    last_reply_probe_seq: Option<u64>,
     closed: bool,
     /// GL1: how the last explicit destruction of this session ended
     /// (orderly activity lifecycle vs. killed after the bounded grace) and how
@@ -859,6 +880,20 @@ pub(crate) struct FirstFrameReport {
 }
 
 impl FirstFrameReport {
+    /// SE2c: point the report at the tree the reply actually publishes.
+    ///
+    /// A content-settled launch binds its frame with the guest's `fast` rule and
+    /// only then proves the tree content stable, so this report was built for the
+    /// pre-settle probe. Publishing it unchanged alongside the *content-settled*
+    /// tree described a tree the reply no longer carries (its `nodes` count and
+    /// `placeholder` flag). Re-describing it keeps `first_frame` evidence and
+    /// `frame.meaningful`/`frame.placeholder` about the same tree.
+    fn describes_tree(mut self, tree: &UiTree) -> Self {
+        self.nodes = ui_tree_node_count(&tree.nodes);
+        self.placeholder = first_frame_is_bare_skeleton(tree);
+        self
+    }
+
     /// The report for a launch whose first traversal is the frame (no wait,
     /// no claim about content).
     fn one_traversal(tree: &UiTree, settled: bool, bound: Option<String>) -> Self {
@@ -1471,9 +1506,13 @@ impl ArtSession {
             first_frame_bound: None,
             reset_settle: "strict",
             reset_pixels: true,
+            next_min_probe_seq: None,
+            last_probe_seq: None,
+            last_reply_probe_seq: None,
             insets,
             animations,
             settle_timeout_ms: None,
+            bound_settle: None,
             reset_settle_timeout_ms: None,
             closed: false,
             last_teardown: None,
@@ -1630,6 +1669,50 @@ impl ArtSession {
         self.require_cached_tree()
     }
 
+    /// SE2c: one **fresh** tree-only traversal for target resolution under
+    /// `settle: content`.
+    ///
+    /// The bound tree of the previous step is not position evidence for the next
+    /// input: the content signature never hashes `bounds` (a view translated by an
+    /// animation reports a rect that drifts ~1 px per fresh traversal), so a
+    /// layout shift between steps would compute the tap point from a stale rect
+    /// and land on a neighbour.
+    ///
+    /// This takes exactly one `fast` traversal (`pixels:false`, no quiet window -
+    /// a forever-animating screen would never satisfy one) with the one-shot
+    /// `min_probe_seq` floor set above every sample this session has consumed, so
+    /// the guest either answers with a provably newer sample or refuses with
+    /// `NO_FRESH_TREE`. No cached tree is used, and no sample is silently reused.
+    /// The input itself still binds its own content-settled frame afterwards.
+    pub(crate) fn fresh_input_tree(&mut self) -> Result<UiTree, BackendError> {
+        let floor = self.last_probe_seq.unwrap_or(0);
+        self.next_min_probe_seq = Some(floor);
+        let result = self.request_tree_with("fast", false);
+        // The floor is one-shot; never leave it armed for the next request.
+        self.next_min_probe_seq = None;
+        result?;
+        if self.last_reply_probe_seq.is_none() {
+            return Err(BackendError::Protocol {
+                code: ErrorCode::NoFreshFrame,
+                detail: format!(
+                    "settle content: the target-resolution traversal returned no `probe_seq`, so \
+                     it cannot be proven newer than the sample at or below {floor}; the target is \
+                     not resolved on an unproven tree"
+                ),
+                hint: Some(
+                    "A content-mode input resolves its selector on a provably fresh traversal. \
+                     Re-run on a guest that reports `probe_seq`."
+                        .to_string(),
+                ),
+                details: Some(serde_json::json!({
+                    "reason": "content_resolution_unproven",
+                    "min_probe_seq": floor,
+                })),
+            });
+        }
+        self.require_cached_tree()
+    }
+
     /// The launched package (empty before the ready line).
     pub fn package(&self) -> &str {
         &self.package
@@ -1659,7 +1742,11 @@ impl ArtSession {
     /// the default `strict`). Serve owns the per-verb choice; assertions never
     /// call this with `fast`.
     pub fn set_settle_mode(&mut self, mode: &'static str) {
-        self.settle_mode = if mode == "fast" { "fast" } else { "strict" };
+        self.settle_mode = match mode {
+            "fast" => "fast",
+            "content" => "content",
+            _ => "strict",
+        };
     }
 
     /// P12b: the per-request settle deadline (`settle_timeout_ms`). `None` keeps
@@ -1667,6 +1754,21 @@ impl ArtSession {
     /// the latest tree and frame identity with `settled:false`.
     pub fn set_settle_timeout(&mut self, timeout_ms: Option<u64>) {
         self.settle_timeout_ms = timeout_ms;
+    }
+
+    /// SE2: the settle rule the bound frame was proven by, as reported.
+    pub fn bound_settle(&self) -> Option<&serde_json::Value> {
+        self.bound_settle.as_ref()
+    }
+
+    /// SE2: ask the next input action for the content-stable rule instead of
+    /// the strict (or fast) one. Mutually exclusive with `set_settle_mode`.
+    pub fn set_content_settle(&mut self, content: bool) {
+        if content {
+            self.settle_mode = "content";
+        } else if self.settle_mode == "content" {
+            self.settle_mode = "strict";
+        }
     }
 
     /// P12: the animation choice this session was launched with (`"on"`/`"off"`).
@@ -2021,9 +2123,26 @@ impl ArtSession {
     ) -> Result<(), BackendError> {
         let mut request = request;
         if let Some(object) = request.as_object_mut() {
-            object.insert("settle".into(), serde_json::json!(self.settle_mode));
-            if let Some(timeout) = self.settle_timeout_ms {
-                object.insert("settle_timeout_ms".into(), serde_json::json!(timeout));
+            // SE2: the guest knows `strict` and `fast` only. A content-stable
+            // step delivers the action with the guest's fast rule (no quiet
+            // window) and proves content stability on the host's own fresh
+            // traversals below; the report it publishes says `content`.
+            let guest_settle = if self.settle_mode == "content" {
+                "fast"
+            } else {
+                self.settle_mode
+            };
+            object.insert("settle".into(), serde_json::json!(guest_settle));
+            // SE2b: in content mode the step's `settle_timeout_ms` is the budget
+            // for the *content window* (the rule the caller asked for), not for
+            // the guest's fast delivery. Forwarding it would make the guest's
+            // navigation settle wait the whole content budget on a screen that
+            // never goes quiet (a 20 s tap on the reference screen). The guest
+            // keeps its own fast deadline; the host bounds the window.
+            if self.settle_mode != "content" {
+                if let Some(timeout) = self.settle_timeout_ms {
+                    object.insert("settle_timeout_ms".into(), serde_json::json!(timeout));
+                }
             }
         }
         self.last_input_settle = None;
@@ -2088,6 +2207,19 @@ impl ArtSession {
                     visual_change = changed;
                 }
                 self.last_input = Some(delivery(&reply, visual_change));
+                // SE2: a content-stable input is only settled once the host has
+                // proven the tree content unchanged across its own traversals.
+                // The guest's fast block is replaced by the content report, so
+                // the step (and every observation it backs) records the rule
+                // that actually justified it.
+                if self.settle_mode == "content" {
+                    let report = self.content_settle()?;
+                    self.last_input_settle = Some(report.clone());
+                    self.bound_settle = Some(report.clone());
+                    if let Some(input) = self.last_input.as_mut() {
+                        input.settle = Some(report);
+                    }
+                }
                 Ok(())
             }
             Err(error) if error.code == ErrorCode::NoFreshFrame => {
@@ -2132,6 +2264,18 @@ impl ArtSession {
                     timing.recovery_polls = self.settle.recovery_polls - polls_before;
                 }
                 timing.host_recovery_ms = recovery_started.elapsed().as_millis() as u64;
+                // SE2b: the recovery path (guest refused the settle, the host
+                // recovered from its own captures) must apply the same content
+                // rule. Before this, a content action that recovered returned a
+                // strict/fast record and only failed closed by accident.
+                if self.settle_mode == "content" {
+                    let report = self.content_settle()?;
+                    self.last_input_settle = Some(report.clone());
+                    self.bound_settle = Some(report.clone());
+                    if let Some(input) = self.last_input.as_mut() {
+                        input.settle = Some(report);
+                    }
+                }
                 Ok(())
             }
             Err(error) => Err(BackendError::from_protocol(error)),
@@ -2307,6 +2451,11 @@ impl ArtSession {
             None => None,
         };
         self.seen_seq = self.seen_seq.max(seq);
+        if reply.get("tree").is_some() {
+            if let Some(settle) = reply.get("settle") {
+                self.bound_settle = Some(settle.clone());
+            }
+        }
         let Some(tree_value) = reply.get("tree") else {
             // No tree in this reply (for example `key` or `screenshot`); keep the
             // cached tree only for the frame it was bound to.
@@ -2376,6 +2525,11 @@ impl ArtSession {
     pub(crate) fn capture_frame(&mut self) -> Result<CapturedFrame, BackendError> {
         // A pure capture command: no tree is returned, so the bound tree keeps
         // its own sequence. Freshness is proven by the sequence advancing.
+        //
+        // SE2b: and it carries no settle record either, so it must not inherit
+        // the previous reply's (a content-settled record would otherwise outlive
+        // the pixels it never described).
+        self.bound_settle = None;
         let previous = self.seen_seq;
         let started = Instant::now();
         let reply = self.command(serde_json::json!({"cmd":"screenshot"}))?;
@@ -2484,10 +2638,22 @@ impl ArtSession {
         if !pixels {
             request["pixels"] = serde_json::json!(false);
         }
+        // SE2b: one-shot sample floor. The guest's fast tree refuses to answer
+        // with a sample at or below it (`NO_FRESH_TREE`), which is what proves a
+        // content-settle traversal is a *new* observation.
+        if let Some(floor) = self.next_min_probe_seq.take() {
+            request["min_probe_seq"] = serde_json::json!(floor);
+        }
         if let Some(baseline) = baseline_tree {
             request["baseline_tree"] = baseline;
         }
         let reply = self.command(request)?;
+        // SE2b: read the sample identity from this reply only. A reply without
+        // `probe_seq` cannot be proven fresh, and the content settle refuses it.
+        self.last_reply_probe_seq = reply.get("probe_seq").and_then(|v| v.as_u64());
+        if let Some(seq) = self.last_reply_probe_seq {
+            self.last_probe_seq = Some(self.last_probe_seq.map_or(seq, |seen| seen.max(seq)));
+        }
         self.last_tree_settle = reply.get("settle").cloned();
         self.last_tree_json = reply.get("tree").cloned();
         let t1 = m5_now_us();
@@ -2885,9 +3051,209 @@ impl ArtSession {
     /// navigation/inspection and is labelled in the reply's `settle` block;
     /// `strict` is the default evidence mode.
     pub fn tree_with_settle(&mut self, settle: &'static str) -> Result<UiTree, BackendError> {
-        let settle = if settle == "fast" { "fast" } else { "strict" };
+        let settle = match settle {
+            "fast" => "fast",
+            "content" => "content",
+            _ => "strict",
+        };
+        if settle == "content" {
+            self.content_settle()?;
+            return self.require_cached_tree();
+        }
         self.request_tree_only(settle)?;
         self.require_cached_tree()
+    }
+
+    /// SE2: prove the UI tree content stable, then report it (`settle: content`).
+    ///
+    /// Every traversal is a **fast, tree-only** request (`settle:fast`,
+    /// `pixels:false`): the guest answers with a probe sample that is
+    /// *strictly newer* than the floor this call passes
+    /// (`min_probe_seq`), or refuses with `NO_FRESH_TREE`. That freshness floor
+    /// is what makes the window an observation of the screen rather than of the
+    /// guest's latest (possibly pre-request) sample: two traversals can never be
+    /// the same sample, and a sample that predates the window never counts.
+    ///
+    /// Only the traversal's **content signature** is compared
+    /// ([`acos_verify::settle::content_signature`]: class, resource-id, text,
+    /// content-desc, hint, bounds, visible-bounds, visible/enabled/focused/
+    /// clickable/scrollable/checked/selected, window, package + the tree's
+    /// package/truncated/text_available). Pixels are never consulted.
+    ///
+    /// A different signature restarts the window. Settled means the same
+    /// signature was seen across at least two **distinct fresh** traversals
+    /// spanning at least the window ([`acos_verify::settle::DEFAULT_CONTENT_WINDOW_MS`],
+    /// configurable upward with `ACOS_CONTENT_SETTLE_WINDOW_MS`, never below
+    /// 300 ms). Running out of [`DEFAULT_CONTENT_SETTLE_TIMEOUT_MS`] (or the
+    /// step's `settle_timeout_ms`) is a `TIMEOUT` carrying the last signature in
+    /// `details.settle`, never a pass - including when the signature changes on
+    /// every traversal (a countdown), because the deadline is checked
+    /// independently of the window's traversal count.
+    ///
+    /// Once settled, one **pixel-bound** traversal is taken so the settled
+    /// content is also the bound frame (the verifier binds a frame, tree and
+    /// PNG together). That traversal is only accepted when its tree hashes to
+    /// the settled signature; if the screen moved meanwhile the window simply
+    /// continues. Its pixels are never pixel evidence (`pixel_evidence:false`).
+    pub fn content_settle(&mut self) -> Result<serde_json::Value, BackendError> {
+        use acos_verify::settle::{content_window_ms, ContentProbeWindow};
+        let requested = std::env::var("ACOS_CONTENT_SETTLE_WINDOW_MS")
+            .ok()
+            .and_then(|value| value.trim().parse::<u64>().ok());
+        let window_ms = content_window_ms(requested);
+        let timeout_ms = self
+            .settle_timeout_ms
+            .unwrap_or(DEFAULT_CONTENT_SETTLE_TIMEOUT_MS);
+        if std::env::var_os("ACOS_CONTENT_TRACE").is_some() {
+            eprintln!("content_settle: step timeout {:?} -> {timeout_ms} ms", self.settle_timeout_ms);
+        }
+        let started = Instant::now();
+        // The floor: the newest sample this session already consumed. The first
+        // traversal of the window must be newer than it, so the pre-request /
+        // pre-input sample can never be part of the verdict.
+        let floor_probe_seq = self.last_probe_seq.unwrap_or(0);
+        let mut window = ContentProbeWindow::new(window_ms, floor_probe_seq);
+        let caller_timeout = self.settle_timeout_ms;
+        let result = self.content_settle_loop(&mut window, started, timeout_ms);
+        self.settle_timeout_ms = caller_timeout;
+        self.next_min_probe_seq = None;
+        match result {
+            Ok(report) => {
+                self.last_tree_settle = Some(report.clone());
+                self.bound_settle = Some(report.clone());
+                Ok(report)
+            }
+            Err(error) => {
+                // A timeout is still an observation of *why*: keep the last
+                // signature, the traversal count and the sample range.
+                if let BackendError::Protocol {
+                    details: Some(details),
+                    ..
+                } = &error
+                {
+                    self.last_tree_settle = details.get("settle").cloned();
+                }
+                Err(error)
+            }
+        }
+    }
+
+    fn content_settle_loop(
+        &mut self,
+        window: &mut acos_verify::settle::ContentProbeWindow,
+        started: Instant,
+        timeout_ms: u64,
+    ) -> Result<serde_json::Value, BackendError> {
+        use acos_verify::settle::{content_signature, ContentAttempt, SIGNATURE_FIELDS};
+        // At least one traversal is always attempted: the deadline is enforced
+        // *after* a traversal (see `ContentAttempt`), so a 1 ms budget is an
+        // honest "not settled", never a verdict with no sample at all.
+        loop {
+            // One fresh, tree-only traversal. A per-traversal deadline keeps a
+            // single slow walk from eating the whole window.
+            let remaining = timeout_ms.saturating_sub(started.elapsed().as_millis() as u64);
+            self.settle_timeout_ms = Some(remaining.clamp(50, 750));
+            self.next_min_probe_seq = Some(window.next_floor());
+            self.request_tree_with("fast", false)?;
+            let probe_seq = self.last_reply_probe_seq;
+            let tree = self.require_cached_tree()?;
+            let signature = content_signature(&tree);
+            let at_ms = started.elapsed().as_millis() as u64;
+            match window.attempt(signature, probe_seq, at_ms, timeout_ms) {
+                ContentAttempt::Settled => {}
+                ContentAttempt::Continue => continue,
+                ContentAttempt::TimedOut(reason) => {
+                    return Err(self.content_timeout(window, started, reason));
+                }
+            }
+            // Bind the settled content to pixels: one traversal with a capture
+            // whose tree must still hash to the settled signature.
+            self.settle_timeout_ms = Some(1);
+            // This traversal may reuse the settled sample (it only has to be
+            // no older than it); the *content* is what is being bound.
+            self.next_min_probe_seq = None;
+            if let Err(error) = self.request_tree_with("strict", true) {
+                // No pixels for the bound frame: the content verdict stands but
+                // there is nothing to bind it to, so fail closed.
+                return Err(error);
+            }
+            let bound_probe = self.last_reply_probe_seq;
+            let bound_tree = self.require_cached_tree()?;
+            let bound_signature = content_signature(&bound_tree);
+            if !window.binds_settled_content(bound_signature, bound_probe) {
+                // The screen moved while the pixels were captured: keep waiting.
+                // The deadline is enforced at the top of the loop.
+                continue;
+            }
+            let frame_seq = self.cached.as_ref().map(|frame| frame.seq);
+            return Ok(serde_json::json!({
+                "mode": "content",
+                "settled": true,
+                "bound": "content-stable",
+                "window_ms": window.window_ms(),
+                "traversals": window.fresh_traversals(),
+                "signature": format!("{:016x}", bound_signature),
+                "frame_seq": frame_seq,
+                "probe_seq": bound_probe,
+                "probe_seq_first": window.first_probe_seq(),
+                "probe_seq_floor": window.floor_probe_seq(),
+                "elapsed_ms": started.elapsed().as_millis() as u64,
+                "pixel_evidence": false,
+                "signature_fields": SIGNATURE_FIELDS,
+                "signature_tree_fields": acos_verify::settle::SIGNATURE_TREE_FIELDS,
+                "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+            }));
+        }
+    }
+
+    fn content_timeout(
+        &self,
+        window: &acos_verify::settle::ContentProbeWindow,
+        started: Instant,
+        reason: &'static str,
+    ) -> BackendError {
+        let elapsed_ms = started.elapsed().as_millis() as u64;
+        let traversals = window.fresh_traversals();
+        let detail = if reason == acos_verify::settle::CONTENT_PROBE_UNPROVEN {
+            format!(
+                "settle content: a traversal could not be proven fresh (no `probe_seq`, or a                  sample at/below the floor {}), so the content window has no evidence;                  after {traversals} proven traversal(s) / {elapsed_ms} ms",
+                window.next_floor()
+            )
+        } else {
+            format!(
+                "settle content: the UI tree content signature was still changing after                  {traversals} proven traversal(s) / {elapsed_ms} ms (window {} ms); the screen                  is not content-stable, so nothing it shows is settled",
+                window.window_ms()
+            )
+        };
+        BackendError::Protocol {
+            code: ErrorCode::Timeout,
+            detail,
+            hint: Some(
+                "Content settle needs the tree's text/content-desc/bounds/state to stop                  changing for the window, on traversals that are provably fresh samples. If                  the screen updates a value continuously (a countdown or a progress                  percentage), no settle rule can prove it: use `settle: fast` for navigation                  only, then assert once you know the value."
+                    .to_string(),
+            ),
+            details: Some(serde_json::json!({
+                "reason": reason,
+                "settle": {
+                    "mode": "content",
+                    "settled": false,
+                    "bound": "content-timeout",
+                    "window_ms": window.window_ms(),
+                    "traversals": traversals,
+                    "signature": window.signature().map(|signature| format!("{signature:016x}")),
+                    "probe_seq": window.last_probe_seq(),
+                    "probe_seq_first": window.first_probe_seq(),
+                    "probe_seq_floor": window.floor_probe_seq(),
+                    "unproven_replies": window.unproven(),
+                    "elapsed_ms": elapsed_ms,
+                    "pixel_evidence": false,
+                    "signature_fields": acos_verify::settle::SIGNATURE_FIELDS,
+                },
+                "traversals": traversals,
+                "window_ms": window.window_ms(),
+                "reason": reason,
+            })),
+        }
     }
 
     /// G3c: how the most recent launch bound its first frame (serve publishes
@@ -2929,8 +3295,28 @@ pub(crate) fn ensure_launch_tree(
         if self.cached.is_some() {
             return self.require_cached_tree();
         }
-        let settle = if settle == "fast" { "fast" } else { "strict" };
-        let (tree, report) = self.bind_first_frame(settle, pixels)?;
+        let settle = match settle {
+            "fast" => "fast",
+            "content" => "content",
+            _ => "strict",
+        };
+        if settle == "content" {
+            // SE2: bind the app's content frame with the guest's fast rule, then
+            // prove the tree content stable on the host. No PNG is claimed for a
+            // content-bound launch (the pixels may still be animating).
+            //
+            // SE2c: the reply must carry the **content-settled** tree. The fast
+            // bind above only proves the app mounted; its skeleton-or-not state is
+            // not what this launch publishes. `content_settle` binds the settled
+            // content to its own frame, so that is the tree both the reply and the
+            // `first_frame` evidence have to describe.
+            let (_pre_settle, report) = self.bind_first_frame("fast", false, false)?;
+            self.content_settle()?;
+            let tree = self.require_cached_tree()?;
+            self.first_frame_report = Some(report.describes_tree(&tree));
+            return Ok(tree);
+        }
+        let (tree, report) = self.bind_first_frame(settle, pixels, true)?;
         self.first_frame_report = Some(report);
         Ok(tree)
     }
@@ -2977,6 +3363,7 @@ pub(crate) fn ensure_launch_tree(
         &mut self,
         settle: &'static str,
         pixels: bool,
+        warn_placeholder: bool,
     ) -> Result<(UiTree, FirstFrameReport), BackendError> {
         let mut traversals = 0usize;
         let mut waited_ms = 0u64;
@@ -3095,7 +3482,7 @@ pub(crate) fn ensure_launch_tree(
             nodes: ui_tree_node_count(&tree.nodes),
             placeholder: unmounted && first_frame_is_bare_skeleton(&tree),
         };
-        if report.placeholder {
+        if report.placeholder && warn_placeholder {
             eprintln!(
                 "acos serve: launch first frame is a window skeleton ({} nodes, no app text) \
                  after {} traversal(s)/{} ms ({} event wait(s)); reported as placeholder, \
@@ -3212,6 +3599,13 @@ pub(crate) fn ensure_launch_tree(
         pixels: bool,
         timeout_ms: Option<u64>,
     ) {
+        // SE2b: only fast/strict can bind a reset frame. `serve::reset` refuses
+        // `content` before it gets here; this is the second, explicit guard so a
+        // future caller cannot silently downgrade it to strict.
+        debug_assert!(
+            settle != "content",
+            "acos_reset cannot bind a content-stable frame"
+        );
         self.reset_settle = if settle == "fast" { "fast" } else { "strict" };
         self.reset_pixels = pixels;
         self.reset_settle_timeout_ms = timeout_ms;
@@ -3255,6 +3649,7 @@ impl SessionBackend for ArtSession {
     }
 
     fn launch(&mut self, _apk: &Path) -> Result<LaunchOutcome, BackendError> {
+        let content = self.settle_mode == "content";
         // G3c: the launch frame must be the app's *content* frame, not the window
         // skeleton that exists a moment before the app mounts its own views (see
         // `bind_first_frame`).
@@ -3268,11 +3663,35 @@ impl SessionBackend for ArtSession {
         // records each traversal's settle block; restore the pre-launch value so
         // the launch step is judged exactly as it was before G3c.
         let settle_before = self.last_tree_settle.clone();
-        let (_tree, report) = self.bind_first_frame("strict", true)?;
+        let (_tree, report) =
+            self.bind_first_frame(if content { "fast" } else { "strict" }, !content, !content)?;
         self.last_tree_settle = settle_before;
+        // SE2: a content-settled launch proves the tree's content only. Its
+        // frame is never pixel evidence, so no PNG is claimed for it and the
+        // reply carries the measured content record.
+        let content_settle = if content {
+            let record = self.content_settle()?;
+            self.bound_settle = Some(record.clone());
+            Some(record)
+        } else {
+            None
+        };
         let frame = self.require_cached_frame()?.observed(previous)?;
+        // SE2c: the published frame is the content-settled traversal, so the
+        // `first_frame` report must describe *it*, not the fast pre-settle probe
+        // `bind_first_frame` returned (whose node count and placeholder flag
+        // describe a tree this reply no longer carries).
+        let report = if content {
+            report.describes_tree(&frame.tree)
+        } else {
+            report
+        };
         let mut meta = frame.tree.frame.clone();
-        if report.placeholder {
+        // SE2: a content-settled launch binds the content-stable traversal, not
+        // the fast skeleton probe; its meaning is the content tree's own.
+        if content {
+            meta.meaningful = !first_frame_is_bare_skeleton(&frame.tree);
+        } else if report.placeholder {
             // The protocol rule: a placeholder must never satisfy a UI
             // assertion. Say so in the frame itself, not only in prose.
             meta.meaningful = false;
@@ -3287,7 +3706,11 @@ impl SessionBackend for ArtSession {
             ),
             package: self.package.clone(),
             frame: Some(meta),
-            screenshot_png: Some(self.require_cached_frame()?.png_bytes()?),
+            screenshot_png: if content {
+                None
+            } else {
+                Some(self.require_cached_frame()?.png_bytes()?)
+            },
             crashed: None,
             detail: serde_json::json!({
                 "engine": "art",
@@ -3295,6 +3718,7 @@ impl SessionBackend for ArtSession {
                 "activity": self.activity,
                 "apk": self.apk.display().to_string(),
                 "first_frame": report.to_json(),
+                "settle": content_settle,
                 "provenance": {
                     "frame": "host-observed",
                     "tree": "guest-asserted",
@@ -3309,8 +3733,40 @@ impl SessionBackend for ArtSession {
         self.tree_with_settle("strict")
     }
 
+    /// SE2b: forward the step's `settle_timeout_ms` to the session.
+    ///
+    /// The verifier's `Backend::set_settle_timeout` reaches
+    /// `EngineBackend::Session { session: Box<dyn SessionBackend> }`, so without
+    /// this override the trait's default (a no-op) swallowed it: every scenario's
+    /// declared settle budget was silently ignored and the engine default was
+    /// used instead. A declared budget that is not applied is exactly the kind of
+    /// quiet downgrade a verification tool must not have.
+    fn set_settle_timeout(&mut self, timeout_ms: Option<u64>) {
+        ArtSession::set_settle_timeout(self, timeout_ms);
+    }
+
     fn set_input_settle_mode(&mut self, fast: bool) {
         self.settle_mode = if fast { "fast" } else { "strict" };
+    }
+
+    fn input_settle_mode(&self) -> &'static str {
+        self.settle_mode
+    }
+
+    fn fresh_input_tree(&mut self) -> Result<UiTree, BackendError> {
+        ArtSession::fresh_input_tree(self)
+    }
+
+    fn set_input_content_settle(&mut self, content: bool) {
+        ArtSession::set_content_settle(self, content);
+    }
+
+    fn set_launch_settle_mode(&mut self, mode: &'static str) {
+        self.settle_mode = mode;
+    }
+
+    fn bound_settle(&self) -> Option<&serde_json::Value> {
+        self.bound_settle.as_ref()
     }
 
     fn frame(&mut self) -> Result<ObservedFrame, BackendError> {
@@ -3414,6 +3870,13 @@ impl SessionBackend for ArtSession {
     }
 
     fn begin_input(&mut self) {
+        // SE2b: the bound settle record describes the *last* tree reply. A new
+        // action invents a new frame, so a previous (possibly content-settled)
+        // record must not outlive it: strict/fast actions clear it here and let
+        // their own reply replace it; a content action proves a new record.
+        if self.settle_mode != "content" {
+            self.bound_settle = None;
+        }
         self.input_baseline = self
             .cached
             .as_ref()
@@ -4061,6 +4524,49 @@ mod tests {
         assert!(!first_frame_is_bare_skeleton(&tree(wide)));
         // An empty tree (no windows yet) is a skeleton, not content.
         assert!(first_frame_is_unmounted(&tree(vec![])));
+    }
+
+    /// SE2c: a content-settled launch publishes the **content-settled** tree, so
+    /// its `first_frame` evidence must describe that tree, not the fast
+    /// pre-settle probe it was built from.
+    ///
+    /// Before the fix `ensure_launch_tree` handed the pre-settle skeleton tree
+    /// back in the launch reply (and the report stayed a skeleton report), so the
+    /// reply's tree and its `first_frame.nodes`/`placeholder` described two
+    /// different traversals.
+    #[test]
+    fn a_content_launch_report_describes_the_tree_the_reply_publishes() {
+        use acos_protocol::ui::Bounds;
+        let node = |class: &str, children: Vec<UiNode>| {
+            let mut node = UiNode::new("n", class, Bounds::new(0, 0, 1080, 2209));
+            node.children = children;
+            node
+        };
+        let tree = |nodes: Vec<UiNode>| {
+            UiTree::new(
+                FrameMeta::new(1, "t", "c", 1080, 2400, 420, "h", true),
+                "com.gaten",
+                nodes,
+            )
+        };
+        // The window skeleton the fast launch bind sees before the app mounts.
+        let skeleton = tree(vec![node("com.android.internal.policy.DecorView", vec![])]);
+        let report = FirstFrameReport::one_traversal(&skeleton, true, Some("probe-fresh".into()));
+        assert!(report.placeholder, "the pre-settle probe is a placeholder");
+        assert_eq!(report.nodes, 1);
+
+        // The content-settled tree the reply actually carries.
+        let mut painted = node("com.android.internal.policy.DecorView", vec![]);
+        painted.text = "Set up Gaten".to_string();
+        painted.children = vec![node("android.widget.FrameLayout", vec![])];
+        let settled = tree(vec![painted]);
+        let report = report.describes_tree(&settled);
+        assert!(
+            !report.placeholder,
+            "the published content tree is not a placeholder"
+        );
+        assert_eq!(report.nodes, ui_tree_node_count(&settled.nodes));
+        assert_eq!(report.nodes, 2);
     }
 
     #[test]

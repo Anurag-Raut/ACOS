@@ -185,6 +185,7 @@ fn observation_from(
         screenshot_png: Some(encode_png(&frame.pixels, frame.width, frame.height)?),
         crashed: None,
         input: None,
+        settle: None,
     })
 }
 

@@ -4481,6 +4481,15 @@ fn interactive_serve(
                     evidence.push(reply);
                     continue;
                 }
+                // SE2b: a caller may pin the sample floor (`min_probe_seq`), so
+                // the guest can only answer with a probe sample *newer* than the
+                // one the caller already consumed. The content-stable settle
+                // requires strictly increasing samples across its window; a
+                // request without the floor keeps the legacy behaviour.
+                let min_probe_seq = request
+                    .get("min_probe_seq")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0);
                 let mut tree_timeout: Option<SettleTiming> = None;
                 // G3f1: how a successful strict settle bound the reply (a fully
                 // settled sample, or a draw commit after the caller's baseline).
@@ -4495,15 +4504,16 @@ fn interactive_serve(
                         probe_state,
                         &mut guest_stdin,
                         deadline,
-                        0,
+                        min_probe_seq,
                     ) {
                         FastTreeEnd::Ready(probe) => probe,
                         FastTreeEnd::Timeout { probe_seq } => {
                             let reply = serde_json::json!({
                                 "ok": false, "cmd": "tree", "code": "NO_FRESH_TREE",
                                 "error": format!(
-                                    "no guest probe sample newer than the frame store that was current at request entry arrived within 750 ms (last probe_seq {probe_seq}); a fast tree never serves the pre-request sample"
+                                    "no guest probe sample newer than the floor {min_probe_seq} and the frame store that was current at request entry arrived within 750 ms (last probe_seq {probe_seq}); a fast tree never serves the pre-request sample"
                                 ),
+                                "min_probe_seq": min_probe_seq,
                                 "settle": {
                                     "mode": "fast", "settled": false,
                                     "probe_seq": probe_seq, "tree_age_ms": null,
