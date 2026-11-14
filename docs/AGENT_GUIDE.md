@@ -31,14 +31,9 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
 
 1. `acos_doctor` — host preflight; fix every failing check's `fix:` first.
 2. `acos_inspect {"apk": ...}` — static: package, launcher, SDK, DEX/native.
-3. `acos_launch {"apk": ...}` — boot it (paths must be **absolute**: the
-   server's cwd is not your shell's, and a relative path is
-   `INVALID_ARGUMENT` with `details.resolved_path`), read `reached_stage`; the
-   first non-ok rung carries the blocker. Each rung carries `ms`. Pass
-   `"label": "..."` and, if you will park the session, `"idle_ttl_s": N`: the
-   server destroys its own sessions after the idle TTL (default 600 s,
-   `ACOS_SESSION_IDLE_TTL_S`) and the next call on an expired one returns
-   `SESSION_NOT_FOUND` with `details.reason=idle_ttl_expired` and the TTL.
+3. `acos_launch {"apk": ...}` — boot it (**absolute** paths only), read
+   `reached_stage`; the first non-ok rung carries the blocker. Idle sessions
+   expire after 600 s (`idle_ttl_s`; see `workflow`).
 4. `acos_observe_tree` — nodes with `id`/`text`/`bounds`; act on those.
 5. `acos_tap` / `acos_text` / `acos_key` / `acos_swipe` — then re-observe.
 6. `acos_logs` — the app's own words; `launched`/`stage_reached` included.
@@ -53,10 +48,9 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
 `acos_help {"topic": "<name>"}` returns one section; `"all"` returns everything.
 
 * `overview` — this page: the three rules, the loop in ten lines, the topic list.
-* `mcp` — every MCP tool this build advertises: arguments, one example call, what
-  it returns (generated from the tool descriptors, so it cannot drift).
-* `workflow` — the loop step by step, plus the screenshot / type / find-by-
-  content_desc / prove-a-flow recipes.
+* `mcp` — every MCP tool: arguments, an example call, what it returns.
+* `workflow` — the loop step by step, plus screenshot / type / find / prove-a-
+  flow recipes.
 * `cli` — every `acos` command with a runnable example.
 * `scenarios` — writing a YAML scenario: steps, selectors, settle rules.
 * `errors` — error code → what to do next.
@@ -101,6 +95,14 @@ and run `acos_verify` (real ART by default). The pass counts only with its
 evidence on disk: `verdict.json`, `steps/NN-*.json` and the referenced frames —
 and `expect_change: true` on the taps whose point is to change the screen is
 what makes the pass mean something.
+
+**Launch arguments.** Paths must be **absolute**: the server's cwd is not your
+shell's, and a relative path is `INVALID_ARGUMENT` with
+`details.resolved_path`. Each launch rung carries `ms`. Pass `"label": "..."`
+and, if you will park the session, `"idle_ttl_s": N`: the server destroys its
+own sessions after the idle TTL (default 600 s, `ACOS_SESSION_IDLE_TTL_S`) and
+the next call on an expired one returns `SESSION_NOT_FOUND` with
+`details.reason=idle_ttl_expired` and the TTL.
 
 **Assert, do not eyeball.** `assert_text` (optionally with `bounds`),
 `assert_visible` / `assert_not_visible` (collapsed content stays in the tree with

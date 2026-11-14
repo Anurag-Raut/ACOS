@@ -1375,7 +1375,7 @@ pub fn build_guest(root: &ArtRoot) -> Result<GuestDex> {
         }
         let class_files = walk(&classes, "class");
         let out = Command::new(&d8)
-            .args(crate::jvm::dump_args())
+            .args(crate::jvm::d8_dump_args())
             .arg("--lib")
             .arg(&android_jar)
             .args(["--min-api", "34", "--output"])
