@@ -2458,10 +2458,21 @@ fn launch_token(envelope: &Envelope) -> String {
 /// [`DEFAULT_IDLE_TTL_S`]. A malformed value is ignored (the default applies)
 /// rather than silently disabling the reaper; `0` is the explicit opt-out.
 fn default_idle_ttl_s() -> u64 {
-    std::env::var(IDLE_TTL_ENV)
+    if let Some(value) = std::env::var(IDLE_TTL_ENV)
         .ok()
         .and_then(|value| value.trim().parse::<u64>().ok())
-        .unwrap_or(DEFAULT_IDLE_TTL_S)
+    {
+        return value;
+    }
+    // The long-documented (pre-FB5, previously inert) millisecond knob still
+    // works, so an existing MCP registration does not silently lose its TTL.
+    if let Some(millis) = std::env::var("ACOS_MCP_SESSION_TTL_MS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+    {
+        return millis / 1000;
+    }
+    DEFAULT_IDLE_TTL_S
 }
 
 /// "20 s" / "10 min": a TTL as an agent reads it, in the expired error.

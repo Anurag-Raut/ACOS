@@ -67,6 +67,31 @@ pub fn fallback_runtime_dir() -> PathBuf {
     PathBuf::from(format!("/tmp/acos-{uid}"))
 }
 
+/// Create/chmod a runtime **base** the caller chose (an explicit
+/// `ACOS_RUNTIME_DIR`, an `XDG_RUNTIME_DIR`): it must be ours, and it is repaired
+/// to 0700 rather than refused, because the caller owns the choice.
+///
+/// The `/tmp` fallback is different: see [`ensure_private_dir`], which refuses a
+/// mode it did not create.
+pub fn ensure_runtime_base(dir: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    std::fs::create_dir_all(dir)?;
+    let meta = std::fs::metadata(dir)?;
+    // SAFETY: `geteuid` has no preconditions and cannot fail.
+    let uid = unsafe { libc::geteuid() };
+    if meta.uid() != uid {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!(
+                "{} is owned by uid {}, not {uid}; refusing to use another user's runtime directory",
+                dir.display(),
+                meta.uid()
+            ),
+        ));
+    }
+    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
+}
+
 /// Create (or verify) a runtime directory that only this user can use.
 ///
 /// Existing directories are **not** repaired blindly: one owned by another uid,
@@ -211,5 +236,59 @@ impl DaemonClient {
                 Metrics::wall_ms(0),
             ));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "acos-daemon-{}-{}-{name}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        dir
+    }
+
+    #[test]
+    fn the_fallback_base_is_per_uid_never_a_shared_tmp_acos() {
+        // SAFETY: `geteuid` has no preconditions.
+        let uid = unsafe { libc::geteuid() };
+        let fallback = fallback_runtime_dir();
+        assert_eq!(fallback, PathBuf::from(format!("/tmp/acos-{uid}")));
+        assert_ne!(fallback, PathBuf::from("/tmp/acos"));
+        // The effective runtime dir is the fallback only without the env vars.
+        if std::env::var_os(RUNTIME_DIR_ENV).is_none()
+            && std::env::var_os("XDG_RUNTIME_DIR").is_none()
+            && std::env::var_os("TMPDIR").is_none()
+        {
+            assert_eq!(runtime_dir(), fallback);
+        }
+    }
+
+    #[test]
+    fn ensure_private_dir_creates_0700_and_refuses_foreign_modes() {
+        let base = scratch("private-dir");
+        let dir = base.join("runtime");
+        ensure_private_dir(&dir).expect("create 0700");
+        let mode = std::fs::metadata(&dir).expect("stat").permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700, "created 0700");
+
+        // A directory someone made group/world accessible is refused, not
+        // silently chmod-ed: the fallback may be a hostile path.
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        let err = ensure_private_dir(&dir).expect_err("0755 must be refused");
+        assert!(
+            err.to_string().contains("expected 0700"),
+            "the error names the mode rule: {err}"
+        );
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

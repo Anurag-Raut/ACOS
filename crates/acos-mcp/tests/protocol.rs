@@ -269,7 +269,9 @@ fn path_escape_attempts_are_rejected() {
     let mut client = McpClient::with_real_acos();
     client.initialize("2025-03-26");
 
-    for path in ["/etc/passwd", "../../etc/passwd", "fixtures/../../etc/passwd"] {
+    // An absolute path outside the allowed roots (and one that climbs with `..`)
+    // is still `UNSAFE_PATH`: the roots check is unchanged.
+    for path in ["/etc/passwd", "/etc/../etc/passwd"] {
         let response = client.call_tool(
             "acos_inspect",
             json!({"base": {"request_id": "t_escape"}, "apk": path}),
@@ -278,6 +280,27 @@ fn path_escape_attempts_are_rejected() {
         let envelope = envelope_of(&response);
         assert_eq!(envelope["status"], "error");
         assert_eq!(envelope["error"]["code"], "UNSAFE_PATH");
+    }
+    // FB5: a **relative** path (with or without `..`) is refused before any
+    // resolution: the server's cwd is not the client's, and the reply carries
+    // the absolute path it would have used. It is still an error, and it still
+    // cannot reach /etc.
+    for path in ["../../etc/passwd", "fixtures/../../etc/passwd"] {
+        let response = client.call_tool(
+            "acos_inspect",
+            json!({"base": {"request_id": "t_escape"}, "apk": path}),
+        );
+        assert!(is_error(&response), "path {path} was not rejected");
+        let envelope = envelope_of(&response);
+        assert_eq!(envelope["status"], "error");
+        assert_eq!(envelope["error"]["code"], "INVALID_ARGUMENT");
+        let resolved = envelope["error"]["details"]["resolved_path"]
+            .as_str()
+            .unwrap_or_default();
+        assert!(
+            resolved.starts_with('/'),
+            "the reply names the absolute path it refused: {envelope}"
+        );
     }
 }
 

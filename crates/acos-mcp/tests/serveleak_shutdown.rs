@@ -47,6 +47,10 @@ fn fake_daemon(
     let listener = UnixListener::bind(path).expect("bind fake daemon");
     let (tx, rx) = channel::<Value>();
     let (stop_tx, stop_rx) = channel::<()>();
+    // The session table a real `acos serve` keeps: `session_list` reports it and
+    // teardown checks the launch token against it before destroying (FB5).
+    let table: Arc<std::sync::Mutex<std::collections::HashMap<String, String>>> =
+        Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
     std::thread::spawn(move || {
         let Ok((stream, _)) = listener.accept() else {
             return;
@@ -81,13 +85,33 @@ fn fake_daemon(
                 .unwrap_or("")
                 .to_string();
             let _ = tx.send(json!({"tool": tool, "session_id": session}));
+            let result = match tool.as_str() {
+                "acos_launch" => {
+                    let token = format!("tok-{session}");
+                    table.lock().unwrap().insert(session.clone(), token.clone());
+                    json!({"session_id": session, "session_token": token, "launched": true})
+                }
+                "session_list" => {
+                    let held = table.lock().unwrap();
+                    let list: Vec<Value> = held
+                        .iter()
+                        .map(|(id, token)| json!({"session_id": id, "session_token": token}))
+                        .collect();
+                    json!({"sessions": list, "count": list.len()})
+                }
+                "acos_destroy" => {
+                    let removed = table.lock().unwrap().remove(&session).is_some();
+                    json!({"destroyed": removed, "already_absent": !removed})
+                }
+                _ => json!({"server": "fake-daemon"}),
+            };
             let envelope = Envelope::pass(
                 "req_daemon",
                 ProtocolBackend::AcosNative,
                 Fidelity::ArtReference,
                 Metrics::wall_ms(0),
             )
-            .with_value_result(json!({"server": "fake-daemon"}));
+            .with_value_result(result);
             let reply = json!({"id": id, "envelope": envelope});
             let mut payload = serde_json::to_string(&reply).expect("serialize reply");
             payload.push('\n');

@@ -86,14 +86,18 @@ one of the roots in `ACOS_ALLOWED_ROOTS` (a `:`-separated list):
 * `..` components are rejected before resolution;
 * anything else — a relative path that climbs out, an absolute path in another
   repo, a link into `/etc` — fails with **`UNSAFE_PATH`** (`error.hint` names
-  the path and the roots; nothing is read and no guest starts).
+  the path and the roots; nothing is read and no guest starts);
+* **a relative path is refused before any of that** (FB5): the server's cwd is
+  not your shell's, so `apk`, `scenario` and `artifacts` must be absolute. A
+  relative one returns **`INVALID_ARGUMENT`** with
+  `details.resolved_path` = the absolute path the server *would* have used and
+  `details.server_cwd`, plus a hint. Pass an absolute path.
 
 `register-mcp.sh` defaults the value to **`$HOME`** so an agent working in
 another repository (for example `~/Projects/gaten`) can pass that repo's APK and
 its own `scenarios/*.yaml` while still being unable to reach outside the home
 directory. The artifacts directory (`ACOS_ARTIFACTS_DIR`) is always allowed in
-addition, and a bare relative path is resolved against the server's working
-directory first. On a shared or multi-user host, list the specific repositories
+addition. On a shared or multi-user host, list the specific repositories
 instead (`ACOS_ALLOWED_ROOTS=/srv/agent-a:/srv/agent-b`).
 
 **If you get `UNSAFE_PATH`,** pick one:
@@ -154,7 +158,8 @@ Server limits (all optional):
 | `ACOS_MCP_MAX_IMAGE_BYTES` | `524288` | maximum bytes of the image inlined as MCP image content (a preview that would exceed it is downscaled further, then dropped to a link) |
 | `ACOS_MCP_PREVIEW_MAX_SIDE` | `1280` | long edge in pixels of an inlined image preview |
 | `ACOS_MCP_MAX_TEXT` | `4000` | maximum bytes for one string in a tool reply. A longer string (an error message carrying a 200-frame java tail and a 400-line native tail) is head/tail-capped with a marker naming its original size and the artifact path, and an identical repeat is replaced by a back-reference, so the full text appears once. `0` disables the bound (the raw CLI behaviour). The guide text (`acos_help`) is exempt |
-| `ACOS_MCP_SESSION_TTL_MS` | `600000` | idle session TTL |
+| `ACOS_MCP_SESSION_TTL_MS` | `600000` | idle session TTL in **milliseconds**; the FB5 fallback when `ACOS_SESSION_IDLE_TTL_S` is unset |
+| `ACOS_SESSION_IDLE_TTL_S` | `600` | FB5: idle TTL in **seconds** for the sessions this MCP server launched (any later call renews it). `0` disables. `acos_launch {idle_ttl_s}` overrides it per session |
 | `ACOS_MCP_SHUTDOWN_GRACE_MS` | `2000` | how long in-flight calls may finish after stdin closes |
 | `ACOS_MCP_QUIET` | unset | silence stderr logging |
 | `ACOS_ART_MEM_MAX` | `2G` | per-session guest cgroup memory ceiling (also the budget the host admission check accounts for) |
@@ -180,7 +185,33 @@ the guest in a fresh app-data directory (`data_cleared: true`).
 That daemon is a child of the server: `PR_SET_PDEATHSIG(SIGTERM)` is set when it
 is spawned, and on MCP stdin EOF/exit the server destroys its sessions, sends
 `SIGTERM` (the daemon closes every ART guest), reaps the child and removes the
-socket directory. Nothing outlives `acos-mcp`.
+socket directory. Nothing outlives `acos-mcp`. **The same teardown runs on
+`SIGTERM`/`SIGINT`** (FB5): a client that is killed never closes stdin, and a
+supervisor stops the server with `SIGTERM` — both destroy exactly the sessions
+this server launched, and no foreign `acos serve` is signalled.
+
+### Session hygiene (FB5)
+
+Sessions cost memory (up to `ACOS_ART_MEM_MAX` each), so the server reclaims the
+ones it owns:
+
+* **Idle TTL.** A session untouched for `ACOS_SESSION_IDLE_TTL_S` (default 600 s;
+  `0` disables) is destroyed by the server — one stderr line, the guest is gone.
+  `acos_launch {"idle_ttl_s": N}` overrides it per session; every later MCP call
+  on the session renews the clock. The launch reply reports `idle_ttl_s` (and
+  `label`), so the deadline is visible.
+* **An expired session says so.** The next call on it returns
+  `SESSION_NOT_FOUND` with `details.reason: "idle_ttl_expired"`, the
+  `idle_ttl_s` it missed, and a hint to relaunch — never a generic "unknown id".
+  `acos_launch` on that id starts a fresh session.
+* **`acos_status` lists this server's sessions** under `sessions[]`:
+  `session_id`, `label`, `package`, `activity`, `age_s`, `idle_s`,
+  `idle_ttl_s`, `guest_pid`, `guest_rss_kb` (the guest's own `VmRSS`) and
+  `live`. Use `acos_launch {"label": "..."}` to give a parked session a name you
+  can recognise.
+* **Per-rung `ms`.** The launch ladder reports `ms` on every rung (and
+  `total_ms`/`ms_basis`), so "how long did each stage take" is answerable
+  without a separate timing call.
 
 The in-process backend still exists but is **frozen and opt-in only**:
 `ACOS_MCP_ENGINE=legacy` selects it; it is for diagnostics and cannot run a real
@@ -473,8 +504,8 @@ snapshot is in [`results/mcp/tools.md`](../results/mcp/tools.md) and
 * **Concurrency.** At most `ACOS_MCP_MAX_CONCURRENCY` calls run at once;
   additional calls queue up to `ACOS_MCP_QUEUE_TIMEOUT_MS`, then return a
   structured `RESOURCE_LIMIT`.
-* **Sessions.** A registry keyed by `session_id` with an idle TTL exists for the
-  future stateful commands (`run`/`observe`/`action`/...). `inspect` and
+* **Sessions.** A registry keyed by `session_id` with an idle TTL (FB5, see
+  §1b) backs the session tools (`run`/`observe`/`action`/...). `inspect` and
   `run-dex` are one-shot.
 * **Shutdown.** Closing stdin makes the server wait
   `ACOS_MCP_SHUTDOWN_GRACE_MS` for in-flight calls to finish, then cancels any

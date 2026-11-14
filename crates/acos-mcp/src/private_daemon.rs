@@ -316,7 +316,13 @@ fn private_runtime_dir() -> io::Result<PathBuf> {
 /// is ours (FB5: the `/tmp/acos-<uid>` fallback is verified, never assumed).
 fn prepare_dir(dir: &Path) -> io::Result<()> {
     if let Some(base) = dir.parent() {
-        daemon::ensure_private_dir(base)?;
+        // The base is either the user's runtime dir (repaired to 0700) or the
+        // `/tmp/acos-<uid>` fallback (verified, never repaired by us).
+        if base == daemon::fallback_runtime_dir() {
+            daemon::ensure_private_dir(base)?;
+        } else {
+            daemon::ensure_runtime_base(base)?;
+        }
     }
     daemon::ensure_private_dir(dir)
 }
