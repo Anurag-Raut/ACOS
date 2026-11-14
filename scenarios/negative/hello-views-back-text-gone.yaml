@@ -1,0 +1,24 @@
+# ROT8 negative: Back on the only Activity finishes the task (window-gone). The
+# app's text is no longer on screen, so asserting it must FAIL (never pass on a
+# stale frame).
+version: 1
+name: negative-hello-views-back-text-gone
+description: Back finishes hello-views; the result text must not still be assertable.
+app: fixtures/build/apps/hello-views.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+steps:
+  - launch:
+      activity: dev.acos.fixtures.helloviews/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: result}
+      timeout_ms: 5000
+  - back: {}
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "clicks: 0"}

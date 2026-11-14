@@ -1,0 +1,33 @@
+# ROT8 negative: after a real hardware Back from SecondActivity the app below is
+# resumed and redrawn; a wrong expectation about its text must fail strictly.
+version: 1
+name: negative-multi-wrong-after-back
+description: Back from SecondActivity, then assert MainActivity text that was never typed.
+app: fixtures/build/apps/multi-activity.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+steps:
+  - launch:
+      activity: dev.acos.fixtures.multiactivity/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: message}
+      timeout_ms: 5000
+  - tap:
+      selector: {id: message}
+  - type:
+      selector: {id: message}
+      text: Hello
+  - tap:
+      selector: {id: send}
+  - assert_text:
+      selector: {id: received}
+      text: {exact: "Received: Hello"}
+  - back: {}
+  - assert_text:
+      selector: {id: message}
+      text: {exact: Goodbye}
