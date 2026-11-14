@@ -144,7 +144,39 @@ ZP1 killed tag=0 pid=8 kill_rc=0 status=0x9
 ZP1 child tag=0 probe_stdin=on / forked child=35   (reset: same epoch, new child)
 ```
 
-## Why the A/B is not measured
+## The A/B, as far as it got (1 OFF rep measured; the ON arm is a NEW finding)
+
+Same binary on both arms (`sha256 0583df84…e077980`, both JSONs record it), 12
+latency samples per rep, `--groups "a:latency:8G:300" --latency-reps 12`.
+
+OFF rep 1 (`.cache/zprod4/ab/off-1.json`, complete, load avg 1.5, mem available
+31.5 GiB):
+
+| metric | p50 |
+|---|---:|
+| M4 launch strict | 307.4 ms |
+| M4 launch fast | 156.2 ms |
+| M6 reset strict | 331.8 ms |
+| M6 reset fast | 199.0 ms |
+| M8 tap counter strict / fast | 961.1 / 44.6 ms |
+| M8 tap form strict / fast | 939.4 / 45.5 ms |
+| M5 screenshot | 24.1 ms |
+| teardown | 12.0 ms (wall 18.0 ms), n=28 |
+
+**ON rep 1 produced NO number and is void**: every reference launch failed with
+`ZYGOTE_DEAD: `argv 0` was not acked within 180002 ms (keeper not responding)`
+(`.cache/zprod4/ab/on-1.json`, `run-on-1/rep-1/latency.json`, `wall_s=180.25`).
+The keeper itself boots fine (`boot_image: mode=lz4 … ACOS_ART_BOOT_IMAGE=lz4`,
+`Z3 zygote guest …/zprod4-build`) — the stall is in the **session-launcher
+contract** under the benchmark's daemon path (the launcher never published
+`<plan>/0/argv` inside 180 s), i.e. a defect this increment did not exist before
+only because the flag-on path had never been driven through `acos-bench`'s
+`serve` cohort. It is a real, reproducible-by-invocation finding, not noise: the
+same binaries pass `acos verify` on the same APK, so the difference is the daemon
+cohort, not the guest. The chain was stopped there (the next thing it would have
+measured is the same stall).
+
+## Why the rest of the A/B is not measured
 
 Two hard stops hit inside the one-hour window:
 
@@ -153,7 +185,8 @@ Two hard stops hit inside the one-hour window:
    started OFF rep 1 and ON rep 1 — the ON rep was **void by construction** (the
    merge regression above), so the chain was stopped rather than record a fake
    ON arm.
-2. **Disk at the 85 % stop line** (`df -h /`: 139 G free, 85 % used, having
+2. **The ON arm's `argv 0` contract stall** (above).
+3. **Disk at the 85 % stop line** (`df -h /`: 139 G free, 85 % used, having
    fallen 10 G in 40 min from other tracks' writes). The standing rule is
    "stop + report at ≥ 85 %", so no six-acquisition A/B and no 16 G N=10 loop
    were started after the fix. Deleting this task's own finished scratch
@@ -177,7 +210,10 @@ keeper log (epoch, `probe_stdin=on`, `forked`) or the reply fields
 
 ## Remaining
 
-1. Run the A/B above (3 interleaved reps, same boot image on both arms, load per
+1. **Fix the ON-arm `argv 0` stall in the daemon cohort** (first: get the bench
+   ON scratch's keeper log — the bench deletes its scratch unless `--keep 1`; re-run
+   one ON group with `--keep 1` and read `<scratch>/…/keeper.log` +
+   `<scratch>/…/plan/0/`), then run the A/B below. (3 interleaved reps, same boot image on both arms, load per
    rep) and the N=10 loop row.
 2. Run `.cache/zprod4/live_dead.sh` for the live dead-keeper proof.
 3. `cargo test -p acos-cli` and `-p acos-art` (with the cgroup test `--exact`

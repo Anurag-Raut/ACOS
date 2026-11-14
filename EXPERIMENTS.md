@@ -2307,8 +2307,14 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   (an explicit value is passed through and still fails closed). After the fix **flag ON PASS**:
   `v2-art-counter`, `w22-counter-reset`, `gaten-home` pass and both negatives fail
   `ASSERTION_FAILED`, with real zygote evidence (`ready epoch=17206167546`, `probe_stdin=on`,
-  `forked child=8`; the reset re-forks the same epoch to `child=35`, old child `0x9`). **Not
-  measured: the OFF/ON latency A/B** — the OFF arm's first rep ran, the ON rep was void by
+  `forked child=8`; the reset re-forks the same epoch to `child=35`, old child `0x9`). **The A/B found a new
+  daemon-cohort defect instead of a number**: the OFF arm measured (M4 strict 307.4 ms / fast
+  156.2 ms, M6 strict 331.8 / fast 199.0, M8 counter 961.1 / 44.6, M8 form 939.4 / 45.5, M5 24.1,
+  teardown 12.0 ms p50, 12 samples), the ON arm produced **no** metric: every reference launch
+  failed `ZYGOTE_DEAD: argv 0 was not acked within 180002 ms` though the keeper itself boots
+  (`mode=lz4`, `Z3 zygote guest …/zprod4-build`) — the session launcher never published
+  `<plan>/0/argv` under `acos-bench`'s `serve` cohort (the flag-on path had never been driven
+  through that path; `acos verify` on the same binary/APK is green). No ON number is claimed.** — the OFF arm's first rep ran, the ON rep was void by
   construction (the regression above), the chain was stopped, and the disk then reached the
   standing 85 % stop line; no latency number is claimed (`.cache/zprod4/ab/ab.log`,
   `results/handoff/ZPROD4.md`).
