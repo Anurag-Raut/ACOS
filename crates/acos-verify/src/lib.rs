@@ -42,6 +42,7 @@ pub mod executor;
 pub mod manifest;
 pub mod native;
 pub mod reference;
+pub mod settle;
 pub mod screenshot;
 pub mod verify;
 
@@ -54,6 +55,7 @@ pub use display::{frame_display_geometry, FrameDisplayGeometry};
 pub use error::VerifyError;
 pub use executor::{run_scenario, RunOptions, RunOutcome};
 pub use native::NativeBackend;
+pub use settle::{content_signature, content_window_ms, ContentWindow};
 pub use reference::{ReferenceBackend, ReferenceState};
 pub use verify::{verify, verify_with_clock};
 

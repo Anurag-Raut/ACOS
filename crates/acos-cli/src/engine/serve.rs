@@ -1529,7 +1529,20 @@ fn assert(session: &mut ArtSession, args: &Value, trust: Trust) -> Result<Value,
         .or_else(|| args.get("text"))
         .and_then(Value::as_str)
         .map(str::to_string);
-    let tree = session.tree()?;
+    // SE2: after a `settle: content` step the bound tree IS the evidence (its
+    // text/nodes/bounds/state were stable for the window). Re-traversing with
+    // the strict rule on a forever-animating screen would only time out and
+    // hide the settled tree the caller just proved.
+    let content_bound = session
+        .bound_settle()
+        .and_then(|settle| settle.get("mode"))
+        .and_then(Value::as_str)
+        == Some("content");
+    let tree = if content_bound {
+        session.ensure_bound_tree()?
+    } else {
+        session.tree()?
+    };
     // P12b: a settle timeout is an observation, not evidence. Assertions stay
     // strict: the tree may be mid-animation, so it can never justify a pass.
     if let Some(settle) = session.last_tree_settle() {
@@ -1812,12 +1825,13 @@ fn launch_bind(args: &Value) -> Result<(&'static str, bool), BackendError> {
             })
         }
     };
-    if settle == "fast" && pixels {
+    if (settle == "fast" || settle == "content") && pixels {
         return Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
-            detail: "settle:fast is a tree-only mode; a fast frame may be mid-animation and \
-                     cannot back a PNG capture (pass pixels:false, or settle:strict)"
-                .to_string(),
+            detail: format!(
+                "settle:{settle} is a tree-only mode; its pixels may still be animating and \
+                 cannot back a PNG capture (pass pixels:false, or settle:strict)"
+            ),
         });
     }
     Ok((settle, pixels))
@@ -1827,9 +1841,14 @@ fn requested_settle(args: &Value) -> Result<&'static str, BackendError> {
     match args.get("settle").and_then(Value::as_str) {
         None | Some("strict") => Ok("strict"),
         Some("fast") => Ok("fast"),
+        // SE2: the content-stable rule for a screen that animates forever in
+        // pixels (ADR-0026 decision 3). Backs UI/text observations only.
+        Some("content") => Ok("content"),
         Some(other) => Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
-            detail: format!("settle must be \"fast\" or \"strict\" (got {other:?})"),
+            detail: format!(
+                "settle must be \"strict\", \"fast\" or \"content\" (got {other:?})"
+            ),
         }),
     }
 }
@@ -2515,6 +2534,17 @@ mod tests {
         assert!(
             err.to_string().contains("tree-only mode"),
             "fast+pixels must be refused, got {err}"
+        );
+        // SE2: content settle is tree-content evidence only; a PNG claim from it
+        // is refused exactly like fast.
+        assert_eq!(
+            launch_bind(&json!({"settle": "content"})).unwrap(),
+            ("content", false)
+        );
+        let err = launch_bind(&json!({"settle": "content", "pixels": true})).unwrap_err();
+        assert!(
+            err.to_string().contains("tree-only mode"),
+            "content+pixels must be refused, got {err}"
         );
     }
 }

@@ -84,6 +84,9 @@ struct StepExec {
     observation: Option<SessionObservation>,
     produced_frame: Option<acos_protocol::FrameMeta>,
     session: Option<String>,
+    /// SE2: the settle record the step bound its frame with, when the backend
+    /// reported one (a `launch` carries it in its detail).
+    settle: Option<serde_json::Value>,
 }
 
 impl StepExec {
@@ -95,6 +98,7 @@ impl StepExec {
             observation: None,
             produced_frame: None,
             session: None,
+            settle: None,
         }
     }
 
@@ -116,6 +120,7 @@ impl StepExec {
             observation: None,
             produced_frame: None,
             session: None,
+            settle: None,
         }
     }
 
@@ -134,6 +139,7 @@ impl StepExec {
             observation: None,
             produced_frame: None,
             session: None,
+            settle: None,
         }
     }
 
@@ -163,6 +169,7 @@ impl StepExec {
             observation: None,
             produced_frame: None,
             session: None,
+            settle: None,
         }
     }
 
@@ -177,6 +184,7 @@ impl StepExec {
             observation: None,
             produced_frame: None,
             session: None,
+            settle: None,
         }
     }
 
@@ -188,6 +196,7 @@ impl StepExec {
             observation: None,
             produced_frame: None,
             session: None,
+            settle: None,
         }
     }
 }
@@ -230,6 +239,9 @@ pub fn run_scenario(
     // navigation only, so an assertion may not describe that frame; a strict
     // `wait_for`/`capture`/input must bind a new one first.
     let mut bound_is_fast = false;
+    // SE2: how the bound frame was settled, when the backend reported it. A
+    // `content` bound frame may back UI/text assertions but never a pixel one.
+    let mut bound_settle: Option<serde_json::Value> = None;
 
     // A log fetch that failed (for example the untrusted-run refusal from
     // `TrustGuard`) is remembered so an `assert_log` step reports that exact
@@ -309,6 +321,11 @@ pub fn run_scenario(
         let cause_id = format!("{}:{}:{}", options.request_id, step.kind(), index);
         let exec = if bound_is_fast && binds_to_bound_frame(step) {
             fast_bound_failure(step.kind())
+        } else if let Some(failure) = content_settle_pixel_failure(step, bound_settle.as_ref()) {
+            // SE2: content stability says nothing about pixels (they may still
+            // be animating). A pixel/frame assertion bound to a content-settled
+            // frame is a failed binding, never a comparison.
+            failure
         } else {
             execute_step(
             backend,
@@ -372,8 +389,13 @@ pub fn run_scenario(
         step_result.settle = exec
             .observation
             .as_ref()
-            .and_then(|observation| observation.input.as_ref())
-            .and_then(|delivery| delivery.settle.clone());
+            .and_then(|observation| {
+                observation
+                    .settle
+                    .clone()
+                    .or_else(|| observation.input.as_ref()?.settle.clone())
+            })
+            .or_else(|| exec.settle.clone());
 
         // Write evidence and declare it.
         let step_artifact = acos_protocol::step_file_name(index, step.kind());
@@ -418,6 +440,9 @@ pub fn run_scenario(
                 if frame_advancing_step(step) {
                     bound_frame_seq = Some(observation.frame.frame_seq);
                     bound_is_fast = fast_input_step(step);
+                    bound_settle = observation.settle.clone().or_else(|| {
+                        observation.input.as_ref().and_then(|input| input.settle.clone())
+                    });
                 }
                 previous_observation = Some(observation.clone());
             } else if let Some(frame) = &exec.produced_frame {
@@ -425,6 +450,7 @@ pub fn run_scenario(
                 if matches!(step.as_step(), Some(StepRef::Launch(_))) {
                     bound_frame_seq = Some(frame.frame_seq);
                     bound_is_fast = false;
+                    bound_settle = exec.settle.clone();
                 }
             }
         }
@@ -720,12 +746,19 @@ fn execute_step(
                 isolation: scenario.isolation,
                 display: scenario.display,
                 cause_id: cause_id.to_string(),
+                settle: launch.settle.unwrap_or_default(),
             };
             match backend.launch(&request) {
                 Ok(outcome) => {
                     let mut exec = StepExec::pass();
                     exec.produced_frame = outcome.frame.clone();
                     exec.session = Some(outcome.session_id.clone());
+                    // SE2: the launch's settle record travels with the frame
+                    // binding so a pixel assertion on a content-launched frame
+                    // fails closed.
+                    exec.settle = outcome.detail.get("settle").cloned().filter(|settle| {
+                        settle.get("mode").and_then(serde_json::Value::as_str) == Some("content")
+                    });
                     if let Some(record) = outcome.crashed {
                         let error = BackendError::Crash {
                             exception: record.exception.clone(),
@@ -873,6 +906,7 @@ fn execute_step(
             }
             backend.set_settle_timeout(tap.settle_timeout_ms);
             backend.set_input_settle(matches!(tap.settle, Some(StepSettle::Fast)));
+            backend.set_input_content_settle(matches!(tap.settle, Some(StepSettle::Content)));
             let action = InputAction::Tap {
                 selector: tap.selector.clone(),
                 x: tap.x,
@@ -887,6 +921,7 @@ fn execute_step(
             }
             backend.set_settle_timeout(ty.settle_timeout_ms);
             backend.set_input_settle(matches!(ty.settle, Some(StepSettle::Fast)));
+            backend.set_input_content_settle(matches!(ty.settle, Some(StepSettle::Content)));
             let action = InputAction::Type {
                 selector: ty.selector.clone(),
                 text: ty.text.clone(),
@@ -901,6 +936,7 @@ fn execute_step(
             }
             backend.set_settle_timeout(key.settle_timeout_ms);
             backend.set_input_settle(matches!(key.settle, Some(StepSettle::Fast)));
+            backend.set_input_content_settle(matches!(key.settle, Some(StepSettle::Content)));
             input_step(
                 backend,
                 &InputAction::Key(key.key),
@@ -1331,6 +1367,7 @@ fn observation_binding_error(backend: &str, observation: &SessionObservation) ->
         observation: None,
         produced_frame: None,
         session: None,
+        settle: None,
     })
 }
 
@@ -1372,6 +1409,7 @@ fn meaningful_error(observation: &SessionObservation) -> Option<StepExec> {
         observation: None,
         produced_frame: None,
         session: None,
+        settle: None,
     })
 }
 
@@ -1577,6 +1615,78 @@ fn fast_bound_failure(kind: &str) -> StepExec {
     })
 }
 
+/// SE2: a pixel/frame assertion whose bound frame was only content-settled.
+///
+/// `settle: content` proves that the UI tree content (text, nodes, bounds,
+/// state) stopped changing for the window. It says nothing about the pixels,
+/// which may still be animating, so a screenshot comparison, a region pixel
+/// check or any other frame-pixel claim backed only by content stability is a
+/// failed binding. The structured failure names the reason
+/// (`content_settle_pixel`) and the content record that bound the frame, so the
+/// caller cannot mistake it for a pixel mismatch.
+fn content_settle_pixel_failure(
+    step: &Step,
+    bound_settle: Option<&serde_json::Value>,
+) -> Option<StepExec> {
+    let settle = bound_settle?;
+    if settle.get("mode").and_then(serde_json::Value::as_str) != Some("content") {
+        return None;
+    }
+    if !pixel_assertion_step(step) {
+        return None;
+    }
+    let detail = format!(
+        "{}: the bound frame was settled by `settle: content` (UI tree content stable), which \
+         is not pixel evidence - the pixels may still be animating",
+        step.kind()
+    );
+    let mut exec = StepExec::failed(Evaluated {
+        result: AssertionResult {
+            kind: "frame_binding".to_string(),
+            passed: false,
+            diff: Some(AssertionDiff {
+                expected: serde_json::json!({"settle": "strict", "pixel_evidence": true}),
+                actual: serde_json::json!({"settle": "content", "pixel_evidence": false}),
+                path: Some("frame.settle".to_string()),
+                detail: Some(
+                    "content settle proves the tree's text/nodes/bounds/state stopped changing; \
+                     it never proves the pixels stopped changing"
+                        .to_string(),
+                ),
+            }),
+            matched_node_ids: Vec::new(),
+            message: None,
+        },
+        error: Some(BackendError::Protocol {
+            code: ErrorCode::AssertionFailed,
+            detail,
+            hint: Some(
+                "A pixel/frame assertion needs a pixel-settled frame: use `settle: strict` \
+                 (the default) and let the screen stop animating, or assert on the UI tree \
+                 (assert_text/assert_visible/assert_state) which content settle may back."
+                    .to_string(),
+            ),
+            details: Some(serde_json::json!({
+                "reason": "content_settle_pixel",
+                "step_kind": step.kind(),
+                "settle": settle,
+                "pixel_evidence": false,
+            })),
+        }),
+    });
+    exec.observation = None;
+    Some(exec)
+}
+
+/// Steps that assert about the frame's pixels (never satisfied by a
+/// content-settled frame alone).
+fn pixel_assertion_step(step: &Step) -> bool {
+    matches!(
+        step.as_step(),
+        Some(StepRef::AssertScreenshot(_) | StepRef::AssertRegion(_))
+    )
+}
+
 /// A UI-tree observation that must be bound to `bound` (the frame a preceding
 /// `launch`/`wait_for`/`input`/`capture` completed). A newer frame without one
 /// of those steps means the screenshot and the tree describe different
@@ -1733,6 +1843,7 @@ fn no_fresh_frame_failure(
         observation: Some(observation.clone()),
         produced_frame: None,
         session: None,
+        settle: None,
     }
 }
 
@@ -2149,6 +2260,7 @@ fn static_launch_assertion(
                 observation: None,
                 produced_frame: None,
                 session: None,
+                settle: None,
             });
         }
     } else if launch.intent_action.is_none() && manifest.launcher_activity.is_none() {
@@ -2164,6 +2276,7 @@ fn static_launch_assertion(
             observation: None,
             produced_frame: None,
             session: None,
+            settle: None,
         });
     }
     None
@@ -2255,6 +2368,7 @@ mod region_tests {
             screenshot_png: Some(png(width, height, pixels)),
             crashed: None,
             input: None,
+            settle: None,
         }
     }
 
@@ -2409,6 +2523,7 @@ mod region_tests {
             screenshot_png: Some(png(width, frame_height, pixels)),
             crashed: None,
             input: None,
+            settle: None,
         }
     }
 
@@ -2533,4 +2648,123 @@ fn peak_rss_bytes() -> Option<u64> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod content_settle_tests {
+    use super::*;
+    use acos_protocol::scenario::Scenario;
+
+    fn scenario(yaml: &str) -> Scenario {
+        Scenario::from_yaml_str(yaml).expect("scenario parses")
+    }
+
+    fn content_record() -> serde_json::Value {
+        serde_json::json!({
+            "mode": "content",
+            "settled": true,
+            "window_ms": 300,
+            "traversals": 3,
+            "signature": "0f0f0f0f0f0f0f0f",
+            "pixel_evidence": false,
+        })
+    }
+
+    fn strict_record() -> serde_json::Value {
+        serde_json::json!({"mode": "strict", "settled": true})
+    }
+
+    const HEADER: &str = "version: 1\nname: se2\napp: dev.acos.fixtures.counter\nisolation: process\ndisplay: {mode: offscreen, width: 100, height: 100, density_dpi: 420}\nsteps:\n  - launch: {activity: .MainActivity}\n";
+
+    /// SE2: a pixel/frame assertion bound to a content-settled frame must fail
+    /// closed with the structured reason, never compare pixels.
+    #[test]
+    fn pixel_assertion_backed_by_content_settle_fails_closed() {
+        let parsed = scenario(&format!(
+            "{HEADER}  - assert_region: {{x: 0, y: 0, w: 10, h: 10, min_distinct_colors: 1}}\n"
+        ));
+        let step = &parsed.steps[1];
+        let failure = content_settle_pixel_failure(step, Some(&content_record()))
+            .expect("a content-bound pixel assertion is a failed binding");
+        assert_eq!(failure.status, Status::Fail);
+        let error = failure.error.as_ref().expect("structured error");
+        assert_eq!(error.code, ErrorCode::AssertionFailed);
+        let details = error.details.as_ref().expect("details");
+        assert_eq!(details["reason"], "content_settle_pixel");
+        assert_eq!(details["pixel_evidence"], false);
+        assert_eq!(failure.assertions[0].kind, "frame_binding");
+        assert!(!failure.assertions[0].passed);
+
+        // A screenshot comparison is the same pixel claim.
+        let parsed = scenario(&format!(
+            "{HEADER}  - assert_screenshot: {{baseline: baseline.png, tolerance: 0.0}}\n"
+        ));
+        let failure = content_settle_pixel_failure(&parsed.steps[1], Some(&content_record()))
+            .expect("a content-bound screenshot comparison is a failed binding");
+        assert_eq!(failure.error.as_ref().unwrap().code, ErrorCode::AssertionFailed);
+    }
+
+    /// SE2: a UI/text assertion may be backed by content settle.
+    #[test]
+    fn text_assertions_are_allowed_on_content_settle() {
+        let parsed = scenario(&format!(
+            "{HEADER}  - assert_text: {{selector: {{id: title}}, text: {{contains: Welcome}}}}\n"
+        ));
+        assert!(
+            content_settle_pixel_failure(&parsed.steps[1], Some(&content_record())).is_none(),
+            "a text assertion must be evaluable on a content-stable tree"
+        );
+        // A strict-settled bound frame is unaffected as well.
+        assert!(content_settle_pixel_failure(&parsed.steps[1], Some(&strict_record())).is_none());
+        // No settle record: unchanged behaviour (nothing new is refused).
+        assert!(content_settle_pixel_failure(&parsed.steps[1], None).is_none());
+    }
+
+    /// SE2: `fast` still never backs a pass. The fast guard is unchanged and
+    /// independent of the content guard.
+    #[test]
+    fn fast_still_never_backs_a_pass() {
+        let failure = fast_bound_failure("assert_text");
+        assert_eq!(failure.status, Status::Fail);
+        assert_eq!(
+            failure.error.as_ref().unwrap().code,
+            ErrorCode::AssertionFailed
+        );
+        // And a pixel assertion on a fast-bound frame is still refused by the
+        // existing fast guard (`fast` never backs a pass).
+        let parsed = scenario(&format!(
+            "{HEADER}  - assert_region: {{x: 0, y: 0, w: 10, h: 10, min_distinct_colors: 1}}\n"
+        ));
+        let fast = fast_bound_failure(parsed.steps[1].kind());
+        assert_eq!(fast.error.as_ref().unwrap().code, ErrorCode::AssertionFailed);
+    }
+
+    /// SE2: `expect_change` (a pixel claim) cannot combine with content settle.
+    #[test]
+    fn expect_change_with_content_settle_is_invalid() {
+        let yaml = format!(
+            "{HEADER}  - tap: {{x: 1, y: 2, settle: content, expect_change: true}}\n"
+        );
+        let parsed = Scenario::from_yaml_str_unvalidated(&yaml).expect("parses");
+        let report = parsed.validate();
+        assert!(
+            report.errors.iter().any(|error| error.path.contains("expect_change")),
+            "content settle + expect_change must be INVALID_SCENARIO: {report:?}"
+        );
+    }
+
+    #[test]
+    fn content_settle_parses_on_inputs_and_launch() {
+        let yaml = "version: 1\nname: se2\napp: dev.acos.fixtures.counter\nisolation: process\ndisplay: {mode: offscreen, width: 100, height: 100, density_dpi: 420}\nsteps:\n  - launch: {activity: .MainActivity, settle: content}\n  - tap: {x: 1, y: 2, settle: content}\n  - type: {text: hi, settle: content}\n  - key: {key: enter, settle: content}\n";
+        let parsed = scenario(yaml);
+        assert_eq!(parsed.validate().errors, Vec::new());
+        assert!(matches!(
+            parsed.steps[0].launch.as_ref().unwrap().settle,
+            Some(StepSettle::Content)
+        ));
+        assert!(matches!(
+            parsed.steps[1].tap.as_ref().unwrap().settle,
+            Some(StepSettle::Content)
+        ));
+    }
 }

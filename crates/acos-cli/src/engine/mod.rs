@@ -367,6 +367,21 @@ pub trait SessionBackend {
     /// that must drive a screen which never settles). Assertions never use it.
     fn set_input_settle_mode(&mut self, _fast: bool) {}
 
+    /// SE2: the content-stable rule for the next input action (`content` for a
+    /// screen that animates forever in pixels). Mutually exclusive with
+    /// [`Self::set_input_settle_mode`].
+    fn set_input_content_settle(&mut self, _content: bool) {}
+
+    /// SE2: the settle rule a `launch` binds its first tree with (`strict`
+    /// default, `content` opt-in).
+    fn set_launch_settle_mode(&mut self, _mode: &'static str) {}
+
+    /// SE2: how the bound frame was settled (`strict`, `fast` or `content`),
+    /// when the engine reports it. `None` means no record.
+    fn bound_settle(&self) -> Option<&serde_json::Value> {
+        None
+    }
+
     /// P12b: the settle block of the most recent input when its strict settle
     /// timed out (`settled:false`, `bound:"timeout"`), or `None`.
     ///
@@ -598,9 +613,11 @@ impl EngineBackend {
         } else {
             package
         };
-        let crashed = match self {
-            EngineBackend::Session { session, .. } => session.last_crash(),
-            EngineBackend::Native(_) => None,
+        let (crashed, settle) = match self {
+            EngineBackend::Session { session, .. } => {
+                (session.last_crash(), session.bound_settle().cloned())
+            }
+            EngineBackend::Native(_) => (None, None),
         };
         Ok(SessionObservation {
             session_id: format!("s_art_{seq}"),
@@ -610,6 +627,7 @@ impl EngineBackend {
             screenshot_png: Some(png),
             crashed,
             input: None,
+            settle,
         })
     }
 
@@ -792,6 +810,13 @@ impl Backend for EngineBackend {
                 ..
             } => {
                 *cause_id = request.cause_id.clone();
+                // SE2: the launch's first tree may be bound by the content rule
+                // (a screen whose pixels animate forever); strict stays the
+                // default and every other step is unaffected.
+                session.set_launch_settle_mode(match request.settle {
+                    acos_protocol::scenario::StepSettle::Content => "content",
+                    _ => "strict",
+                });
                 let outcome = session.launch(&request.apk)?;
                 if let Some(settle) = session.tree_settle_timeout() {
                     return Err(settle_timeout_error(
@@ -815,6 +840,12 @@ impl Backend for EngineBackend {
     fn set_input_settle(&mut self, fast: bool) {
         if let EngineBackend::Session { session, .. } = self {
             session.set_input_settle_mode(fast);
+        }
+    }
+
+    fn set_input_content_settle(&mut self, content: bool) {
+        if let EngineBackend::Session { session, .. } = self {
+            session.set_input_content_settle(content);
         }
     }
 
@@ -1831,6 +1862,7 @@ mod engine_tests {
             isolation: acos_protocol::identity::IsolationLevel::Process,
             display: acos_protocol::identity::DisplaySpec::offscreen(1080, 2400, 420),
             cause_id: "req_engine_test:launch:0".to_string(),
+            settle: acos_protocol::scenario::StepSettle::Strict,
         }
     }
 

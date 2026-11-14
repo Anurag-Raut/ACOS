@@ -446,7 +446,8 @@ Common errors: `ELEMENT_NOT_FOUND`, `SESSION_NOT_FOUND`, `TIMEOUT`,
 ### 8.6.1 Settle modes: `fast` navigation vs `strict` verification (P1)
 
 `acos_tap`, `acos_text`, `acos_key` and an input `acos_action` accept an
-optional `settle` argument:
+optional `settle` argument (`strict` default, `fast` navigation,
+`content` content-stable — see §8.6.4a):
 
 ```json
 {"base": {"request_id": "req_6", "session_id": "s_views"},
@@ -511,7 +512,7 @@ Every input reply carries a `settle` object (also copied into
 
 | field | meaning |
 |---|---|
-| `mode` | `fast` or `strict`; the mode this observation was taken with |
+| `mode` | `fast`, `strict` or `content`; the mode this observation was taken with |
 | `settled` | `true` only when a settled observation was returned; `false` on a settle timeout (the tree/frame are still present for inspection; `acos verify` fails the step as `TIMEOUT`; see §8.6.4) or the documented no-fresh-frame failure |
 | `ack_ms` | publish → this gesture's own `FINISHED` acknowledgment. Focus/touch-mode acks queued at window attach are drained and discarded, never counted |
 | `first_change_ms` | publish → the first tree-probe sample that differs from the pre-action baseline (`null` when no change was seen / no baseline) |
@@ -609,6 +610,10 @@ for every tree verb remains `strict`, so existing callers see no change.
   newest for the confirmation window. This is the mode every assertion and
   pixel check runs on. `settle_timeout_ms` (§8.6.4) bounds it; a timeout still
   returns the latest tree with `settled:false`.
+* **`content`** — SE2 (§8.6.4a): the reply binds the first traversal, then proves
+  the tree content stable for the window. It is tree-only (a content-settled
+  frame is never pixel evidence), so `pixels:true` with `settle:"content"` is
+  refused with `INVALID_ARGUMENT`.
 * **`fast`** — the reply binds the app's **first traversal** from a probe sample
   whose C1 generation is at least the generation current when the request began
   (P3b's freshness rule). No quiet window, no second probe period. A fast launch
@@ -704,6 +709,73 @@ On an indeterminate `ProgressBar` (or any forever-animating screen) use
 full default deadline. If the screen is animating for real, `animations:"off"`
 (see §8.6.5) is the functional-check answer; do not turn it on for
 animation/transition tests.
+
+### 8.6.4a Content-stable settle: the forever-animating screen (SE2, ADR-0026 #3)
+
+Some screens animate forever in a way that does not change what the user can
+read: an endless Reanimated/SVG loop behind a form, a spinner beside a heading.
+Gaten's welcome/onboarding pages are the reference (GR3 §4.3, backlog G3e: a
+10 s looping timeline plus a 200 ms auto-advance retry). On such a screen the
+strict event rule never reaches a verdict — it is an honest `TIMEOUT` — and
+`fast` is navigation only, so no text could be *proven*.
+
+`settle:"content"` is the opt-in third rule (scenario step or serve verb,
+**strict stays the default everywhere**). It is settled when the UI tree
+**content signature** is unchanged across fresh traversals spanning at least
+**300 ms**, with at least **2 traversals**, inside the step's timeout:
+
+* the signature is a hash over, in visible/tree order, each node's
+  `(class, text, content_desc, hint, checked, selected, enabled, focused,
+  bounds, visible)` plus the child structure. Nothing else is hashed, and no
+  field is silently dropped from that list. A text value that an animation
+  keeps updating (a countdown, a progress percentage) therefore changes the
+  signature: the screen is *not* content-stable and the step is a `TIMEOUT`,
+  which is the correct answer;
+* the window is configurable upward with `ACOS_CONTENT_SETTLE_WINDOW_MS`
+  (never below 300 ms); the step's `settle_timeout_ms` (default 10 s) bounds
+  the wait;
+* pixels are **never** consulted. Content stability says nothing about the
+  pixels, which may still be animating.
+
+Where it is accepted:
+
+| surface | `settle: content` |
+|---|---|
+| scenario `tap` / `type` / `key` | yes — the action is delivered, then its tree content is proven stable |
+| scenario `launch` | yes — the first tree is bound by the content rule, and its frame is **not** pixel evidence |
+| serve/MCP `acos_observe`, `acos_observe_tree`, `acos_launch`, `acos_reset` | yes (tree-only; `pixels:true` with `content` is refused like `fast`) |
+| serve/MCP `acos_tap`, `acos_text`, `acos_key`, `acos_action` | yes |
+| `acos_assert` | no argument needed: an assertion after a content step evaluates the **content-settled bound tree** (no strict re-traversal, which would only time out) |
+| scenario `assert_screenshot` / `assert_region` (pixel/frame claims) | **never** — a pixel assertion bound only by content settle fails closed, see below |
+
+Provenance: the step result and every observation it backs records the rule
+that bound it. A content settle reply is
+
+```json
+"settle": {"mode": "content", "settled": true, "bound": "content-stable",
+           "window_ms": 300, "traversals": 3,
+           "signature": "0f0f0f0f0f0f0f0f", "frame_seq": 41,
+           "elapsed_ms": 812, "pixel_evidence": false}
+```
+
+`window_ms`, `traversals` and `signature` are the measured facts; the same
+object is written into `steps/<i>-<kind>.json` (`settle`). A timeout carries
+`settled:false`, `bound:"content-timeout"`, the last signature and
+`reason:"content-not-stable"`, and the step fails `TIMEOUT` like any other
+settle timeout.
+
+**Pixel assertions stay honest.** A screenshot comparison, a region pixel check
+or any other frame/pixel claim cannot be justified by content stability. In
+`acos verify`, `assert_screenshot`/`assert_region` bound to a content-settled
+frame fail closed with `ASSERTION_FAILED`, `details.reason:
+"content_settle_pixel"`, `details.pixel_evidence: false` and the content
+`settle` record; in serve, `pixels:true` together with `settle:"content"` is
+`INVALID_ARGUMENT`. A fresh strict `capture` (or any strict step) rebinds the
+frame and pixel assertions work again — pixels are settled by pixels.
+
+`settle:"fast"` is unchanged: it is immediate navigation and never backs a
+pass. `expect_change: true` (a pixel claim) with `settle: content` is
+`INVALID_SCENARIO`, exactly like `fast`.
 
 ### 8.6.5 `animations:"on"|"off"` (P12)
 

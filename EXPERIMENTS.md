@@ -2383,6 +2383,107 @@ wire/native bugs, and keep a bounded `HostGuard` in `render_views` so a future
 guest loop fails loudly. File the five real failures as T1a–T1e; do not weaken
 any verify/assertion or mark a real failure `#[ignore]`.
 
+## E13.16 — SE2: `settle: content` gives the forever-animating screen a verification answer (ADR-0026 decision 3; Gaten G3e) — PASS
+
+**Date:** 2026-11-14. **Branch:** `settle-se2-content-stable` (worktree
+`3oxa6xao/k5`, base `main` `0c0b322`). **Responsible agent:** SE2. One ART-lock
+acquisition per batch; APK read-only `e04c7ffc…`; scratch `.cache/se2`.
+
+- **Question / goal:** ADR-0026 decision 3, verbatim: *"Forever-animating
+  screens: add a content-stable settle. Settled when the UI tree content
+  signature (text, nodes, bounds) is unchanged for a bounded window (~300 ms)
+  even if pixels keep animating. Pixel assertions on such screens stay strict
+  (honest TIMEOUT). Existing navigation-only `settle: fast` stays but is no
+  longer the documented answer for these screens."* This closes GR3 §4.3 /
+  backlog G3e: Gaten's welcome and onboarding pages run a 10 s Reanimated loop
+  and a 200 ms auto-advance retry, so strict settle there is an honest
+  `TIMEOUT` and the only route past them was `fast`, which never backs a pass.
+- **Design (as shipped):**
+  * **signature** = hash over, in visible/tree order, each node's `class`,
+    `text`, `content_desc`, `hint`, `checked`, `selected`, `enabled`,
+    `focused`, `bounds`, `visible`, plus the child structure/order. No field is
+    silently dropped from that list; a text value an animation updates (a
+    countdown, a progress percentage) changes it, and the screen is then not
+    content-stable (`TIMEOUT`, correctly).
+  * **window** = same signature across at least **2 traversals** spanning
+    **≥ 300 ms** (`ContentWindow`; floor 300 ms, configurable upward with
+    `ACOS_CONTENT_SETTLE_WINDOW_MS`). A different signature resets both the span
+    and the traversal count, so A→B→A never settles. The step's
+    `settle_timeout_ms` (default 10 s) bounds it; expiry is `TIMEOUT`,
+    `details.reason:"content-not-stable"`, with the last signature — never a
+    pass.
+  * **surface**: scenario `tap`/`type`/`key`/`launch`; serve/MCP
+    `acos_observe`, `acos_observe_tree`, `acos_launch`, `acos_reset`,
+    `acos_tap`/`acos_text`/`acos_key`/`acos_action`. `acos_assert` needs no
+    argument after a content step: it evaluates the content-settled bound tree
+    (no strict re-traversal that would only time out).
+  * **pixels fail closed**: content stability never proves pixels. In
+    `acos verify`, `assert_screenshot`/`assert_region` bound to a content-settled
+    frame fail with `ASSERTION_FAILED`, `details.reason:"content_settle_pixel"`,
+    `pixel_evidence:false` and the content record, before any capture. In serve,
+    `pixels:true` + `settle:"content"` is `INVALID_ARGUMENT` (same as fast). A
+    fresh strict `capture` rebinds the frame.
+  * **provenance**: the step's `settle` object is
+    `{mode:"content", settled, bound:"content-stable", window_ms, traversals,
+    signature, frame_seq, elapsed_ms, pixel_evidence:false, signature_fields}`
+    and travels with every observation it backs (assertions included).
+  * **strict default everywhere; fast unchanged** (never backs a pass);
+    `expect_change: true` (a pixel claim) + `settle: content` is
+    `INVALID_SCENARIO`, exactly like fast.
+  * **implementation seam (honest):** each content traversal is a strict tree
+    request with a 1 ms deadline — the guest returns the latest tree *and its
+    PNG* with `settled:false` (P12b's documented observation). That gives real
+    pixels bound to the traversal the signature came from without waiting for a
+    quiet window that never comes; the host's content window is the verdict and
+    the host replaces the guest's unsettled block with the content record before
+    publishing. A content `launch` binds its first content frame via the normal
+    skeleton retry, then the content window; its frame is
+    `pixel_evidence:false` and claims no PNG.
+- **Unit tests (green in `cargo test --release --offline -p acos-verify -p acos-cli`):**
+  `settle::tests` — same tree → same signature (different node ids/frame
+  seq/pixels → same), every text/bounds/checked/selected/enabled/focused/
+  content-desc/hint change → different, child structure and order → different,
+  window settles only after ≥2 traversals over the span, a change resets the
+  window, A→B→A never settles, the floor clamps at 300 ms;
+  `executor::content_settle_tests` — a content-bound `assert_region` and
+  `assert_screenshot` fail closed with the structured reason, a text assertion
+  is allowed, `fast` still never backs a pass, content+`expect_change` is
+  `INVALID_SCENARIO`, and `settle: content` parses on launch/tap/type/key.
+  87 acos-cli bin tests + 55 acos-verify lib tests green.
+- **Gaten (real ART, `--engine art`, APK read-only):**
+
+  | scenario | runs | result |
+  |---|---:|---|
+  | `scenarios/gaten-content-welcome.yaml` (launch content → assert welcome copy → content tap) | 3 | **pass 3/3**; launch, `assert_text` and `tap` each record `settle.mode:"content"`, `window_ms:300`, `traversals` 16–17 and a signature; content settle 694–≈750 ms, scenario wall 3.19 s |
+  | `scenarios/negative/gaten-content-welcome-wrong.yaml` (wrong text on the content-settled tree) | 3 | **fail / `ASSERTION_FAILED` 3/3** |
+  | `scenarios/negative/gaten-content-pixel.yaml` (region pixels after content settle) | 3 | **fail / `ASSERTION_FAILED` 3/3** with `details.reason:"content_settle_pixel"` |
+
+  Before this rule those two taps were strict `TIMEOUT`s (GR3), and `fast` was
+  the workaround that could not back an assertion.
+- **No regression (one ART-lock acquisition per batch):** the 15 gates exactly
+  as listed (v2-art-counter, w22-counter-reset, w54-dialog-pixels,
+  w42-back-frame, w15-dialog-menu, form-validation, T03-render-good,
+  v1-offscreen-pager, w7-insets-report, se1-expect-change-tap pass;
+  T03-render-wrong, w7-insets-carve-negative, negative/se1-expect-change-noop
+  fail `ASSERTION_FAILED`; negative/offscreen-pager-visible `ELEMENT_OFFSCREEN`;
+  p11-progress-timeout `TIMEOUT`), the 5 Gaten flows ×3 **pass 15/15**, the 5
+  negatives **fail `ASSERTION_FAILED` 5/5**, and GR4 (support/kanji/
+  recognition/backstack **pass**, their 4 negatives **fail `ASSERTION_FAILED`**)
+  — `sweep.log`.
+- **Latency:** strict default path untouched (no extra traversal, no extra
+  field on the strict path; the only added work is a `None`-check and the
+  content-mode branch, which is never taken by a strict step). Interleaved A/B
+  main vs branch, `--groups "a:latency:8G:300" --latency-reps 12`, 3 reps:
+  M4–M8 strict p50 within +5 % / 2 ms. Content settle on the Gaten welcome
+  screen: see `results/handoff/SE2.md` §4 (≈0.7 s, versus the strict TIMEOUT it
+  replaces).
+- **Conclusion / next:** G3e has an answer that never weakens an assertion: a
+  content-stable screen can now back UI/text claims (`settle: content` is the
+  documented rule), while every pixel claim on it fails closed. `settle: fast`
+  remains navigation only. Scenario authors can upgrade GR3's onboarding taps
+  from `fast` to `content` once the page-text visibility classification (GR4
+  G4a) is aligned.
+
 ## Backlog (optimization hypotheses; rank = impact × confidence ÷ (cost × risk))
 
 Re-ranked by B2 (E3.2) on the measured objective: **verified tasks per second per

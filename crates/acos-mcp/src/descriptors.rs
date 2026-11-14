@@ -307,18 +307,22 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                 "apk": {"type": "string", "description": "Path to the .apk, under ACOS_ALLOWED_ROOTS."},
                 "timeout_ms": {"type": "integer", "minimum": 1, "description": "Wall-clock ceiling for the launch (defaults to the server call budget)."},
                 "settle": {
-                    "type": "string", "enum": ["fast", "strict"],
+                    "type": "string", "enum": ["fast", "strict", "content"],
                     "description": "How the launch reply binds its tree. `strict` (default) keeps the \
                                     150 ms quiet window and is assertion evidence. `fast` binds the app's \
                                     first traversal from a fresh in-guest probe sample with no quiet \
                                     window; it may be mid-animation and is never assertion evidence. \
-                                    The reply's `settle` object names the mode and how it was bound."
+                                    `content` (SE2) is the content-stable rule for a screen that animates \
+                                    forever: settled when the UI tree content signature is unchanged \
+                                    for a >=300 ms window across >=2 traversals; it backs UI/text \
+                                    observations only, never pixels. The reply's `settle` object names \
+                                    the mode and how it was bound."
                 },
                 "pixels": {
                     "type": "boolean",
                     "description": "Capture a PNG for the launch reply (default false). Without it the \
                                     reply carries the bound C1 frame identity (`buffer_generation`, \
-                                    `frame_number`) and no md5; `settle:fast` refuses pixels."
+                                    `frame_number`) and no md5; `settle:fast` and `settle:content`                                     refuse pixels (a content-settled frame is tree-content evidence                                     only; its pixels may still be animating)."
                 },
                 "settle_timeout_ms": {
                     "type": "integer", "minimum": 1, "maximum": 600000,
@@ -355,10 +359,12 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             with_base(json!({
                 "max_nodes": {"type": "integer", "minimum": 1, "description": "Truncate the walk after this many nodes."},
                 "settle": {
-                    "type": "string", "enum": ["fast", "strict"],
+                    "type": "string", "enum": ["fast", "strict", "content"],
                     "description": "`strict` (default) is the event-settled rule and assertion evidence. \
                                     `fast` binds the newest probe sample immediately (may be \
-                                    mid-animation; not assertion evidence)."
+                                    mid-animation; not assertion evidence). `content` (SE2) proves \
+                                    the tree content stable for a >=300 ms window and is the \
+                                    documented answer for a screen that animates forever in pixels."
                 },
                 "settle_timeout_ms": {
                     "type": "integer", "minimum": 1, "maximum": 600000,
@@ -384,9 +390,11 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                 "id": {"type": "string", "description": "Node `resource_id` (or bare local name) to tap; takes precedence over text and x/y."},
                 "testID": {"type": "string", "description": "React Native testID to tap (resolves to the nearest clickable ancestor); used when `id` and `text` are absent."},
                 "settle": {
-                    "type": "string", "enum": ["fast", "strict"],
+                    "type": "string", "enum": ["fast", "strict", "content"],
                     "description": "`fast` for navigation (may be mid-animation); `strict` (default) is \
-                                    the event-settled rule."
+                                    the event-settled rule; `content` (SE2) is the content-stable rule \
+                                    for a screen that animates forever in pixels (tree content proven \
+                                    stable >=300 ms; never pixel evidence)."
                 },
                 "settle_timeout_ms": {
                     "type": "integer", "minimum": 1, "maximum": 600000,

@@ -881,6 +881,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
         extras: BTreeMap::new(),
         clear_state: true,
         settle_timeout_ms: None,
+        settle: None,
     }));
     steps.push(Step {
         wait_for: Some(WaitForStep {

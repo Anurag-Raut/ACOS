@@ -558,6 +558,7 @@ mod tests {
             screenshot_png: None,
             crashed: None,
             input: None,
+        settle: None,
         }
     }
 
@@ -636,6 +637,7 @@ mod tests {
             screenshot_png: None,
             crashed: None,
             input: None,
+        settle: None,
         }
     }
 
