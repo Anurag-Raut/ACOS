@@ -2445,10 +2445,10 @@ fn request_id(args: &Value) -> String {
 }
 
 fn session_id(args: &Value) -> String {
-    args.pointer("/base/session_id")
-        .and_then(Value::as_str)
-        .unwrap_or(acos_mcp::session_backend::DEFAULT_SESSION)
-        .to_string()
+    match args.pointer("/base/session_id").and_then(Value::as_str) {
+        Some(id) => id.to_string(),
+        None => acos_mcp::session_backend::default_session_id().to_string(),
+    }
 }
 
 /// Session ids become directory names, so keep them path-safe.

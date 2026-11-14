@@ -750,10 +750,14 @@ fn execute_step(
             if let Some(failure) = static_launch_assertion(manifest, launch) {
                 return failure;
             }
-            let activity = launch
-                .activity
-                .clone()
-                .or_else(|| manifest.launcher_activity.clone());
+            // Hand the backend the expanded component (`pkg/.Cls` -> `pkg.Cls`),
+            // not the shorthand: engines that resolve the class themselves must
+            // not each re-implement Android's name expansion.
+            let activity = match &launch.activity {
+                Some(activity) => crate::backend::resolve_component(&manifest.package, activity)
+                    .or_else(|| Some(activity.clone())),
+                None => manifest.launcher_activity.clone(),
+            };
             backend.set_settle_timeout(launch.settle_timeout_ms);
             let request = LaunchRequest {
                 apk: apk.to_path_buf(),
@@ -2169,26 +2173,40 @@ fn hex_sha256(bytes: &[u8]) -> String {
 }
 
 /// Static assertion that the scenario's launch target exists in the manifest.
+///
+/// A launch target the APK does not declare is a **scenario/setup error**, not
+/// an app assertion: the app never ran, so the run cannot be evidence about the
+/// app. The code is `INVALID_SCENARIO` (status `error`), never
+/// `ASSERTION_FAILED`.
 fn static_launch_assertion(
     manifest: &crate::backend::ManifestInfo,
     launch: &acos_protocol::LaunchStep,
 ) -> Option<StepExec> {
     if let Some(activity) = &launch.activity {
+        let resolved = crate::backend::resolve_component(&manifest.package, activity);
         if !manifest.declares_activity(activity) {
-            let resolved = crate::backend::resolve_component(&manifest.package, activity)
-                .unwrap_or_else(|| activity.clone());
+            let expanded = resolved.clone().unwrap_or_else(|| activity.clone());
             let error = ProtocolError::new(
-                ErrorCode::AssertionFailed,
-                format!("activity `{resolved}` is not declared in {}", manifest.path),
+                ErrorCode::InvalidScenario,
+                format!(
+                    "launch activity `{activity}` resolves to `{expanded}`, which {} does not declare",
+                    manifest.path
+                ),
             )
-            .with_hint("Fix the scenario launch target or rebuild the APK; this is a static manifest assertion.")
+            .with_hint(
+                "Fix the scenario's `launch.activity` (`pkg/.Activity`, `pkg/Activity`, `.Activity` \
+                 and a bare `Activity` are all accepted) or rebuild the APK. This is a scenario \
+                 error: the app was never launched, so it is not an app verdict.",
+            )
             .with_details(serde_json::json!({
                 "declared_activities": manifest.activities,
                 "requested": activity,
-                "resolved": resolved,
+                "resolved": expanded,
+                "launcher_activity": manifest.launcher_activity,
+                "error_class": "invalid_scenario",
             }));
             return Some(StepExec {
-                status: Status::Fail,
+                status: Status::Error,
                 error: Some(error),
                 assertions: Vec::new(),
                 observation: None,
@@ -2198,12 +2216,16 @@ fn static_launch_assertion(
         }
     } else if launch.intent_action.is_none() && manifest.launcher_activity.is_none() {
         let error = ProtocolError::new(
-            ErrorCode::AssertionFailed,
+            ErrorCode::InvalidScenario,
             "scenario launches without an activity and the APK has no launcher activity"
                 .to_string(),
+        )
+        .with_hint(
+            "Name the activity in the scenario's `launch.activity`, or launch the APK by its \
+             launcher (declare MAIN/LAUNCHER on an <activity> or <activity-alias>).",
         );
         return Some(StepExec {
-            status: Status::Fail,
+            status: Status::Error,
             error: Some(error),
             assertions: Vec::new(),
             observation: None,
@@ -2578,4 +2600,109 @@ fn peak_rss_bytes() -> Option<u64> {
         }
     }
     None
+}
+
+/// F5: the launch gate must accept every Android component-name spelling and
+/// must report a bad target as a scenario error, never as an app assertion.
+#[cfg(test)]
+mod launch_gate_tests {
+    use super::*;
+    use crate::backend::ManifestInfo;
+    use acos_protocol::scenario::LaunchStep;
+
+    fn gaten_manifest() -> ManifestInfo {
+        // The real Gaten shape: the manifest package is `com.gaten` and the
+        // activities live under `com.gaten.app`, which is why the old
+        // "package part must equal the manifest package" rule rejected
+        // `com.gaten.app/.MainActivity`.
+        ManifestInfo {
+            path: "gaten.apk".to_string(),
+            sha256: "0".repeat(64),
+            package: "com.gaten".to_string(),
+            version_code: 10,
+            version_name: "0.1.0".to_string(),
+            min_sdk: 29,
+            target_sdk: 36,
+            label: Some("Gaten".to_string()),
+            launcher_activity: Some("com.gaten.app.LauncherIconLight".to_string()),
+            activities: vec![
+                "com.gaten.app.MainActivity".to_string(),
+                "com.gaten.app.LauncherActivity".to_string(),
+                "com.gaten.app.LauncherIconLight".to_string(),
+            ],
+            native_abis: vec!["x86_64".to_string()],
+            debuggable: false,
+        }
+    }
+
+    fn launch(activity: &str) -> LaunchStep {
+        LaunchStep {
+            activity: Some(activity.to_string()),
+            intent_action: None,
+            data: None,
+            extras: Default::default(),
+            clear_state: true,
+            settle_timeout_ms: None,
+        }
+    }
+
+    #[test]
+    fn documented_component_shorthand_passes_the_gate() {
+        let manifest = gaten_manifest();
+        for activity in [
+            "com.gaten.app/.MainActivity",
+            "com.gaten.app/MainActivity",
+            "com.gaten.app/com.gaten.app.MainActivity",
+            "com.gaten.app.MainActivity",
+        ] {
+            assert!(
+                static_launch_assertion(&manifest, &launch(activity)).is_none(),
+                "{activity} must pass the launch gate"
+            );
+        }
+    }
+
+    #[test]
+    fn undeclared_activity_is_an_invalid_scenario_not_an_assertion() {
+        let manifest = gaten_manifest();
+        let failure = static_launch_assertion(&manifest, &launch("com.gaten.app/.Nope"))
+            .expect("an undeclared target must fail the gate");
+        assert_eq!(failure.status, Status::Error, "not an app verdict");
+        let error = failure.error.expect("error");
+        assert_eq!(error.code, ErrorCode::InvalidScenario);
+        assert_ne!(error.code, ErrorCode::AssertionFailed);
+        assert_eq!(error.status(), Status::Error);
+        let details = error.details.expect("details");
+        assert_eq!(details["resolved"], "com.gaten.app.Nope");
+        assert_eq!(details["requested"], "com.gaten.app/.Nope");
+        assert_eq!(details["error_class"], "invalid_scenario");
+        assert!(details["declared_activities"]
+            .as_array()
+            .expect("declared_activities")
+            .iter()
+            .any(|v| v == "com.gaten.app.MainActivity"));
+        assert!(
+            error.message.contains("resolves to `com.gaten.app.Nope`"),
+            "the message must show the expansion: {}",
+            error.message
+        );
+    }
+
+    #[test]
+    fn a_scenario_without_an_activity_and_no_launcher_is_an_invalid_scenario() {
+        let mut manifest = gaten_manifest();
+        manifest.launcher_activity = None;
+        let step = LaunchStep {
+            activity: None,
+            intent_action: None,
+            data: None,
+            extras: Default::default(),
+            clear_state: false,
+            settle_timeout_ms: None,
+        };
+        let failure = static_launch_assertion(&manifest, &step).expect("must fail");
+        assert_eq!(failure.status, Status::Error);
+        let error = failure.error.expect("error");
+        assert_eq!(error.code, ErrorCode::InvalidScenario);
+    }
 }

@@ -252,6 +252,25 @@
         }
       },
       "type": "object"
+    },
+    "VerifyEngine": {
+      "description": "The execution engine `verify` runs on.\n\nThis is the **execution** engine (real ART or the frozen Rust VM). It is not the scenario YAML `engine:` field, which is a legacy native/reference preference (`native-preferred` | `native-only` | `reference-only`) that ART verification does not consume.",
+      "oneOf": [
+        {
+          "description": "Real Google ART through an `acos-art` guest (the default).",
+          "enum": [
+            "art"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The frozen Rust VM / native runtime (diagnostics; never silently chosen).",
+          "enum": [
+            "rust-vm"
+          ],
+          "type": "string"
+        }
+      ]
     }
   },
   "description": "`verify`: run an APK + scenario and produce artifacts.",
@@ -275,9 +294,18 @@
       ],
       "description": "Identity fields."
     },
+    "engine": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/VerifyEngine"
+        }
+      ],
+      "default": "art",
+      "description": "Execution engine: `art` (default, real ART) or `rust-vm` (frozen)."
+    },
     "flags": {
       "default": [],
-      "description": "Deterministic flags recorded in the reproducer.",
+      "description": "Deterministic `NAME=VALUE` flags recorded in the reproducer (`repro.json`'s `flags` and the `--flag` lines of `repro.sh`).\n\nA flag is metadata, not a command-line option: it must be `NAME=VALUE` with a name matching `[A-Za-z][A-Za-z0-9_.-]*` and a non-empty value, so a value can never be read as another option. A malformed flag is `INVALID_ARGUMENT` (`details.index` names it).",
       "items": {
         "type": "string"
       },

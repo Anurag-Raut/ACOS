@@ -30,7 +30,7 @@ use std::os::unix::io::AsRawFd;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -182,8 +182,17 @@ pub fn run(args: ServeArgs) -> ExitCode {
     // eviction does not pay P7's +198 ms. Never on the verification path.
     crate::prewarm::spawn_if_enabled(default_engine);
 
+    // A `SIGTERM`/`SIGINT` (the MCP server tearing its private daemon down, or
+    // an operator stopping it) must run the same shutdown as the idle exit:
+    // close every ART guest and reap its process group, then remove the socket.
+    // The handler only sets a flag; the accept loop checks it once per second.
+    install_termination_handler();
     let idle = Duration::from_secs(args.idle_timeout.max(1));
     loop {
+        if TERMINATING.load(Ordering::SeqCst) {
+            eprintln!("acos serve: termination signal; shutting sessions down");
+            break;
+        }
         match listener.accept() {
             Ok((stream, _addr)) => {
                 if !peer_is_self(&stream) {
@@ -261,6 +270,32 @@ pub fn run(args: ServeArgs) -> ExitCode {
 struct SharedState {
     last_activity: Mutex<Instant>,
     active: AtomicUsize,
+}
+
+/// Set by the `SIGTERM`/`SIGINT` handler; the accept loop owns the shutdown.
+static TERMINATING: AtomicBool = AtomicBool::new(false);
+
+/// Make `SIGTERM`/`SIGINT` reach the normal daemon shutdown.
+///
+/// A signal handler cannot call `engine.shutdown()` (it is not
+/// async-signal-safe), so it only sets [`TERMINATING`]; the binding loop polls
+/// it at most a second later and runs the ordinary exit path.
+fn install_termination_handler() {
+    // SAFETY: `on_terminate` is async-signal-safe (one atomic store), the
+    // `sigaction` struct is zeroed and only `sa_sigaction`/`sa_flags` are set,
+    // and the bindings are the same libc the process already uses.
+    unsafe {
+        let mut action: libc::sigaction = std::mem::zeroed();
+        action.sa_sigaction = on_terminate as usize;
+        action.sa_flags = 0;
+        libc::sigemptyset(&mut action.sa_mask);
+        let _ = libc::sigaction(libc::SIGTERM, &action, std::ptr::null_mut());
+        let _ = libc::sigaction(libc::SIGINT, &action, std::ptr::null_mut());
+    }
+}
+
+extern "C" fn on_terminate(_signal: libc::c_int) {
+    TERMINATING.store(true, Ordering::SeqCst);
 }
 
 fn handle_connection(stream: UnixStream, engine: &ServeEngine) {

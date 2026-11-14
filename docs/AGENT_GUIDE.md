@@ -4,7 +4,10 @@ ACOS runs real Android apps on Google's real ART (API 34, x86_64) inside an
 unprivileged `bwrap` sandbox and reports what actually happened: a launch ladder,
 a live UI tree, frames, logs, and an evidence-backed verdict. Agents are the
 only users. This file is the complete operating guide; the MCP tool
-`acos_help` returns it (and `acos_help {"topic": ...}` returns one section).
+`acos_help` returns a short skeleton of it, `acos_help {"topic": ...}` one
+section and `acos_help {"topic": "all"}` the whole thing.
+
+<!-- topic:overview -->
 
 Three rules decide everything:
 
@@ -19,6 +22,42 @@ Three rules decide everything:
 `status`, `backend`, `fidelity`, `capabilities_used`, `metrics`; a non-pass
 status always carries `error.code`, `error.hint`, `error.retryable` and optional
 `error.details`.
+
+## The loop, in ten lines
+
+```
+doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> verify -> reset -> destroy
+```
+
+1. `acos_doctor` — host preflight; fix every failing check's `fix:` first.
+2. `acos_inspect {"apk": ...}` — static: package, launcher, SDK, DEX/native.
+3. `acos_launch {"apk": ...}` — boot it, read `reached_stage`; the first
+   non-ok rung carries the blocker.
+4. `acos_observe_tree` — nodes with `id`/`text`/`bounds`; act on those.
+5. `acos_tap` / `acos_text` / `acos_key` / `acos_swipe` — then re-observe.
+6. `acos_logs` — the app's own words; `launched`/`stage_reached` included.
+7. `acos_verify {"apk","scenario"}` — the verdict and its artifacts are the
+   product; `"engine": "art"` for anything with `animations: off`.
+8. Read `verdict.json` + `steps/NN-*.json` on a non-pass; never guess.
+9. `acos_reset {"scope": "app"}` — fresh guest, empty app data.
+10. `acos_destroy` — idempotent; sessions also die with the server.
+
+## Topics
+
+`acos_help {"topic": "<name>"}` returns one section; `"all"` returns everything.
+
+* `overview` — this page: the three rules, the loop in ten lines, the topic list.
+* `workflow` — the loop step by step, with what each reply tells you.
+* `cli` — every `acos` command with a runnable example.
+* `scenarios` — writing a YAML scenario: steps, selectors, settle rules.
+* `errors` — error code → what to do next.
+* `limits` — what this build cannot do (ABI, rotation, RN/Flutter, paths).
+* `all` — the complete guide in one reply (largest; ask for a section when you
+  can).
+
+Call `acos_help {"topic": "workflow"}` next if you are about to run an app.
+
+<!-- /topic:overview -->
 
 <!-- topic:workflow -->
 ## The loop
@@ -37,7 +76,10 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    inventory). It never executes the app and is never proof of runtime
    behaviour.
 3. **Run it.** `acos_launch {"apk": "..."}` (MCP, session persists) or
-   `acos launch <apk> --json`. Read the ladder:
+   `acos launch <apk> --engine art --json`. **The MCP session tools always run
+   real ART** (the server starts its own private `acos serve --engine art`
+   daemon); the `acos` CLI's own default route is the frozen Rust VM, so pass
+   `--engine art` there. Read the ladder:
    `apk_parsed -> process_booted -> bind_application -> application_on_create ->
    client_transaction -> activity_on_create -> on_resume -> first_frame`.
    `reached_stage` is the honest answer to "how far did it get"; the first
@@ -58,10 +100,12 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    app actually reached `onCreate`.
 7. **Prove the flow.** `acos_verify {"apk": ..., "scenario": ...}` (or
    `acos verify <scenario.yaml> --artifacts out/<name>`) runs a YAML scenario and
-   writes `verdict.json`, per-step JSON and the frames. Pass `"engine": "art"`
-   when the scenario needs real ART (anything with `animations: off`); without
-   it the CLI default engine runs. A pass is valid only when its evidence exists
-   on disk.
+   writes `verdict.json`, per-step JSON and the frames. The tool runs **real
+   ART by default** (`engine: "art"`); pass `"engine": "rust-vm"` only to
+   reproduce the frozen Rust VM, and the reply's `fidelity` then says
+   `native-runtime`. With `required_fidelity: "art-reference"` a non-ART run is
+   refused as `UNSUPPORTED_BACKEND` (achieved fidelity does not satisfy), never
+   passed. A pass is valid only when its evidence exists on disk.
 8. **Clean up.** `acos_reset {"scope": "app"}` (relaunch in a fresh guest with
    an empty app-data directory) and `acos_destroy` (idempotent). Sessions also
    die with the `acos-mcp` process.
@@ -106,9 +150,10 @@ Notes that save a run:
   exists and otherwise fall back to a one-shot in-process session; `--apk`
   always launches a fresh one. `acos session …` always talks to the daemon
   (auto-starting it). `ACOS_NO_DAEMON=1` disables the daemon.
-* `acos launch --engine art` uses real ART. Without `--engine art` the default
-  route is the frozen Rust VM, which verifies far less. Use `--engine art` for
-  anything you intend to trust.
+* `acos launch --engine art` uses real ART. Without `--engine art` the **CLI's**
+  default route is the frozen Rust VM, which verifies far less. The **MCP**
+  session tools are not like that: they run real ART by default (see Limits).
+  Use `--engine art` on the CLI for anything you intend to trust.
 * `reset` and `destroy` are daemon verbs: `acos session reset|destroy`, or the
   MCP tools `acos_reset` / `acos_destroy`. There is no top-level `acos reset`.
 * `acos run-dex <path> --main Main` executes a DEX `main` on the Rust
@@ -127,7 +172,7 @@ A scenario is YAML with `version: 1`. Minimal, runnable shape:
 version: 1
 name: counter-increment
 app: fixtures/build/apps/counter.apk
-engine: native-preferred        # native-preferred | native-only | reference-only
+engine: native-preferred        # native-preferred | native-only | reference-only (see note)
 fallback: report-and-escalate   # report-and-escalate | report-only | forbid
 api_level: 34
 isolation: process              # shared-task | process | sandbox | core | vm
@@ -143,6 +188,12 @@ steps:
   - assert_text: {selector: {id: count}, text: {exact: "1"}}
   - assert_no_crash: {}
 ```
+
+`engine:` and `fallback:` above are the legacy **native-vs-reference** preference
+(`native-preferred` | `native-only` | `reference-only`) and are **not** the
+execution engine. The execution engine is `acos verify --engine art|rust-vm`
+(CLI) or the `engine` argument of the `acos_verify` tool (default: `art`, real
+ART). ART verification does not read the YAML field.
 
 A step is a **one-key map**. Valid keys:
 
@@ -171,6 +222,16 @@ A step is a **one-key map**. Valid keys:
 
 There is no `sleep` step and no polling: `wait_for` and the assertions are
 event-driven.
+
+`launch.activity` takes the same component spellings Android does, expanded
+before the launch gate runs: `com.example.app/.MainActivity` (a real
+`adb shell am start` component, `ComponentName.unflattenFromString`),
+`com.example.app/MainActivity`, `.MainActivity` and a bare `MainActivity`
+(`PackageParser.buildClassName`). A component prefix may differ from the
+manifest package (`com.gaten` + `com.gaten.app/.MainActivity`). A target the APK
+does not declare is `INVALID_SCENARIO` (status `error`, the app never ran) with
+`details.requested`, `details.resolved` and `details.declared_activities` — not
+`ASSERTION_FAILED`.
 
 **Selectors.** All given fields are ANDed; matching is case-sensitive.
 
@@ -261,6 +322,18 @@ Two session-specific hints worth memorising:
 * **API 34, x86_64.** The runtime is Google's ART from the API-34 ART APEX on
   an x86_64 host image. An APK whose native code has no `lib/x86_64/` entry is
   `UNSUPPORTED_ABI` on every route (that is a gate, not a silent fallback).
+* **The MCP session tools run real ART by default.** On the first session tool
+  call the server starts its **own** private `acos serve --engine art` on a
+  private socket under `$XDG_RUNTIME_DIR/acos/mcp-<pid>-…/` and forwards
+  `acos_launch/observe/tap/text/key/logs/status/reset/destroy` to it, so the
+  loop is the same real-ART loop `acos verify --engine art` runs. That daemon is
+  a child of the server: on stdin EOF/exit its sessions are destroyed and it is
+  terminated and reaped, so sessions never outlive `acos-mcp`.
+  `ACOS_SESSION_DAEMON=1` still forwards to an external `acos serve` when one is
+  listening. `ACOS_MCP_ENGINE=legacy` selects the frozen in-process Rust VM /
+  RN-bridge backend: it is **legacy, diagnostics only**, cannot run real APKs
+  and is never chosen implicitly. Default session ids are unique per server
+  (`mcp-<pid>`), so two agents on one daemon cannot collide.
 * **Rotation is not supported** on the ART session channel: the guest line
   protocol has no `rotate`, so a `rotate` step returns `UNSUPPORTED_BACKEND`
   (`capability: input`). Do not build a scenario that depends on it.

@@ -8,9 +8,18 @@ to the `acos` CLI.
 
 The server is deliberately thin: it does not re-implement the runtime. It
 adapts the typed contract in [`crates/acos-protocol`](../crates/acos-protocol)
-and dispatches to the `acos` binary. **Every command appears in `tools/list`**,
-whether or not it is implemented yet; each descriptor is annotated with
-`available: true|false` and its expected `fidelity`.
+and dispatches to the `acos` binary.
+
+`tools/list` advertises **only what this build can run**. The protocol still
+reserves every command name (the descriptors in `acos_protocol::mcp_tools()` are
+unchanged, and the table below lists them all), but a command with no
+implementation on any route — `acos_capture`, `acos_assert`, `acos_events`,
+`acos_profile`, `acos_capability_report` — is hidden: calling one still returns
+the same structured `unsupported` envelope with
+`error.details.available = false`, it is simply not advertised to an agent that
+would otherwise try it. (`acos_run`, `acos_observe`, `acos_action`, `acos_reset`
+and `acos_destroy` **are** advertised: the in-process session backend implements
+them even though the `acos` CLI has no such subcommand.)
 
 | | |
 |---|---|
@@ -143,22 +152,68 @@ Server limits (all optional):
 | `ACOS_MCP_CALL_TIMEOUT_MS` | `120000` | default call budget when the request declares none |
 | `ACOS_MCP_MAX_OUTPUT_BYTES` | `16777216` | maximum captured bytes per child stream |
 | `ACOS_MCP_MAX_IMAGE_BYTES` | `524288` | maximum image inlined as MCP image content |
+| `ACOS_MCP_MAX_TEXT` | `4000` | maximum bytes for one string in a tool reply. A longer string (an error message carrying a 200-frame java tail and a 400-line native tail) is head/tail-capped with a marker naming its original size and the artifact path, and an identical repeat is replaced by a back-reference, so the full text appears once. `0` disables the bound (the raw CLI behaviour). The guide text (`acos_help`) is exempt |
 | `ACOS_MCP_SESSION_TTL_MS` | `600000` | idle session TTL |
 | `ACOS_MCP_SHUTDOWN_GRACE_MS` | `2000` | how long in-flight calls may finish after stdin closes |
 | `ACOS_MCP_QUIET` | unset | silence stderr logging |
 | `ACOS_ART_MEM_MAX` | `2G` | per-session guest cgroup memory ceiling (also the budget the host admission check accounts for) |
 | `ACOS_MEMORY_GUARD` | on | `off` disables the `HOST_MEMORY_LOW` admission check (the cgroup ceiling still applies) |
-| `ACOS_SESSION_DAEMON` | unset | `1` forwards session tools to a running `acos serve` (by default the server holds sessions in-process on the Rust VM; start `acos serve --engine art` for real-ART sessions) |
-| `ACOS_SESSION_SOCKET` | `<runtime dir>/session.sock` | socket of that daemon |
+| `ACOS_SESSION_DAEMON` | unset | `1` forwards session tools to a **running external** `acos serve` at `ACOS_SESSION_SOCKET`. Without it the server spawns its own private `acos serve --engine art` (real ART) on first use |
+| `ACOS_SESSION_SOCKET` | `<runtime dir>/session.sock` | socket of that external daemon |
+| `ACOS_MCP_ENGINE` | unset (`art`) | `legacy` keeps the frozen in-process Rust VM / RN-bridge backend (diagnostics only; no real Android). Never chosen implicitly |
+
+---
+
+## 1b. Which engine do the tools run?
+
+**Real ART, by default.** The MCP session tools (`acos_launch`, `acos_observe`,
+`acos_observe_tree`, `acos_tap`, `acos_text`, `acos_key`, `acos_logs`,
+`acos_status`, `acos_reset`, `acos_destroy`) do not run on the frozen in-process
+Rust VM any more. On the first session tool call the server lazily spawns **its
+own private** `acos serve --engine art` daemon on a socket under
+`$XDG_RUNTIME_DIR/acos/mcp-<pid>-<rand>/session.sock` and forwards every session
+call to it, so the reply carries `engine: "art"`, `fidelity: "art-reference"`
+and the real launch ladder to `first_frame`, and `acos_reset` really restarts
+the guest in a fresh app-data directory (`data_cleared: true`).
+
+That daemon is a child of the server: `PR_SET_PDEATHSIG(SIGTERM)` is set when it
+is spawned, and on MCP stdin EOF/exit the server destroys its sessions, sends
+`SIGTERM` (the daemon closes every ART guest), reaps the child and removes the
+socket directory. Nothing outlives `acos-mcp`.
+
+The in-process backend still exists but is **frozen and opt-in only**:
+`ACOS_MCP_ENGINE=legacy` selects it; it is for diagnostics and cannot run a real
+APK. `ACOS_SESSION_DAEMON=1` is unchanged: it connects to an **external**
+`acos serve` (any `--engine`) at `ACOS_SESSION_SOCKET` when one is listening. If
+that daemon is not listening the server falls back to its own private ART
+daemon.
+
+Default session ids are unique per server process (`mcp-<pid>`), so two agents
+sharing one external daemon never address each other's session.
+
+### The `engine` argument
+
+`acos_verify` advertises an `engine` argument, an enum of `art` (default, real
+ART) and `rust-vm` (the frozen Rust VM). Omitted means `art`; the reply's
+`fidelity` says which engine actually ran (`art-reference` or `native-runtime`),
+and `required_fidelity: "art-reference"` on a non-ART run is refused
+(`UNSUPPORTED_BACKEND`), never passed.
+
+The **scenario YAML `engine:` field is a different thing**: it is the legacy
+native-vs-reference preference (`native-preferred` | `native-only` |
+`reference-only`) and ART verification does not read it. Do not confuse the two;
+the tool/CLI argument selects the execution engine.
 
 ---
 
 ## 2. Tools
 
-The server advertises 23 tools: the 13 protocol commands in
-`acos_protocol::mcp_tools()` (`acos_<command>`), two meta tools
-(`acos_capabilities`, `acos_help`), and eight server-local tools (the in-process
-session tools plus `acos_doctor`).
+The protocol defines 13 commands (`acos_<command>` in
+`acos_protocol::mcp_tools()`); the server adds two meta tools
+(`acos_capabilities`, `acos_help`) and the server-local tools (the in-process
+session tools plus `acos_doctor`). The number *advertised* in `tools/list`
+depends on what the installed `acos` binary implements — see above; the table
+below is the full structural list.
 
 Whether a protocol command can run **today** is derived at runtime by probing
 `acos --help`, never hard-coded, so new commands appear as available as soon as

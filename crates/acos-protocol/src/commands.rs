@@ -235,6 +235,9 @@ pub struct FeatureSummary {
 pub enum ComponentKindSummary {
     /// Activity.
     Activity,
+    /// `<activity-alias>` (a launcher entry that targets an activity).
+    #[serde(rename = "activity_alias")]
+    ActivityAlias,
     /// Service.
     Service,
     /// Broadcast receiver.
@@ -308,6 +311,13 @@ pub struct ComponentSummary {
     /// Intent filters.
     #[serde(default)]
     pub intent_filters: Vec<IntentFilterSummary>,
+    /// `<activity-alias android:targetActivity>`: the class the framework
+    /// instantiates (absent for a plain activity).
+    #[serde(default)]
+    pub target_activity: Option<String>,
+    /// `android:enabled`; absent means enabled.
+    #[serde(default)]
+    pub enabled: Option<bool>,
 }
 
 /// Components grouped by kind.
@@ -1102,6 +1112,38 @@ pub struct DestroyResponse {
 // verify
 // ---------------------------------------------------------------------------
 
+/// The execution engine `verify` runs on.
+///
+/// This is the **execution** engine (real ART or the frozen Rust VM). It is not
+/// the scenario YAML `engine:` field, which is a legacy native/reference
+/// preference (`native-preferred` | `native-only` | `reference-only`) that ART
+/// verification does not consume.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum VerifyEngine {
+    /// Real Google ART through an `acos-art` guest (the default).
+    Art,
+    /// The frozen Rust VM / native runtime (diagnostics; never silently chosen).
+    RustVm,
+}
+
+impl Default for VerifyEngine {
+    fn default() -> Self {
+        VerifyEngine::Art
+    }
+}
+
+impl VerifyEngine {
+    /// The stable CLI string.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            VerifyEngine::Art => "art",
+            VerifyEngine::RustVm => "rust-vm",
+        }
+    }
+}
+
 /// `verify`: run an APK + scenario and produce artifacts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct VerifyRequest {
@@ -1120,7 +1162,16 @@ pub struct VerifyRequest {
     /// Minimum fidelity the verdict must achieve.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required_fidelity: Option<Fidelity>,
-    /// Deterministic flags recorded in the reproducer.
+    /// Execution engine: `art` (default, real ART) or `rust-vm` (frozen).
+    #[serde(default)]
+    pub engine: VerifyEngine,
+    /// Deterministic `NAME=VALUE` flags recorded in the reproducer
+    /// (`repro.json`'s `flags` and the `--flag` lines of `repro.sh`).
+    ///
+    /// A flag is metadata, not a command-line option: it must be
+    /// `NAME=VALUE` with a name matching `[A-Za-z][A-Za-z0-9_.-]*` and a
+    /// non-empty value, so a value can never be read as another option. A
+    /// malformed flag is `INVALID_ARGUMENT` (`details.index` names it).
     #[serde(default)]
     pub flags: Vec<String>,
 }
@@ -1355,5 +1406,102 @@ mod tests {
         );
         let back: CommandRequest = serde_json::from_value(value).unwrap();
         assert_eq!(back, req);
+    }
+}
+
+/// Validate one deterministic reproducer flag (`NAME=VALUE`).
+///
+/// The syntax is deliberately strict: a flag is recorded in the reproducer and
+/// echoed by `repro.sh`, so a value that started with `-` (for example
+/// `--native`) could be read as a command-line option by whatever replays the
+/// script. `acos verify --flag` and the MCP `acos_verify` tool share this
+/// function so the CLI and the server cannot disagree.
+///
+/// Valid: `engine=art`, `variant.pre-fix=1`, `build_id=abc-123`.
+/// Invalid: `--native` (no `=`, looks like an option), `engine=` (empty value),
+/// `=art` (empty name), `engine=ar t` (whitespace), `1x=2` (name starts with a
+/// digit).
+pub fn validate_reproducer_flag(flag: &str) -> std::result::Result<(), String> {
+    if flag.is_empty() {
+        return Err("a flag must not be empty".to_string());
+    }
+    if flag.len() > 256 {
+        return Err(format!(
+            "a flag must be at most 256 bytes (this one is {})",
+            flag.len()
+        ));
+    }
+    let Some((name, value)) = flag.split_once('=') else {
+        return Err(format!(
+            "`{flag}` is not NAME=VALUE (a deterministic flag is metadata, not an acos option;              use for example `engine=art`)"
+        ));
+    };
+    if name.is_empty() {
+        return Err(format!("`{flag}` has an empty name (expected NAME=VALUE)"));
+    }
+    let mut chars = name.chars();
+    let first = chars.next().expect("non-empty");
+    if !first.is_ascii_alphabetic() {
+        return Err(format!(
+            "`{name}` must start with an ASCII letter (NAME=VALUE)"
+        ));
+    }
+    if !chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '-') {
+        return Err(format!(
+            "`{name}` may only contain ASCII letters, digits, `_`, `.` and `-`"
+        ));
+    }
+    if value.is_empty() {
+        return Err(format!("`{flag}` has an empty value (expected NAME=VALUE)"));
+    }
+    if let Some(bad) = value
+        .chars()
+        .find(|c| c.is_whitespace() || c.is_control() || *c == '"' || *c == '\'')
+    {
+        return Err(format!(
+            "the value of `{name}` contains {bad:?}; use a plain token (no whitespace or quotes)"
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod flag_tests {
+    use super::validate_reproducer_flag;
+
+    #[test]
+    fn name_value_flags_are_accepted() {
+        for flag in [
+            "engine=art",
+            "variant.pre-fix=1",
+            "build_id=abc-123",
+            "a.b_c-d=value",
+            "k=v=w",
+        ] {
+            assert!(validate_reproducer_flag(flag).is_ok(), "{flag}");
+        }
+    }
+
+    #[test]
+    fn option_like_and_malformed_flags_are_rejected() {
+        for (flag, needle) in [
+            ("--native", "NAME=VALUE"),
+            ("-x", "NAME=VALUE"),
+            ("engine", "NAME=VALUE"),
+            ("engine=", "empty value"),
+            ("=art", "empty name"),
+            ("1x=2", "ASCII letter"),
+            ("en gine=art", "letters"),
+            ("engine=ar t", "whitespace"),
+            ("engine=a\"b", "whitespace or quotes"),
+            ("", "empty"),
+        ] {
+            let error = validate_reproducer_flag(flag).expect_err(flag);
+            assert!(
+                error.contains(needle),
+                "flag {flag:?} produced {error:?}, expected {needle:?}"
+            );
+        }
+        assert!(validate_reproducer_flag(&format!("k={}", "v".repeat(300))).is_err());
     }
 }

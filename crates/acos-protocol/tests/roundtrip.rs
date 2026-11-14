@@ -150,6 +150,8 @@ fn inspect_result() -> InspectResult {
                         mime_type: Some("text/plain".to_string()),
                     }],
                 }],
+                target_activity: None,
+                enabled: Some(true),
             }],
             services: vec![],
             receivers: vec![],
@@ -645,6 +647,7 @@ fn command_requests_and_responses_round_trip() {
             artifacts: "out/".to_string(),
             reference: Some("ref/".to_string()),
             required_fidelity: Some(Fidelity::NativeRuntime),
+            engine: VerifyEngine::RustVm,
             flags: vec!["--x".to_string()],
         }),
         CommandRequest::CapabilityReport(CapabilityReportRequest {

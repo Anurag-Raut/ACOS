@@ -10,7 +10,9 @@
 //!   and an unknown URI is a JSON-RPC error, never an empty read;
 //! * `prompts/list` + `prompts/get` produce a runnable instruction that names
 //!   the real tool calls and the memory/honesty rules;
-//! * `acos_help {"topic": ...}` returns only that section.
+//! * `acos_help` with no topic returns a bounded skeleton, `topic` one section
+//!   and `topic: "all"` the whole guide (a 6.4k-token default reply was
+//!   truncated mid-scenario by at least one client).
 //!
 //! The text itself is checked for *content*, not just presence: a guide that
 //! lost the workflow, the CLI examples, the settle rules or the error playbook
@@ -46,7 +48,7 @@ fn embedded_guide_matches_the_checked_in_file() {
 /// Every advertised topic must slice a real, non-trivial section.
 #[test]
 fn every_topic_slices_a_real_section() {
-    let full = acos_mcp::help::guide(None);
+    let full = acos_mcp::help::full_guide();
     for topic in acos_mcp::help::TOPICS {
         let section = acos_mcp::help::guide(Some(topic));
         assert!(
@@ -63,14 +65,59 @@ fn every_topic_slices_a_real_section() {
             "topic {topic:?} is not a section of the full guide"
         );
     }
-    // An unknown topic returns the whole guide rather than nothing.
-    assert_eq!(acos_mcp::help::guide(Some("nonsense")), acos_mcp::help::guide(None));
+    // `all` is the whole guide, and it is bigger than any single section.
+    assert_eq!(acos_mcp::help::guide(Some("all")), full);
+    // No topic returns the skeleton: bounded, and a section of the full guide.
+    let skeleton = acos_mcp::help::guide(None);
+    // The skeleton is the guide's own front section: every line of it is a line
+    // of the guide (only the `<!-- topic:overview -->` markers are dropped).
+    for line in skeleton.lines().filter(|line| !line.trim().is_empty()) {
+        assert!(
+            full.contains(line),
+            "the skeleton drifted from the guide: {line:?}"
+        );
+    }
+    assert!(skeleton.len() > 500, "the skeleton is not empty");
+    // An unknown topic returns the skeleton (bounded), never the whole guide
+    // and never nothing.
+    assert_eq!(acos_mcp::help::guide(Some("nonsense")), skeleton);
+    assert!(skeleton.len() < full.len() / 3);
+}
+
+/// The skeleton is what a fresh agent sees first: the three rules, the loop in
+/// ten lines, and the topic list it can ask for next. It must stay small enough
+/// that no client truncates it.
+#[test]
+fn the_default_help_reply_is_a_bounded_skeleton() {
+    let skeleton = acos_mcp::help::guide(None);
+    assert!(
+        skeleton.len() < 4000,
+        "the acos_help default reply is {} bytes; it must fit one frame",
+        skeleton.len()
+    );
+    for expected in [
+        "status: \"pass\"",
+        "status: \"fail\"",
+        "status: \"unsupported\"",
+        "doctor -> inspect -> launch -> observe_tree",
+        "acos_help {\"topic\": \"workflow\"}",
+    ] {
+        assert!(skeleton.contains(expected), "the skeleton lost {expected:?}");
+    }
+    // Every topic it advertises is described in one line, so an agent knows
+    // which one to ask for.
+    for topic in acos_mcp::help::TOPICS {
+        assert!(
+            skeleton.contains(topic),
+            "the skeleton does not name the {topic:?} topic"
+        );
+    }
 }
 
 /// The guide must say the things an agent needs, in every build.
 #[test]
 fn the_guide_covers_the_contract() {
-    let text = acos_mcp::help::guide(None);
+    let text = acos_mcp::help::full_guide();
     for expected in [
         // The loop, in order.
         "doctor -> inspect -> launch -> observe_tree",
@@ -116,14 +163,37 @@ fn help_tool_serves_the_guide_and_its_topics() {
     let mut client = McpClient::with_real_acos();
     client.initialize("2025-03-26");
 
-    let all = client.call_tool("acos_help", json!({}));
-    assert!(!common::is_error(&all), "acos_help must not error: {all}");
-    let envelope = common::envelope_of(&all);
+    let default = client.call_tool("acos_help", json!({}));
+    assert!(!common::is_error(&default), "acos_help must not error: {default}");
+    let envelope = common::envelope_of(&default);
     let guide = envelope
         .pointer("/result/guide")
         .and_then(Value::as_str)
         .expect("result.guide");
+    // The default reply is the skeleton, not the whole 6.4k-token guide.
     assert_eq!(guide, acos_mcp::help::guide(None));
+    assert!(
+        guide.len() < 4000,
+        "the default acos_help reply is {} bytes",
+        guide.len()
+    );
+    assert_eq!(
+        envelope.pointer("/result/guide_topic"),
+        Some(&Value::Null),
+        "no topic was asked for"
+    );
+
+    // `topic: "all"` is the escape hatch for the complete guide.
+    let all = client.call_tool("acos_help", json!({"topic": "all"}));
+    let envelope = common::envelope_of(&all);
+    assert_eq!(
+        envelope.pointer("/result/guide_topic").and_then(Value::as_str),
+        Some("all")
+    );
+    assert_eq!(
+        envelope.pointer("/result/guide").and_then(Value::as_str),
+        Some(acos_mcp::help::full_guide().as_str())
+    );
     assert_eq!(
         envelope.pointer("/result/guide_source").and_then(Value::as_str),
         Some("docs/AGENT_GUIDE.md")
@@ -137,6 +207,10 @@ fn help_tool_serves_the_guide_and_its_topics() {
 
     let scenarios = client.call_tool("acos_help", json!({"topic": "scenarios"}));
     let envelope = common::envelope_of(&scenarios);
+    assert_eq!(
+        envelope.pointer("/result/guide_unknown_topic"),
+        Some(&json!(false))
+    );
     assert_eq!(
         envelope.pointer("/result/guide_topic").and_then(Value::as_str),
         Some("scenarios")
@@ -180,6 +254,7 @@ fn resources_serve_the_same_guide_text() {
     for expected in [
         "acos://guide",
         "acos://errors",
+        "acos://guide/overview",
         "acos://guide/workflow",
         "acos://guide/cli",
         "acos://guide/scenarios",
@@ -198,7 +273,8 @@ fn resources_serve_the_same_guide_text() {
         .pointer("/result/contents/0/text")
         .and_then(Value::as_str)
         .expect("contents text");
-    assert_eq!(text, acos_mcp::help::guide(None));
+    // A resource read is deliberate: `acos://guide` is the complete guide.
+    assert_eq!(text, acos_mcp::help::full_guide());
     assert_eq!(
         full.pointer("/result/contents/0/mimeType").and_then(Value::as_str),
         Some("text/markdown")

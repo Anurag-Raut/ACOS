@@ -27,22 +27,66 @@ pub const AGENT_GUIDE: &str = include_str!("../../../docs/AGENT_GUIDE.md");
 
 /// The guide topics `acos_help {"topic": ...}` accepts. Each names a
 /// `<!-- topic:NAME -->` … `<!-- /topic:NAME -->` block in the guide.
-pub const TOPICS: &[&str] = &["workflow", "cli", "scenarios", "errors", "limits"];
+///
+/// `overview` is the skeleton `acos_help` returns with no topic; `all` is the
+/// whole guide (not a section, so it is not in this list).
+pub const TOPICS: &[&str] = &["overview", "workflow", "cli", "scenarios", "errors", "limits"];
 
-/// The guide, or exactly one topic block of it. An unknown topic returns the
-/// whole guide (a wrong topic must not hide the documentation).
+/// `topic: "all"` returns everything.
+pub const ALL_TOPIC: &str = "all";
+
+/// The whole guide, trimmed.
+#[must_use]
+pub fn full_guide() -> String {
+    AGENT_GUIDE.trim().to_string()
+}
+
+/// The skeleton `acos_help` returns with **no topic**: the guide's own front
+/// section (`<!-- topic:overview -->`, which carries the three status rules,
+/// the loop in ten lines and the topic list with one-line descriptions).
+///
+/// Why: the whole guide is ~6.4k tokens, and a client that truncated it
+/// mid-scenario taught the agent a half-product. An agent that wants the whole
+/// text asks for `topic: "all"`; one that wants a section asks for it by name.
+#[must_use]
+pub fn skeleton() -> String {
+    let full = AGENT_GUIDE;
+    let start = "<!-- topic:overview -->";
+    let end = "<!-- /topic:overview -->";
+    let preamble = full
+        .find("<!-- topic:")
+        .map_or("", |idx| &full[..idx])
+        .trim();
+    let section = match (full.find(start), full.find(end)) {
+        (Some(from), Some(to)) if to > from => full[from + start.len()..to].trim(),
+        _ => "",
+    };
+    format!("{preamble}\n\n{section}\n").trim().to_string()
+}
+
+/// A guide topic, the skeleton, or (with `topic: "all"`) the whole guide.
+///
+/// An unknown topic returns the skeleton — a wrong topic must not flood the
+/// agent with the whole document, and it must not return nothing either.
 #[must_use]
 pub fn guide(topic: Option<&str>) -> String {
-    let Some(topic) = topic.filter(|t| TOPICS.contains(t)) else {
-        return AGENT_GUIDE.trim().to_string();
-    };
+    match topic {
+        None => skeleton(),
+        Some(ALL_TOPIC) => full_guide(),
+        Some(topic) if TOPICS.contains(&topic) => section(topic).unwrap_or_else(skeleton),
+        Some(_) => skeleton(),
+    }
+}
+
+/// One `<!-- topic:NAME -->` section of the guide.
+fn section(topic: &str) -> Option<String> {
     let start = format!("<!-- topic:{topic} -->");
     let end = format!("<!-- /topic:{topic} -->");
     match (AGENT_GUIDE.find(&start), AGENT_GUIDE.find(&end)) {
-        (Some(from), Some(to)) if to > from => AGENT_GUIDE[from + start.len()..to]
-            .trim()
-            .to_string(),
-        _ => AGENT_GUIDE.trim().to_string(),
+        (Some(from), Some(to)) if to > from => {
+            Some(AGENT_GUIDE[from + start.len()..to].trim().to_string())
+        }
+        _ => None,
     }
 }
 
@@ -183,8 +227,14 @@ pub fn build_help_topic(
         // The agent guide (embedded from `docs/AGENT_GUIDE.md`): the full text,
         // the requested topic when one was asked for, and the topic list.
         "guide": guide(topic),
-        "guide_topic": topic.filter(|t| TOPICS.contains(t)),
+        "guide_topic": match topic {
+            Some(topic) if topic == ALL_TOPIC => Some(ALL_TOPIC),
+            Some(topic) if TOPICS.contains(&topic) => Some(topic),
+            _ => None,
+        },
+        "guide_unknown_topic": topic.is_some_and(|t| t != ALL_TOPIC && !TOPICS.contains(&t)),
         "guide_topics": TOPICS,
+        "guide_all_topic": ALL_TOPIC,
         "guide_source": "docs/AGENT_GUIDE.md",
     })
 }

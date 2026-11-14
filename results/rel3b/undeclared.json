@@ -1,0 +1,233 @@
+{
+  "request_id": "req_2573c8_18e7f439d485d6b1",
+  "ok": false,
+  "status": "error",
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest"
+  ],
+  "error": {
+    "code": "INVALID_SCENARIO",
+    "class": "harness",
+    "message": "launch activity `com.gaten.app/.NopeActivity` resolves to `com.gaten.app.NopeActivity`, which /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk does not declare",
+    "hint": "Fix the scenario's `launch.activity` (`pkg/.Activity`, `pkg/Activity`, `.Activity` and a bare `Activity` are all accepted) or rebuild the APK. This is a scenario error: the app was never launched, so it is not an app verdict.",
+    "retryable": false,
+    "details": {
+      "declared_activities": [
+        "com.gaten.app.MainActivity",
+        "com.gaten.app.LauncherActivity",
+        "com.gaten.app.LauncherIconSystem",
+        "com.gaten.app.LauncherIconLight",
+        "com.gaten.app.LauncherIconDark",
+        "com.google.android.gms.common.api.GoogleApiActivity",
+        "com.google.android.play.core.common.PlayCoreDialogWrapperActivity"
+      ],
+      "error_class": "invalid_scenario",
+      "launcher_activity": "com.gaten.app.LauncherIconLight",
+      "requested": "com.gaten.app/.NopeActivity",
+      "resolved": "com.gaten.app.NopeActivity"
+    }
+  },
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": ".cache/rel3b-out/undeclared",
+    "certification": "certified-with-limits",
+    "certification_limits": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "section": "§8.7"
+    },
+    "certification_policy": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+      "section": "§8.8"
+    },
+    "trust": "trusted",
+    "verdict": {
+      "animations": "off",
+      "app": {
+        "package": "com.gaten",
+        "path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+        "sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29"
+      },
+      "backend": "acos-native",
+      "certification": "certified-with-limits",
+      "certification_limits": {
+        "doc": "docs/SANDBOX_CERTIFICATION.md",
+        "section": "§8.7"
+      },
+      "certification_policy": {
+        "doc": "docs/SANDBOX_CERTIFICATION.md",
+        "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+        "section": "§8.8"
+      },
+      "engine": "art",
+      "evidence": {
+        "artifacts": ".cache/rel3b-out/undeclared",
+        "engine_report": ".cache/rel3b-out/undeclared/engine.json",
+        "retention": ".cache/rel3b-out/undeclared/retention.json",
+        "verdict": ".cache/rel3b-out/undeclared/verdict.json"
+      },
+      "evidence_provenance": {
+        "binder_transactions": "host-observed",
+        "crash_reports": "guest-asserted",
+        "frames": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "logs": "guest-asserted",
+        "static_manifest": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "failure": {
+        "code": "INVALID_SCENARIO",
+        "error": {
+          "class": "harness",
+          "code": "INVALID_SCENARIO",
+          "details": {
+            "declared_activities": [
+              "com.gaten.app.MainActivity",
+              "com.gaten.app.LauncherActivity",
+              "com.gaten.app.LauncherIconSystem",
+              "com.gaten.app.LauncherIconLight",
+              "com.gaten.app.LauncherIconDark",
+              "com.google.android.gms.common.api.GoogleApiActivity",
+              "com.google.android.play.core.common.PlayCoreDialogWrapperActivity"
+            ],
+            "error_class": "invalid_scenario",
+            "launcher_activity": "com.gaten.app.LauncherIconLight",
+            "requested": "com.gaten.app/.NopeActivity",
+            "resolved": "com.gaten.app.NopeActivity"
+          },
+          "hint": "Fix the scenario's `launch.activity` (`pkg/.Activity`, `pkg/Activity`, `.Activity` and a bare `Activity` are all accepted) or rebuild the APK. This is a scenario error: the app was never launched, so it is not an app verdict.",
+          "message": "launch activity `com.gaten.app/.NopeActivity` resolves to `com.gaten.app.NopeActivity`, which /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk does not declare",
+          "retryable": false
+        },
+        "step_index": 0,
+        "summary": "step 0 (launch) error"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-14T15:51:51.926Z",
+      "insets": "report",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [
+        "stopped at step 0 (launch): error; later steps were not executed",
+        "scenario expected `pass`, engine produced `error` — result is a truthful partial",
+        "artifacts: referenced (keep-all): 8 file(s) / 0.1 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json"
+      ],
+      "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+      "reproducer": {
+        "acos_version": "0.2.0",
+        "apk_path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+        "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 400,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": ".cache/rel3b-scenarios/gaten-undeclared.yaml",
+        "scenario_sha256": "3390d103ee9d7b22c9af9b13d1be5aca3fff5a098e11f7d98c8d0bacb87f3b02"
+      },
+      "request_id": "req_2573c8_18e7f439d485d6b1",
+      "resources": {
+        "events": 234,
+        "frames_captured": 0,
+        "memory_mib": 240,
+        "peak_rss_bytes": 251670528,
+        "sessions": 0,
+        "steps": 1,
+        "wall_ms": 0
+      },
+      "scenario": {
+        "name": "rel3b-gaten-undeclared",
+        "path": ".cache/rel3b-scenarios/gaten-undeclared.yaml",
+        "sha256": "3390d103ee9d7b22c9af9b13d1be5aca3fff5a098e11f7d98c8d0bacb87f3b02"
+      },
+      "schema_version": 1,
+      "session_exit": {
+        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=130MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2454794-i2394719.scope)",
+        "code": null,
+        "disk_free_bytes": 153005215744,
+        "guest_crash": null,
+        "guest_exit": 0,
+        "guest_signal": null,
+        "native_crash": null,
+        "native_crash_path": null,
+        "outcome": "ok",
+        "panic": null,
+        "path": ".cache/rel3b-out/undeclared/art-frames/session-exit.json",
+        "retryable": false,
+        "stage": "teardown-evidence"
+      },
+      "started_at": "2026-11-14T15:51:51.926Z",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 0,
+          "error": {
+            "class": "harness",
+            "code": "INVALID_SCENARIO",
+            "details": {
+              "declared_activities": [
+                "com.gaten.app.MainActivity",
+                "com.gaten.app.LauncherActivity",
+                "com.gaten.app.LauncherIconSystem",
+                "com.gaten.app.LauncherIconLight",
+                "com.gaten.app.LauncherIconDark",
+                "com.google.android.gms.common.api.GoogleApiActivity",
+                "com.google.android.play.core.common.PlayCoreDialogWrapperActivity"
+              ],
+              "error_class": "invalid_scenario",
+              "launcher_activity": "com.gaten.app.LauncherIconLight",
+              "requested": "com.gaten.app/.NopeActivity",
+              "resolved": "com.gaten.app.NopeActivity"
+            },
+            "hint": "Fix the scenario's `launch.activity` (`pkg/.Activity`, `pkg/Activity`, `.Activity` and a bare `Activity` are all accepted) or rebuild the APK. This is a scenario error: the app was never launched, so it is not an app verdict.",
+            "message": "launch activity `com.gaten.app/.NopeActivity` resolves to `com.gaten.app.NopeActivity`, which /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk does not declare",
+            "retryable": false
+          },
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "provenance": {
+            "frame": "host-observed",
+            "launch_markers": "guest-asserted",
+            "lifecycle_markers": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "error",
+          "step": "launch"
+        }
+      ],
+      "trust": "trusted",
+      "unsupported_steps": [],
+      "verdict": "error"
+    },
+    "verdict_path": ".cache/rel3b-out/undeclared/verdict.json"
+  },
+  "metrics": {
+    "wall_ms": 0,
+    "peak_rss_bytes": 251670528
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  }
+}

@@ -179,22 +179,52 @@ impl ManifestInfo {
     }
 }
 
-/// Resolve a launch component (`pkg/.Activity`, `.Activity`, `Activity`) against
-/// a package to a fully qualified class name.
+/// Resolve a launch component (`pkg/.Activity`, `pkg/Activity`, `.Activity`,
+/// `Activity`) to a fully qualified class name.
+///
+/// The `pkg/class` forms follow Android's own rules, which are the rules a
+/// scenario author copies from `adb shell am start`:
+///
+/// * `pkg/.Cls` → `pkg.Cls`: `ComponentName.unflattenFromString` expands a
+///   leading `.` **against the package part of the string**, not against the
+///   manifest package — `.cache/aosp/base/core/java/android/content/
+///   ComponentName.java` (`if (cls.charAt(0) == '.') cls = pkg + cls;`). A
+///   manifest package and a component's package prefix are allowed to differ
+///   (`com.gaten` vs `com.gaten.app/.MainActivity`), so the old rule that
+///   rejected a mismatched prefix rejected a valid Android component name.
+/// * `pkg/Cls` with no `.` in `Cls` is relative: `PackageParser.buildClassName`
+///   prefixes the component package (`if (name.indexOf('.') < 0) name =
+///   pkg + '.' + name`), so it is `pkg.Cls`.
+/// * `.Cls` and a bare `Cls` are relative to the manifest package (same
+///   `buildClassName` rule).
+///
+/// A class name that already contains a `.` is fully qualified and is kept
+/// verbatim, except that it must name the APK's own package (a typo from
+/// another package is a scenario error, and the caller reports it as one).
 pub fn resolve_component(package: &str, component: &str) -> Option<String> {
     let component = component.trim();
     if component.is_empty() {
         return None;
     }
     if let Some((pkg_part, class_part)) = component.split_once('/') {
-        if pkg_part != package {
+        let pkg_part = pkg_part.trim();
+        let class_part = class_part.trim();
+        if pkg_part.is_empty() || class_part.is_empty() {
             return None;
         }
-        let class = class_part.trim_start_matches('.');
-        if class.is_empty() {
-            return None;
+        // ComponentName.unflattenFromString: the leading dot is expanded with
+        // the package written in the component string itself.
+        if let Some(rest) = class_part.strip_prefix('.') {
+            if rest.is_empty() {
+                return None;
+            }
+            return Some(format!("{pkg_part}.{rest}"));
         }
-        return Some(format!("{package}.{class}"));
+        // PackageParser.buildClassName: a dotless class is relative.
+        if !class_part.contains('.') {
+            return Some(format!("{pkg_part}.{class_part}"));
+        }
+        return Some(class_part.to_string());
     }
     if let Some(rest) = component.strip_prefix('.') {
         if rest.is_empty() {
@@ -203,7 +233,9 @@ pub fn resolve_component(package: &str, component: &str) -> Option<String> {
         return Some(format!("{package}.{rest}"));
     }
     if component.contains('.') {
-        return component.starts_with(package).then(|| component.to_string());
+        let own_package =
+            component == package || component.starts_with(&format!("{package}."));
+        return own_package.then(|| component.to_string());
     }
     // A bare class name is relative to the package.
     Some(format!("{package}.{component}"))
@@ -757,6 +789,44 @@ mod tests {
         );
         assert_eq!(resolve_component(pkg, "com.other.Activity"), None);
         assert_eq!(resolve_component(pkg, ""), None);
+    }
+
+    /// The shorthand Android's own tooling accepts: `ComponentName.
+    /// unflattenFromString` (`pkg/.Cls`) and `PackageParser.buildClassName`
+    /// (`pkg/Cls`, dotless class relative to the component's package). A
+    /// component prefix that differs from the manifest package is legal and
+    /// must resolve (Gaten: manifest package `com.gaten`, component package
+    /// `com.gaten.app`).
+    #[test]
+    fn resolve_component_expands_android_component_shorthand() {
+        // `pkg/.Cls` — ComponentName.unflattenFromString, package part wins.
+        assert_eq!(
+            resolve_component("com.gaten", "com.gaten.app/.MainActivity").as_deref(),
+            Some("com.gaten.app.MainActivity")
+        );
+        // `pkg/Cls` — dotless class is relative (buildClassName).
+        assert_eq!(
+            resolve_component("com.gaten", "com.gaten.app/MainActivity").as_deref(),
+            Some("com.gaten.app.MainActivity")
+        );
+        // `pkg/a.b.Cls` — fully qualified class after the slash.
+        assert_eq!(
+            resolve_component("com.gaten", "com.gaten.app/com.gaten.app.MainActivity").as_deref(),
+            Some("com.gaten.app.MainActivity")
+        );
+        // `.Cls` and bare `Cls` — relative to the manifest package.
+        assert_eq!(
+            resolve_component("com.gaten", ".MainActivity").as_deref(),
+            Some("com.gaten.MainActivity")
+        );
+        assert_eq!(
+            resolve_component("com.gaten", "MainActivity").as_deref(),
+            Some("com.gaten.MainActivity")
+        );
+        // Degenerate forms are not components.
+        assert_eq!(resolve_component("com.gaten", "com.gaten.app/"), None);
+        assert_eq!(resolve_component("com.gaten", "/.MainActivity"), None);
+        assert_eq!(resolve_component("com.gaten", "com.gaten.app/."), None);
     }
 
     #[test]

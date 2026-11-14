@@ -90,10 +90,36 @@ fn end_to_end_mcp_session_over_stdio() {
     assert_eq!(init["result"]["serverInfo"]["name"], "acos-mcp");
     client.send(&json!({"jsonrpc": "2.0", "method": "notifications/initialized"}));
 
-    // 2. tools/list (assert it is large; full contents are covered in protocol.rs)
+    // 2. tools/list: only what this build can run (full contents are covered in
+    // protocol.rs). Stub commands are hidden, never advertised-and-refused.
     let list = client.request(2, "tools/list", json!({}));
     let tools = list["result"]["tools"].as_array().expect("tools");
-    assert_eq!(tools.len(), 24);
+    assert!(
+        tools.len() >= 15 && tools.len() < 24,
+        "tools/list advertised {} tools",
+        tools.len()
+    );
+    for tool in tools {
+        assert_eq!(
+            tool["annotations"]["available"], true,
+            "an unavailable tool was advertised: {tool}"
+        );
+    }
+    // The session backend serves `run`/`observe`/`action`/`reset`/`destroy`
+    // in-process, so those stay advertised; the five stubs below do not exist
+    // on any route in this build.
+    for hidden in [
+        "acos_capture",
+        "acos_assert",
+        "acos_events",
+        "acos_profile",
+        "acos_capability_report",
+    ] {
+        assert!(
+            !tools.iter().any(|t| t["name"] == hidden),
+            "{hidden} is not implemented and must not be advertised"
+        );
+    }
     assert!(tools
         .iter()
         .any(|t| t["name"] == "acos_inspect" && t["annotations"]["available"] == true));

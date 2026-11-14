@@ -1618,6 +1618,7 @@ mod engine_tests {
             artifacts: artifacts.display().to_string(),
             reference: None,
             required_fidelity: None,
+            engine: acos_protocol::VerifyEngine::Art,
             flags: Vec::new(),
         }
     }

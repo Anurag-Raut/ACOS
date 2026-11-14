@@ -58,20 +58,33 @@ fn main() {
             .unwrap_or_else(|| "<not found>".to_string())
     ));
 
+    let acos_binary = backend_config.binary.clone();
     let mut backend = SessionBackend::new(backend_config, SessionOptions::default());
-    if acos_mcp::daemon::mcp_daemon_requested() {
+    // The default engine is real ART: the server lazily spawns its own
+    // `acos serve --engine art` and forwards the session tools to it. The frozen
+    // in-process backend is opt-in only (`ACOS_MCP_ENGINE=legacy`), and an
+    // external daemon (`ACOS_SESSION_DAEMON=1`) still wins when it is listening.
+    if acos_mcp::daemon::mcp_daemon_requested() && acos_mcp::daemon::socket_path().exists() {
         let socket = acos_mcp::daemon::socket_path();
-        if socket.exists() {
-            backend = backend.with_daemon();
-            log(&format!(
-                "session daemon: forwarding session tools to {}",
-                socket.display()
-            ));
-        } else {
-            log(&format!(
-                "session daemon: {} not found; holding sessions in-process",
-                socket.display()
-            ));
+        backend = backend.with_daemon();
+        log(&format!(
+            "session daemon: forwarding session tools to {}",
+            socket.display()
+        ));
+    } else if acos_mcp::private_daemon::legacy_requested() {
+        log("session engine: legacy (in-process Rust VM / RN bridge, FROZEN; ACOS_MCP_ENGINE=legacy)");
+    } else {
+        match acos_binary {
+            Some(binary) => {
+                log(&format!(
+                    "session engine: art (private `{} serve --engine art` daemon on first session call)",
+                    binary.display()
+                ));
+                backend = backend.with_art_daemon(binary);
+            }
+            None => log(
+                "session engine: art requested but no `acos` binary was found;                  set ACOS_BIN (session tools will answer INTERNAL until then)",
+            ),
         }
     }
     let caps = backend.capabilities();
@@ -89,7 +102,11 @@ fn main() {
         log(&format!("capability probe note: {error}"));
     }
 
+    // stdin EOF is the MCP client exiting: tear the private daemon (and every
+    // ART guest it holds) down before this process exits.
+    let teardown = backend.art_daemon_handle();
     serve(backend);
+    teardown.shutdown();
 }
 
 fn serve<B: Backend + 'static>(backend: B) {
