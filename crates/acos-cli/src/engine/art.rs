@@ -2664,9 +2664,33 @@ impl ArtSession {
     fn owned_pids(&self) -> Vec<u32> {
         let me = std::process::id();
         let mut pids: Vec<u32> = Vec::new();
+        // Proof 1 — membership of a process group this session recorded. This is
+        // the widest proof and the one that makes the teardown *complete*: a
+        // guest whose environment was cleared (`bwrap --clearenv`) and whose
+        // parent already died is still a member of the group this session
+        // started, so it must be named in the teardown proof rather than
+        // reported as a clean tree over a live process.
         for group in self.own_groups() {
             pids.extend(processes_in_group(group));
         }
+        pids.extend(self.provable_pids());
+        pids.retain(|pid| *pid != me);
+        pids.sort_unstable();
+        pids.dedup();
+        pids
+    }
+
+    /// Pids this session can prove it started **independently of a group id**
+    /// (SERVELEAK2/F1 proofs 2 and 3).
+    ///
+    /// These, and only these, are what a signal is aimed at: a recorded group id
+    /// can be recycled by another agent once its leader is reaped (F4), so a
+    /// group is signalled only while it holds one of these pids (see
+    /// [`Self::owned_live_groups`]). A member that cannot be attributed this way
+    /// is still *reported* as a survivor — never silently dropped, never killed
+    /// on a guess.
+    fn provable_pids(&self) -> Vec<u32> {
+        let mut pids: Vec<u32> = Vec::new();
         if let Some(launcher) = self.launcher_pid {
             pids.extend(descendants_of(launcher as u32));
         }
@@ -2678,9 +2702,6 @@ impl ArtSession {
                 }
             }
         }
-        pids.retain(|pid| *pid != me);
-        pids.sort_unstable();
-        pids.dedup();
         pids
     }
 
@@ -2695,7 +2716,7 @@ impl ArtSession {
         // SAFETY: `getpgrp` takes no arguments and cannot fail.
         let own = unsafe { libc::getpgrp() };
         let mut groups: Vec<i32> = Vec::new();
-        for pid in self.owned_pids() {
+        for pid in self.provable_pids() {
             if let Some((_ppid, pgrp, _alive)) = proc_ppid_pgrp(pid) {
                 if pgrp > 1 && pgrp != own && !groups.contains(&pgrp) {
                     groups.push(pgrp);
@@ -2714,7 +2735,13 @@ impl ArtSession {
     /// path-identical directory was killed by this session's teardown. Only the
     /// three proofs in [`Self::owned_pids`] are used now.
     fn reap_session_leftovers(&self) -> usize {
-        let owned = self.owned_pids();
+        // A signal is aimed only at a pid this session can prove it started
+        // (F1: not at a command-line name, not at a recycled group id).
+        let owned: Vec<u32> = self
+            .provable_pids()
+            .into_iter()
+            .filter(|pid| *pid != std::process::id())
+            .collect();
         for pid in &owned {
             // SAFETY: `pid` is a live process this session proved it owns; a
             // process that died in between answers `ESRCH`.
