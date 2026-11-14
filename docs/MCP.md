@@ -230,7 +230,7 @@ server.
 | `acos_inspect` | protocol | `inspect` | `static-analysis` | `apk`, `base` |
 | `acos_run_dex` | protocol | `run-dex` | `native-runtime` | `base`, `path` |
 | `acos_run` | protocol | `run` | `native-runtime` | `apk`, `base` |
-| `acos_observe` | protocol | `observe` | `native-runtime` | `base` (`screenshot` optional) |
+| `acos_observe` | protocol | `observe` | `native-runtime` | `base` |
 | `acos_capture` | protocol | `capture` | `native-runtime` | `base` |
 | `acos_action` | protocol | `action` | `native-runtime` | `action`, `base` |
 | `acos_assert` | protocol | `assert` | `native-runtime` | `assertion`, `base` |
@@ -243,7 +243,7 @@ server.
 | `acos_capabilities` | server | - | `static-analysis` | - |
 | `acos_help` | server | - | `static-analysis` | - |
 | `acos_launch` | server | - | `native-runtime` | - |
-| `acos_observe_tree` | server | - | `native-runtime` | `session_id` (`screenshot` optional) |
+| `acos_observe_tree` | server | - | `native-runtime` | - |
 | `acos_tap` | server | - | `native-runtime` | - |
 | `acos_key` | server | - | `native-runtime` | - |
 | `acos_text` | server | - | `native-runtime` | - |

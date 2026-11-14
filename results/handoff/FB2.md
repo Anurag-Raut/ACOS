@@ -384,8 +384,40 @@ checks** are the two rows above (both run, output in §9 and §8).
 
 `cargo test --release --offline -p acos-cli -p acos-art -p acos-mcp
 -p acos-verify -p acos-protocol -p acos-apk`, `CARGO_TARGET_DIR=.cache/gr4-target`,
-through the lock and `tools/guarded.sh` — see §12 for the final result and the
-one host-load flake that had to be re-run.
+through the lock and `tools/guarded.sh --mem 10G --time 900`:
+
+```text
+60 "test result: ok" suites; 655 tests passed; 0 failed; 0 FAILED
+(results/fb2b/tests.log)
+```
+
+Notable suites: acos-cli 121 bin + 120 lib, acos-art 121 lib + the integration
+suites, acos-mcp 61 lib + the docs/metadata suites (the generated tool table in
+`docs/MCP.md` is compared byte for byte — see below), acos-verify, acos-protocol
+(incl. `schemas_are_up_to_date`; no schema changed in FB2b), acos-apk 29 lib
+tests including the four new `native::tests`.
+
+Three runs were needed, and what failed in the earlier ones is worth recording
+because neither was caused by this branch's logic:
+
+1. `acos-apk` `native::tests::elf_needed_reads_a_minimal_dynamic_section` — my
+   **test fixture** was off by one byte in the fake string table (it asserted
+   `libc.so` at offset 15 where it lives at 16, so the parser correctly returned
+   the empty string at 15). Fixture fixed; the parser was right.
+2. `acos-art` `launch_hang::guest_killed_by_signal_returns_signal_and_cleans_up`
+   — `launch took 11.428 s ... (bound: 5 s)` while three other agents were
+   compiling and benching on this host. This is the known **LHFLAKE**
+   (`results/handoff/SHOTZ.md` §5/§6: the `launch_hang` family fails only when
+   the whole suite runs under host load and passes in isolation, recorded on
+   `main` as well). It **passed** unchanged in the next full run (15.02 s suite,
+   7/7) — the test was not touched, skipped or loosened.
+3. `acos-mcp` `docs::docs_tool_table_matches_descriptors` — a real finding about
+   **my** doc edit: the table between the markers is generated from the tool
+   descriptors, so adding "(`screenshot` optional)" to two cells drifted it. The
+   table is back to the generated form and the `screenshot` argument is
+   documented in the prose section instead (regenerating with
+   `cargo run -p acos-mcp --example gen-tools-docs` would also drop such edits
+   silently, so the prose is the honest place for it).
 
 ## 12. Remaining + smallest next action
 
@@ -404,6 +436,9 @@ decisions; the two follow-ups that are **not** FB2's to do are listed there.
 01:45  MCP smoke (B)           smoke: ok, PNG 138 839 B, preview 576x1280
 01:45  crafted check (C)       blocked/PLACEHOLDER_CONTENT, inspect warns 1 lib,
                                verify gaten-home not a pass
+02:02  tests                  60 suites, 655 passed / 0 failed (results/fb2b/tests.log)
+02:05  cleanup                 scratch prefix (.cache/fb2/prefix) and the crafted
+                               APK deleted; .cache/fb2 keeps only small logs
 ```
 
 ## 14. Decisions for the orchestrator
