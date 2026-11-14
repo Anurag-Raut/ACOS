@@ -2152,11 +2152,12 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
 
   | n | pass | crash | placeholder | content frame (nodes) | launch p50 / p90 | traversals | event waits |
   |---:|---:|---:|---:|---|---|---|---|
-  | 30 | **30** | **0** | **0/30** | **30/30** (21×243, 9×201) | **2.210 s / 2.228 s** (min 0.890 s) | 1×17, 3×1, 4×2, 5×10 | 13/30 launches waited (223–235 ms) |
+  | 30 | **30** | **0** | **0/30** | **30/30** (21×243, 9×201) | **2.21 s / 2.23 s** (min 0.89 s) | 1×17, 3×1, 4×2, 5×10 | 13/30 launches waited (223–235 ms) |
 
   The 13 launches that needed the wait finished **faster** than the content-first ones (0.89–1.01 s
   vs 2.2 s): the skeleton settled early and the app's next committed state is the content frame, so
-  the event wait costs ~0.23 s of 3–4 committed states. 0 `GUEST_EXITED`, 0 SIGSEGV, no crash record
+  the event wait costs ~0.23 s of 3–4 committed states. The other 17 bound an unsettled content
+  frame on their own traversal (`bound: "timeout"`, `traversals: 1`) — pre-existing P9 behaviour. 0 `GUEST_EXITED`, 0 SIGSEGV, no crash record
   in any rep; every session had 243 nodes at +2 s.
 - **Guarantees, unit-tested** (`cargo test -p acos-cli --bin acos g3f1`, 6/6, plus the classification
   test in `failure.rs`): late content → content frame (`traversals 2`, `event_waits 1`, settled
