@@ -233,6 +233,12 @@ impl ZygoteRegistry {
         self.keepers.insert(key, keeper);
     }
 
+    /// Drop a keeper from the registry (the dead-keeper restart path, ZPROD4).
+    /// The caller has already shut it down; a removed keeper can never answer.
+    pub fn remove(&mut self, key: &ZygoteKey) -> Option<PersistentZygote> {
+        self.keepers.remove(key)
+    }
+
     /// A tag that no live session of this serve holds. Tags are never reused, so
     /// a stale contract in `<plan>/<tag>` can never be mistaken for a new child.
     pub fn allocate_tag(&mut self) -> u32 {
@@ -323,6 +329,12 @@ impl PersistentZygote {
         // A stale FIFO from a dead serve would be opened happily and never read.
         let _ = fs::remove_file(&cmd_path);
         make_fifo(&cmd_path)?;
+        // ZPROD4: a restarted keeper must not inherit the dead keeper's contract.
+        // `ready` carries the boot epoch, so a stale file would make a brand-new
+        // zygote answer with the dead epoch (and the restart would look like a
+        // reset on a live keeper). §4.2: nothing the old process wrote survives.
+        let _ = fs::remove_file(plan.join("ready"));
+        let _ = fs::remove_file(plan.join("zygote.pid"));
 
         let timeout = Duration::from_millis(DEFAULT_READY_TIMEOUT_MS);
         let started = Instant::now();

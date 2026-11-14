@@ -173,6 +173,28 @@ impl ZygoteHost {
             ("ACOS_ZYGOTE_PROBE".into(), "1".into()),
         ];
         let mut keepers = self.lock();
+        // ZPROD4 (design §6): a keeper that died is not "a keeper". It is removed
+        // (its exit status and log tail are already carried by the request that
+        // observed the death) and the NEXT request boots a fresh keeper: a new
+        // zygote, hence a new `zygote_boot_epoch` and a fresh fork. Sessions that
+        // still hold the dead epoch are reported lost by [`Self::verb_error`];
+        // they are never re-pointed at this new keeper.
+        if let Some(keeper) = keepers.keeper_mut(key) {
+            if !keeper.alive() {
+                let dead_epoch = keeper.boot_epoch().to_string();
+                let reason = keeper
+                    .dead_reason()
+                    .map(|error| error.to_string())
+                    .unwrap_or_else(|| "keeper is gone".to_string());
+                eprintln!(
+                    "acos: zygote: keeper for {} is dead (epoch {dead_epoch}); booting a new \
+                     keeper (a session of the dead epoch is lost, never re-pointed): {reason}",
+                    key.dir_name()
+                );
+                keeper.shutdown();
+                keepers.remove(key);
+            }
+        }
         if keepers.keeper_mut(key).is_none() {
             let keeper = PersistentZygote::start(
                 &self.root,
@@ -224,6 +246,71 @@ impl ZygoteHost {
     /// The keeper's `epoch=<n>`. Unchanged across a reset, new after a restart.
     pub fn boot_epoch(&self, key: &ZygoteKey) -> Option<String> {
         self.lock().keeper_mut(key).map(|k| k.boot_epoch().to_string())
+    }
+
+    /// The epoch of a keeper that is **still alive**, or `None`. ZPROD4: the
+    /// cached epoch string of a dead keeper must never answer this, or a lost
+    /// session would look like a live one.
+    pub fn live_boot_epoch(&self, key: &ZygoteKey) -> Option<String> {
+        let mut keepers = self.lock();
+        let keeper = keepers.keeper_mut(key)?;
+        if keeper.alive() {
+            Some(keeper.boot_epoch().to_string())
+        } else {
+            None
+        }
+    }
+
+    /// The structured failure for a zygote verb that failed on a session.
+    ///
+    /// ZPROD4: a failure whose keeper is gone *or* whose `zygote_boot_epoch` is
+    /// not the epoch the session was born in is a **lost session**: the reply
+    /// names it (`details.zygote.session = "lost"`, the session's epoch, the
+    /// keeper's current epoch or `null`) and the session is never re-pointed to
+    /// the new keeper. Every other failure is the plain `ZYGOTE_DEAD`.
+    pub fn verb_error(
+        &self,
+        key: &ZygoteKey,
+        tag: u32,
+        expected_epoch: &str,
+        error: &ZygoteError,
+    ) -> BackendError {
+        let current = self.live_boot_epoch(key);
+        if current.as_deref() == Some(expected_epoch) {
+            return zygote_dead(&error.to_string());
+        }
+        let mut backend = zygote_dead(&format!(
+            "SESSION_LOST: zygote session tag {tag} was born in zygote_boot_epoch \
+             {expected_epoch}, but that keeper is gone (current: {}) and a lost session is never \
+             re-pointed at a new keeper; relaunch it. Underlying failure: {error}",
+            current.as_deref().unwrap_or("none")
+        ));
+        if let BackendError::Protocol { details, .. } = &mut backend {
+            if let Some(zygote) = details
+                .as_mut()
+                .and_then(|value| value.get_mut("zygote"))
+                .and_then(serde_json::Value::as_object_mut)
+            {
+                zygote.insert("session".into(), serde_json::json!("lost"));
+                zygote.insert("zygote_tag".into(), serde_json::json!(tag));
+                zygote.insert(
+                    "session_boot_epoch".into(),
+                    serde_json::json!(expected_epoch),
+                );
+                zygote.insert(
+                    "keeper_boot_epoch".into(),
+                    match &current {
+                        Some(epoch) => serde_json::json!(epoch),
+                        None => serde_json::Value::Null,
+                    },
+                );
+                zygote.insert(
+                    "repointed".into(),
+                    serde_json::json!(false),
+                );
+            }
+        }
+        backend
     }
 
     /// Close every keeper (serve exit). Idempotent.
@@ -326,7 +413,9 @@ plan="$ACOS_ZYGOTE_PLAN_DIR"
 [ "$ACOS_ZYGOTE_PERSIST" = "1" ] || { echo "not persistent" >&2; exit 64; }
 echo "epoch=$$.1 boot_ms=13" > "$plan/ready"
 echo 2 > "$plan/zygote.pid"
-n=100
+# The child pid a keeper hands out starts at its own pid, so a restarted
+# keeper (a new process) can never hand out the dead keeper's child pid.
+n=$$
 while read -r verb tag; do
   case "$verb" in
     spawn) n=$((n+1)); echo "pid=$n" > "$plan/$tag/spawned"; echo "$n" > "$plan/$tag/pid" ;;
@@ -437,6 +526,108 @@ done < "$plan/cmd"
         assert_eq!(details["zygote"]["fallback"], "none (a zygote failure never runs the exec path)");
         assert!(details["memory_scope"].as_str().unwrap().contains("shared-scope"));
         assert_eq!(host.keeper_count(), 0, "a dead keeper is not kept in the registry");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_dead_keeper_restarts_with_a_new_epoch_and_old_sessions_are_lost() {
+        // ZPROD4: kill the keeper between two requests. (1) The request that sees
+        // it dead fails structurally and says the session is *lost*. (2) The NEXT
+        // request boots a NEW keeper with a NEW `zygote_boot_epoch` and reforks.
+        // (3) The lost session is never re-pointed at the new epoch.
+        let dir = scratch("restart");
+        let script = mock_keeper(&dir);
+        let build = dir.join("zbuild");
+        fs::create_dir_all(&build).unwrap();
+        let host = host_with(&dir, &build);
+        let k = key();
+        let tag0 = host
+            .prepare(&k, &script, Path::new("/apks/counter.apk"), None)
+            .unwrap();
+        publish_argv(&host, &k, tag0);
+        let child0 = host
+            .wait_contract_and_spawn(&k, tag0, Duration::from_secs(5))
+            .unwrap();
+        let epoch1 = host.boot_epoch(&k).unwrap();
+        assert_eq!(
+            epoch1.lines().next().unwrap_or_default(),
+            epoch1,
+            "the epoch is the keeper's ready line, not prose"
+        );
+        let keeper1 = *host.keeper_pids().first().expect("one keeper");
+
+        // Kill the keeper exactly as a host OOM/crash would: SIGKILL, no shutdown
+        // ack. The child it forked is gone with it (bwrap --die-with-parent).
+        let killed = std::process::Command::new("kill")
+            .arg("-9")
+            .arg(keeper1.to_string())
+            .status()
+            .expect("kill the keeper");
+        assert!(killed.success(), "keeper {keeper1} must die");
+        std::thread::sleep(Duration::from_millis(150));
+
+        // (1) The current request on the old session: structured, and *lost*.
+        let error = host
+            .kill(&k, tag0)
+            .expect_err("a dead keeper cannot kill the old child");
+        let backend = host.verb_error(&k, tag0, &epoch1, &error);
+        assert_eq!(backend.code(), ErrorCode::ZygoteDead);
+        let details = match &backend {
+            BackendError::Protocol { details, .. } => details.clone().unwrap(),
+            other => panic!("expected a structured protocol error, got {other:?}"),
+        };
+        assert_eq!(details["zygote"]["session"], serde_json::json!("lost"));
+        assert_eq!(
+            details["zygote"]["session_boot_epoch"],
+            serde_json::json!(epoch1)
+        );
+        assert_eq!(details["zygote"]["keeper_boot_epoch"], serde_json::Value::Null);
+        assert_eq!(details["zygote"]["repointed"], serde_json::json!(false));
+
+        // (2) The next request boots a new keeper: new epoch, fresh fork.
+        let tag1 = host
+            .prepare(&k, &script, Path::new("/apks/counter.apk"), None)
+            .unwrap();
+        publish_argv(&host, &k, tag1);
+        let child1 = host
+            .wait_contract_and_spawn(&k, tag1, Duration::from_secs(5))
+            .unwrap();
+        let epoch2 = host.boot_epoch(&k).unwrap();
+        assert_ne!(epoch1, epoch2, "a restarted zygote has a new boot epoch");
+        assert_ne!(child0.child_pid, child1.child_pid);
+        assert_eq!(host.keeper_count(), 1, "a dead keeper is replaced, not duplicated");
+        assert_ne!(
+            host.keeper_pids()[0],
+            keeper1,
+            "the new keeper is a new process"
+        );
+
+        // (3) The old session still says lost, and now names the new epoch: it is
+        // reported, never silently re-pointed at it.
+        let backend = host.verb_error(&k, tag0, &epoch1, &error);
+        let details = match &backend {
+            BackendError::Protocol { details, .. } => details.clone().unwrap(),
+            other => panic!("expected a structured protocol error, got {other:?}"),
+        };
+        assert_eq!(details["zygote"]["session"], serde_json::json!("lost"));
+        assert_eq!(
+            details["zygote"]["keeper_boot_epoch"],
+            serde_json::json!(epoch2)
+        );
+        assert_eq!(details["zygote"]["repointed"], serde_json::json!(false));
+        assert!(
+            backend.to_string().contains("SESSION_LOST"),
+            "the text names the loss: {backend}"
+        );
+        // A live session of the current epoch is not "lost": it is plain dead.
+        let plain = host.verb_error(&k, tag1, &epoch2, &error);
+        assert!(
+            !plain.to_string().contains("SESSION_LOST"),
+            "the current epoch is not a lost session: {plain}"
+        );
+
+        host.shutdown_all();
+        assert_eq!(host.keeper_count(), 0);
         let _ = fs::remove_dir_all(&dir);
     }
 

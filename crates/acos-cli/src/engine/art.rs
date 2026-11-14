@@ -3345,10 +3345,14 @@ impl SessionBackend for ArtSession {
         // for the *same* tag + `spawn <tag>`. The zygote itself, its pid and its
         // boot epoch are untouched; a reset that silently restarted the keeper
         // would change the epoch, which the reply states.
-        let zygote_link = self
-            .zygote
-            .as_ref()
-            .map(|binding| (Arc::clone(&binding.host), binding.key.clone(), binding.facts.tag));
+        let zygote_link = self.zygote.as_ref().map(|binding| {
+            (
+                Arc::clone(&binding.host),
+                binding.key.clone(),
+                binding.facts.tag,
+                binding.facts.boot_epoch.clone(),
+            )
+        });
         let zygote_previous_child_pid = self.zygote.as_ref().map(|b| b.facts.child_pid);
         let zygote_start = self.zygote.as_ref().map(|binding| ZygoteStart {
             host: Arc::clone(&binding.host),
@@ -3375,10 +3379,13 @@ impl SessionBackend for ArtSession {
         // group inside the keeper before its run root is wiped (§4.1/§4.2). A
         // keeper that cannot ack the kill is `ZYGOTE_DEAD` and this session stays
         // provably closed (W55): no bound frame, no verb answers from it.
-        if let Some((host, key, tag)) = zygote_link.as_ref() {
+        // ZPROD4: if the keeper is gone (or was restarted with a new boot epoch)
+        // this session is *lost*: `verb_error` says so structurally and never
+        // re-points it at the new keeper.
+        if let Some((host, key, tag, epoch)) = zygote_link.as_ref() {
             if let Err(error) = host.kill(key, *tag) {
                 self.invalidate_frame();
-                return Err(zygote_dead(&error.to_string()));
+                return Err(host.verb_error(key, *tag, epoch, &error));
             }
         }
         let relaunch_started = Instant::now();
