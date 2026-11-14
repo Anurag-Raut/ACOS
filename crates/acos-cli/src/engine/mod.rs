@@ -328,6 +328,15 @@ pub trait SessionBackend {
     /// Traverse now and return the live tree bound to the new frame.
     fn tree(&mut self) -> Result<UiTree, BackendError>;
 
+    /// SE2b: the tree of the **last completed traversal**, without issuing a new
+    /// command when the engine has one cached (a traversal only when it has
+    /// none). A content-settled input resolves its target here: the frame the
+    /// rule bound, never a fresh strict wait that cannot succeed on a screen
+    /// that never goes quiet.
+    fn bound_tree(&mut self) -> Result<UiTree, BackendError> {
+        self.tree()
+    }
+
     /// A **fresh** capture: a new capture command, and evidence that the frame
     /// sequence advanced. The default has no capture command of its own and says so.
     ///
@@ -371,6 +380,13 @@ pub trait SessionBackend {
     /// screen that animates forever in pixels). Mutually exclusive with
     /// [`Self::set_input_settle_mode`].
     fn set_input_content_settle(&mut self, _content: bool) {}
+
+    /// SE2b: the settle rule the next input action will apply (`strict`,
+    /// `fast` or `content`). Target resolution reads it so a content action
+    /// resolves against the content-settled tree instead of a strict wait.
+    fn input_settle_mode(&self) -> &'static str {
+        "strict"
+    }
 
     /// SE2: the settle rule a `launch` binds its first tree with (`strict`
     /// default, `content` opt-in).
@@ -694,9 +710,36 @@ impl EngineBackend {
 
     /// Resolve a selector to a screen point and the window it belongs to, from
     /// the current tree.
+    /// SE2b: is the input rule in force the content-stable one?
+    fn input_settle_is_content(&self) -> bool {
+        match self {
+            EngineBackend::Session { session, .. } => session.input_settle_mode() == "content",
+            EngineBackend::Native(_) => false,
+        }
+    }
+
     fn point_for(&mut self, selector: &Selector) -> Result<(String, i32, i32), BackendError> {
+        // SE2b: a `settle: content` input resolves its target on the
+        // **content-settled bound tree**, never on a new strict traversal.
+        //
+        // Two reasons. Correctness: the rule the caller asked for is the one that
+        // binds this frame, and the executor resolves the same node against
+        // exactly this observation, so the two can never disagree. Cost: a strict
+        // resolution on a forever-animating screen waits the step's whole
+        // `settle_timeout_ms` (20 s on the reference screen) before the input is
+        // even injected - a strict wait that can never succeed.
+        let content = match self {
+            EngineBackend::Session { .. } => self.input_settle_is_content(),
+            EngineBackend::Native(_) => false,
+        };
         let tree = match self {
-            EngineBackend::Session { session, .. } => session.tree()?,
+            EngineBackend::Session { session, .. } => {
+                if content {
+                    session.bound_tree()?
+                } else {
+                    session.tree()?
+                }
+            }
             EngineBackend::Native(_) => unreachable!("native path forwards input"),
         };
         let node = match tree.find_one(selector) {

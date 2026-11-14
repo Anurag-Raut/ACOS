@@ -1951,8 +1951,16 @@ impl ArtSession {
                 self.settle_mode
             };
             object.insert("settle".into(), serde_json::json!(guest_settle));
-            if let Some(timeout) = self.settle_timeout_ms {
-                object.insert("settle_timeout_ms".into(), serde_json::json!(timeout));
+            // SE2b: in content mode the step's `settle_timeout_ms` is the budget
+            // for the *content window* (the rule the caller asked for), not for
+            // the guest's fast delivery. Forwarding it would make the guest's
+            // navigation settle wait the whole content budget on a screen that
+            // never goes quiet (a 20 s tap on the reference screen). The guest
+            // keeps its own fast deadline; the host bounds the window.
+            if self.settle_mode != "content" {
+                if let Some(timeout) = self.settle_timeout_ms {
+                    object.insert("settle_timeout_ms".into(), serde_json::json!(timeout));
+                }
             }
         }
         self.last_input_settle = None;
@@ -3243,6 +3251,14 @@ impl SessionBackend for ArtSession {
 
     fn set_input_settle_mode(&mut self, fast: bool) {
         self.settle_mode = if fast { "fast" } else { "strict" };
+    }
+
+    fn input_settle_mode(&self) -> &'static str {
+        self.settle_mode
+    }
+
+    fn bound_tree(&mut self) -> Result<UiTree, BackendError> {
+        self.ensure_bound_tree()
     }
 
     fn set_input_content_settle(&mut self, content: bool) {
