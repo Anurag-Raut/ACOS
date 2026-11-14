@@ -1077,3 +1077,20 @@ the tracked benchmark metrics (M4–M8) at parity with the viewer off.
 
 **Order.** Finish v0.2.0 → screenshot compression and live view (phase 1) in parallel → T3 preview
 pane check → Metro spike → Metro bridge.
+
+## ADR-0028 — v0.2.1 release, lattice-aware fast-settle gate (orchestrator, 2026-11-15)
+
+**Context.** Fast-settle latencies (M4/M6/M8 `fast`) sit on a ~16.4 ms frame-period lattice; a rep's
+p50 is whichever frame slot holds the middle sample, so the old gate (medians of per-rep p50s, +5 %
+and +2 ms) flips by a whole frame between reps (REL3-AB, INT-021-AB). PERF-REL3 measured the v0.2.1
+launch-fast "shift" with 40 samples/rep: pooled trimmed mean +1.0 % (+1.7 ms), first-slot share 44 %
+vs 43 % (n = 120/120) — noise.
+
+**Decision.**
+1. Fast-settle metrics are gated on the **pooled 5 %-trimmed mean** (+5 % and +2 ms) from raw
+   samples (`tools/bench/ab-compare.py`), with a ≥ 10 pp drop in first-slot share flagged for a
+   look. The old median-of-p50s gate is still printed beside it and still gates strict metrics.
+2. The bench takes 40 fast samples per rep by default (+~57 s/rep; `--fast-reps` / `ACOS_BENCH_FAST_REPS`).
+3. Ship v0.2.1 (main = int-021): no metric regresses under either gate; M5 −57 %, M8 form fast −28 %.
+4. The FB2 placeholder verdict and the VIEW1 live view are NOT in v0.2.1: both reviews returned
+   "merge after fixes" (FB2c, VIEW1c in flight).
