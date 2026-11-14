@@ -193,7 +193,7 @@ fn read_relayout_reply(reply: &mut Parcel) -> RelayoutReply {
 
 #[test]
 fn a_dialog_window_is_added_relayouted_and_drawn_as_its_own_top_level_window() {
-    let mut host = ServiceHost::standard();
+    let mut host = ServiceHost::standard_with_insets(acos_services::wms::InsetsMode::Carve);
     let session = open_session(&mut host);
 
     let activity = BinderId(0x5701);
@@ -315,7 +315,7 @@ fn read_refused_add_reply(reply: &mut Parcel) -> RefusedAdd {
 
 #[test]
 fn a_duplicate_or_null_dialog_add_is_a_typed_refusal() {
-    let mut host = ServiceHost::standard();
+    let mut host = ServiceHost::standard_with_insets(acos_services::wms::InsetsMode::Carve);
     let session = open_session(&mut host);
     let dialog = BinderId(0x5801);
 

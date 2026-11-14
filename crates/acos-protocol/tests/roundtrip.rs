@@ -897,7 +897,8 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
             y: None,
             timeout_ms: Some(1000),
             settle_timeout_ms: None,
-                settle: None,
+            settle: None,
+            expect_change: false,
         }),
         ..Step::default()
     });
@@ -907,7 +908,8 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
             text: "World".to_string(),
             clear: true,
             settle_timeout_ms: None,
-                settle: None,
+            settle: None,
+            expect_change: false,
         }),
         ..Step::default()
     });
@@ -915,7 +917,8 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
         key: Some(KeyStep {
             key: KeyName::Enter,
             settle_timeout_ms: None,
-                settle: None,
+            settle: None,
+            expect_change: false,
         }),
         ..Step::default()
     });
@@ -1074,6 +1077,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
         steps,
         output: OutputOptions::default(),
         animations: None,
+        insets: None,
     };
     round_trip(&scenario);
     for step in &scenario.steps {

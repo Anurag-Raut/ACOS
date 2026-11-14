@@ -212,7 +212,7 @@ for rep in $(seq 1 "$REPS"); do
         rm -rf "$scratch"; mkdir -p "$scratch"
         t0=$(date +%s)
         echo "acos-bench: rep $rep/$REPS group $gname [$gphases] mem $gmem time ${gtime}s"
-        tools/art-runtime/run-exclusive.sh --task "$TASK" -- \
+        tools/art-runtime/run-exclusive.sh --task "$TASK" --exclusive -- \
             tools/guarded.sh --mem "$gmem" --time "$gtime" -- \
             python3 "$PY" --bundle "$gphases" --acos "$BIN" \
             --out-dir "$repdir" --scratch-root "$scratch" \

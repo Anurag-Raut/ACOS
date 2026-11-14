@@ -280,7 +280,7 @@ fn read_relayout_reply(reply: &mut Parcel) -> RelayoutReply {
 
 #[test]
 fn open_session_answers_a_routable_iwindow_session_node() {
-    let mut host = ServiceHost::standard();
+    let mut host = ServiceHost::standard_with_insets(acos_services::wms::InsetsMode::Carve);
     let session = open_session(&mut host);
     let registered = host
         .binder_for_descriptor(IWINDOW_SESSION)
@@ -304,7 +304,7 @@ fn open_session_answers_a_routable_iwindow_session_node() {
 
 #[test]
 fn add_to_display_as_user_reply_is_api_34_exact() {
-    let mut host = ServiceHost::standard();
+    let mut host = ServiceHost::standard_with_insets(acos_services::wms::InsetsMode::Carve);
     let session = open_session(&mut host);
     let window = BinderId(0x5701);
     let mut data = add_to_display_as_user_request(window);
@@ -390,7 +390,7 @@ fn add_to_display_as_user_reply_is_api_34_exact() {
 
 #[test]
 fn relayout_reply_is_api_34_exact_and_routable() {
-    let mut host = ServiceHost::standard();
+    let mut host = ServiceHost::standard_with_insets(acos_services::wms::InsetsMode::Carve);
     let session = open_session(&mut host);
     let window = BinderId(0x5702);
     let mut data = add_to_display_as_user_request(window);
@@ -465,7 +465,7 @@ fn relayout_reply_is_api_34_exact_and_routable() {
 
 #[test]
 fn the_traversal_calls_after_relayout_are_served_in_order() {
-    let mut host = ServiceHost::standard();
+    let mut host = ServiceHost::standard_with_insets(acos_services::wms::InsetsMode::Carve);
     let session = open_session(&mut host);
     let window = BinderId(0x5703);
     let mut data = add_to_display_as_user_request(window);
@@ -630,7 +630,7 @@ fn the_traversal_calls_after_relayout_are_served_in_order() {
 
 #[test]
 fn unknown_methods_are_structured_unsupported_naming_the_descriptor() {
-    let mut host = ServiceHost::standard();
+    let mut host = ServiceHost::standard_with_insets(acos_services::wms::InsetsMode::Carve);
     let session = open_session(&mut host);
 
     // A code above the interface's table.

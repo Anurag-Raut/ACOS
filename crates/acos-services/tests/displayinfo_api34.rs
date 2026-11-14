@@ -469,7 +469,7 @@ fn expected_served_decoded() -> Decoded {
 fn host_serves_display_info_in_the_api34_write_order() {
     // The display override is process-wide; pin the emulator reference.
     acos_services::display::set_display_override(None);
-    let mut host = ServiceHost::standard();
+    let mut host = ServiceHost::standard_with_insets(acos_services::wms::InsetsMode::Carve);
     let reply = get_display_info(&mut host, 0);
 
     let expected = expected_served_parcel().marshall();
@@ -499,7 +499,7 @@ fn host_serves_display_info_in_the_api34_write_order() {
 #[test]
 fn host_reply_decodes_with_the_framework_read_order_and_leaves_no_bytes() {
     acos_services::display::set_display_override(None);
-    let mut host = ServiceHost::standard();
+    let mut host = ServiceHost::standard_with_insets(acos_services::wms::InsetsMode::Carve);
     let bytes = get_display_info(&mut host, 0);
     let mut reply = Parcel::new();
     reply.unmarshall(&bytes);
@@ -519,7 +519,7 @@ fn host_reply_decodes_with_the_framework_read_order_and_leaves_no_bytes() {
 #[test]
 fn unknown_display_id_is_a_null_reply() {
     acos_services::display::set_display_override(None);
-    let mut host = ServiceHost::standard();
+    let mut host = ServiceHost::standard_with_insets(acos_services::wms::InsetsMode::Carve);
     let bytes = get_display_info(&mut host, 7);
     // writeNoException + writeTypedObject(null) and nothing else.
     assert_eq!(bytes, vec![0, 0, 0, 0, 0, 0, 0, 0]);

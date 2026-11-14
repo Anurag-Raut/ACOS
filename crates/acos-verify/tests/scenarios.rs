@@ -20,8 +20,8 @@ use acos_protocol::{
     Backend as ProtocolBackend, Envelope, Fidelity, FrameMeta, LogLevel, Status, UiTree,
 };
 use acos_verify::backend::{
-    Backend, BackendError, Capabilities, InputAction, LaunchOutcome, LaunchRequest, LogRecord,
-    ManifestInfo, SessionObservation,
+    Backend, BackendError, Capabilities, InputAction, InputDelivery, LaunchOutcome, LaunchRequest,
+    LogRecord, ManifestInfo, SessionObservation,
 };
 use acos_verify::clock::FixedClock;
 use acos_verify::executor::{run_scenario, RunOptions};
@@ -328,6 +328,9 @@ struct SliceBackend {
     shot_version: u8,
     screenshot_initial: Vec<u8>,
     screenshot_after: Vec<u8>,
+    /// SE1: the strict settle's measured pixel fact. `None` = the backend
+    /// reports no settle record at all (what a non-pixel backend does today).
+    settle_pixels: Option<bool>,
 }
 
 impl SliceBackend {
@@ -340,7 +343,14 @@ impl SliceBackend {
             shot_version: 0,
             screenshot_initial: initial,
             screenshot_after: after,
+            settle_pixels: None,
         }
+    }
+
+    /// SE1: report `settle.pixels_changed` on every input reply.
+    fn with_settle_pixels(mut self, pixels_changed: bool) -> Self {
+        self.settle_pixels = Some(pixels_changed);
+        self
     }
 
     fn meaningful(&self) -> bool {
@@ -481,7 +491,22 @@ impl Backend for SliceBackend {
                 }
             }
         }
-        Ok(self.current())
+        let mut observation = self.current();
+        if let Some(pixels_changed) = self.settle_pixels {
+            observation.input = Some(InputDelivery {
+                delivered: true,
+                visual_change: pixels_changed,
+                acks: Vec::new(),
+                settle: Some(serde_json::json!({
+                    "mode": "strict",
+                    "settled": true,
+                    "bound": "strict-event",
+                    "strict_rule": "event",
+                    "pixels_changed": pixels_changed,
+                })),
+            });
+        }
+        Ok(observation)
     }
 
     fn capture(&mut self) -> Result<SessionObservation, BackendError> {
@@ -493,9 +518,20 @@ impl Backend for SliceBackend {
 }
 
 fn run_slice(yaml: &str, mode: SliceMode, initial: Vec<u8>, after: Vec<u8>) -> RunOutcome {
+    run_slice_with_settle(yaml, mode, initial, after, None)
+}
+
+fn run_slice_with_settle(
+    yaml: &str,
+    mode: SliceMode,
+    initial: Vec<u8>,
+    after: Vec<u8>,
+    settle_pixels: Option<bool>,
+) -> RunOutcome {
     let scenario = Scenario::from_yaml_str(yaml).expect("valid scenario");
     let artifacts = scratch("advisor-rule");
     let mut backend = SliceBackend::new(mode, initial, after);
+    backend.settle_pixels = settle_pixels;
     let options = RunOptions {
         apk: workspace().join("fixtures/build/apps/hello-views.apk"),
         scenario_path: workspace().join("scenarios/hello-views.yaml"),
@@ -1177,4 +1213,141 @@ fn a_strict_wait_for_after_a_fast_input_rebinds_the_frame() {
     );
     let outcome = run_slice(&yaml, SliceMode::Good, b"initial".to_vec(), b"after".to_vec());
     assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+}
+
+// ---------------------------------------------------------------------------
+// SE1: the opt-in per-step `expect_change` rule (ADR-0026 decision 2, GR4 G4c).
+//
+// P12 keeps the strict rule: an action that drew but changed no pixel settles
+// and passes, and its reply reports `pixels_changed:false`. `expect_change: true`
+// is the per-step opt-in that turns that measured fact into a failure.
+// ---------------------------------------------------------------------------
+
+const EXPECT_CHANGE_TAP: &str = r#"
+version: 1
+name: expect-change-tap
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+steps:
+  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
+  - assert_text: {selector: {id: result}, text: {exact: "clicks: 0"}}
+  - tap: {selector: {id: btn}, expect_change: true}
+  - assert_text: {selector: {id: result}, text: {exact: "clicks: 1"}}
+"#;
+
+/// A changed settled frame satisfies `expect_change`, and the step still carries
+/// the P12 pixel fact as evidence.
+#[test]
+fn expect_change_passes_when_the_settled_frame_changed() {
+    let outcome = run_slice_with_settle(
+        EXPECT_CHANGE_TAP,
+        SliceMode::Good,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+        Some(true),
+    );
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Pass,
+        "{:?}",
+        outcome.verdict.failure
+    );
+    let tap = tap_step(&outcome);
+    assert_eq!(tap.status, Status::Pass);
+    let settle = tap.settle.as_ref().expect("settle evidence");
+    assert_eq!(settle["pixels_changed"], serde_json::json!(true));
+}
+
+/// The G4c case: the action was delivered, the frame settled, and nothing
+/// changed. `expect_change` fails the step with the measured fact and both frame
+/// refs, and the verdict names the step.
+#[test]
+fn expect_change_fails_when_the_settled_frame_is_pixel_identical() {
+    let outcome = run_slice_with_settle(
+        EXPECT_CHANGE_TAP,
+        SliceMode::Good,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+        Some(false),
+    );
+    assert_eq!(outcome.verdict.verdict, Status::Fail);
+    let tap = tap_step(&outcome);
+    assert_eq!(tap.status, Status::Fail);
+    assert!(
+        tap.assertions
+            .iter()
+            .any(|a| a.kind == "expect_change" && !a.passed),
+        "the failed step must name the rule: {:?}",
+        tap.assertions
+    );
+    let failure = outcome.verdict.failure.as_ref().expect("failure");
+    assert_eq!(failure.step_index, Some(2));
+    assert_eq!(
+        failure.error.code,
+        acos_protocol::ErrorCode::AssertionFailed
+    );
+    let details = failure.error.details.as_ref().expect("details");
+    assert_eq!(details["reason"], serde_json::json!("expect_change"));
+    assert_eq!(details["pixels_changed"], serde_json::json!(false));
+    assert_eq!(details["step_kind"], serde_json::json!("tap"));
+    // Before/after frame refs: launch frame 1, the action's frame 2.
+    assert_eq!(details["before"]["frame_seq"], serde_json::json!(1));
+    assert_eq!(details["after"]["frame_seq"], serde_json::json!(2));
+    assert_eq!(
+        details["after"]["frame"],
+        serde_json::json!("frames/2.png")
+    );
+    // The failing step is still evidence: its frame is a claimed artifact.
+    assert_eq!(tap.frame_seq, Some(2));
+}
+
+/// Without the flag, the P12 rule is untouched: a delivered action with no
+/// pixel change settles and passes, and the step states `pixels_changed:false`.
+#[test]
+fn a_no_change_tap_without_the_flag_keeps_the_p12_rule() {
+    let yaml = EXPECT_CHANGE_TAP.replace(", expect_change: true", "");
+    let outcome = run_slice_with_settle(
+        &yaml,
+        SliceMode::Good,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+        Some(false),
+    );
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Pass,
+        "{:?}",
+        outcome.verdict.failure
+    );
+    let tap = tap_step(&outcome);
+    assert_eq!(tap.status, Status::Pass);
+    assert_eq!(
+        tap.settle.as_ref().expect("settle evidence")["pixels_changed"],
+        serde_json::json!(false)
+    );
+}
+
+/// A backend that cannot measure the pixels must not be able to satisfy
+/// `expect_change`: the step is `unsupported` (never a pass, never a fake fail).
+#[test]
+fn expect_change_without_a_settle_record_is_unsupported() {
+    let outcome = run_slice_with_settle(
+        EXPECT_CHANGE_TAP,
+        SliceMode::Good,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+        None,
+    );
+    assert!(!outcome.verdict.verdict.is_pass());
+    assert_eq!(outcome.verdict.verdict, Status::Unsupported);
+    let failure = outcome.verdict.failure.as_ref().expect("failure");
+    assert_eq!(
+        failure.error.code,
+        acos_protocol::ErrorCode::UnsupportedAssertion
+    );
+    let details = failure.error.details.as_ref().expect("details");
+    assert_eq!(details["reason"], serde_json::json!("expect_change"));
+    assert_eq!(details["pixels_changed"], serde_json::Value::Null);
 }

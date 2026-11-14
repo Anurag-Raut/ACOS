@@ -1,0 +1,62 @@
+# se1-expect-change-noop: the negative half of SE1's `expect_change` gate.
+#
+# The tap below focuses the form's Name field on an otherwise untouched screen:
+# the host injects the gesture, the guest acks it, a draw happens and the strict
+# settle completes - but **no pixel changes** (`settle.pixels_changed: false`,
+# `bound: strict-event`, `settled: true`). This is the measured no-op case P12
+# recorded for exactly this tap (`results/art-runtime/P12.md` §3.1: "the first
+# `w54` tap (focus into the name field) settles with
+# `pixels_changed:false, settled:true` and passes").
+#
+# Before SE1 that step passed, and a following assertion could describe state
+# the tap never produced: GR4's `gaten-kanji` v1 was 3/3 while its RTK tap wrote
+# nothing because the value was already the asserted one (Backlog G4c). With
+# `expect_change: true` the step must fail with `ASSERTION_FAILED`
+# (`details.reason = "expect_change"`, `pixels_changed: false`, before/after
+# frame refs), and the run is `expectation: fail`.
+#
+# Why not "tap an empty area"? An action that provokes no *draw* at all cannot
+# settle: tapping the counter's blank content (probed, 2026-11-14) reports
+# `TIMEOUT`/`reason: no-draw-after-action` - also never a pass, but a different
+# honest failure. SE1's rule is about the subtler case: a delivered action that
+# settles on a frame that is pixel-identical to the pre-action one.
+version: 1
+name: se1-expect-change-noop
+description: >-
+  Focus the form-validation Name field with `expect_change: true`. The action is
+  delivered and settles on a pixel-identical frame, so it must fail with
+  ASSERTION_FAILED instead of passing on state it never produced.
+app: fixtures/build/apps/form-validation.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - input
+expectation: fail
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.formvalidation/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: name}
+      timeout_ms: 5000
+
+  # Delivered, settled, and pixel-identical to the frame it was handed.
+  - tap:
+      selector: {id: name}
+      expect_change: true
+
+  # Unreachable when the rule works: the runner stops at the failing tap.
+  - assert_no_crash: {}

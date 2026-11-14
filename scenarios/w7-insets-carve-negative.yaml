@@ -1,16 +1,24 @@
 # W7 NEGATIVE (must fail under `ACOS_WM_INSETS=carve`).
 #
 # The same edge-to-edge probe, asserting the *report* contract while the WMS is
-# carving. On the carved frame `InsetsState.calculateInsets(mWinFrame, ...)`
-# has no status/nav source inside the frame, so `status` reads 0 and the window
-# is `[0,128][1080,2337]`. A pass here would mean the carve model is still
-# handing the app a full-display frame and reporting insets, i.e. the selector
-# is not switching the model.
+# carving. `insets: carve` pins the model for this scenario (W7b): after
+# ADR-0026 decision 6 the build default is `report`, so a negative that relied
+# on the ambient default would pass and be a false pass.
+#
+# On the carved frame `InsetsState.calculateInsets(mWinFrame, ...)` has no
+# status/nav source inside the frame, so `status` reads 0 and the window is
+# `[0,128][1080,2337]`. The carve frame assertion passes first, proving the
+# selector really switched the model; the report-contract assertions then fail.
+# A pass here would mean the carve model is still handing the app a full-display
+# frame and reporting insets.
 version: 1
 name: w7-insets-carve-negative
+# Pre-W7 carved application-area frame (display minus the system bars).
+insets: carve
 description: >-
-  The report contract under the carve selector: status=128 must fail because the
-  carved window reports zero insets. Must produce status=fail.
+  The report contract under the carve selector: the carved frame is proven
+  first, then status=128 must fail because the carved window reports zero
+  insets. Must produce status=fail.
 app: fixtures/build/apps/insets-probe.apk
 engine: native-preferred
 fallback: forbid
@@ -22,5 +30,9 @@ budgets: {memory_mib: 1024, wall_ms: 120000}
 steps:
   - launch: {activity: dev.acos.fixtures.insetsprobe/.MainActivity, clear_state: true}
   - wait_for: {selector: {id: status}, timeout_ms: 20000}
+  # The carve model is active: the app window starts below the 128 px status bar.
+  - assert_text: {selector: {id: frame}, text: {exact: "frame=[0,128][1080,2337]"}}
+  # Intended failure: the carved window has no status source inside its frame.
   - assert_text: {selector: {id: status}, text: {exact: "status=128"}}
+  # If status were ever faked, this full-display frame must still fail under carve.
   - assert_text: {selector: {id: frame}, text: {exact: "frame=[0,0][1080,2400]"}}

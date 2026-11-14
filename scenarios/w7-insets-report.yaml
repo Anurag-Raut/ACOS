@@ -1,7 +1,7 @@
 # W7: report the system-bar insets instead of carving the app window.
 #
-# Run with `ACOS_WM_INSETS=report` (or `acos launch --engine art --insets
-# report`). The fixture is an edge-to-edge Activity (targetSdk 35, explicit
+# `insets: report` pins the model (W7b; also the build default after ADR-0026
+# decision 6). The fixture is an edge-to-edge Activity (targetSdk 35, explicit
 # `Window.setDecorFitsSystemWindows(false)`) that reads
 # `DecorView.getRootWindowInsets()` and `WindowManager.getCurrentWindowMetrics()`
 # and prints them. On the default API-34 profile the full display is
@@ -11,6 +11,8 @@
 # `InsetsState` calculates to zero; this scenario is expected to fail there.
 version: 1
 name: w7-insets-report
+# AOSP full-display window + reported InsetsState (WindowLayout.computeFrames).
+insets: report
 description: >-
   Edge-to-edge insets probe under the report model: full-display app window and
   non-zero status/navigation/system-gesture insets.

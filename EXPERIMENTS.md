@@ -2183,6 +2183,152 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   (`ACOS_ART_ZYGOTE=on`), adds the per-child cgroup memory limit (F3) and then runs the Z7 loop for
   the ≥25 % gate. Exact commands and acceptance: `results/handoff/ZPROD1.md`.
 
+## E13.10 — SE1: an opt-in per-step `expect_change` closes GR4's vacuous-flow gap (a no-op tap can no longer pass) — PASS (ADR-0026 decision 2 shipped; 0 false passes)
+
+**Date:** 2026-11-14. **Commit:** the SE1 commit on branch `settle-se1-expect-change`
+(base `main` `3e11d9c`). **Responsible agent:** SE1 (worktree `3oxa6xao/gr4`,
+`.cache/gr4-target`, one ART-lock acquisition per batch).
+
+- **Question / goal:** ADR-0026 decision 2: keep the P12 rule (a step whose
+  action drew but changed no pixel still settles and passes, and the reply keeps
+  reporting `settle.pixels_changed`) **and** add an opt-in per-step
+  `expect_change: true` that fails the step when the settled frame's pixels did
+  not change. That is GR4 Backlog `G4c`: a tap on a control that is already in
+  the asserted state writes nothing, and every later assertion then holds on
+  state the tap never produced (`gaten-kanji` v1 was 3/3 while its RTK tap was a
+  no-op; only a hand-run byte-diff of the captures noticed).
+- **Design (as shipped):**
+  * the flag lives on the input step bodies that carry a strict settle record —
+    `tap`, `type`, `key`, and `back` (the protocol's `EmptyStep` becomes
+    `BackStep { expect_change }`, so `- back: {}` still parses) — and defaults to
+    `false`, skipped on the wire, so the format and every existing scenario are
+    unchanged;
+  * after the strict settle, `settle.pixels_changed: true` passes;
+    `false` fails the step with **`ASSERTION_FAILED`**,
+    `details.reason="expect_change"`, `pixels_changed:false`, `step_kind`, and
+    `details.before`/`details.after` frame refs (`frame_seq` + `frames/<n>.png`
+    when that frame was captured). No new `ErrorCode`: the codebase's convention
+    is "one code per outcome class, `details` for the situation"
+    (`ELEMENT_OFFSCREEN`, `INSUFFICIENT_HOST_EVIDENCE` do the same), and an
+    `expect_change` miss *is* an assertion that ran and did not hold;
+  * a reply with **no** measured `pixels_changed` is `UNSUPPORTED_ASSERTION`
+    (the engine cannot supply the evidence) — an unmeasured change never passes;
+  * `expect_change: true` + `settle: fast` is rejected at scenario-validation
+    time (`INVALID_SCENARIO` at `steps[i].<kind>.expect_change`, for tap/type/key)
+    because a fast frame may be mid-animation and never backs a pass (ADR-0026
+    decision 5). A non-bool is a parse error;
+  * the same flag is on the serve/MCP input tools (`acos_tap`, `acos_key`,
+    `acos_text`) with the same fast rejection before any input is injected and
+    the same measured-fact rule.
+- **Tests (green):** `cargo test -p acos-protocol` (3 new: bool+default, non-bool
+  rejected for `yes`/`1`/`"true"`/`[true]`, fast rejected for tap/type/key with
+  the stable path); `cargo test -p acos-verify` (4 new end-to-end on the
+  vertical-slice backend: changed→pass with `settle.pixels_changed:true`,
+  unchanged→`ASSERTION_FAILED` with the full details and frame refs, flag absent
+  →the P12 pass with `pixels_changed:false`, no settle record→
+  `UNSUPPORTED_ASSERTION`). `acos-cli`, `acos-services` and `acos-art` green (the
+  `sandbox_s5` order flake run alone with `--exact`, as documented).
+- **Gates (measured, one lock acquisition per batch, `--engine art`, animations
+  on):** new `scenarios/se1-expect-change-tap.yaml` **pass** (5 steps, counter
+  tap really moves 0→1) and `scenarios/negative/se1-expect-change-noop.yaml`
+  **fail `ASSERTION_FAILED`** at its tap (3 steps) — the flipped flag flips the
+  verdict, no other step involved. Existing gates unchanged:
+  `v2-art-counter` 11/11, `w22-counter-reset` 9/9, `w54-dialog-pixels` 14/14,
+  `w42-back-frame` 17/17, `w15-dialog-menu` 3/3, `form-validation` 28/28,
+  `T03-render-good` 5/5, `v1-offscreen-pager` 9/9 pass; `T03-render-wrong`
+  `ASSERTION_FAILED`, `negative/offscreen-pager-visible` `ELEMENT_OFFSCREEN`,
+  `p11-progress-timeout` `TIMEOUT`. Gaten: `home`/`tabs`/`settings`/`search`/
+  `lesson` pass (14/22/33/22/28 steps) and the five wrong twins fail
+  `ASSERTION_FAILED` (at 7/7/12/16/10). **All 21 runs are step-for-step identical
+  to the main-side run** in `.cache/wt-int/.cache/int/suite` (status, verdict,
+  failure code, and every step's status/code compared programmatically) —
+  0 false passes, 0 changed codes.
+- **Negative-control note (honest, measured):** a tap on the counter's *blank*
+  content area with `expect_change: true` does **not** fail with
+  `ASSERTION_FAILED` — it never draws, so the strict settle times out
+  (`TIMEOUT`, `reason: no-draw-after-action`). The gate twin therefore uses the
+  measured pixel-identical-but-drawing case (focus the form's empty `Name`
+  field: `settled:true, bound:strict-event, pixels_changed:false`, exactly the
+  tap P12 recorded). Both are non-passes; the SE1 rule is the subtler one.
+- **Conclusion / next:** `G4c` is addressed at the harness level: a flow that
+  needs a state change can now say so per step, and the scenario that quietly
+  proved nothing fails. Scenario authors (GR4/GR3) can add
+  `expect_change: true` to the mutating tap of any claim they care about; no
+  assertion, settle horizon or gate was weakened, and P12's no-change pass is
+  still the default.
+
+## E13.11 — W7b: `report` insets default, the red w7 gate, and the w42 one-row re-bless — PASS (gates, Gaten, crate tests; 0 false passes)
+
+- **Date / branch:** 2026-11-14; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/g3cd`,
+  branch `fix-w7b-insets` (off `main` `3e11d9c`). Real ART guest; all runs under
+  `tools/art-runtime/run-exclusive.sh --task W7B` + `guarded.sh`; scratch `.cache/w7b`.
+- **Question / goal:** `scenarios/w7-insets-report.yaml` was red on main at
+  `status=128` (got `status=0`). Bisect the delta from 5cae694 (density fix
+  `0e569b5`, B4, S3c) to the exact hunk and name the root cause; then ADR-0026
+  decision 6: default the app-window inset model to `report`, keep `carve`
+  selectable, re-bless w42's one AA row with a pixel-diff proof.
+- **Bisect (targeted A/B on the same binary):**
+  - default (`carve`): probe prints `status=0`, decor `[0,128][1080,2337]` → the
+    gate failure (`.cache/w7b/gates/w7-insets-report.json`).
+  - `ACOS_WM_INSETS=report`: probe passes, `status=128`, decor `[0,0][1080,2400]`.
+  - `ACOS_WM_INSETS=report` + `ACOSLAUNCH_APP_FLAGS=0x10808044` (the exact
+    pre-`0e569b5` ApplicationInfo flag set, i.e. no
+    `FLAG_SUPPORTS_SCREEN_DENSITIES`): **also passes**. The density hunk does
+    not change the insets read; B4/S3c are bench-only by file scope. **Root
+    cause: the scenario required `report` but nothing selected it, and the build
+    default was `carve`.** Under AOSP `WindowLayout.computeFrames` +
+    `InsetsState.calculateInsets`, a carved window frame excludes the bar
+    sources, so the calculation is zero; the density flag only feeds
+    `CompatibilityInfo` scaling, and ACOS's guest always binds
+    `DEFAULT_COMPATIBILITY_INFO` (no translator), so it cannot move the rows.
+    AOSP refs: `PackageParser.java:2500`, `CompatibilityInfo.java:295`,
+    `ActivityThread.java:7218`, `ViewRootImpl.java:1407/2098`.
+- **Change:** `DEFAULT_INSETS_MODE = Report` (and the enum default). New
+  validated scenario field `insets: carve|report` threaded through `acos verify`
+  (precedence CLI > scenario > `ACOS_WM_INSETS` > default; the resolved value is
+  installed in the env before launch and published in the verdict). The two W7
+  scenarios pin their model; the negative also asserts the carved frame first,
+  then fails the report contract at `status=128` (without the pin it would
+  become a false pass under the new default). `carve` remains selectable via
+  env, `--insets`, and the scenario field. Docs updated (`AGENT_API` §8.6.6,
+  `SECURITY` env table, `MORNING`, `TRACKS`, `results/render/W7.md` addendum).
+- **w42 re-bless:** `w42-back-frame` pinned to `insets: report`; only the final
+  first-Activity region-1 hash changed
+  (`dee05db8…` → `5edac422…`). Pixel diff (`.cache/w7b/art-w42-*/frames/14.png`,
+  `results/handoff/W7B-pixel-diff.txt`): exactly **one** differing row in the
+  overlapping display area, display y=411 (carve PNG y=283), 122 pixels,
+  x=58..1026, only `G -1` (carve 211 → report 210). Every other pixel identical;
+  the second-activity regions and final region 2 are unchanged. No tolerance.
+- **Result (gates, final binary):** all pass under `report`:
+  `v2-art-counter`, `w22-counter-reset`, `w54-dialog-pixels`, `w42-back-frame`,
+  `w15-dialog-menu`, `form-validation`, `suite/T03-render-good`,
+  `v1-offscreen-pager`, `w7-insets-report`; `w7-insets-carve-negative` fails
+  `ASSERTION_FAILED` at its status assertion with `insets=carve`;
+  `suite/T03-render-wrong` `ASSERTION_FAILED`; `negative/offscreen-pager-visible`
+  `ELEMENT_OFFSCREEN`; `p11-progress-timeout` `TIMEOUT`. Gaten: home/tabs/
+  settings/search/lesson pass (14/22/33/22/28 steps), the five negatives fail
+  `ASSERTION_FAILED`. Evidence `.cache/w7b/gates/`, `.cache/w7b/gaten/`,
+  `results/handoff/W7B.md`.
+- **Tests:** `cargo test --release --offline -p acos-apk -p acos-cli
+  -p acos-verify -p acos-services` green (the services carve wire-golden tests
+  now pin `ServiceHost::standard_with_insets(Carve)`; DisplayInfo is built with
+  the same explicit mode, so the display service can no longer disagree with the
+  WMS). `acos-art`: skip the order-dependent cgroup test with
+  `--test-threads=1 --skip refuses_to_run_when_no_cgroup_can_be_created` (green),
+  then that test alone in a **fresh** lock acquisition (fresh `ACOS_ART_DATA`,
+  green). Same-acquisition rerun reuses the cached `scope_ok=true` and fails.
+- **Regression / false pass:** none; 0 false passes. The negative that would
+  have false-passed without a model pin is now pinned. `report` changes the
+  frame metadata for all ART gates (display-sized PNG, origin `[0,0]`) as W7
+  measured; only w42 had a model-specific hash.
+- **Not fixed:** GR4 Backlog G4a (visibility vs carved bottom bar) — `report`
+  likely removes its carve-specific trigger for Activities; GR4 must re-measure.
+  Any baseline that wants the old pixels must pin `insets: carve`.
+- **Incident:** an external cleanup at ~14:06 removed `.cache/` from this and
+  three sibling worktrees (~92 GB host-wide), including the required symlinks
+  and the prebuilt target; they were recreated and the release rebuilt. Other
+  tracks' `.cache` scratch evidence is gone.
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
@@ -2317,7 +2463,7 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | H2 | Early post-first-frame concurrent GC (Z7) on the exec path | M1/M2 | −23–30 MiB/session | high | low | low | **accepted: product default, E2.10** (H6 numbers are pre-H2; re-baseline) |
 | R2a | Gaten launch flake: SIGSEGV after first frame (~1/10). **Fixed (E13.8):** the fault is libc's GWP-ASan sampled-allocation backtrace (`android_unsafe_frame_pointer_chase+0x117`), enabled for 1 in 128 guest processes by libc's own lottery; the frame-pointer walk follows a guard page (`SEGV_ACCERR`) on frame-pointer-free guest code. Guests now get `GWP_ASAN_PROCESS_SAMPLING=0` (`ACOS_ART_GWP_ASAN=on|libc` are the seams). Forced-on: 4/4 SIGSEGV; default: 40/40 launches, 0 crash. Residual: one exit-1 `GUEST_EXITED` before the first frame in the 60-launch before-arm is a different, unnamed class | verified-launch stability | name the frame, then 10/10 | high | low | low | **done, E13.8/G3cd** (root cause named; one separate exit-1 class remains open) |
 | R2b | W6 `+1080 px` fragment offset: move `ACOSLAUNCH_GEOM_TRACE` to `application-created`, keep failing runs, n=20. Then a first-measure race vs a pager-translation source is decidable from `win_frame` vs `app_cfg` | layout correctness | catch + fix the root cause | medium | low | low | **next** (R2 §6) |
-| W7a | `report` is faithful (Gaten footer 0 px, SSIM 0.87960) but cannot become the default while `w42-back-frame` changes one AA row (G: 210→211). Decide: accept the changed pixel expectation as more faithful, or make strict capture tolerant of a single AA row without masking real moves. `gaten-home`'s forever-looping welcome also needs a strict-settle answer | verification semantics / default | `carve` → `report` default | high (measured) | low (owner decision) / medium (settle) | medium | **owner decision** (W7, E13.5) |
+| W7a | `report` is faithful (Gaten footer 0 px, SSIM 0.87960) but cannot become the default while `w42-back-frame` changes one AA row (G: 210→211). Decide: accept the changed pixel expectation as more faithful, or make strict capture tolerant of a single AA row without masking real moves. `gaten-home`'s forever-looping welcome also needs a strict-settle answer | verification semantics / default | `carve` → `report` default | high (measured) | low (owner decision) / medium (settle) | medium | **decided (ADR-0026 decision 6); implemented W7b (E13.9): `report` default, w42 re-blessed with a one-row pixel proof** |
 | R2c | Per-view canvas for the ART guest without a GPU: opt-in per-view nested `Bitmap` canvas + blit (R2 §4.3) vs a `libhwui`-shim `RenderNode`/`HardwareRenderer` | SVG/wordmark fidelity | `canvasIsViewPx=true` | medium | medium/high | medium (draw cost 1.5–3×) | **owner decision** (R2 §4) |
 | G3a | **Scenario input could not request the API's existing fast navigation settle**, so every tap on Gaten's 200 ms-retry onboarding pages was a strict `queue` timeout. Fixed: `settle: fast` on scenario `tap`/`type`/`key`, forwarded through `TrustGuard`; assertions still reject fast | reachable owner flow | 3/3 after the fix | high | low | low | **done, E13.7/GR3** |
 | G3b | **Strict-settle probe wake over-driven the guest**: 20 ms host requests re-asked even after a sample arrived (~50 full tree walks/s under the 10 s Reanimated loop); likely the `probe-floor` starvation. Fixed to 50 ms and no re-ask until the probe sequence moves | probe liveness / tree age | no probe-floor at long n | medium | low | low | **fixed in code, E13.7; still prove at a 60 s pathological n** |
