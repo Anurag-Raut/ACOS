@@ -429,3 +429,4 @@ the device.
 | `results/phone/evidence/multi-activity/phone/observations.json` | §4.5 (ACOS side pending) |
 | `results/phone/evidence/neg-form-wrong/phone/observations.json` | negative twin false on the phone |
 | `results/phone/evidence/*/phone/screenshot-NN-*.png` | paired screenshots, ≤540 px wide |
+| `results/phone/evidence/<flow>/{acos,phone}/texts.md` | per-step text dumps (screen identity, target, assertion, visible label set) |
