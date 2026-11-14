@@ -3393,10 +3393,19 @@ fn wait_for_event_settled(
         }
         // An idle screen emits nothing, so a bounded wake keeps it observable;
         // a drawing screen's own dirty events are the request. Never re-ask for
-        // a sample that already arrived since the last request.
+        // a sample that already arrived since the last request — but *do*
+        // record that it arrived: otherwise `last_requested_seq` stays stuck at
+        // the pre-request sample and the host stops asking forever. The 250 ms
+        // guest fallback used to hide that bug; H4's 5 s fallback exposes it
+        // (a type/tap leaves the main queue pending and strict settle needs a
+        // fresh sample after the queue drains).
         let current_probe_seq = latest_probe(probe_state)
             .map(|sample| sample.seq)
             .unwrap_or(last_requested_seq);
+        if current_probe_seq > last_requested_seq {
+            last_requested_seq = current_probe_seq;
+            last_wake = Instant::now();
+        }
         if last_wake.elapsed() >= Duration::from_millis(wake_ms)
             && current_probe_seq == last_requested_seq
         {

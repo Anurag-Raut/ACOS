@@ -129,49 +129,55 @@ impl MemoryWatchdog {
             Arc::clone(&rss_now),
             Arc::clone(&stop),
         );
-        let handle = thread::spawn(move || {
-            while !s.load(Ordering::Relaxed) {
-                if let Some(rss) = read_self_rss_bytes() {
-                    *rn.lock().unwrap() = rss;
-                    if rss > limit_bytes {
-                        let pgid = *t.lock().unwrap();
-                        if let Some(pgid) = pgid {
-                            unsafe {
-                                // The whole guest group: bwrap + dalvikvm64 +
-                                // every ART thread it started.
-                                libc::kill(-pgid, libc::SIGKILL);
-                                libc::kill(pgid, libc::SIGKILL);
+        let handle = thread::Builder::new()
+            .name("acos-mem-watchdog".into())
+            .spawn(move || {
+                while !s.load(Ordering::Relaxed) {
+                    if let Some(rss) = read_self_rss_bytes() {
+                        *rn.lock().unwrap() = rss;
+                        if rss > limit_bytes {
+                            let pgid = *t.lock().unwrap();
+                            if let Some(pgid) = pgid {
+                                unsafe {
+                                    // The whole guest group: bwrap + dalvikvm64 +
+                                    // every ART thread it started.
+                                    libc::kill(-pgid, libc::SIGKILL);
+                                    libc::kill(pgid, libc::SIGKILL);
+                                }
+                            }
+                            *tr.lock().unwrap() = Some(Trip {
+                                rss_bytes: rss,
+                                limit_bytes,
+                                killed_pgid: pgid,
+                            });
+                            eprintln!(
+                                "acos-art: HOST_MEMORY_LIMIT: launcher RSS {} MiB > {} MiB (ACOS_ART_RSS_MAX); \
+                                 killed guest process group {:?}",
+                                rss / 1024 / 1024,
+                                limit_bytes / 1024 / 1024,
+                                pgid
+                            );
+                            // Armed: the kill ends the growth, so stop sampling. Not
+                            // armed (a guard installed before any guest exists): keep
+                            // watching silently in case a run path arms it later; the
+                            // soft RLIMIT_DATA backstop bounds the worst case.
+                            if pgid.is_some() {
+                                break;
                             }
                         }
-                        *tr.lock().unwrap() = Some(Trip {
-                            rss_bytes: rss,
-                            limit_bytes,
-                            killed_pgid: pgid,
-                        });
-                        eprintln!(
-                            "acos-art: HOST_MEMORY_LIMIT: launcher RSS {} MiB > {} MiB (ACOS_ART_RSS_MAX); \
-                             killed guest process group {:?}",
-                            rss / 1024 / 1024,
-                            limit_bytes / 1024 / 1024,
-                            pgid
-                        );
-                        // Armed: the kill ends the growth, so stop sampling. Not
-                        // armed (a guard installed before any guest exists): keep
-                        // watching silently in case a run path arms it later; the
-                        // soft RLIMIT_DATA backstop bounds the worst case.
-                        if pgid.is_some() {
-                            break;
-                        }
+                    }
+                    // Sleep until the next sample, or return at once when the
+                    // watchdog is dropped (`recv_timeout` wakes on the closed
+                    // channel) or when a trip armed a kill ended the loop.
+                    if matches!(
+                        wake_rx.recv_timeout(POLL_INTERVAL),
+                        Err(RecvTimeoutError::Disconnected)
+                    ) {
+                        break;
                     }
                 }
-                // Sleep until the next sample, or return at once when the
-                // watchdog is dropped (`recv_timeout` wakes on the closed
-                // channel) or when a trip armed a kill ended the loop.
-                if matches!(wake_rx.recv_timeout(POLL_INTERVAL), Err(RecvTimeoutError::Disconnected)) {
-                    break;
-                }
-            }
-        });
+            })
+            .expect("spawn acos-mem-watchdog");
         Some(Self {
             limit_bytes,
             target,
