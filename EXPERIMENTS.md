@@ -2404,3 +2404,70 @@ own public key, for RSA and EC (`fidelity.chain.verifies`, `fidelity.chain.ec`).
 A's `create.*` checks but the driver cannot find A's material after the guest
 exits (`acos-art run` removes its run root at teardown); it must copy the
 app-data out from inside the locked shell while A is alive.
+
+### K5c — the JCA-fallback trap is solved by AOSP opacity, not by throwing `Error` (2026-11-14)
+
+**Question.** K5b escaped `Cipher`'s delayed provider selection by throwing
+`KeystoreRefusal extends Error`. That is not what AOSP does and an app that
+catches `InvalidKeyException`/`KeyExpiredException` sees the wrong thing. Can the
+refusal keep AOSP's exception types and still be un-performable by a second
+provider?
+
+**Mechanism read from this image's bytecode** (`dexdump` on
+`framework/classes3.dex`, `core-oj/classes.dex`), not assumed:
+
+1. `javax.crypto.Cipher.tryCombinations` skips a provider whose
+   `Provider.Service.supportsParameter(key)` returns false — this is what
+   `SupportedKeyClasses` on AOSP's keystore services buys, and it is why
+   Conscrypt is never offered an `AndroidKeyStoreKey`.
+2. If a provider is tried and fails, the **first** exception is remembered and
+   rethrown (`chooseProvider` rethrows `InvalidKeyException`/
+   `InvalidAlgorithmParameterException`/`RuntimeException` as-is). So the caller
+   sees *our* type even after the JCA walks on to other providers.
+3. `android.security.keystore2.KeyStoreCryptoOperationUtils` fixes the mapping:
+   `KM_ERROR_KEY_EXPIRED(-25) -> KeyExpiredException`,
+   `KM_ERROR_KEY_NOT_YET_VALID(-24) -> KeyNotYetValidException`,
+   `KM_ERROR_USER_NOT_AUTHENTICATED(-26) -> UserNotAuthenticatedException`,
+   `KM_ERROR_CALLER_NONCE_PROHIBITED(-55) -> InvalidAlgorithmParameterException
+   ("Caller-provided IV not permitted")`, `KM_ERROR_INVALID_NONCE(-52) ->
+   ("Invalid IV")`, default `InvalidKeyException("Keystore operation failed",
+   KeyStoreException(code, detail))`.
+
+**Change.** `StoreSecretKey`/`StorePrivateKey` are now opaque
+(`getEncoded()==null`, `getFormat()==null`) and carry only the alias; the
+material is rebuilt inside the provider for the delegate SPI
+(`materialSecret`/`materialPrivate`). `GuardService.supportsParameter` accepts
+only `SoftwareKey`s (AOSP's `SupportedKeyClasses`). `KeystoreRefusal` is deleted;
+refusals throw the AOSP types/messages above. A `GuardSignature` SPI was added so
+signing still works with an opaque private key. `engineSetKeyEntry` rejects
+opaque/never-encoded keys.
+
+**Result.** `fidelity` **38/38** checks on real ART (the 30 K5b checks, with AOSP
+types instead of `CODE:` prefixes, plus 8 new: `refusal.no_foreign_provider`,
+`refusal.rsa_no_foreign_provider`, `randomized_iv_no_foreign_provider`,
+`refusal.control_foreign_provider_visible`, `refusal.stable`,
+`opaque.secret`, `opaque.private`, `opaque.public_x509`).
+`InvalidKeyException(Keystore operation failed) cause=KeyStoreException/code=-3`
+for both purpose refusals, `KeyNotYetValidException(Key not yet valid)`,
+`KeyExpiredException(Key expired)`, `InvalidAlgorithmParameterException(
+Caller-provided IV not permitted)`; `Cipher.getProvider()` is
+`AndroidKeyStoreGuard` (or none) for every refusal, while the control shows a
+plain `SecretKeySpec` op performed by `AndroidOpenSSL` — i.e. the measurement
+would see Conscrypt if Conscrypt had done the work: it did not.
+
+**Cross-session (was K5b-open).** `create` holds ~30 s, so the driver copies A's
+`app-data` (private file + `acos-keystore/entries.properties`) out of
+`$ACOS_ART_DATA/runs/*` **inside the locked shell while A is alive**, then runs B
+concurrently: A live during B (`yes`), copy rc `0`, A keystore mode `600`, and
+B reports `k_a absent` plus all four paths unreadable while its own controls
+pass — **8/8 PASS**.
+
+**Default off.** Unchanged: `env -u ACOS_ART_KEYSTORE acos launch` still logs
+`java.security.KeyStoreException: AndroidKeyStore not found` and no
+AndroidKeyStore provider (2/2 PASS).
+
+**Not measured this hour:** the gate matrix and the
+`acos-services`/`acos-art`/`acos-aidl`/`acos-cli`/`acos-verify` suites — the
+host ART lock's two slots were held by other tracks and both attempts spent
+their timeout in the queue (`acos-apk --lib` 18/18 was re-run and is green).
+Evidence `results/compat/K5C-evidence/`; report `results/compat/K5.md` (K5c).
