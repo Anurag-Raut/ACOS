@@ -2759,7 +2759,20 @@ impl ArtSession {
         // grace below bounds the *lifecycle*, never the app's threads: a guest
         // still alive afterwards is killed with its whole process tree, and the
         // reply says which path was taken (`lifecycle` vs `killed`).
-        let grace = Duration::from_millis(teardown_grace_ms());
+        //
+        // ZPROD6: a **zygote** session has no lifecycle to wait for. Its `child`
+        // here is the session launcher — a foreign-guest shim that owns the
+        // sockets and the `ServiceHost` and starts no ART at all (the app child
+        // was forked inside the keeper). Measured with `DM6_RESET_TRACE` on the
+        // serve path: the shim never exits after `close` (`exit_ms=300`,
+        // `reaped_before_deadline=false` on every ON stop), so the 300 ms grace
+        // bought nothing and every ON `acos_destroy` cost 307 ms against the OFF
+        // arm's 13 ms — and every ON reset paid it too, inside its stop phase.
+        // The real death proof for a zygote session is the keeper's `reaped`
+        // ack (`kill(-child, SIGKILL)` + `wait4`, written by `ZygoteApp.z4KillOne`),
+        // which `close`/`reset` obtain right after this stop. So: signal, then
+        // prove — never wait out a lifecycle the shim cannot deliver.
+        let grace = Duration::from_millis(teardown_grace_ms_for(self.zygote.is_some()));
         let deadline = Instant::now() + grace;
         let exited = self.wait_for_exit(deadline);
         let path = if exited {
@@ -2834,6 +2847,8 @@ impl ArtSession {
             "session": self.artifacts.display().to_string(),
             "process_group": self.process_group,
             "path": path.as_str(),
+            "zygote": self.zygote.is_some(),
+            "grace_ms": grace.as_millis() as u64,
             "exit_ms": exit_ms,
             "stop_ms": started.elapsed().as_millis() as u64,
             "reaped_before_deadline": exited,
@@ -4173,11 +4188,43 @@ pub(crate) fn processes_in_group(group: i32) -> Vec<u32> {
 /// find, `Thread.join` of non-daemon threads), and waiting longer cannot help.
 const DEFAULT_TEARDOWN_GRACE_MS: u64 = 300;
 
+/// ZPROD6: the lifecycle grace for a session whose ART guest is **not** this
+/// process's child (a zygote session: the guest was forked inside the keeper and
+/// the engine's own `child` is the foreign-guest session launcher).
+///
+/// Zero, because there is nothing to wait for and waiting was measured to cost
+/// exactly the grace: with `DM6_RESET_TRACE` on the live serve path every ON
+/// stop read `path=killed reaped_before_deadline=false exit_ms=300` — the shim
+/// never exits on `close` — which is 100 % of the ON arm's teardown regression
+/// (307 ms vs the OFF arm's 13 ms) and, inside reset's stop phase, all of its
+/// reset regression (307 ms vs 14 ms). The death proof for a zygote session is
+/// the keeper's `reaped` ack instead (`kill(-child, SIGKILL)` + `wait4`, written
+/// by `ZygoteApp.z4KillOne`), which `close`/`reset` fetch immediately after this
+/// stop; the process-group proof below is unchanged and still runs.
+const DEFAULT_ZYGOTE_TEARDOWN_GRACE_MS: u64 = 0;
+
 fn teardown_grace_ms() -> u64 {
     std::env::var("ACOS_ART_TEARDOWN_GRACE_MS")
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(DEFAULT_TEARDOWN_GRACE_MS)
+}
+
+/// The grace this session's stop may spend waiting for its own child to exit.
+///
+/// The operator knob still wins (so an experiment can restore the old bound for
+/// either arm); otherwise the arm decides: an exec-path session keeps GL1's
+/// 300 ms lifecycle bound, a zygote session has none (see
+/// [`DEFAULT_ZYGOTE_TEARDOWN_GRACE_MS`]).
+fn teardown_grace_ms_for(zygote: bool) -> u64 {
+    if std::env::var("ACOS_ART_TEARDOWN_GRACE_MS").is_ok() {
+        return teardown_grace_ms();
+    }
+    if zygote {
+        DEFAULT_ZYGOTE_TEARDOWN_GRACE_MS
+    } else {
+        DEFAULT_TEARDOWN_GRACE_MS
+    }
 }
 
 /// Live (non-zombie) processes whose command line names `dir`.
@@ -5230,6 +5277,110 @@ mod tests {
             "the reset must re-bind the replacement guest's artifact, not keep the old bytes"
         );
         session.close().expect("clean close");
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// ZPROD6: the lifecycle grace each arm gets. A zygote session has no
+    /// lifecycle to wait for (its app child is the keeper's, and the shim that
+    /// *is* the engine's child never exits on `close`), so its stop must not
+    /// spend GL1's 300 ms bound; the exec path keeps it. The operator knob still
+    /// wins for both arms, so an experiment can restore the old bound.
+    #[test]
+    fn only_the_exec_path_pays_the_lifecycle_grace() {
+        let guard = art_bin_env_lock();
+        std::env::remove_var("ACOS_ART_TEARDOWN_GRACE_MS");
+        assert_eq!(teardown_grace_ms_for(false), DEFAULT_TEARDOWN_GRACE_MS);
+        assert_eq!(teardown_grace_ms_for(true), DEFAULT_ZYGOTE_TEARDOWN_GRACE_MS);
+        assert_eq!(teardown_grace_ms_for(true), 0, "no wait is the whole point");
+        std::env::set_var("ACOS_ART_TEARDOWN_GRACE_MS", "120");
+        assert_eq!(teardown_grace_ms_for(true), 120, "the knob wins on both arms");
+        assert_eq!(teardown_grace_ms_for(false), 120);
+        std::env::remove_var("ACOS_ART_TEARDOWN_GRACE_MS");
+        drop(guard);
+    }
+
+    /// ZPROD6, the measured regression: the ON arm's `acos_destroy` cost 307 ms
+    /// (OFF: 13 ms) and every ON reset paid the same 307 ms inside its stop
+    /// phase, because the engine waited GL1's 300 ms lifecycle grace for a
+    /// *shim* that never exits on `close` (`reaped_before_deadline=false`,
+    /// `exit_ms=300`). With a zygote binding the stop must signal and prove
+    /// instead — and still leave the whole process group gone.
+    #[test]
+    fn a_zygote_session_signals_and_proves_instead_of_waiting_the_grace() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = o2_scratch_dir("zygote-stop");
+        // A session launcher in foreign-guest mode: it serves the protocol line
+        // for line and **ignores** `close` — the app child lives inside the
+        // keeper, and this process is only the sockets/ServiceHost shim. This is
+        // the shape measured on the serve path, not a synthetic never-exiter.
+        let script = dir.join("fake-acos-art-shim.sh");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\n\
+             echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.test\",\"width\":1080,\"height\":2400,\"density\":420}'\n\
+             while IFS= read -r line; do\n\
+               case \"$line\" in\n\
+                 *'\"cmd\":\"close\"'*) : ;;\n\
+                 *) echo '{\"ok\":false,\"code\":\"BAD_REQUEST\",\"error\":\"no\"}' ;;\n\
+               esac\n\
+             done\n\
+             sleep 300\n",
+        )
+        .unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _art_bin_guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        std::env::remove_var("ACOS_ART_TEARDOWN_GRACE_MS");
+
+        // The exec path keeps GL1's bound: the same shim costs the full grace.
+        let mut exec = ArtSession::start(&apk, &dir.join("exec")).expect("exec session starts");
+        assert!(exec.zygote.is_none());
+        let started = Instant::now();
+        let report = exec.teardown().expect("clean stop");
+        let exec_ms = started.elapsed();
+        assert!(
+            exec_ms >= Duration::from_millis(250),
+            "the exec arm still bounds the lifecycle at {} ms (waited {exec_ms:?})",
+            DEFAULT_TEARDOWN_GRACE_MS
+        );
+        assert!(report.is_clean(), "{report:?}");
+        assert_eq!(
+            exec.last_teardown().map(|(path, _)| path),
+            Some(TeardownPath::Killed),
+            "a guest that never exits is killed, and the reply says so"
+        );
+
+        // A zygote session: the same shim, but the app child is the keeper's.
+        let mut zg = ArtSession::start(&apk, &dir.join("zg")).expect("zygote-shaped session starts");
+        zg.zygote = Some(ZygoteBinding {
+            host: Arc::new(ZygoteHost::disabled()),
+            key: zygote_key_of(&apk, "report", "on"),
+            facts: ZygoteFacts {
+                tag: 0,
+                child_pid: 0,
+                run_root: dir.join("zg/run"),
+                boot_epoch: "test-epoch".into(),
+            },
+        });
+        let started = Instant::now();
+        let report = zg.teardown().expect("clean zygote stop");
+        let zg_ms = started.elapsed();
+        assert!(
+            zg_ms < Duration::from_millis(100),
+            "a zygote stop must not wait a lifecycle its shim cannot deliver: {zg_ms:?}"
+        );
+        assert!(report.is_clean(), "{report:?}");
+        assert!(report.survivors.is_empty(), "{report:?}");
+        assert!(report.verified, "the group is still proven, never assumed");
+        assert_eq!(
+            zg.last_teardown().map(|(path, _)| path),
+            Some(TeardownPath::Killed)
+        );
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);
     }
