@@ -446,7 +446,11 @@ impl ZygoteHost {
 
 impl Drop for ZygoteHost {
     fn drop(&mut self) {
-        self.lock().shutdown_all();
+        // ZPROD5: go through the host's own shutdown so a short runtime root this
+        // host created is removed with it (a graceful serve exit leaves nothing).
+        // A SIGKILLed serve cannot clean it; the next daemon's `prepare_session`
+        // wipes its own session dirs, and the path is per-pid.
+        ZygoteHost::shutdown_all(self);
     }
 }
 
@@ -485,18 +489,43 @@ fn sun_path_overflow(session: &Path) -> Option<PathBuf> {
 
 /// A short directory this process can own: `/run/user/<uid>/z<pid>` (tmpfs, the
 /// runtime dir W43's socket helper already uses), else `/dev/shm/z<pid>`.
+///
+/// A daemon that is SIGKILLed cannot remove its own root (`acos serve` installs
+/// no SIGTERM handler either, so a terminated daemon does not run its `Drop`), so
+/// opening one also sweeps the `z<pid>` roots of daemons that are **gone**. The
+/// tree is per pid and bounded; a live pid's root is never touched.
 fn open_short_root() -> Option<PathBuf> {
     let uid = unsafe { libc::getuid() };
     let pid = std::process::id();
-    for candidate in [
-        PathBuf::from(format!("/run/user/{uid}/z{pid}")),
-        PathBuf::from(format!("/dev/shm/z{pid}")),
+    for parent in [
+        PathBuf::from(format!("/run/user/{uid}")),
+        PathBuf::from("/dev/shm"),
     ] {
+        let candidate = parent.join(format!("z{pid}"));
         if std::fs::create_dir_all(&candidate).is_ok() {
+            sweep_short_roots(&parent, pid);
             return Some(candidate);
         }
     }
     None
+}
+
+fn sweep_short_roots(parent: &Path, own_pid: u32) {
+    let Ok(entries) = std::fs::read_dir(parent) else { return };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(pid) = name
+            .to_str()
+            .and_then(|name| name.strip_prefix('z'))
+            .and_then(|rest| rest.parse::<u32>().ok())
+        else {
+            continue;
+        };
+        if pid == own_pid || Path::new(&format!("/proc/{pid}")).exists() {
+            continue;
+        }
+        let _ = std::fs::remove_dir_all(entry.path());
+    }
 }
 
 /// The structured failure for a zygote error: `ZYGOTE_DEAD`, class `host_guard`,
