@@ -501,3 +501,106 @@ action: do that, then re-run `v1-recreate` and `counter.yaml`'s tail (`assert_no
    `hello-views`, `todo-list`, `multi-activity` green at their oracle bounds.
 2. Window focus on `addToDisplay` after a relaunch → `v1-recreate` `back`.
 3. Re-run the 5 Gaten flows + 5 negatives and the interleaved A/B on the finished branch.
+
+# ROT6 section (branch `art-rotate-1`, `main` `c517a76` merged in)
+
+Status: **GAP 1 fixed and verified against the oracle; GAP 2's stated mechanism disproved and
+replaced with a measured one — the fix is half-landed and `back` still times out.** Merge was
+clean (`b11ee68`, no `EXPERIMENTS.md` conflict), commits `af8970b` + `7d5b00b`.
+
+## 1. GAP 1 — the landscape 63 px, delivered as `configInsets`
+
+`DisplayPolicy` has two inset sets per rotation; ACOS delivered only `nonDecorInsets`. The
+difference is a `status_bar_height` strip (24 dp = 63 px) at the **top of the app's
+configuration** for `rotation != 0`, which the app's own decor draws into — the reference phone's
+`mDecorInsetsInfo` (`fixtures/reference/hello-views/art-api34-x86_64/display.txt`) prints both
+rows side by side, and its rotated tree shows the strip in use
+(`statusBarBackground [128,0][2400,63]`, `action_bar [128,63][2400,189]`,
+`content [128,189][2400,1017]`).
+
+Implementation: `STATUS_BAR_CONFIG_DP = 24.0` → `DisplaySpec::config_status_bar_height()` (63 px
+at 420 dpi), `SystemBars::status_bar_config` set by `DisplaySpec::rotated()` (empty at rotation
+0), `DisplaySpec::config_insets()` = `app_insets()` + that strip, and — because the guest only
+sees insets through `InsetsState` — the strip delivered as a status-bars source
+(`CONFIG_STATUS_BAR_SOURCE_ID`, no control: it owns no surface) in
+`reference_insets_state()`. The guest's own `calculateInsets` maxes per edge, so the window gets
+the physical left strip *and* the config top strip = `configInsets`. Two new tests pin the four
+fixture rows and the delivered source.
+
+Result — every landscape bound is now the oracle's to the pixel, in all three fixtures:
+
+| scenario | oracle | measured |
+|---|---|---|
+| `hello-views` `input` | `[170,282][2358,400]` | `[170,282][2358,400]` |
+| `hello-views` `result` | `[170,526][303,577]` | `[170,526][303,577]` |
+| `todo-list` `input` | `[170,475][2358,601]` | pass (29/29 steps) |
+| `multi-activity` | `[170,231][2358,349]` | pass (19/20, only `back` fails) |
+
+`counter.yaml`/`rot1-rotate.yaml` landscape y moved +63 to the counter's own oracle values
+(`count [170,231][191,282]`, `inc [170,282][401,408]`, `reset [170,408][401,534]`,
+`fixtures/reference/counter/art-api34-x86_64/ui_after_recreate.xml`) — derived, not re-blessed.
+
+## 2. GAP 2 — ROT5's mechanism is wrong; the rung is the server side of `Activity.finish()`
+
+Measured (host trace `ACOS_ART_INPUT_TRACE=...`, `ACOS_ATMS_TRACE=1`, `.cache/rot6/trace/`):
+
+* back's DOWN and UP both come back **`handled=true`, 5 ms**, on the current window's channel
+  (`seqs=[3,4]`, i.e. the pair right after that channel's `TOUCH_MODE`+`FOCUS`): the guest
+  received the key with focus and *claimed* it;
+* the guest logs **no** `Dropping event` — `ViewRootImpl$InputStage.shouldDropInputEvent` logs
+  one for "no window focus" and the logd sink keeps every entry, so the focus gate never fired;
+* the same step fails **without any relaunch** (`probe-back.yaml`: launch → `wait_for` →
+  `back` → TIMEOUT). `counter.yaml` fails at its trailing `back` too. So the relaunch is *not*
+  the discriminator, and `back` on ART was never proven to work — ROT5's `back-probe` in fact
+  ended `ASSERTION_FAILED` on its log assertion (`.cache/rot5/backprobe/probe.json`), the step
+  only looked green;
+* `Activity.mFinished` never flips (a launch-time watcher polls it for 120 s) and
+  `ACOS_ATMS_TRACE` sees **no** `finishActivity` request at all.
+
+AOSP: `Activity.finish(I)` sets `mFinished` **only if** `IActivityClientController.finishActivity`
+returns true, and every lifecycle callback after it is a `ClientTransaction` the *server* sends
+(`PauseActivityItem(finished)` → `StopActivityItem` → `DestroyActivityItem`). `Activity.onKeyUp`
+(API-34 bytecode, dumped from `classes.dex`) additionally requires
+`mDefaultBackCallback != null` before it calls `onBackPressed()`. ACOS's ATMS only records a
+finish (`AtmsState::finish_activity`) — there is no transaction scheduler for the ART guest, and
+its `activities` never learn the token the guest harness mints at launch (`adopt_activity`
+needs a host-recorded launch or the guest-binder tag, and a plain CLI launch has neither), so a
+token-keyed finish cannot resolve.
+
+Landed this pass (guest half): `LaunchMain.startTopFinishWatcher` sends the three lifecycle
+transactions through the framework's own `TransactionExecutor` as soon as `mFinished` flips —
+the shape W38's two-Activity path already uses — plus the `ACOS_ATMS_TRACE` gate. **It does not
+fire yet**: `back` still ends in `TIMEOUT no-draw-after-action`.
+
+## 3. Measured this pass
+
+* `rot1-rotate` **3/3 pass**, negative **3/3 `ASSERTION_FAILED`** (`.cache/rot6/suite/rot-*`,
+  `negrot-*`).
+* `hello-views` 23/24 steps pass (only `back`), `todo-list` **29/29 pass**,
+  `multi-activity` 19/20 (only `back`), `v1-recreate` 14/15 (only `back`) — one run each;
+  `3/3` for the three fixtures plus `v1-recreate` is blocked by GAP 2.
+* 15 gates exactly as expected (10 pass; `T03-render-wrong`, `w7-insets-carve-negative`,
+  `negative/se1-expect-change-noop` `ASSERTION_FAILED`; `negative/offscreen-pager-visible`
+  `ELEMENT_OFFSCREEN`; `p11-progress-timeout` `TIMEOUT`). `w7-insets-report` green ⇒ portrait
+  insets unchanged.
+* 5 Gaten flows **pass**, 5 Gaten negatives **`ASSERTION_FAILED`** (RN's back is in-app, so it
+  does not need the Activity finish).
+* `cargo test --release --offline -p acos-wm -p acos-services -p acos-art` green (acos-wm 57
+  lib tests, +2). `-p acos-cli`: only the known worktree-path
+  `w50_serve_art::an_unknown_session_is_not_routed_to_the_frozen_rust_vm` socket failure.
+
+## 4. Next smallest actions, in order
+
+1. **Make the ATMS own the guest's Activity token**, then the finish trigger exists: at launch
+   the harness mints `new Binder()` (there is no host-recorded launch to adopt) — the AOSP-shaped
+   move is an `IApplicationThread`-side registration, e.g. have the harness deliver
+   `IActivityClientController.activityResumed(token)`/a launch record the ATMS can adopt, or
+   teach `adopt_activity` the peer's real guest-binder tag on this path (the W38 test
+   `an_unknown_or_zero_token_still_errors` must keep rejecting a bare number — do not weaken it).
+2. Then `ActivityClient.finishActivity` returns true → `mFinished` flips →
+   `startTopFinishWatcher` delivers pause/stop/destroy → `hello-views`, `multi-activity`,
+   `v1-recreate` reach their oracle-asserting final steps and can be run 3/3.
+3. Also worth one dump before/after: which stage claims back's **UP** as handled while
+   `mDefaultBackCallback == null` (the bytecode says `onKeyUp` must return false then), i.e.
+   either `DecorView.superDispatchKeyEvent`'s action-mode branch or the fallback handler is
+   answering — the ATMS trace above proves it never reaches `Activity.onBackPressed`.

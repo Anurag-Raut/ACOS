@@ -3696,3 +3696,83 @@ Smallest next actions, in order: (1) carry the landscape `configInsets` top (`st
 `hello-views`/`todo-list`/`multi-activity` (expect their oracle bounds exactly); (2) after
 `ActivityRelaunchItem`, hand focus to the new window (`addToDisplay` → focus + `windowFocusChanged`
 callback) and re-run `v1-recreate`; (3) then the Gaten flows.
+
+### E13.13 / ROT6 — the landscape 63 px is `configInsets` and it now reaches the guest; `back` is **not** a focus problem (PARTIAL)
+
+Branch `art-rotate-1`, `main` (`c517a76`) merged in (`b11ee68`), two commits: `af8970b`
+(the inset), `7d5b00b` (baselines + the partial finish path).
+
+**1. GAP 1 is closed, from the oracle, without hard-coded bounds.** `DisplayPolicy` keeps two
+inset sets per rotation and ACOS only ever delivered the first:
+
+* `nonDecorInsets` — the *physical* bars (`app_insets()`): `[0,128][0,63]`, `[128,0][0,63]`,
+  `[0,0][0,191]`, `[0,0][128,63]` for ROTATION 0/90/180/270;
+* `configInsets` — the same plus a **status-bar strip at the top of the app's configuration**
+  whenever `rotation != 0`: `[0,128][0,63]`, `[128,63][0,63]`, `[0,63][0,191]`, `[0,63][128,63]`,
+  with `configFrame` = `frame - configInsets`.
+
+The strip is `status_bar_height` (24 dp × 2.625 = 63 px) and it is not a second bar: on the
+reference phone's rotated tree (`ui_after_recreate.xml`) the app's own decor draws it —
+`statusBarBackground [128,0][2400,63]`, `action_bar_container [128,63][2400,189]`,
+`content [128,189][2400,1017]` — while the *physical* status bar is the 128 px left strip.
+The guest only ever sees insets as `InsetsState` sources (the config/non-decor split is
+`WindowManagerService`-internal), so the strip is delivered as a status-bars source at the top of
+the rotated frame (`SystemBars::status_bar_config`, `CONFIG_STATUS_BAR_SOURCE_ID`); the guest's
+own `InsetsState.calculateInsets` takes the per-edge maximum, so the window gets the physical
+left strip *and* the config top strip, i.e. exactly `configInsets`. Two new tests pin the four
+fixture rows (`nonDecorInsets`/`configInsets`/`configFrame`, `config_status_bar_height() == 63`)
+and the delivered source. No node bound was written from a measurement.
+
+Measured (`.cache/rot6/suite/scen-*.out`): `hello-views` landscape `action_bar [128,63][2400,189]`,
+`content [128,189][2400,1017]`, `input [170,282][2358,400]`, `result [170,526][303,577]` —
+**every asserted bound is the oracle's to the pixel**, and all 22 steps before `back` pass.
+`todo-list` **29/29 pass** (whole scenario, oracle landscape bounds included). `multi-activity`
+19/20 and `v1-recreate` 14/15 — the one failure in each is the trailing `back`.
+
+**2. GAP 2's named mechanism is wrong; the real rung is the server half of
+`Activity.finish()`.** ROT5 said "the relaunch leaves WMS/dispatcher focus on the old window".
+Measured against it (host trace `ACOS_ART_INPUT_TRACE`, `ACOS_ATMS_TRACE`):
+
+* `back`'s DOWN **and** UP are acked `handled=true`, 5 ms, on the *current* window's channel
+  (`key acks_returned seqs=[3,4] acks=[(3,true,5066),(4,true,5066)]` — seqs 3/4 are the pair
+  right after that channel's `TOUCH_MODE`+`FOCUS`, so the channel and its focus are the new
+  window's);
+* the guest logs **no** `Dropping event` (`ViewRootImpl$InputStage.shouldDropInputEvent` writes
+  one to Slog for "no window focus", and the logd sink captures every entry);
+* it fails just the same **without any relaunch** (`probe-back.yaml`: launch → `wait_for` →
+  `back` → TIMEOUT), so the relaunch is not the discriminator;
+* `Activity.mFinished` never flips (a watcher that polls it from the launch never sees it), and
+  `ACOS_ATMS_TRACE` shows **no** `finishActivity` request at all.
+
+That is the AOSP shape: `Activity.finish(I)` sets `mFinished` only if
+`IActivityClientController.finishActivity` returns true, and every callback after it
+(`onPause` → `onSaveInstanceState`/`onStop` → `onDestroy`) is a `ClientTransaction` the
+**server** sends. ACOS's ATMS only records a finish (`AtmsState::finish_activity`) and has no
+transaction scheduler for the ART guest, and its `activities` never learn the token the guest
+harness mints at launch, so a token-keyed finish cannot resolve either. `Activity.onKeyUp`
+(API-34 bytecode) also requires `mDefaultBackCallback != null` before it calls
+`onBackPressed()` — that flag is what the harness never installs, which is why `back`'s UP can
+be "handled" twice with no finish.
+
+Landed this pass: the guest half of the delivery — `startTopFinishWatcher`, which sends
+`PauseActivityItem(finished=true)` → `StopActivityItem` → `DestroyActivityItem` through the
+framework's own `TransactionExecutor` (the shape W38's two-Activity path already uses) as soon
+as `mFinished` flips — plus the `ACOS_ATMS_TRACE` gate. **It does not fire yet**, so `back` still
+ends in `TIMEOUT`; the missing trigger is the ATMS half (see the handoff's next actions).
+
+**3. Everything else is exactly as ROT5 left it, re-measured on the merged tree.**
+`scenarios/rot1-rotate.yaml` **3/3 pass** + its negative **3/3 `ASSERTION_FAILED`**
+(`.cache/rot6/suite/rot-{1,2,3}.json`, `negrot-{1,2,3}.json`); `counter.yaml` and
+`rot1-rotate.yaml` landscape bounds re-derived from the counter's own oracle
+(`fixtures/reference/counter/art-api34-x86_64/ui_after_recreate.xml`: `count [170,231][191,282]`,
+`inc [170,282][401,408]`, `reset [170,408][401,534]` — +63 from the ROT5 measurement, no
+re-bless); 15 gates **exactly the expected 15** (10 pass, `T03-render-wrong` /
+`w7-insets-carve-negative` / `negative/se1-expect-change-noop` `ASSERTION_FAILED`,
+`negative/offscreen-pager-visible` `ELEMENT_OFFSCREEN`, `p11-progress-timeout` `TIMEOUT`) with
+`w7-insets-report` green, i.e. portrait insets unchanged; 5 Gaten flows **pass** and 5 Gaten
+negatives **`ASSERTION_FAILED`** (first time since ROT4 — Gaten was not run in ROT5);
+`cargo test -p acos-wm -p acos-services -p acos-art` green (acos-wm 57 lib tests, +2), only the
+known worktree-path `w50_serve_art` socket test fails.
+
+Host: peak guest cgroup 432 MiB, MemAvailable never below 29 GiB (49 % of 60 GiB used), disk
+83 % after pruning this worktree's stale target/scratch dirs.
