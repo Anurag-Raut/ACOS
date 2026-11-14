@@ -47,7 +47,7 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use acos_protocol::ui::UiTree;
+use acos_protocol::ui::{UiNode, UiTree};
 use acos_protocol::{ErrorCode, FrameMeta, LogLevel, Selector};
 use acos_verify::backend::{CrashRecord, InputAck, InputDelivery, LogRecord};
 use acos_verify::{BackendError, LaunchOutcome};
@@ -172,6 +172,10 @@ pub struct ArtSession {
     /// (`mode`, `settled`, `probe_seq`, `tree_age_ms`, `bound`). Copied into
     /// the `acos_observe_tree` result; never synthesised.
     last_tree_settle: Option<serde_json::Value>,
+    /// G3c: how the most recent launch bound its first frame (traversals, wait,
+    /// node count and whether it is only the window skeleton). Serve publishes
+    /// it in the launch reply so a placeholder is visible, never silent.
+    first_frame_report: Option<FirstFrameReport>,
     /// P9: the settle mode the **next** `reset` binds its fresh tree with
     /// (`strict` by default). Serve sets it per `acos_reset` call; the reset
     /// body reads it before it replaces the session.
@@ -809,6 +813,112 @@ fn settle_state_changed(reply: &serde_json::Value) -> Option<bool> {
     settle.get("state_changed").and_then(|v| v.as_bool())
 }
 
+/// G3c: how a launch bound its first frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FirstFrameReport {
+    /// Traversals spent on the launch frame (1 = the first one was content).
+    pub traversals: usize,
+    /// Wall time those traversals took.
+    pub waited_ms: u64,
+    /// Nodes in the bound tree.
+    pub nodes: usize,
+    /// True when the bound tree is still only the window skeleton after the
+    /// budget: no app content, so the frame is a placeholder, never a claim.
+    pub placeholder: bool,
+}
+
+impl FirstFrameReport {
+    /// The report for a launch whose first traversal is the frame (no wait,
+    /// no claim about content).
+    fn one_traversal(tree: &UiTree) -> Self {
+        FirstFrameReport {
+            traversals: 1,
+            waited_ms: 0,
+            nodes: ui_tree_node_count(&tree.nodes),
+            placeholder: first_frame_is_bare_skeleton(tree),
+        }
+    }
+
+    /// The evidence object a launch reply publishes (`result.first_frame`).
+    pub(crate) fn to_json(self) -> serde_json::Value {
+        serde_json::json!({
+            "traversals": self.traversals,
+            "waited_ms": self.waited_ms,
+            "nodes": self.nodes,
+            "placeholder": self.placeholder,
+        })
+    }
+}
+
+/// G3c: node count of a tree (all windows, all depths).
+fn ui_tree_node_count(nodes: &[UiNode]) -> usize {
+    nodes
+        .iter()
+        .map(|node| 1 + ui_tree_node_count(&node.children))
+        .sum()
+}
+
+/// G3c: does any node carry something an app put on screen (text, a content
+/// description or an editor hint)?
+fn ui_tree_has_app_text(nodes: &[UiNode]) -> bool {
+    nodes.iter().any(|node| {
+        !node.text.trim().is_empty()
+            || !node.content_desc.trim().is_empty()
+            || !node.hint.trim().is_empty()
+            || ui_tree_has_app_text(&node.children)
+    })
+}
+
+/// G3c: the largest tree that can still be *only* the window skeleton.
+///
+/// Measured on Gaten: the unmounted skeleton (DecorView -> `action_bar_root` ->
+/// `android.R.id.content` -> an empty `ReactRootView`, plus the decor's
+/// `ViewStub`s) is **10 nodes**, while the painted welcome screen is **243**.
+/// 40 leaves room for a window skeleton with dialogs/stubs without ever
+/// reaching a mounted app screen.
+const FIRST_FRAME_SKELETON_MAX_NODES: usize = 40;
+
+/// G3c: how many traversals a launch may spend waiting for app content.
+const FIRST_FRAME_MAX_ATTEMPTS: usize = 4;
+
+/// G3c: at or below this node count a text-free tree is the *bare* window
+/// skeleton measured on Gaten (1–10 nodes), so a launch frame that never grew
+/// past it is published as a `placeholder` with `meaningful: false`. Kept well
+/// below [`FIRST_FRAME_SKELETON_MAX_NODES`]: a dense but text-free screen is
+/// waited for, never labelled.
+const FIRST_FRAME_PLACEHOLDER_MAX_NODES: usize = 16;
+
+/// G3c: the launch's first-frame content budget (`ACOS_ART_FIRST_FRAME_MS`,
+/// default 900 ms — the app's own mounting work, not a settle deadline).
+fn first_frame_budget_ms() -> u64 {
+    std::env::var("ACOS_ART_FIRST_FRAME_MS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .unwrap_or(900)
+}
+
+/// G3c: is this tree the window skeleton with nothing of the app's mounted yet?
+///
+/// Deliberately conservative: a tree that carries *any* text/content-description
+/// or that has more than [`FIRST_FRAME_SKELETON_MAX_NODES`] nodes is app content
+/// and is never delayed or labelled, so a legitimately small screen cannot be
+/// mistaken for an unmounted one (and a blank screen that never mounts is
+/// labelled `placeholder` instead of being claimed as the app's first frame).
+fn first_frame_is_unmounted(tree: &UiTree) -> bool {
+    ui_tree_node_count(&tree.nodes) <= FIRST_FRAME_SKELETON_MAX_NODES
+        && !ui_tree_has_app_text(&tree.nodes)
+}
+
+/// G3c: is this tree the *bare* window skeleton (never gained app content)?
+///
+/// Only such a frame is labelled `placeholder` / `meaningful: false`; a
+/// text-free screen that is bigger than the skeleton is returned as-is, so a
+/// legitimately non-textual app is never turned into a failed assertion.
+fn first_frame_is_bare_skeleton(tree: &UiTree) -> bool {
+    ui_tree_node_count(&tree.nodes) <= FIRST_FRAME_PLACEHOLDER_MAX_NODES
+        && !ui_tree_has_app_text(&tree.nodes)
+}
+
 /// Structural signature of a UI tree: its nodes and their attributes, with no
 /// dependence on pixels, frame numbers or timestamps.
 fn tree_signature(tree: &UiTree) -> u64 {
@@ -1245,6 +1355,7 @@ impl ArtSession {
             last_input_settle: None,
             settle_mode: "strict",
             last_tree_settle: None,
+            first_frame_report: None,
             reset_settle: "strict",
             reset_pixels: true,
             insets,
@@ -2512,6 +2623,12 @@ impl ArtSession {
         self.require_cached_tree()
     }
 
+    /// G3c: how the most recent launch bound its first frame (serve publishes
+    /// it in the launch reply, so a placeholder is visible and never silent).
+    pub(crate) fn first_frame_report(&self) -> Option<FirstFrameReport> {
+        self.first_frame_report
+    }
+
     /// P9: the tree a **launch** reply binds.
     ///
     /// A live session already has a bound tree, and a relaunch of the same
@@ -2526,7 +2643,11 @@ impl ArtSession {
     ///   least as new as the store current at request entry, no quiet window.
     ///   `pixels` is always `false` here (the launcher refuses fast + capture),
     ///   so the reply's frame identity is C1 metadata only.
-    pub(crate) fn ensure_launch_tree(
+    ///
+    /// G3c: a launch frame that is still the *window skeleton* is re-read (see
+    /// [`ArtSession::bind_first_frame`]) so the first frame is the app's content
+    /// frame, not the empty window that exists a moment before it mounts.
+pub(crate) fn ensure_launch_tree(
         &mut self,
         settle: &'static str,
         pixels: bool,
@@ -2535,8 +2656,110 @@ impl ArtSession {
             return self.require_cached_tree();
         }
         let settle = if settle == "fast" { "fast" } else { "strict" };
-        self.request_tree_with(settle, pixels)?;
-        self.require_cached_tree()
+        let (tree, report) = self.bind_first_frame(settle, pixels)?;
+        self.first_frame_report = Some(report);
+        Ok(tree)
+    }
+
+    /// G3c: bind a launch's first frame, waiting past an unmounted window
+    /// skeleton.
+    ///
+    /// One traversal is the normal case (`settle` already waits for the frame
+    /// the request produced). When that traversal returns the window skeleton —
+    /// no text/content-description anywhere and at most
+    /// [`FIRST_FRAME_SKELETON_MAX_NODES`] nodes — the app's own mounting work is
+    /// still in flight (measured on Gaten: 10 nodes at the launch frame, 243 two
+    /// seconds later), so the traversal is repeated until the tree carries app
+    /// content, `FIRST_FRAME_MAX_ATTEMPTS` is reached, or the
+    /// `ACOS_ART_FIRST_FRAME_MS` budget (default 900 ms) expires. The report
+    /// says which happened; `placeholder` is true only for a frame that never
+    /// gained content, and such a frame is never claimed as app content
+    /// (`FrameMeta::meaningful` is cleared by the caller).
+    fn bind_first_frame(
+        &mut self,
+        settle: &'static str,
+        pixels: bool,
+    ) -> Result<(UiTree, FirstFrameReport), BackendError> {
+        let deadline = Instant::now() + Duration::from_millis(first_frame_budget_ms());
+        let mut traversals = 0usize;
+        let mut waited_ms = 0u64;
+        // The last **settled** binding. A retry is an optimisation, never a new
+        // failure mode: when it does not settle (a screen that keeps drawing —
+        // Gaten's welcome loop — or an engine error), the launch frame and its
+        // settle verdict roll back to this one, exactly as a launch without the
+        // retry would have.
+        let mut settled: Option<(CachedFrame, Option<serde_json::Value>)> = None;
+        loop {
+            let started = Instant::now();
+            let result = self.request_tree_with(settle, pixels);
+            traversals += 1;
+            waited_ms += started.elapsed().as_millis() as u64;
+            let is_settled = self
+                .last_tree_settle
+                .as_ref()
+                .and_then(|block| block.get("settled"))
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(true);
+            if let Err(error) = result {
+                // The first traversal is the launch's own traversal: its failure
+                // is the launch's failure, as before.
+                if traversals == 1 {
+                    return Err(error);
+                }
+                break;
+            }
+            let tree = self.require_cached_tree()?;
+            if is_settled {
+                settled = Some((
+                    self.require_cached_frame()?.clone(),
+                    self.last_tree_settle.clone(),
+                ));
+            } else if traversals == 1 {
+                // Pre-existing behaviour: a first traversal that did not settle
+                // is handed back as-is (the caller's settle deadline decides).
+                let report = FirstFrameReport::one_traversal(&tree);
+                return Ok((tree, report));
+            }
+            let done = !first_frame_is_unmounted(&tree)
+                || Instant::now() >= deadline
+                || traversals >= FIRST_FRAME_MAX_ATTEMPTS
+                || !is_settled;
+            if done {
+                break;
+            }
+        }
+        // Keep the settled binding as the launch frame whenever the last
+        // traversal did not leave one of its own.
+        let tree = if let Some((frame, block)) = settled {
+            let last_unsettled = !self
+                .last_tree_settle
+                .as_ref()
+                .and_then(|b| b.get("settled"))
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(true);
+            if last_unsettled {
+                self.cached = Some(frame.clone());
+                self.last_tree_settle = block;
+            }
+            frame.tree.clone()
+        } else {
+            self.require_cached_tree()?
+        };
+        let unmounted = first_frame_is_unmounted(&tree);
+        let report = FirstFrameReport {
+            traversals,
+            waited_ms,
+            nodes: ui_tree_node_count(&tree.nodes),
+            placeholder: unmounted && first_frame_is_bare_skeleton(&tree),
+        };
+        if report.placeholder {
+            eprintln!(
+                "acos serve: launch first frame is a window skeleton ({} nodes, no app text) \
+                 after {} traversal(s)/{} ms; reported as placeholder, never as app content",
+                report.nodes, report.traversals, report.waited_ms
+            );
+        }
+        Ok((tree, report))
     }
 
     /// P9: choose the settle mode and pixel capture the next `reset` binds its
@@ -2590,11 +2813,28 @@ impl SessionBackend for ArtSession {
     }
 
     fn launch(&mut self, _apk: &Path) -> Result<LaunchOutcome, BackendError> {
+        // G3c: the launch frame must be the app's *content* frame, not the window
+        // skeleton that exists a moment before the app mounts its own views (see
+        // `bind_first_frame`).
         let previous = self.seen_seq;
-        let reply = self.command(serde_json::json!({"cmd":"tree"}))?;
-        self.absorb(&reply)?;
-        let cached = self.require_cached_frame()?;
-        let frame = cached.observed(previous)?;
+        // P9 (unchanged): a launch's contract is a **fresh** frame, not a
+        // settled one. A screen that keeps animating (Gaten's welcome timeline)
+        // must not fail the launch step — that verdict is `wait_for`'s or
+        // `capture`'s to make, and the settle semantics of an endlessly
+        // animating screen are GR3/E13.7's open owner decision (G3e). The
+        // content-aware retry below traverses with `request_tree_with`, which
+        // records each traversal's settle block; restore the pre-launch value so
+        // the launch step is judged exactly as it was before G3c.
+        let settle_before = self.last_tree_settle.clone();
+        let (_tree, report) = self.bind_first_frame("strict", true)?;
+        self.last_tree_settle = settle_before;
+        let frame = self.require_cached_frame()?.observed(previous)?;
+        let mut meta = frame.tree.frame.clone();
+        if report.placeholder {
+            // The protocol rule: a placeholder must never satisfy a UI
+            // assertion. Say so in the frame itself, not only in prose.
+            meta.meaningful = false;
+        }
         Ok(LaunchOutcome {
             session_id: format!(
                 "s_art_{}",
@@ -2604,15 +2844,15 @@ impl SessionBackend for ArtSession {
                     .unwrap_or_default()
             ),
             package: self.package.clone(),
-            frame: Some(frame.tree.frame.clone()),
-            screenshot_png: Some(frame.frame.png.clone()),
+            frame: Some(meta),
+            screenshot_png: Some(self.require_cached_frame()?.png_bytes()?),
             crashed: None,
             detail: serde_json::json!({
                 "engine": "art",
                 "mode": "live",
                 "activity": self.activity,
                 "apk": self.apk.display().to_string(),
-                "frame": frame.frame.label(),
+                "first_frame": report.to_json(),
                 "provenance": {
                     "frame": "host-observed",
                     "tree": "guest-asserted",
@@ -3277,6 +3517,74 @@ fn processes_mentioning(dir: &Path) -> Vec<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// G3c: the launch first-frame predicate must reject the *window skeleton*
+    /// (decor + `action_bar_root` + `content` + an empty app root, no text) and
+    /// must never touch a mounted screen — including a small, text-free one.
+    #[test]
+    fn the_launch_first_frame_predicate_only_rejects_an_unmounted_skeleton() {
+        use acos_protocol::ui::Bounds;
+        let node = |class: &str, children: Vec<UiNode>| {
+            let mut node = UiNode::new("n", class, Bounds::new(0, 0, 1080, 2209));
+            node.children = children;
+            node
+        };
+        let tree = |nodes: Vec<UiNode>| {
+            UiTree::new(
+                FrameMeta::new(1, "t", "c", 1080, 2400, 420, "h", true),
+                "com.gaten",
+                nodes,
+            )
+        };
+        // Gaten's measured unmounted skeleton: 10 nodes, no text anywhere.
+        let app_root = node("android.widget.FrameLayout", vec![]);
+        let content = node("android.widget.FrameLayout", vec![app_root.clone()]);
+        let action_bar_root = node(
+            "android.widget.LinearLayout",
+            vec![content, node("android.view.ViewStub", vec![])],
+        );
+        let mut skeleton = vec![node("com.android.internal.policy.DecorView", vec![action_bar_root])];
+        for _ in 0..5 {
+            skeleton.push(node("android.view.ViewStub", vec![]));
+        }
+        assert!(
+            first_frame_is_unmounted(&tree(skeleton.clone())),
+            "a 10-node, text-free window skeleton is not app content"
+        );
+        assert!(
+            first_frame_is_bare_skeleton(&tree(skeleton.clone())),
+            "and a frame that never grows past it is a placeholder"
+        );
+
+        // The same skeleton with one app text (the painted welcome screen) is
+        // content: it must never be delayed or labelled as a placeholder.
+        let mut painted = skeleton.clone();
+        painted[0].children[0].children[0].children[0].text = "Set up Gaten".to_string();
+        assert!(!first_frame_is_unmounted(&tree(painted)));
+
+        // A content description or an editor hint counts too.
+        let mut described = skeleton.clone();
+        described[0].children[0].children[0].children[0].content_desc = "Skip".to_string();
+        assert!(!first_frame_is_unmounted(&tree(described)));
+        let mut hinted = skeleton.clone();
+        hinted[0].children[0].children[0].children[0].hint = "Search".to_string();
+        assert!(!first_frame_is_unmounted(&tree(hinted)));
+
+        // A big, text-free tree is a mounted screen (canvas/custom views): the
+        // node budget alone must not make it a placeholder.
+        let wide = vec![node(
+            "android.widget.FrameLayout",
+            (0..FIRST_FRAME_SKELETON_MAX_NODES)
+                .map(|_| node("android.view.View", vec![]))
+                .collect(),
+        )];
+        assert!(!first_frame_is_unmounted(&tree(wide.clone())));
+        // ... and it is never labelled a placeholder either (it is bigger than
+        // the bare skeleton), so a text-free canvas screen keeps its meaning.
+        assert!(!first_frame_is_bare_skeleton(&tree(wide)));
+        // An empty tree (no windows yet) is a skeleton, not content.
+        assert!(first_frame_is_unmounted(&tree(vec![])));
+    }
 
     #[test]
     fn art_capabilities_name_the_protocol_gaps() {

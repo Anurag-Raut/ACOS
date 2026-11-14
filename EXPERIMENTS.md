@@ -1951,6 +1951,99 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   animating-screen semantics; R2a/R2b first-paint + SIGSEGV root cause; a real lesson needs
   AnkiDroid or a WaniKani account (data, not ACOS).
 
+## E13.8 — G3d/G3c: the Gaten launch SIGSEGV is libc's GWP-ASan backtrace chase walking off the stack, and the launch's first frame is now the app's content frame — PASS (root cause named, 40/40 launches, 0 thin first frames) ; re-verified 2026-11-14: 30/30 launches, 0 SIGSEGV, 0 one-node frame, 9/30 labelled placeholder
+
+- **Date / commit:** 2026-11-13; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/g3cd`, branch
+  `fix-g3cd-gaten-launch`, off `main` `11b917c` (branch head recorded in `results/gaten/G3cd.md`).
+  Same read-only Gaten APK as GR1/GR2/GR3/R3 (sha256 `e04c7ffc…`). Gaten source/APK untouched.
+- **Question / goal:** name and fix the root cause of Gaten's rare launch `SIGSEGV` (~1 in 6–10:
+  `SEGV_ACCERR`, thread 2 `com.gaten`, libc frame — R2a/G3d), and make the launch's first frame
+  never a near-empty tree without saying so (G3c).
+- **Hypothesis (from R3's evidence, re-symbolised):** the R3 dump's `rip` is
+  `libc.so android_unsafe_frame_pointer_chase+0x117` (`mov 0x8(%r12),%rcx`, the "return address"
+  read of a frame record), and `SEGV_ACCERR` on a page-aligned address is a `PROT_NONE` stack guard
+  page. That function is `LIBC_PRIVATE` and has exactly **one** consumer in libc: `MaybeInitGwpAsan`
+  installs it as `Options::Backtrace`. So the process died inside **GWP-ASan's sampled-allocation
+  backtrace capture**.
+- **Method:** (a) symbolise the fault against the image's own libc (BuildId `fa3379…`), resolve the
+  only GOT reference to the chase, and check every sysroot/Gaten `.so` for an import (none);
+  (b) A/B the one input that decides GWP-ASan, `GWP_ASAN_PROCESS_SAMPLING` (libc's own lottery
+  `arc4random % 128` unless set), with `ACOS_ART_GWP_ASAN={libc,on,off}`; (c) 60/3/40 guarded Gaten
+  launches through `run-exclusive.sh --task G3CD` + `guarded.sh --mem 8G`, first frame + a 2 s-later
+  tree per rep (`.cache/g3cd/loop.py`); (d) the 5 Gaten scenarios 3× and their 5 negative controls,
+  the 8 positive gates + 3 fail-by-design controls.
+- **Result 1 — root cause named (G3d).** The faulting instruction is the frame-pointer chase reading
+  `frame->return_addr` at `frame+8`; the kernel reports `SEGV_ACCERR` because that address is in a
+  stack guard page. The walk's own bound (`r15`, from `__get_thread()->stack_top`) is not this
+  thread's stack at all, and x86_64 guest code (optimised libraries, JIT/AOT frames) carries no frame
+  pointers, so the walk follows stale stack words. Forcing GWP-ASan on reproduces the exact recorded
+  crash: **4/4 launches** die with `SIGSEGV (SEGV_ACCERR) fault addr <page>`, thread 2 `com.gaten`,
+  `libc.so android_unsafe_frame_pointer_chase+0x117` — the same registers shape as GR3's `tabsb-2`
+  (rbx = 0x80 = 128 entries, r12 = fault-8, end in `0x7ffc…`). That is the causal proof R3 could not
+  get.
+- **Result 2 — before/after (launches, guarded, ART lock).**
+
+  | arm | n | pass | crash | thin (10-node skeleton) first frame | launch p50 / p90 | host load1 |
+  |---|---:|---:|---:|---:|---|---|
+  | before: libc's own GWP-ASan lottery (`ACOS_ART_GWP_ASAN=libc`) | 60 | 59 | 1 (`GUEST_EXITED`, exit 1 **before** the first frame — *not* the SIGSEGV shape; no record kept, unclassified) | **20/59 (34 %)** | 2.336 s / 2.408 s | 1.8–4.7 |
+  | forced: GWP-ASan on (`ACOS_ART_GWP_ASAN=on`) | 3 (+1) | 0 | **4/4 SIGSEGV** at the chase | — | dies in launch | 2.4–2.5 |
+  | after: GWP-ASan off (**new default**) + content-aware first frame | 40 | **40** | **0** | **0/40** | 2.433 s / 2.579 s | 3.3–10.7 |
+
+- **Result 3 — G3c fixed.** `ArtSession::bind_first_frame` (both launch routes: `SessionBackend::launch`
+  for verify and `serve.rs::ensure_launch_tree` for `acos launch`/`acos_launch`) re-traverses while
+  the tree is still the **window skeleton** (no text/content-desc/hint anywhere and ≤ 40 nodes) for up
+  to `ACOS_ART_FIRST_FRAME_MS` (900 ms) / 4 traversals. A retry that does not settle (an animating
+  screen) rolls the frame *and* its settle verdict back to the last settled traversal, so the wait can
+  never turn a passing launch into a `TIMEOUT`; the launch step's P9 contract ("a fresh frame, not a
+  settled one") is byte-for-byte preserved. A frame that never gains content is published with
+  `first_frame.placeholder: true` and `frame.meaningful: false` when it is still the bare skeleton
+  (≤ 16 nodes), and is logged. Every reply carries `result.first_frame`
+  (`traversals`/`waited_ms`/`nodes`/`placeholder`). Measured effect: thin first frames 34 % → **0**,
+  at a launch p50 cost of +97 ms (2.336 → 2.433 s) on the ~1 in 3 launches that used to bind the
+  skeleton.
+- **Scenarios / negatives:** `gaten-home`, `gaten-tabs`, `gaten-settings`, `gaten-search`,
+  `gaten-lesson` **3/3 each (15/15)**; `scenarios/negative/gaten-*-wrong.yaml` **5/5
+  `ASSERTION_FAILED`** (0 false passes).
+- **Gates:** v2-art-counter, w22-counter-reset, w54-dialog-pixels, w42-back-frame, w15-dialog-menu,
+  form-validation, suite/T03-render-good, v1-offscreen-pager **pass**; suite/T03-render-wrong
+  `ASSERTION_FAILED`; negative/offscreen-pager-visible `ELEMENT_OFFSCREEN`; p11-progress-timeout
+  `TIMEOUT`. `cargo test --release --offline` per crate (`acos-art`, `acos-cli`, `acos-verify`) in
+  `results/gaten/G3cd.md`.
+- **False passes:** 0. The negative controls all fail; an unsettled or placeholder launch frame is
+  never counted as app content, and the settle-verdict rollback keeps the launch step's verdict
+  exactly as strict as it was (it does not add tolerance — see the checkpoint note in
+  `results/gaten/G3cd.md` §"verify launch settle").
+- **Decision:** land. GWP-ASan is a *field-sampling* debug allocator: libc enables it for 1 in 128
+  non-zygote processes and, when enabled, every sampled allocation unwinds through a function bionic
+  itself documents as unsafe; that is not something a deterministic verification sandbox may inherit
+  (`ACOS_ART_GWP_ASAN=on` restores it for a debugging run, an explicit `GWP_ASAN_*` value is forwarded
+  verbatim, `libc` reproduces the pre-fix lottery). The launch frame now comes from the app's content
+  or says it is a placeholder.
+- **Re-verification 2026-11-14 (independent repeat on `32baa78`, same source, fresh binaries and logs):**
+  `acos-cli` 147/147, `acos-services` 302/302, `acos-verify` 66/66 green; `acos-art` 127 passed +
+  1 failed in a single-process run — `sandbox_s5::allocator_bomb_…`, which loses the pid budget to the
+  parallel `fork_bomb` test (48 `/bin/sh: fork: retry` lines in the window) and then sees the
+  `systemd-run --user --scope` probe fail `Failed to connect to bus`; **each `sandbox_s5` test in its
+  own process passes (7/7, rc=0)**, so the failure is the test process's parallelism, not the branch
+  (the user systemd bus is up again: `systemctl --user status` → `State: running`). Gates 8 pass +
+  `ASSERTION_FAILED` + `ELEMENT_OFFSCREEN` + `TIMEOUT` exactly as above; the 5 Gaten flows 15/15 and
+  their 5 negatives `ASSERTION_FAILED`. Launch stability n=30: **30/30 pass, 0 SIGSEGV, 0 one-node
+  frame**, p50 2.309 s / p90 2.430 s — but 9/30 bound the window skeleton as a **labelled placeholder**
+  (`first_frame.placeholder: true`, `meaningful: false`, `waited_ms` ≈1.63 s, 243 nodes 2 s later)
+  versus 0/40 in the after arm above, so the content-aware wait is budget-bound rather than
+  unconditional (fail-closed either way, 0 false passes). Details: `results/gaten/G3cd.md` §Checkpoint 3.
+  Also found (pre-existing, `cgroup.rs` untouched): `host_scope_capability()`'s per-process `OnceLock`
+  makes `refuses_to_run_when_no_cgroup_can_be_created` pass only when it is the first probe in the
+  process — a test-isolation defect in the S5 binary, not a product defect.
+- **Open risks:** (1) the before arm's single loss is an exit-1 `GUEST_EXITED` before the first frame
+  with no kept tree — a *different* class from the GWP-ASan SIGSEGV, unnamed and unmeasured at n>60;
+  (2) the fix removes the crash by not using the sampled allocator, not by making bionic's chase
+  safe — a guest that deliberately enables GWP-ASan (env) can still hit it; (3) the 900 ms/4-traversal
+  budget is a heuristic on the measured skeleton shape (Gaten 10 nodes vs 243), documented and
+  observable in `first_frame`; (4) the G3c wait only *adds* a wait where a text-free small tree was
+  found — an app whose first screen is text-free and small pays one extra traversal and is labelled a
+  placeholder (fail-closed, never a false pass).
+
 ## E2.14 — H15: M6 reset profiled — 117 ms of the strict bind is a framework animator run, and the 25 % target is not reachable without a strict-rule change — MEASURED (partial: −3.9 % fast, −0.6 % strict)
 
 - **Experiment ID / name:** H15 — cut M6 reset (`strict` 333–342 ms / `fast` 210 ms p50); reset is 24 % of the agent loop with animations on and ~48 % with them off.
@@ -2015,7 +2108,7 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | Gaten-vs-device footer delta | **0 px** (`report`, phone geometry nav 80); `report` nav 60 = +20 px; GR1 `carve` = +60 px | `wm-w7-insets` | W7, E13.5 | 2026-11-13 | first model that reproduces the device footer |
 | Gaten-vs-device SSIM | **0.87960** (`report`, nav 80) vs 0.84854 GR1 / 0.74518 recomputed before | `wm-w7-insets` | W7, E13.5 | 2026-11-13 | >16/255 pixels 14.56 % → 7.20 % |
 | False passes | **0**, class closed at the root: selectors/asserts/taps match user-visible nodes only; off-screen-only match = `ELEMENT_OFFSCREEN` | `verify-v1-visibility` | V1, E13.4 | 2026-11-13 | V1 (current main) |
-| Gaten flows passing (real ART) | **gaten-home 14/14 3/3; gaten-tabs 5/6; gaten-settings 3/3; gaten-search 3/3; gaten-lesson 3/3** (animations off) | branch `gaten-gr3-flows` (off `main` `10778f9`) | GR3, E13.7 | 2026-11-13 | new row; one tab rep lost to the known R2a SIGSEGV; onboarding taps are `settle: fast` navigation, every claim after them strict |
+| Gaten flows passing (real ART) | **15/15: gaten-home, gaten-tabs, gaten-settings, gaten-search, gaten-lesson 3/3 each**, 5/5 negatives `ASSERTION_FAILED`; launches **40/40, 0 crash, 0 thin first frames** (default config) | branch `fix-g3cd-gaten-launch` (off `main` `11b917c`) | E13.8, G3cd | 2026-11-13 | supersedes the GR3 row (E13.7): the tab loss was the GWP-ASan launch SIGSEGV, now named and removed; the launch frame is the app's content frame or a labelled placeholder |
 
 ## E9.1 — T1: workspace test health — PASS for the hang and the stale goldens; 5 real failures remain and are filed
 
@@ -2102,12 +2195,12 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | T1e | `render_views` pipeline coverage: `form-validation`/`text-input` hit `Settings$Config.getContentResolver` NPE; `widget-gallery` hits unsupported `PathParser.nInterpolatePathData` (test records `PIPELINE-FAIL`, does not false-pass) | render corpus coverage | 5/5 pipeline scenes | high | medium | low | **open (T1, E9.1)** |
 | H1 | Strict numbers drop after event settle; re-measure M3–M8 and take cheap wins | M4/M6/M7/M5 | — | — | — | — | **done (H6)**: M7 151→41, M4 440→309, M6 463→342 |
 | H2 | Early post-first-frame concurrent GC (Z7) on the exec path | M1/M2 | −23–30 MiB/session | high | low | low | **accepted: product default, E2.10** (H6 numbers are pre-H2; re-baseline) |
-| R2a | Gaten launch flake: SIGSEGV after first frame (~1/10). **Diagnosability done (E13.6):** the guest now reports fault addr / `si_code` / faulting thread / ART backtrace with mapped library + offset, keeps its run tree, and `session-exit.json.native_crash` reaches the agent; crash rate 1/10 → **0/40** but the root cause is still unnamed (not reproduced at n=40). Remaining: n≥100 to separate rare from fixed, then bisect the named library/offset | verified-launch stability | name the frame, then 10/10 | high (evidence path proven with a deterministic fault) | low | low | **diagnosability done; root cause open** (R3 §6) |
+| R2a | Gaten launch flake: SIGSEGV after first frame (~1/10). **Fixed (E13.8):** the fault is libc's GWP-ASan sampled-allocation backtrace (`android_unsafe_frame_pointer_chase+0x117`), enabled for 1 in 128 guest processes by libc's own lottery; the frame-pointer walk follows a guard page (`SEGV_ACCERR`) on frame-pointer-free guest code. Guests now get `GWP_ASAN_PROCESS_SAMPLING=0` (`ACOS_ART_GWP_ASAN=on|libc` are the seams). Forced-on: 4/4 SIGSEGV; default: 40/40 launches, 0 crash. Residual: one exit-1 `GUEST_EXITED` before the first frame in the 60-launch before-arm is a different, unnamed class | verified-launch stability | name the frame, then 10/10 | high | low | low | **done, E13.8/G3cd** (root cause named; one separate exit-1 class remains open) |
 | R2b | W6 `+1080 px` fragment offset: move `ACOSLAUNCH_GEOM_TRACE` to `application-created`, keep failing runs, n=20. Then a first-measure race vs a pager-translation source is decidable from `win_frame` vs `app_cfg` | layout correctness | catch + fix the root cause | medium | low | low | **next** (R2 §6) |
 | W7a | `report` is faithful (Gaten footer 0 px, SSIM 0.87960) but cannot become the default while `w42-back-frame` changes one AA row (G: 210→211). Decide: accept the changed pixel expectation as more faithful, or make strict capture tolerant of a single AA row without masking real moves. `gaten-home`'s forever-looping welcome also needs a strict-settle answer | verification semantics / default | `carve` → `report` default | high (measured) | low (owner decision) / medium (settle) | medium | **owner decision** (W7, E13.5) |
 | R2c | Per-view canvas for the ART guest without a GPU: opt-in per-view nested `Bitmap` canvas + blit (R2 §4.3) vs a `libhwui`-shim `RenderNode`/`HardwareRenderer` | SVG/wordmark fidelity | `canvasIsViewPx=true` | medium | medium/high | medium (draw cost 1.5–3×) | **owner decision** (R2 §4) |
 | G3a | **Scenario input could not request the API's existing fast navigation settle**, so every tap on Gaten's 200 ms-retry onboarding pages was a strict `queue` timeout. Fixed: `settle: fast` on scenario `tap`/`type`/`key`, forwarded through `TrustGuard`; assertions still reject fast | reachable owner flow | 3/3 after the fix | high | low | low | **done, E13.7/GR3** |
 | G3b | **Strict-settle probe wake over-driven the guest**: 20 ms host requests re-asked even after a sample arrived (~50 full tree walks/s under the 10 s Reanimated loop); likely the `probe-floor` starvation. Fixed to 50 ms and no re-ask until the probe sequence moves | probe liveness / tree age | no probe-floor at long n | medium | low | low | **fixed in code, E13.7; still prove at a 60 s pathological n** |
-| G3c | **First frame can be a 1-node blank tree** (old W6/R2a first-paint shape). An assert on the launch frame fails even though the app paints next; the strict first tap re-traverses and recovers it. Mitigated in scenarios (no launch-frame assert) | first-frame predicate / Gaten first paint | launch frame is the app's content | medium | medium | medium | **open, classified; R2a/R2b** |
-| G3d | **Gaten launch SIGSEGV still occurs** (1 of 6 `gaten-tabs` runs in GR3): `SIGSEGV code 2 (SEGV_ACCERR)`, thread 2 `com.gaten`, libc frame; R3 evidence path works | ART guest native fault | name the faulting frame, then 10/10 | high | low | low | **open, same as R2a (E13.6 evidence)** |
+| G3c | **First frame can be a near-empty tree** (1 node in GR3, **10 nodes in 34 % of 60 measured launches**, 243 two seconds later). Fixed (E13.8): `ArtSession::bind_first_frame` re-traverses while the tree is still the window skeleton (no text/content-desc/hint, ≤ 40 nodes) within 900 ms / 4 traversals; a retry that does not settle rolls the frame *and* its settle verdict back, so no launch turns into a TIMEOUT; a frame that never gains content is `first_frame.placeholder` + `meaningful:false` | first-frame predicate / Gaten first paint | launch frame is the app's content | medium | medium | medium | **done, E13.8** (34 % thin → 0/40; launch p50 2.336 → 2.433 s) |
+| G3d | **Gaten launch SIGSEGV** (1 of 6 `gaten-tabs` runs in GR3): `SIGSEGV code 2 (SEGV_ACCERR)`, thread 2 `com.gaten`, libc frame. Root cause named (E13.8): GWP-ASan's sampled-allocation backtrace, `android_unsafe_frame_pointer_chase+0x117` (`mov 0x8(%r12),%rcx`) reading a stack guard page; the only GOT consumer of that function in libc is `MaybeInitGwpAsan`. Fixed by keeping the sampled allocator out of guests | ART guest native fault | name the faulting frame, then 10/10 | high | low | low | **done, E13.8** (forced-on 4/4 crash reproduces it; default 40/40 clean) |
 | G3e | **No verification semantics for a screen that animates forever in a region that does not matter.** Options (stable tree content, region mask, navigation-only fast, explicit non-settle assertion) + false-pass analysis in `results/gaten/GR3.md` §4.3 | verify semantics | owner decision | — | — | — | **owner decision; do not weaken until then** |

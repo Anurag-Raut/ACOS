@@ -997,6 +997,74 @@ pub fn keep_run_for_guest_crash(run: RunDir, detail: serde_json::Value) -> Optio
     Some(path)
 }
 
+// ------------------------------------------------- guest GWP-ASan policy --
+
+/// `ACOS_ART_GWP_ASAN` (default **off**): give the guest libc's GWP-ASan
+/// sampling allocator on purpose.
+///
+/// GWP-ASan is a *field-sampling* debugging allocator, not a general-purpose
+/// one: `MallocInitImpl` calls `MaybeInitGwpAsanFromLibc` on the first malloc of
+/// every process whose program name is not `app_process64`
+/// (`bionic/libc/bionic/malloc_common_dynamic.cpp`), and that call picks the
+/// process with `arc4random_uniform`-style sampling — `__libc_safe_arc4random_buf`
+/// byte `% 128 == 0`.
+///
+/// When it is on, every sampled allocation captures a backtrace through
+/// `Options::Backtrace = android_unsafe_frame_pointer_chase`
+/// (`bionic/libc/bionic/gwp_asan_wrappers.cpp:258`). That function
+/// (`bionic/libc/bionic/android_unsafe_frame_pointer_chase.cpp`) walks the
+/// frame-pointer chain from the caller outward, and it dereferences
+/// `frame->return_addr` at `frame + 8` after only checking that `frame` itself
+/// is below `__get_thread_stack_top()`. On x86_64 the guest's optimized and JIT
+/// frames carry no frame pointers, so the walk follows stale stack words; the
+/// last 8 bytes of the topmost stack page are a legal `frame`, and reading
+/// `frame + 8` lands in the guard page → `SIGSEGV (SEGV_ACCERR)` at
+/// `android_unsafe_frame_pointer_chase+0x117` (`mov 0x8(%r12),%rcx`) on a thread
+/// named after the app, i.e. the G3d/R2a launch flake.
+///
+/// ACOS decides, so the guest is deterministic: unless the caller asks
+/// (`ACOS_ART_GWP_ASAN=on`, or an explicit host `GWP_ASAN_*` value), the guest
+/// gets `GWP_ASAN_PROCESS_SAMPLING=0`, which disables GWP-ASan cleanly
+/// (`MaybeInitGwpAsan`: `process_sample_rate == 0` → returns false before
+/// `arc4random` is consulted).
+///
+/// `ACOS_ART_GWP_ASAN=libc` (or `default`) forwards nothing, i.e. libc's own
+/// behaviour — the pre-G3d baseline, kept as an A/B seam and as the only way to
+/// reproduce the original flake on one binary.
+///
+/// Returns the environment pairs to add to the guest sandbox.
+#[must_use]
+pub fn gwp_asan_guest_env(
+    host_env: impl Fn(&str) -> Option<String>,
+    force: Option<&str>,
+) -> Vec<(String, String)> {
+    const KNOBS: [&str; 4] = [
+        "GWP_ASAN_SAMPLE_RATE",
+        "GWP_ASAN_PROCESS_SAMPLING",
+        "GWP_ASAN_MAX_ALLOCS",
+        "GWP_ASAN_RECOVERABLE",
+    ];
+    // An operator can re-enable the allocator for one debugging run, and an
+    // explicit host value is passed through unchanged rather than overridden.
+    let mode = force.map(str::trim);
+    let asked = matches!(mode, Some("1" | "on" | "true" | "yes"));
+    let libc = matches!(mode, Some("libc" | "default" | "inherit"));
+    let explicit: Vec<(String, String)> = KNOBS
+        .iter()
+        .filter_map(|k| host_env(k).map(|v| ((*k).to_string(), v)))
+        .collect();
+    if !explicit.is_empty() {
+        return explicit;
+    }
+    if libc {
+        return Vec::new();
+    }
+    if asked {
+        return vec![("GWP_ASAN_PROCESS_SAMPLING".to_string(), "1".to_string())];
+    }
+    vec![("GWP_ASAN_PROCESS_SAMPLING".to_string(), "0".to_string())]
+}
+
 impl Drop for RunDir {
     fn drop(&mut self) {
         if self.keep {
@@ -1772,6 +1840,42 @@ mod tests {
             assert!(!keeps_run_tree_for_crash(Some(guest_signal), false));
         }
         assert!(!keeps_run_tree_for_crash(None, true));
+    }
+
+    /// G3d: the guest gets libc's sampling allocator disabled unless a caller
+    /// asks for it, and an explicit host value is passed through untouched.
+    #[test]
+    fn gwp_asan_is_off_for_guests_unless_asked() {
+        let none = |_: &str| None;
+        assert_eq!(
+            gwp_asan_guest_env(none, None),
+            vec![("GWP_ASAN_PROCESS_SAMPLING".to_string(), "0".to_string())],
+            "default: deterministic guest, no sampling allocator"
+        );
+        assert_eq!(
+            gwp_asan_guest_env(none, Some("off")),
+            vec![("GWP_ASAN_PROCESS_SAMPLING".to_string(), "0".to_string())]
+        );
+        assert_eq!(
+            gwp_asan_guest_env(none, Some("on")),
+            vec![("GWP_ASAN_PROCESS_SAMPLING".to_string(), "1".to_string())],
+            "ACOS_ART_GWP_ASAN=on restores libc's own sampling for one run"
+        );
+        // An explicit host knob wins and is forwarded verbatim (A/B runs).
+        let host = |k: &str| {
+            (k == "GWP_ASAN_PROCESS_SAMPLING").then(|| "1".to_string())
+        };
+        assert_eq!(
+            gwp_asan_guest_env(host, Some("off")),
+            vec![("GWP_ASAN_PROCESS_SAMPLING".to_string(), "1".to_string())]
+        );
+        let rate = |k: &str| (k == "GWP_ASAN_SAMPLE_RATE").then(|| "1".to_string());
+        assert_eq!(
+            gwp_asan_guest_env(rate, None),
+            vec![("GWP_ASAN_SAMPLE_RATE".to_string(), "1".to_string())]
+        );
+        // `libc` is the pre-G3d baseline: forward nothing, let libc decide.
+        assert!(gwp_asan_guest_env(none, Some("libc")).is_empty());
     }
 
     /// R3 retention cap: the marker identifies *kept crash* trees, the oldest are
