@@ -254,6 +254,11 @@ pub enum ErrorCode {
     /// Carries the guest exit code, terminating signal and stage; inspect them
     /// to separate an app crash from a host condition.
     GuestExited,
+    /// The persistent zygote keeper (`ACOS_ART_ZYGOTE=on`) is gone or stopped
+    /// acking a verb. The session is not served from the exec path while it
+    /// reports zygote isolation: the reply names the keeper's exit status and
+    /// the last zygote log lines, and the session is closed fail-closed.
+    ZygoteDead,
 
     // ---- harness ----------------------------------------------------------
     /// ACOS itself failed (distinct from an app crash).
@@ -425,6 +430,7 @@ impl ErrorCode {
             ErrorCode::HostMemoryLimit => "HOST_MEMORY_LIMIT",
             ErrorCode::SeccompUnavailable => "SECCOMP_UNAVAILABLE",
             ErrorCode::GuestExited => "GUEST_EXITED",
+            ErrorCode::ZygoteDead => "ZYGOTE_DEAD",
             ErrorCode::Internal => "INTERNAL",
         }
     }
@@ -657,6 +663,9 @@ impl ErrorCode {
             ErrorCode::GuestExited => {
                 "The guest process ended before the requested stage. Read error.details.session_exit for guest_exit, guest_signal, stage and the guest's own ACOSLAUNCH crash line: exit 126/signal 31 with a guard ERR is a host isolation condition; a guest SIGSEGV/abort or a fatal ART log is an app crash. Do not retry unchanged until the cause is named."
             }
+            ErrorCode::ZygoteDead => {
+                "The persistent zygote keeper died or stopped acking (ACOS_ART_ZYGOTE=on). Read error.details.zygote for the keeper exit status and the last zygote log lines; the session is closed, not silently re-run on the exec path. Re-launch the session (a fresh keeper boots a new zygote and a new boot epoch) after the log names the cause."
+            }
             ErrorCode::Internal => {
                 "ACOS harness failure, not app behaviour. Capture request/scenario/artifacts and report it; do not count it as a pass."
             }
@@ -682,6 +691,7 @@ impl ErrorCode {
                 | ErrorCode::ApkIo
                 | ErrorCode::HostDiskFull
                 | ErrorCode::HostMemoryLimit
+                | ErrorCode::ZygoteDead
         )
     }
 
@@ -735,7 +745,8 @@ impl ErrorCode {
             | ErrorCode::RamAbort
             | ErrorCode::ResourceLimit
             | ErrorCode::HostDiskFull
-            | ErrorCode::HostMemoryLimit => ErrorClass::HostGuard,
+            | ErrorCode::HostMemoryLimit
+            | ErrorCode::ZygoteDead => ErrorClass::HostGuard,
 
             // Harness/parse/protocol/invariant failures and codes that need
             // triage before they can be attributed (GuestExited, HostPanic).
@@ -1008,6 +1019,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::HostMemoryLimit,
     ErrorCode::SeccompUnavailable,
     ErrorCode::GuestExited,
+    ErrorCode::ZygoteDead,
     ErrorCode::Internal,
 ];
 

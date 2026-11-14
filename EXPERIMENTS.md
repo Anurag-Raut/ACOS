@@ -2183,7 +2183,7 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   (`ACOS_ART_ZYGOTE=on`), adds the per-child cgroup memory limit (F3) and then runs the Z7 loop for
   the ≥25 % gate. Exact commands and acceptance: `results/handoff/ZPROD1.md`.
 
-## E2.18 — ZPROD2: the persistent zygote's host half (`PersistentZygote`) — MEASURED (unit/gateway level); engine wiring NOT done
+## E2.18 — ZPROD2/ZPROD3: the persistent zygote's host half and its engine wiring — MEASURED (unit/gateway level); real-ART gates pending
 
 - **Date / commit:** 2026-11-14; branch `zygote-prod-1` (merge of `main` `0c0b322`, then the step-1
   commit). Design `docs/decisions/2026-11-14-zygote-prod.md`. (E2.17 was claimed by ZPROD1's
@@ -2217,9 +2217,31 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   `acos_art::Error::Zygote` variant — no engine line changed, so the flag-off path is untouched by
   construction (and `-p acos-cli` 147/0 confirms it). 0 false passes; nothing is claimed at gate
   level.
+- **ZPROD3 (step 2, same number — orchestrator decision 2026-11-14): engine wiring landed.**
+  `crates/acos-cli/src/engine/zygote_host.rs` is the daemon's owner of the keepers
+  (`ZygoteHost`: one keeper per `ZygoteKey`, `prepare`/`wait_contract_and_spawn`/`kill`/
+  `boot_epoch`/`shutdown_all`, `Mutex`-interior so the engine's `&self` verbs work).
+  `ArtSession::start_with_zygote` adds the hook to the existing launch body and keeps
+  `start_with_options` byte-identical (it delegates with no zygote); with `ACOS_ART_ZYGOTE=on` the
+  order is prepare → launcher with `ACOS_ZYGOTE_SESSION`/`ACOS_ZYGOTE_PROBE` → `argv`+`binds` →
+  `spawn <tag>` → ready line. `reset` = old launcher group down → `kill <tag>` → fresh launcher for
+  the **same** tag → `spawn`, and the reply gains `isolation:"fresh-zygote-child"`, `child_pid`,
+  `previous_child_pid`, `run_root`, `zygote_boot_epoch`, `zygote_tag` and
+  `memory_scope:"shared-scope (per-child accounting deferred, F3)"`. Those fields appear on the
+  reset reply, `acos_launch` and `acos_status` and **only** for a real zygote child (F3 is deferred,
+  so no reply may imply a per-child limit). `ErrorCode::ZygoteDead` (`host_guard`, retryable) is the
+  only outcome of a keeper failure: the launcher is killed and no exec-path session is substituted
+  (§6, 0 silent fallbacks). `ServeEngine::shutdown` calls `ZygoteHost::shutdown_all`, and
+  `close`/`reset` also `kill` their own child. New `-p acos-cli` tests (mock keeper, no ART):
+  flag-off touches no zygote (no keeper, no directory), reply fields exist only with a zygote child,
+  dead keeper → `ZYGOTE_DEAD` + `details.zygote.fallback:"none"` + registry empty, and
+  `shutdown_all` leaves no keeper pid and no child behind while the reset refork reuses the tag and
+  keeps the boot epoch. Real-ART gate runs for this increment are queued on the host ART lock; see
+  `results/handoff/ZPROD3.md` for the exact commands and whatever the lock allowed.
 - **Conclusion / next:** step 2 (engine wiring: `ZygoteHost`, `ArtSession` zygote branch,
-  reset/status reply fields, `ErrorCode::ZygoteDead`, `shutdown_all`) is the immediate next task,
-  then the flag-off gate list and the flag-on counter/reset/Gaten checks from the task brief.
+  reset/status reply fields, `ErrorCode::ZygoteDead`, `shutdown_all`) is landed; the flag-off gate
+  list and the flag-on counter/reset/Gaten checks are the evidence that remains, then ZYGOTE_DEAD
+  restart/new-epoch/refork (ZPROD4) and F3 per-child cgroups.
 
 ## E13.10 — SE1: an opt-in per-step `expect_change` closes GR4's vacuous-flow gap (a no-op tap can no longer pass) — PASS (ADR-0026 decision 2 shipped; 0 false passes)
 

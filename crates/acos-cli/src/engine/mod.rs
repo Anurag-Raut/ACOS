@@ -34,6 +34,7 @@ pub mod art;
 pub mod fake;
 pub mod rust_vm;
 pub mod serve;
+pub mod zygote_host;
 
 /// The explicit execution engine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

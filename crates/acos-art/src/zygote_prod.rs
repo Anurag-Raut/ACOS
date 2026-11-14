@@ -249,6 +249,20 @@ impl ZygoteRegistry {
         }
     }
 
+    /// The keeper launcher pids this registry owns (a leak check reads these:
+    /// after `shutdown_all` none of them may be alive).
+    pub fn keeper_pids(&self) -> Vec<u32> {
+        self.keepers
+            .values()
+            .filter_map(PersistentZygote::keeper_pid)
+            .collect()
+    }
+
+    /// The last child pid this registry handed out for `tag` of `key`.
+    pub fn child_pid_of(&self, key: &ZygoteKey, tag: u32) -> Option<u32> {
+        self.keepers.get(key).and_then(|k| k.child_pid_of(tag))
+    }
+
     pub fn epochs(&self) -> HashMap<String, String> {
         self.keepers
             .iter()
@@ -421,6 +435,11 @@ impl PersistentZygote {
 
     pub fn idle_exit_s(&self) -> u64 {
         self.idle_exit_s
+    }
+
+    /// The keeper launcher's pid (the process this struct reaps on shutdown).
+    pub fn keeper_pid(&self) -> Option<u32> {
+        self.keeper.as_ref().map(Child::id)
     }
 
     pub fn child_pid_of(&self, tag: u32) -> Option<u32> {

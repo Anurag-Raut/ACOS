@@ -52,6 +52,7 @@ use acos_protocol::{ErrorCode, FrameMeta, LogLevel, Selector};
 use acos_verify::backend::{CrashRecord, InputAck, InputDelivery, LogRecord};
 use acos_verify::{BackendError, LaunchOutcome};
 
+use super::zygote_host::{reply_fields, zygote_dead, ZygoteFacts, ZygoteHost};
 use super::{
     key_code, live_frame_unavailable, parse_bounds, stale_frame, ui_tree_from_json, Engine,
     FrameEvidence, Mode, ObservedFrame, SessionBackend, SessionCapabilities, TeardownReport,
@@ -201,6 +202,29 @@ pub struct ArtSession {
     /// (orderly activity lifecycle vs. killed after the bounded grace) and how
     /// long it took. Reported by `acos_destroy`; never guessed.
     last_teardown: Option<(TeardownPath, u64)>,
+    /// ZPROD3: the keeper this session runs on. `None` with `ACOS_ART_ZYGOTE`
+    /// off (the exec path, byte-identical to `main`) and also on every session
+    /// that failed to get a zygote child (that session does not exist: the
+    /// failure is a structured `ZYGOTE_DEAD`, never a silent exec fallback).
+    zygote: Option<ZygoteBinding>,
+    /// The pid the most recent zygote reset killed (reply field only).
+    zygote_previous_child_pid: Option<u32>,
+}
+
+/// One session's binding to a keeper child (P2, design §3/§4).
+struct ZygoteBinding {
+    host: Arc<ZygoteHost>,
+    key: acos_art::zygote_prod::ZygoteKey,
+    facts: ZygoteFacts,
+}
+
+/// How a session asks for a zygote child. Built by
+/// [`ArtSession::start_with_zygote`], and again by `reset` with
+/// `reuse_tag: Some(..)` so the reset refork reuses the killed tag (§4).
+pub struct ZygoteStart {
+    host: Arc<ZygoteHost>,
+    key: acos_art::zygote_prod::ZygoteKey,
+    reuse_tag: Option<u32>,
 }
 
 /// How an explicit session destruction ended (GL1).
@@ -1098,6 +1122,43 @@ impl ArtSession {
         animations: &str,
         insets: &str,
     ) -> Result<ArtSession, BackendError> {
+        Self::start_inner(apk, artifacts, animations, insets, None)
+    }
+
+    /// ZPROD3: start a session that must run on a persistent zygote child
+    /// (`ACOS_ART_ZYGOTE=on`). With the flag off (or a disabled host) this is
+    /// exactly [`ArtSession::start_with_options`]: the launcher argv, the call
+    /// order and the replies are unchanged.
+    ///
+    /// With the flag on the order is the design's (§2/§4.3/§4.4): prepare the
+    /// session dir → spawn the launcher with `ACOS_ZYGOTE_SESSION` → wait for
+    /// its `argv` and publish `binds` → `spawn <tag>` on the keeper → only then
+    /// read the launcher's ready line (the ready line means the forked child
+    /// connected to this session's own sockets). Any zygote failure returns a
+    /// structured `ZYGOTE_DEAD`; the launcher is killed and no exec-path session
+    /// is ever substituted.
+    pub fn start_with_zygote(
+        apk: &Path,
+        artifacts: &Path,
+        animations: &str,
+        insets: &str,
+        zygote: Option<Arc<ZygoteHost>>,
+    ) -> Result<ArtSession, BackendError> {
+        let start = zygote.map(|host| ZygoteStart {
+            key: zygote_key_of(apk, insets, animations),
+            host,
+            reuse_tag: None,
+        });
+        Self::start_inner(apk, artifacts, animations, insets, start)
+    }
+
+    fn start_inner(
+        apk: &Path,
+        artifacts: &Path,
+        animations: &str,
+        insets: &str,
+        zygote: Option<ZygoteStart>,
+    ) -> Result<ArtSession, BackendError> {
         let insets: &'static str = match acos_services::wms::parse_insets_mode(insets) {
             Some(acos_services::wms::InsetsMode::Carve) => "carve",
             Some(acos_services::wms::InsetsMode::Report) => "report",
@@ -1184,6 +1245,29 @@ impl ArtSession {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        // ZPROD3 (design §4.3): the session launcher runs in *foreign-guest*
+        // mode: it builds its own sandbox, peer, `ServiceHost` and contract, but
+        // does not start ART — the keeper forks the child that connects to these
+        // sockets. `prepare` boots the keeper on first use and wipes this
+        // session's run root/sock dir, so nothing the previous child wrote can
+        // survive a reset. Every failure here is `ZYGOTE_DEAD`; there is no
+        // fallback to the exec path while the flag is on.
+        let mut zygote_prepared: Option<(Arc<ZygoteHost>, acos_art::zygote_prod::ZygoteKey, u32)> =
+            None;
+        if let Some(start) = zygote.as_ref() {
+            if start.host.enabled() {
+                let tag = start
+                    .host
+                    .prepare(&start.key, &binary, apk, start.reuse_tag)
+                    .map_err(|error| zygote_dead(&error.to_string()))?;
+                let session_dir = start.host.session_dir(&start.key, tag);
+                command
+                    .env("ACOS_ZYGOTE_SESSION", &session_dir)
+                    // Z4: the forked child publishes the read-only tree probe.
+                    .env("ACOS_ZYGOTE_PROBE", "1");
+                zygote_prepared = Some((Arc::clone(&start.host), start.key.clone(), tag));
+            }
+        }
         // Display geometry. The defaults are the API-34 emulator profile the
         // existing baselines were captured on; `ACOS_ART_*` lets a caller match
         // a *reference device* exactly (1080x2400 @ 400 dpi with a 108 px status
@@ -1257,6 +1341,32 @@ impl ArtSession {
             ),
         })?;
         let _pid = child.id();
+        // ZPROD3 (design §4.3/§4.4): the launcher published `argv` during its
+        // own launch; publish this session's `binds` and fork **one** fresh child
+        // from the keeper, all before the launcher's ready line (that line means
+        // the child connected to this session's sockets). A dead keeper or a
+        // missing ack is a structured `ZYGOTE_DEAD` and the launcher is killed —
+        // never an exec-path session reported as zygote isolation (§6).
+        let mut zygote_facts: Option<ZygoteFacts> = None;
+        if let Some((host, key, tag)) = zygote_prepared.as_ref() {
+            match host.wait_contract_and_spawn(key, *tag, Duration::from_secs(180)) {
+                Ok(spawned) => {
+                    zygote_facts = Some(ZygoteFacts::of(
+                        &spawned,
+                        host.boot_epoch(key).unwrap_or_default(),
+                    ));
+                }
+                Err(error) => {
+                    // SAFETY: the launcher was spawned with `process_group(0)`,
+                    // so `-_pid` names its group and no other.
+                    unsafe {
+                        libc::kill(-(_pid as i32), libc::SIGKILL);
+                    }
+                    let _ = child.wait();
+                    return Err(zygote_dead(&error.to_string()));
+                }
+            }
+        }
         dm6_trace(serde_json::json!({
             "event": "spawn",
             "session": artifacts.display().to_string(),
@@ -1364,6 +1474,11 @@ impl ArtSession {
             reset_settle_timeout_ms: None,
             closed: false,
             last_teardown: None,
+            zygote: match (zygote_prepared, zygote_facts) {
+                (Some((host, key, _tag)), Some(facts)) => Some(ZygoteBinding { host, key, facts }),
+                _ => None,
+            },
+            zygote_previous_child_pid: None,
         };
         // The ready line is the protocol's first reply. If the session dies
         // before it, there is no live frame at all: say so by name and keep the
@@ -1455,6 +1570,30 @@ impl ArtSession {
     /// step clock starts, so no step could be charged with it.
     pub const fn session_start_ms(&self) -> u64 {
         self.session_start_ms
+    }
+
+    /// ZPROD3: the zygote child facts this session really runs on, or `None`
+    /// with `ACOS_ART_ZYGOTE` off. Facts are the keeper's observed acks, never
+    /// host guesses, so a reply built from them cannot claim a zygote it did not
+    /// get.
+    pub fn zygote_facts(&self) -> Option<&ZygoteFacts> {
+        self.zygote.as_ref().map(|binding| &binding.facts)
+    }
+
+    /// The child pid the most recent zygote reset killed.
+    pub fn zygote_previous_child_pid(&self) -> Option<u32> {
+        self.zygote_previous_child_pid
+    }
+
+    /// ZPROD3: the zygote reply fields (`isolation`, `child_pid`,
+    /// `previous_child_pid`, `run_root`, `zygote_boot_epoch`, `memory_scope`).
+    /// `None` when the session is not a zygote child, so the flag-off reply is
+    /// unchanged byte for byte.
+    pub fn zygote_reply_fields(&self) -> Option<serde_json::Map<String, serde_json::Value>> {
+        reply_fields(
+            self.zygote.as_ref().map(|binding| &binding.facts),
+            self.zygote_previous_child_pid,
+        )
     }
 
     /// The bound frame's identity: `(frame_seq, md5, captured_at)`.
@@ -3081,6 +3220,20 @@ impl SessionBackend for ArtSession {
         let artifacts = self.artifacts.clone();
         let settle = self.settle.clone();
         let boot_ms = self.session_start_ms;
+        // ZPROD3 (design §4): a zygote reset is `kill <tag>` + a fresh launcher
+        // for the *same* tag + `spawn <tag>`. The zygote itself, its pid and its
+        // boot epoch are untouched; a reset that silently restarted the keeper
+        // would change the epoch, which the reply states.
+        let zygote_link = self
+            .zygote
+            .as_ref()
+            .map(|binding| (Arc::clone(&binding.host), binding.key.clone(), binding.facts.tag));
+        let zygote_previous_child_pid = self.zygote.as_ref().map(|b| b.facts.child_pid);
+        let zygote_start = self.zygote.as_ref().map(|binding| ZygoteStart {
+            host: Arc::clone(&binding.host),
+            key: binding.key.clone(),
+            reuse_tag: Some(binding.facts.tag),
+        });
         // Same teardown rule as `close`: the old guest's whole process group
         // must be gone before the replacement starts (one ART guest at a time).
         //
@@ -3097,12 +3250,23 @@ impl SessionBackend for ArtSession {
             return Err(error);
         }
         let stop_ms = phase_started.elapsed().as_millis() as u64;
+        // The old launcher's group is gone; now end the old child's process
+        // group inside the keeper before its run root is wiped (§4.1/§4.2). A
+        // keeper that cannot ack the kill is `ZYGOTE_DEAD` and this session stays
+        // provably closed (W55): no bound frame, no verb answers from it.
+        if let Some((host, key, tag)) = zygote_link.as_ref() {
+            if let Err(error) = host.kill(key, *tag) {
+                self.invalidate_frame();
+                return Err(zygote_dead(&error.to_string()));
+            }
+        }
         let relaunch_started = Instant::now();
-        let mut fresh = match ArtSession::start_with_options(
+        let mut fresh = match ArtSession::start_inner(
             &apk,
             &artifacts,
             self.animations,
             self.insets(),
+            zygote_start,
         ) {
             Ok(fresh) => fresh,
             Err(error) => {
@@ -3114,6 +3278,7 @@ impl SessionBackend for ArtSession {
         let start_ms = relaunch_started.elapsed().as_millis() as u64;
         fresh.seq_offset = offset;
         fresh.log_offset = log_offset;
+        fresh.zygote_previous_child_pid = zygote_previous_child_pid;
         // Session-level cost accounting spans the relaunch.
         fresh.settle = settle;
         fresh.session_start_ms = boot_ms.saturating_add(fresh.session_start_ms);
@@ -3157,7 +3322,15 @@ impl SessionBackend for ArtSession {
             return Ok(());
         }
         self.closed = true;
-        self.shutdown()
+        let stopped = self.shutdown();
+        // ZPROD3: a zygote session's app child lives inside the keeper's
+        // sandbox, so closing the session must end *that child* too (by its
+        // process group). A keeper that is already gone is not an error here:
+        // `shutdown_all` on serve exit ends every child with its zygote.
+        if let Some(binding) = self.zygote.as_ref() {
+            let _ = binding.host.kill(&binding.key, binding.facts.tag);
+        }
+        stopped
     }
 
     fn teardown(&mut self) -> Result<TeardownReport, BackendError> {
@@ -3401,6 +3574,29 @@ fn resolve_binary() -> Result<PathBuf, BackendError> {
     // Last resort: PATH lookup by spawning with a bare name. `Command` resolves
     // it; `start` turns a missing binary into `UNSUPPORTED_BACKEND`.
     Ok(PathBuf::from("acos-art"))
+}
+
+/// ZPROD3: the keeper key a session needs (design §3: a zygote's pre-fork heap
+/// is only valid for one APK + boot-image mode + geometry + insets + animations
+/// tuple). Values are the launch-time ones the engine already decided, never a
+/// new source of truth.
+fn zygote_key_of(apk: &Path, insets: &str, animations: &str) -> acos_art::zygote_prod::ZygoteKey {
+    let num = |name: &str, default: u32| {
+        std::env::var(name)
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(default)
+    };
+    acos_art::zygote_prod::ZygoteKey {
+        apk: apk.display().to_string(),
+        boot_image: std::env::var("ACOS_ART_BOOT_IMAGE")
+            .unwrap_or_else(|_| "default".to_string()),
+        width: num("ACOS_ART_WIDTH", 1080),
+        height: num("ACOS_ART_PANEL_HEIGHT", 2400),
+        density: num("ACOS_ART_DENSITY", 420),
+        insets: insets.trim().to_ascii_lowercase(),
+        animations: animations.trim().to_ascii_lowercase(),
+    }
 }
 
 fn read_png(path: &Path) -> Result<Vec<u8>, BackendError> {

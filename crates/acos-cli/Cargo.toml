@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 acos-apk = { path = "../acos-apk" }
+acos-art = { path = "../acos-art" }
 acos-jni = { path = "../acos-jni" }
 acos-dex = { path = "../acos-dex" }
 acos-mcp = { path = "../acos-mcp" }

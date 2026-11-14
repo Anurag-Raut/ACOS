@@ -45,6 +45,7 @@ use serde_json::{json, Value};
 use crate::trust::Trust;
 
 use super::art::{m5_now_us, m5_trace, p3_enabled, p3_trace, ArtSession, GuestExit};
+use super::zygote_host::ZygoteHost;
 use super::{Engine, SessionBackend};
 
 /// The engine label every ART reply carries.
@@ -87,6 +88,10 @@ pub struct ServeEngine {
     artifacts_root: PathBuf,
     art: Mutex<HashMap<String, Arc<HeldArtSession>>>,
     routes: Mutex<HashMap<String, Route>>,
+    /// ZPROD3: the daemon owns the persistent zygote keepers (`ACOS_ART_ZYGOTE=on`).
+    /// One keeper per `ZygoteKey`, closed on serve exit: a keeper outlives
+    /// sessions, never a serve.
+    zygote: Arc<ZygoteHost>,
 }
 
 impl ServeEngine {
@@ -101,6 +106,8 @@ impl ServeEngine {
         max_sessions: usize,
         artifacts_root: PathBuf,
     ) -> Self {
+        // ZPROD3: keepers live inside the daemon's private runtime directory.
+        let zygote = Arc::new(ZygoteHost::from_env(artifacts_root.join("zygote")));
         ServeEngine {
             legacy,
             default_engine,
@@ -108,8 +115,10 @@ impl ServeEngine {
             artifacts_root,
             art: Mutex::new(HashMap::new()),
             routes: Mutex::new(HashMap::new()),
+            zygote,
         }
     }
+
 
     /// Number of sessions held (ART + legacy). Used by the idle-exit check and
     /// the `--max-sessions` cap; it never probes a guest.
@@ -135,6 +144,10 @@ impl ServeEngine {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clear();
+        // ZPROD3 (design §3/§6): the keeper outlives sessions, never a serve.
+        // Closing every keeper ends the zygote and every child it forked, so no
+        // keeper or app child pid survives serve exit.
+        self.zygote.shutdown_all();
         count
     }
 
@@ -589,7 +602,13 @@ impl ServeEngine {
             );
         }
         let artifacts = self.artifacts_root.join(sanitize_session_id(id));
-        match ArtSession::start_with_options(&apk, &artifacts, animations, insets) {
+        match ArtSession::start_with_zygote(
+            &apk,
+            &artifacts,
+            animations,
+            insets,
+            Some(Arc::clone(&self.zygote)),
+        ) {
             Ok(mut session) => {
                 session.set_settle_timeout(settle_timeout_ms);
                 let started = match session.ensure_launch_tree(settle, pixels) {
@@ -1195,6 +1214,10 @@ fn launch_reply(
         ],
     });
     label_meta(&mut result, ENGINE_ART, held.trust, EVIDENCE_HOST_PIXEL);
+    // ZPROD3: a session that really runs a zygote child says so, with the facts
+    // the keeper acked. With the flag off `merge_zygote_fields` changes nothing,
+    // so the launch reply is unchanged byte for byte.
+    merge_zygote_fields(&mut result, session);
     result["animations"] = json!(session.animations());
     result["insets"] = json!(session.insets());
     label_frame(&mut result, session);
@@ -1681,8 +1704,24 @@ fn logs(session: &mut ArtSession) -> Result<Value, BackendError> {
     }))
 }
 
+/// ZPROD3: copy the zygote fields into a reply (flag-on sessions only). With the
+/// flag off the map is `None` and the reply object is untouched; with it on the
+/// fields replace the generic `isolation` string, because a reset/status reply
+/// must never describe a zygote child as an ordinary fresh process.
+fn merge_zygote_fields(result: &mut Value, session: &ArtSession) {
+    let Some(fields) = session.zygote_reply_fields() else {
+        return;
+    };
+    let Some(object) = result.as_object_mut() else {
+        return;
+    };
+    for (key, value) in fields {
+        object.insert(key, value);
+    }
+}
+
 fn status_value(session: &ArtSession) -> Value {
-    json!({
+    let mut status = json!({
         "launched": true,
         "package": session.package(),
         "activity": session.activity(),
@@ -1699,7 +1738,9 @@ fn status_value(session: &ArtSession) -> Value {
             "assert": true, "swipe": false, "environment": false,
         },
         "unsupported": ["acos_swipe"],
-    })
+    });
+    merge_zygote_fields(&mut status, session);
+    status
 }
 
 fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
@@ -1716,7 +1757,7 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
     // first correct screen" is one round trip (the tree was already bound by
     // reset; serializing it costs ~1 ms). Same shape as the launch reply.
     let (max_nodes, node_count, truncated, tree_value) = tree_json(&tree, 2000);
-    Ok(json!({
+    let mut reply = json!({
         "state_reset": true,
         "data_cleared": true,
         "scope": "all",
@@ -1731,7 +1772,15 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
         "tree_truncated": truncated,
         "settle": session.last_tree_settle().cloned().unwrap_or(Value::Null),
         "note": "the guest process was stopped and the same APK relaunched with empty app-data",
-    }))
+    });
+    // ZPROD3 (design §4.5): a zygote reset proves freshness with the same
+    // `state_reset`/`data_cleared` facts **plus** a new `child_pid`, the
+    // `previous_child_pid` it replaced, the new `run_root` and an **unchanged**
+    // `zygote_boot_epoch` (a reset that silently restarted the zygote would show
+    // up here). Memory is not per child yet (F3 deferred), which `memory_scope`
+    // states instead of implying a limit that does not exist.
+    merge_zygote_fields(&mut reply, session);
+    Ok(reply)
 }
 
 /// P1 part 3: `observe: {tree:true, png:false}` on an input verb.
