@@ -2376,6 +2376,383 @@ semantics vs AOSP, uid escape analysis) before any merge.
 - **Trade-offs / regressions:** none measured. Risks: the 5 s probe fallback is only safe together with the host `last_requested_seq` fix (`w42-back-frame` is the canary — it fails deterministically without it), and the binder-looper untimed wait is correct by construction (broadcast under `g.mu`) but not separately gate-proven (reverting only that file reproduces the same w42 timeout).
 - **Fidelity / evidence:** `art-reference` (real ART, release), MEASURED; `results/bench/H4.md` (method, tables, attribution, risks), `results/handoff/H4.md` (pre-fix state), `.cache/h4/results/{ab,loop}/` merged JSON/MD + raw per-rep phase files, `.cache/h4/logs/` gate and test transcripts.
 
+## E2.17 — ZPROD1: a persistent zygote and a reset that forks **one** child — MEASURED (mechanism; throughput pending P2)
+
+- **Date / commit:** 2026-11-14; branch `zygote-prod-1` (off `main` `863def1`).
+- **Question / goal:** Z7 measured the zygote arms at 30.0/30.1 tasks/min vs the exec arms'
+  39.0/39.1 and named the cause: the prototype's reset restarted the **whole cohort**, re-paying the
+  zygote's pre-fork core every round; Z7 §7 item 2 explicitly left "a product zygote that forks a
+  new child per reset" unmeasured. Does a persistent zygote whose reset kills **one** session's
+  child and forks one fresh child actually work, and does it leave every sibling untouched?
+- **Method:** guest-side ART zygote (Z3/Z4 lineage) with a command FIFO (`spawn <tag>` /
+  `kill <tag>` / `exit`) instead of a fixed cohort; each session is its own process group
+  (`setpgid0`), so the zygote ends exactly that session; the driver then wipes that session's run
+  root, starts a fresh foreign launcher (new peer + new contract) and asks the zygote for one new
+  child. N=2 `counter.apk`, real ART, one release binary; both sessions verified `0` → tap → `1`
+  before the reset, then one session reset and both re-verified.
+- **Inputs:** `fixtures/build/apps/counter.apk`; zygote build `research/zygote-proto/z3/build.sh`
+  (`ZBUILD=zprod1-build`); API-34 sysroot; x86_64 host; guard `--mem 16G --time 300`.
+- **Result:** zygote pre-fork core **13 ms** once. Reset of tag 0: kill **20.2 ms** (`status=0x9`,
+  SIGKILL on pid 8), fresh launcher **70.6 ms**, new child pid **62**, total **390.1 ms**. Session 0
+  after the reset: counter **`0`** and first frame md5 **`39d1e4e3…`**, byte-identical to a
+  never-tapped session's first frame (the old child's tapped frame was `9f3406c1…`). Sibling
+  session 1: child pid **35 → 35**, counter **`1` → `1`**, launcher never restarted. Zygote pid
+  **2 → 2** and boot epoch unchanged. Verdict PASS, 0 failures, 7.76 s end to end.
+- **Finding (proven vs hypothesis):** proven — a reset can be scoped to one child of a persistent
+  zygote, with a provable fresh state and siblings untouched. Not measured (no claim): any
+  tasks/min or tasks/GiB-min number for this reset; the Z7 loop was not re-run, and the keeper is
+  not yet owned by `acos serve`, so the flag-on gate/Gaten runs are not possible yet.
+- **Fidelity / evidence:** MEASURED on real ART, `real-ART` fidelity.
+  `results/art-runtime/ZPROD1.md`, `results/art-runtime/ZPROD1/{reset-n2.json,zygote.log,
+  session-0.log,session-1.log}`; design `docs/decisions/2026-11-14-zygote-prod.md`; driver
+  `research/zygote-proto/z4/reset.py`.
+- **Regression / false pass:** every check is a fresh read from the new/old child's own `tree` and
+  `screenshot` reply, never an ack; the freshness assertion compares PNG bytes with a brand-new
+  session's first frame. 0 false passes. Two real defects found and fixed on the way: a zygote host
+  that inherited the guest Landlock guard could not write its own contract dir (`EACCES`), and a
+  silent `writeText` hid it.
+- **Conclusion / next:** keep the mechanism; **P2** wires the keeper into `acos serve`
+  (`ACOS_ART_ZYGOTE=on`), adds the per-child cgroup memory limit (F3) and then runs the Z7 loop for
+  the ≥25 % gate. Exact commands and acceptance: `results/handoff/ZPROD1.md`.
+
+## E2.18 — ZPROD2/ZPROD3/ZPROD3b: the persistent zygote's host half, its engine wiring and the flag-on probe path — MEASURED (unit/gateway level + real-ART gates, flag off and on)
+
+- **Date / commit:** 2026-11-14; branch `zygote-prod-1` (merge of `main` `0c0b322`, then the step-1
+  commit). Design `docs/decisions/2026-11-14-zygote-prod.md`. (E2.17 was claimed by ZPROD1's
+  mechanism section in this file; E2.18 is used here to leave E2.17 free for S3PERF on the other
+  branch.)
+- **Question / goal:** P2 of `results/handoff/ZPROD1.md`: make the persistent zygote a *library* the
+  engine can own — keeper launcher, plan dir, command FIFO, `spawn`/`kill`/`boot_epoch`/`reset`
+  with file-based acks, every failure a structured `ZYGOTE_DEAD` — before any product path depends
+  on it. (Step 2 of the same task, wiring it into `acos serve`, was not reached.)
+- **Method:** a Rust port of `research/zygote-proto/z4/reset.py` steps 1–4 into
+  `crates/acos-art/src/zygote_prod.rs`, tested two ways: (a) pure functions/paths (key naming, Z4
+  contract parsing, run-root wipe, `binds`), (b) a **mock keeper** — a `sh` script that speaks the
+  exact file protocol (`<plan>/ready`, `<plan>/<tag>/{spawned,reaped,pid}`, `cmd` FIFO) with no ART,
+  so the host half is proven deterministically at 0.1 s instead of 8 s per ART boot.
+- **Result:** 7/7 new tests green; `cargo test -p acos-art` 107 lib + all integration targets green
+  (0 failed, the cgroup-conditional test green when run alone with `--exact`); `-p acos-cli` 147
+  passed / 0 failed (that crate was not modified, so this is the flag-off baseline). Proven in the
+  mock-keeper test: `spawn` → child pid 101; `reset` → `previous 101`, fresh child **102**, the old
+  run root wiped, **boot epoch and zygote pid unchanged**; `shutdown` leaves no keeper process.
+  Proven for failures: a dead keeper and a missing ack both surface as `ZYGOTE_DEAD: …` carrying the
+  exit status and the last 20 log lines, and no write is attempted — there is no silent fallback to
+  the exec path in the module.
+- **Finding (proven vs hypothesis):** proven — the Z4 driver's steps 1–4 are a self-contained Rust
+  component with file-acked verbs and a leak-free lifetime. Not measured (no claim): anything on
+  real ART through this component, any gate or Gaten run, any latency/throughput number. The host
+  ART lock was held by other agents' runs (`--exclusive` latency bench, `G3F1`, `K5C-T2`) for the
+  whole window in which the gate list would have run, so no gate JSON exists for this tree.
+- **Fidelity / evidence:** `real-ART` not exercised in this increment (mock keeper only);
+  `results/handoff/ZPROD2.md` has the exact commands, the test table and the remaining task list.
+- **Regression / false pass:** none; the only code added to the product path is a new module and one
+  `acos_art::Error::Zygote` variant — no engine line changed, so the flag-off path is untouched by
+  construction (and `-p acos-cli` 147/0 confirms it). 0 false passes; nothing is claimed at gate
+  level.
+- **ZPROD3 (step 2, same number — orchestrator decision 2026-11-14): engine wiring landed.**
+  `crates/acos-cli/src/engine/zygote_host.rs` is the daemon's owner of the keepers
+  (`ZygoteHost`: one keeper per `ZygoteKey`, `prepare`/`wait_contract_and_spawn`/`kill`/
+  `boot_epoch`/`shutdown_all`, `Mutex`-interior so the engine's `&self` verbs work).
+  `ArtSession::start_with_zygote` adds the hook to the existing launch body and keeps
+  `start_with_options` byte-identical (it delegates with no zygote); with `ACOS_ART_ZYGOTE=on` the
+  order is prepare → launcher with `ACOS_ZYGOTE_SESSION`/`ACOS_ZYGOTE_PROBE` → `argv`+`binds` →
+  `spawn <tag>` → ready line. `reset` = old launcher group down → `kill <tag>` → fresh launcher for
+  the **same** tag → `spawn`, and the reply gains `isolation:"fresh-zygote-child"`, `child_pid`,
+  `previous_child_pid`, `run_root`, `zygote_boot_epoch`, `zygote_tag` and
+  `memory_scope:"shared-scope (per-child accounting deferred, F3)"`. Those fields appear on the
+  reset reply, `acos_launch` and `acos_status` and **only** for a real zygote child (F3 is deferred,
+  so no reply may imply a per-child limit). `ErrorCode::ZygoteDead` (`host_guard`, retryable) is the
+  only outcome of a keeper failure: the launcher is killed and no exec-path session is substituted
+  (§6, 0 silent fallbacks). `ServeEngine::shutdown` calls `ZygoteHost::shutdown_all`, and
+  `close`/`reset` also `kill` their own child. New `-p acos-cli` tests (mock keeper, no ART):
+  flag-off touches no zygote (no keeper, no directory), reply fields exist only with a zygote child,
+  dead keeper → `ZYGOTE_DEAD` + `details.zygote.fallback:"none"` + registry empty, and
+  `shutdown_all` leaves no keeper pid and no child behind while the reset refork reuses the tag and
+  keeps the boot epoch. Real-ART gates: **flag off PASS** (`v2-art-counter`, `w22-counter-reset`,
+  `gaten-home` pass; `suite/T03-render-wrong` and `negative/gaten-home-wrong` fail
+  `ASSERTION_FAILED`). **Flag on FAIL**: the keeper boots on real ART (`epoch=30988051884
+  boot_ms=14`), forks a child (`ZP1 forked tag=0 child=8`), serves frames and a `tap` that changes
+  pixels, then the post-tap `assert_text` never gets a fresh probe sample (`capture: strict settle
+  timed out (probe-floor)`, `probe_seq=41`, `tree_age_ms=1639`). Two real defects were found by
+  checking zygote facts instead of only `status=pass`: `acos verify` did not use the zygote at all
+  (fixed: one `ZygoteHost` per run) and the keeper did not export the guest seams, so the child
+  published no probe (fixed: `ACOSLAUNCH_INTERACTIVE`/`LIVE_PROBE`/`FRAME_WAIT_SECS`/
+  `ACOS_INPUT_ACK_MS`/`ACOS_ZYGOTE_PROBE` on the keeper). No flag-on claim is made; the exact
+  evidence and the next probe-floor diagnostic are in `results/handoff/ZPROD3.md`.
+- **ZPROD3b (same number, same branch, orchestrator decision 2026-11-14): the flag-on probe path —
+  PASS.** Root cause, proven not hypothesised: the guest's demand probe is its **stdin**
+  (`LaunchMain.startLiveProbe` reads a `PROBE` line from `System.in`), but the keeper is spawned by
+  `PersistentZygote::start` with **`.stdin(Stdio::null())`**, so a forked child's fd 0 is `/dev/null`;
+  in this mode the session launcher's own `child` is the `/system/bin/sleep` tombstone (it never
+  runs ART), so the launcher's `PROBE` wake went to the stub and was discarded. After the tap the
+  child's own dirty draws still produced samples (the strict tap passed, `pixels_changed=true`), but
+  an idle screen emits nothing, the following `tree` request set `entry_floor` = the newest sample
+  (41) and no newer one ever arrived — `probe-floor`, `tree_age_ms` = that sample's age. Shadowing
+  of the old symptom: the keeper log of the pre-fix run had no probe-channel line at all. Fix: the
+  session launcher publishes `<session>/probe.fifo` (`0600`, opened read-write like the keeper's
+  `cmd` FIFO) **before** `<session>/argv` (i.e. before any `spawn`), `ZygoteApp.z4ProbeStdin` opens
+  it and `System.setIn`s it in the child **before** `spawnSession` (no namespace/seccomp/Landlock
+  rule yet; fd 0 is inherited down the fork chain), and the launcher's `GuestProbeChannel {Pipe,
+  Fifo}` sends the wake there; the exec path keeps its own stdin pipe unchanged. Strict settle was
+  **not** touched (a stale sample still cannot back a pass). 3 new unit tests (wakes delivered in
+  order, vanished reader cannot `EPIPE`/break the next wake, guest source installs the FIFO before
+  its sandbox) green; `-p acos-cli` and `-p acos-art` suites green (`CLI_RC=0`, `ART_RC=0`).
+  **Flag ON PASS**: `v2-art-counter`, `w22-counter-reset`, `gaten-home` pass (the post-tap
+  `04-assert_text` that used to time out now passes; tap `strict-event`, `pixels_changed=true`),
+  `suite/T03-render-wrong` and `negative/gaten-home-wrong` fail `ASSERTION_FAILED`; every run is a
+  real zygote child (keeper log `ready epoch=33137279661` once, `probe_stdin=on`, child 8 → reset →
+  child 35, same epoch, old child `status=0x9`). **Flag OFF PASS**: the same three pass and the same
+  two negatives fail; no zygote artifact is created (all `out/*/zygote` files predate the off run).
+  Not measured: flag ON vs OFF latency (lock queue); no number claimed. Evidence
+  `.cache/zprod3b/on.log`, `off.log`, `cli.log`, `art.log` and `results/handoff/ZPROD3b.md`.
+- **ZPROD4 (same number, same branch; merge of `main` `389429a` first): the first product-path
+  latency measurement + a dead keeper that restarts.** Merge kept both behaviours: the S3b
+  one-bounded-retry relaunch loop now wraps `start_inner` (so it covers the exec path exactly as
+  `main` and the zygote arm when the flag is on; `ZygoteStart` gained a manual `Clone` so a retry
+  re-spawns the same tag), `ArtSession` keeps H13b `boot_image()` next to the zygote accessors,
+  the reset reply carries BOTH `merge_zygote_fields` and `relaunch_retry`, and `launch.rs` keeps
+  both `probe_channel_tests` and `skipped_traversal_tests`. A/B numbers go in the row below.
+- **ZPROD4 dead keeper:** a keeper that is not alive is removed by `ZygoteHost::prepare`, and the
+  next request boots a fresh keeper — a new zygote, a **new `zygote_boot_epoch`**, a fresh fork.
+  A verb on a session whose keeper is gone (or whose epoch no longer matches) is reported as
+  `ZYGOTE_DEAD` with `details.zygote.session="lost"`, the session's epoch, the keeper's current
+  epoch and `repointed=false`; it is never re-pointed at the new keeper. Found and fixed on the
+  way: a restarted keeper inherited the dead keeper's `plan/ready` (which carries the epoch), so
+  the new zygote answered with the **old** epoch — `PersistentZygote::start` now removes
+  `ready` and `zygote.pid` before spawning (§4.2). Proven by a mock-keeper test (SIGKILL between
+  two requests: new epoch, fresh child, lost session) and LIVE on real ART (see the ZPROD4 run
+  below).
+- **ZPROD4 merge + flag results (measured).** Flag OFF after the merge: the full standing list
+  **25/25 as specified** — 10 gates pass (`v2-art-counter`, `w22-counter-reset`,
+  `w54-dialog-pixels`, `w42-back-frame`, `w15-dialog-menu`, `form-validation`,
+  `suite/T03-render-good`, `v1-offscreen-pager`, `w7-insets-report`, `se1-expect-change-tap`),
+  `suite/T03-render-wrong` / `w7-insets-carve-negative` / `negative/se1-expect-change-noop` fail
+  `ASSERTION_FAILED`, `negative/offscreen-pager-visible` fails `ELEMENT_OFFSCREEN`,
+  `p11-progress-timeout` fails `TIMEOUT`, the 5 Gaten flows pass and the 5 negative flows fail
+  `ASSERTION_FAILED` (`.cache/zprod4/out/off.log`). **Flag ON**: the first post-merge run failed
+  every check with `ZYGOTE_DEAD` — a **merge regression, not noise**: `main` made `shared-fixed`
+  the default boot image (a file under `/data/img`), and `-Xzygote` sets
+  `only_use_system_oat_files_`, so ART aborts with `Registering a non /system oat file:
+  /data/img/boot.oat` (the documented F11 in `results/art-runtime/ZS-security-review.md`, Z1
+  §5.2; the zygote arm had only ever run on the pre-merge `lz4` default). Fix: `ZygoteHost::
+  prepare` pins `ACOS_ART_BOOT_IMAGE=lz4` for the keeper unless the caller chose one explicitly
+  (an explicit value is passed through and still fails closed). After the fix **flag ON PASS**:
+  `v2-art-counter`, `w22-counter-reset`, `gaten-home` pass and both negatives fail
+  `ASSERTION_FAILED`, with real zygote evidence (`ready epoch=17206167546`, `probe_stdin=on`,
+  `forked child=8`; the reset re-forks the same epoch to `child=35`, old child `0x9`). **The A/B found a new
+  daemon-cohort defect instead of a number**: the OFF arm measured (M4 strict 307.4 ms / fast
+  156.2 ms, M6 strict 331.8 / fast 199.0, M8 counter 961.1 / 44.6, M8 form 939.4 / 45.5, M5 24.1,
+  teardown 12.0 ms p50, 12 samples), the ON arm produced **no** metric: every reference launch
+  failed `ZYGOTE_DEAD: argv 0 was not acked within 180002 ms` though the keeper itself boots
+  (`mode=lz4`, `Z3 zygote guest …/zprod4-build`) — the session launcher never published
+  `<plan>/0/argv` under `acos-bench`'s `serve` cohort (the flag-on path had never been driven
+  through that path; `acos verify` on the same binary/APK is green). No ON number is claimed.** — the OFF arm's first rep ran, the ON rep was void by
+  construction (the regression above), the chain was stopped, and the disk then reached the
+  standing 85 % stop line; no latency number is claimed (`.cache/zprod4/ab/ab.log`,
+  `results/handoff/ZPROD4.md`).
+- **Conclusion / next:** step 2 (engine wiring: `ZygoteHost`, `ArtSession` zygote branch,
+  reset/status reply fields, `ErrorCode::ZygoteDead`, `shutdown_all`) is landed and the flag-on
+  counter/reset/Gaten checks now pass with the demand-probe channel plumbed; remaining are the
+  flag-on/off latency comparison, ZYGOTE_DEAD restart/new-epoch/refork (ZPROD4) and F3 per-child
+  cgroups.
+- **ZPROD5 (same number, same branch): the serve/daemon `argv 0` stall — ROOT CAUSE, FIX, live
+  proof.** ZPROD4's open defect is closed: an `AF_UNIX` `sun_path` overflow, not the keeper.
+  *Measured* (one `acos_launch` against a warm `serve` daemon with `ACOS_ART_ZYGOTE=on`,
+  `.cache/zprod5/repro/run1.log`): the **session launcher** — not the keeper — exited in ~0.2 s
+  after `acos-art: io: path must be shorter than SUN_LEN`, so `<plan>/0/argv` was never written
+  and `ZygoteHost::wait_contract` polled it for the full 180 s. A zygote session's directory
+  *carries its sockets* (the forked child bind-mounts `<plan>/<tag>/sock` as `/dev/socket` and
+  `<plan>/<tag>/sock/peer.sock` as `/data/acos-launch.sock`), and `sun_path` is 108 bytes
+  including its NUL: `acos verify`'s artifacts root (`out/<scenario>`, ≈80 bytes) fit, the
+  daemon's (`…/r1-a/latency/sessions/zygote/zygote/<45-char key>/plan/0`, ≈128) did not. The flag-
+  on path had only ever run through `verify`, which is exactly why the gates were green while
+  every bench launch failed. *Second defect, why it cost 180 s and no diagnosis:* the contract
+  wait watched only the **keeper's** liveness and its error carried the **keeper's** log (healthy),
+  while the launcher's one-line cause was drained into a tail created only *after* the wait.
+  Fix: (1) `ZygoteHost::for_artifacts` keeps `<artifacts>/zygote` when a worst-case session socket
+  fits and otherwise relocates the plan tree to a short runtime root it owns
+  (`ACOS_ART_ZYGOTE_ROOT` → `/run/user/<uid>/z<pid>` → `/dev/shm/z<pid>`; host-side only, bound
+  into the zygote as `/sessions`, the W43 argument) — `verify`'s layout is unchanged; (2)
+  `prepare` fails closed with the lengths and the knob when the **exact** session path cannot fit,
+  *before* a keeper boots, and `wait_contract_with`/`wait_contract_and_spawn(peer_gone)` follow the
+  **launcher** too, so a launcher that dies before `argv` is a `ZYGOTE_DEAD` in milliseconds
+  carrying its exit status and stderr tail; (3) the redundant duplicated `zygote` path level is
+  gone (`<root>/<key>/plan/<tag>`, +8 bytes of headroom); (4) an owned short root is removed on
+  graceful exit and stale `z<pid>` roots (a SIGTERMed serve installs no handler) are swept at the
+  next start. 4 new tests (mock keeper, no ART): a launcher dying before `argv` fails in <10 s
+  naming `exit status: 3` and `path must be shorter than SUN_LEN`; a too-deep root is refused
+  with `keeper_count()==0`; a deep artifacts root is displaced while a short one is kept and an
+  explicit root wins; 8/8 `zygote_host::tests` green. **Live `acos serve` proof**
+  (`.cache/zprod5/live/proof.json`): launch `isolation=fresh-zygote-child child_pid=8
+  epoch=20612077173`, tap `inc` → tree count **1**, `reset` → count **0** (`state_reset`,
+  `data_cleared`) with child **8→35** and the **same epoch**, `destroy` `teardown_ms=307
+  survivors=[]`; then SIGKILL the keeper → `ZYGOTE_DEAD session="lost" repointed=false`, the next
+  launch boots a **new keeper** (`epoch 20612077173→20619119756`, child 62→8), and after serve
+  exit **no keeper, launcher, bwrap or daemon** survives. The same invocation that stalled now
+  reaches `argv` in **4.21 s** (3.9 s of which is the cold `shared-fixed` image build the OFF arm
+  also pays), `launch ok=True`. — **and the A/B, 1:1 interleaved, OFF = the shipped default
+  (exec path + shared-fixed) vs ON = the zygote**: see the table this bullet adds below; the
+  orchestrator decision for ZPROD5 is that the comparison arm is what users get, not an
+  lz4-pinned exec arm, and the keeper keeps its `lz4` pin (F11: `-Xzygote` refuses a `/data/img`
+  oat), so the zygote currently cannot use the shared-fixed image — a named follow-up, and the
+  honest limit of any ON/OFF delta. **Result, 2 interleaved reps per arm (12 latency samples
+  each, same binary `sha256 ac8b06bd…`, groups `a:latency:8G:300`, `.cache/zprod5/ab/`)**:
+  launch gets faster, reset and teardown get much slower, interactive verbs are unchanged.
+
+  | metric (p50, pooled over the 2 reps) | OFF — shipped default | ON — zygote | delta |
+  |---|---:|---:|---:|
+  | M4 launch strict | 306.5 ms | **259.1 ms** | −15.5 % |
+  | M4 launch fast | 166.1 ms | **123.1 ms** | −25.9 % |
+  | M6 reset strict | **333.8 ms** | 574.5 ms | +72.1 % |
+  | M6 reset fast | **193.1 ms** | 431.7 ms | +123.5 % |
+  | M8 tap counter strict / fast | 950.1 / 45.0 ms | 947.2 / 45.7 ms | −0.3 % / +1.6 % (parity) |
+  | M8 tap form strict / fast | 948.3 / 45.6 ms | 942.0 / 47.5 ms | −0.7 % / +4.0 % (parity) |
+  | M5 screenshot | 24.1 ms | 24.9 ms | +3.1 % (parity) |
+  | tap ack | 5.0 ms | 5.0 ms | 0 |
+  | teardown (`acos_destroy`) | **12.5 ms** (wall 18.0) | 307.0 ms (wall 316.7) | +2356 % |
+
+  Load1 before/after per acquisition: OFF 0.93→1.70 and 1.10→0.83; ON 1.70→1.10 and 0.83→1.26;
+  MemAvailable 32.3–32.6 GiB throughout; no phase was flagged noisy; every arm `ok=True`, 0
+  failed steps, `survivors=[]`. Zygote evidence for the ON arm is real and preserved
+  (`.cache/zprod5/ab/zygote-evidence/`): one keeper per `ZygoteKey` (counter, form), `plan/ready`
+  `epoch=21672502580 boot_ms=13` and `epoch=21596387361`, 30 session dirs with
+  `sock/{logdw,peer.sock}`, `argv`, `binds`, `spawned`. (An earlier interleaved pair gave the
+  same shape — OFF M4 311.5/169.1 vs ON 259.8/124.4 — and its ON arm also hit **one** 60 s
+  `NO_LIVE_FRAME` on the discarded `m4-warm` launch, the first launch after a keeper boot; the
+  two reported reps had no failure. A chain-script naming bug overwrote that pair's raw JSON, so
+  it is not pooled.) Reading: the zygote **wins the launch metric it exists for** (−16 to −26 %)
+  and **loses reset** (+72 %: `reset` = kill the old child, keep the epoch, re-fork through the
+  launcher's contract) and **teardown** (+295 ms: `acos_destroy` kills the child's process group
+  and reaps it). Both regressions are named follow-ups, not corrected here.
+- **ZPROD6 (same number, same branch; merge of `main` `cb5bd04` first, both sides of the
+  `acos-art` `Error` enum kept): the reset and teardown regressions are located and FIXED —
+  both were one 300 ms lifecycle grace spent on a process that has no lifecycle.** The task
+  named `refork through the launcher's contract` (reset) and `kill-by-group + reap` (teardown)
+  as the causes. Phase timestamps say otherwise: the refork is *cheap* on the zygote arm, and
+  the reap was never the cost.
+  *Method (goal 1).* `DM6_RESET_TRACE` (already in the engine, inert by default) was switched on
+  for the live `serve` path — one daemon per arm, the same verb sequence, 2 reps per arm,
+  interleaved `off on off on`, same binary
+  (`sha256 daf1693ee7f5ac4794852f01612a5053508959beb73a84cd4280ddb42d1fd694`,
+  harness `.cache/zprod6/profile.py`, raw `.cache/zprod6/profile/profile.json`). The engine's own
+  `stop`/`reset` events split every phase, so this is a measurement, not a hypothesis.
+
+  **Phase table, BEFORE the fix (p50 of 4 resets per arm, ms):**
+
+  | phase (engine trace) | OFF — exec path | ON — zygote | delta |
+  |---|---:|---:|---:|
+  | `reset.stop_ms` (old guest down) | **13.5** | **307** | **+293.5** |
+  | `reset.relaunch_ms` (launcher + fork + ready) | 183 | 113 | −70 |
+  | `reset.bind_ms` (first strict tree) | 142 | 142 | 0 |
+  | `reset.engine_total_ms` | 342 | 566 | +224 |
+  | `stop`: `path` / `exit_ms` / `reaped_before_deadline` | `lifecycle` / 13.5 / true | **`killed` / 300 / false** | — |
+  | `acos_destroy` `teardown_ms` | 13 | 307 | +294 |
+
+  The whole ON regression is one phase: `stop`. `relaunch` is already **70 ms faster** on the
+  zygote (no exec-path launcher ART boot), and `bind` is identical. So the named causes are wrong
+  in an important way, and the fix is not a USAP pool, nor a reused launcher contract, nor an
+  overlapped kill — those optimise the phases that are already equal or better.
+  *Root cause (proven).* A zygote session's engine-side `child` is **not the app**. It is the
+  session launcher in foreign-guest mode: it builds the sockets and the `ServiceHost` and starts
+  no ART (ZPROD3b), while the app child was forked **inside the keeper**. `shutdown()` writes
+  `{"cmd":"close"}` and then waits GL1's 300 ms lifecycle bound for *that* process to exit — and
+  it never does (`reaped_before_deadline=false`, `exit_ms=300` on **every** ON stop, in both the
+  reset and the destroy path). The grace was pure loss: the zygote child is SIGKILLed by the
+  keeper anyway (`kill <tag>` → `kill(-child, SIGKILL)` + `wait4`, `ZygoteApp.z4KillOne`), and
+  that ack *is* the death proof.
+  *Fix (goal 2 + goal 3, one change).* `teardown_grace_ms_for(zygote)`: a zygote session takes a
+  **zero** lifecycle grace (`DEFAULT_ZYGOTE_TEARDOWN_GRACE_MS = 0`); the exec path keeps GL1's
+  300 ms. The stop then does what the goal asks — signal, then prove: `close` the shim, SIGKILL
+  its group, and the unchanged kernel proof (`kill(-pgid,0)` then a `/proc` scan only when the
+  kernel says a member exists, adaptive 1→10 ms poll) must show the group empty, or
+  `PROCESS_TREE_DIRTY` still fails the destroy. The app child (and its bwrap) is signalled and
+  proven by the keeper's `reaped` ack, fetched by `close`/`reset` immediately after the stop.
+  `ACOS_ART_TEARDOWN_GRACE_MS` still overrides both arms, so the old bound stays reproducible.
+  Nothing about `survivors`, `data_cleared`, `state_reset` or the reset refork changed, and the
+  flag stays opt-in (ADR-0026 #1).
+  *Why not the AOSP USAP pool (decision).* Pre-forking the next child while the current one runs
+  buys `relaunch_ms` (113 ms) down toward 0 but costs a resident idle child per keeper (memory,
+  and a child that must be discarded whenever `argv`/`binds` differ), and it does not touch the
+  293 ms. Reusing the session's launcher removes the ~113 ms launcher round-trip but needs the
+  launcher to survive a `run`-root wipe and re-publish `argv`, which is exactly the contract
+  ZPROD5 made fail-closed; overlap cannot help because the stop must complete before the run root
+  is wiped. The smallest change that hits the target is therefore "do not wait for a lifecycle
+  the shim cannot deliver", and the measurement above says it hits it with ~65 ms to spare rather
+  than the 17 ms the +5 % budget allowed.
+
+  **Phase table, AFTER the fix (same harness, same interleaving, 4 samples per arm, ms):**
+
+  | phase (engine trace) | OFF — exec path | ON — zygote | delta |
+  |---|---:|---:|---:|
+  | `reset.stop_ms` | 14 | **7.5** | −6.5 |
+  | `reset.relaunch_ms` | 184 | 121 | −63 |
+  | `reset.bind_ms` | 142 | 142 | 0 |
+  | `reset.engine_total_ms` | 341.7 | **276.7** | **−19 %** |
+  | `stop`: `path` / `grace_ms` / `stop_ms` | `lifecycle` / 300 / 13.5 | `killed` / **0** / 7.5 | — |
+  | `acos_destroy` `teardown_ms` p50 | 13 | **7** | −6 |
+  | `acos_launch` (warm daemon, 2nd rep) | 297.0 / 312.8 | **265.8 / 273.8** | −9 % |
+
+  Every ON stop now reads `path=killed grace_ms=0 stop_ms=7..11 reaped_before_deadline=false` and
+  every arm ended with `survivors=[]`, `session_leftovers=[]`, `verified=true`; `count=0` after
+  every reset and the reset kept its `previous_child_pid` → new child with the **same**
+  `zygote_boot_epoch`. The zygote is now faster than the shipped default on **all three** metrics
+  the task named (launch, reset, teardown), which was the precondition for making it the default.
+  *The bench A/B (acceptance C, the ZPROD5 method: `tools/bench/acos-bench.sh --reps 1 --groups
+  "a:latency:8G:300" --latency-reps 12 --no-build`, `ACOS_BENCH_TASK=ZPROD6`, arms interleaved
+  `off on off on`, same binary `sha256 daf1693e…`).* p50 over 12 samples per metric, both arms
+  `ok=true`, `noisy_phases=[]`:
+
+  | metric (bench p50) | OFF — shipped default | ON — zygote | delta | ZPROD5 was |
+  |---|---:|---:|---:|---:|
+  | M4 launch strict | 306.2 ms | **259.2 ms** | −15.4 % | −15.5 % (unchanged) |
+  | M4 launch fast | 170.4 ms | **123.8 ms** | −27.3 % | −25.9 % (unchanged) |
+  | M6 reset strict | 319.7 ms | **272.2 ms** | **−14.9 %** | +72.1 % |
+  | M6 reset fast | 180.7 ms | **133.4 ms** | **−26.2 %** | +123.5 % |
+  | teardown (`acos_destroy`) | 12.0 ms | **6.5 ms** | **−46 %** | +2356 % |
+  | M5 screenshot | 24.4 ms | 23.5 ms | parity | parity |
+  | M8 tap counter strict / fast | 959.7 / 49.3 ms | 961.4 / 44.7 ms | parity | parity |
+
+  Honest caveats: (a) the chain script's rep counter (`grep -c "^arm=$arm "`) never matched the
+  `=== arm=…` log line, so arms 1–2's raw JSON was overwritten by arms 3–4 — the pair reported
+  here is the surviving interleaved `off`/`on` pair (copies in `.cache/zprod6/ab/keep/`), one rep
+  each, and the two-rep-per-arm numbers come from the `DM6_RESET_TRACE` harness above; (b) as in
+  ZPROD5 the arms do not run the same boot image (OFF `shared-fixed`, ON `lz4` — F11), which is
+  the honest limit of the delta; (c) the flag stays **off by default**; nothing in this increment
+  changes the default.
+  *Tests (goal 1 of the acceptance).* Two new `acos-cli` tests, mock ART, ~0.35 s:
+  `only_the_exec_path_pays_the_lifecycle_grace` (the arm decides; the operator knob still wins on
+  both) and `a_zygote_session_signals_and_proves_instead_of_waiting_the_grace` — a launcher shim
+  that ignores `close` and stays alive costs the **exec** arm its full bound (asserted ≥ 250 ms,
+  `path=killed`) and the **zygote** arm **< 100 ms**, still with an empty, verified group.
+  *Live `acos serve` proof (acceptance B: the ZPROD5 live proof, unchanged harness
+  `.cache/zprod5/live_serve.py`, re-run on this tree) — **13/13 PASS**, `RESULT PASS []`: launch
+  `isolation=fresh-zygote-child child_pid=8 epoch=44075745284`, tap → count **1**, reset → count
+  **0** with `state_reset`/`data_cleared` and child **8→35** in the **same** epoch, destroy
+  `{"lifecycle":"killed","teardown_ms":**6**,"survivors":[],"session_leftovers":[],"verified":true}`
+  (was 307), SIGKILL the keeper → `ZYGOTE_DEAD` + `session="lost"` + `repointed=false`, the next
+  launch boots a **new** keeper (`epoch 44075745284→44081672917`, child 62→8), and after serve
+  exit no keeper/launcher/bwrap/daemon survives (the SIGTERM plan-root residue is still swept by
+  the next daemon).
+  *Suites (acceptance A).* `cargo test --release -p acos-cli --no-fail-fast -- --test-threads=1`:
+  16 test binaries, **173 passed, 0 failed**, including all 8 `zygote_host::tests` and both new
+  tests (`.cache/zprod6/cli-suite.log`).
+  *Gates (acceptance D), `--engine art`, animations on, same binary, `ACOS_ART_DATA` per arm:*
+  **flag OFF — 3/3 pass** (`v2-art-counter`, `w22-counter-reset`, `form-validation`). **Flag ON —
+  2/3 pass** (`v2-art-counter`, `w22-counter-reset`); `form-validation` fails deterministically at
+  **step 5 `assert_log`** with an **empty** guest log buffer (`actual: []`, expected
+  `^onCreate$ ^onStart$ ^onResume$`; reproduced twice, `.cache/zprod6/gates/`). The zygote itself
+  served both runs for real (`plan/ready epoch=43843439484 boot_ms=22`, keeper log `ZP1 forked
+  tag=0 child=8 probe_stdin=on`, `ZP1 killed … status=0x9`), and the three steps before it pass on
+  a live tree. This is a **pre-existing flag-on gap, not a ZPROD6 regression and not a relaxed
+  check**: a forked child's guest log lines go to the **keeper's** stdout, not to the session's
+  log buffer, so any `assert_log` scenario cannot pass on the zygote path. It fails at step 5 of
+  28, long before any stop — the only thing ZPROD6 changes. Named as the next follow-up
+  (route the child's log buffer to the session, the same class as ZPROD3b's probe channel). No
+  gate is claimed to pass that did not.
+  *Acceptance summary:* (A) PASS 173/0; (B) PASS 13/13 live; (C) PASS — reset 272.2 vs 319.7 ms and
+  teardown 6.5 vs 12.0 ms p50 with launch unchanged-or-better; (D) OFF 3/3, ON 2/3 with the log
+  gap named above; (E) this subsection + `results/handoff/ZPROD6.md`.
+
 ## E13.10 — SE1: an opt-in per-step `expect_change` closes GR4's vacuous-flow gap (a no-op tap can no longer pass) — PASS (ADR-0026 decision 2 shipped; 0 false passes)
 
 **Date:** 2026-11-14. **Commit:** the SE1 commit on branch `settle-se1-expect-change`
@@ -3815,3 +4192,52 @@ smallest follow-up.
   ART encoder still writes stored blocks — deliberate, it is on the screenshot
   path; re-encoding happens in the evidence pass). `gc` has no size budget
   (`--max-bytes`) yet.
+
+### E2.18 — ZPROD7: the forked child's log stream (CHECKPOINT: shim fixed + pinned by test, gate gap still open)
+
+- **Date / branch:** 2026-11-14; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/g3cd`, branch
+  `zygote-prod-1` (first `git merge --no-edit main` = `92e09bf`; both sides of every conflict kept:
+  `acos-art::Error::{Zygote, InvalidGuestUid}`, `ErrorCode::{ZygoteDead, HostMemoryLow}`).
+  All ART runs under `tools/art-runtime/run-exclusive.sh --task ZPROD7`; scratch `.cache/zprod7`.
+  Checkpoint (the owner reprioritised the queue mid-increment): GOAL 2 (F11 `shared-fixed`) and the
+  interleaved A/B were **not** attempted.
+- **Question / goal:** with the flag on, `form-validation` fails deterministically at step 5
+  `assert_log` with an **empty** guest log buffer (`^onCreate$ ^onStart$ ^onResume$`), because a
+  forked child's log lines land in the keeper's buffer, not its session's. Route each child's guest
+  log stream to **its own** session, and never to a sibling's, with two concurrent sessions.
+- **Change (one function, `crates/acos-art/shim/artshim.c`):** a zygote child inherits the shim's
+  *connected descriptor*, not the path — the keeper resolves `/dev/socket/logdw` (its own socket
+  dir) before it forks. `log_socket()` now **re-resolves the sink path when the pid changes**
+  (one `getpid()` per formatted entry, on the non-hot dump/crash paths), and a failed connect is
+  **no longer sticky** (a `-1` used to be permanent; the next entry retries, so one entry at most is
+  lost when a reset re-binds the sink). The path is `ACOSART_LOGD_SOCK`, default
+  `"/dev/socket/logdw"` — the build-time default is unchanged and pinned by a test; the `-D`
+  override exists only so a host test can exercise the shipped code outside a guest.
+- **Tests (`crates/acos-art/tests/logd_route.rs`, 3 new, real processes + a real `fork()`):** the
+  *shipped* shim source (`acos_art::SHIM_SOURCE`) is compiled and preloaded into two concurrent
+  writers whose sink path is the same string resolved against a per-process working directory (the
+  host stand-in for the per-mount `/dev/socket`). Proved: the keeper sink holds exactly the
+  pre-fork lines, session *k* holds exactly its own three post-fork lines, no foreign tag appears,
+  nothing falls back to stderr; a missing sink does not silence the stream; the shipped default
+  path is unchanged. **Inverse check:** with the ZPROD6 rule restored (no pid check, sticky
+  failure) the two behavioural tests **fail** — the suite pins the behaviour, 0 false passes.
+- **Result:** `cargo test -p acos-cli` 183/0, `cargo test -p acos-art` 181/0. **15-gate matrix,
+  same binary, both arms (`.cache/zprod7/gates/gates.log`):** OFF **10 pass / 5 fail exactly as
+  specified** (so the flag-off path is untouched). ON: 7 pass; **three** differences from OFF —
+  `form-validation` (step 5 `assert_log`, `actual: []`, the known gap) **and `w54-dialog-pixels`,
+  `w42-back-frame`** (`ASSERTION_FAILED`; new information, no earlier increment ran them with the
+  flag on; neither failing step is a log assertion, so they are not attributed to this change).
+- **Ruled out for the remaining gap:** the shim's `-O2` path resolution (a `bwrap` namespace with a
+  real `logdw` socket bound at `/dev/socket` received the frame from the default build); a stale
+  shim (`build_shim` keys on `SHIM_SOURCE`, mtime matches); a `sun_path`/session-dir defect
+  (ZPROD5's class — the ON runs pass 5 of 6 steps). **Not isolated:** the live path still delivers
+  nothing to the session sink; next candidates are (1) the child's `/dev/socket` bind not carrying
+  the session launcher's `logdw` inode (a `prepare_session` wipe/bind race), (2) the child's lines
+  not passing through the shim at all, (3) a second `Logd` instance serving the session. The
+  cheapest decisive test is a live one with the plan root kept (`ACOS_ART_ZYGOTE_KEEP=1`) plus
+  `/proc/<child>/mountinfo`, the `logdw` inode and the keeper log's `[art]` fallback lines.
+- **Not run:** the ZPROD5/6 live `serve` proof (13/13), the interleaved OFF/ON A/B (conditional on
+  GOAL 2), F11 (`shared-fixed` for `-Xzygote`; the ON arm still pins `lz4`, so the launch/reset/
+  teardown deltas remain arm-vs-arm).
+- **Regression / false pass:** none claimed. No flag default, assertion, settle horizon, scenario or
+  gate was touched; the two new ON-arm failures are reported, not explained away.

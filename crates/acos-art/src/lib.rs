@@ -33,6 +33,7 @@ pub mod capture;
 pub mod cgroup;
 pub mod crash;
 pub mod host_zygote;
+pub mod zygote_prod;
 pub mod launch;
 pub mod session;
 pub mod landlock;
@@ -129,6 +130,12 @@ pub enum Error {
     /// there is no silent fallback to the stock heap values (W48).
     #[error("INVALID_HEAP_CONFIG: {0}")]
     InvalidHeapConfig(String),
+    /// The production zygote (`ACOS_ART_ZYGOTE=on`) could not serve a verb. The
+    /// message starts with `ZYGOTE_DEAD` and carries the keeper's exit status and
+    /// log tail: a dead zygote is reported and restarted, never silently replaced
+    /// by the exec path (ZPROD P2, design §6).
+    #[error("{0}")]
+    Zygote(String),
     /// An `ACOS_ART_GUEST_UID` seam refused its value. There is no silent
     /// fallback to the host uid: uid 1000 is Android's `SYSTEM_UID` and makes
     /// the framework take privileged branches that do not exist for an app.

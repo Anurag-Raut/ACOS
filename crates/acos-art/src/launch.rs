@@ -481,6 +481,21 @@ pub(crate) fn launch_session(
     // Z4 (research seam, off by default): `ACOS_ZYGOTE_SESSION=<dir>` makes this
     // launcher a *foreign-guest* session of a shared zygote. Unset => production.
     let session_dir: Option<PathBuf> = std::env::var_os("ACOS_ZYGOTE_SESSION").map(PathBuf::from);
+    // ZPROD3b: the demand-probe channel of a zygote child. The keeper's stdin
+    // is `/dev/null` (`PersistentZygote::start`), so a `PROBE` wake written to
+    // this launcher's stub stdin could never reach the forked app: measured as
+    // `capture: strict settle timed out (probe-floor)` right after a tap (the
+    // last event-driven sample stayed the newest, `tree_age_ms` ~1.6 s). The
+    // guest reads `PROBE` from fd 0, so the session publishes
+    // `<session>/probe.fifo` here — before `<session>/argv`, i.e. before the
+    // host can send `spawn <tag>` — and `ZygoteApp.z4ForkOne` opens it and
+    // `System.setIn`s it before its namespace/fork chain. Opened read-write
+    // like the keeper's `cmd` FIFO: neither side blocks on open and the child
+    // never sees a spurious EOF when this launcher restarts.
+    let probe_fifo = match &session_dir {
+        Some(dir) => Some(open_guest_probe_fifo(dir)?),
+        None => None,
+    };
     // Private per-run data root (S4): app data, out staging and the importer
     // socket are this run's; everything else under /data is read-only.
     let run = match &session_dir {
@@ -1007,7 +1022,13 @@ pub(crate) fn launch_session(
     // seccomp/Landlock guard is applied per forked child (the child loads the
     // same `libacos_seccomp_guest.so` after its bind mounts, exactly AOSP's
     // order). The production path keeps the preload-at-start ordering.
-    sb.seccomp_guest(session_dir.is_none());
+    // ZPROD1: a zygote host is a process *without* app code; the guard belongs to
+    // every forked child (which loads it after its mounts — AOSP order), so the
+    // zygote itself must not carry the guest seccomp/Landlock preload either: a
+    // Landlock ruleset in the pre-fork process would deny the child's writes to
+    // its own contract directory (`/sessions/<tag>`, measured: EACCES). With
+    // the zygote seam unset this expression is exactly `session_dir.is_none()`.
+    sb.seccomp_guest(session_dir.is_none() && zygote_app.is_none());
     sb.with_shim(false);
     sb.ro_bind(&shims.art_shim, "/data/shim/libartshim.so");
     // The per-run extracted native libraries (installd's `nativeLibraryDir`).
@@ -1049,13 +1070,22 @@ pub(crate) fn launch_session(
         if let Ok(n) = std::env::var("ACOS_ZYGOTE_N") {
             sb.env("ACOS_ZYGOTE_N", &n);
         }
+        // ZPROD1: the persistent zygote. `spawn`/`kill`/`exit` arrive on
+        // `<plan>/cmd`, so the zygote outlives one session's reset instead of
+        // forking a fixed cohort once (Z7 §7 item 2: the cohort restart was the
+        // whole throughput loss). Off unless the caller asks for it.
+        if std::env::var_os("ACOS_ZYGOTE_PERSIST").is_some() {
+            sb.env("ACOS_ZYGOTE_PERSIST", "1");
+        }
     }
-    if session_dir.is_some() {
+    if session_dir.is_some() || zygote_app.is_some() {
         // ZS/Z4: forward the research security-probe switch into the child.
         if std::env::var_os("ACOS_ZYGOTE_PROBE").is_some() {
             sb.env("ACOS_ZYGOTE_PROBE", "1");
         }
         // The child loads the production guard itself; it must see the blob.
+        // ZPROD1: a zygote host keeps no session of its own, but its forked
+        // children still need the blob and the loadable `.so`.
         sb.ro_bind(&root.data.join("seccomp"), "/data/seccomp");
         if let Some(dir) = &zygote_app {
             // Z4: same source, same blob, but loadable via System.load from a
@@ -1507,6 +1537,7 @@ pub(crate) fn launch_session(
             &mut cgroup,
             &live,
             &probe_state,
+            probe_fifo,
             started,
             opts.timeout,
             &frames_dir,
@@ -3405,7 +3436,7 @@ fn wait_for_event_settled(
     cgroup: &mut crate::cgroup::RunCgroup,
     live: &acos_services::registry::LiveHandles,
     probe_state: &Arc<std::sync::Mutex<ProbeState>>,
-    guest_stdin: &mut Option<std::process::ChildStdin>,
+    guest_stdin: &mut Option<GuestProbeChannel>,
     deadline: Instant,
     min_generation: u64,
     min_probe_seq: u64,
@@ -3718,7 +3749,7 @@ fn wait_for_settled_observation(
     cgroup: &mut crate::cgroup::RunCgroup,
     live: &acos_services::registry::LiveHandles,
     probe_state: &Arc<std::sync::Mutex<ProbeState>>,
-    guest_stdin: &mut Option<std::process::ChildStdin>,
+    guest_stdin: &mut Option<GuestProbeChannel>,
     deadline: Instant,
     min_generation: u64,
     min_probe_seq: u64,
@@ -3948,10 +3979,62 @@ fn probe_usable_for_fast_tree(
     probe.seq > min_probe_seq && probe.generation >= entry_generation
 }
 
+/// The demand-probe channel: the guest reads `PROBE` lines from fd 0.
+///
+/// * `Pipe` — the exec path: the guest process's own stdin.
+/// * `Fifo` — a zygote session (Z4/ZPROD): the keeper's stdin is `/dev/null`,
+///   so the forked child `System.setIn`s `<session>/probe.fifo` instead
+///   (`ZygoteApp.z4ProbeStdin`), and this is the writer half.
+pub(crate) enum GuestProbeChannel {
+    Pipe(std::process::ChildStdin),
+    Fifo(std::fs::File),
+}
+
+impl std::io::Write for GuestProbeChannel {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            GuestProbeChannel::Pipe(writer) => writer.write(buf),
+            GuestProbeChannel::Fifo(writer) => writer.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            GuestProbeChannel::Pipe(writer) => writer.flush(),
+            GuestProbeChannel::Fifo(writer) => writer.flush(),
+        }
+    }
+}
+
+/// The FIFO name a zygote child opens for its demand-probe channel. Kept here
+/// so the guest source and this writer cannot drift (`ZygoteApp.z4ProbeStdin`).
+pub(crate) const GUEST_PROBE_FIFO: &str = "probe.fifo";
+
+/// Create (or reset) and open a session's probe FIFO for the host writer.
+///
+/// Read+write, exactly like the keeper's `cmd` FIFO: the child's blocking
+/// `open` never waits on this side, and a reader that goes away cannot turn
+/// the next wake into `EPIPE` (this process is its own reader).
+fn open_guest_probe_fifo(dir: &Path) -> Result<std::fs::File> {
+    fs::create_dir_all(dir)?;
+    let path = dir.join(GUEST_PROBE_FIFO);
+    let _ = fs::remove_file(&path);
+    let c = std::ffi::CString::new(path.to_string_lossy().to_string())
+        .map_err(|e| Error::Layout(e.to_string()))?;
+    if unsafe { libc::mkfifo(c.as_ptr(), 0o600) } != 0 {
+        return Err(Error::Io(std::io::Error::last_os_error()));
+    }
+    std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&path)
+        .map_err(Error::Io)
+}
+
 /// Ask the guest for one probe sample on its main looper, out of its 50 ms
 /// cadence. The guest reads `PROBE` lines from stdin (interactive sessions only)
 /// and wakes the probe thread immediately; this never changes the view tree.
-fn request_guest_probe(stdin: &mut Option<std::process::ChildStdin>) {
+fn request_guest_probe(stdin: &mut Option<GuestProbeChannel>) {
     if let Some(writer) = stdin.as_mut() {
         use std::io::Write;
         let _ = writeln!(writer, "PROBE");
@@ -3975,7 +4058,7 @@ fn wait_for_fast_tree(
     cgroup: &mut crate::cgroup::RunCgroup,
     live: &acos_services::registry::LiveHandles,
     probe_state: &Arc<std::sync::Mutex<ProbeState>>,
-    guest_stdin: &mut Option<std::process::ChildStdin>,
+    guest_stdin: &mut Option<GuestProbeChannel>,
     deadline: Instant,
     min_probe_seq: u64,
 ) -> FastTreeEnd {
@@ -4119,6 +4202,7 @@ fn interactive_serve(
     cgroup: &mut crate::cgroup::RunCgroup,
     live: &acos_services::registry::LiveHandles,
     probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+    probe_fifo: Option<std::fs::File>,
     started: Instant,
     startup_budget: Duration,
     frames_dir: &Path,
@@ -4135,7 +4219,12 @@ fn interactive_serve(
     // tree can wake the probe thread instead of waiting for its 50 ms tick.
     // Interactive sessions are spawned with a piped stdin; non-interactive ones
     // have none and the request is a no-op.
-    let mut guest_stdin = child.stdin.take();
+    // ZPROD3b: a zygote session's probe channel is its own FIFO (the stub's
+    // stdin is a dead end); every other session keeps the guest's own pipe.
+    let mut guest_stdin = match probe_fifo {
+        Some(fifo) => Some(GuestProbeChannel::Fifo(fifo)),
+        None => child.stdin.take().map(GuestProbeChannel::Pipe),
+    };
     let startup_deadline = started + startup_budget;
     // P9: the drain thread signals this on every parsed probe sample, so the
     // loop below is woken by the guest instead of polling on a fixed 10 ms
@@ -6308,6 +6397,10 @@ mod png_checksum_tests;
 #[cfg(test)]
 #[path = "md5_frame_tests.rs"]
 mod md5_frame_tests;
+
+#[cfg(test)]
+#[path = "probe_channel_tests.rs"]
+mod probe_channel_tests;
 
 /// S3PERF (E2.17): the skipped-draw evidence is never a readiness gate.
 ///

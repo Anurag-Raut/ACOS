@@ -53,6 +53,7 @@ use acos_verify::backend::{CrashRecord, InputAck, InputDelivery, LogRecord};
 use acos_verify::{BackendError, LaunchOutcome};
 
 use super::host_mem;
+use super::zygote_host::{reply_fields, zygote_dead, ZygoteFacts, ZygoteHost};
 use super::{
     key_code, live_frame_unavailable, parse_bounds, stale_frame, ui_tree_from_json, Engine,
     FrameEvidence, Mode, ObservedFrame, SessionBackend, SessionCapabilities, TeardownReport,
@@ -236,11 +237,44 @@ pub struct ArtSession {
     /// (orderly activity lifecycle vs. killed after the bounded grace) and how
     /// long it took. Reported by `acos_destroy`; never guessed.
     last_teardown: Option<(TeardownPath, u64)>,
+    /// ZPROD3: the keeper this session runs on. `None` with `ACOS_ART_ZYGOTE`
+    /// off (the exec path, byte-identical to `main`) and also on every session
+    /// that failed to get a zygote child (that session does not exist: the
+    /// failure is a structured `ZYGOTE_DEAD`, never a silent exec fallback).
+    zygote: Option<ZygoteBinding>,
+    /// The pid the most recent zygote reset killed (reply field only).
+    zygote_previous_child_pid: Option<u32>,
     /// S3b: a reset that failed once for a host-transport reason and then
     /// succeeded. The first failure's evidence is copied to
     /// `<artifacts>/relaunch-retry-1/` and this record is carried in the reset
     /// reply. `None` on every ordinary relaunch.
     relaunch_retry: Option<serde_json::Value>,
+}
+
+/// One session's binding to a keeper child (P2, design §3/§4).
+struct ZygoteBinding {
+    host: Arc<ZygoteHost>,
+    key: acos_art::zygote_prod::ZygoteKey,
+    facts: ZygoteFacts,
+}
+
+/// How a session asks for a zygote child. Built by
+/// [`ArtSession::start_with_zygote`], and again by `reset` with
+/// `reuse_tag: Some(..)` so the reset refork reuses the killed tag (§4).
+pub struct ZygoteStart {
+    host: Arc<ZygoteHost>,
+    key: acos_art::zygote_prod::ZygoteKey,
+    reuse_tag: Option<u32>,
+}
+
+impl Clone for ZygoteStart {
+    fn clone(&self) -> Self {
+        Self {
+            host: Arc::clone(&self.host),
+            key: self.key.clone(),
+            reuse_tag: self.reuse_tag,
+        }
+    }
 }
 
 /// How an explicit session destruction ended (GL1).
@@ -1225,6 +1259,43 @@ impl ArtSession {
         animations: &str,
         insets: &str,
     ) -> Result<ArtSession, BackendError> {
+        Self::start_inner(apk, artifacts, animations, insets, None)
+    }
+
+    /// ZPROD3: start a session that must run on a persistent zygote child
+    /// (`ACOS_ART_ZYGOTE=on`). With the flag off (or a disabled host) this is
+    /// exactly [`ArtSession::start_with_options`]: the launcher argv, the call
+    /// order and the replies are unchanged.
+    ///
+    /// With the flag on the order is the design's (§2/§4.3/§4.4): prepare the
+    /// session dir → spawn the launcher with `ACOS_ZYGOTE_SESSION` → wait for
+    /// its `argv` and publish `binds` → `spawn <tag>` on the keeper → only then
+    /// read the launcher's ready line (the ready line means the forked child
+    /// connected to this session's own sockets). Any zygote failure returns a
+    /// structured `ZYGOTE_DEAD`; the launcher is killed and no exec-path session
+    /// is ever substituted.
+    pub fn start_with_zygote(
+        apk: &Path,
+        artifacts: &Path,
+        animations: &str,
+        insets: &str,
+        zygote: Option<Arc<ZygoteHost>>,
+    ) -> Result<ArtSession, BackendError> {
+        let start = zygote.map(|host| ZygoteStart {
+            key: zygote_key_of(apk, insets, animations),
+            host,
+            reuse_tag: None,
+        });
+        Self::start_inner(apk, artifacts, animations, insets, start)
+    }
+
+    fn start_inner(
+        apk: &Path,
+        artifacts: &Path,
+        animations: &str,
+        insets: &str,
+        zygote: Option<ZygoteStart>,
+    ) -> Result<ArtSession, BackendError> {
         let insets: &'static str = match acos_services::wms::parse_insets_mode(insets) {
             Some(acos_services::wms::InsetsMode::Carve) => "carve",
             Some(acos_services::wms::InsetsMode::Report) => "report",
@@ -1329,6 +1400,29 @@ impl ArtSession {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        // ZPROD3 (design §4.3): the session launcher runs in *foreign-guest*
+        // mode: it builds its own sandbox, peer, `ServiceHost` and contract, but
+        // does not start ART — the keeper forks the child that connects to these
+        // sockets. `prepare` boots the keeper on first use and wipes this
+        // session's run root/sock dir, so nothing the previous child wrote can
+        // survive a reset. Every failure here is `ZYGOTE_DEAD`; there is no
+        // fallback to the exec path while the flag is on.
+        let mut zygote_prepared: Option<(Arc<ZygoteHost>, acos_art::zygote_prod::ZygoteKey, u32)> =
+            None;
+        if let Some(start) = zygote.as_ref() {
+            if start.host.enabled() {
+                let tag = start
+                    .host
+                    .prepare(&start.key, &binary, apk, start.reuse_tag)
+                    .map_err(|error| zygote_dead(&error.to_string()))?;
+                let session_dir = start.host.session_dir(&start.key, tag);
+                command
+                    .env("ACOS_ZYGOTE_SESSION", &session_dir)
+                    // Z4: the forked child publishes the read-only tree probe.
+                    .env("ACOS_ZYGOTE_PROBE", "1");
+                zygote_prepared = Some((Arc::clone(&start.host), start.key.clone(), tag));
+            }
+        }
         // Display geometry. The defaults are the API-34 emulator profile the
         // existing baselines were captured on; `ACOS_ART_*` lets a caller match
         // a *reference device* exactly (1080x2400 @ 400 dpi with a 108 px status
@@ -1402,6 +1496,85 @@ impl ArtSession {
             ),
         })?;
         let _pid = child.id();
+        // ZPROD5: the launcher's stderr is drained **before** the zygote contract
+        // wait, so a launcher that dies before it publishes `<plan>/<tag>/argv`
+        // reports *why* instead of the engine waiting out the 180 s contract
+        // timeout with only the keeper's log (measured: `acos serve`'s bench
+        // cohort, where the session dir pushed `sock/peer.sock` past `sun_path`
+        // and the launcher printed `io: path must be shorter than SUN_LEN` and
+        // exited, invisible to the engine).
+        let stderr_tail = Arc::new(Mutex::new(VecDeque::new()));
+        {
+            let tail = Arc::clone(&stderr_tail);
+            let stderr = child.stderr.take().expect("piped stderr");
+            std::thread::spawn(move || {
+                let mut reader = BufReader::new(stderr);
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    match reader.read_line(&mut line) {
+                        Ok(0) | Err(_) => break,
+                        Ok(_) => {
+                            let mut tail = tail.lock().unwrap_or_else(|e| e.into_inner());
+                            tail.extend(line.bytes());
+                            while tail.len() > 8192 {
+                                tail.pop_front();
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        // ZPROD3 (design §4.3/§4.4): the launcher published `argv` during its
+        // own launch; publish this session's `binds` and fork **one** fresh child
+        // from the keeper, all before the launcher's ready line (that line means
+        // the child connected to this session's sockets). A dead keeper or a
+        // missing ack is a structured `ZYGOTE_DEAD` and the launcher is killed —
+        // never an exec-path session reported as zygote isolation (§6).
+        let mut zygote_facts: Option<ZygoteFacts> = None;
+        if let Some((host, key, tag)) = zygote_prepared.as_ref() {
+            let tail = Arc::clone(&stderr_tail);
+            let mut launcher_gone = || match child.try_wait() {
+                Ok(Some(status)) => {
+                    let text = {
+                        let tail = tail.lock().unwrap_or_else(|e| e.into_inner());
+                        let bytes: Vec<u8> = tail.iter().copied().collect();
+                        String::from_utf8_lossy(&bytes).trim().to_string()
+                    };
+                    Some(format!(
+                        "the session launcher exited ({status}) before it published the contract \
+                         (its stderr: {})",
+                        if text.is_empty() { "<empty>" } else { &text }
+                    ))
+                }
+                Ok(None) => None,
+                Err(error) => Some(format!(
+                    "the session launcher could not be observed: {error}"
+                )),
+            };
+            match host.wait_contract_and_spawn(
+                key,
+                *tag,
+                Duration::from_secs(180),
+                &mut launcher_gone,
+            ) {
+                Ok(spawned) => {
+                    zygote_facts = Some(ZygoteFacts::of(
+                        &spawned,
+                        host.boot_epoch(key).unwrap_or_default(),
+                    ));
+                }
+                Err(error) => {
+                    // SAFETY: the launcher was spawned with `process_group(0)`,
+                    // so `-_pid` names its group and no other.
+                    unsafe {
+                        libc::kill(-(_pid as i32), libc::SIGKILL);
+                    }
+                    let _ = child.wait();
+                    return Err(zygote_dead(&error.to_string()));
+                }
+            }
+        }
         dm6_trace(serde_json::json!({
             "event": "spawn",
             "session": artifacts.display().to_string(),
@@ -1411,8 +1584,8 @@ impl ArtSession {
         }));
         let stdin = child.stdin.take();
         let stdout = child.stdout.take().expect("piped stdout");
-        let stderr = child.stderr.take().expect("piped stderr");
 
+        let stderr_tail2 = Arc::clone(&stderr_tail);
         let (tx, lines) = mpsc::channel();
         std::thread::spawn(move || {
             let mut reader = BufReader::new(stdout);
@@ -1445,31 +1618,12 @@ impl ArtSession {
                 }
             }
         });
-        let stderr_tail = Arc::new(Mutex::new(VecDeque::new()));
-        let tail = Arc::clone(&stderr_tail);
-        std::thread::spawn(move || {
-            let mut reader = BufReader::new(stderr);
-            let mut line = String::new();
-            loop {
-                line.clear();
-                match reader.read_line(&mut line) {
-                    Ok(0) | Err(_) => break,
-                    Ok(_) => {
-                        let mut tail = tail.lock().unwrap_or_else(|e| e.into_inner());
-                        tail.extend(line.bytes());
-                        while tail.len() > 8192 {
-                            tail.pop_front();
-                        }
-                    }
-                }
-            }
-        });
 
         let mut session = ArtSession {
             child: Some(child),
             stdin,
             lines,
-            stderr_tail,
+            stderr_tail: stderr_tail2,
             timeout,
             apk: apk.to_path_buf(),
             artifacts: artifacts.to_path_buf(),
@@ -1516,6 +1670,11 @@ impl ArtSession {
             reset_settle_timeout_ms: None,
             closed: false,
             last_teardown: None,
+            zygote: match (zygote_prepared, zygote_facts) {
+                (Some((host, key, _tag)), Some(facts)) => Some(ZygoteBinding { host, key, facts }),
+                _ => None,
+            },
+            zygote_previous_child_pid: None,
             relaunch_retry: None,
         };
         // The ready line is the protocol's first reply. If the session dies
@@ -1612,6 +1771,30 @@ impl ArtSession {
     /// step clock starts, so no step could be charged with it.
     pub const fn session_start_ms(&self) -> u64 {
         self.session_start_ms
+    }
+
+    /// ZPROD3: the zygote child facts this session really runs on, or `None`
+    /// with `ACOS_ART_ZYGOTE` off. Facts are the keeper's observed acks, never
+    /// host guesses, so a reply built from them cannot claim a zygote it did not
+    /// get.
+    pub fn zygote_facts(&self) -> Option<&ZygoteFacts> {
+        self.zygote.as_ref().map(|binding| &binding.facts)
+    }
+
+    /// The child pid the most recent zygote reset killed.
+    pub fn zygote_previous_child_pid(&self) -> Option<u32> {
+        self.zygote_previous_child_pid
+    }
+
+    /// ZPROD3: the zygote reply fields (`isolation`, `child_pid`,
+    /// `previous_child_pid`, `run_root`, `zygote_boot_epoch`, `memory_scope`).
+    /// `None` when the session is not a zygote child, so the flag-off reply is
+    /// unchanged byte for byte.
+    pub fn zygote_reply_fields(&self) -> Option<serde_json::Map<String, serde_json::Value>> {
+        reply_fields(
+            self.zygote.as_ref().map(|binding| &binding.facts),
+            self.zygote_previous_child_pid,
+        )
     }
 
     /// H13b: the `boot_image` record the guest's ready line carried.
@@ -2761,7 +2944,20 @@ impl ArtSession {
         // grace below bounds the *lifecycle*, never the app's threads: a guest
         // still alive afterwards is killed with its whole process tree, and the
         // reply says which path was taken (`lifecycle` vs `killed`).
-        let grace = Duration::from_millis(teardown_grace_ms());
+        //
+        // ZPROD6: a **zygote** session has no lifecycle to wait for. Its `child`
+        // here is the session launcher — a foreign-guest shim that owns the
+        // sockets and the `ServiceHost` and starts no ART at all (the app child
+        // was forked inside the keeper). Measured with `DM6_RESET_TRACE` on the
+        // serve path: the shim never exits after `close` (`exit_ms=300`,
+        // `reaped_before_deadline=false` on every ON stop), so the 300 ms grace
+        // bought nothing and every ON `acos_destroy` cost 307 ms against the OFF
+        // arm's 13 ms — and every ON reset paid it too, inside its stop phase.
+        // The real death proof for a zygote session is the keeper's `reaped`
+        // ack (`kill(-child, SIGKILL)` + `wait4`, written by `ZygoteApp.z4KillOne`),
+        // which `close`/`reset` obtain right after this stop. So: signal, then
+        // prove — never wait out a lifecycle the shim cannot deliver.
+        let grace = Duration::from_millis(teardown_grace_ms_for(self.zygote.is_some()));
         let deadline = Instant::now() + grace;
         let exited = self.wait_for_exit(deadline);
         let path = if exited {
@@ -2836,6 +3032,8 @@ impl ArtSession {
             "session": self.artifacts.display().to_string(),
             "process_group": self.process_group,
             "path": path.as_str(),
+            "zygote": self.zygote.is_some(),
+            "grace_ms": grace.as_millis() as u64,
             "exit_ms": exit_ms,
             "stop_ms": started.elapsed().as_millis() as u64,
             "reaped_before_deadline": exited,
@@ -3966,6 +4164,24 @@ impl SessionBackend for ArtSession {
         let artifacts = self.artifacts.clone();
         let settle = self.settle.clone();
         let boot_ms = self.session_start_ms;
+        // ZPROD3 (design §4): a zygote reset is `kill <tag>` + a fresh launcher
+        // for the *same* tag + `spawn <tag>`. The zygote itself, its pid and its
+        // boot epoch are untouched; a reset that silently restarted the keeper
+        // would change the epoch, which the reply states.
+        let zygote_link = self.zygote.as_ref().map(|binding| {
+            (
+                Arc::clone(&binding.host),
+                binding.key.clone(),
+                binding.facts.tag,
+                binding.facts.boot_epoch.clone(),
+            )
+        });
+        let zygote_previous_child_pid = self.zygote.as_ref().map(|b| b.facts.child_pid);
+        let zygote_start = self.zygote.as_ref().map(|binding| ZygoteStart {
+            host: Arc::clone(&binding.host),
+            key: binding.key.clone(),
+            reuse_tag: Some(binding.facts.tag),
+        });
         // Same teardown rule as `close`: the old guest's whole process group
         // must be gone before the replacement starts (one ART guest at a time).
         //
@@ -3982,6 +4198,19 @@ impl SessionBackend for ArtSession {
             return Err(error);
         }
         let stop_ms = phase_started.elapsed().as_millis() as u64;
+        // The old launcher's group is gone; now end the old child's process
+        // group inside the keeper before its run root is wiped (§4.1/§4.2). A
+        // keeper that cannot ack the kill is `ZYGOTE_DEAD` and this session stays
+        // provably closed (W55): no bound frame, no verb answers from it.
+        // ZPROD4: if the keeper is gone (or was restarted with a new boot epoch)
+        // this session is *lost*: `verb_error` says so structurally and never
+        // re-points it at the new keeper.
+        if let Some((host, key, tag, epoch)) = zygote_link.as_ref() {
+            if let Err(error) = host.kill(key, *tag) {
+                self.invalidate_frame();
+                return Err(host.verb_error(key, *tag, epoch, &error));
+            }
+        }
         let relaunch_started = Instant::now();
         // S3b: a relaunch can fail because the *host* could not complete a
         // transport/host resource step (the binder reply was malformed, or the
@@ -3991,14 +4220,20 @@ impl SessionBackend for ArtSession {
         // `<artifacts>/relaunch-retry-1/` and carried in the reset reply. Any
         // other startup failure (a real app wall, a broken APK) is returned
         // immediately and is never retried.
+        //
+        // ZPROD4: the loop covers both arms. With `ACOS_ART_ZYGOTE` off
+        // `zygote_start` is `None` and this is exactly `start_with_options`;
+        // with it on `start_inner` spawns the child on the keeper (same tag,
+        // same epoch) and a retry re-spawns on that same tag.
         let mut retry_info: Option<serde_json::Value> = None;
         let mut fresh = None;
         for attempt in 1..=2 {
-            match ArtSession::start_with_options(
+            match ArtSession::start_inner(
                 &apk,
                 &artifacts,
                 self.animations,
                 self.insets(),
+                zygote_start.clone(),
             ) {
                 Ok(session) => {
                     fresh = Some(session);
@@ -4033,6 +4268,7 @@ impl SessionBackend for ArtSession {
         let start_ms = relaunch_started.elapsed().as_millis() as u64;
         fresh.seq_offset = offset;
         fresh.log_offset = log_offset;
+        fresh.zygote_previous_child_pid = zygote_previous_child_pid;
         fresh.relaunch_retry = retry_info;
         // Session-level cost accounting spans the relaunch.
         fresh.settle = settle;
@@ -4077,7 +4313,15 @@ impl SessionBackend for ArtSession {
             return Ok(());
         }
         self.closed = true;
-        self.shutdown()
+        let stopped = self.shutdown();
+        // ZPROD3: a zygote session's app child lives inside the keeper's
+        // sandbox, so closing the session must end *that child* too (by its
+        // process group). A keeper that is already gone is not an error here:
+        // `shutdown_all` on serve exit ends every child with its zygote.
+        if let Some(binding) = self.zygote.as_ref() {
+            let _ = binding.host.kill(&binding.key, binding.facts.tag);
+        }
+        stopped
     }
 
     fn teardown(&mut self) -> Result<TeardownReport, BackendError> {
@@ -4323,6 +4567,29 @@ fn resolve_binary() -> Result<PathBuf, BackendError> {
     Ok(PathBuf::from("acos-art"))
 }
 
+/// ZPROD3: the keeper key a session needs (design §3: a zygote's pre-fork heap
+/// is only valid for one APK + boot-image mode + geometry + insets + animations
+/// tuple). Values are the launch-time ones the engine already decided, never a
+/// new source of truth.
+fn zygote_key_of(apk: &Path, insets: &str, animations: &str) -> acos_art::zygote_prod::ZygoteKey {
+    let num = |name: &str, default: u32| {
+        std::env::var(name)
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(default)
+    };
+    acos_art::zygote_prod::ZygoteKey {
+        apk: apk.display().to_string(),
+        boot_image: std::env::var("ACOS_ART_BOOT_IMAGE")
+            .unwrap_or_else(|_| "default".to_string()),
+        width: num("ACOS_ART_WIDTH", 1080),
+        height: num("ACOS_ART_PANEL_HEIGHT", 2400),
+        density: num("ACOS_ART_DENSITY", 420),
+        insets: insets.trim().to_ascii_lowercase(),
+        animations: animations.trim().to_ascii_lowercase(),
+    }
+}
+
 fn read_png(path: &Path) -> Result<Vec<u8>, BackendError> {
     let file = std::fs::File::open(path).map_err(|error| BackendError::Error {
         code: acos_protocol::ErrorCode::RenderIo,
@@ -4403,11 +4670,43 @@ pub(crate) fn processes_in_group(group: i32) -> Vec<u32> {
 /// find, `Thread.join` of non-daemon threads), and waiting longer cannot help.
 const DEFAULT_TEARDOWN_GRACE_MS: u64 = 300;
 
+/// ZPROD6: the lifecycle grace for a session whose ART guest is **not** this
+/// process's child (a zygote session: the guest was forked inside the keeper and
+/// the engine's own `child` is the foreign-guest session launcher).
+///
+/// Zero, because there is nothing to wait for and waiting was measured to cost
+/// exactly the grace: with `DM6_RESET_TRACE` on the live serve path every ON
+/// stop read `path=killed reaped_before_deadline=false exit_ms=300` — the shim
+/// never exits on `close` — which is 100 % of the ON arm's teardown regression
+/// (307 ms vs the OFF arm's 13 ms) and, inside reset's stop phase, all of its
+/// reset regression (307 ms vs 14 ms). The death proof for a zygote session is
+/// the keeper's `reaped` ack instead (`kill(-child, SIGKILL)` + `wait4`, written
+/// by `ZygoteApp.z4KillOne`), which `close`/`reset` fetch immediately after this
+/// stop; the process-group proof below is unchanged and still runs.
+const DEFAULT_ZYGOTE_TEARDOWN_GRACE_MS: u64 = 0;
+
 fn teardown_grace_ms() -> u64 {
     std::env::var("ACOS_ART_TEARDOWN_GRACE_MS")
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(DEFAULT_TEARDOWN_GRACE_MS)
+}
+
+/// The grace this session's stop may spend waiting for its own child to exit.
+///
+/// The operator knob still wins (so an experiment can restore the old bound for
+/// either arm); otherwise the arm decides: an exec-path session keeps GL1's
+/// 300 ms lifecycle bound, a zygote session has none (see
+/// [`DEFAULT_ZYGOTE_TEARDOWN_GRACE_MS`]).
+fn teardown_grace_ms_for(zygote: bool) -> u64 {
+    if std::env::var("ACOS_ART_TEARDOWN_GRACE_MS").is_ok() {
+        return teardown_grace_ms();
+    }
+    if zygote {
+        DEFAULT_ZYGOTE_TEARDOWN_GRACE_MS
+    } else {
+        DEFAULT_TEARDOWN_GRACE_MS
+    }
 }
 
 /// Live (non-zombie) processes whose command line names `dir`.
@@ -5503,6 +5802,110 @@ mod tests {
             "the reset must re-bind the replacement guest's artifact, not keep the old bytes"
         );
         session.close().expect("clean close");
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// ZPROD6: the lifecycle grace each arm gets. A zygote session has no
+    /// lifecycle to wait for (its app child is the keeper's, and the shim that
+    /// *is* the engine's child never exits on `close`), so its stop must not
+    /// spend GL1's 300 ms bound; the exec path keeps it. The operator knob still
+    /// wins for both arms, so an experiment can restore the old bound.
+    #[test]
+    fn only_the_exec_path_pays_the_lifecycle_grace() {
+        let guard = art_bin_env_lock();
+        std::env::remove_var("ACOS_ART_TEARDOWN_GRACE_MS");
+        assert_eq!(teardown_grace_ms_for(false), DEFAULT_TEARDOWN_GRACE_MS);
+        assert_eq!(teardown_grace_ms_for(true), DEFAULT_ZYGOTE_TEARDOWN_GRACE_MS);
+        assert_eq!(teardown_grace_ms_for(true), 0, "no wait is the whole point");
+        std::env::set_var("ACOS_ART_TEARDOWN_GRACE_MS", "120");
+        assert_eq!(teardown_grace_ms_for(true), 120, "the knob wins on both arms");
+        assert_eq!(teardown_grace_ms_for(false), 120);
+        std::env::remove_var("ACOS_ART_TEARDOWN_GRACE_MS");
+        drop(guard);
+    }
+
+    /// ZPROD6, the measured regression: the ON arm's `acos_destroy` cost 307 ms
+    /// (OFF: 13 ms) and every ON reset paid the same 307 ms inside its stop
+    /// phase, because the engine waited GL1's 300 ms lifecycle grace for a
+    /// *shim* that never exits on `close` (`reaped_before_deadline=false`,
+    /// `exit_ms=300`). With a zygote binding the stop must signal and prove
+    /// instead — and still leave the whole process group gone.
+    #[test]
+    fn a_zygote_session_signals_and_proves_instead_of_waiting_the_grace() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = o2_scratch_dir("zygote-stop");
+        // A session launcher in foreign-guest mode: it serves the protocol line
+        // for line and **ignores** `close` — the app child lives inside the
+        // keeper, and this process is only the sockets/ServiceHost shim. This is
+        // the shape measured on the serve path, not a synthetic never-exiter.
+        let script = dir.join("fake-acos-art-shim.sh");
+        std::fs::write(
+            &script,
+            "#!/bin/sh\n\
+             echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.test\",\"width\":1080,\"height\":2400,\"density\":420}'\n\
+             while IFS= read -r line; do\n\
+               case \"$line\" in\n\
+                 *'\"cmd\":\"close\"'*) : ;;\n\
+                 *) echo '{\"ok\":false,\"code\":\"BAD_REQUEST\",\"error\":\"no\"}' ;;\n\
+               esac\n\
+             done\n\
+             sleep 300\n",
+        )
+        .unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _art_bin_guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        std::env::remove_var("ACOS_ART_TEARDOWN_GRACE_MS");
+
+        // The exec path keeps GL1's bound: the same shim costs the full grace.
+        let mut exec = ArtSession::start(&apk, &dir.join("exec")).expect("exec session starts");
+        assert!(exec.zygote.is_none());
+        let started = Instant::now();
+        let report = exec.teardown().expect("clean stop");
+        let exec_ms = started.elapsed();
+        assert!(
+            exec_ms >= Duration::from_millis(250),
+            "the exec arm still bounds the lifecycle at {} ms (waited {exec_ms:?})",
+            DEFAULT_TEARDOWN_GRACE_MS
+        );
+        assert!(report.is_clean(), "{report:?}");
+        assert_eq!(
+            exec.last_teardown().map(|(path, _)| path),
+            Some(TeardownPath::Killed),
+            "a guest that never exits is killed, and the reply says so"
+        );
+
+        // A zygote session: the same shim, but the app child is the keeper's.
+        let mut zg = ArtSession::start(&apk, &dir.join("zg")).expect("zygote-shaped session starts");
+        zg.zygote = Some(ZygoteBinding {
+            host: Arc::new(ZygoteHost::disabled()),
+            key: zygote_key_of(&apk, "report", "on"),
+            facts: ZygoteFacts {
+                tag: 0,
+                child_pid: 0,
+                run_root: dir.join("zg/run"),
+                boot_epoch: "test-epoch".into(),
+            },
+        });
+        let started = Instant::now();
+        let report = zg.teardown().expect("clean zygote stop");
+        let zg_ms = started.elapsed();
+        assert!(
+            zg_ms < Duration::from_millis(100),
+            "a zygote stop must not wait a lifecycle its shim cannot deliver: {zg_ms:?}"
+        );
+        assert!(report.is_clean(), "{report:?}");
+        assert!(report.survivors.is_empty(), "{report:?}");
+        assert!(report.verified, "the group is still proven, never assumed");
+        assert_eq!(
+            zg.last_teardown().map(|(path, _)| path),
+            Some(TeardownPath::Killed)
+        );
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);
     }

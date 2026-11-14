@@ -26,6 +26,13 @@ public final class Nat {
 
     public static native int geteuid();
 
+    /**
+     * ZPROD1: setpgid(0, 0) — the zygote session's warden process becomes its
+     * own process-group leader, so `kill(pid, SIGKILL)` with {@code pid} negated
+     * ends exactly that session (the group) and no sibling.
+     */
+    public static native int setpgid0();
+
     public static native int kill(int pid, int sig);
 
     /** rt_sigaction(SIGCHLD, SIG_DFL); returns 0 on success. */
