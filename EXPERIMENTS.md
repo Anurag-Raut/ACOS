@@ -2305,3 +2305,60 @@ decision are the two halves of rotate that can be proven without a guest run; bo
 with tests. The remaining work is a guest-side config change through a hand-rolled,
 ViewRootImpl-less window path, which needs several multi-minute ART runs to get right and
 must not be half-plumbed behind a "supported" capability.
+
+### E13.13 / ROT2 — `android:configChanges` lands on `ActivityInfo`; the rotation sequence itself still needs the window path (PARTIAL)
+
+Same experiment, second pass (branch `art-rotate-1`, base `1870756`). What this pass
+settles, and what it learned that changes the plan:
+
+| item | state |
+|---|---|
+| `android:configChanges` parsing (`acos-services::manifest_resolve`) | **done.** `PackageParser.parseActivity` rules: the attribute is one `int` bitmask in the binary XML (`ActivityInfo.CONFIG_*`), read into `LauncherActivity::config_changes`; an `<activity-alias>` inherits the target's value (`parseActivityAlias`: `info.configChanges = target.info.configChanges`, the alias schema has no such attribute); `getActivityConfigChanges(declared, 0)` is applied exactly (`declared \| (~recreateOnConfigChanges & CONFIG_MCC\|CONFIG_MNC)`). Three unit tests on synthetic AXML DOM fixtures: `orientation\|screenSize` → `0x480\|0x3` and `RotationRelaunch::missing() == screenLayout\|smallestScreenSize`; all four rotation bits → no relaunch; unset (every fixture APK) → `0x3` → relaunch; alias inherits. The fixtures' relaunch decision is unchanged from ROT1, which is what `counter.yaml`/`v1-recreate.yaml`/`multi-activity.yaml` `assert_log` blocks already expect |
+| carrying it to the guest | **done for the engine's path**: `acos-art launch` resolves it once from the APK and forwards `ACOSLAUNCH_CONFIG_CHANGES`; `LaunchMain.buildActivityInfoNamed` sets `ActivityInfo.configChanges` from it instead of a hardcoded `0`, which is the field `ActivityRecord.getRealConfigChanged()` compares. Inert until a configuration actually changes, so no measured path moved (11 gates + 5 Gaten flows + 5 negatives unchanged, §below) |
+| `{"cmd":"rotate"}` / `ArtSession::rotate` / `InputAction::Rotate` | **still not done**, and **`input.rotate` still answers `UNSUPPORTED_BACKEND`/`input.rotate`**. Nothing was flipped to supported, so no run can claim a rotate pass |
+| D1's relaunch sequence in the guest | **not started**; the design note below is a correction of ROT1's target |
+| gate + negative, 3/3 | not done (impossible while rotate does not work) |
+| A/B | see §below |
+
+**Correction to ROT1's handoff, found while wiring the carry.** The engine's live path
+(`crates/acos-cli/src/engine/art.rs` → `acos-art launch --interactive`) runs
+**`LaunchMain.java`**, not `SessionMain.java`: `launch.rs::GUEST_CLASS = dev.acos.art.LaunchMain`,
+and its interactive stdin accepts exactly one word, `PROBE` (`LaunchMain` reader thread). The
+JSON `dispatchCommand` loop ROT1 §2 pointed at belongs to `acos-art session`
+(`SessionMain`, `session.rs::SESSION_CLASS`, argv-driven, no `ActivityThread` transaction
+path). Consequences for the rotate design:
+
+* a `{"cmd":"rotate"}` line has no reader on the engine's path — the guest side must be a new
+  stdin verb next to `PROBE` (or an out-of-band control), not a `SessionMain`-style switch;
+* `LaunchMain` builds the Activity through a **real** `ClientTransaction`
+  (`scheduleTransaction` + `LaunchActivityItem`/`ResumeActivityItem`) against a real
+  `ActivityThread`, and its window is driven by the local `mWMS`, so the AOSP-faithful rotate is
+  `mWMS` display-rotation + `ActivityThread.handleConfigurationChanged` with a real
+  `MergedConfiguration`, i.e. the framework path D1 describes *minus* the hand-rolled part. That
+  is a WMS/binder-shaped change, not a session-shaped one, and it is the reason this pass
+  stopped instead of half-plumbing it;
+* `SessionMain`'s ViewRootImpl-less decor (`traversal()` at `AppMain.W x PANEL_H`) is still the
+  cheaper place to *prove* the Activity-level sequence D1 names (`performSaveInstanceState` →
+  `performStop` → `performDestroy` → `attach(newConfig)` → `performCreate(state)` →
+  `performStart` → `callActivityOnRestoreInstanceState` → `performResume`, vs
+  `onConfigurationChanged` when the manifest declares all four bits) — but that scenario only
+  exercises `acos-art session`, which the verify engine does not use, so it cannot back a
+  `input.rotate` pass on its own.
+
+Verification of this pass (all on `art-rotate-1`, `CARGO_TARGET_DIR=.cache/h4-target`):
+
+* `cargo test --release --offline -p acos-services` → 84 lib tests + 2 integration files green,
+  including the three new `config_changes_*` tests.
+* the 11 gates (`v2-art-counter`, `w22-counter-reset`, `w54-dialog-pixels`, `w42-back-frame`,
+  `w15-dialog-menu`, `form-validation`, `suite/T03-render-good`, `v1-offscreen-pager` pass;
+  `suite/T03-render-wrong` `ASSERTION_FAILED`, `negative/offscreen-pager-visible`
+  `ELEMENT_OFFSCREEN`, `p11-progress-timeout` `TIMEOUT`), the 5 Gaten flows (pass) and the 5
+  Gaten negatives (`ASSERTION_FAILED`) are byte-for-byte the outcomes the pre-change branch had:
+  `.cache/rot2/suite/gate-*.json`, `.cache/rot2/suite/{scenarios,neg}-*.json`.
+
+Out of scope but observed while running the copied gate script: `w7-insets-report`,
+`w7-insets-carve-negative` fail `ASSERTION_FAILED` (`expected text "status=128", got "status=0"`)
+and the two `se1-expect-change*` scenarios error `INVALID_SCENARIO` on this base. None is in the
+ROT2 gate list, none can be affected by `ActivityInfo.configChanges` (no session in them
+changes configuration), and `se1-*` names a step this base does not implement — recorded here so
+the next pass does not mistake them for rotate fallout.

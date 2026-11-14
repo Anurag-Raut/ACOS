@@ -47,6 +47,15 @@ pub struct LauncherActivity {
     pub icon_ref: Option<u32>,
     /// `true` when the chosen entry is an `<activity-alias>`.
     pub alias: bool,
+    /// `ActivityInfo.configChanges` as `PackageParser.parseActivity` builds it:
+    /// the manifest's `android:configChanges` bitmask (an `int` in the binary
+    /// XML, the values are `ActivityInfo.CONFIG_*`) **or**-ed with the bits
+    /// `getActivityConfigChanges()` always forces (`CONFIG_MCC|CONFIG_MNC`, from
+    /// `RECREATE_ON_CONFIG_CHANGES_MASK`); an alias inherits the target's value
+    /// (`parseActivityAlias`: `info.configChanges = target.info.configChanges`).
+    /// This is what decides whether a display rotation re-creates the Activity
+    /// (`acos_wm::RotationRelaunch::for_rotation`).
+    pub config_changes: i32,
     /// Every enabled launcher candidate in resolution order (declaration
     /// order within the alias and activity groups), as `component` names.
     pub candidates: Vec<String>,
@@ -132,6 +141,7 @@ struct Decl {
     label: LabelSpec,
     icon: Option<u32>,
     launcher: bool,
+    config_changes: Option<i32>,
 }
 
 /// Walk the AXML DOM exactly as `PackageParser.parseBaseApplication` does.
@@ -226,12 +236,19 @@ pub fn resolve_from_dom(doc: &XmlDocument) -> Result<LauncherActivity, LauncherE
         chosen.label.clone()
     };
     let icon_ref = chosen.icon.or_else(|| target_decl.and_then(|d| d.icon));
+    // `parseActivityAlias` copies the target's `configChanges`; an alias has no
+    // `android:configChanges` attribute of its own in the manifest schema.
+    let declared = chosen
+        .config_changes
+        .or_else(|| target_decl.and_then(|d| d.config_changes))
+        .unwrap_or(0);
     Ok(LauncherActivity {
         component: chosen.name.clone(),
         target: chosen.target.clone(),
         label,
         icon_ref,
         alias: chosen.alias,
+        config_changes: get_activity_config_changes(declared),
         candidates: ordered.into_iter().map(|d| d.name.clone()).collect(),
     })
 }
@@ -261,6 +278,8 @@ fn parse_component(node: &XmlNode, package: &str, alias: bool) -> Option<Decl> {
             .any(|c| c == "android.intent.category.LAUNCHER");
         action && category
     });
+    // `parseActivityAlias` does not read `configChanges` for an alias.
+    let config_changes = if alias { None } else { attr_int(node, "configChanges") };
     Some(Decl {
         name,
         target,
@@ -269,6 +288,7 @@ fn parse_component(node: &XmlNode, package: &str, alias: bool) -> Option<Decl> {
         label: LabelSpec::from_parts(literal.as_ref(), res),
         icon: attr_ref(node, "icon"),
         launcher,
+        config_changes,
     })
 }
 
@@ -346,11 +366,37 @@ fn attr_bool(node: &XmlNode, name: &str) -> Option<bool> {
     }
 }
 
+fn attr_int(node: &XmlNode, name: &str) -> Option<i32> {
+    match attr(node, name)? {
+        TypedValue::IntDec(i) => Some(*i),
+        TypedValue::IntHex(h) => Some(*h as i32),
+        TypedValue::String(s) => s.trim().parse().ok(),
+        _ => None,
+    }
+}
+
 fn attr_ref(node: &XmlNode, name: &str) -> Option<u32> {
     match attr(node, name)? {
         TypedValue::Reference(r) => Some(*r),
         _ => None,
     }
+}
+
+/// `ActivityInfo.CONFIG_MCC` — one of the two bits
+/// `RECREATE_ON_CONFIG_CHANGES_MASK` names.
+pub const CONFIG_MCC: i32 = 0x0000_0001;
+/// `ActivityInfo.CONFIG_MNC`.
+pub const CONFIG_MNC: i32 = 0x0000_0002;
+
+/// `PackageParser.getActivityConfigChanges(configChanges, 0)`: the declared
+/// bits **or** `(~recreateOnConfigChanges) & RECREATE_ON_CONFIG_CHANGES_MASK`.
+/// The fixture APKs declare no `android:recreateOnConfigChanges`, so the forced
+/// bits are always `CONFIG_MCC|CONFIG_MNC`; they do not intersect the rotation
+/// bits, so they never change the relaunch decision — they are kept because the
+/// result is published as `ActivityInfo.configChanges`.
+#[must_use]
+pub fn get_activity_config_changes(declared: i32) -> i32 {
+    declared | (CONFIG_MCC | CONFIG_MNC)
 }
 
 fn label_of(node: &XmlNode) -> (Option<String>, Option<u32>) {
@@ -390,6 +436,9 @@ mod tests {
     }
     fn b(v: bool) -> TypedValue {
         TypedValue::Boolean(v)
+    }
+    fn i(v: i32) -> TypedValue {
+        TypedValue::IntDec(v)
     }
     fn r(v: u32) -> TypedValue {
         TypedValue::Reference(v)
@@ -657,6 +706,80 @@ mod tests {
             assert!(budget.native_bytes >= LARGE_NATIVE_BYTES, "~108 MiB of .so");
             assert_eq!(budget.resume_ms, RESUME_MS_LARGE);
         }
+    }
+
+    #[test]
+    fn config_changes_are_parsed_from_the_binary_manifest_int_bits() {
+        // `android:configChanges="orientation|screenSize"` is compiled to one
+        // `int` bitmask (0x80|0x400); PackageParser reads it with
+        // `sa.getInt(R.styleable.AndroidManifestActivity_configChanges, 0)`.
+        let doc = dom(vec![attr_node(
+            "activity",
+            &[
+                ("name", s(".Main")),
+                ("configChanges", i(0x80 | 0x400)),
+            ],
+            vec![filter()],
+        )]);
+        let got = resolve_from_dom(&doc).unwrap();
+        // `getActivityConfigChanges` forces CONFIG_MCC|CONFIG_MNC on top.
+        assert_eq!(got.config_changes, 0x480 | 0x3);
+        // The rotation decision AOSP derives from it
+        // (`ActivityRecord.getRealConfigChanged`): two of the four rotation bits
+        // are missing, so this Activity is re-created on a rotation.
+        let decision = acos_wm::RotationRelaunch::for_rotation(got.config_changes);
+        assert_eq!(
+            decision.missing(),
+            acos_wm::display::CONFIG_SCREEN_LAYOUT | acos_wm::display::CONFIG_SMALLEST_SCREEN_SIZE
+        );
+        assert!(decision.relaunches());
+    }
+
+    #[test]
+    fn all_four_rotation_bits_keep_the_activity_and_no_declaration_relaunches() {
+        let handled = dom(vec![attr_node(
+            "activity",
+            &[
+                ("name", s(".Main")),
+                ("configChanges", i(0x80 | 0x400 | 0x100 | 0x800)),
+            ],
+            vec![filter()],
+        )]);
+        let got = resolve_from_dom(&handled).unwrap();
+        assert_eq!(got.config_changes & 0xD80, 0xD80);
+        assert!(!acos_wm::RotationRelaunch::for_rotation(got.config_changes).relaunches());
+
+        // Every fixture APK declares nothing: 0x0 (plus the forced MCC/MNC).
+        let none = dom(vec![attr_node(
+            "activity",
+            &[("name", s(".Main"))],
+            vec![filter()],
+        )]);
+        let got = resolve_from_dom(&none).unwrap();
+        assert_eq!(got.config_changes, 0x3);
+        assert!(acos_wm::RotationRelaunch::for_rotation(got.config_changes).relaunches());
+    }
+
+    #[test]
+    fn activity_alias_inherits_the_targets_config_changes() {
+        // `PackageParser.parseActivityAlias`: `info.configChanges =
+        // target.info.configChanges`; an alias has no attribute of its own.
+        let doc = dom(vec![
+            attr_node(
+                "activity",
+                &[("name", s(".Main")), ("configChanges", i(0xD80))],
+                vec![],
+            ),
+            attr_node(
+                "activity-alias",
+                &[("name", s(".Alias")), ("targetActivity", s(".Main"))],
+                vec![filter()],
+            ),
+        ]);
+        let got = resolve_from_dom(&doc).unwrap();
+        assert!(got.alias);
+        assert_eq!(got.config_changes & 0xD80, 0xD80);
+        assert!(!acos_wm::RotationRelaunch::for_rotation(got.config_changes).relaunches());
     }
 
     #[test]

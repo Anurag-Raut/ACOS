@@ -140,3 +140,79 @@ scenario, so the 11 gates are unaffected by this branch.
    rotating to landscape, which must fail `ASSERTION_FAILED`.
 6. Then: 3/3 positive + 3/3 negative, the 11 gates, the 5 Gaten flows and 5 Gaten negatives,
    and the interleaved A/B (`ACOS_BENCH_TASK=ROT1`).
+
+---
+
+# ROT2 section (branch `art-rotate-1`, base `1870756` + ROT2 commit)
+
+Status: **PARTIAL** again, stopped at the 60-minute rule. Landed this pass: the
+`android:configChanges` half of step (a) — parsed from the binary manifest into
+`LauncherActivity::config_changes` with `PackageParser`'s exact rules, unit-tested on
+synthetic AXML, and carried to the engine's guest as `ACOSLAUNCH_CONFIG_CHANGES` →
+`ActivityInfo.configChanges` (was a hardcoded `0`). Nothing was flipped to "supported":
+`input.rotate` still answers `UNSUPPORTED_BACKEND`/`input.rotate`, so no run can claim a
+rotate pass.
+
+## 1. What changed
+
+* `crates/acos-services/src/manifest_resolve.rs`
+  * `LauncherActivity::config_changes: i32` (`ActivityInfo.configChanges`).
+  * `parse_component` reads `android:configChanges` (`attr_int`, `IntDec`/`IntHex`); an
+    `<activity-alias>` does **not** read it — `parseActivityAlias` copies the target's
+    (`info.configChanges = target.info.configChanges`), modelled the same way the alias label
+    already falls back to the target.
+  * `get_activity_config_changes(declared) = declared | (CONFIG_MCC|CONFIG_MNC)`, exactly
+    `PackageParser.getActivityConfigChanges(c, 0)` (`RECREATE_ON_CONFIG_CHANGES_MASK`).
+  * tests: `config_changes_are_parsed_from_the_binary_manifest_int_bits`,
+    `all_four_rotation_bits_keep_the_activity_and_no_declaration_relaunches`,
+    `activity_alias_inherits_the_targets_config_changes` — they assert the parsed bits **and**
+    the `acos_wm::RotationRelaunch` decision derived from them.
+* `crates/acos-art/src/launch.rs`: `ACOSLAUNCH_CONFIG_CHANGES` env for the guest.
+* `crates/acos-art/guest/java/dev/acos/art/LaunchMain.java`:
+  `setFieldForce(cls, ai, "configChanges", (int) envLong("ACOSLAUNCH_CONFIG_CHANGES", 0))`.
+
+## 2. The correction to this handoff that matters for the next attempt
+
+ROT1 §4.2 targeted `SessionMain.dispatchCommand` for the rotate verb. **The engine never runs
+`SessionMain`.** `crates/acos-cli/src/engine/art.rs` spawns `acos-art launch --interactive`,
+whose guest is `launch.rs::GUEST_CLASS = dev.acos.art.LaunchMain`; its stdin reader accepts
+exactly `PROBE`. `SessionMain` is the `acos-art session` guest (`session.rs`). So:
+
+1. the guest verb for a rotate on the engine path is a **new stdin line in `LaunchMain`**
+   next to `PROBE` (e.g. `ROTATE <n>`), handled on the main looper — a `{"cmd":"rotate"}` JSON
+   line has no reader there;
+2. `LaunchMain` runs a **real** `ActivityThread` transaction path
+   (`scheduleTransaction`/`LaunchActivityItem`/`ResumeActivityItem`) with the local `mWMS`, so
+   D1's AOSP sequence is reachable *through the framework*: rotate the `mWMS` display, build the
+   new `Configuration`/`MergedConfiguration`, and let
+   `ActivityThread.handleConfigurationChanged` decide relaunch vs `onConfigurationChanged` from
+   `ActivityInfo.configChanges` (now the manifest's real value — that is what this pass added).
+   That is a WMS/binder-shaped change, which is why it did not fit a 60-minute window on top of
+   (a);
+3. `SessionMain`'s `traversal()`-at-`AppMain.W x PANEL_H` decor remains the cheap place to
+   *unit-prove* the Activity-level sequence, but `acos-art session` is not what `acos verify`
+   runs, so it cannot back `input.rotate` alone.
+
+## 3. Measured this pass
+
+* `cargo test --release --offline -p acos-services` — 84 lib + 2 integration green (3 new).
+* 11 gates: 8 pass; `suite/T03-render-wrong` `ASSERTION_FAILED`,
+  `negative/offscreen-pager-visible` `ELEMENT_OFFSCREEN`, `p11-progress-timeout` `TIMEOUT`.
+* 5 Gaten flows pass; 5 Gaten negatives `ASSERTION_FAILED`.
+* Evidence: `.cache/rot2/suite/*.json` (gitignored), runner `.cache/rot2/run_suite.sh`.
+
+## 4. Next smallest actions (revised, in order)
+
+1. `LaunchMain`: `ROTATE <quarters>` on the stdin reader → main looper → rotate the local
+   `mWMS` display (`DisplayContent`/`DisplayFrames` on the C1 compositor's display spec, which
+   `acos-wm` already models), then `ActivityThread.handleConfigurationChanged` with the new
+   `Configuration`+`MergedConfiguration`; guest prints one `ACOSPROBE` with the new
+   width/height/rotation so the host's reply is bound to a fresh probe + fresh C1 frame.
+2. `launch.rs` interactive `match cmd`: `"rotate"` → write the stdin line, wait for the fresh
+   probe (same `wait_for_*` path as `tap`), answer `rotation`/`width`/`height`.
+3. `ArtSession::rotate` + `SessionCapabilities { rotate: true }` + `InputAction::Rotate` at
+   `crates/acos-cli/src/engine/mod.rs:980`; remove the unsupported answer only then.
+4. `acos-wm`: the dispatcher's display frame and window→display transform follow the rotated
+   `DisplaySpec` (D2: bars follow `DisplayPolicy`, not the rotated app rect) — the landscape bar
+   rule is already unit-tested in `DisplaySpec::rotated`.
+5. `scenarios/rot1-rotate.yaml` + `scenarios/negative/rot1-rotate-wrong.yaml`, 3/3 each.

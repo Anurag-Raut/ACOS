@@ -1066,6 +1066,18 @@ pub(crate) fn launch_session(
         "ACOSLAUNCH_SCREEN_LAYOUT",
         &acos_services::wms::REFERENCE_SCREEN_LAYOUT.to_string(),
     );
+    // ROT2: the Activity's `android:configChanges` bitmask, resolved from the
+    // binary manifest the way `PackageParser.getActivityConfigChanges` builds it
+    // (declared bits + the forced `CONFIG_MCC|CONFIG_MNC`). `LaunchMain` puts it
+    // on the `ActivityInfo` it hands `Activity.attach`, so
+    // `ActivityInfo.configChanges` is the manifest's value instead of a
+    // hardcoded 0 — that field is what `ActivityRecord
+    // .getRealConfigChanged()` compares when a rotation has to decide between a
+    // re-create (`ActivityRelaunchItem`) and `onConfigurationChanged`.
+    let config_changes = acos_services::manifest_resolve::launcher_activity(&apk)
+        .map(|l| l.config_changes)
+        .unwrap_or(0);
+    sb.env("ACOSLAUNCH_CONFIG_CHANGES", &config_changes.to_string());
     if std::env::var_os("E3G_DEBUG").is_some() {
         sb.env("E3G_DEBUG", "1");
     }

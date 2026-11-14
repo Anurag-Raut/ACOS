@@ -3359,7 +3359,12 @@ public final class LaunchMain {
                 sActivityLabelText.isEmpty() ? null : sActivityLabelText);
         setFieldForce(cls, ai, "flags", 0);          // no FLAG_HARDWARE_ACCELERATED
         setFieldForce(cls, ai, "screenOrientation", -1);
-        setFieldForce(cls, ai, "configChanges", 0);
+        // ROT2: the manifest's `android:configChanges` bitmask (resolved by
+        // `acos_services::manifest_resolve`, forced MCC/MNC included), not 0:
+        // `ActivityRecord.getRealConfigChanged()` compares exactly this field
+        // when a display rotation has to decide re-create vs
+        // `onConfigurationChanged`.
+        setFieldForce(cls, ai, "configChanges", (int) envLong("ACOSLAUNCH_CONFIG_CHANGES", 0));
         setFieldForce(cls, ai, "softInputMode", 0);
         setFieldForce(cls, ai, "uiOptions", 0);
         setFieldForce(cls, ai, "exported", true);
