@@ -764,6 +764,13 @@
           "type": "string"
         },
         {
+          "description": "The persistent zygote keeper (`ACOS_ART_ZYGOTE=on`) is gone or stopped acking a verb. The session is not served from the exec path while it reports zygote isolation: the reply names the keeper's exit status and the last zygote log lines, and the session is closed fail-closed.",
+          "enum": [
+            "ZYGOTE_DEAD"
+          ],
+          "type": "string"
+        },
+        {
           "description": "ACOS itself failed (distinct from an app crash).",
           "enum": [
             "INTERNAL"

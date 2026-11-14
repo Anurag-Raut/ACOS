@@ -3044,6 +3044,7 @@ mod launch_gate_tests {
             extras: Default::default(),
             clear_state: true,
             settle_timeout_ms: None,
+            settle: None,
         }
     }
 
@@ -3100,6 +3101,7 @@ mod launch_gate_tests {
             extras: Default::default(),
             clear_state: false,
             settle_timeout_ms: None,
+            settle: None,
         };
         let failure = static_launch_assertion(&manifest, &step).expect("must fail");
         assert_eq!(failure.status, Status::Error);
