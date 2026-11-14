@@ -418,6 +418,14 @@ pub static SPECS: &[ParcelableSpec] = &[
     },
     // `ProviderInfo.writeToParcel` (API 34): the `ComponentInfo` prefix then
     // the provider fields (28 `Parcel.write*` calls).
+    // `android.content.pm.Signature.writeToParcel`: one `writeByteArray`
+    // (the DER X.509 certificate). Read back by `PackageInfo.signatures`'s
+    // `TypedArray` and by `Signature.CREATOR`.
+    ParcelableSpec {
+        class: "android.content.pm.Signature",
+        fields: &[FieldOp::ByteArray],
+        verification: Verification::Full,
+    },
     ParcelableSpec {
         class: "android.content.pm.ProviderInfo",
         fields: &[

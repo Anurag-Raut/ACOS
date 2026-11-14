@@ -1,0 +1,1925 @@
+{
+  "schema_version": 1,
+  "source": "acos",
+  "fidelity": "art-reference",
+  "scenario": {
+    "name": "gaten-lesson",
+    "path": "scenarios/gaten-lesson.yaml",
+    "sha256": "098079c2b84078bae01fc2fa6d1699aa81957b4e901d280df3cc8ace46a1788b"
+  },
+  "app": {
+    "package": null,
+    "activity": "com.gaten.app.MainActivity",
+    "sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29"
+  },
+  "engine": {
+    "backend": "acos-native",
+    "isolation": "process",
+    "verdict": "pass",
+    "display": {
+      "density_dpi": 400,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    }
+  },
+  "started": "2026-11-14T11:56:14.351+00:00",
+  "steps": [
+    {
+      "index": 0,
+      "kind": "launch",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [],
+      "screen": {},
+      "assertion": null,
+      "screenshot": null,
+      "error": null
+    },
+    {
+      "index": 1,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Set up Gaten"
+        }
+      },
+      "target": null,
+      "visible_texts": [
+        "1 / 3",
+        "Android needs Gaten as an accessibility service.",
+        "Choose text recognition",
+        "Look up Japanese anywhere",
+        "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+        "Skip",
+        "Standard or Enhanced",
+        "Turn on lookup mode"
+      ],
+      "visible_descs": [
+        "Look up Japanese anywhere. Step 1 of 3.",
+        "Skip lookup mode setup",
+        "Step 1 of 2, Turn on lookup mode, current",
+        "Step 1 of 3",
+        "Step 2 of 2, Choose text recognition, not started"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 3,
+        "content_hash": "aabbc7f02163bf15d33f9eda33100768"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-01-tap.png",
+      "error": null,
+      "visible_labels": [
+        "1 / 3",
+        "Android needs Gaten as an accessibility service.",
+        "Choose text recognition",
+        "Look up Japanese anywhere",
+        "Look up Japanese anywhere. Step 1 of 3.",
+        "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+        "Skip",
+        "Skip lookup mode setup",
+        "Standard or Enhanced",
+        "Step 1 of 2, Turn on lookup mode, current",
+        "Step 1 of 3",
+        "Step 2 of 2, Choose text recognition, not started",
+        "Turn on lookup mode"
+      ],
+      "node_count": 175
+    },
+    {
+      "index": 2,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Skip"
+        }
+      },
+      "target": {
+        "text": "Skip",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          498,
+          2163,
+          582,
+          2216
+        ]
+      },
+      "visible_texts": [
+        "2 / 3",
+        "Install AnkiDroid",
+        "Look up Japanese anywhere",
+        "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+        "Skip"
+      ],
+      "visible_descs": [
+        "Back",
+        "Look up Japanese anywhere. Step 1 of 3.",
+        "Skip Anki setup",
+        "Step 2 of 3"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 4,
+        "content_hash": "678e73865def017df39b7e0526383eb6"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-02-tap.png",
+      "error": null,
+      "visible_labels": [
+        "2 / 3",
+        "Back",
+        "Install AnkiDroid",
+        "Look up Japanese anywhere",
+        "Look up Japanese anywhere. Step 1 of 3.",
+        "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+        "Skip",
+        "Skip Anki setup",
+        "Step 2 of 3"
+      ],
+      "node_count": 162
+    },
+    {
+      "index": 3,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Skip"
+        }
+      },
+      "target": {
+        "text": "Skip",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          498,
+          2163,
+          582,
+          2216
+        ]
+      },
+      "visible_texts": [
+        "2 / 3",
+        "A separate app from Google Play.",
+        "Allow access",
+        "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+        "Install AnkiDroid",
+        "Read decks, record answers, add words.",
+        "Skip",
+        "Study with Anki"
+      ],
+      "visible_descs": [
+        "Back",
+        "Skip Anki setup",
+        "Step 1 of 2, Install AnkiDroid, current",
+        "Step 2 of 2, Allow access, not started",
+        "Step 2 of 3",
+        "Study with Anki. Step 2 of 3."
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 5,
+        "content_hash": "86a037dde05da16896a5c08ac552f459"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-03-tap.png",
+      "error": null,
+      "visible_labels": [
+        "2 / 3",
+        "A separate app from Google Play.",
+        "Allow access",
+        "Back",
+        "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+        "Install AnkiDroid",
+        "Read decks, record answers, add words.",
+        "Skip",
+        "Skip Anki setup",
+        "Step 1 of 2, Install AnkiDroid, current",
+        "Step 2 of 2, Allow access, not started",
+        "Step 2 of 3",
+        "Study with Anki",
+        "Study with Anki. Step 2 of 3."
+      ],
+      "node_count": 162
+    },
+    {
+      "index": 4,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Skip"
+        }
+      },
+      "target": {
+        "text": "Skip",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          498,
+          2163,
+          582,
+          2216
+        ]
+      },
+      "visible_texts": [
+        "1",
+        "3 / 3",
+        "Connect WaniKani",
+        "Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+        "Create a token",
+        "Need a token? Show me how",
+        "Paste it here",
+        "Paste your token",
+        "Show",
+        "Skip"
+      ],
+      "visible_descs": [
+        "Back",
+        "Connect WaniKani. Step 3 of 3.",
+        "Show token",
+        "Skip WaniKani setup and finish",
+        "Step 1 of 2, Create a token, available",
+        "Step 2 of 2, Paste it here, current",
+        "Step 3 of 3",
+        "WaniKani personal access token"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 6,
+        "content_hash": "98291f3f1233708d72c1a718589af21a"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-04-tap.png",
+      "error": null,
+      "visible_labels": [
+        "1",
+        "3 / 3",
+        "Back",
+        "Connect WaniKani",
+        "Connect WaniKani. Step 3 of 3.",
+        "Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+        "Create a token",
+        "Need a token? Show me how",
+        "Paste it here",
+        "Paste your token",
+        "Show",
+        "Show token",
+        "Skip",
+        "Skip WaniKani setup and finish",
+        "Step 1 of 2, Create a token, available",
+        "Step 2 of 2, Paste it here, current",
+        "Step 3 of 3",
+        "WaniKani personal access token"
+      ],
+      "node_count": 179
+    },
+    {
+      "index": 5,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Recently looked up"
+        }
+      },
+      "target": {
+        "text": "Recently looked up",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          58,
+          1424,
+          1024,
+          1482
+        ]
+      },
+      "visible_texts": [
+        "0",
+        "Anki",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Home",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "visible_descs": [
+        "Analytics",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "No recent searches found",
+        "Search Japanese dictionary",
+        "Settings",
+        "WaniKani, Not connected, Connect"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 7,
+        "content_hash": "1cc6a5e0e7e52addae37ae72478b1df3"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-05-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Connect",
+        "Daily streak",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Fri",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Search Japanese dictionary",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 218
+    },
+    {
+      "index": 6,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "0",
+        "Anki",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Home",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "visible_descs": [
+        "Analytics",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "No recent searches found",
+        "Search Japanese dictionary",
+        "Settings",
+        "WaniKani, Not connected, Connect"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 8,
+        "content_hash": "1cc6a5e0e7e52addae37ae72478b1df3"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-06-capture.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Connect",
+        "Daily streak",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Fri",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Search Japanese dictionary",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 218
+    },
+    {
+      "index": 7,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "contains": "Anki, Not connected"
+        }
+      },
+      "target": null,
+      "visible_texts": [
+        "Anki",
+        "Anki is not installed",
+        "Download Anki",
+        "Install Anki and finish setup, then return to review."
+      ],
+      "visible_descs": [
+        "Anki setup help",
+        "Back"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 10,
+        "content_hash": "3b83565c08eece1a1c4dc41ce8ad6de3"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-07-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Anki",
+        "Anki is not installed",
+        "Anki setup help",
+        "Back",
+        "Download Anki",
+        "Install Anki and finish setup, then return to review."
+      ],
+      "node_count": 233
+    },
+    {
+      "index": 8,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Anki is not installed"
+        }
+      },
+      "target": {
+        "text": "Anki is not installed",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          278,
+          1150,
+          801,
+          1224
+        ]
+      },
+      "visible_texts": [
+        "Anki",
+        "Anki is not installed",
+        "Download Anki",
+        "Install Anki and finish setup, then return to review."
+      ],
+      "visible_descs": [
+        "Anki setup help",
+        "Back"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 11,
+        "content_hash": "3b83565c08eece1a1c4dc41ce8ad6de3"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-08-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "Anki",
+        "Anki is not installed",
+        "Anki setup help",
+        "Back",
+        "Download Anki",
+        "Install Anki and finish setup, then return to review."
+      ],
+      "node_count": 233
+    },
+    {
+      "index": 9,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "Anki",
+        "Anki is not installed",
+        "Download Anki",
+        "Install Anki and finish setup, then return to review."
+      ],
+      "visible_descs": [
+        "Anki setup help",
+        "Back"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 12,
+        "content_hash": "3b83565c08eece1a1c4dc41ce8ad6de3"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-09-capture.png",
+      "error": null,
+      "visible_labels": [
+        "Anki",
+        "Anki is not installed",
+        "Anki setup help",
+        "Back",
+        "Download Anki",
+        "Install Anki and finish setup, then return to review."
+      ],
+      "node_count": 233
+    },
+    {
+      "index": 10,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Anki is not installed"
+        }
+      },
+      "target": {
+        "text": "Anki is not installed",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          278,
+          1150,
+          801,
+          1224
+        ]
+      },
+      "visible_texts": [
+        "Anki",
+        "Anki is not installed",
+        "Download Anki",
+        "Install Anki and finish setup, then return to review."
+      ],
+      "visible_descs": [
+        "Anki setup help",
+        "Back"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 12,
+        "content_hash": "3b83565c08eece1a1c4dc41ce8ad6de3"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Anki is not installed"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-10-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Anki",
+        "Anki is not installed",
+        "Anki setup help",
+        "Back",
+        "Download Anki",
+        "Install Anki and finish setup, then return to review."
+      ],
+      "node_count": 233
+    },
+    {
+      "index": 11,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Download Anki"
+        }
+      },
+      "target": {
+        "text": "Download Anki",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          396,
+          1458,
+          682,
+          1511
+        ]
+      },
+      "visible_texts": [
+        "Anki",
+        "Anki is not installed",
+        "Download Anki",
+        "Install Anki and finish setup, then return to review."
+      ],
+      "visible_descs": [
+        "Anki setup help",
+        "Back"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 12,
+        "content_hash": "3b83565c08eece1a1c4dc41ce8ad6de3"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Download Anki"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-11-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Anki",
+        "Anki is not installed",
+        "Anki setup help",
+        "Back",
+        "Download Anki",
+        "Install Anki and finish setup, then return to review."
+      ],
+      "node_count": 233
+    },
+    {
+      "index": 12,
+      "kind": "back",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "0",
+        "Anki",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Home",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "visible_descs": [
+        "Analytics",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "No recent searches found",
+        "Search Japanese dictionary",
+        "Settings",
+        "WaniKani, Not connected, Connect"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 13,
+        "content_hash": "1cc6a5e0e7e52addae37ae72478b1df3"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-12-back.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Connect",
+        "Daily streak",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Fri",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Search Japanese dictionary",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 345
+    },
+    {
+      "index": 13,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Recently looked up"
+        }
+      },
+      "target": {
+        "text": "Recently looked up",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          58,
+          1424,
+          1024,
+          1482
+        ]
+      },
+      "visible_texts": [
+        "0",
+        "Anki",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Home",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "visible_descs": [
+        "Analytics",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "No recent searches found",
+        "Search Japanese dictionary",
+        "Settings",
+        "WaniKani, Not connected, Connect"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 14,
+        "content_hash": "1cc6a5e0e7e52addae37ae72478b1df3"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-13-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Connect",
+        "Daily streak",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Fri",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Search Japanese dictionary",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 345
+    },
+    {
+      "index": 14,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "0",
+        "Anki",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Home",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "visible_descs": [
+        "Analytics",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "No recent searches found",
+        "Search Japanese dictionary",
+        "Settings",
+        "WaniKani, Not connected, Connect"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 15,
+        "content_hash": "1cc6a5e0e7e52addae37ae72478b1df3"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-14-capture.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Connect",
+        "Daily streak",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Fri",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Search Japanese dictionary",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 345
+    },
+    {
+      "index": 15,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "contains": "WaniKani, Not connected"
+        }
+      },
+      "target": null,
+      "visible_texts": [
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Paste your token",
+        "Personal access token",
+        "WaniKani"
+      ],
+      "visible_descs": [
+        "Back",
+        "WaniKani personal access token",
+        "WaniKani setup help"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 17,
+        "content_hash": "a68e6dd915d56be9eb2d2db529f49391"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-15-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Paste your token",
+        "Personal access token",
+        "WaniKani",
+        "WaniKani personal access token",
+        "WaniKani setup help"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 16,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Connect WaniKani"
+        }
+      },
+      "target": {
+        "text": "Connect WaniKani",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          292,
+          624,
+          786,
+          698
+        ]
+      },
+      "visible_texts": [
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Paste your token",
+        "Personal access token",
+        "WaniKani"
+      ],
+      "visible_descs": [
+        "Back",
+        "WaniKani personal access token",
+        "WaniKani setup help"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 18,
+        "content_hash": "a68e6dd915d56be9eb2d2db529f49391"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-16-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Paste your token",
+        "Personal access token",
+        "WaniKani",
+        "WaniKani personal access token",
+        "WaniKani setup help"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 17,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Paste your token",
+        "Personal access token",
+        "WaniKani"
+      ],
+      "visible_descs": [
+        "Back",
+        "WaniKani personal access token",
+        "WaniKani setup help"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 19,
+        "content_hash": "a68e6dd915d56be9eb2d2db529f49391"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-17-capture.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Paste your token",
+        "Personal access token",
+        "WaniKani",
+        "WaniKani personal access token",
+        "WaniKani setup help"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 18,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Connect WaniKani"
+        }
+      },
+      "target": {
+        "text": "Connect WaniKani",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          292,
+          624,
+          786,
+          698
+        ]
+      },
+      "visible_texts": [
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Paste your token",
+        "Personal access token",
+        "WaniKani"
+      ],
+      "visible_descs": [
+        "Back",
+        "WaniKani personal access token",
+        "WaniKani setup help"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 19,
+        "content_hash": "a68e6dd915d56be9eb2d2db529f49391"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Connect WaniKani"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-18-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Paste your token",
+        "Personal access token",
+        "WaniKani",
+        "WaniKani personal access token",
+        "WaniKani setup help"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 19,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Personal access token"
+        }
+      },
+      "target": {
+        "text": "Personal access token",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          58,
+          1142,
+          1024,
+          1195
+        ]
+      },
+      "visible_texts": [
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Paste your token",
+        "Personal access token",
+        "WaniKani"
+      ],
+      "visible_descs": [
+        "Back",
+        "WaniKani personal access token",
+        "WaniKani setup help"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 19,
+        "content_hash": "a68e6dd915d56be9eb2d2db529f49391"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Personal access token"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-19-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Paste your token",
+        "Personal access token",
+        "WaniKani",
+        "WaniKani personal access token",
+        "WaniKani setup help"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 20,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "exact": "WaniKani personal access token"
+        }
+      },
+      "target": {
+        "text": "Paste your token",
+        "content_desc": "WaniKani personal access token",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          100,
+          1253,
+          982,
+          1306
+        ]
+      },
+      "visible_texts": [
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Paste your token",
+        "Personal access token",
+        "WaniKani"
+      ],
+      "visible_descs": [
+        "Back",
+        "WaniKani personal access token",
+        "WaniKani setup help"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 21,
+        "content_hash": "9a6e80e1335f109d8c26d30cd0a83e0b"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-20-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Paste your token",
+        "Personal access token",
+        "WaniKani",
+        "WaniKani personal access token",
+        "WaniKani setup help"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 21,
+      "kind": "type",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Personal access token",
+        "WaniKani",
+        "not-a-real-token"
+      ],
+      "visible_descs": [
+        "Back",
+        "WaniKani personal access token",
+        "WaniKani setup help"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 22,
+        "content_hash": "681299eb6f25ed3cabc0ee30cb1fc678"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-21-type.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Personal access token",
+        "WaniKani",
+        "WaniKani personal access token",
+        "WaniKani setup help",
+        "not-a-real-token"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 22,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Personal access token",
+        "WaniKani",
+        "not-a-real-token"
+      ],
+      "visible_descs": [
+        "Back",
+        "WaniKani personal access token",
+        "WaniKani setup help"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 23,
+        "content_hash": "681299eb6f25ed3cabc0ee30cb1fc678"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-22-capture.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Personal access token",
+        "WaniKani",
+        "WaniKani personal access token",
+        "WaniKani setup help",
+        "not-a-real-token"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 23,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "exact": "WaniKani personal access token"
+        }
+      },
+      "target": {
+        "text": "not-a-real-token",
+        "content_desc": "WaniKani personal access token",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          100,
+          1253,
+          982,
+          1306
+        ]
+      },
+      "visible_texts": [
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Personal access token",
+        "WaniKani",
+        "not-a-real-token"
+      ],
+      "visible_descs": [
+        "Back",
+        "WaniKani personal access token",
+        "WaniKani setup help"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 23,
+        "content_hash": "681299eb6f25ed3cabc0ee30cb1fc678"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "not-a-real-token"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-23-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Connect WaniKani",
+        "Connect your account to review kanji and vocabulary here.",
+        "Create a token on wanikani.com",
+        "Not connected",
+        "Personal access token",
+        "WaniKani",
+        "WaniKani personal access token",
+        "WaniKani setup help",
+        "not-a-real-token"
+      ],
+      "node_count": 245
+    },
+    {
+      "index": 24,
+      "kind": "back",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "0",
+        "Anki",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Home",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "visible_descs": [
+        "Analytics",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "No recent searches found",
+        "Search Japanese dictionary",
+        "Settings",
+        "WaniKani, Not connected, Connect"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 24,
+        "content_hash": "625aeeac29b016ab22510ab79522606d"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-24-back.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Connect",
+        "Daily streak",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Fri",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Search Japanese dictionary",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 345
+    },
+    {
+      "index": 25,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Recently looked up"
+        }
+      },
+      "target": {
+        "text": "Recently looked up",
+        "content_desc": "",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          58,
+          1424,
+          1024,
+          1482
+        ]
+      },
+      "visible_texts": [
+        "0",
+        "Anki",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Home",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "visible_descs": [
+        "Analytics",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "No recent searches found",
+        "Search Japanese dictionary",
+        "Settings",
+        "WaniKani, Not connected, Connect"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 25,
+        "content_hash": "625aeeac29b016ab22510ab79522606d"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-25-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Connect",
+        "Daily streak",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Fri",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Search Japanese dictionary",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 345
+    },
+    {
+      "index": 26,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "0",
+        "Anki",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Home",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "visible_descs": [
+        "Analytics",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "No recent searches found",
+        "Search Japanese dictionary",
+        "Settings",
+        "WaniKani, Not connected, Connect"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 26,
+        "content_hash": "625aeeac29b016ab22510ab79522606d"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-26-capture.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Connect",
+        "Daily streak",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Fri",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Search Japanese dictionary",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 345
+    },
+    {
+      "index": 27,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Daily streak"
+        }
+      },
+      "target": {
+        "text": "Daily streak",
+        "content_desc": "Daily streak. Anki study days follow your collection's rollover.",
+        "identifier": "",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          150,
+          610,
+          764,
+          663
+        ]
+      },
+      "visible_texts": [
+        "0",
+        "Anki",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Home",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "visible_descs": [
+        "Analytics",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "No recent searches found",
+        "Search Japanese dictionary",
+        "Settings",
+        "WaniKani, Not connected, Connect"
+      ],
+      "screen": {
+        "package": "com.gaten",
+        "frame_seq": 26,
+        "content_hash": "625aeeac29b016ab22510ab79522606d"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "contains": "Daily streak"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-27-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Not connected, Open Anki",
+        "Connect",
+        "Daily streak",
+        "Daily streak. Anki study days follow your collection's rollover.",
+        "Fri",
+        "Gaten",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Open Anki",
+        "Recently looked up",
+        "Sat",
+        "Search Japanese dictionary",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 345
+    }
+  ],
+  "finished": "2026-11-14T11:56:16.182+00:00",
+  "available": ".cache/phone2/acos/gaten-lesson"
+}

@@ -1,0 +1,2895 @@
+{
+  "schema_version": 1,
+  "source": "phone",
+  "fidelity": "physical-device",
+  "scenario": {
+    "name": "gaten-tabs",
+    "path": "scenarios/gaten-tabs.yaml",
+    "sha256": "f7ce86280dd7f7d3cf8c5ca76e2aa70293a7c88d61f7343ede833526e431f97a"
+  },
+  "app": {
+    "package": "com.gaten",
+    "activity": "com.gaten/app.MainActivity",
+    "apk": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk"
+  },
+  "device": {
+    "ro.build.fingerprint": "motorola/manila_g/manila:15/VUOA35.116-151/a43dc2:user/release-keys",
+    "ro.build.version.sdk": "35",
+    "ro.build.version.release": "15",
+    "ro.product.model": "moto g35 5G",
+    "wm_size": "1080x2400",
+    "density_dpi": 400,
+    "font_scale": "1.0"
+  },
+  "started": "2026-11-14T11:43:32.400+00:00",
+  "steps": [
+    {
+      "index": 0,
+      "kind": "launch",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "Gaten looks up words you circle on screen and saves them to Anki.",
+        "Look up Japanese in any app, then study it.",
+        "See a word you don't know",
+        "Set up Gaten",
+        "\u304c\u3044\u3063\u305f\u3002",
+        "\u306a\u308b\u307b\u3069\u3001",
+        "\u5408\u70b9"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-00-launch.png",
+      "error": null,
+      "visible_labels": [
+        "Gaten looks up words you circle on screen and saves them to Anki.",
+        "Look up Japanese in any app, then study it.",
+        "See a word you don't know",
+        "Set up Gaten",
+        "\u304c\u3044\u3063\u305f\u3002",
+        "\u306a\u308b\u307b\u3069\u3001",
+        "\u5408\u70b9"
+      ],
+      "node_count": 29
+    },
+    {
+      "index": 1,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Set up Gaten"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Set up Gaten",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          2130,
+          1025,
+          2260
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "1 / 3",
+        "Android needs Gaten as an accessibility service.",
+        "Choose text recognition",
+        "Look up Japanese anywhere",
+        "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+        "Skip",
+        "Skip lookup mode setup",
+        "Standard or Enhanced",
+        "Step 1 of 2, Turn on lookup mode, current",
+        "Step 2 of 2, Choose text recognition, not started",
+        "Turn on lookup mode"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-01-tap.png",
+      "error": null,
+      "visible_labels": [
+        "1 / 3",
+        "Android needs Gaten as an accessibility service.",
+        "Choose text recognition",
+        "Look up Japanese anywhere",
+        "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+        "Skip",
+        "Skip lookup mode setup",
+        "Standard or Enhanced",
+        "Step 1 of 2, Turn on lookup mode, current",
+        "Step 2 of 2, Choose text recognition, not started",
+        "Turn on lookup mode"
+      ],
+      "node_count": 61
+    },
+    {
+      "index": 2,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Skip"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Skip",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          500,
+          2175,
+          580,
+          2225
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "2 / 3",
+        "Allow Gaten to read your AnkiDroid collection.",
+        "Allow access",
+        "AnkiDroid is installed",
+        "Back",
+        "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+        "Read decks, record answers, add words.",
+        "Skip",
+        "Skip Anki setup",
+        "Step 1 of 2, AnkiDroid is installed, done",
+        "Step 2 of 2, Allow access, current",
+        "Study with Anki"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-02-tap.png",
+      "error": null,
+      "visible_labels": [
+        "2 / 3",
+        "Allow Gaten to read your AnkiDroid collection.",
+        "Allow access",
+        "AnkiDroid is installed",
+        "Back",
+        "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+        "Read decks, record answers, add words.",
+        "Skip",
+        "Skip Anki setup",
+        "Step 1 of 2, AnkiDroid is installed, done",
+        "Step 2 of 2, Allow access, current",
+        "Study with Anki"
+      ],
+      "node_count": 66
+    },
+    {
+      "index": 3,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Skip"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Skip",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          500,
+          2175,
+          580,
+          2225
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "1",
+        "3 / 3",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Back",
+        "Connect",
+        "Connect WaniKani",
+        "Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+        "Create a token",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "Need a token? Show me how",
+        "No recent searches found",
+        "Not connected",
+        "Paste it here",
+        "Paste your token",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Show",
+        "Show token",
+        "Skip",
+        "Skip WaniKani setup and finish",
+        "Step 1 of 2, Create a token, available",
+        "Step 2 of 2, Paste it here, current",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-03-tap.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "1",
+        "3 / 3",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Back",
+        "Connect",
+        "Connect WaniKani",
+        "Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+        "Create a token",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "Need a token? Show me how",
+        "No recent searches found",
+        "Not connected",
+        "Paste it here",
+        "Paste your token",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Show",
+        "Show token",
+        "Skip",
+        "Skip WaniKani setup and finish",
+        "Step 1 of 2, Create a token, available",
+        "Step 2 of 2, Paste it here, current",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 225
+    },
+    {
+      "index": 4,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Skip"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Skip",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          500,
+          2175,
+          580,
+          2225
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-04-tap.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 165
+    },
+    {
+      "index": 5,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Recently looked up"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Recently looked up",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          1343,
+          1025,
+          1398
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-05-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 165
+    },
+    {
+      "index": 6,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-06-capture-tabs-home.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 165
+    },
+    {
+      "index": 7,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Daily streak"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Daily streak",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          143,
+          569,
+          778,
+          619
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "Daily streak",
+        "mode": "contains",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-07-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 165
+    },
+    {
+      "index": 8,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "exact": "Analytics"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Analytics",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          517,
+          2163,
+          682,
+          2320
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "12 weeks \u00b7 Anki",
+        "Accuracy",
+        "Allow Gaten to read collection statistics.",
+        "Analytics",
+        "Anki",
+        "Anki access needed.",
+        "Anki, Collection, Anki access needed., Allow Gaten to read collection statistics., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks \u00b7 Anki, Waiting for permission., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+        "Answer accuracy will appear here.",
+        "Collection",
+        "Connect",
+        "Connect to see WaniKani progress.",
+        "Grant access",
+        "Home",
+        "Level progress",
+        "Not connected",
+        "Progress",
+        "Refresh the numbers",
+        "Settings",
+        "Study activity",
+        "Waiting for permission.",
+        "WaniKani",
+        "Your level history will appear here."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-08-tap.png",
+      "error": null,
+      "visible_labels": [
+        "12 weeks \u00b7 Anki",
+        "Accuracy",
+        "Allow Gaten to read collection statistics.",
+        "Analytics",
+        "Anki",
+        "Anki access needed.",
+        "Anki, Collection, Anki access needed., Allow Gaten to read collection statistics., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks \u00b7 Anki, Waiting for permission., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+        "Answer accuracy will appear here.",
+        "Collection",
+        "Connect",
+        "Connect to see WaniKani progress.",
+        "Grant access",
+        "Home",
+        "Level progress",
+        "Not connected",
+        "Progress",
+        "Refresh the numbers",
+        "Settings",
+        "Study activity",
+        "Waiting for permission.",
+        "WaniKani",
+        "Your level history will appear here."
+      ],
+      "node_count": 153
+    },
+    {
+      "index": 9,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Study activity"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Anki, Collection, Anki access needed., Allow Gaten to read collection statistics., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks \u00b7 Anki, Waiting for permission., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          108,
+          1025,
+          2400
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "12 weeks \u00b7 Anki",
+        "Accuracy",
+        "Allow Gaten to read collection statistics.",
+        "Analytics",
+        "Anki",
+        "Anki access needed.",
+        "Anki, Collection, Anki access needed., Allow Gaten to read collection statistics., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks \u00b7 Anki, Waiting for permission., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+        "Answer accuracy will appear here.",
+        "Collection",
+        "Connect",
+        "Connect to see WaniKani progress.",
+        "Grant access",
+        "Home",
+        "Level progress",
+        "Not connected",
+        "Progress",
+        "Refresh the numbers",
+        "Settings",
+        "Study activity",
+        "Waiting for permission.",
+        "WaniKani",
+        "Your level history will appear here."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-09-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "12 weeks \u00b7 Anki",
+        "Accuracy",
+        "Allow Gaten to read collection statistics.",
+        "Analytics",
+        "Anki",
+        "Anki access needed.",
+        "Anki, Collection, Anki access needed., Allow Gaten to read collection statistics., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks \u00b7 Anki, Waiting for permission., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+        "Answer accuracy will appear here.",
+        "Collection",
+        "Connect",
+        "Connect to see WaniKani progress.",
+        "Grant access",
+        "Home",
+        "Level progress",
+        "Not connected",
+        "Progress",
+        "Refresh the numbers",
+        "Settings",
+        "Study activity",
+        "Waiting for permission.",
+        "WaniKani",
+        "Your level history will appear here."
+      ],
+      "node_count": 153
+    },
+    {
+      "index": 10,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "12 weeks \u00b7 Anki",
+        "Accuracy",
+        "Allow Gaten to read collection statistics.",
+        "Analytics",
+        "Anki",
+        "Anki access needed.",
+        "Anki, Collection, Anki access needed., Allow Gaten to read collection statistics., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks \u00b7 Anki, Waiting for permission., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+        "Answer accuracy will appear here.",
+        "Collection",
+        "Connect",
+        "Connect to see WaniKani progress.",
+        "Grant access",
+        "Home",
+        "Level progress",
+        "Not connected",
+        "Progress",
+        "Refresh the numbers",
+        "Settings",
+        "Study activity",
+        "Waiting for permission.",
+        "WaniKani",
+        "Your level history will appear here."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-10-capture-tabs-analytics.png",
+      "error": null,
+      "visible_labels": [
+        "12 weeks \u00b7 Anki",
+        "Accuracy",
+        "Allow Gaten to read collection statistics.",
+        "Analytics",
+        "Anki",
+        "Anki access needed.",
+        "Anki, Collection, Anki access needed., Allow Gaten to read collection statistics., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks \u00b7 Anki, Waiting for permission., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+        "Answer accuracy will appear here.",
+        "Collection",
+        "Connect",
+        "Connect to see WaniKani progress.",
+        "Grant access",
+        "Home",
+        "Level progress",
+        "Not connected",
+        "Progress",
+        "Refresh the numbers",
+        "Settings",
+        "Study activity",
+        "Waiting for permission.",
+        "WaniKani",
+        "Your level history will appear here."
+      ],
+      "node_count": 153
+    },
+    {
+      "index": 11,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Accuracy"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Anki, Collection, Anki access needed., Allow Gaten to read collection statistics., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks \u00b7 Anki, Waiting for permission., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          108,
+          1025,
+          2400
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "12 weeks \u00b7 Anki",
+        "Accuracy",
+        "Allow Gaten to read collection statistics.",
+        "Analytics",
+        "Anki",
+        "Anki access needed.",
+        "Anki, Collection, Anki access needed., Allow Gaten to read collection statistics., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks \u00b7 Anki, Waiting for permission., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+        "Answer accuracy will appear here.",
+        "Collection",
+        "Connect",
+        "Connect to see WaniKani progress.",
+        "Grant access",
+        "Home",
+        "Level progress",
+        "Not connected",
+        "Progress",
+        "Refresh the numbers",
+        "Settings",
+        "Study activity",
+        "Waiting for permission.",
+        "WaniKani",
+        "Your level history will appear here."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "Accuracy",
+        "mode": "contains",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-11-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "12 weeks \u00b7 Anki",
+        "Accuracy",
+        "Allow Gaten to read collection statistics.",
+        "Analytics",
+        "Anki",
+        "Anki access needed.",
+        "Anki, Collection, Anki access needed., Allow Gaten to read collection statistics., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks \u00b7 Anki, Waiting for permission., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+        "Answer accuracy will appear here.",
+        "Collection",
+        "Connect",
+        "Connect to see WaniKani progress.",
+        "Grant access",
+        "Home",
+        "Level progress",
+        "Not connected",
+        "Progress",
+        "Refresh the numbers",
+        "Settings",
+        "Study activity",
+        "Waiting for permission.",
+        "WaniKani",
+        "Your level history will appear here."
+      ],
+      "node_count": 153
+    },
+    {
+      "index": 12,
+      "kind": "assert_text",
+      "status": "fail",
+      "selector": {
+        "text": {
+          "contains": "Anki is not installed."
+        }
+      },
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "12 weeks \u00b7 Anki",
+        "Accuracy",
+        "Allow Gaten to read collection statistics.",
+        "Analytics",
+        "Anki",
+        "Anki access needed.",
+        "Anki, Collection, Anki access needed., Allow Gaten to read collection statistics., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks \u00b7 Anki, Waiting for permission., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+        "Answer accuracy will appear here.",
+        "Collection",
+        "Connect",
+        "Connect to see WaniKani progress.",
+        "Grant access",
+        "Home",
+        "Level progress",
+        "Not connected",
+        "Progress",
+        "Refresh the numbers",
+        "Settings",
+        "Study activity",
+        "Waiting for permission.",
+        "WaniKani",
+        "Your level history will appear here."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "Anki is not installed.",
+        "mode": "contains",
+        "passed": false,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-12-assert_text.png",
+      "error": "ASSERTION_FAILED",
+      "visible_labels": [
+        "12 weeks \u00b7 Anki",
+        "Accuracy",
+        "Allow Gaten to read collection statistics.",
+        "Analytics",
+        "Anki",
+        "Anki access needed.",
+        "Anki, Collection, Anki access needed., Allow Gaten to read collection statistics., WaniKani, Progress, Not connected, Connect to see WaniKani progress., Study activity, 12 weeks \u00b7 Anki, Waiting for permission., Accuracy, WaniKani, Answer accuracy will appear here., Level progress, WaniKani, Your level history will appear here.",
+        "Answer accuracy will appear here.",
+        "Collection",
+        "Connect",
+        "Connect to see WaniKani progress.",
+        "Grant access",
+        "Home",
+        "Level progress",
+        "Not connected",
+        "Progress",
+        "Refresh the numbers",
+        "Settings",
+        "Study activity",
+        "Waiting for permission.",
+        "WaniKani",
+        "Your level history will appear here."
+      ],
+      "node_count": 153
+    },
+    {
+      "index": 13,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "exact": "Settings"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Settings",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          681,
+          2163,
+          846,
+          2320
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-13-tap.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 14,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Screen lookup"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Screen lookup. Off",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          396,
+          1025,
+          546
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-14-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 15,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-15-capture-tabs-settings.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 16,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Screen lookup"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Screen lookup. Off",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          396,
+          1025,
+          546
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "Screen lookup",
+        "mode": "contains",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-16-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 17,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Kanji reference"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Kanji reference. Remembering the Kanji",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          1126,
+          1025,
+          1276
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "Kanji reference",
+        "mode": "contains",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-17-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 18,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "exact": "Home"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Home",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          239,
+          2163,
+          404,
+          2320
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-18-tap.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 165
+    },
+    {
+      "index": 19,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Recently looked up"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Recently looked up",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          1343,
+          1025,
+          1398
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-19-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 165
+    },
+    {
+      "index": 20,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-20-capture-tabs-home-again.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 165
+    },
+    {
+      "index": 21,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Daily streak"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Daily streak",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          143,
+          569,
+          778,
+          619
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "Daily streak",
+        "mode": "contains",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-21-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 165
+    }
+  ],
+  "finished": "2026-11-14T11:44:05.526+00:00",
+  "commands": [
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "pm",
+        "list",
+        "packages"
+      ],
+      "ts": "2026-11-14T11:43:31.804+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "getprop",
+        "ro.build.fingerprint"
+      ],
+      "ts": "2026-11-14T11:43:31.912+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "getprop",
+        "ro.build.version.sdk"
+      ],
+      "ts": "2026-11-14T11:43:31.969+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "getprop",
+        "ro.build.version.release"
+      ],
+      "ts": "2026-11-14T11:43:32.010+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "getprop",
+        "ro.product.model"
+      ],
+      "ts": "2026-11-14T11:43:32.059+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "wm",
+        "size"
+      ],
+      "ts": "2026-11-14T11:43:32.112+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "wm",
+        "density"
+      ],
+      "ts": "2026-11-14T11:43:32.211+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "settings",
+        "get",
+        "system",
+        "font_scale"
+      ],
+      "ts": "2026-11-14T11:43:32.310+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "pm",
+        "clear",
+        "com.gaten"
+      ],
+      "ts": "2026-11-14T11:43:32.400+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "open",
+        "com.gaten",
+        "--activity",
+        "com.gaten/.app.MainActivity",
+        "--relaunch",
+        "--foreground",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:32.560+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:35.289+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:35.591+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-00-launch.png"
+      ],
+      "ts": "2026-11-14T11:43:35.709+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:36.079+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "2195",
+        "--settle"
+      ],
+      "ts": "2026-11-14T11:43:36.401+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:38.050+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:38.259+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-01-tap.png"
+      ],
+      "ts": "2026-11-14T11:43:38.360+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:38.675+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "2200",
+        "--settle"
+      ],
+      "ts": "2026-11-14T11:43:38.848+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:40.334+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:40.517+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-02-tap.png"
+      ],
+      "ts": "2026-11-14T11:43:40.623+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:40.919+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "2200",
+        "--settle"
+      ],
+      "ts": "2026-11-14T11:43:41.068+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:43.095+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:43.438+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-03-tap.png"
+      ],
+      "ts": "2026-11-14T11:43:43.551+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:43.838+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "2200",
+        "--settle"
+      ],
+      "ts": "2026-11-14T11:43:44.083+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:45.742+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:45.979+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-04-tap.png"
+      ],
+      "ts": "2026-11-14T11:43:46.122+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:46.433+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:46.659+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:46.903+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-05-wait_for.png"
+      ],
+      "ts": "2026-11-14T11:43:47.013+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:47.334+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:47.556+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-06-capture-tabs-home.png"
+      ],
+      "ts": "2026-11-14T11:43:47.664+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:47.986+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:48.205+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:48.444+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-07-assert_text.png"
+      ],
+      "ts": "2026-11-14T11:43:48.548+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:48.855+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "599",
+        "2241",
+        "--settle"
+      ],
+      "ts": "2026-11-14T11:43:49.066+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:50.694+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:50.949+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-08-tap.png"
+      ],
+      "ts": "2026-11-14T11:43:51.059+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:51.389+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:51.631+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:51.951+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-09-wait_for.png"
+      ],
+      "ts": "2026-11-14T11:43:52.072+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:52.418+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:52.654+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-10-capture-tabs-analytics.png"
+      ],
+      "ts": "2026-11-14T11:43:52.757+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:53.083+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:53.314+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:53.570+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-11-assert_text.png"
+      ],
+      "ts": "2026-11-14T11:43:53.681+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:54.024+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:54.262+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:54.521+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-12-assert_text.png"
+      ],
+      "ts": "2026-11-14T11:43:54.613+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:54.946+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "763",
+        "2241",
+        "--settle"
+      ],
+      "ts": "2026-11-14T11:43:55.185+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:56.619+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:56.908+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-13-tap.png"
+      ],
+      "ts": "2026-11-14T11:43:57.024+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:57.330+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:57.554+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:57.795+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-14-wait_for.png"
+      ],
+      "ts": "2026-11-14T11:43:57.909+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:58.236+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:58.452+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-15-capture-tabs-settings.png"
+      ],
+      "ts": "2026-11-14T11:43:58.558+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:58.850+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:59.068+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:43:59.291+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-16-assert_text.png"
+      ],
+      "ts": "2026-11-14T11:43:59.413+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:59.717+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:43:59.942+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:44:00.175+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-17-assert_text.png"
+      ],
+      "ts": "2026-11-14T11:44:00.272+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:44:00.607+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "321",
+        "2241",
+        "--settle"
+      ],
+      "ts": "2026-11-14T11:44:00.839+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:44:02.447+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:44:02.683+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-18-tap.png"
+      ],
+      "ts": "2026-11-14T11:44:02.785+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:44:03.105+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:44:03.322+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:44:03.551+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-19-wait_for.png"
+      ],
+      "ts": "2026-11-14T11:44:03.668+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:44:03.997+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:44:04.208+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-20-capture-tabs-home-again.png"
+      ],
+      "ts": "2026-11-14T11:44:04.319+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:44:04.630+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T11:44:04.859+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T11:44:05.100+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-tabs/phone/screenshot-21-assert_text.png"
+      ],
+      "ts": "2026-11-14T11:44:05.213+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "close"
+      ],
+      "ts": "2026-11-14T11:44:05.526+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "home"
+      ],
+      "ts": "2026-11-14T11:44:05.661+00:00"
+    }
+  ]
+}

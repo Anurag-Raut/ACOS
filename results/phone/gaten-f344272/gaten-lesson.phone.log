@@ -1,0 +1,48 @@
+[replay] phone step 00 launch -> pass
+[replay] phone step 01 tap -> pass
+[replay] phone step 02 tap -> pass
+[replay] phone step 03 tap -> pass
+[replay] phone step 04 tap -> pass
+[replay] phone step 05 wait_for -> pass
+[replay] phone step 06 capture -> pass
+[replay] phone step 07 tap -> fail
+[replay] phone step 08 wait_for -> fail
+[replay] phone step 09 capture -> pass
+[replay] phone step 10 assert_text -> fail
+[replay] phone step 11 assert_text -> fail
+[replay] phone step 12 back -> pass
+[replay] phone step 13 wait_for -> fail
+[replay] phone step 14 capture -> pass
+[replay] phone step 15 tap -> fail
+[replay] phone step 16 wait_for -> fail
+[replay] phone step 17 capture -> pass
+[replay] phone step 18 assert_text -> fail
+[replay] phone step 19 assert_text -> fail
+[replay] phone step 20 tap -> fail
+[replay] phone step 21 type -> pass
+[replay] phone step 22 capture -> pass
+[replay] phone step 23 assert_text -> fail
+[replay] phone step 24 back -> pass
+[replay] phone step 25 wait_for -> fail
+[replay] phone step 26 capture -> pass
+[replay] phone step 27 assert_text -> fail
+{
+  "source": "phone",
+  "out": "results/phone/gaten-f344272/gaten-lesson/phone",
+  "steps": 28,
+  "failed": [
+    7,
+    8,
+    10,
+    11,
+    13,
+    15,
+    16,
+    18,
+    19,
+    20,
+    23,
+    25,
+    27
+  ]
+}

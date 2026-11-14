@@ -95,6 +95,17 @@ pub struct VerifyArgs {
     #[arg(long)]
     pub untrusted: bool,
 
+    /// Artifact retention for this run: `all`, `referenced` (default) or
+    /// `none-on-pass`.
+    ///
+    /// A **non-pass** run (`fail`, `timeout`, `error`, `unsupported`, `crash`,
+    /// `blocked`) always keeps every artifact: it is the diagnosis. A **pass**
+    /// keeps everything its verdict/report declares plus the first and last
+    /// frame, and drops the intermediate frames and the mirrored raw captures
+    /// that nothing references. Overrides `ACOS_KEEP_ARTIFACTS`.
+    #[arg(long = "keep-artifacts", value_name = "all|referenced|none-on-pass")]
+    pub keep_artifacts: Option<String>,
+
     /// Emit the standard ACOS JSON envelope instead of a text summary.
     #[arg(long)]
     pub json: bool,
@@ -141,6 +152,34 @@ pub fn run(args: VerifyArgs) -> ExitCode {
             Metrics::wall_ms(0),
         );
         return finish_run(&envelope, &args, &artifacts, Some(trust));
+    }
+
+    // ARTGC: artifact retention is a launch-time choice like `animations` and
+    // `insets`. Flag > `ACOS_KEEP_ARTIFACTS` > default (`referenced`). A bogus
+    // flag is rejected here, not silently ignored; a bogus environment value
+    // falls back to the default and the run records that in its verdict.
+    if let Some(value) = args.keep_artifacts.as_deref() {
+        match acos_verify::retention::KeepArtifacts::parse(value) {
+            Some(mode) => std::env::set_var(
+                acos_verify::retention::KEEP_ARTIFACTS_ENV,
+                mode.as_str(),
+            ),
+            None => {
+                let envelope = Envelope::failure(
+                    request_id,
+                    ProtocolBackend::AcosNative,
+                    Fidelity::StaticAnalysis,
+                    ProtocolError::new(
+                        ErrorCode::InvalidArgument,
+                        format!("unknown --keep-artifacts value {value:?}"),
+                    )
+                    .with_hint("Use one of: all, referenced (default), none-on-pass. A non-pass run always keeps all of its artifacts.")
+                    .with_details(serde_json::json!({"field": "keep_artifacts", "value": value})),
+                    Metrics::wall_ms(0),
+                );
+                return finish_run(&envelope, &args, &artifacts, Some(trust));
+            }
+        }
     }
 
     let Some(engine) = Engine::parse(&args.engine) else {
@@ -456,6 +495,11 @@ pub(crate) fn annotate(
     session_boot_image: Option<serde_json::Value>,
 ) {
     let engine = engine.unwrap_or(Engine::RustVm);
+    // ARTGC: the engine writes `art-frames/live-session.json` and
+    // `session-exit.json` at shutdown, after the verifier's retention pass. If
+    // this run pruned captures, reconcile those late records so nothing in the
+    // artifacts directory names a file that is not there.
+    let pruned_captures = acos_verify::retention::finalize(artifacts);
     let Some(result) = envelope.result().cloned() else {
         return;
     };
@@ -486,11 +530,18 @@ pub(crate) fn annotate(
                 .collect()
         })
         .unwrap_or_default();
-    let evidence = serde_json::json!({
+    let retention_path = artifacts.join(acos_verify::retention::RETENTION_JSON);
+    let mut evidence = serde_json::json!({
         "artifacts": artifacts.display().to_string(),
         "verdict": artifacts.join(acos_protocol::artifacts::VERDICT_JSON).display().to_string(),
         "engine_report": artifacts.join("engine.json").display().to_string(),
     });
+    if retention_path.is_file() {
+        evidence["retention"] = serde_json::json!(retention_path.display().to_string());
+    }
+    if pruned_captures > 0 {
+        evidence["pruned_session_captures"] = serde_json::json!(pruned_captures);
+    }
     let provenance = crate::provenance::run_evidence(trust);
     // W46: the session's own exit record belongs in the verdict artifacts, not
     // only in the engine's frames directory. A future death is then classified

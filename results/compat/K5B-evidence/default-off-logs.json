@@ -1,0 +1,725 @@
+{
+  "request_id": "req_f4e67_18e7e1eb67e7785e",
+  "ok": true,
+  "status": "pass",
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "session_id": "s_cli",
+  "capabilities_used": [
+    "logs"
+  ],
+  "result": {
+    "animations": "on",
+    "collapsed": 0,
+    "count": 84,
+    "crash": null,
+    "engine": "art",
+    "engine_frozen": false,
+    "evidence": {
+      "frame": "host-observed",
+      "input_acks": "guest-asserted",
+      "logs": "guest-asserted",
+      "state_change": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "evidence_label": "host-pixel",
+    "frame": {
+      "buffer_generation": 1,
+      "captured_at": "2026-11-14T10:16:17.702Z",
+      "frame_number": 1,
+      "frame_seq": 1,
+      "identity": "C1 buffer metadata (no pixel copy)",
+      "md5": "",
+      "pixels": false
+    },
+    "insets": "carve",
+    "last_frame_seq": 1,
+    "launched": true,
+    "logs": [
+      {
+        "line": "E cutils-trace Error opening trace file: Permission denied (13)",
+        "message": "Error opening trace file: Permission denied (13)",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 1,
+        "tag": "cutils-trace"
+      },
+      {
+        "line": "I          Using CollectorTypeCC GC.",
+        "message": "Using CollectorTypeCC GC.",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 2,
+        "tag": ""
+      },
+      {
+        "line": "D nativeloader InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so",
+        "message": "InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so",
+        "priority": "D",
+        "repeat_count": 1,
+        "seq": 3,
+        "tag": "nativeloader"
+      },
+      {
+        "line": "D          I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat",
+        "message": "I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat",
+        "priority": "D",
+        "repeat_count": 1,
+        "seq": 4,
+        "tag": ""
+      },
+      {
+        "line": "E logdw    Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 5,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 6,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 7,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 8,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 9,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 10,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 11,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 12,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 13,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 14,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 15,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 16,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 17,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 18,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 19,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 20,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 21,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 22,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 23,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 24,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 25,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 26,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 27,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 28,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 29,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 30,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 31,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 32,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 33,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 34,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 35,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 36,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 37,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 38,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 39,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 40,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 41,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 42,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 43,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 44,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 45,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 46,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'",
+        "message": "Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 47,
+        "tag": "logdw"
+      },
+      {
+        "line": "W ziparchive Unable to open '/data/app/launch-guest/classes.dm': No such file or directory",
+        "message": "Unable to open '/data/app/launch-guest/classes.dm': No such file or directory",
+        "priority": "W",
+        "repeat_count": 1,
+        "seq": 48,
+        "tag": "ziparchive"
+      },
+      {
+        "line": "W ziparchive Unable to open '/data/app/launch-guest/classes.dm': No such file or directory",
+        "message": "Unable to open '/data/app/launch-guest/classes.dm': No such file or directory",
+        "priority": "W",
+        "repeat_count": 1,
+        "seq": 49,
+        "tag": "ziparchive"
+      },
+      {
+        "line": "I nativeloader InitApexLibraries skipped: No such file or directory",
+        "message": "InitApexLibraries skipped: No such file or directory",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 50,
+        "tag": "nativeloader"
+      },
+      {
+        "line": "D nativeloader InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so",
+        "message": "InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so",
+        "priority": "D",
+        "repeat_count": 1,
+        "seq": 51,
+        "tag": "nativeloader"
+      },
+      {
+        "line": "D nativeloader Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand",
+        "message": "Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand",
+        "priority": "D",
+        "repeat_count": 1,
+        "seq": 52,
+        "tag": "nativeloader"
+      },
+      {
+        "line": "D nativeloader InitExtendedPublicLibraries: ",
+        "message": "InitExtendedPublicLibraries: ",
+        "priority": "D",
+        "repeat_count": 1,
+        "seq": 53,
+        "tag": "nativeloader"
+      },
+      {
+        "line": "I nativeloader InitVendorPublicLibraries skipped: No such file or directory",
+        "message": "InitVendorPublicLibraries skipped: No such file or directory",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 54,
+        "tag": "nativeloader"
+      },
+      {
+        "line": "D nativeloader InitProductPublicLibraries: ",
+        "message": "InitProductPublicLibraries: ",
+        "priority": "D",
+        "repeat_count": 1,
+        "seq": 55,
+        "tag": "nativeloader"
+      },
+      {
+        "line": "E ProcessState Binder driver /dev/binder is unavailable. Using /dev/binder instead.",
+        "message": "Binder driver /dev/binder is unavailable. Using /dev/binder instead.",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 56,
+        "tag": "ProcessState"
+      },
+      {
+        "line": "D CompatibilityChangeReporter Compat change id reported: 171979766; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 171979766; UID 10192; state: ENABLED",
+        "priority": "D",
+        "repeat_count": 1,
+        "seq": 57,
+        "tag": "CompatibilityChangeReporter"
+      },
+      {
+        "line": "D CompatibilityChangeReporter Compat change id reported: 242716250; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 242716250; UID 10192; state: ENABLED",
+        "priority": "D",
+        "repeat_count": 1,
+        "seq": 58,
+        "tag": "CompatibilityChangeReporter"
+      },
+      {
+        "line": "I Typeface Preloading /system/fonts/Roboto-Regular.ttf",
+        "message": "Preloading /system/fonts/Roboto-Regular.ttf",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 59,
+        "tag": "Typeface"
+      },
+      {
+        "line": "I Typeface Preloading /system/fonts/RobotoStatic-Regular.ttf",
+        "message": "Preloading /system/fonts/RobotoStatic-Regular.ttf",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 60,
+        "tag": "Typeface"
+      },
+      {
+        "line": "D CompatibilityChangeReporter Compat change id reported: 247079863; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 247079863; UID 10192; state: ENABLED",
+        "priority": "D",
+        "repeat_count": 1,
+        "seq": 61,
+        "tag": "CompatibilityChangeReporter"
+      },
+      {
+        "line": "W ziparchive Unable to open '/data/app/keystore-probe.dm': No such file or directory",
+        "message": "Unable to open '/data/app/keystore-probe.dm': No such file or directory",
+        "priority": "W",
+        "repeat_count": 1,
+        "seq": 62,
+        "tag": "ziparchive"
+      },
+      {
+        "line": "W ziparchive Unable to open '/data/app/keystore-probe.dm': No such file or directory",
+        "message": "Unable to open '/data/app/keystore-probe.dm': No such file or directory",
+        "priority": "W",
+        "repeat_count": 1,
+        "seq": 63,
+        "tag": "ziparchive"
+      },
+      {
+        "line": "D nativeloader Configuring clns-2 for other apk /data/app/keystore-probe.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.keystoreprobe",
+        "message": "Configuring clns-2 for other apk /data/app/keystore-probe.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.keystoreprobe",
+        "priority": "D",
+        "repeat_count": 1,
+        "seq": 64,
+        "tag": "nativeloader"
+      },
+      {
+        "line": "W ContextImpl Failed to ensure /data/app-data/dev.acos.fixtures.keystoreprobe/cache: chown failed: EINVAL (Invalid argument)",
+        "message": "Failed to ensure /data/app-data/dev.acos.fixtures.keystoreprobe/cache: chown failed: EINVAL (Invalid argument)",
+        "priority": "W",
+        "repeat_count": 1,
+        "seq": 65,
+        "tag": "ContextImpl"
+      },
+      {
+        "line": "W ContextImpl Failed to ensure /data/app-data/dev.acos.fixtures.keystoreprobe/code_cache: chown failed: EINVAL (Invalid argument)",
+        "message": "Failed to ensure /data/app-data/dev.acos.fixtures.keystoreprobe/code_cache: chown failed: EINVAL (Invalid argument)",
+        "priority": "W",
+        "repeat_count": 1,
+        "seq": 66,
+        "tag": "ContextImpl"
+      },
+      {
+        "line": "V GraphicsEnvironment Currently set values for:",
+        "message": "Currently set values for:",
+        "priority": "V",
+        "repeat_count": 1,
+        "seq": 67,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "V GraphicsEnvironment   angle_gl_driver_selection_pkgs=[]",
+        "message": "  angle_gl_driver_selection_pkgs=[]",
+        "priority": "V",
+        "repeat_count": 1,
+        "seq": 68,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "V GraphicsEnvironment   angle_gl_driver_selection_values=[]",
+        "message": "  angle_gl_driver_selection_values=[]",
+        "priority": "V",
+        "repeat_count": 1,
+        "seq": 69,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "V GraphicsEnvironment ANGLE GameManagerService for dev.acos.fixtures.keystoreprobe: false",
+        "message": "ANGLE GameManagerService for dev.acos.fixtures.keystoreprobe: false",
+        "priority": "V",
+        "repeat_count": 1,
+        "seq": 70,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "V GraphicsEnvironment dev.acos.fixtures.keystoreprobe is not listed in per-application setting",
+        "message": "dev.acos.fixtures.keystoreprobe is not listed in per-application setting",
+        "priority": "V",
+        "repeat_count": 1,
+        "seq": 71,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "V GraphicsEnvironment Neither updatable production driver nor prerelease driver is supported.",
+        "message": "Neither updatable production driver nor prerelease driver is supported.",
+        "priority": "V",
+        "repeat_count": 1,
+        "seq": 72,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "W SystemServiceRegistry No service published for: netstats",
+        "message": "No service published for: netstats",
+        "priority": "W",
+        "repeat_count": 1,
+        "seq": 73,
+        "tag": "SystemServiceRegistry"
+      },
+      {
+        "line": "E TrafficStats TrafficStats not initialized, uid=10192",
+        "message": "TrafficStats not initialized, uid=10192",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 74,
+        "tag": "TrafficStats"
+      },
+      {
+        "line": "D CompatibilityChangeReporter Compat change id reported: 210923482; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 210923482; UID 10192; state: ENABLED",
+        "priority": "D",
+        "repeat_count": 1,
+        "seq": 75,
+        "tag": "CompatibilityChangeReporter"
+      },
+      {
+        "line": "I KEYPROBE start mode=fidelity",
+        "message": "start mode=fidelity",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 76,
+        "tag": "KEYPROBE"
+      },
+      {
+        "line": "I KEYPROBE {\"check\":\"fidelity.provider\",\"ok\":false,\"detail\":\"providers=AndroidNSSP,AndroidOpenSSL,CertPathProvider,BC,HarmonyJSSE\"}",
+        "message": "{\"check\":\"fidelity.provider\",\"ok\":false,\"detail\":\"providers=AndroidNSSP,AndroidOpenSSL,CertPathProvider,BC,HarmonyJSSE\"}",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 77,
+        "tag": "KEYPROBE"
+      },
+      {
+        "line": "E KEYPROBE harness threw\njava.security.KeyStoreException: AndroidKeyStore not found\n\tat java.security.KeyStore.getInstance(KeyStore.java:904)\n\tat dev.acos.fixtures.keystoreprobe.MainActivity.fidelity(MainActivity.java:259)\n\tat dev.acos.fixtures.keystoreprobe.MainActivity.onCreate(MainActivity.java:95)\n\tat android.app.Activity.performCreate(Activity.java:8595)\n\tat android.app.Activity.performCreate(Activity.java:8573)\n\tat android.app.Instrumentation.callActivityOnCreate(Instrumentation.java:1456)\n\tat android.app.ActivityThread.performLaunchActivity(ActivityThread.java:3764)\n\tat android.app.ActivityThread.handleLaunchActivity(ActivityThread.java:3922)\n\tat android.app.servertransaction.LaunchActivityItem.execute(LaunchActivityItem.java:103)\n\tat android.app.servertransaction.TransactionExecutor.executeCallbacks(TransactionExecutor.java:139)\n\tat android.app.servertransaction.TransactionExecutor.execute(TransactionExecutor.java:96)\n\tat android.app.ActivityThread$H.handleMessage(ActivityThread.java:2443)\n\tat android.os.Handler.dispatchMessage(Handler.java:106)\n\tat android.os.Looper.loopOnce(Looper.java:205)\n\tat android.os.Looper.loop(Looper.java:294)\n\tat dev.acos.art.LaunchMain.run(LaunchMain.java:430)\n\tat dev.acos.art.LaunchMain.main(LaunchMain.java:223)\nCaused by: java.security.NoSuchAlgorithmException: AndroidKeyStore KeyStore not available\n\tat sun.security.jca.GetInstance.getInstance(GetInstance.java:159)\n\tat java.security.Security.getImpl(Security.java:628)\n\tat java.security.KeyStore.getInstance(KeyStore.java:901)\n\t... 16 more\n",
+        "message": "harness threw\njava.security.KeyStoreException: AndroidKeyStore not found\n\tat java.security.KeyStore.getInstance(KeyStore.java:904)\n\tat dev.acos.fixtures.keystoreprobe.MainActivity.fidelity(MainActivity.java:259)\n\tat dev.acos.fixtures.keystoreprobe.MainActivity.onCreate(MainActivity.java:95)\n\tat android.app.Activity.performCreate(Activity.java:8595)\n\tat android.app.Activity.performCreate(Activity.java:8573)\n\tat android.app.Instrumentation.callActivityOnCreate(Instrumentation.java:1456)\n\tat android.app.ActivityThread.performLaunchActivity(ActivityThread.java:3764)\n\tat android.app.ActivityThread.handleLaunchActivity(ActivityThread.java:3922)\n\tat android.app.servertransaction.LaunchActivityItem.execute(LaunchActivityItem.java:103)\n\tat android.app.servertransaction.TransactionExecutor.executeCallbacks(TransactionExecutor.java:139)\n\tat android.app.servertransaction.TransactionExecutor.execute(TransactionExecutor.java:96)\n\tat android.app.ActivityThread$H.handleMessage(ActivityThread.java:2443)\n\tat android.os.Handler.dispatchMessage(Handler.java:106)\n\tat android.os.Looper.loopOnce(Looper.java:205)\n\tat android.os.Looper.loop(Looper.java:294)\n\tat dev.acos.art.LaunchMain.run(LaunchMain.java:430)\n\tat dev.acos.art.LaunchMain.main(LaunchMain.java:223)\nCaused by: java.security.NoSuchAlgorithmException: AndroidKeyStore KeyStore not available\n\tat sun.security.jca.GetInstance.getInstance(GetInstance.java:159)\n\tat java.security.Security.getImpl(Security.java:628)\n\tat java.security.KeyStore.getInstance(KeyStore.java:901)\n\t... 16 more\n",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 78,
+        "tag": "KEYPROBE"
+      },
+      {
+        "line": "I KEYPROBE {\"check\":\"fidelity.harness\",\"ok\":false,\"detail\":\"harness threw java.security.KeyStoreException: AndroidKeyStore not found\"}",
+        "message": "{\"check\":\"fidelity.harness\",\"ok\":false,\"detail\":\"harness threw java.security.KeyStoreException: AndroidKeyStore not found\"}",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 79,
+        "tag": "KEYPROBE"
+      },
+      {
+        "line": "I KEYPROBE SUMMARY {\"activity\":\"MainActivity\",\"mode\":\"fidelity\",\"pass\":0,\"fail\":2}",
+        "message": "SUMMARY {\"activity\":\"MainActivity\",\"mode\":\"fidelity\",\"pass\":0,\"fail\":2}",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 80,
+        "tag": "KEYPROBE"
+      },
+      {
+        "line": "E logdw    dev.acos.fixtures.keystoreprobe.MainActivity",
+        "message": "dev.acos.fixtures.keystoreprobe.MainActivity",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 81,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    dev.acos.fixtures.keystoreprobe.MainActivity",
+        "message": "dev.acos.fixtures.keystoreprobe.MainActivity",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 82,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    dev.acos.fixtures.keystoreprobe.MainActivity",
+        "message": "dev.acos.fixtures.keystoreprobe.MainActivity",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 83,
+        "tag": "logdw"
+      },
+      {
+        "line": "D CompatibilityChangeReporter Compat change id reported: 237531167; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 237531167; UID 10192; state: ENABLED",
+        "priority": "D",
+        "repeat_count": 1,
+        "seq": 84,
+        "tag": "CompatibilityChangeReporter"
+      }
+    ],
+    "note": "",
+    "session_id": "s_cli",
+    "stage_reached": "first_frame",
+    "timing": {
+      "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+      "total_ms": 0
+    },
+    "total": 84,
+    "trust": "trusted"
+  },
+  "metrics": {
+    "wall_ms": 0
+  }
+}

@@ -136,6 +136,11 @@ pub enum Error {
     /// by the exec path (ZPROD P2, design §6).
     #[error("{0}")]
     Zygote(String),
+    /// An `ACOS_ART_GUEST_UID` seam refused its value. There is no silent
+    /// fallback to the host uid: uid 1000 is Android's `SYSTEM_UID` and makes
+    /// the framework take privileged branches that do not exist for an app.
+    #[error("INVALID_GUEST_UID: {0}")]
+    InvalidGuestUid(String),
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -1150,8 +1155,11 @@ fn run_dir_is_live(path: &Path) -> bool {
 /// inherited from the host. `--cap-drop ALL` is redundant (bwrap's implicit
 /// user namespace already zeroes the capability sets) but costs nothing.
 ///
-/// Deliberately absent: `--unshare-user` (bwrap already does it implicitly),
-/// `--disable-userns` and `--new-session` (untested against ART; see S2).
+/// `--unshare-user` is made explicit for runs because it is what lets the guest
+/// carry an **application** uid instead of the host caller's uid (see
+/// [`guest_uid`]); bwrap would create the namespace implicitly anyway.
+/// `--disable-userns` and `--new-session` remain absent (untested against ART;
+/// see S2).
 const SANDBOX_FLAGS: &[&str] = &[
     "--unshare-pid",
     "--unshare-net",
@@ -1163,6 +1171,57 @@ const SANDBOX_FLAGS: &[&str] = &[
     "--cap-drop",
     "ALL",
 ];
+
+/// The uid the guest runs as inside the sandbox's user namespace.
+///
+/// `bwrap --unshare-user --uid N` maps inner `N` onto the host caller's uid, so
+/// every host file the run binds stays accessible (it appears owned by `N`
+/// inside) while the guest's *kernel* uid — and therefore `Process.myUid()`,
+/// `Libcore.os.getuid()`, `/proc/self/status` — is an application uid.
+///
+/// Default: [`acos_services::pms::FIXTURE_UID`] (10192), the uid PMS/AMS already
+/// answer for the installed package, so `Process.myUid()` and
+/// `getPackageUid()` agree. This is a fidelity fix, not a cosmetic one: the
+/// host caller is uid 1000, which is Android's `Process.SYSTEM_UID`. Framework
+/// code branches on it — `WebViewFactory.getProvider()` refuses for
+/// `ROOT_UID`/`SYSTEM_UID`/`SHELL_UID`/`NETWORK_STACK_UID`/`BLUETOOTH_UID`
+/// (measured from the API-34 framework dex: uids 0, 1000, 1001, 1027, 1002) and
+/// throws `UnsupportedOperationException: For security reasons, WebView is not
+/// allowed in privileged processes`, so every app that probes WebView died in a
+/// *system* branch it can never take on a device.
+///
+/// `ACOS_ART_GUEST_UID=host` keeps the old uid for A/B work. Any other value
+/// must be exactly the PMS fixture uid: PMS/AMS answers and the writable mount
+/// ownership are keyed to it, so a different numeric uid would make
+/// `Process.myUid()` and `getPackageUid()` disagree. A malformed or unsupported
+/// value is an explicit `INVALID_GUEST_UID` error, never a silent host-uid
+/// fallback (host uid 1000 is `SYSTEM_UID`).
+fn guest_uid() -> Result<Option<u32>> {
+    let raw = match std::env::var("ACOS_ART_GUEST_UID") {
+        Err(std::env::VarError::NotPresent) => {
+            return Ok(Some(acos_services::pms::FIXTURE_UID as u32))
+        }
+        Err(e) => return Err(Error::InvalidGuestUid(e.to_string())),
+        Ok(v) => v,
+    };
+    let value = raw.trim();
+    if value.eq_ignore_ascii_case("host") {
+        return Ok(None);
+    }
+    let uid = value.parse::<u32>().map_err(|_| {
+        Error::InvalidGuestUid(format!(
+            "{raw:?} is neither `host` nor an application uid"
+        ))
+    })?;
+    if uid != acos_services::pms::FIXTURE_UID as u32 {
+        return Err(Error::InvalidGuestUid(format!(
+            "uid {uid} != PMS fixture uid {} (PMS/AMS answers and the writable \
+             mounts are keyed to the fixture uid)",
+            acos_services::pms::FIXTURE_UID
+        )));
+    }
+    Ok(Some(uid))
+}
 
 /// Builder for the `bwrap` command line: the mini-Android root, its
 /// environment, and any extra host directories the task needs.
@@ -1319,6 +1378,15 @@ impl<'a> Sandbox<'a> {
         // options in order, so these must precede every mount and `--setenv`.
         for f in SANDBOX_FLAGS {
             a.push((*f).into());
+        }
+        // Runs get an application uid (see `guest_uid`); host-side staging
+        // steps and the argv-shape tests keep the caller's uid.
+        if self.active_run_root().is_some() {
+            if let Some(uid) = guest_uid()? {
+                a.push("--unshare-user".into());
+                a.push("--uid".into());
+                a.push(uid.to_string().into());
+            }
         }
         a.push("--tmpfs".into());
         a.push("/".into());

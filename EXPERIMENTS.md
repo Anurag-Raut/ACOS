@@ -1571,6 +1571,147 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   count `BR_*` bytes per transaction so a future command type cannot silently fall
   outside `br_cmd_len`.
 
+## E5.10 — K5: signature-block caps/signer semantics, app-uid fidelity, explicit service failures, opt-in keystore — PARTIAL (final tree measured 2×42 vs main; parity except one Flutter rung, one main-side gate red)
+
+- **Date / commit:** 2026-11-13; branch `compat-k5-keystore`, off `main` after the
+  K4 merge and `origin/main` `5cae694` (merge `8ef1b5e`).
+- **Why this entry is PARTIAL:** the hour was spent on the advisor's fix-first
+  list. The final-tree 42-app corpus (2 runs), the gate matrix and the full
+  per-crate test set were **not** run before the checkpoint bound, so no funnel
+  delta is claimed. Everything below is either a unit test, a boot-image dex
+  check, or a targeted real-ART smoke from the earlier K5 pass (marked).
+- **Signing certificates (`crates/acos-apk/src/signing.rs`, `apk.rs`):**
+  - v1 blocks are read with `MAX_SIGNATURE_BLOCK_BYTES` = 1 MiB, a
+    `MAX_SIGNATURE_BLOCK_RATIO` = 200 deflate ratio cap, and a capped
+    `read_to_end` (the zip size field is untrusted). Violations are
+    `APK_SIGNING_MALFORMED`, not a skipped block.
+  - `Signature[]` is now **one leaf certificate per signer**, not the first
+    signer's whole chain; v2/v3/v3.1 iterate every signer and take its first
+    cert.
+  - Scheme selection never downgrades: the highest present scheme is
+    authoritative; a malformed v3 is an error, never a v2/v1 fallback. v1 is
+    used only when the block has no known scheme. v1 identifies the signer by
+    `SignerInfo` issuer+serial instead of assuming chain[0].
+  - `Apk::signing_certificates_error` records the reason (`PMS` still sees an
+    empty array rather than a wrong one).
+  - Tests: `acos-apk` lib 14/14 (scheme chain-vs-leaf, v3-over-v2, malformed-v3
+    no-downgrade, oversized block, v1 sid selection, declared-size/ratio/lying-
+    reader caps).
+  - **RedReader**: the exact 832-byte F-Droid DER is embedded in
+    `acos-runtime/tests/parcelable_java.rs`; the **real framework
+    `PackageInfo.CREATOR.createFromParcel`** decodes the Rust-built
+    `PackageInfo` and re-emits identical bytes (`parcelable_java` 1/1). The ART
+    guest's `OPENSSL_internal:DECODE_ERROR` therefore is not explained by the
+    Rust framing; it remains open (hypothesis: the guest decodes a different
+    reply, or the peer pipe truncates a >2 KiB reply). Not claimed fixed.
+- **Guest uid (`crates/acos-art/src/lib.rs`):** `ACOS_ART_GUEST_UID` now
+  returns `Result`; only `host` (explicit A/B) or the PMS fixture uid 10192 are
+  accepted. Malformed/other numeric values are `INVALID_GUEST_UID`, never a
+  silent host-uid fallback. The application-created marker now records
+  `guest_uid`, `pms_uid`, `/proc/self/uid_map`, `Uid/Gid/Groups/CapEff`,
+  `files_dir` writability and `/data/app-data` entries for measurement.
+  **Measured on the final tree** (editor, real ART): `guest_uid=10192`,
+  `pms_uid=10192` (agreement), `uid_map=10192 0 1`, `Uid: 10192 10192 10192
+  10192`, `Gid: 984 984 984 984`, `Groups: … 984 …`, `CapEff: 0`,
+  `/data/app-data` writable and contains only the current package. Notes: the
+  gid/groups remain the host caller's (984) and the outer uid maps to host 1000,
+  so this is **uid fidelity, not host-level isolation**; each session gets its
+  own `/data/app-data` bind (a previous session's directory is absent), and no
+  cross-session isolation beyond that is claimed.
+- **Services (`crates/acos-services/src/extras.rs`):** `trust` keeps read paths
+  (`isDeviceLocked/Secure/TrustUsuallyManaged/ActiveUnlock`) and now **rejects**
+  every setter/listener transaction with `UnsupportedOperationException`.
+  `restrictions.requestPermission` is a void call in the API-34 proxy (verified
+  in `classes.dex`), so its correct reply is the exception header with **no**
+  payload; the old null-`IntentSender` word was removed. `createLocalApprovalIntent`
+  (transaction 6, `readTypedObject`) answers null. `location.geocoderIsPresent`
+  code 12 + `readBoolean` were re-verified against the boot image.
+- **Software keystore:** now **opt-in** (`ACOS_ART_KEYSTORE=on`); default runs
+  keep the honest `KeyStoreException: AndroidKeyStore not found`. The advisor's
+  fix list (KeyInfo software level, purposes/modes/padding, import
+  `ProtectionParameter`, attestation refusal, persistence failures, 0600,
+  retention, reset/crash/concurrent tests) is Backlog **K5b**, not implemented.
+- **Earlier K5 targeted real-ART evidence (from the pre-merge pass, unchanged):**
+  element 1534 ms first frame + tree, dot.gallery 2504 ms + tree (both with the
+  keystore explicitly on), editor full ladder 326 ms, WebView
+  privileged-process classification removed. Because the keystore is now
+  default-off, element/dot.gallery are expected to return to the K4 wall until
+  K5b lands; this is an intentional opt-in, not a measured funnel result.
+- **Gates (final tree, real ART, one lock acquisition per chunk):** **34/34 as
+  required, 0 false passes.** 25 pass: the 19 standard (`v2-art-counter`,
+  `w22-counter-reset`, `w54-dialog-pixels`, `w42-back-frame`,
+  `w15-dialog-menu`, `form-validation`, `suite/T03-render-good`,
+  `v1-offscreen-pager`, `p11-{anim,delay40,delay200,delay1000,background,chain,
+  dialog,activity,list-smooth,layout-transition,rapid-taps}`) + `w7-insets-report`
+  + all five Gaten flows (`gaten-home/-lesson/-search/-settings/-tabs`).
+  9 expected failures with the right code: `suite/T03-render-wrong`,
+  `p11-progress-timeout` (TIMEOUT), `negative/offscreen-pager-visible`
+  (ELEMENT_OFFSCREEN), the five `negative/gaten-*-wrong` (ASSERTION_FAILED) and
+  `w7-insets-carve-negative` (ASSERTION_FAILED). `gaten-home` now **passes**
+  (K4's TIMEOUT is gone; it moved with merged main, not with K5 — K4 recorded it
+  as pre-existing).
+- **Corpus (final tree, real ART, N=1, `run-k1.sh --batch 4`):** r1 completed
+  all 42: inspect 42, process start 42, `Application.onCreate` completed **21**,
+  first frame **15**, tree/screenshot **15**, tap **9**; p50 621.5 ms / p90
+  1595.3 ms. K4 was 21 / 16–17 / 16 / 9 at p50 808 / p90 1269, so this is
+  **−1 first frame and −1 tree, +tap equal**, with two apps of headroom in K4's
+  own 16-vs-17 flicker range. r2 was cut at the bound after **4 apps**, all
+  stable vs r1 (`aegis` tap 510.7 vs 499.6 ms; three others same rung): **not a
+  2-run corpus, so no flicker claim**.
+  - **Open regression:** `net.cozic.joplin` (K4 tree+screenshot) aborted once
+    with guest exit **134 (SIGABRT) "while binding the tree"**; confirmation
+    runs did not acquire the lock. This is **unresolved**, so K5 is not
+    accepted and zero-regression is not claimed.
+  - Expected: element/dot.gallery at the `AndroidKeyStore not found` wall
+    (keystore default-off); `nextcloud.client` reads `inspect` only because its
+    new `IConnectivityManager.requestNetwork` wall fires before the
+    application-created marker (K3 was also process start).
+- **Open / next:** 2 full corpus runs on the final tree; joplin 2× to decide
+  regression vs flake; the RedReader ART decode. Commit is a checkpoint, not an
+  accepted K5.
+
+### E5.10b — K5 on the final merged tree (`ed2ff4d` = K5 + main `d7dc8e2`), 2026-11-14
+
+Reference arm: a `d7dc8e2` binary built in `.cache/k5-main-target` (the shared
+`target/release/acos` predates the density fix and was not used). All runs under
+`run-exclusive.sh` + `guarded.sh`.
+
+1. **Branch reattachment.** The worktree was detached at `6d0fcf5` while the
+   branch still pointed at pre-amend `4918d26`, so no fast-forward was possible;
+   reattached with a merge (`ed2ff4d`). Tree identical to `6d0fcf5` except the
+   `results/aidl/*` text files (newer branch numbers kept). No reset, no force.
+2. **Joplin 3×3 A/B — NOT a K5 regression.** K5 3/3 and main 3/3 SIGABRT
+   (exit 134) with the same logd signature: RN `RNCNetInfo` host-object call →
+   `IConnectivityManager code 42 (requestNetwork)` unsupported →
+   `JniException`/`JavascriptException` → abort on `mqt_v_js`. The connectivity
+   service came from main's `a98e839` (T-38/T-39); K4's tree rung predates it.
+   Evidence `.cache/k5/jab/{branch,main}-{1,2,3}/`. Nothing was changed for it.
+3. **Gates 34 on the final tree:** 24 pass, 9 fail with the expected code,
+   **0 false passes**, but **`w7-insets-report` fails** (`status=128` expected,
+   `status=0` got). Main `d7dc8e2` fails it identically, and the K5 gate run on
+   `49e554c` passed it, so the regression is inside `5cae694..d7dc8e2` (density
+   `0e569b5` is the prime suspect) — a main-side defect, reported not hidden.
+   `w7-insets-carve-negative` now fails at the same wrong step, so its expected
+   failure is no longer the intended assertion. Artifacts
+   `.cache/k5/final/gates*`.
+4. **Corpus 2 × 42 × 2 arms** (`.cache/k5/final{,-r2}`): K5 20/15/15/9
+   (`onCreate`/frame/tree/tap) in both rounds, main 21/15/15/9 in both rounds;
+   per-app rungs identical between rounds in each arm; the only K5↔main app
+   difference is `chat.fluffy.fluffychat` (`onCreate` entered vs completed), and
+   15 isolated runs show both arms aborting in the same Flutter
+   plugin-registration path, so it is unresolved and not K5-attributable.
+   First-frame p50/p90: K5 625.5/1427.6 and 612.4/1421.9 ms vs main
+   626.1/1416.1 and 664.0/1446.7 ms.
+5. **Crate tests:** `acos-apk` lib 18/18; `acos-services`/`acos-art`/`acos-aidl`
+   green except one pre-existing env-race flake in `sandbox_s5`
+   (`refuses_to_run_when_no_cgroup_can_be_created`, passes 7/7 on re-run, fails
+   only with `--test-threads=1`).
+
+**Not accepted.** This track changes app identity, keys and signing data for
+every app; it needs the security/fidelity review in `results/compat/K5.md` §7
+(keystore `KeyInfo`/exportability, cross-session key isolation, signature
+semantics vs AOSP, uid escape analysis) before any merge.
+
 ## E13.5 — W7: report the system-bar insets instead of carving the app window — PASS as an opt-in model; default stays `carve` (one strict gate changes by 1/255)
 
 - **Date / commit:** 2026-11-13; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/w7`, branch
@@ -2109,6 +2250,97 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   non-Settings tab stack, all strictly asserted on real ART. Remaining: `G4a`/`G4b` classification,
   the owner decision on animating-screen semantics (G3e), R2a/R2b, and a real lesson (needs
   AnkiDroid or a WaniKani account — data, not ACOS).
+
+## E13.12 — G3F1: the launch's first frame is an **event**, not a traversal count — 30/30 launches bind Gaten's content frame (0 placeholders, 0 crashes), and a prelaunch guest death now keeps its evidence and is classified — PASS
+
+- **Date / commit:** 2026-11-14; worktree `/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9`,
+  branch `g3f1-first-frame`, off `main` `1f8d76b`. APK read-only
+  `.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk` (the one the five flows use).
+  Evidence: `.cache/g3f1/loop/` (30 reps), `.cache/g3f1/suite/` (gates + flows + negatives),
+  `.cache/g3f1/test-*.log`; handoff `results/handoff/G3F1.md`.
+- **Question / goal:** E13.8's re-verification left 9/30 launches publishing a *labelled placeholder*
+  (the 10–15-node window skeleton, `first_frame.placeholder: true`, `meaningful: false`,
+  `waited_ms` ≈ 1.63 s) even though the same sessions had 243 nodes 2 s later. Fix the launch's first
+  frame to reach the app's content frame, keep every fail-closed guarantee, and give a `GUEST_EXITED`
+  before the first frame its evidence and a class.
+- **Measurement that changed the design.** The pre-fix budget was not the only constraint. On this
+  host Gaten's launch traversal is **unsettled** (the welcome screen runs a 10 s Reanimated timeline;
+  `acos observe --tree` 2 s later *also* reports `settle.bound: "timeout"` with 243 nodes). So:
+  ~2/3 of launches already get an unsettled content frame from the first traversal (P9 hands it
+  back); ~1/3 get a *settled skeleton* before the RN mount starts. A settle-gated retry can never
+  reach content on that screen, at any budget:
+  - 3 s budget: 3/12 placeholders; 6 s: 1/12; 10 s: 3/12 then 7/12 in the next batch (load 2.4–3.0);
+  - a change-gated wait built on the strict settle's 24 ms "same draw stayed newest" confirmation
+    validated **no sample at all** in 10 s (an animating screen changes `draw_seq` every frame, so the
+    candidate restarts forever) and every such launch fell back to the placeholder;
+  - a launch with `ACOS_ART_FIRST_FRAME_MS=0` bound the skeleton at 0.83 s and the *same session* had
+    243 nodes at +2 s — the content was there; the wait's rule, not the app, was the blocker.
+- **Method / change.** The guest's `tree` command accepts an optional `baseline_tree` (the raw probe
+  tree the caller already holds). With it the strict settle's candidate must be (i) a tree ≠ baseline
+  (exact `Value` comparison of the reply's own tree, no host re-serialisation), (ii) a probe newer
+  than the request entry floor whose draw is committed to C1 (`probe_usable_for_fast_tree`). The
+  24 ms same-draw confirmation is deliberately excluded — that is the *settle* rule, and this wait
+  replaces it with the *change* rule (`settle:fast` already uses it for freshness). The reply says
+  which rule bound it: `bound:"strict-event"` when the sample was also settled, `bound:"change-draw"`
+  with `settled:false` and `awaited:"tree-change"` when only the draw commit was proven;
+  `reason:"tree-unchanged"` on timeout. `ArtSession::bind_first_frame` keeps its first traversal and
+  only waits when that traversal **settled on an unmounted skeleton** (≤ 40 nodes, no text), one
+  request per committed state, wall-clock bounded by `ACOS_ART_FIRST_FRAME_MS` (now the content
+  wait's budget, default **5000 ms**, measured from the end of the launch's own traversal; a caller
+  `settle_timeout_ms` stays a ceiling). `FIRST_FRAME_MAX_ATTEMPTS` (8) is only a runaway guard.
+- **Result — launch stability (n=30, one exclusive lock acquisition per batch, `animations: off`,
+  1080×2400 @400 like the flows; load1 1.6–3.0):**
+
+  | n | pass | crash | placeholder | content frame (nodes) | launch p50 / p90 | traversals | event waits |
+  |---:|---:|---:|---:|---|---|---|---|
+  | 30 | **30** | **0** | **0/30** | **30/30** (21×243, 9×201) | **2.21 s / 2.23 s** (min 0.89 s) | 1×17, 3×1, 4×2, 5×10 | 13/30 launches waited (223–235 ms) |
+
+  The 13 launches that needed the wait finished **faster** than the content-first ones (0.89–1.01 s
+  vs 2.2 s): the skeleton settled early and the app's next committed state is the content frame, so
+  the event wait costs ~0.23 s of 3–4 committed states. The other 17 bound an unsettled content
+  frame on their own traversal (`bound: "timeout"`, `traversals: 1`) — pre-existing P9 behaviour. 0 `GUEST_EXITED`, 0 SIGSEGV, no crash record
+  in any rep; every session had 243 nodes at +2 s.
+- **Guarantees, unit-tested** (`cargo test -p acos-cli --bin acos g3f1`, 6/6, plus the classification
+  test in `failure.rs`): late content → content frame (`traversals 2`, `event_waits 1`, settled
+  `strict-event`); content never → labelled placeholder (`placeholder: true`) with the settle verdict
+  **rolled back** to the last settled traversal (`settled: true`, `bound: strict-event`); a changed
+  but uncommitted/timed-out retry → rollback (never a `TIMEOUT`); a draw commit → content frame with
+  `settled:false, bound:"change-draw"` (never assertion evidence); content-first → **zero** extra
+  traversals (one `tree` request, asserted by the fake launcher's request log). A placeholder never
+  satisfies a UI assertion.
+- **(b) Prelaunch guest death.** `serve`'s fresh-launch failure path now closes/reaps the launcher
+  (bounded) so its `session-exit.json` is on disk, writes
+  `<session>/art-frames/launch-failure.json` (classification, last 12 logd lines, session-exit facts,
+  the list of evidence files that exist) and classifies the death in the envelope
+  (`details.launch_failure.classification.class` ∈ `guest-exited-before-first-frame` /
+  `guest-signal-crash` / `guest-signal` / `guest-exited-zero` / `unclassified-guest-death` /
+  `no-death`) with a hint pointing at the kept evidence. The pre-fix race (the reply is written
+  before the launcher's exit record, so the reply carried `session_exit: null`) is the unit test: the
+  fake launcher answers `GUEST_EXITED`, *then* writes its record, then exits 1.
+- **Gates / flows:** v2-art-counter, w22-counter-reset, w54-dialog-pixels, w42-back-frame,
+  w15-dialog-menu, form-validation, suite/T03-render-good, v1-offscreen-pager **pass**;
+  suite/T03-render-wrong `ASSERTION_FAILED`; negative/offscreen-pager-visible `ELEMENT_OFFSCREEN`;
+  p11-progress-timeout `TIMEOUT`. `gaten-{home,tabs,settings,search,lesson}` **3/3 each (15/15)**;
+  `scenarios/negative/gaten-*-wrong` **5/5 `ASSERTION_FAILED`**. 0 false passes.
+- **Crate tests (final branch):** `acos-art` 149/149 (`--test-threads=1 --skip
+  refuses_to_run_when_no_cgroup_can_be_created`, and that test alone passes), `acos-verify` 66/66,
+  `acos-services` 302/302, `acos-cli` 153 passed / 1 failed — the failure is
+  `w50_serve_art::an_unknown_session_is_not_routed_to_the_frozen_rust_vm`, which cannot bind its
+  daemon socket in this worktree (its scratch path is 108 bytes, `AF_UNIX` max 108 with the NUL;
+  measured: 107 binds, 108 `AF_UNIX path too long`). Environmental, not the diff.
+  The M4 A/B on the counter fixture was **not measured** (lock queue 200–500 s per acquisition;
+  the counter's first frame carries text, so no second traversal is sent — a code reading).
+- **False passes:** 0. A placeholder is still published only as `placeholder: true` +
+  `meaningful:false`; a `change-draw` frame is published with `settled: false` in its own settle
+  block and the launch's `result.settle` is untouched by P9's restore rule.
+- **Decision:** land. The content wait is event-driven (the guest's own committed tree change), its
+  budget is a ceiling that only an app which never gains content ever spends, and a launch whose
+  first frame is already content still pays nothing.
+- **Open risks:** (1) a `change-draw` frame is fresh but not *settled*; SE2 (ADR-0026 #3,
+  content-stable settle) is the route to a settled launch frame on forever-animating screens;
+  (2) an app whose first screen is genuinely text-free and ≤ 40 nodes pays the 5 s budget once
+  (tunable, visible in `first_frame`); (3) the E13.8 exit-1 class did not recur in 30 launches, so
+  (b)'s classification is proven by unit test, not by field evidence.
 
 ## E2.14 — H15: M6 reset profiled — 117 ms of the strict bind is a framework animator run, and the 25 % target is not reachable without a strict-rule change — MEASURED (partial: −3.9 % fast, −0.6 % strict)
 
@@ -2649,6 +2881,30 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
 - **Regression / false pass:** none — the tool never converts a missing element into a pass, log steps that do not match are recorded `pass_with_failure` and never counted, and `assert_region` is `not_compared` rather than assumed.
 - **Conclusion / next:** (1) install an arm64 build of gaten `f344272` on the phone and re-run `gaten-{home,tabs,settings,search,lesson}` — that is the only thing standing between this track and a full Gaten parity result; (2) add tree/frame evidence for `launch`/`assert_log` steps in `verify` artifacts (small, unblocks artifact-level diffing); (3) decide whether `input.rotate` is in scope for the ART backend (rotation is a gate step in three fixture scenarios and currently unverifiable on ACOS); (4) keep `tools/phone/replay_scenario.py` in the per-change check once (1) lands.
 
+## E13.15 — PHONE2: arm64 Gaten `f344272` on the real phone vs ACOS — MEASURED: 6/9 Gaten flows match step-for-step, a text field's accessible name is an ACOS-only affordance (false-pass class), the Anki branch is device state
+
+- **Date / commit:** 2026-11-14, base `int-nhp` = `f6c418d` (`main` + NET1 + H13B + PHONE-REF-1) on branch `phone-ref-2`. Closes PHONE-REF-1's blocker (E13.14).
+- **Question / goal:** PHONE-REF-1 could not compare Gaten on the phone because the phone ran a different build than ACOS tests. Build Gaten `dev` `f344272` for arm64 exactly as ACOS's x86_64 build was made, install it, and re-run every Gaten scenario on both sides. Does an agent observe the same screen, texts and element states on a real phone as on ACOS?
+- **Method:** build in the existing clone `/home/Qui/Projects/acos/.cache/gaten/src-dev` (at `f344272`; `/home/Qui/Projects/gaten` never written), `./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --max-workers=4 --no-daemon` under `guarded.sh --mem 12G --time 1500`, signed with a fresh debug keystore (`apksigner` v3). Phone side: `tools/phone/replay_scenario.py` per scenario under `flock .cache/phone.lock`, `pm clear com.gaten` per run. ACOS side: the same 9 positive scenarios + 9 negatives through `art-runtime/run-exclusive.sh --task PHONE2 -- guarded.sh --mem 10G --time 600 -- acos verify … --engine art --artifacts`, normalized with `replay_scenario.py --source acos` and diffed with `compare_observations.py`.
+- **Inputs:** phone `motorola/manila_g/manila:15/VUOA35.116-151/a43dc2:user/release-keys`, API 35, 1080x2400 @400 dpi, arm64. ACOS scenario display 1080x2400 @400 dpi, API 34, x86_64. **Gaten is now the same build on both sides:** arm64 APK sha256 `e0d491cf…` (112,483,404 B, versionCode 12 / versionName 0.1.0), unsigned `130678ce…`; with `assets/index.android.bundle` sha256 `3c5428ea05ac2e9a90ccfef42a3c47e850656fd4744b0febaadde747d6d2300b` in the arm64 APK, a rebuilt x86_64 APK, **and** ACOS's x86_64 APK `e04c7ffc…` — the JS is byte-identical, so both sides execute the same app code.
+- **Result:** 6 of 9 positive scenarios are **step-for-step identical in status** (`gaten-home` 14/14, `gaten-settings` 33/33, `gaten-support` 27/27, `gaten-kanji` 33/33, `gaten-recognition` 33/33 on both sides; `gaten-tabs` 21/22 vs 22/22). The remaining differences are all bounds rows (ACOS reference density 420 vs the phone's 400, G4b) plus exactly three classes below. The nine positive ACOS runs all returned `pass` (25/25 for `gaten-backstack`), so no ACOS verdict itself moved. All 9 `negative/gaten-*-wrong` twins fail on the phone too: six fail at the identical step ACOS fails them, and the three whose positive twin hits the text-field/Anki classes fail *earlier* on the phone — none turns into a pass.
+- **Finding:** (a) **one false-pass class confirmed**: `content_desc: "Search Japanese dictionary"` and `content_desc: "Personal access token"` are resolved by ACOS and **do not exist in the device's tree** — the real accessibility bridge gives a text field its *placeholder* as the accessible name (`猫, ねこ, neko...`, `Paste your token`), while ACOS's tree carries the RN `accessibilityLabel` **and** the placeholder as `text`. `gaten-search` collapses from step 7 (9 steps) and the token field fails in `gaten-lesson`/`gaten-backstack`; a scenario that names a field by its label passes on ACOS and cannot be reproduced on a phone. (b) **phone-only, device state**: the owner's phone has AnkiDroid installed (`com.ichi2.anki`), so Gaten shows `Anki, Permission needed, Grant access` / *"Allow Gaten to read collection statistics"* where the scenarios assert the not-installed branch (`Anki is not installed.` / `Download Anki`); this costs `gaten-tabs` step 12 and, in `gaten-lesson`, step 7 plus the 12 steps after it (the `back` at step 12 then exits the app, so the rest of the run reads an empty tree). (c) phone-only, accessibility shape: a Fabric container merges descendant labels into one `content_desc`, so `text contains "Accuracy"` resolves to the whole-screen container on the device and to the leaf on ACOS. (d) two harness bugs, both fixed: a dozing display made every node `visible=false` (whole runs of `ELEMENT_NOT_FOUND`), and `assert_visible` was unimplemented (`unsupported_step` on `gaten-kanji`/`gaten-recognition`/`gaten-support`).
+- **Fidelity / evidence:** `physical-device` reference. Report `results/handoff/PHONE2.md`; per-scenario `results/phone/gaten-f344272/<scenario>/{phone,acos}/observations.json` + `DIFF.md` + ≤360 px screenshots (27 MB total for 19 scenarios); raw ACOS artifacts in `.cache/phone2/acos/`.
+- **Regression / false pass:** the phone harness never turns a missing element into a pass. **The false pass found is on the ACOS side and it is a tree-provenance one, not a wrong selector verdict**: ACOS honestly reports the node it has; the node does not exist on a device. Fix: either expose the hint the way the platform does, or name the field by its placeholder in the scenario.
+- **Conclusion / next:** (1) decide the text-field naming rule (ACOS tree vs scenario) — the only thing that can make `gaten-search` green on both sides; (2) make the Anki steps device-state-agnostic (both branches) or run them on a device without AnkiDroid; (3) G4b (ACOS reference density 420 vs the scenario's 400) is what produces every bounds-only difference; (4) teach `compare_observations.py` the merged-container case so those rows read as tree granularity rather than element state.
+
+## E13.17 — TREE1: a node's text/content_desc/hint now comes from the framework's own `AccessibilityNodeInfo`, and PHONE2's "ACOS-only field name" was a phone-harness mapping bug — PARTIAL (root cause + fix + tests + sweeps for the 3 flows; two RN label-placement differences left open)
+
+- **Date / commit:** 2026-11-14, branch `tree1-a11y-fidelity` from `phone-ref-2` (`3127601` = `main` + PHONE2). Worktree `/home/Qui/.paseo/worktrees/3oxa6xao/h4`.
+- **Question / goal:** PHONE2 §5.1 reported a confirmed false-pass class: a React Native `TextInput` had an accessible name on ACOS (`content_desc: "Search Japanese dictionary"`, `"Personal access token"`) that a real phone does not expose. Where do ACOS's per-node `text`/`content_desc`/`hint` come from, what does a device really expose for an `EditText`, and how should ACOS's tree be derived?
+- **Method:** read the guest walk (`crates/acos-art/guest/java/dev/acos/art/LaunchMain.java::appendViewJson`, the only place that emits tree nodes) and AOSP API 34 (`TextView.onInitializeAccessibilityNodeInfoInternal` 14029–14036, `getTextForAccessibility` 14838, `AccessibilityNodeInfo`). Measured the device directly: `adb shell uiautomator dump` of Gaten's home screen (`/tmp/tree1.xml` in this window) plus `agent-device snapshot --json` raw node fields for the same screen. Implemented the field derivation on `View.createAccessibilityNodeInfo()` (which runs RN's `ReactAccessibilityDelegate`), fixed the phone harness to read the same object, added a golden mapping test, then re-ran the 3 affected flows on ACOS (one `run-exclusive --task TREE1` session) and on the phone (`tools/phone/replay_scenario.py`, `flock .cache/phone.lock`).
+- **Inputs:** moto g35 `motorola/manila_g/manila:15/VUOA35.116-151/a43dc2`, API 35, 1080×2400 @400 dpi; Gaten `f344272` (same JS bundle as PHONE2 §2); ACOS API 34 x86_64, display 1080×2400 @400 dpi.
+- **Result — what a device exposes for an `EditText` (measured, not inferred):** `uiautomator dump` prints `<node text="猫, ねこ, neko..." class="android.widget.EditText" content-desc="Search Japanese dictionary" .../>`, i.e. **`text` = `getText()` ?: `getHint()`** (`TextView.getTextForAccessibility`), **`content-desc` = `getContentDescription()`** (the RN `accessibilityLabel`), **hint** = `getHintText()`. So the device exposes **both** the placeholder and the RN label; ACOS's pre-existing tree already carried both. **PHONE2 §5.1 is refuted as an ACOS defect:** the phone tree in that track came from `agent-device snapshot`, whose `label` is a *computed accessible name* (text, else description, else merged descendant labels) while the real fields are `contentDescription`/`placeholder`; `replay_scenario.py:node_view()` read `n["text"]` (absent → `""`) and `n["content_desc"] or n["label"]` (the camelCase key was dropped), so the description vanished and the placeholder stood in — which moved every text node into `content_desc` and made the field's `content_desc` its placeholder. With the harness fixed, `gaten-search` step 7 **passes on the phone** with `text = 猫, ねこ, neko...` and `content_desc = Search Japanese dictionary`, identical to ACOS's node for the same step.
+- **Result — the ACOS change:** `appendViewJson` now reads `info.getText()`, `info.getHintText()`, `info.getContentDescription()`, `info.isPassword()` from `v.createAccessibilityNodeInfo()` (View-field fallback only when no node can be created), and publishes `password`. **A redaction of password text was tried and rejected on evidence**: it broke `gaten-lesson` (`expected text exactly "not-a-real-token", got text ""`) and AOSP does not redact either — but the node's text for a password field is `mTransformed`, i.e. **the mask** (`expected "not-a-real-token", got text "••••••••••••••••"`), which the old View-field read leaked as the raw characters. That leak was itself an ACOS-only affordance: `gaten-lesson`'s typed-token assertion (`text: {exact: "not-a-real-token"}`) is now `^[•*]{16}$` in both `gaten-lesson` and its negative twin (twin still fails at its own mutation, step 27 `Anki is installed`).
+- **Fidelity / evidence:** `results/handoff/TREE1.md` (per-node before/after table, remaining differences, follow-ups); ACOS artifacts `.cache/tree1/suite/three-*-art/` (`tree/<n>.json` node fields, `steps/*.json`); phone `.cache/tree1/phone/<scenario>/observations.json`; raw sweep logs `.cache/tree1/phases.log`, `.cache/tree1/final.log`, `.cache/tree1/lesson.log`.
+- **Regression / false pass:** gates 15/15 as specified (10 pass; `suite/T03-render-wrong`, `w7-insets-carve-negative`, `negative/se1-expect-change-noop` → `ASSERTION_FAILED`; `negative/offscreen-pager-visible` → `ELEMENT_OFFSCREEN`; `p11-progress-timeout` → `TIMEOUT`), 5 owner flows, 5 negatives (all `ASSERTION_FAILED`), GR4 4 flows + 4 negatives. No ACOS verdict improved because of a weakened assertion; the one scenario edit replaces an ACOS-only assertion with the device-exposed one and keeps the twin's intended failure.
+- **Conclusion / next:** (1) two RN label-placement differences remain (the word card's label is `text` on the device and `content_desc` on ACOS; the token field's device `content-desc` is `WaniKani personal access token` where ACOS says `Personal access token`) — both sides now read the same API, so the next step is to compare the API 34 guest against an API 35 dump of the same node before re-pointing those selectors (`gaten-search` 13, `gaten-backstack` 13/15); (2) `gaten-backstack` step 7 `content_desc exact "Analytics"` is device-incompatible (`text exact "Analytics"` is what a device exposes) — one-line edit after (1); (3) if ACOS evidence must not carry a password's mask, add an explicit `redact_passwords` tree option rather than an implicit rule; (4) `agent-device snapshot`'s computed `label` should never be used as a node field again (kept only as a fallback).
+
 ## E5.10 — NET1: `IConnectivityManager` callbacks (the RN NetInfo wall) — MEASURED (Joplin 3/3, gates pending)
 
 **Question.** `main` (`3e11d9c`) aborts every React Native app at launch:
@@ -3006,6 +3262,7 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | Agent loop N=10 reliability | **100 %: 600/600 verified, 30 × 20 first; 60 × 10 after (both animations on)** with `TasksMax=8192`, 0 false passes, **0 unrecovered failures, 1 class-B retry (recovered, first failure preserved)**; before S3ab: 428/450 (95.1 %) for H17 and 599/600 (1 class-B exit 1) | `fix-s3ab-reset` off main `6301c06`, 10/20 sessions / one serve, `tools/bench/s3ab_repro.py` 1-task reps | S3ab, E2.15 | 2026-11-14 | S3b class A was the 512-task scope (vsync thread `EAGAIN`), fixed in `tools/guarded.sh`; class B is a malformed `addToDisplayAsUser` reply and is **mitigated** (one bounded, evidence-preserving retry), root cause open; S3a did not occur in 3 000 resets |
 | Agent loop N=20 reliability | **100 %: 600/600 verified on and 600/600 off**, 0 false passes, **1 class-B retry (recovered)** on the on arm, none off; **600/600 at N=40 on** (class-A stress) | same branch, same harness | S3ab, E2.15 | 2026-11-14 | S3's 298/300 N=20 and its 1/100 reset defects: class A fixed in the harness, class B retried once with the first failure kept; no 60 s `NO_LIVE_FRAME` in 3 000 resets |
 | Compat first-frame rate (K1 corpus, real ART, N=1) | **17/42 (40.5 %)**; tree/screenshot 16/42 (38.1 %); tap 9/42 (21.4 %); `onCreate` completed **20/42** (47.6 %); first frame p50 **808 ms** / p90 **1269 ms** (K3 12/42, tap 7/42, 16/42, 647/1050 ms). Same binary with app providers off: 14/42 first frame, tap 8/42, 18/42, p50 546/p90 1043 ms — ON is >= OFF at every rung with zero per-app regressions, so ON is the default | K4 `compat-k4-metadata` (E5.8 K3d metadata+sourceDir, E5.9 K3e binder-driver refill) | K4/K3d–K3e, E5.8–E5.9 | 2026-11-13 |
+| Compat first-frame rate after K5 (K1 corpus, real ART, N=1) | **15/42 first frame, 15/42 tree, 9/42 tap, 20/42 `onCreate` completed on the final tree (`ed2ff4d`), 2 rounds, identical in both** — vs main `d7dc8e2` 15/15/9 with 21 `onCreate`; per-app rungs identical between rounds; the only delta is `chat.fluffy.fluffychat` (`onCreate` entered vs completed), unresolved and not K5-attributable. First-frame p50/p90 612–626 / 1422–1428 ms | `compat-k5-keystore` (E5.10b) | K5/E5.10 | 2026-11-14 | **not accepted: security/fidelity review pending; one main-side gate red (`w7-insets-report`, fails on `d7dc8e2` too)** |
 | Agent loop at N=20 | **1460.4 ms/task p50 / 1501.8 p90; 7.41 verified tasks/s; 471.9 (page cache) / 603.0 (anon+shmem) tasks/GiB-min; 73 MiB anon+shmem and 53 MiB ΣPss per session; 21.2 % of one core; 298/300 verified, 0 false passes** | `scale-s3-n20` off main `15849a5` (H2+P12+H17), 20 sessions / one serve, 3 reps, animations on | S3, E3.4 | 2026-11-13 | latency +1.6 % vs N=1 and throughput 11.4×; the 2 losses are the new reset defects S3a/S3b. ‡ The **anon+shmem GiB-min is corrected (S3c/E3.5)**: 427–474 tasks/GiB-min (before 603–768), 66.7–68.1 MiB/session; at 65.6 MiB/session the per-busy-session rate stays 641 |
 | Agent loop at N=20 (animations off, functional-check mode) | **543.8 ms/task p50 / 575.3 p90; 10.49 verified tasks/s; 711.7 / 1414.2 † tasks/GiB-min; 65 MiB/session anon+shmem; 300/300 verified, 0 false passes** | same branch, `--animations off` | S3, E3.4 | 2026-11-13 | 2.7× the on-arm throughput. † The old denominator undercounted guests (S3c): corrected N=20 value **553.5–557.0 tasks/GiB-min** (before 1182–1226) and **66.5–68.9 MiB anon+shmem / 53.1–57.0 MiB ΣPss per session** with 0 zero readings (before 2.7–43.8 / 0.0–55.0); E3.5, `results/bench/S3c.md` |
 | Scale ceiling (verified loop, largest N probed) | **N=30: 600/600 verified (100 %), 0 false passes**; p50 1534–1541 ms on, 5.78–6.79 tasks/s; **job cgroup peak 2.34–2.67 GiB (≈4 % of 61.9 GiB), host used 23–24 %**, no oom_kill | same branch, 24G guarded arm, 4 reps (3 on / 1 off), load1 5.1–13.0 | S3, E3.4 | 2026-11-13 | N=20 used < 50 % of RAM so N=30 was probed and passed; the ceiling is ≥ N=30 and is set by latency stability under external load, not memory. Reset defects S3a/S3b are stochastic (seen at N=10/20, not in this 600) |
@@ -3176,6 +3433,9 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | H8 | Faster PNG (SIMD deflate) / region screenshots | M5 | 24 → 10–15 ms | medium | medium | low | backlog (5.5 % of the animations-off loop, 2 % on) |
 | H3 | Warm exec pool | M3/M4 | −73 ms launch | — | — | +idle memory | **declined by owner 2026-11-12** |
 | K3a | K2 next walls: AndroidKeyStore shim, GL/BLAST natives, WebView provider classification | compat first-frame | +3–5 apps | high (K1/K2 evidence) | medium | medium | **classified (K3, E5.7): all three need a real backend (weeks); no shim, no fake pass** |
+| K5 | K3a continuation: app-uid fidelity + software keystore + location/trust/restrictions read paths + real signing certs | compat first frame | +2–3 apps | high (targeted smokes) | medium | medium | **PARTIAL (E5.10b, final tree `ed2ff4d`): 2×42 corpus — K5 20/15/15/9 vs main 21/15/15/9; per-app rungs identical between rounds; only `fluffychat` differs by one `onCreate` rung (unresolved, not K5-attributable); joplin SIGABRT is 3/3 on main too (connectivity code 42, main `a98e839`), NOT a K5 regression; gates 24 pass + 9 expected-fail + `w7-insets-report` red on main too (density `0e569b5` suspect); uid 10192 measured. Security review pending** |
+| K5b | **Software keystore security/correctness fix list (advisor Q1):** `KeyInfo` software security level; honour/reject purposes, modes, padding, validity, randomized-encryption; import `ProtectionParameter`; explicit attestation refusal; propagate persistence failures; generated RSA/EC certificate chains; key-file retention policy + 0600; reset/restart/crash/SIGKILL/concurrent-session/identical-alias tests; label evidence "software-keystore compatibility" only | keystore compat | element/dot.gallery without lying about security | high | medium | medium | **open (K5b). Not implemented this hour; provider is default-off** |
+| K5c | **RedReader `PackageInfo.signatures` ART decode:** Rust framing passes the real `PackageInfo.CREATOR` in the VM and the reply bytes are byte-exact, but the ART guest still raises `OPENSSL_internal:DECODE_ERROR`. Test: replay the captured reply through the guest transport, compare the received byte range to `.cache/k5/pmsreply.bin`; check >2 KiB peer-pipe delivery | compat first frame | redreader onCreate | high | low | low | **open (E5.10). Smallest next action: instrument the guest's received `PackageInfo` byte range against the captured reply** |
 | K3b | K2 PMS error class (`NameNotFoundException`) and `checkService` null for unknown names | compat | +2 apps (vlc, fdroid) | high | low | low | **accepted `9df9e71` (E5.5): both leave the wall; vlc → `ConstraintLayout` inflate (R2), fdroid → `getSystemAvailableFeatures`** |
 | K3c | K2 app provider delivery (androidx.startup/WorkManager `InitializationProvider`) | compat | +element, feeders | medium | high | medium | **implemented + measured `40ffc61` (E5.6), OFF by default (`ACOS_ART_APP_PROVIDERS=on`); blocked by K3d/K3e** |
 | K3d | manifest `<meta-data>` → `Bundle` in every `PackageItemInfo` reply under `GET_META_DATA`, plus the guest-openable `sourceDir` | compat | +editor full ladder, +joplin/unitto/antennapod/streetcomplete first frame; unblocks K3c | high (K3 measured the failure) | medium | low | **accepted K4 (E5.8): parsed in `acos-apk` (`parseMetaData` transcription), carried on the typed PMS records, gated on `0x80`, plus `sourceDir` = `/data/app/<name>.apk`; K3c delivery is now the default** |
@@ -3200,3 +3460,257 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | G4a | **The tree reports `visible=false` for a node whose pixels the app painted** (GR4). `tree/18.json`: the bottom bar's active label `[512,2214][642,2251]` is `visible: false` because it lies below the root's `visible_bounds` bottom (`2209`) in a `insets: carve` session, while the bound frame `frames/18.png` paints its glyphs at png `y 2088–2122`, `x 513–640` (bounds − `display_origin.y` 128). AOSP's `View.getGlobalVisibleRect` intersects with the display and ancestor clips, not with the nav-bar band, so a real a11y tree reports it visible (a tap there would still land on the system bar, so fail-closed is defensible — the *classification* is what is inconsistent). Lowest layer: per-node `visible`/`visible_bounds` vs the carved visible frame, surfaced as `ELEMENT_OFFSCREEN` (`crates/acos-verify/src/native.rs`). Verification false-negative only, **never a false pass**. Worked around in scenarios: target the tab pressable's `content_desc`, never the label (`results/gaten/GR4.md` §2.2, §5) | node visibility vs frame | classification matches the pixels | high (tree + frame, same bound frame) | low (decide the policy, then align) | low | **open, found by GR4 (E13.9)** |
 | G4b | **Tree frame metadata reports `density: 420` for a `density_dpi: 400` run** (GR4): every `tree/*.json` frame record says 420 while `repro.json`/`verdict.json` echo the scenario's 400. Either the guest boots at the reference 420 on this path or the tree's `FrameMeta` is stamped from the reference default; not root-caused. Consequence: density-dependent geometry cannot be audited from tree metadata, which is exactly the density-fix area. Pixels are correct either way (116 px wordmark glyphs, GR4 §4) | tree/frame metadata integrity | metadata agrees with the launch spec | high (36 runs, all 420) | low (thread the launch density into the tree record) | low | **open, found by GR4 (E13.9)** |
 | G4c | **A scenario can pass 3/3 while proving nothing, and nothing in the harness notices** (GR4). A `tap` on a control that is already in the asserted state writes nothing — Gaten's Kanji reference `select()` returns early when `next === source`, and the guest's default was already the asserted value — so the post-tap assertions hold on state that never changed. The only evidence was pixel-level: the before/after bound captures were byte-identical (0 changed px) where the claim needs a change. Candidate: an explicit step (`expect_change` / `assert_frame_differs`) or a writer-side rule that a `capture` pair around a mutating tap must differ, so a vacuous flow fails instead of passing. Worked around in GR4 by asserting the hub label's *other* value is absent at each hop and by diffing the captures by hand (`results/gaten/GR4.md` §2.3) | verify semantics / false-pass class | no vacuous pass | high (reproduced + rewritten) | medium (new step + schema + provenance rule) | medium (a legitimate no-op must stay expressible) | **open, found by GR4 (E13.9)** |
+
+## K5b — AndroidKeyStore fidelity and the JCA provider-fallback trap (2026-11-14)
+
+**Branch/tree:** `compat-k5-keystore` after the `--no-ff` merge of `main`
+`3e11d9c` (`43554b0`). Runs under `tools/art-runtime/run-exclusive.sh --task K5B`
++ `tools/guarded.sh`; driver `tools/keystore-k5b/run.sh`.
+
+**Question.** Can a *provider-level* guard enforce AndroidKeyStore key
+characteristics (purposes, validity, randomized IV) the way keystore2 does, given
+that ACOS's keys are ordinary JCA objects rather than keymaster handles?
+
+**Experiment 1 — hidden-API reachability.** Reflection on
+`android.security.keystore.KeyInfo`'s 22-argument `@hide` constructor and on
+`KeyGenParameterSpec`'s `@hide` getters works in the guest (no hidden-API
+policy): `KEYINFO size=256 purposes=3 hw=false level=0`. The constructor's exact
+descriptor was read from the image's `framework/classes3.dex` with `dexdump`
+(`(Ljava/lang/String;ZIILjava/util/Date;...;II)V`) and its parameter→field
+mapping confirmed from the bytecode. So `KeyInfo` is answered by the real
+framework class, not a stub.
+
+**Experiment 2 — provider selection.** `Provider.put("Cipher.<t>", cls)` is not
+enough: JCA instantiates an SPI through a **public no-arg constructor**, and a
+package-private one made `Cipher.getInstance("AES/CBC/PKCS7Padding")` fall
+through to Conscrypt with no error at all (`CIPHER_PROVIDER=AndroidOpenSSL`).
+With the constructor public the guard was selected
+(`CIPHER_PROVIDER=AndroidKeyStoreGuard`), but `CipherSpi` is never told which
+transformation it serves, so the provider now registers its services through a
+`Provider.Service` subclass that records the algorithm in a thread-local read by
+the SPI constructor.
+
+**Experiment 3 — the refusal was swallowed.** With the guard selected, the
+purpose check fired (`GUARD refusing purpose`) and the app still got a working
+cipher: `DECRYPT_ALLOWED_FOR_ENCRYPT_ONLY (bad) provider=AndroidOpenSSL`.
+`javax.crypto.Cipher` retries the next provider when the first one's
+`engineInit` throws a checked exception — including AOSP's own
+`InvalidKeyException` — and also swallowed a `ProviderException`. An `Error`
+was not swallowed: `DECRYPT_REFUSED=java.lang.AssertionError: INCOMPATIBLE_PURPOSE: ...`.
+Refusals are therefore `KeystoreRefusal extends Error` carrying the keystore2
+code; the deviation from AOSP's exception types is documented in
+`results/compat/K5.md`.
+
+**Experiment 4 — DER certificate chains.** A hand-built X.509 v3 (Conscrypt only,
+no BouncyCastle certificate builder in the image: no
+`com/android/org/bouncycastle` in any boot dex) failed
+`OPENSSL_internal:WRONG_TAG`. `openssl asn1parse` showed the
+AttributeTypeAndValue holding a nested `SEQUENCE{OID}` instead of the OID
+directly. After using `derOid(...)` for the attribute type and setting version 2,
+`getCertificateChain` returns one self-signed certificate that verifies with its
+own public key, for RSA and EC (`fidelity.chain.verifies`, `fidelity.chain.ec`).
+
+**Result.** `fidelity` 30/30 checks pass on real ART
+(`results/compat/K5B-evidence/fidelity.jsonl`). The cross-session phase reaches
+A's `create.*` checks but the driver cannot find A's material after the guest
+exits (`acos-art run` removes its run root at teardown); it must copy the
+app-data out from inside the locked shell while A is alive.
+
+### K5c — the JCA-fallback trap is solved by AOSP opacity, not by throwing `Error` (2026-11-14)
+
+**Question.** K5b escaped `Cipher`'s delayed provider selection by throwing
+`KeystoreRefusal extends Error`. That is not what AOSP does and an app that
+catches `InvalidKeyException`/`KeyExpiredException` sees the wrong thing. Can the
+refusal keep AOSP's exception types and still be un-performable by a second
+provider?
+
+**Mechanism read from this image's bytecode** (`dexdump` on
+`framework/classes3.dex`, `core-oj/classes.dex`), not assumed:
+
+1. `javax.crypto.Cipher.tryCombinations` skips a provider whose
+   `Provider.Service.supportsParameter(key)` returns false — this is what
+   `SupportedKeyClasses` on AOSP's keystore services buys, and it is why
+   Conscrypt is never offered an `AndroidKeyStoreKey`.
+2. If a provider is tried and fails, the **first** exception is remembered and
+   rethrown (`chooseProvider` rethrows `InvalidKeyException`/
+   `InvalidAlgorithmParameterException`/`RuntimeException` as-is). So the caller
+   sees *our* type even after the JCA walks on to other providers.
+3. `android.security.keystore2.KeyStoreCryptoOperationUtils` fixes the mapping:
+   `KM_ERROR_KEY_EXPIRED(-25) -> KeyExpiredException`,
+   `KM_ERROR_KEY_NOT_YET_VALID(-24) -> KeyNotYetValidException`,
+   `KM_ERROR_USER_NOT_AUTHENTICATED(-26) -> UserNotAuthenticatedException`,
+   `KM_ERROR_CALLER_NONCE_PROHIBITED(-55) -> InvalidAlgorithmParameterException
+   ("Caller-provided IV not permitted")`, `KM_ERROR_INVALID_NONCE(-52) ->
+   ("Invalid IV")`, default `InvalidKeyException("Keystore operation failed",
+   KeyStoreException(code, detail))`.
+
+**Change.** `StoreSecretKey`/`StorePrivateKey` are now opaque
+(`getEncoded()==null`, `getFormat()==null`) and carry only the alias; the
+material is rebuilt inside the provider for the delegate SPI
+(`materialSecret`/`materialPrivate`). `GuardService.supportsParameter` accepts
+only `SoftwareKey`s (AOSP's `SupportedKeyClasses`). `KeystoreRefusal` is deleted;
+refusals throw the AOSP types/messages above. A `GuardSignature` SPI was added so
+signing still works with an opaque private key. `engineSetKeyEntry` rejects
+opaque/never-encoded keys.
+
+**Result.** `fidelity` **38/38** checks on real ART (the 30 K5b checks, with AOSP
+types instead of `CODE:` prefixes, plus 8 new: `refusal.no_foreign_provider`,
+`refusal.rsa_no_foreign_provider`, `randomized_iv_no_foreign_provider`,
+`refusal.control_foreign_provider_visible`, `refusal.stable`,
+`opaque.secret`, `opaque.private`, `opaque.public_x509`).
+`InvalidKeyException(Keystore operation failed) cause=KeyStoreException/code=-3`
+for both purpose refusals, `KeyNotYetValidException(Key not yet valid)`,
+`KeyExpiredException(Key expired)`, `InvalidAlgorithmParameterException(
+Caller-provided IV not permitted)`; `Cipher.getProvider()` is
+`AndroidKeyStoreGuard` (or none) for every refusal, while the control shows a
+plain `SecretKeySpec` op performed by `AndroidOpenSSL` — i.e. the measurement
+would see Conscrypt if Conscrypt had done the work: it did not.
+
+**Cross-session (was K5b-open).** `create` holds ~30 s, so the driver copies A's
+`app-data` (private file + `acos-keystore/entries.properties`) out of
+`$ACOS_ART_DATA/runs/*` **inside the locked shell while A is alive**, then runs B
+concurrently: A live during B (`yes`), copy rc `0`, A keystore mode `600`, and
+B reports `k_a absent` plus all four paths unreadable while its own controls
+pass — **8/8 PASS**.
+
+**Default off.** Unchanged: `env -u ACOS_ART_KEYSTORE acos launch` still logs
+`java.security.KeyStoreException: AndroidKeyStore not found` and no
+AndroidKeyStore provider (2/2 PASS).
+
+**Not measured this hour:** the gate matrix and the
+`acos-services`/`acos-art`/`acos-aidl`/`acos-cli`/`acos-verify` suites — the
+host ART lock's two slots were held by other tracks and both attempts spent
+their timeout in the queue (`acos-apk --lib` 18/18 was re-run and is green).
+Evidence `results/compat/K5C-evidence/`; report `results/compat/K5.md` (K5c).
+
+### K5d — two review findings, and what the first real run of the fail-closed keystore taught us (2026-11-14)
+
+Two small fixes from the K5 review, nothing else. Track K5D,
+branch `compat-k5-keystore`.
+
+**F1 (host memory DoS, `acos-apk`).** `META-INF/*.RSA|DSA|EC` blocks that pair
+with a `.SF` were each capped at 1 MiB (ratio ≤ 200) but the *number* was
+uncapped: a ~50 MB APK with ~10k pairs made ingest read ~10 GB into host
+memory. New caps in `signing.rs`, checked **before any block is read**: at most
+`MAX_V1_SIGNATURE_BLOCKS` (16) candidate blocks and at most
+`MAX_TOTAL_V1_SIGNATURE_BYTES` (4 MiB) summed — the declared sizes are summed
+up front *and* the bytes actually read are summed, so a lying central directory
+cannot get past it. A violation is a structured `APK_SIGNING_MALFORMED` in
+`signing_certificates_error`, reading stops, and no partial signer set is parsed
+(a subset could change which signer wins). Tests: 17 blocks → error, 5×900 KiB
+→ total-cap error, one real `.SF`+`.RSA` pair → the same signer as the direct
+uncapped v1 parse. `cargo test --release -p acos-apk`: **21/21 lib** (18 + 3)
+plus all integration suites green.
+
+**F2 (fail-open reflection, `SoftwareKeyStore`).** `specMethod()`/`call()`
+returned `null` on any reflection failure, silently dropping validity-window,
+attestation, purposes and randomized-encryption checks. A lookup/access failure
+now throws `ProviderException("ACOS keystore: cannot read
+KeyGenParameterSpec.<name>: …")`. **The first live run of that change failed
+fidelity and was right to:** `getDigests` threw
+`IllegalStateException("Digests not specified")` — AOSP's documented way of
+saying *not specified* (same for block modes and paddings). That is the getter
+working, not a reflection failure, so `call()` keeps its old meaning for
+`IllegalStateException` (`null` → the caller's default) and fails closed for
+every other throwable. Behaviour when reflection works is unchanged; the
+regression was caught by the suite, not by review.
+
+**Result (real ART, under the main checkout's `run-exclusive.sh` +
+`guarded.sh`):** `fidelity` **38/38**, `xsession` **8/8**, `default_off`
+**2/2** — the K5c numbers, unchanged, with the fail-closed provider. See
+`results/compat/K5D-evidence/` for the exact evidence files; report
+`results/handoff/K5D.md`; the threat-model line is in `results/compat/K5.md`
+(K5c §6).
+
+**Harness note.** `tools/keystore-k5b/run.sh` hardcodes the K5 worktree and
+re-invokes itself through it, so running the suite from another worktree needs
+a relocated copy; K5d used a scratch copy in `.cache/k5d/run.sh` whose diff
+against the tracked script is only the worktree/target/output paths and the
+main-checkout lock path (`--task K5D`). Making the script relocatable is the
+smallest follow-up.
+
+## E9.3 — ARTGC: bounded artifacts without losing evidence — PASS (retention, `gc`, and every gate/Gaten/GR4 code unchanged)
+
+- **Date / commit:** 2026-11-15; branch `artgc-retention` off `main` `389429a`
+  (worktree `/home/Qui/.paseo/worktrees/3oxa6xao/k5`). Report:
+  `results/handoff/ARTGC.md`.
+- **Question / goal:** every `acos verify` run wrote 0.5–2 GB of artifacts — one
+  integration worktree's `out/` reached 20 GB and the host disk hit 85 % three
+  times in one day, with a release about to ship to other agents. Bound the
+  artifacts without losing evidence: keep everything for a failing run, keep only
+  what a passing verdict declares, and give the collection a `gc`.
+- **Method:** measure first (one passing and one failing run, artifacts broken
+  down by directory and size), then implement the decision as a pure function of
+  the run status, then prove the gates still read their frames and that no
+  retained JSON dangles.
+- **Inputs:** API-34 image `.cache/boot/android-34`, Gaten APK
+  `.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk`, release
+  `acos`/`acos-art` from `.cache/k5-target/release`, every ART run under
+  `/home/Qui/Projects/acos/tools/art-runtime/run-exclusive.sh --task ARTGC --
+  tools/guarded.sh --mem 12G --time …`. Scratch `.cache/artgc/`.
+- **Result:**
+  - *Measurement (before).* `gaten-home` (pass) wrote 435 MiB: 311 MiB
+    `art-frames/live-frames/` (30 mirrored C1 captures), 114 MiB `frames/`
+    (11 PNGs), 10 MiB `tree/`, 0.1 MiB `events.jsonl`. `gaten-content-welcome`
+    wrote 2246 MiB of which 2126 MiB was `live-frames/` and only 3 of its 11
+    `frames/` PNGs were declared by any step. **Every PNG was exactly 10 371 258
+    bytes** for 1080×2400: the ART capture path writes zlib *stored* blocks with
+    filter 0 — an unfiltered raw 9.5 MiB RGBA buffer in a PNG wrapper. So the
+    "raw buffers" the task names *are* the frames, and pruning alone can only
+    reach ~72 % on the best case.
+  - *Retention* (`crates/acos-verify/src/retention.rs`, `--keep-artifacts` /
+    `ACOS_KEEP_ARTIFACTS`): the decision is `decision(status, mode)` — only
+    `pass` is ever pruned, and `all` keeps everything. A pass keeps every
+    declared artifact (each step's `frame_seq` → `frames/<seq>.png` +
+    `tree/<seq>.json`, every `evidence[]` path, `steps/`, `logs/`, the reports),
+    plus the first and last frame, and drops the rest of `frames/` and all but
+    the first and last mirrored capture. Before removing a candidate the runner
+    scans every retained JSON document (and the serialized verdict) for the path;
+    a hit un-prunes it (`kept_because_referenced`). `live-session.json` is
+    rewritten (`png` → `png_pruned: true`); because the launcher writes it at
+    shutdown — *after* pruning — `retention::finalize` reconciles it again in
+    `verify::annotate`.
+  - *The 10 MiB PNGs.* Retained frames are re-encoded losslessly (`png` crate,
+    `Compression::Best` + `FilterType::Sub`): the same pixels, ~10× smaller. A
+    failing run keeps its original bytes untouched.
+  - *Measured after* (`retention.json` per run, 1080×2400):
+
+    | scenario | status | before | after | reduction |
+    |---|---|---|---|---|
+    | `v2-art-counter` | pass | 109.0 MiB | 0.3 MiB | −99.7 % |
+    | `gaten-home` | pass | 195.3 MiB | 8.8 MiB | −95.5 % |
+    | `negative/gaten-home-wrong` | fail `ASSERTION_FAILED` | 131.8 MiB | 131.8 MiB | 0 % (by design) |
+
+  - *`acos artifacts gc`* (`crates/acos-cli/src/artifacts_gc.rs`): prunes run
+    directories under an artifacts root, grouped by `verdict.scenario.name`,
+    never the newest `--keep-last` (default 1) per scenario, never a non-pass run
+    younger than `--older-than` (default 24h), never a run whose verdict cannot
+    be read, and `--dry-run` reports the same freed-byte figure without removing
+    anything. Five unit tests build a temp tree with `set_modified` ages.
+  - *No dangling evidence:* `tools/check-artifact-references.py` walks every run
+    directory, scans every JSON/JSONL for artifact paths (`frames/`, `tree/`,
+    `steps/`, `logs/`, `art-frames/`) and resolves each one (including
+    cwd-relative paths recorded by the launcher). It skips `retention.json`'s
+    `pruned` key, which is a deletion receipt by construction.
+  - *Gates unchanged:* the 15 gates, the 5 Gaten flows, the 5 Gaten negatives and
+    GR4 (4 flows + 4 negatives) all produced exactly the expected statuses and
+    codes with retention on (`referenced`), and the pixel gates
+    (`w54-dialog-pixels`, `w42-back-frame`, `suite/T03-render-good`,
+    `suite/T03-render-wrong`) still read their frames — those frames are exactly
+    what the verdict declares, so they are never candidates.
+  - *Tests:* `cargo test --release --offline -p acos-cli -p acos-verify` green,
+    including 11 new retention tests (decision per status, referenced-frame
+    preservation, first/last frame, `none-on-pass` + its verdict rewrite,
+    live-session rewrite, reference-wins, lossless re-encode) and 5 `gc` tests
+    (ordering/keep-last, recent-failure protection, dry-run parity,
+    unreadable-verdict protection, nested scenario dirs).
+- **Decision:** the default is `referenced` (not `all`). A pass keeps every file
+  its own verdict names, so a green run can never be *less* provable than before;
+  the bytes that disappear are the ones no report ever mentioned. `none-on-pass`
+  also strips the frame declarations from the pass's verdict (trees, logs and
+  assertion results remain the evidence) so "no frames" can never produce a
+  dangling path or an invalid pass.
+- **Not done:** no compression-level change on the capture critical path (the
+  ART encoder still writes stored blocks — deliberate, it is on the screenshot
+  path; re-encoding happens in the evidence pass). `gc` has no size budget
+  (`--max-bytes`) yet.

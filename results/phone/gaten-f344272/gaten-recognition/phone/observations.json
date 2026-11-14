@@ -1,0 +1,3648 @@
+{
+  "schema_version": 1,
+  "source": "phone",
+  "fidelity": "physical-device",
+  "scenario": {
+    "name": "gaten-recognition",
+    "path": "scenarios/gaten-recognition.yaml",
+    "sha256": "180b83c77803dddd448a917a12c95bd5f353df190f2f04e1c88008d982ed8a2c"
+  },
+  "app": {
+    "package": "com.gaten",
+    "activity": "com.gaten/app.MainActivity",
+    "apk": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk"
+  },
+  "device": {
+    "ro.build.fingerprint": "motorola/manila_g/manila:15/VUOA35.116-151/a43dc2:user/release-keys",
+    "ro.build.version.sdk": "35",
+    "ro.build.version.release": "15",
+    "ro.product.model": "moto g35 5G",
+    "wm_size": "1080x2400",
+    "density_dpi": 400,
+    "font_scale": "1.0"
+  },
+  "started": "2026-11-14T12:05:54.648+00:00",
+  "steps": [
+    {
+      "index": 0,
+      "kind": "launch",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "Gaten looks up words you circle on screen and saves them to Anki.",
+        "Look up Japanese in any app, then study it.",
+        "See a word you don't know",
+        "Set up Gaten",
+        "\u304c\u3044\u3063\u305f\u3002",
+        "\u306a\u308b\u307b\u3069\u3001",
+        "\u5408\u70b9"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-00-launch.png",
+      "error": null,
+      "visible_labels": [
+        "Gaten looks up words you circle on screen and saves them to Anki.",
+        "Look up Japanese in any app, then study it.",
+        "See a word you don't know",
+        "Set up Gaten",
+        "\u304c\u3044\u3063\u305f\u3002",
+        "\u306a\u308b\u307b\u3069\u3001",
+        "\u5408\u70b9"
+      ],
+      "node_count": 29
+    },
+    {
+      "index": 1,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Set up Gaten"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Set up Gaten",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          2130,
+          1025,
+          2260
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "1 / 3",
+        "Android needs Gaten as an accessibility service.",
+        "Choose text recognition",
+        "Look up Japanese anywhere",
+        "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+        "Skip",
+        "Skip lookup mode setup",
+        "Standard or Enhanced",
+        "Step 1 of 2, Turn on lookup mode, current",
+        "Step 2 of 2, Choose text recognition, not started",
+        "Turn on lookup mode"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-01-tap.png",
+      "error": null,
+      "visible_labels": [
+        "1 / 3",
+        "Android needs Gaten as an accessibility service.",
+        "Choose text recognition",
+        "Look up Japanese anywhere",
+        "Look up Japanese words and kanji while you read in other apps. Enable lookup mode to get started.",
+        "Skip",
+        "Skip lookup mode setup",
+        "Standard or Enhanced",
+        "Step 1 of 2, Turn on lookup mode, current",
+        "Step 2 of 2, Choose text recognition, not started",
+        "Turn on lookup mode"
+      ],
+      "node_count": 61
+    },
+    {
+      "index": 2,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Skip"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Skip",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          500,
+          2175,
+          580,
+          2225
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "2 / 3",
+        "Allow Gaten to read your AnkiDroid collection.",
+        "Allow access",
+        "AnkiDroid is installed",
+        "Back",
+        "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+        "Read decks, record answers, add words.",
+        "Skip",
+        "Skip Anki setup",
+        "Step 1 of 2, AnkiDroid is installed, done",
+        "Step 2 of 2, Allow access, current",
+        "Study with Anki"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-02-tap.png",
+      "error": null,
+      "visible_labels": [
+        "2 / 3",
+        "Allow Gaten to read your AnkiDroid collection.",
+        "Allow access",
+        "AnkiDroid is installed",
+        "Back",
+        "Connect AnkiDroid to review your decks and save words from your lookups as flashcards.",
+        "Read decks, record answers, add words.",
+        "Skip",
+        "Skip Anki setup",
+        "Step 1 of 2, AnkiDroid is installed, done",
+        "Step 2 of 2, Allow access, current",
+        "Study with Anki"
+      ],
+      "node_count": 66
+    },
+    {
+      "index": 3,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Skip"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Skip",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          500,
+          2175,
+          580,
+          2225
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "1",
+        "3 / 3",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Back",
+        "Connect",
+        "Connect WaniKani",
+        "Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+        "Create a token",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "Need a token? Show me how",
+        "No recent searches found",
+        "Not connected",
+        "Paste it here",
+        "Paste your token",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Show",
+        "Show token",
+        "Skip",
+        "Skip WaniKani setup and finish",
+        "Step 1 of 2, Create a token, available",
+        "Step 2 of 2, Paste it here, current",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-03-tap.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "1",
+        "3 / 3",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Back",
+        "Connect",
+        "Connect WaniKani",
+        "Connect your WaniKani account to review kanji and vocabulary alongside your other study.",
+        "Create a token",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "Need a token? Show me how",
+        "No recent searches found",
+        "Not connected",
+        "Paste it here",
+        "Paste your token",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Show",
+        "Show token",
+        "Skip",
+        "Skip WaniKani setup and finish",
+        "Step 1 of 2, Create a token, available",
+        "Step 2 of 2, Paste it here, current",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 225
+    },
+    {
+      "index": 4,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Skip"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Skip",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          500,
+          2175,
+          580,
+          2225
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-04-tap.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 165
+    },
+    {
+      "index": 5,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Recently looked up"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Recently looked up",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          1343,
+          1025,
+          1398
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-05-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 165
+    },
+    {
+      "index": 6,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-06-capture-recognition-home.png",
+      "error": null,
+      "visible_labels": [
+        "0",
+        "Analytics",
+        "Anki",
+        "Anki Fri: study activity unknown",
+        "Anki Mon: study activity unknown",
+        "Anki Sat: study activity unknown, today",
+        "Anki Sun: upcoming",
+        "Anki Thu: study activity unknown",
+        "Anki Tue: study activity unknown",
+        "Anki Wed: study activity unknown",
+        "Anki, Permission needed, Grant access",
+        "Connect",
+        "Daily streak",
+        "Fri",
+        "Gaten",
+        "Grant access",
+        "Home",
+        "Lookup mode off. Open screen lookup settings.",
+        "Mon",
+        "No recent searches found",
+        "Not connected",
+        "Permission needed",
+        "Recently looked up",
+        "Sat",
+        "Settings",
+        "Sun",
+        "Thu",
+        "Tue",
+        "WaniKani",
+        "WaniKani, Not connected, Connect",
+        "Wed",
+        "days",
+        "\u732b, \u306d\u3053, neko..."
+      ],
+      "node_count": 165
+    },
+    {
+      "index": 7,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "exact": "Settings"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Settings",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          682,
+          2163,
+          847,
+          2320
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-07-tap.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 8,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Screen lookup"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Screen lookup",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          140,
+          446,
+          883,
+          496
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-08-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 9,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-09-capture-recognition-hub.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 10,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "contains": "Text recognition."
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Text recognition. Standard",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          549,
+          1025,
+          699
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-10-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 51
+    },
+    {
+      "index": 11,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Standard"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Standard",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          353,
+          1025,
+          516
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-11-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 51
+    },
+    {
+      "index": 12,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-12-capture-recognition-page.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 51
+    },
+    {
+      "index": 13,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Standard"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Standard",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          353,
+          1025,
+          516
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "Standard",
+        "mode": "exact",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-13-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 51
+    },
+    {
+      "index": 14,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Enhanced"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Enhanced",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          145,
+          549,
+          322,
+          599
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "Enhanced",
+        "mode": "exact",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-14-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 51
+    },
+    {
+      "index": 15,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Better for stylised fonts"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Better for stylised fonts, novels and harder-to-read text",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          145,
+          609,
+          1025,
+          652
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "Better for stylised fonts",
+        "mode": "contains",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-15-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 51
+    },
+    {
+      "index": 16,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "content_desc": {
+          "contains": "Enhanced"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Enhanced, Recommended",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          55,
+          519,
+          1025,
+          682
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-16-tap.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 23
+    },
+    {
+      "index": 17,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Download Enhanced?"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Download Enhanced?",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          90,
+          861,
+          990,
+          1539
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-17-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 23
+    },
+    {
+      "index": 18,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-18-capture-recognition-confirm.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 23
+    },
+    {
+      "index": 19,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Download Enhanced?"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Download Enhanced?",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          90,
+          861,
+          990,
+          1539
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "Download Enhanced?",
+        "mode": "exact",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-19-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 23
+    },
+    {
+      "index": 20,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Download size"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Download size",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          150,
+          1056,
+          361,
+          1101
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "Download size",
+        "mode": "exact",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-20-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 23
+    },
+    {
+      "index": 21,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Reads screen and novel text better"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Reads screen and novel text better, then works offline.",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          150,
+          1136,
+          930,
+          1236
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "Reads screen and novel text better",
+        "mode": "contains",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-21-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 23
+    },
+    {
+      "index": 22,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "contains": "Wi-Fi recommended"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Wi-Fi recommended. Mobile data may incur charges.",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          150,
+          1266,
+          930,
+          1309
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "Wi-Fi recommended",
+        "mode": "contains",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-22-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 23
+    },
+    {
+      "index": 23,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Cancel"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Cancel",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          425,
+          1359,
+          608,
+          1479
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "Cancel",
+        "mode": "exact",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-23-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 23
+    },
+    {
+      "index": 24,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Download"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Download",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          628,
+          1349,
+          930,
+          1479
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "Download",
+        "mode": "exact",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-24-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "76.6 MB",
+        "Cancel",
+        "Download",
+        "Download Enhanced?",
+        "Download size",
+        "Download size 76.6 MB",
+        "Reads screen and novel text better, then works offline.",
+        "Wi-Fi recommended. Mobile data may incur charges."
+      ],
+      "node_count": 23
+    },
+    {
+      "index": 25,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Cancel"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Cancel",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          425,
+          1359,
+          608,
+          1479
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-25-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 51
+    },
+    {
+      "index": 26,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-26-capture-recognition-cancelled.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 51
+    },
+    {
+      "index": 27,
+      "kind": "assert_not_visible",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Download Enhanced?"
+        }
+      },
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "assert_not_visible",
+        "passed": true,
+        "expected_absent": {
+          "text": {
+            "exact": "Download Enhanced?"
+          }
+        }
+      },
+      "screenshot": "screenshot-27-assert_not_visible.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 51
+    },
+    {
+      "index": 28,
+      "kind": "assert_visible",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Enhanced"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Enhanced",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          145,
+          549,
+          322,
+          599
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "assert_visible",
+        "passed": true,
+        "expected_present": {
+          "text": {
+            "exact": "Enhanced"
+          }
+        }
+      },
+      "screenshot": "screenshot-28-assert_visible.png",
+      "error": null,
+      "visible_labels": [
+        "Back",
+        "Better for stylised fonts, novels and harder-to-read text",
+        "Clear, regular text in standard fonts",
+        "Enhanced",
+        "Enhanced, Recommended",
+        "Open help",
+        "Reader",
+        "Recommended",
+        "Standard",
+        "Text recognition"
+      ],
+      "node_count": 51
+    },
+    {
+      "index": 29,
+      "kind": "back",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-29-back.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 30,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Screen lookup"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Screen lookup",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          140,
+          446,
+          883,
+          496
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-30-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 31,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-31-capture-recognition-hub-after.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    },
+    {
+      "index": 32,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "text": {
+          "exact": "Standard"
+        }
+      },
+      "target": {
+        "text": "",
+        "content_desc": "Standard",
+        "identifier": "",
+        "enabled": true,
+        "checked": null,
+        "clickable": null,
+        "bounds": [
+          822,
+          601,
+          957,
+          646
+        ]
+      },
+      "visible_texts": [],
+      "visible_descs": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "screen": {
+        "activity": "com.gaten/com.gaten.app.MainActivity",
+        "package": "com.gaten",
+        "app_bundle_in_snapshot": "com.gaten"
+      },
+      "assertion": {
+        "kind": "text",
+        "expected": "Standard",
+        "mode": "exact",
+        "passed": true,
+        "expected_bounds": null
+      },
+      "screenshot": "screenshot-32-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "0.1.0",
+        "About",
+        "About. 0.1.0",
+        "Analytics",
+        "Anki cards",
+        "Anki cards. Permission needed",
+        "App",
+        "Appearance",
+        "Appearance. Light",
+        "Home",
+        "Kanji reference",
+        "Kanji reference. Remembering the Kanji",
+        "Light",
+        "Lookup",
+        "Not connected",
+        "Off",
+        "Permission needed",
+        "Remembering the Kanji",
+        "Screen lookup",
+        "Screen lookup. Off",
+        "Settings",
+        "Standard",
+        "Study",
+        "Support Gaten",
+        "Text recognition",
+        "Text recognition. Standard",
+        "WaniKani",
+        "WaniKani. Not connected"
+      ],
+      "node_count": 149
+    }
+  ],
+  "finished": "2026-11-14T12:06:38.163+00:00",
+  "commands": [
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "pm",
+        "list",
+        "packages"
+      ],
+      "ts": "2026-11-14T12:05:52.689+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "input",
+        "keyevent",
+        "KEYCODE_WAKEUP"
+      ],
+      "ts": "2026-11-14T12:05:52.791+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "wm",
+        "dismiss-keyguard"
+      ],
+      "ts": "2026-11-14T12:05:52.887+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "settings",
+        "get",
+        "global",
+        "stay_on_while_plugged_in"
+      ],
+      "ts": "2026-11-14T12:05:52.983+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "svc",
+        "power",
+        "stayon",
+        "true"
+      ],
+      "ts": "2026-11-14T12:05:53.075+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "getprop",
+        "ro.build.fingerprint"
+      ],
+      "ts": "2026-11-14T12:05:54.183+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "getprop",
+        "ro.build.version.sdk"
+      ],
+      "ts": "2026-11-14T12:05:54.237+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "getprop",
+        "ro.build.version.release"
+      ],
+      "ts": "2026-11-14T12:05:54.288+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "getprop",
+        "ro.product.model"
+      ],
+      "ts": "2026-11-14T12:05:54.340+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "wm",
+        "size"
+      ],
+      "ts": "2026-11-14T12:05:54.391+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "wm",
+        "density"
+      ],
+      "ts": "2026-11-14T12:05:54.467+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "settings",
+        "get",
+        "system",
+        "font_scale"
+      ],
+      "ts": "2026-11-14T12:05:54.551+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "pm",
+        "clear",
+        "com.gaten"
+      ],
+      "ts": "2026-11-14T12:05:54.648+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "open",
+        "com.gaten",
+        "--activity",
+        "com.gaten/.app.MainActivity",
+        "--relaunch",
+        "--foreground",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:54.838+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:57.552+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:05:57.885+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-00-launch.png"
+      ],
+      "ts": "2026-11-14T12:05:57.993+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:05:58.414+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "2195",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:05:58.647+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:00.305+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:00.515+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-01-tap.png"
+      ],
+      "ts": "2026-11-14T12:06:00.619+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:01.003+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "2200",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:06:01.185+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:02.560+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:02.743+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-02-tap.png"
+      ],
+      "ts": "2026-11-14T12:06:02.852+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:03.253+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "2200",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:06:03.405+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:05.289+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:05.632+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-03-tap.png"
+      ],
+      "ts": "2026-11-14T12:06:05.750+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:06.117+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "2200",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:06:06.377+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:08.091+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:08.338+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-04-tap.png"
+      ],
+      "ts": "2026-11-14T12:06:08.449+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:08.842+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:09.065+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:09.297+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-05-wait_for.png"
+      ],
+      "ts": "2026-11-14T12:06:09.396+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:09.785+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:10.020+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-06-capture-recognition-home.png"
+      ],
+      "ts": "2026-11-14T12:06:10.120+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:10.518+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "764",
+        "2241",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:06:10.748+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:12.228+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:12.491+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-07-tap.png"
+      ],
+      "ts": "2026-11-14T12:06:12.598+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:12.980+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:13.201+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:13.431+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-08-wait_for.png"
+      ],
+      "ts": "2026-11-14T12:06:13.531+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:13.912+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:14.110+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-09-capture-recognition-hub.png"
+      ],
+      "ts": "2026-11-14T12:06:14.219+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:14.604+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "624",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:06:14.807+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:16.333+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:16.540+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-10-tap.png"
+      ],
+      "ts": "2026-11-14T12:06:16.641+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:16.992+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:17.183+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:17.358+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-11-wait_for.png"
+      ],
+      "ts": "2026-11-14T12:06:17.466+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:17.818+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:17.996+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-12-capture-recognition-page.png"
+      ],
+      "ts": "2026-11-14T12:06:18.101+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:18.445+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:18.617+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:18.806+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-13-assert_text.png"
+      ],
+      "ts": "2026-11-14T12:06:18.907+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:19.259+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:19.430+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:19.618+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-14-assert_text.png"
+      ],
+      "ts": "2026-11-14T12:06:19.732+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:20.086+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:20.274+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:20.471+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-15-assert_text.png"
+      ],
+      "ts": "2026-11-14T12:06:20.577+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:20.924+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "540",
+        "600",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:06:21.120+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:22.415+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:22.565+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-16-tap.png"
+      ],
+      "ts": "2026-11-14T12:06:22.656+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:23.033+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:23.167+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:23.281+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-17-wait_for.png"
+      ],
+      "ts": "2026-11-14T12:06:23.383+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:23.767+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:23.898+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-18-capture-recognition-confirm.png"
+      ],
+      "ts": "2026-11-14T12:06:23.994+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:24.374+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:24.510+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:24.641+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-19-assert_text.png"
+      ],
+      "ts": "2026-11-14T12:06:24.732+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:25.123+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:25.221+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:25.343+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-20-assert_text.png"
+      ],
+      "ts": "2026-11-14T12:06:25.433+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:25.815+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:25.945+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:26.081+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-21-assert_text.png"
+      ],
+      "ts": "2026-11-14T12:06:26.175+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:26.571+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:26.701+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:26.837+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-22-assert_text.png"
+      ],
+      "ts": "2026-11-14T12:06:26.944+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:27.330+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:27.463+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:27.592+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-23-assert_text.png"
+      ],
+      "ts": "2026-11-14T12:06:27.704+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:28.088+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:28.222+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:28.344+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-24-assert_text.png"
+      ],
+      "ts": "2026-11-14T12:06:28.446+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:28.824+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "press",
+        "516",
+        "1419",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:06:28.960+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:29.856+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:30.055+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-25-tap.png"
+      ],
+      "ts": "2026-11-14T12:06:30.166+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:30.520+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:30.704+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-26-capture-recognition-cancelled.png"
+      ],
+      "ts": "2026-11-14T12:06:30.818+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:31.169+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:31.344+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:31.526+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-27-assert_not_visible.png"
+      ],
+      "ts": "2026-11-14T12:06:31.627+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:31.983+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:32.163+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:32.356+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-28-assert_visible.png"
+      ],
+      "ts": "2026-11-14T12:06:32.483+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "back",
+        "--settle"
+      ],
+      "ts": "2026-11-14T12:06:32.844+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:34.749+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:34.985+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-29-back.png"
+      ],
+      "ts": "2026-11-14T12:06:35.104+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:35.492+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:35.769+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:36.004+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-30-wait_for.png"
+      ],
+      "ts": "2026-11-14T12:06:36.119+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:36.514+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:36.731+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-31-capture-recognition-hub-after.png"
+      ],
+      "ts": "2026-11-14T12:06:36.828+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:37.210+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "snapshot",
+        "--force-full",
+        "--json"
+      ],
+      "ts": "2026-11-14T12:06:37.429+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "dumpsys",
+        "window"
+      ],
+      "ts": "2026-11-14T12:06:37.665+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "screenshot",
+        "results/phone/gaten-f344272/gaten-recognition/phone/screenshot-32-assert_text.png"
+      ],
+      "ts": "2026-11-14T12:06:37.770+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "svc",
+        "power",
+        "stayon",
+        "false"
+      ],
+      "ts": "2026-11-14T12:06:38.163+00:00"
+    },
+    {
+      "tool": "adb",
+      "args": [
+        "shell",
+        "settings",
+        "put",
+        "global",
+        "stay_on_while_plugged_in",
+        "15"
+      ],
+      "ts": "2026-11-14T12:06:39.270+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "close"
+      ],
+      "ts": "2026-11-14T12:06:39.364+00:00"
+    },
+    {
+      "tool": "agent-device",
+      "args": [
+        "home"
+      ],
+      "ts": "2026-11-14T12:06:39.477+00:00"
+    }
+  ]
+}

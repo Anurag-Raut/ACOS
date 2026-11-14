@@ -1,0 +1,3 @@
+{"check":"default_off.not_found","ok":true,"detail":"java.security.KeyStoreException: AndroidKeyStore not found"}
+{"check":"default_off.provider_absent","ok":true,"detail":"providers=AndroidNSSP,AndroidOpenSSL,CertPathProvider,BC,HarmonyJSSE"}
+{"activity":"MainActivity","mode":"default_off","pass":2,"fail":0}
