@@ -237,3 +237,16 @@ regardless of queue order.
   fix would be to retry the spawn without `--owner-pid` if the daemon exits with
   a usage error; it was not needed for a same-version install, so it is left as
   the next smallest action.
+
+## Review (Opus, 2026-11-15) and fix-up
+
+Verdict: MERGE AFTER FIXES (finding 1). Fixed here:
+1. `PrivateDaemon::shutdown` signalled `child.id()` with raw `libc::kill` even when `wait_ready` had
+   already reaped the child (daemon died before its socket was ready) — a recycled pid could be hit.
+   Now SIGTERM is sent only when `try_wait()` is `Ok(None)` (child provably unreaped).
+Deferred (low, no foreign kill): (2) teardown can respawn a dead private daemon (add a no-restart
+flag for teardown calls); (3) the destroy-by-id fallback when `session_list` fails skips the token
+check (on the external daemon: skip + log a leak instead); (4) 5 s SIGKILL deadline can cut a slow
+multi-guest engine shutdown; (5) no signal handler in `acos-mcp` → sessions on an EXTERNAL daemon
+leak until its idle timeout on SIGTERM; (6) `/tmp/acos` fallback base dir (no XDG_RUNTIME_DIR /
+TMPDIR) is shared between users — use a per-uid base or verify owner/mode. Queued for FB5.

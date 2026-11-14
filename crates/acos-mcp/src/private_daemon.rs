@@ -225,11 +225,16 @@ impl PrivateDaemon {
         }
         self.stopped = true;
         self.client.take();
-        // Signal *before* reaping: while the child is unreaped its pid (and so
-        // any group derived from it) cannot have been recycled.
-        // SAFETY: `kill` on a pid we own; a failure (already exited) is ignored.
-        unsafe {
-            libc::kill(self.child.id() as libc::pid_t, libc::SIGTERM);
+        // Signal only a child that is provably still unreaped: `try_wait`
+        // returns the remembered status once the child was reaped (for example
+        // by `wait_ready` when the daemon died before its socket was ready), and
+        // a reaped pid may already belong to another process. While the child is
+        // unreaped (`Ok(None)`) its pid cannot have been recycled.
+        if matches!(self.child.try_wait(), Ok(None)) {
+            // SAFETY: `kill` on our own child, which is not yet reaped.
+            unsafe {
+                libc::kill(self.child.id() as libc::pid_t, libc::SIGTERM);
+            }
         }
         let deadline = Instant::now() + Duration::from_secs(5);
         loop {
