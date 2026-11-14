@@ -1204,7 +1204,7 @@ pub fn reference_merged_configuration(display: &DisplaySpec) -> MergedConfigurat
         hard_keyboard_hidden: 1,
         navigation: 1,        // NAVIGATION_DPAD
         navigation_hidden: 1,
-        orientation: 1,       // ORIENTATION_PORT
+        orientation: if display.is_landscape() { 2 } else { 1 },
         screen_layout: REFERENCE_SCREEN_LAYOUT, // ldltr nrml long (measured `display.txt`)
         color_mode: 0,        // HDR_UNDEFINED / sRGB
         ui_mode: 0x11,        // UI_MODE_TYPE_NORMAL | NIGHT_NO
@@ -1212,33 +1212,33 @@ pub fn reference_merged_configuration(display: &DisplaySpec) -> MergedConfigurat
         // exactly like the device (`sw432dp w432dp h960dp` on the Moto G35 at
         // 400 dpi). `carve` keeps the measured API-34 application-area values
         // so the frozen baselines are unchanged.
-        screen_width_dp: if display.insets_mode.is_report() {
+        screen_width_dp: if display.insets_mode.is_report() || display.rotation != 0 {
             display.screen_width_dp()
         } else {
             411
         },
-        screen_height_dp: if display.insets_mode.is_report() {
+        screen_height_dp: if display.insets_mode.is_report() || display.rotation != 0 {
             display.screen_height_dp()
         } else {
             842
         },
-        smallest_screen_width_dp: if display.insets_mode.is_report() {
+        smallest_screen_width_dp: if display.insets_mode.is_report() || display.rotation != 0 {
             display.screen_width_dp().min(display.screen_height_dp())
         } else {
             411
         },
         density_dpi: display.density_dpi as i32,
-        compat_screen_width_dp: if display.insets_mode.is_report() {
+        compat_screen_width_dp: if display.insets_mode.is_report() || display.rotation != 0 {
             display.screen_width_dp()
         } else {
             411
         },
-        compat_screen_height_dp: if display.insets_mode.is_report() {
+        compat_screen_height_dp: if display.insets_mode.is_report() || display.rotation != 0 {
             display.screen_height_dp()
         } else {
             842
         },
-        compat_smallest_screen_width_dp: if display.insets_mode.is_report() {
+        compat_smallest_screen_width_dp: if display.insets_mode.is_report() || display.rotation != 0 {
             display.screen_width_dp().min(display.screen_height_dp())
         } else {
             411
@@ -1250,9 +1250,9 @@ pub fn reference_merged_configuration(display: &DisplaySpec) -> MergedConfigurat
             windowing_mode: 1, // WINDOWING_MODE_FULLSCREEN
             activity_type: 0,  // ACTIVITY_TYPE_UNDEFINED
             always_on_top: 0,
-            rotation: 0,
+            rotation: i32::from(display.rotation),
             display_windowing_mode: 1,
-            display_rotation: 0,
+            display_rotation: i32::from(display.rotation),
         },
         assets_seq: 0,
         seq: 1,
@@ -1279,6 +1279,37 @@ mod tests {
     /// (`0x1a` here, `0x0` in the guest's bind config before the fix) the
     /// resource matcher picked `values-xlarge` and
     /// `dialog_min_width_minor` resolved to 72% instead of 95%.
+    /// ROT3: after a display rotation the WMS `MergedConfiguration` describes
+    /// the rotated display: landscape orientation, swapped bounds/appBounds and
+    /// the dp size of the new frame (carve included, which keeps the frozen
+    /// portrait baseline only at rotation 0), with density unchanged.
+    #[test]
+    fn rotated_display_reports_a_landscape_merged_configuration() {
+        let portrait = DisplaySpec::reference_with_insets(InsetsMode::Carve);
+        let port = reference_merged_configuration(&portrait);
+        assert_eq!(port.global.orientation, 1, "portrait before the rotation");
+        assert_eq!(port.global.screen_width_dp, 411, "frozen carve baseline");
+        assert_eq!(port.global.screen_height_dp, 842);
+
+        let land = portrait.rotated(1);
+        assert_eq!(land.frame.width(), 2400, "frame is swapped");
+        assert_eq!(land.frame.height(), 1080);
+        let cfg = reference_merged_configuration(&land);
+        assert_eq!(cfg.global.orientation, 2, "ORIENTATION_LANDSCAPE");
+        assert_eq!(cfg.global.screen_width_dp, 914);
+        assert_eq!(cfg.global.screen_height_dp, 411);
+        // The smallest width is a display property: it does not rotate.
+        assert_eq!(cfg.global.smallest_screen_width_dp, 411);
+        assert_eq!(cfg.global.density_dpi, port.global.density_dpi);
+        assert_eq!(cfg.global.window_configuration.bounds, land.frame);
+        assert_eq!(cfg.global.window_configuration.rotation, 1);
+        assert_eq!(cfg.global.window_configuration.display_rotation, 1);
+        // 180 degrees is portrait again with a mirrored configuration.
+        let half = reference_merged_configuration(&portrait.rotated(2));
+        assert_eq!(half.global.orientation, 1);
+        assert_eq!(half.global.window_configuration.rotation, 2);
+    }
+
     #[test]
     fn reference_screen_layout_is_normal_long_not_xlarge() {
         assert_eq!(REFERENCE_SCREEN_LAYOUT, 0x62);

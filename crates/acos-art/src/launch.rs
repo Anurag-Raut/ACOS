@@ -4428,6 +4428,99 @@ fn interactive_serve(
                     evidence.push(reply);
                 }
             },
+            "rotate" => {
+                // ROT3: a display rotation is a WMS operation plus a
+                // configuration change in the guest. The host rotates the
+                // live `WmsState` display first (so every later `relayout`
+                // reply carries the new frame + MergedConfiguration), then
+                // asks the guest to build the new `Configuration` and let
+                // `ActivityThread.handleConfigurationChanged` decide
+                // relaunch vs `onConfigurationChanged` from the manifest's
+                // real `ActivityInfo.configChanges`.
+                let rotation = request
+                    .get("rotation")
+                    .and_then(|v| v.as_i64())
+                    .or_else(|| {
+                        request.get("orientation").and_then(|v| v.as_str()).map(|o| {
+                            if o.eq_ignore_ascii_case("landscape") { 1 } else { 0 }
+                        })
+                    });
+                let Some(rotation) = rotation.filter(|r| (0..=3).contains(r)) else {
+                    let reply = serde_json::json!({
+                        "ok": false, "cmd": "rotate", "code": "BAD_REQUEST",
+                        "error": "rotate needs rotation 0..3 or orientation portrait|landscape",
+                    });
+                    protocol_write(&reply);
+                    evidence.push(reply);
+                    continue;
+                };
+                let display = live
+                    .wms
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .rotate(rotation as u8);
+                let before = latest_probe(probe_state).map(|p| p.seq).unwrap_or(0);
+                if let Some(writer) = guest_stdin.as_mut() {
+                    use std::io::Write;
+                    let _ = writeln!(writer, "ROTATE {rotation}");
+                    let _ = writer.flush();
+                }
+                // The reply is bound to a *new* probe sample: the guest posts
+                // the rotation on its main looper and emits one sample at the
+                // new size, so a sample older than the request can never back
+                // the answer.
+                let deadline = Instant::now() + frame_wait;
+                let mut fresh = None;
+                while Instant::now() < deadline {
+                    if let Some(sample) = latest_probe(probe_state) {
+                        if sample.seq > before {
+                            fresh = Some(sample);
+                            break;
+                        }
+                    }
+                    if let Ok(Some(status)) = child.try_wait() {
+                        let reply = serde_json::json!({
+                            "ok": false, "cmd": "rotate", "code": "GUEST_EXITED",
+                            "error": format!("the guest exited before it published a rotated probe: {status}"),
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                match fresh {
+                    Some(sample) => {
+                        let reply = serde_json::json!({
+                            "ok": true, "cmd": "rotate",
+                            "rotation": rotation,
+                            "width": display.frame.width(),
+                            "height": display.frame.height(),
+                            "probe_seq": sample.seq,
+                            "tree": sample.tree,
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                    }
+                    None => {
+                        // No fresh sample: the rotation did not reach the
+                        // guest (no reader, or the guest refused). Fail closed
+                        // with a structured error, never a pass.
+                        if !evidence
+                            .last()
+                            .map(|r| r.get("cmd") == Some(&serde_json::json!("rotate")))
+                            .unwrap_or(false)
+                        {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": "rotate", "code": "NO_FRESH_TREE",
+                                "error": "the guest published no probe sample at the rotated size",
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                        }
+                    }
+                }
+            }
             "tap" | "key" | "type_text" => {
                 let text_arg = request
                     .get("text")

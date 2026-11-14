@@ -2519,3 +2519,25 @@ latency: M4 strict 308.83 → 308.96 ms (+0.04 %), M4 fast 173.92 → 174.65 (+0
 M6 fast 187.91 → 188.71 (+0.4 %), M8 tap strict counter 961.72 → 957.63 (−0.4 %), M8 form
 935.73 → 933.15 (−0.3 %), M8 fast +0.1/+0.4 %, tap ack 5.00 → 5.00. Every gate
 (≤ +5 % **and** ≤ +2 ms) holds. Raw: `.cache/rot2/ab/{main-1,branch-1}.json` (gitignored).
+
+### E13.13 / ROT3 — the rotate protocol exists end to end in code; `input.rotate` stays unsupported until a live run proves it (PARTIAL, 60-minute checkpoint)
+
+Branch `art-rotate-1`, `main` merged into it (`0c0b322`, EXPERIMENTS.md both sides kept).
+Landed this pass: the WMS display rotation, the host `rotate` command and the guest
+`ROTATE <quarters>` framework path. Deliberately **not** landed: the engine/CLI wiring.
+
+| item | state |
+|---|---|
+| `WmsState::rotate(rotation)` (`acos-services/src/wms.rs`) | **done.** Rotates the live `DisplaySpec` (`DisplaySpec::rotated`), updates `DisplayFacts` width/height; every later `IWindowSession.relayout` reply therefore carries the new frame. `LiveHandles` now exposes the same `Arc<Mutex<WmsState>>` so a live session can drive it |
+| WMS `MergedConfiguration` for a rotated display (`acos-wm/src/wms.rs`) | **done**, unit-tested: landscape `orientation=2`, `screenWidthDp/HeightDp` 914x411, `smallestScreenWidthDp` unchanged (a display property that does not rotate), `windowConfiguration.bounds` swapped, `rotation`/`displayRotation` = display rotation, density unchanged; carve keeps the frozen 411x842 baseline only at rotation 0. 86 `acos-wm` + 84 `acos-services` lib tests green |
+| host `{"cmd":"rotate","rotation":n}` (`acos-art/src/launch.rs`) | **done.** Rotates the WMS display, writes `ROTATE <n>` on the guest stdin, and only answers `ok:true` with a probe sample **newer** than the request (else `NO_FRESH_TREE`, or `GUEST_EXITED`) — a stale sample can never back a rotate reply |
+| guest `ROTATE <quarters>` (`LaunchMain`, the engine's real guest class) | **done in code**: control thread posts to the main looper; new `Configuration` (orientation, dp size, `WindowConfiguration` bounds/appBounds) → real `ActivityThread.handleConfigurationChanged(config, 0)` → activity-level decision from `ActivityInfo.getRealConfigChanged()` against `orientation\|screenLayout\|screenSize\|smallestScreenSize` → `handleActivityConfigurationChanged` (manifest declares all four) or `scheduleRelaunchActivity` + `handleRelaunchActivity` (AOSP `handleRelaunchActivityInner` order: pause → stop(saveState) → destroy → launch(state restored)) → `ViewRootImpl.mForceNextWindowRelayout` + `requestLayout()` → one `ACOSPROBE` at the new size |
+| `ArtSession::rotate` / `SessionCapabilities{rotate}` / `InputAction::Rotate` | **not done.** `crates/acos-cli/src/engine/mod.rs:980` still answers `UNSUPPORTED_BACKEND`/`input.rotate`, so no scenario can claim a rotate pass |
+| `acos-wm` rotated input mapping, `scenarios/rot1-rotate.yaml` + negative, the 3 unsupported rotate scenarios | **not done** |
+| one live rotate run | **not obtained**: the ART lock had four other holders (a phone run, the interleaved `int` benchmark, two `ZPROD3` arms, `G3F1`); a 300 s acquisition never got a slot, so no guest evidence exists yet. Nothing above is claimed as measured on a device |
+| gates / Gaten / A-B | not run (no behavioural change on non-rotating paths — the rotate command is only reachable from the interactive stdin, which no gate drives) |
+
+The smallest next action is therefore one live `ACOSLAUNCH_INTERACTIVE=1` launch with
+`{"cmd":"tree"}` → `{"cmd":"rotate","rotation":1}` → `{"cmd":"tree"}`, which either shows
+`rotate rotation=1 relaunch=… panel=2400x1080` in the guest log plus a landscape root, or
+names the failing rung (`rotate-failed`). Only after that may `input.rotate` be flipped.

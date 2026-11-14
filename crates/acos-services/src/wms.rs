@@ -190,6 +190,21 @@ impl WmsState {
         }
     }
 
+    /// ROT3: rotate the display to `rotation` (0..3, a target rotation).
+    ///
+    /// The WMS half of a display rotation: `DisplaySpec::rotated` swaps the
+    /// frame, moves the bars (AOSP `DisplayPolicy` puts the status bar on the
+    /// top edge of the *rotated* display) and re-derives app bounds/insets, so
+    /// every later `relayout` reply carries the new frame and the new
+    /// `MergedConfiguration`.
+    pub fn rotate(&mut self, rotation: u8) -> DisplaySpec {
+        let display = self.wm.display.rotated(rotation);
+        self.wm.display = display;
+        self.facts.width = display.frame.width();
+        self.facts.height = display.frame.height();
+        display
+    }
+
     /// `IWindowManager.openSession`: allocate a fresh session and return its
     /// `IWindowSession` binder.
     pub fn open_session(&mut self) -> BinderId {

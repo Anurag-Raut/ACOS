@@ -1237,6 +1237,160 @@ public final class LaunchMain {
         return "[" + r.left + ',' + r.top + "][" + r.right + ',' + r.bottom + ']';
     }
 
+    /**
+     * ROT3: the guest display geometry for a target rotation (0..3).
+     *
+     * <p>One quarter turn swaps the panel dimensions; the app window
+     * (`APP_W`/`APP_H`) follows, and the `Configuration` is rebuilt with the
+     * framework's own fields: `orientation`, `screenWidthDp`/`screenHeightDp`,
+     * `smallestScreenWidthDp` (unchanged: the smallest width of a display does
+     * not rotate), and the `WindowConfiguration` bounds/appBounds, exactly as
+     * `DisplayContent.updateBaseConfiguration` recomputes them.
+     */
+    static int sRotation = 0;
+    static int sBasePanelW = -1;
+    static int sBasePanelH = -1;
+
+    static Configuration rotatedConfiguration(int rotation) {
+        if (sBasePanelW < 0) {
+            sBasePanelW = PANEL_W;
+            sBasePanelH = PANEL_H;
+        }
+        boolean odd = (rotation % 2) != 0;
+        PANEL_W = odd ? sBasePanelH : sBasePanelW;
+        PANEL_H = odd ? sBasePanelW : sBasePanelH;
+        APP_W = PANEL_W;
+        APP_H = REPORT_INSETS ? PANEL_H : PANEL_H - STATUS_INSET - NAV_INSET;
+        Configuration cfg = displayConfiguration();
+        cfg.orientation = PANEL_W > PANEL_H
+                ? Configuration.ORIENTATION_LANDSCAPE
+                : Configuration.ORIENTATION_PORTRAIT;
+        android.graphics.Rect bounds = new android.graphics.Rect(0, 0, PANEL_W, PANEL_H);
+        cfg.windowConfiguration.setBounds(bounds);
+        cfg.windowConfiguration.setAppBounds(REPORT_INSETS
+                ? new android.graphics.Rect(0, 0, PANEL_W, PANEL_H)
+                : new android.graphics.Rect(0, STATUS_INSET, PANEL_W, PANEL_H - NAV_INSET));
+        cfg.windowConfiguration.setMaxBounds(bounds);
+        return cfg;
+    }
+
+    /**
+     * ROT3: rotate the display to `want` (a target rotation, 0..3) and let the
+     * *framework* decide what happens to the Activity.
+     *
+     * <p>This is the AOSP sequence with the WMS half already done by the host
+     * (`IWindowSession.relayout` now answers the rotated frame + rotated
+     * `MergedConfiguration`):
+     *
+     * <ol>
+     *   <li>`ActivityThread.handleConfigurationChanged(newConfig, 0)` — the
+     *       process-wide configuration (the same entry point the real
+     *       `ActivityThread` receives from AMS).</li>
+     *   <li>the activity-level decision is `ActivityInfo.getRealConfigChanged()`
+     *       against the four configuration bits a rotation changes
+     *       (`orientation|screenLayout|screenSize|smallestScreenSize`), i.e.
+     *       `ActivityRecord.getRealConfigChanged()`. When the manifest declares
+     *       all four, `handleActivityConfigurationChanged` reports the change to
+     *       the live instance; otherwise the record is relaunched through
+     *       `scheduleRelaunchActivity` + `handleRelaunchActivity`, whose
+     *       `handleRelaunchActivityInner` performs the AOSP order (pause →
+     *       stop(saveState) → destroy → launch(state restored)).</li>
+     *   <li>`ViewRootImpl.mForceNextWindowRelayout` + `requestLayout()` so the
+     *       next traversal actually calls `relayoutWindow` and picks up the new
+     *       frame (the WMS sends no unsolicited `resized` in ACOS).</li>
+     * </ol>
+     */
+    static void applyRotation(int want) {
+        final int target = ((want % 4) + 4) % 4;
+        final int rotationBits =
+                android.content.pm.ActivityInfo.CONFIG_ORIENTATION
+                        | android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT
+                        | android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE
+                        | android.content.pm.ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE;
+        try {
+            Object thread = sThread;
+            if (thread == null) throw new IllegalStateException("no ActivityThread");
+            Configuration cfg = rotatedConfiguration(target);
+            sRotation = target;
+            Class<?> at = Class.forName("android.app.ActivityThread");
+            java.lang.reflect.Method hcc =
+                    at.getMethod("handleConfigurationChanged", Configuration.class, int.class);
+            hcc.invoke(thread, cfg, 0);
+            Object r = null;
+            Object activities = get(thread, "mActivities");
+            if (activities instanceof java.util.Map && sCurrentToken != null) {
+                r = ((java.util.Map<?, ?>) activities).get(sCurrentToken);
+            }
+            if (r == null) {
+                throw new IllegalStateException("no ActivityClientRecord for token");
+            }
+            Object ai = get(r, "activityInfo");
+            int handled = ai instanceof android.content.pm.ActivityInfo
+                    ? ((android.content.pm.ActivityInfo) ai).getRealConfigChanged()
+                    : 0;
+            boolean relaunch = (handled & rotationBits) != rotationBits;
+            Class<?> rec = Class.forName("android.app.ActivityThread$ActivityClientRecord");
+            if (relaunch) {
+                java.lang.reflect.Method sched =
+                        at.getDeclaredMethod("scheduleRelaunchActivity", IBinder.class);
+                sched.setAccessible(true);
+                sched.invoke(thread, sCurrentToken);
+                setFieldForce(rec, r, "createdConfig", cfg);
+                setFieldForce(rec, r, "pendingConfigChanges", rotationBits);
+                Class<?> pta =
+                        Class.forName("android.app.servertransaction.PendingTransactionActions");
+                java.lang.reflect.Constructor<?> ctor = pta.getDeclaredConstructor();
+                ctor.setAccessible(true);
+                Object actions = ctor.newInstance();
+                java.lang.reflect.Method hr =
+                        at.getDeclaredMethod("handleRelaunchActivity", rec, pta);
+                hr.setAccessible(true);
+                hr.invoke(thread, r, actions);
+            } else {
+                Class<?> awi = Class.forName("android.app.ActivityWindowInfo");
+                java.lang.reflect.Constructor<?> ctor = awi.getDeclaredConstructor();
+                ctor.setAccessible(true);
+                Object info = ctor.newInstance();
+                java.lang.reflect.Method hac = at.getDeclaredMethod(
+                        "handleActivityConfigurationChanged",
+                        rec, Configuration.class, int.class, awi);
+                hac.setAccessible(true);
+                // An empty override is not a zeroed Configuration (framework
+                // `Configuration.updateFrom` treats it as "no delta").
+                Configuration override = new Configuration();
+                override.setTo(new Configuration());
+                hac.invoke(thread, r, override, 0, info);
+            }
+            Object activity = resumedActivity(thread);
+            if (activity != null) {
+                Object window = activity.getClass().getMethod("getWindow").invoke(activity);
+                Object decor = window.getClass().getMethod("getDecorView").invoke(window);
+                if (decor instanceof View) {
+                    Object vr = ((View) decor).getViewRootImpl();
+                    if (vr != null) {
+                        setFieldForce(vr.getClass(), vr, "mForceNextWindowRelayout", Boolean.TRUE);
+                    }
+                    ((View) decor).requestLayout();
+                }
+            }
+            // One sample at the new size backs the host's reply.
+            sDirtyAtMs = 0;
+            sTreeDirty.set(true);
+            synchronized (sProbeWake) {
+                sProbeRequested = true;
+                sProbeWake.notifyAll();
+            }
+            System.out.println("ACOSLAUNCH MARK rotate rotation=" + target
+                    + " relaunch=" + relaunch + " handled=0x" + Integer.toHexString(handled)
+                    + " panel=" + PANEL_W + "x" + PANEL_H);
+            System.out.flush();
+        } catch (Throwable t) {
+            System.out.println("ACOSLAUNCH MARK rotate-failed rotation=" + target + " " + unwrap(t));
+            t.printStackTrace(System.out);
+            System.out.flush();
+        }
+    }
+
     static void startLiveProbe(final Object activity) {
         final android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
         final java.util.concurrent.atomic.AtomicBoolean pending =
@@ -1262,11 +1416,31 @@ public final class LaunchMain {
                             new java.io.InputStreamReader(System.in));
                     String line;
                     while ((line = reader.readLine()) != null) {
-                        if (line.trim().equalsIgnoreCase("PROBE")) {
+                        String word = line.trim();
+                        if (word.equalsIgnoreCase("PROBE")) {
                             synchronized (sProbeWake) {
                                 sProbeRequested = true;
                                 sProbeWake.notifyAll();
                             }
+                        } else if (word.toUpperCase().startsWith("ROTATE")) {
+                            // ROT3: a display rotation. It must run on the main
+                            // looper (configuration changes are a main-thread
+                            // framework operation), so the control thread only
+                            // posts it.
+                            final int want;
+                            try {
+                                want = Integer.parseInt(word.substring(6).trim());
+                            } catch (Throwable bad) {
+                                System.out.println("ACOSLAUNCH MARK rotate-bad-arg line=" + word);
+                                System.out.flush();
+                                continue;
+                            }
+                            main.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    applyRotation(want);
+                                }
+                            });
                         }
                     }
                 } catch (Throwable ignored) {

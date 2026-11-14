@@ -216,3 +216,54 @@ exactly `PROBE`. `SessionMain` is the `acos-art session` guest (`session.rs`). S
    `DisplaySpec` (D2: bars follow `DisplayPolicy`, not the rotated app rect) — the landscape bar
    rule is already unit-tested in `DisplaySpec::rotated`.
 5. `scenarios/rot1-rotate.yaml` + `scenarios/negative/rot1-rotate-wrong.yaml`, 3/3 each.
+
+---
+
+# ROT3 section (branch `art-rotate-1`, `main` `0c0b322` merged in)
+
+Status: **PARTIAL**, stopped at the 60-minute rule with code landed and no live proof.
+`input.rotate` still answers `UNSUPPORTED_BACKEND`/`input.rotate`.
+
+## 1. What changed
+
+* `crates/acos-services/src/wms.rs`: `WmsState::rotate(rotation)` rotates the live
+  `DisplaySpec` and the `DisplayFacts` size; `registry::LiveHandles` now carries the
+  `Arc<Mutex<WmsState>>` so the interactive session drives the same state the
+  `IWindowSession` relayout replies come from.
+* `crates/acos-wm/src/wms.rs`: `reference_merged_configuration` follows the display —
+  landscape orientation, display-derived dp size (also under `carve`, but only when
+  `rotation != 0`, so every frozen portrait baseline is untouched), rotated
+  `WindowConfiguration.bounds`/`rotation`/`displayRotation`. New test
+  `rotated_display_reports_a_landscape_merged_configuration`.
+* `crates/acos-art/src/launch.rs`: interactive `"rotate"` command — rotates the WMS, writes
+  `ROTATE <n>` to the guest stdin, waits for a probe sample with `seq > before`, answers
+  `rotation`/`width`/`height`/`tree` only from that fresh sample.
+* `LaunchMain` (the engine's real guest class, **not** `SessionMain`): `ROTATE <quarters>` on
+  the stdin reader → main looper → `rotatedConfiguration()` → real
+  `ActivityThread.handleConfigurationChanged` → activity-level path from the manifest's real
+  `ActivityInfo.configChanges` (`handleActivityConfigurationChanged`, or
+  `scheduleRelaunchActivity` + `handleRelaunchActivity` for AOSP's
+  `handleRelaunchActivityInner` order) → force `relayoutWindow` → one `ACOSPROBE` at the new
+  size. Guest log line on success: `ACOSLAUNCH MARK rotate rotation=N relaunch=B handled=0xM
+  panel=WxH`; on failure `ACOSLAUNCH MARK rotate-failed … <cause>`.
+
+## 2. What is NOT proven, and why that matters
+
+No live rotate run was obtained: the ART lock had four other holders and a 300 s acquisition
+timed out (no guest process was started, so there is no partial evidence to misread). The
+guest path is therefore **compiled but unmeasured** — in particular these rungs can fail on
+the image: the `ActivityClientRecord` lookup through `mActivities` for the in-process token,
+`PendingTransactionActions`' no-arg constructor, `handleRelaunchActivity`'s requirement that
+`scheduleRelaunchActivity` has put the record on `mRelaunchingActivities`, and whether
+`mForceNextWindowRelayout` makes the next traversal call `relayoutWindow`.
+
+## 3. Next smallest actions, in order
+
+1. One live run (interactive stdin: `tree` → `rotate rotation=1` → `tree`) and read
+   `ACOSLAUNCH MARK rotate …` / `rotate-failed …`.
+2. `ArtSession::rotate` + `SessionCapabilities.rotate` + `InputAction::Rotate` at
+   `crates/acos-cli/src/engine/mod.rs:980`; delete the unsupported answer only then.
+3. `acos-wm` rotated input mapping (a tap after the rotation must hit the node whose bounds
+   contain it).
+4. `scenarios/rot1-rotate.yaml` + `scenarios/negative/rot1-rotate-wrong.yaml`, 3/3 each; then
+   the 3 unsupported rotate scenarios, then the gates and the A/B.
