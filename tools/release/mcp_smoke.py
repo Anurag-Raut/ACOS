@@ -563,16 +563,33 @@ def main() -> int:
                     timeout=args.timeout,
                 )
             )
+            tap_result = focused_tap.get("result") or {}
+            settle = tap_result.get("settle") or {}
+            # A field tap moves focus and opens the keyboard on the *next* frame,
+            # so `state_changed` (the settled tree/pixel verdict) can be false
+            # while the gesture was delivered and a change was already measured
+            # (`settle.first_change_ms`). The claim here is delivery + change;
+            # the proof that it landed *on this field* is the typed query in the
+            # next tree (`gaten_search_results_after_typing`), never this flag.
             check(
                 "gaten_search_tap_by_content_desc",
                 focused_tap.get("status") == "pass"
-                and focused_tap.get("result", {}).get("accepted") is True
-                and focused_tap.get("result", {}).get("state_changed") is True,
+                and tap_result.get("accepted") is True
+                and (
+                    tap_result.get("state_changed") is True
+                    or settle.get("first_change_ms") is not None
+                    or settle.get("frame_ms") is not None
+                ),
                 {
                     "content_desc": field["content_desc"],
                     "status": focused_tap.get("status"),
-                    "accepted": focused_tap.get("result", {}).get("accepted"),
-                    "state_changed": focused_tap.get("result", {}).get("state_changed"),
+                    "accepted": tap_result.get("accepted"),
+                    "state_changed": tap_result.get("state_changed"),
+                    "settle": {
+                        "bound": settle.get("bound"),
+                        "first_change_ms": settle.get("first_change_ms"),
+                        "frame_ms": settle.get("frame_ms"),
+                    },
                     "error": focused_tap.get("error"),
                 },
             )

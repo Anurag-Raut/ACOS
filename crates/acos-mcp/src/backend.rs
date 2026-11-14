@@ -180,16 +180,35 @@ impl BackendConfig {
 }
 
 /// Find the `acos` binary.
+///
+/// Order: an explicit `ACOS_BIN`, then the **sibling** of this executable, then
+/// `PATH`, then a checkout's `target/{release,debug}/acos`.
+///
+/// The sibling step is what makes an installed prefix (`<prefix>/bin/acos-mcp`
+/// next to `<prefix>/bin/acos`, or the versioned `…/share/acos/<v>/bin/` pair)
+/// work with no environment at all: an MCP client registers only the `acos-mcp`
+/// path, and starting from an empty directory outside any checkout used to leave
+/// the server with no CLI to drive real ART (`session tools will answer INTERNAL`).
 pub fn discover_binary() -> Option<PathBuf> {
     if let Ok(value) = std::env::var("ACOS_BIN") {
         if !value.trim().is_empty() {
             return Some(PathBuf::from(value));
         }
     }
+    if let Some(path) = find_sibling_binary("acos") {
+        return Some(path);
+    }
     if let Some(path) = find_on_path("acos") {
         return Some(path);
     }
     find_repo_binary()
+}
+
+/// The `acos` next to this executable (an installed layout ships both).
+fn find_sibling_binary(name: &str) -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let candidate = exe.parent()?.join(name);
+    candidate.is_file().then_some(candidate)
 }
 
 fn find_on_path(name: &str) -> Option<PathBuf> {

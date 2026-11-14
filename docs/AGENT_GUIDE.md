@@ -402,7 +402,9 @@ Two session-specific hints worth memorising:
   a child of the server: on stdin EOF/exit its sessions are destroyed and it is
   terminated and reaped, so sessions never outlive `acos-mcp`.
   `ACOS_SESSION_DAEMON=1` still forwards to an external `acos serve` when one is
-  listening. `ACOS_MCP_ENGINE=legacy` selects the frozen in-process Rust VM /
+  listening. The server finds the CLI it spawns as `ACOS_BIN` when set, else the
+  `acos` next to its own executable (how a normal install ships it), else the
+  first `acos` on `PATH`. `ACOS_MCP_ENGINE=legacy` selects the frozen in-process Rust VM /
   RN-bridge backend: it is **legacy, diagnostics only**, cannot run real APKs
   and is never chosen implicitly. Default session ids are unique per server
   (`mcp-<pid>`), so two agents on one daemon cannot collide.
