@@ -3387,6 +3387,12 @@ review of the landed SE2b tree (Opus, no memory of the first review) returned
   "resolve on the cache" seam next to a fix that forbids exactly that would be a
   standing invitation to regress. `ArtSession::bound_tree` (the pure accessor
   used by serve's assert path via `ensure_bound_tree`) is unchanged.
+- **Docs synced (they had drifted, not just been incomplete):**
+  `docs/AGENT_API.md` §8.6.4 still listed `bounds` as part of the content
+  signature and `docs/ERROR_CODES.md` had no `content_settle_geometry` row, i.e.
+  the agent-facing contract described the pre-SE2b rule. Both now say geometry is
+  not hashed, that a rectangle in *either* position is refused on a
+  content-settled frame, and which steps resolve instead of claiming.
 - **Test-infra fix (environmental, not a product change):** in this worktree
   (`.../t3/worktrees/acos/<long-id>`) the W50 serve test's socket path lands on
   exactly 108 characters, one over `sun_path`'s limit, so `acos serve` exits

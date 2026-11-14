@@ -728,12 +728,24 @@ strict event rule never reaches a verdict — it is an honest `TIMEOUT` — and
 **300 ms**, with at least **2 traversals**, inside the step's timeout:
 
 * the signature is a hash over, in visible/tree order, each node's
-  `(class, text, content_desc, hint, checked, selected, enabled, focused,
-  bounds, visible)` plus the child structure. Nothing else is hashed, and no
-  field is silently dropped from that list. A text value that an animation
-  keeps updating (a countdown, a progress percentage) therefore changes the
-  signature: the screen is *not* content-stable and the step is a `TIMEOUT`,
-  which is the correct answer;
+  `(class, resource_id, text, content_desc, hint, checked, selected, enabled,
+  focused, clickable, scrollable, visible, window, package)` plus the child
+  structure and the tree's `package`/`truncated`/`text_available`. Nothing else
+  is hashed, and no field is silently dropped from that list. A text value that
+  an animation keeps updating (a countdown, a progress percentage) therefore
+  changes the signature: the screen is *not* content-stable and the step is a
+  `TIMEOUT`, which is the correct answer;
+* **geometry (`bounds`, `visible_bounds`) is deliberately not hashed.** On the
+  screen this rule exists for (ADR-0026 decision 3), an animating view's
+  reported rect drifts ~1 px from one fresh traversal to the next while every
+  content field is identical, so hashing it would make the window impossible to
+  span. The consequence is the other way round: geometry is **never evidence**
+  on a content-settled frame. An assertion that names a rectangle fails closed
+  with `ASSERTION_FAILED`, `details.reason:"content_settle_geometry"` — in
+  *either* position, the assertion's own `bounds` **or** `selector.bounds`
+  (which is compared exactly), for `assert_text`, `assert_visible`,
+  `assert_not_visible` and `assert_state`. Assert without a rectangle, or settle
+  strictly;
 * the window is configurable upward with `ACOS_CONTENT_SETTLE_WINDOW_MS`
   (never below 300 ms); the step's `settle_timeout_ms` (default 10 s) bounds
   the wait;
@@ -750,6 +762,8 @@ Where it is accepted:
 | serve/MCP `acos_tap`, `acos_text`, `acos_key`, `acos_action` | yes |
 | `acos_assert` | no argument needed: an assertion after a content step evaluates the **content-settled bound tree** (no strict re-traversal, which would only time out) |
 | scenario `assert_screenshot` / `assert_region` (pixel/frame claims) | **never** — a pixel assertion bound only by content settle fails closed, see below |
+| any assertion naming `bounds` (the assertion's or the selector's) | **never** — geometry is not hashed, so a rectangle claim on a content-settled frame is `ASSERTION_FAILED` / `content_settle_geometry`; assert without a rectangle or settle strictly |
+| `wait_for` / `tap` / `type` with `selector.bounds` | allowed: these resolve their selector on a traversal they take themselves (a content input's resolution traversal is proven fresh), not on the bound frame |
 
 Provenance: the step result and every observation it backs records the rule
 that bound it. A content settle reply is
@@ -775,6 +789,16 @@ frame fail closed with `ASSERTION_FAILED`, `details.reason:
 `settle` record; in serve, `pixels:true` together with `settle:"content"` is
 `INVALID_ARGUMENT`. A fresh strict `capture` (or any strict step) rebinds the
 frame and pixel assertions work again — pixels are settled by pixels.
+
+**Bounds claims stay honest too.** Content stability is text/nodes/state, not
+geometry. `assert_text`/`assert_visible`/`assert_not_visible`/`assert_state`
+with a `bounds` — inside the assertion *or* inside its `selector` — bound to a
+content-settled frame fail closed with `ASSERTION_FAILED`, `details.reason:
+"content_settle_geometry"`, `details.geometry_evidence: false` and
+`details.bounds_claim.{assertion,selector}`. This is the false-pass class it
+closes: a drifting node reports `0,101,…` instead of `0,100,…`, so
+`assert_not_visible {selector: {text: "Error", bounds: [0,100,200,140]}}` would
+otherwise report "node absent" and pass while the banner is on screen.
 
 `settle:"fast"` is unchanged: it is immediate navigation and never backs a
 pass. `expect_change: true` (a pixel claim) with `settle: content` is
