@@ -1360,6 +1360,35 @@ impl ArtSession {
             ),
         })?;
         let _pid = child.id();
+        // ZPROD5: the launcher's stderr is drained **before** the zygote contract
+        // wait, so a launcher that dies before it publishes `<plan>/<tag>/argv`
+        // reports *why* instead of the engine waiting out the 180 s contract
+        // timeout with only the keeper's log (measured: `acos serve`'s bench
+        // cohort, where the session dir pushed `sock/peer.sock` past `sun_path`
+        // and the launcher printed `io: path must be shorter than SUN_LEN` and
+        // exited, invisible to the engine).
+        let stderr_tail = Arc::new(Mutex::new(VecDeque::new()));
+        {
+            let tail = Arc::clone(&stderr_tail);
+            let stderr = child.stderr.take().expect("piped stderr");
+            std::thread::spawn(move || {
+                let mut reader = BufReader::new(stderr);
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    match reader.read_line(&mut line) {
+                        Ok(0) | Err(_) => break,
+                        Ok(_) => {
+                            let mut tail = tail.lock().unwrap_or_else(|e| e.into_inner());
+                            tail.extend(line.bytes());
+                            while tail.len() > 8192 {
+                                tail.pop_front();
+                            }
+                        }
+                    }
+                }
+            });
+        }
         // ZPROD3 (design §4.3/§4.4): the launcher published `argv` during its
         // own launch; publish this session's `binds` and fork **one** fresh child
         // from the keeper, all before the launcher's ready line (that line means
@@ -1368,7 +1397,31 @@ impl ArtSession {
         // never an exec-path session reported as zygote isolation (§6).
         let mut zygote_facts: Option<ZygoteFacts> = None;
         if let Some((host, key, tag)) = zygote_prepared.as_ref() {
-            match host.wait_contract_and_spawn(key, *tag, Duration::from_secs(180)) {
+            let tail = Arc::clone(&stderr_tail);
+            let mut launcher_gone = || match child.try_wait() {
+                Ok(Some(status)) => {
+                    let text = {
+                        let tail = tail.lock().unwrap_or_else(|e| e.into_inner());
+                        let bytes: Vec<u8> = tail.iter().copied().collect();
+                        String::from_utf8_lossy(&bytes).trim().to_string()
+                    };
+                    Some(format!(
+                        "the session launcher exited ({status}) before it published the contract \
+                         (its stderr: {})",
+                        if text.is_empty() { "<empty>" } else { &text }
+                    ))
+                }
+                Ok(None) => None,
+                Err(error) => Some(format!(
+                    "the session launcher could not be observed: {error}"
+                )),
+            };
+            match host.wait_contract_and_spawn(
+                key,
+                *tag,
+                Duration::from_secs(180),
+                &mut launcher_gone,
+            ) {
                 Ok(spawned) => {
                     zygote_facts = Some(ZygoteFacts::of(
                         &spawned,
@@ -1395,8 +1448,8 @@ impl ArtSession {
         }));
         let stdin = child.stdin.take();
         let stdout = child.stdout.take().expect("piped stdout");
-        let stderr = child.stderr.take().expect("piped stderr");
 
+        let stderr_tail2 = Arc::clone(&stderr_tail);
         let (tx, lines) = mpsc::channel();
         std::thread::spawn(move || {
             let mut reader = BufReader::new(stdout);
@@ -1429,31 +1482,12 @@ impl ArtSession {
                 }
             }
         });
-        let stderr_tail = Arc::new(Mutex::new(VecDeque::new()));
-        let tail = Arc::clone(&stderr_tail);
-        std::thread::spawn(move || {
-            let mut reader = BufReader::new(stderr);
-            let mut line = String::new();
-            loop {
-                line.clear();
-                match reader.read_line(&mut line) {
-                    Ok(0) | Err(_) => break,
-                    Ok(_) => {
-                        let mut tail = tail.lock().unwrap_or_else(|e| e.into_inner());
-                        tail.extend(line.bytes());
-                        while tail.len() > 8192 {
-                            tail.pop_front();
-                        }
-                    }
-                }
-            }
-        });
 
         let mut session = ArtSession {
             child: Some(child),
             stdin,
             lines,
-            stderr_tail,
+            stderr_tail: stderr_tail2,
             timeout,
             apk: apk.to_path_buf(),
             artifacts: artifacts.to_path_buf(),

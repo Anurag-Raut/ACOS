@@ -107,7 +107,7 @@ impl ServeEngine {
         artifacts_root: PathBuf,
     ) -> Self {
         // ZPROD3: keepers live inside the daemon's private runtime directory.
-        let zygote = Arc::new(ZygoteHost::from_env(artifacts_root.join("zygote")));
+        let zygote = Arc::new(ZygoteHost::for_artifacts(&artifacts_root));
         ServeEngine {
             legacy,
             default_engine,

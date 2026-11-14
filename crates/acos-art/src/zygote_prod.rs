@@ -319,7 +319,7 @@ impl PersistentZygote {
         env: &[(String, String)],
         zygote_build: &Path,
     ) -> ZygoteResult<Self> {
-        let root = root.join("zygote").join(key.dir_name());
+        let root = root.join(key.dir_name());
         fs::create_dir_all(&root)?;
         let plan = root.join("plan");
         fs::create_dir_all(&plan)?;
@@ -545,6 +545,29 @@ impl PersistentZygote {
     /// Wait until the session launcher published `<plan>/<tag>/argv`, then write
     /// `binds`. Returns the launcher-observed contract path.
     pub fn wait_contract(&mut self, tag: u32, timeout: Duration) -> ZygoteResult<()> {
+        self.wait_contract_with(tag, timeout, || None)
+    }
+
+    /// [`Self::wait_contract`] that also watches the **peer** that has to produce
+    /// the contract (the session launcher process, owned by the caller).
+    ///
+    /// ZPROD5: the contract timeout alone is not a diagnosis. A launcher that
+    /// exits before it writes `<plan>/<tag>/argv` (measured: `acos serve`'s bench
+    /// cohort, where the session dir pushed `sock/peer.sock` past `sun_path` and
+    /// the launcher died with `io: path must be shorter than SUN_LEN`) left the
+    /// engine waiting the full 180 s with nothing but the *keeper's* log. Here the
+    /// caller passes `peer_gone`, which returns `Some(reason)` as soon as the
+    /// launcher can no longer answer; the reason becomes the `ZYGOTE_DEAD` detail
+    /// (the launcher's exit status and its stderr tail, not a timeout).
+    pub fn wait_contract_with<F>(
+        &mut self,
+        tag: u32,
+        timeout: Duration,
+        mut peer_gone: F,
+    ) -> ZygoteResult<()>
+    where
+        F: FnMut() -> Option<String>,
+    {
         let argv = self.session_dir(tag).join("argv");
         let started = Instant::now();
         while started.elapsed() < timeout {
@@ -556,6 +579,13 @@ impl PersistentZygote {
                 return Err(self
                     .dead_reason()
                     .unwrap_or(ZygoteError::Contract("the keeper died before <tag>/argv".into())));
+            }
+            if let Some(reason) = peer_gone() {
+                return Err(ZygoteError::Contract(format!(
+                    "the session launcher cannot publish `<plan>/{tag}/argv` and never will \
+                     (waited {} ms): {reason}",
+                    started.elapsed().as_millis()
+                )));
             }
             std::thread::sleep(Duration::from_millis(5));
         }

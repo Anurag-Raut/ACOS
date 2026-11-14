@@ -379,8 +379,8 @@ pub fn run(args: VerifyArgs) -> ExitCode {
             // (`start_with_zygote`); with the flag off the host is disabled and
             // this is exactly `start_with_options`. One host per run: its `Drop`
             // closes the keeper, so a verify run never leaves a zygote behind.
-            let zygote = Arc::new(crate::engine::zygote_host::ZygoteHost::from_env(
-                artifacts.join("zygote"),
+            let zygote = Arc::new(crate::engine::zygote_host::ZygoteHost::for_artifacts(
+                &artifacts,
             ));
             match crate::engine::art::ArtSession::start_with_zygote(
                 &apk,

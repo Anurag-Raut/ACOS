@@ -37,6 +37,21 @@ pub const ENV_ZYGOTE: &str = "ACOS_ART_ZYGOTE";
 /// The guest dex + shims (built by `research/zygote-proto/z3/build.sh`). A flag-on
 /// serve without it fails closed; it never falls back to the exec path.
 pub const ENV_ZYGOTE_BUILD: &str = "ACOS_ART_ZYGOTE_BUILD";
+/// ZPROD5: where the keeper plan trees live. Host-side only (the plan dir is
+/// bound into the zygote as `/sessions`), so an operator may place it anywhere.
+pub const ENV_ZYGOTE_ROOT: &str = "ACOS_ART_ZYGOTE_ROOT";
+/// `AF_UNIX`'s `sun_path`, **including** the terminating NUL.
+pub const SUN_PATH_MAX: usize = 108;
+/// The longest leaf a session launcher binds inside `<session>/sock` (`peer.sock`;
+/// the logd socket is `logdw`). Every session directory therefore has to leave
+/// room for this suffix in `sun_path`.
+const LONGEST_SOCKET_LEAF: &str = "/sock/peer.sock";
+/// The longest `ZygoteKey::dir_name()` can be (5-digit dimension, 4-digit
+/// density, `report` insets, 16 hex of hash) and the widest tag a daemon can
+/// hand out in practice. Used only for the up-front root choice; `prepare`
+/// checks the **actual** session path and fails closed (see [`sun_path_ok`]).
+const WORST_KEY_DIR: &str = "00000000-00000x00000-0000-report-0000000000000000";
+const WORST_TAG_DIGITS: usize = 4;
 /// The `isolation` string a zygote reset/status reply carries (design §4.5).
 pub const ISOLATION_ZYGOTE_CHILD: &str = "fresh-zygote-child";
 /// What a zygote reply must say about memory while F3 is deferred: the children
@@ -68,6 +83,9 @@ impl ZygoteFacts {
 pub struct ZygoteHost {
     enabled: bool,
     root: PathBuf,
+    /// ZPROD5: `root` is a short runtime directory this host created (see
+    /// [`ZygoteHost::for_artifacts`]); [`ZygoteHost::shutdown_all`] removes it.
+    owned_root: bool,
     build: Option<PathBuf>,
     keepers: Mutex<ZygoteRegistry>,
 }
@@ -83,9 +101,61 @@ impl ZygoteHost {
         ZygoteHost {
             enabled,
             root,
+            owned_root: false,
             build,
             keepers: Mutex::new(ZygoteRegistry::new()),
         }
+    }
+
+    /// The host for `acos serve`'s / `acos verify`'s artifact root.
+    ///
+    /// ZPROD5 (root cause of the ON arm's `argv 0` stall): a session directory
+    /// also holds the **sockets** (`<session>/sock/peer.sock`), because the
+    /// forked zygote child bind-mounts `/sessions/<tag>/binds` — and an `AF_UNIX`
+    /// `sun_path` is 108 bytes including its NUL. `acos verify`'s artifacts root
+    /// is short (`out/<scenario>`), so the natural `<artifacts>/zygote` fit; the
+    /// **daemon** cohort's root is the caller's scratch
+    /// (`…/sessions/zygote` in `acos-bench`), and there the session launcher died
+    /// with `io: path must be shorter than SUN_LEN` **before** it published
+    /// `<plan>/0/argv`, which the engine could only report as a 180 s contract
+    /// timeout. The plan tree is host-side only (bound into the zygote as
+    /// `/sessions`), so when the natural root cannot host a session's socket we
+    /// relocate it to a short runtime directory — the same class of directory
+    /// W43 already uses for the exec path's sockets.
+    ///
+    /// Order: `ACOS_ART_ZYGOTE_ROOT` (explicit, caller-owned) →
+    /// `<artifacts>/zygote` when a worst-case session still fits `sun_path` →
+    /// `/run/user/<uid>/z<pid>` → `/dev/shm/z<pid>`. If nothing fits, the
+    /// natural root is kept and [`ZygoteHost::prepare`] fails closed with the
+    /// lengths instead of letting a launcher die into a timeout.
+    ///
+    /// Note for a **memory** measurement: a relocated root sits on a tmpfs, so a
+    /// session's run root (dalvik-cache, app-data, tmp) is tmpfs-backed there.
+    /// Latency is unaffected; a memory row must use an on-disk
+    /// `ACOS_ART_ZYGOTE_ROOT` (F3 follow-up).
+    pub fn for_artifacts(artifacts: &Path) -> Self {
+        if let Some(root) = std::env::var_os(ENV_ZYGOTE_ROOT)
+            .map(PathBuf::from)
+            .filter(|path| !path.as_os_str().is_empty())
+        {
+            return Self::for_root(root);
+        }
+        let natural = artifacts.join("zygote");
+        if sun_budget_fits(&natural) {
+            return Self::for_root(natural);
+        }
+        match open_short_root() {
+            Some(root) => {
+                let mut host = Self::for_root(root);
+                host.owned_root = true;
+                host
+            }
+            None => Self::for_root(natural),
+        }
+    }
+
+    fn for_root(root: PathBuf) -> Self {
+        Self::from_env(root)
     }
 
     /// An explicitly disabled host (tests, and any caller that must not read the
@@ -95,6 +165,7 @@ impl ZygoteHost {
         ZygoteHost {
             enabled: false,
             root: PathBuf::new(),
+            owned_root: false,
             build: None,
             keepers: Mutex::new(ZygoteRegistry::new()),
         }
@@ -124,7 +195,6 @@ impl ZygoteHost {
     /// `<plan>/<tag>` for the session launcher's `ACOS_ZYGOTE_SESSION`.
     pub fn session_dir(&self, key: &ZygoteKey, tag: u32) -> PathBuf {
         self.root
-            .join("zygote")
             .join(key.dir_name())
             .join("plan")
             .join(tag.to_string())
@@ -155,6 +225,11 @@ impl ZygoteHost {
                 build.display()
             )));
         }
+        // ZPROD5: the session directory also carries the sockets, and `bind()`
+        // refuses a `sun_path` over 108 bytes. Check the real path *before* a
+        // keeper boots, with the widest tag this host can hand out, so a root
+        // that cannot host a session is a named `ZYGOTE_DEAD` here instead of a
+        // launcher dying into a contract timeout (see [`Self::for_artifacts`]).
         // The keeper's zygote (and therefore every forked child) inherits this
         // environment, so it must carry the *guest* seams the session launcher
         // sets for the exec path: the interactive live tree probe, the input
@@ -209,6 +284,29 @@ impl ZygoteHost {
                 keepers.remove(key);
             }
         }
+        // ZPROD5: the session directory also carries the sockets (`<session>/sock`
+        // is what the forked child bind-mounts as `/dev/socket`), and `bind()`
+        // refuses a `sun_path` over 108 bytes. Check the **exact** path with the
+        // tag this session will really use, before a keeper boots: a root that
+        // cannot host a session is a named `ZYGOTE_DEAD` here instead of a session
+        // launcher dying into a contract timeout (see [`Self::for_artifacts`]).
+        let tag = match reuse_tag {
+            Some(tag) => tag,
+            None => keepers.allocate_tag(),
+        };
+        if let Some(longest) = sun_path_overflow(&self.session_dir(key, tag)) {
+            return Err(ZygoteError::Io(format!(
+                "the session directory is too long for an AF_UNIX socket: {} needs {} bytes, \
+                 sun_path holds {SUN_PATH_MAX} including its NUL (session root {}). Set \
+                 {ENV_ZYGOTE_ROOT} to a shorter directory (at most {} bytes) or choose a \
+                 shorter artifact root; the keeper was not booted and no exec-path session is \
+                 substituted.",
+                longest.display(),
+                longest.as_os_str().len() + 1,
+                self.root.display(),
+                max_root_len()
+            )));
+        }
         if keepers.keeper_mut(key).is_none() {
             let keeper = PersistentZygote::start(
                 &self.root,
@@ -220,10 +318,6 @@ impl ZygoteHost {
             )?;
             keepers.insert(key.clone(), keeper);
         }
-        let tag = match reuse_tag {
-            Some(tag) => tag,
-            None => keepers.allocate_tag(),
-        };
         let keeper = keepers
             .keeper_mut(key)
             .expect("the keeper was just inserted");
@@ -234,17 +328,25 @@ impl ZygoteHost {
     /// Wait for the session launcher's `argv`, publish this session's `binds`,
     /// then fork one fresh child. Runs **before** the launcher's ready line: the
     /// ready line means the child connected to the session's own sockets.
-    pub fn wait_contract_and_spawn(
+    ///
+    /// `peer_gone` reports why the launcher can no longer publish the contract
+    /// (its exit status + stderr tail); ZPROD5, a dead launcher must not be
+    /// waited out as a 180 s "keeper not responding" timeout.
+    pub fn wait_contract_and_spawn<F>(
         &self,
         key: &ZygoteKey,
         tag: u32,
         timeout: Duration,
-    ) -> Result<ZygoteChild, ZygoteError> {
+        peer_gone: F,
+    ) -> Result<ZygoteChild, ZygoteError>
+    where
+        F: FnMut() -> Option<String>,
+    {
         let mut keepers = self.lock();
         let keeper = keepers
             .keeper_mut(key)
             .ok_or_else(|| ZygoteError::Contract(format!("no keeper for tag {tag}")))?;
-        keeper.wait_contract(tag, timeout)?;
+        keeper.wait_contract_with(tag, timeout, peer_gone)?;
         keeper.spawn(tag)
     }
 
@@ -327,9 +429,14 @@ impl ZygoteHost {
         backend
     }
 
-    /// Close every keeper (serve exit). Idempotent.
+    /// Close every keeper (serve exit). Idempotent. A root this host created for
+    /// itself (the short runtime root of [`Self::for_artifacts`]) is removed with
+    /// it, so a serve leaves nothing behind.
     pub fn shutdown_all(&self) {
         self.lock().shutdown_all();
+        if self.owned_root && !self.root.as_os_str().is_empty() {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
     }
 
     fn lock(&self) -> MutexGuard<'_, ZygoteRegistry> {
@@ -341,6 +448,55 @@ impl Drop for ZygoteHost {
     fn drop(&mut self) {
         self.lock().shutdown_all();
     }
+}
+
+/// Does a worst-case session under `root` still fit `sun_path`?
+///
+/// Conservative on purpose: it decides a **root**, and [`ZygoteHost::prepare`]
+/// then checks the session path it is actually about to create.
+fn sun_budget_fits(root: &Path) -> bool {
+    let worst = root
+        .join(WORST_KEY_DIR)
+        .join("plan")
+        .join("0".repeat(WORST_TAG_DIGITS));
+    sunded_len(&worst) + LONGEST_SOCKET_LEAF.len() + 1 <= SUN_PATH_MAX
+}
+
+fn sunded_len(path: &Path) -> usize {
+    path.as_os_str().len()
+}
+
+/// The longest root that can still host a worst-case session's socket.
+fn max_root_len() -> usize {
+    SUN_PATH_MAX - 1 - LONGEST_SOCKET_LEAF.len() - WORST_KEY_DIR.len() - WORST_TAG_DIGITS
+        - "/plan".len()
+        - 2
+}
+
+/// `Some(longest socket path)` when `<session>/sock/peer.sock` would not fit.
+fn sun_path_overflow(session: &Path) -> Option<PathBuf> {
+    let longest = session.join(LONGEST_SOCKET_LEAF.trim_start_matches('/'));
+    if sunded_len(&longest) + 1 > SUN_PATH_MAX {
+        Some(longest)
+    } else {
+        None
+    }
+}
+
+/// A short directory this process can own: `/run/user/<uid>/z<pid>` (tmpfs, the
+/// runtime dir W43's socket helper already uses), else `/dev/shm/z<pid>`.
+fn open_short_root() -> Option<PathBuf> {
+    let uid = unsafe { libc::getuid() };
+    let pid = std::process::id();
+    for candidate in [
+        PathBuf::from(format!("/run/user/{uid}/z{pid}")),
+        PathBuf::from(format!("/dev/shm/z{pid}")),
+    ] {
+        if std::fs::create_dir_all(&candidate).is_ok() {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 /// The structured failure for a zygote error: `ZYGOTE_DEAD`, class `host_guard`,
@@ -402,6 +558,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
+    use std::sync::Arc;
 
     fn key() -> ZygoteKey {
         ZygoteKey {
@@ -448,6 +605,7 @@ done < "$plan/cmd"
         ZygoteHost {
             enabled: true,
             root: root.to_path_buf(),
+            owned_root: false,
             build: Some(build.to_path_buf()),
             keepers: Mutex::new(ZygoteRegistry::new()),
         }
@@ -544,6 +702,147 @@ done < "$plan/cmd"
     }
 
     #[test]
+    fn a_launcher_that_dies_before_argv_fails_fast_with_its_stderr() {
+        // ZPROD5, the serve/daemon defect: the session launcher can die before it
+        // publishes `<plan>/<tag>/argv` (measured: `sock/peer.sock` past
+        // `sun_path` under the bench's deep serve scratch). The contract wait must
+        // report THAT, immediately, instead of a 180 s "keeper not responding"
+        // timeout that says nothing about the launcher.
+        let dir = scratch("launcher-dead");
+        let script = mock_keeper(&dir);
+        let build = dir.join("zbuild");
+        fs::create_dir_all(&build).unwrap();
+        let host = host_with(&dir, &build);
+        let k = key();
+        let tag = host
+            .prepare(&k, &script, Path::new("/apks/counter.apk"), None)
+            .unwrap();
+        // The launcher: prints the real diagnosis and exits without a contract.
+        let mut launcher = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("echo 'acos-art: io: path must be shorter than SUN_LEN' >&2; exit 3")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        // Drain its stderr the way the engine does (a tail read by the probe).
+        let tail = {
+            use std::io::Read;
+            let mut pipe = launcher.stderr.take().unwrap();
+            let mut text = String::new();
+            pipe.read_to_string(&mut text).unwrap();
+            Arc::new(Mutex::new(text))
+        };
+        let started = std::time::Instant::now();
+        let error = host
+            .wait_contract_and_spawn(&k, tag, Duration::from_secs(180), || {
+                match launcher.try_wait().expect("observe the launcher") {
+                    Some(status) => {
+                        let text = tail.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                        Some(format!(
+                            "the session launcher exited ({status}) before it published the \
+                             contract (its stderr: {})",
+                            text.trim()
+                        ))
+                    }
+                    None => None,
+                }
+            })
+            .expect_err("a dead launcher cannot publish a contract");
+        let waited = started.elapsed();
+        let text = error.to_string();
+        assert!(
+            waited < Duration::from_secs(10),
+            "the wait must end with the launcher, not the 180 s timeout (waited {waited:?})"
+        );
+        assert!(text.starts_with("ZYGOTE_DEAD"), "{text}");
+        assert!(text.contains("session launcher"), "{text}");
+        assert!(text.contains("exit status: 3"), "the exit status is named: {text}");
+        assert!(
+            text.contains("path must be shorter than SUN_LEN"),
+            "the launcher's own diagnosis travels with the failure: {text}"
+        );
+        // The failure is a zygote failure: the keeper is untouched, and the code
+        // the engine reports is the structured one.
+        assert_eq!(host.keeper_count(), 1);
+        assert_eq!(zygote_dead(&text).code(), ErrorCode::ZygoteDead);
+        host.shutdown_all();
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_root_too_deep_for_sun_path_fails_closed_before_a_keeper_boots() {
+        // ZPROD5: `<session>/sock/peer.sock` is an AF_UNIX path. A root that
+        // cannot host it is refused *here*, by name and with the lengths, so no
+        // keeper is booted and no launcher is asked to publish a contract it can
+        // never satisfy.
+        let dir = scratch("sunpath");
+        let script = mock_keeper(&dir);
+        let build = dir.join("zbuild");
+        fs::create_dir_all(&build).unwrap();
+        let deep = dir.join("a".repeat(80)).join("b".repeat(80));
+        let host = host_with(&deep, &build);
+        let error = host
+            .prepare(&key(), &script, Path::new("/apks/counter.apk"), None)
+            .expect_err("a root past sun_path cannot host a session");
+        let text = error.to_string();
+        assert!(text.contains("too long for an AF_UNIX socket"), "{text}");
+        assert!(text.contains(ENV_ZYGOTE_ROOT), "the fix is named: {text}");
+        assert!(text.contains("peer.sock"), "the failing path is named: {text}");
+        assert_eq!(host.keeper_count(), 0, "the keeper must not boot for a refused root");
+        assert_eq!(host.keeper_pids().len(), 0, "and nothing is left running");
+        assert!(!host.root().join("zygote").exists(), "no plan tree was written");
+        // The boundary itself: a session whose socket fits is accepted.
+        let fits = PathBuf::from("/tmp").join("z");
+        assert!(sun_path_overflow(&fits.join(WORST_KEY_DIR).join("plan/0")).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_deep_artifacts_root_is_displaced_to_a_short_root_and_a_short_one_is_kept() {
+        // ZPROD5: the *choice* of root. `acos verify`'s artifacts root is short
+        // (`out/<scenario>`), so it keeps `<artifacts>/zygote` exactly as before;
+        // the bench's serve scratch
+        // (`…/r1-a/latency/sessions`) is not, so the plan tree moves to a short
+        // runtime root instead of dying in the launcher.
+        let previous = std::env::var_os(ENV_ZYGOTE_ROOT);
+        std::env::remove_var(ENV_ZYGOTE_ROOT);
+        let deep = PathBuf::from("/home/somebody/a-fairly-long-worktree-name/.cache/h6")
+            .join("r1-a/latency/sessions");
+        assert!(!sun_budget_fits(&deep), "the bench-shaped root does not fit");
+        let host = ZygoteHost::for_artifacts(&deep);
+        let session = host.session_dir(&key(), 7);
+        assert!(
+            sun_path_overflow(&session).is_none(),
+            "the displaced root hosts a session socket: {}",
+            session.display()
+        );
+        assert!(
+            !session.starts_with(&deep),
+            "the deep artifacts root is not used for the plan tree: {}",
+            session.display()
+        );
+        assert!(host.root().is_dir(), "the short root was created");
+        // A short artifacts root keeps the historical layout (verify).
+        let short = PathBuf::from("out/v2-art-counter");
+        assert!(sun_budget_fits(&short), "the verify root fits");
+        let kept = ZygoteHost::for_artifacts(&short);
+        assert_eq!(kept.root(), short.join("zygote"));
+        // An explicit root always wins, short or not.
+        std::env::set_var(ENV_ZYGOTE_ROOT, "/tmp/zprod5-explicit");
+        let explicit = ZygoteHost::for_artifacts(&deep);
+        assert_eq!(explicit.root(), Path::new("/tmp/zprod5-explicit"));
+        match previous {
+            Some(value) => std::env::set_var(ENV_ZYGOTE_ROOT, value),
+            None => std::env::remove_var(ENV_ZYGOTE_ROOT),
+        }
+        // A root this host created goes away with the host (serve exit).
+        let owned = host.root().to_path_buf();
+        host.shutdown_all();
+        assert!(!owned.exists(), "an owned root is removed on shutdown: {}", owned.display());
+    }
+
+    #[test]
     fn a_dead_keeper_restarts_with_a_new_epoch_and_old_sessions_are_lost() {
         // ZPROD4: kill the keeper between two requests. (1) The request that sees
         // it dead fails structurally and says the session is *lost*. (2) The NEXT
@@ -560,7 +859,7 @@ done < "$plan/cmd"
             .unwrap();
         publish_argv(&host, &k, tag0);
         let child0 = host
-            .wait_contract_and_spawn(&k, tag0, Duration::from_secs(5))
+            .wait_contract_and_spawn(&k, tag0, Duration::from_secs(5), || None)
             .unwrap();
         let epoch1 = host.boot_epoch(&k).unwrap();
         assert_eq!(
@@ -604,7 +903,7 @@ done < "$plan/cmd"
             .unwrap();
         publish_argv(&host, &k, tag1);
         let child1 = host
-            .wait_contract_and_spawn(&k, tag1, Duration::from_secs(5))
+            .wait_contract_and_spawn(&k, tag1, Duration::from_secs(5), || None)
             .unwrap();
         let epoch2 = host.boot_epoch(&k).unwrap();
         assert_ne!(epoch1, epoch2, "a restarted zygote has a new boot epoch");
@@ -658,12 +957,12 @@ done < "$plan/cmd"
         let tag0 = host.prepare(&k, &script, Path::new("/apks/counter.apk"), None).unwrap();
         publish_argv(&host, &k, tag0);
         let child0 = host
-            .wait_contract_and_spawn(&k, tag0, Duration::from_secs(5))
+            .wait_contract_and_spawn(&k, tag0, Duration::from_secs(5), || None)
             .unwrap();
         let tag1 = host.prepare(&k, &script, Path::new("/apks/counter.apk"), None).unwrap();
         publish_argv(&host, &k, tag1);
         let child1 = host
-            .wait_contract_and_spawn(&k, tag1, Duration::from_secs(5))
+            .wait_contract_and_spawn(&k, tag1, Duration::from_secs(5), || None)
             .unwrap();
         assert_ne!(child0.child_pid, child1.child_pid);
         assert_eq!(host.keeper_count(), 1, "one keeper per key");
@@ -680,7 +979,7 @@ done < "$plan/cmd"
         assert_eq!(tag0_again, tag0, "a reset refork reuses its own tag");
         publish_argv(&host, &k, tag0);
         let fresh = host
-            .wait_contract_and_spawn(&k, tag0, Duration::from_secs(5))
+            .wait_contract_and_spawn(&k, tag0, Duration::from_secs(5), || None)
             .unwrap();
         assert_ne!(fresh.child_pid, child0.child_pid, "a genuinely fresh child");
         assert_eq!(host.boot_epoch(&k).unwrap(), epoch, "epoch is stable across a reset");
