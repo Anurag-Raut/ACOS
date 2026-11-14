@@ -1,12 +1,12 @@
 //! APK container ingest: zip entry listing, DEX files, native libs, assets and
 //! signature-scheme detection.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 
 use crate::error::{
-    ApkError, Result, APK_ENTRY, APK_IO, APK_NOT_ZIP, APK_NO_MANIFEST, NATIVE_LIB_NOT_FOUND,
+    ApkError, Result, APK_ENTRY, APK_SIGNING_MALFORMED, APK_IO, APK_NOT_ZIP, APK_NO_MANIFEST, NATIVE_LIB_NOT_FOUND,
     UNSUPPORTED_ABI, ZIP_SLIP,
 };
 use crate::manifest::Manifest;
@@ -68,6 +68,11 @@ pub struct Apk {
     pub native_libs: BTreeMap<String, Vec<NativeLib>>,
     pub assets: Vec<ApkEntry>,
     pub signing: SigningInfo,
+    /// DER X.509 **signer** certificates (the platform's `PackageInfo.signatures`).
+    pub signing_certificates: Vec<Vec<u8>>,
+    /// Why `signing_certificates` is empty despite a signature block being
+    /// present. An error here is never papered over by a lower scheme.
+    pub signing_certificates_error: Option<String>,
     pub manifest_raw: Option<Vec<u8>>,
     pub arsc_raw: Option<Vec<u8>>,
     raw: Vec<u8>,
@@ -95,6 +100,9 @@ impl Apk {
         let mut assets = Vec::new();
         let mut manifest_raw = None;
         let mut arsc_raw = None;
+        // v1 signature blocks (`META-INF/*.RSA|DSA|EC`), read after the index
+        // pass: their bytes are the PKCS#7 fallback for the signing certificate.
+        let mut v1_blocks_to_read: Vec<(usize, String, u64)> = Vec::new();
 
         for i in 0..archive.len() {
             let mut file = archive
@@ -153,6 +161,8 @@ impl Apk {
                     data_offset,
                     uncompressed_in_apk,
                 });
+            } else if is_v1_signature_block(&name) {
+                v1_blocks_to_read.push((i, name, size));
             } else if name.starts_with("assets/") {
                 assets.push(ApkEntry {
                     name,
@@ -171,6 +181,108 @@ impl Apk {
 
         let entry_names: Vec<String> = entries.iter().map(|e| e.name.clone()).collect();
         let signing = signing::detect(&entry_names, &bytes);
+        // A `.RSA`/`.DSA`/`.EC` block is a v1 signature only with its matching
+        // `META-INF/<stem>.SF`; pairing prevents an unrelated asset-shaped
+        // entry from being treated as one. Read every candidate through the
+        // size/ratio caps: the size fields are untrusted.
+        let sf_stems: BTreeSet<String> = entry_names
+            .iter()
+            .filter(|n| n.to_ascii_uppercase().starts_with("META-INF/"))
+            .filter(|n| n.to_ascii_uppercase().ends_with(".SF"))
+            .map(|n| v1_stem(n))
+            .collect();
+        let mut v1_blocks: Vec<Vec<u8>> = Vec::new();
+        let mut signing_certificates_error: Option<String> = None;
+        // Both the number of candidate blocks and their sizes are untrusted, so
+        // the count and the declared total are checked *before* any block is
+        // read (a ~50 MB APK with ~10k pairs would otherwise make ingest read
+        // ~10 GB into host memory). A cap violation is a hard signing error, not
+        // a silent subset: dropping blocks could change which signer wins.
+        let v1_candidates: Vec<(usize, String, u64)> = v1_blocks_to_read
+            .into_iter()
+            .filter(|(_, name, _)| sf_stems.contains(&v1_stem(name)))
+            .collect();
+        let declared_total: u64 = v1_candidates.iter().map(|(_, _, size)| *size).sum();
+        let mut v1_cap_exceeded = false;
+        if v1_candidates.len() > signing::MAX_V1_SIGNATURE_BLOCKS {
+            signing_certificates_error = Some(
+                ApkError::new(
+                    APK_SIGNING_MALFORMED,
+                    format!(
+                        "{} v1 signature blocks exceed cap {}",
+                        v1_candidates.len(),
+                        signing::MAX_V1_SIGNATURE_BLOCKS
+                    ),
+                )
+                .to_string(),
+            );
+            v1_cap_exceeded = true;
+        } else if declared_total > signing::MAX_TOTAL_V1_SIGNATURE_BYTES as u64 {
+            signing_certificates_error = Some(
+                ApkError::new(
+                    APK_SIGNING_MALFORMED,
+                    format!(
+                        "v1 signature blocks declare {declared_total} bytes, exceeding total cap {}",
+                        signing::MAX_TOTAL_V1_SIGNATURE_BYTES
+                    ),
+                )
+                .to_string(),
+            );
+            v1_cap_exceeded = true;
+        }
+        // The declared sizes are untrusted, so the bytes actually read are
+        // summed too, and reading stops the moment the total cap is passed.
+        let mut v1_total_read: u64 = 0;
+        if !v1_cap_exceeded {
+            for (i, name, _) in v1_candidates {
+                let Ok(mut file) = archive.by_index(i) else {
+                    signing_certificates_error =
+                        Some(format!("{name}: unreadable signature block"));
+                    continue;
+                };
+                match read_signature_block(
+                    &name,
+                    file.size() as usize,
+                    file.compressed_size() as usize,
+                    &mut file,
+                ) {
+                    Ok(buf) => {
+                        v1_total_read += buf.len() as u64;
+                        if v1_total_read > signing::MAX_TOTAL_V1_SIGNATURE_BYTES as u64 {
+                            signing_certificates_error = Some(
+                                ApkError::new(
+                                    APK_SIGNING_MALFORMED,
+                                    format!(
+                                        "v1 signature blocks exceed total cap {} bytes",
+                                        signing::MAX_TOTAL_V1_SIGNATURE_BYTES
+                                    ),
+                                )
+                                .to_string(),
+                            );
+                            v1_blocks.clear();
+                            v1_cap_exceeded = true;
+                            break;
+                        }
+                        v1_blocks.push(buf);
+                    }
+                    Err(e) => signing_certificates_error = Some(e.to_string()),
+                }
+            }
+        }
+        let signing_certificates = if v1_cap_exceeded {
+            // No further reads and no partial signer set after a cap violation.
+            Vec::new()
+        } else {
+            match signing::certificates(&bytes, &v1_blocks) {
+                Ok(certs) => certs,
+                Err(e) => {
+                    if signing_certificates_error.is_none() {
+                        signing_certificates_error = Some(e.to_string());
+                    }
+                    Vec::new()
+                }
+            }
+        };
 
         Ok(Apk {
             source: "<memory>".to_string(),
@@ -179,6 +291,8 @@ impl Apk {
             native_libs,
             assets,
             signing,
+            signing_certificates,
+            signing_certificates_error,
             manifest_raw,
             arsc_raw,
             raw: bytes,
@@ -407,3 +521,187 @@ fn parse_lib_name(name: &str) -> Option<(String, String)> {
     Some((abi.to_string(), lib.to_string()))
 }
 
+/// `META-INF/<stem>.SF` and `META-INF/<stem>.RSA|DSA|EC` must pair.
+fn v1_stem(name: &str) -> String {
+    let upper = name.to_ascii_uppercase();
+    for ext in [".SF", ".RSA", ".DSA", ".EC"] {
+        if let Some(stem) = upper.strip_suffix(ext) {
+            return stem.to_string();
+        }
+    }
+    upper
+}
+
+/// Read one untrusted v1 signature block with an absolute size cap and a
+/// compression-ratio cap, both checked before/while decompressing.
+fn read_signature_block(
+    name: &str,
+    declared: usize,
+    compressed: usize,
+    reader: &mut impl Read,
+) -> std::result::Result<Vec<u8>, ApkError> {
+    if declared > signing::MAX_SIGNATURE_BLOCK_BYTES {
+        return Err(ApkError::new(
+            APK_SIGNING_MALFORMED,
+            format!(
+                "{name}: signature block size {declared} exceeds cap {}",
+                signing::MAX_SIGNATURE_BLOCK_BYTES
+            ),
+        ));
+    }
+    if compressed > 0
+        && declared > compressed.saturating_mul(signing::MAX_SIGNATURE_BLOCK_RATIO)
+    {
+        return Err(ApkError::new(
+            APK_SIGNING_MALFORMED,
+            format!("{name}: signature block compression ratio exceeds cap"),
+        ));
+    }
+    let mut buf = Vec::new();
+    // The declared size is untrusted, so cap the actual read as well.
+    reader
+        .take(signing::MAX_SIGNATURE_BLOCK_BYTES as u64 + 1)
+        .read_to_end(&mut buf)
+        .map_err(|e| ApkError::new(APK_SIGNING_MALFORMED, format!("{name}: {e}")))?;
+    if buf.len() > signing::MAX_SIGNATURE_BLOCK_BYTES {
+        return Err(ApkError::new(
+            APK_SIGNING_MALFORMED,
+            format!("{name}: signature block exceeds cap"),
+        ));
+    }
+    Ok(buf)
+}
+
+/// `META-INF/*.RSA` / `*.DSA` / `*.EC`: a v1 (JAR) signature block, whose
+/// PKCS#7 payload carries the signing certificate.
+fn is_v1_signature_block(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    upper.starts_with("META-INF/")
+        && (upper.ends_with(".RSA") || upper.ends_with(".DSA") || upper.ends_with(".EC"))
+}
+
+#[cfg(test)]
+mod signature_cap_tests {
+    use super::*;
+    use std::io::Cursor;
+
+    /// Build a stored (uncompressed) zip from `(name, bytes)` entries, so the
+    /// per-block compression-ratio cap never masks the cap under test.
+    fn stored_zip(entries: &[(String, Vec<u8>)]) -> Vec<u8> {
+        use std::io::Write;
+        let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        for (name, bytes) in entries {
+            zip.start_file(name.as_str(), options).unwrap();
+            zip.write_all(bytes).unwrap();
+        }
+        zip.finish().unwrap().into_inner()
+    }
+
+    fn v1_pair(stem: &str, len: usize) -> Vec<(String, Vec<u8>)> {
+        vec![
+            (format!("META-INF/{stem}.SF"), vec![b'S'; len]),
+            (format!("META-INF/{stem}.RSA"), vec![b'R'; len]),
+        ]
+    }
+
+    #[test]
+    fn too_many_v1_signature_blocks_is_rejected() {
+        let mut entries = Vec::new();
+        for i in 0..=signing::MAX_V1_SIGNATURE_BLOCKS {
+            entries.extend(v1_pair(&format!("S{i}"), 64));
+        }
+        let apk = Apk::from_bytes(stored_zip(&entries)).expect("zip should open");
+        let err = apk
+            .signing_certificates_error
+            .expect("cap violation must be an error");
+        assert!(err.starts_with(APK_SIGNING_MALFORMED), "{err}");
+        assert!(err.contains("exceed cap"), "{err}");
+        assert!(apk.signing_certificates.is_empty());
+    }
+
+    #[test]
+    fn total_v1_signature_bytes_over_cap_is_rejected() {
+        // Five blocks of 900 KiB: each is under the per-block cap and the count
+        // is under the block cap, but 4.5 MiB exceeds the 4 MiB total.
+        let block = 900 * 1024;
+        let mut entries = Vec::new();
+        for i in 0..5 {
+            entries.extend(v1_pair(&format!("B{i}"), block));
+        }
+        let apk = Apk::from_bytes(stored_zip(&entries)).expect("zip should open");
+        let err = apk
+            .signing_certificates_error
+            .expect("cap violation must be an error");
+        assert!(err.starts_with(APK_SIGNING_MALFORMED), "{err}");
+        assert!(err.contains("total cap"), "{err}");
+        assert!(apk.signing_certificates.is_empty());
+    }
+
+    #[test]
+    fn one_normal_v1_block_still_yields_its_signer() {
+        // A real `.SF` + `.RSA` pair from a fixture APK, re-zipped alone so the
+        // v1 (PKCS#7) path — not the v2/v3 block — supplies the signer.
+        let fixture = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/hello-jni.apk");
+        let mut archive =
+            zip::ZipArchive::new(Cursor::new(std::fs::read(fixture).unwrap())).unwrap();
+        let mut entries = Vec::new();
+        let mut rsa = Vec::new();
+        for name in ["META-INF/ANDROIDD.SF", "META-INF/ANDROIDD.RSA"] {
+            let mut file = archive.by_name(name).expect("fixture v1 entry");
+            let mut buf = Vec::new();
+            file.read_to_end(&mut buf).unwrap();
+            if name.ends_with(".RSA") {
+                rsa = buf.clone();
+            }
+            entries.push((name.to_string(), buf));
+        }
+        // The uncapped, direct v1 parse is the reference result.
+        let direct = signing::certificates(&[], &[rsa]).expect("v1 PKCS#7 parses");
+        assert!(!direct.is_empty());
+
+        let apk = Apk::from_bytes(stored_zip(&entries)).expect("zip should open");
+        assert_eq!(apk.signing_certificates_error, None);
+        assert_eq!(apk.signing_certificates, direct);
+        assert_eq!(apk.signing_certificates.len(), 1);
+        assert_eq!(apk.signing_certificates[0][0], 0x30, "DER SEQUENCE");
+    }
+
+    #[test]
+    fn declared_size_over_cap_is_rejected_before_reading() {
+        let mut reader = Cursor::new(vec![0u8; 8]);
+        let err = read_signature_block(
+            "META-INF/A.RSA",
+            signing::MAX_SIGNATURE_BLOCK_BYTES + 1,
+            1,
+            &mut reader,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), APK_SIGNING_MALFORMED);
+        assert!(err.message().contains("exceeds cap"));
+    }
+
+    #[test]
+    fn compression_ratio_over_cap_is_rejected() {
+        let mut reader = Cursor::new(vec![0u8; 8]);
+        let err = read_signature_block(
+            "META-INF/A.RSA",
+            signing::MAX_SIGNATURE_BLOCK_RATIO * 2,
+            1,
+            &mut reader,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), APK_SIGNING_MALFORMED);
+        assert!(err.message().contains("ratio"));
+    }
+
+    #[test]
+    fn a_reader_that_lies_about_its_size_is_still_capped() {
+        // The zip central directory can declare a small size while the stream
+        // yields more; `read_to_end` must stop at the cap.
+        let mut reader = Cursor::new(vec![0u8; signing::MAX_SIGNATURE_BLOCK_BYTES + 10]);
+        let err = read_signature_block("META-INF/A.RSA", 16, 16, &mut reader).unwrap_err();
+        assert_eq!(err.code(), APK_SIGNING_MALFORMED);
+    }
+}
