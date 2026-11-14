@@ -206,6 +206,19 @@ the tool/CLI argument selects the execution engine.
 
 ---
 
+## 1c. Watching a session (live view)
+
+Every live ART session publishes one small file
+(`$XDG_RUNTIME_DIR/acos/live/<session_id>-<daemon_pid>.json`: client, project
+dir, APK, package, activity, display, and the session's `stream_socket`) and
+streams its screen and an action/event feed to any local viewer that connects to
+that socket. The viewer is **view-only** and optional: with nobody watching the
+session costs what it cost before (ADR-0027). The wire protocol — subscribe
+line, framing, `H`/`F`/`E` messages, cost rules, registry fields, stale
+handling — is `docs/LIVE_VIEW.md`; `tools/view/stream_probe.py` is a stdlib
+reference consumer. The MCP tools themselves are unchanged and do not expose the
+stream.
+
 ## 2. Tools
 
 The protocol defines 13 commands (`acos_<command>` in

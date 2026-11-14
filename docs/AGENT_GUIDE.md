@@ -322,6 +322,11 @@ Two session-specific hints worth memorising:
 * **API 34, x86_64.** The runtime is Google's ART from the API-34 ART APEX on
   an x86_64 host image. An APK whose native code has no `lib/x86_64/` entry is
   `UNSUPPORTED_ABI` on every route (that is a gate, not a silent fallback).
+* **Watching a session is view-only and costs nothing when unused.** A live
+  session publishes a registry entry (`$XDG_RUNTIME_DIR/acos/live/`) and a
+  `stream_socket` for local viewers (half-resolution frames + an action feed,
+  ≤ 15 fps). Agents never need it; `docs/LIVE_VIEW.md` has the protocol and the
+  measured cost. Nothing an agent reads or asserts comes from the stream.
 * **The MCP session tools run real ART by default.** On the first session tool
   call the server starts its **own** private `acos serve --engine art` on a
   private socket under `$XDG_RUNTIME_DIR/acos/mcp-<pid>-…/` and forwards
