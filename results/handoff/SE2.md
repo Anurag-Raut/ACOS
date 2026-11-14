@@ -45,6 +45,10 @@ for a screen that animates forever in pixels while its UI tree content is stable
    "signature_fields":["class","text","content_desc","hint","checked","selected",
                        "enabled","focused","bounds","visible"]}
   ```
+* **fail closed if unapplied** — a step that asks for content and gets no
+  content record is `UNSUPPORTED_ASSERTION`
+  (`reason:"content_settle_unhonored"`); no backend can silently downgrade the
+  rule.
 * **`settle: fast` unchanged** (navigation only, never backs a pass);
   `expect_change: true` (a pixel claim) with `settle: content` is
   `INVALID_SCENARIO`, exactly like fast.
@@ -102,17 +106,43 @@ read-only `gaten-dev-f344272-x86_64-release-unsigned.apk`
 
 | run | result |
 |---|---|
-| `gaten-content-welcome` ×3 | **pass 3/3** (`sweep.log` `se2-content-*`); launch, `assert_text` and the `tap` all record `settle.mode:"content"` with `window_ms:300`, `traversals` and `signature`; content settle elapsed 694–≈750 ms, scenario wall 3.19 s |
+| `gaten-content-welcome` ×3 | **pass 3/3** (`sweep.log` + `content-reps.log`, `suite-content-r{1,2,3}/`); launch, `assert_text` and the `tap` all record `settle.mode:"content"`, `window_ms:300`, `traversals:15`, signature `470c294c658e68bd`; content settle p50 **740 ms** (730/740/743), scenario wall p50 3.11 s |
 | `negative/gaten-content-welcome-wrong` ×3 | **fail / `ASSERTION_FAILED`** 3/3 at the content-settled assertion |
 | `negative/gaten-content-pixel` ×3 | **fail / `ASSERTION_FAILED`** 3/3, `details.reason:"content_settle_pixel"` (structured fail-closed) |
-| 15 gates, 5 Gaten flows ×3, 5 negatives, GR4 4+4 | see `sweep.log` (below) |
+| 15 gates | exactly the expected verdicts (`sweep.log`): 10 pass; T03-render-wrong, w7-insets-carve-negative, negative/se1-expect-change-noop `ASSERTION_FAILED`; negative/offscreen-pager-visible `ELEMENT_OFFSCREEN`; p11-progress-timeout `TIMEOUT` |
+| Gaten flows ×3 | **15/15 pass** (home/tabs/settings/search/lesson ×3) |
+| 5 Gaten negatives | **5/5 `ASSERTION_FAILED`** |
+| GR4 | support/kanji/recognition/backstack **pass**; their 4 negatives **`ASSERTION_FAILED`** |
+| strict control on the welcome screen | launch strict pass, `capture fresh` **`TIMEOUT`** after 1555 ms (`reason:"newer-store"`) — the honest non-pass content settle replaces |
 
 ## 5. Tests
 
 `cargo test --release --offline -p acos-verify -p acos-cli` — green (87 acos-cli
-bin tests + 55 acos-verify lib tests, including the new
-`settle::tests::*` and `executor::content_settle_tests::*`). `-p acos-art` was
-built and its tests are unchanged by this branch.
+bin tests + 56 acos-verify lib tests, including `settle::tests::*` and
+`executor::content_settle_tests::*`). `cargo test -p acos-protocol` green after
+`UPDATE_SCHEMA=1`. `cargo test --release --offline -p acos-art --
+--test-threads=1 --skip refuses_to_run_when_no_cgroup_can_be_created` green
+(14 suites, 0 failed, `art-tests.log`).
+
+## 5a. Latency A/B (strict path unchanged)
+
+Interleaved 3 rounds, main arm read-only `.cache/wt-abmain2` (target
+`.cache/ab-target`, never built there) vs branch `.cache/k5-target`, one
+exclusive acquisition per arm, `--groups "a:latency:8G:300" --latency-reps 12
+--reps 1`; per-round p50 (`.cache/se2/ab/{main,branch}-{1,2,3}.json`):
+
+| metric | main | branch | Δ p50 |
+|---|---:|---:|---:|
+| M4 launch strict | 308.4 / 321.9 / 308.9 | 349.9 / 308.5 / 308.8 | −0.1 ms (−0.0 %) |
+| M5 screenshot | 26.4 / 26.9 / 25.0 | 24.6 / 23.8 / 23.7 | −2.6 ms (−9.8 %) |
+| M6 reset strict | 335.6 / 335.9 / 332.3 | 335.2 / 337.5 / 348.9 | +1.9 ms (+0.6 %) |
+| M7 tree strict | 41.1 / 41.0 / 41.1 | 41.4 / 41.3 / 41.2 | +0.2 ms (+0.5 %) |
+| M8 tap counter strict | 967.5 / 950.8 / 954.9 | 958.5 / 953.0 / 951.3 | −1.9 ms (−0.2 %) |
+| M8 tap form strict | 944.4 / 949.3 / 941.3 | 952.4 / 949.6 / 941.4 | +5.2 ms (+0.6 %) |
+
+All M4–M8 strict p50 within +5 % / noise (largest absolute +5.2 ms at ~950 ms,
+smaller than that metric's own 8 ms rep spread). Content settle p50 740 ms vs
+the strict `TIMEOUT` it replaces.
 
 ## 6. Known limits / next
 

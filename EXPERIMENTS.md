@@ -2429,7 +2429,10 @@ acquisition per batch; APK read-only `e04c7ffc…`; scratch `.cache/se2`.
     and travels with every observation it backs (assertions included).
   * **strict default everywhere; fast unchanged** (never backs a pass);
     `expect_change: true` (a pixel claim) + `settle: content` is
-    `INVALID_SCENARIO`, exactly like fast.
+    `INVALID_SCENARIO`, exactly like fast. A step that asked for content and
+    received no content record fails closed (`UNSUPPORTED_ASSERTION`,
+    `reason:"content_settle_unhonored"`), so no backend can silently downgrade
+    the rule.
   * **implementation seam (honest):** each content traversal is a strict tree
     request with a 1 ms deadline — the guest returns the latest tree *and its
     PNG* with `settled:false` (P12b's documented observation). That gives real
@@ -2449,12 +2452,16 @@ acquisition per batch; APK read-only `e04c7ffc…`; scratch `.cache/se2`.
   `assert_screenshot` fail closed with the structured reason, a text assertion
   is allowed, `fast` still never backs a pass, content+`expect_change` is
   `INVALID_SCENARIO`, and `settle: content` parses on launch/tap/type/key.
-  87 acos-cli bin tests + 55 acos-verify lib tests green.
+  87 acos-cli bin tests + 56 acos-verify lib tests green; `acos-protocol` green
+  after `UPDATE_SCHEMA=1` (schema `scenario.json` refreshed); `acos-art` green
+  with the cgroup-test split (`--test-threads=1 --skip
+  refuses_to_run_when_no_cgroup_can_be_created`, 14 suites, 0 failed,
+  `art-tests.log` RC=0).
 - **Gaten (real ART, `--engine art`, APK read-only):**
 
   | scenario | runs | result |
   |---|---:|---|
-  | `scenarios/gaten-content-welcome.yaml` (launch content → assert welcome copy → content tap) | 3 | **pass 3/3**; launch, `assert_text` and `tap` each record `settle.mode:"content"`, `window_ms:300`, `traversals` 16–17 and a signature; content settle 694–≈750 ms, scenario wall 3.19 s |
+  | `scenarios/gaten-content-welcome.yaml` (launch content → assert welcome copy → content tap) | 3 | **pass 3/3** (`content-reps.log`); launch, `assert_text` and `tap` each record `settle.mode:"content"`, `window_ms:300`, `traversals:15` and signature `470c294c658e68bd`; content settle p50 **740 ms** (730/740/743), scenario wall p50 3.11 s |
   | `scenarios/negative/gaten-content-welcome-wrong.yaml` (wrong text on the content-settled tree) | 3 | **fail / `ASSERTION_FAILED` 3/3** |
   | `scenarios/negative/gaten-content-pixel.yaml` (region pixels after content settle) | 3 | **fail / `ASSERTION_FAILED` 3/3** with `details.reason:"content_settle_pixel"` |
 
@@ -2473,10 +2480,30 @@ acquisition per batch; APK read-only `e04c7ffc…`; scratch `.cache/se2`.
 - **Latency:** strict default path untouched (no extra traversal, no extra
   field on the strict path; the only added work is a `None`-check and the
   content-mode branch, which is never taken by a strict step). Interleaved A/B
-  main vs branch, `--groups "a:latency:8G:300" --latency-reps 12`, 3 reps:
-  M4–M8 strict p50 within +5 % / 2 ms. Content settle on the Gaten welcome
-  screen: see `results/handoff/SE2.md` §4 (≈0.7 s, versus the strict TIMEOUT it
-  replaces).
+  (main arm `/home/Qui/Projects/acos/.cache/wt-abmain2`, target
+  `.cache/ab-target`, never built there; branch arm `.cache/k5-target`),
+  `ACOS_BENCH_TASK=SE2 acos-bench.sh --reps 1 --groups "a:latency:8G:300"
+  --latency-reps 12 --no-build`, 3 interleaved rounds, strict p50 per round:
+
+  | metric | main p50 (r1,r2,r3) | branch p50 (r1,r2,r3) | Δ p50 |
+  |---|---:|---:|---:|
+  | M4 launch strict | 308.4 / 321.9 / 308.9 | 349.9 / 308.5 / 308.8 | **−0.0 %** (−0.1 ms) |
+  | M5 screenshot | 26.4 / 26.9 / 25.0 | 24.6 / 23.8 / 23.7 | −9.8 % |
+  | M6 reset strict | 335.6 / 335.9 / 332.3 | 335.2 / 337.5 / 348.9 | +0.6 % (+1.9 ms) |
+  | M7 UI tree strict | 41.1 / 41.0 / 41.1 | 41.4 / 41.3 / 41.2 | +0.5 % (+0.2 ms) |
+  | M8 tap→settled counter strict | 967.5 / 950.8 / 954.9 | 958.5 / 953.0 / 951.3 | −0.2 % (−1.9 ms) |
+  | M8 tap→settled form strict | 944.4 / 949.3 / 941.3 | 952.4 / 949.6 / 941.4 | +0.6 % (+5.2 ms) |
+
+  Every M4–M8 strict p50 is inside +5 % (the largest is M6 +0.6 % / +1.9 ms;
+  M8-form +5.2 ms is 0.55 % and smaller than that metric's own rep spread of
+  8 ms), and the launch/tap fast rows are unchanged too (M4 fast +0.1 %, tap
+  fast +4.2 % within its 4.3 ms spread). The branch binary in this A/B is the
+  final one (`content_settle_unhonored` present; `strings` verified).
+  **Content settle on the Gaten welcome screen: p50 740 ms** over the 3 runs
+  (signature-identical), **versus strict on the same screen: `TIMEOUT`** — a
+  strict fresh capture fails after 1555 ms with `reason:"newer-store"`
+  (`.cache/se2/strict-timeout.json`), i.e. the rule replaces an honest
+  non-pass with a measured content verdict.
 - **Conclusion / next:** G3e has an answer that never weakens an assertion: a
   content-stable screen can now back UI/text claims (`settle: content` is the
   documented rule), while every pixel claim on it fails closed. `settle: fast`
@@ -2531,7 +2558,7 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | G3b | **Strict-settle probe wake over-driven the guest**: 20 ms host requests re-asked even after a sample arrived (~50 full tree walks/s under the 10 s Reanimated loop); likely the `probe-floor` starvation. Fixed to 50 ms and no re-ask until the probe sequence moves | probe liveness / tree age | no probe-floor at long n | medium | low | low | **fixed in code, E13.7; still prove at a 60 s pathological n** |
 | G3c | **First frame can be a near-empty tree** (1 node in GR3, **10 nodes in 34 % of 60 measured launches**, 243 two seconds later). Fixed (E13.8): `ArtSession::bind_first_frame` re-traverses while the tree is still the window skeleton (no text/content-desc/hint, ≤ 40 nodes) within 900 ms / 4 traversals; a retry that does not settle rolls the frame *and* its settle verdict back, so no launch turns into a TIMEOUT; a frame that never gains content is `first_frame.placeholder` + `meaningful:false` | first-frame predicate / Gaten first paint | launch frame is the app's content | medium | medium | medium | **done, E13.8** (34 % thin → 0/40; launch p50 2.336 → 2.433 s) |
 | G3d | **Gaten launch SIGSEGV** (1 of 6 `gaten-tabs` runs in GR3): `SIGSEGV code 2 (SEGV_ACCERR)`, thread 2 `com.gaten`, libc frame. Root cause named (E13.8): GWP-ASan's sampled-allocation backtrace, `android_unsafe_frame_pointer_chase+0x117` (`mov 0x8(%r12),%rcx`) reading a stack guard page; the only GOT consumer of that function in libc is `MaybeInitGwpAsan`. Fixed by keeping the sampled allocator out of guests | ART guest native fault | name the faulting frame, then 10/10 | high | low | low | **done, E13.8** (forced-on 4/4 crash reproduces it; default 40/40 clean) |
-| G3e | **No verification semantics for a screen that animates forever in a region that does not matter.** Options (stable tree content, region mask, navigation-only fast, explicit non-settle assertion) + false-pass analysis in `results/gaten/GR3.md` §4.3 | verify semantics | owner decision | — | — | — | **owner decision; do not weaken until then** |
+| G3e | **No verification semantics for a screen that animates forever in a region that does not matter.** Options (stable tree content, region mask, navigation-only fast, explicit non-settle assertion) + false-pass analysis in `results/gaten/GR3.md` §4.3 | verify semantics | owner decision | — | — | — | **done, E13.16 (ADR-0026 #3): `settle: content`** — content-stable window backs UI/text assertions; pixel assertions fail closed; `fast` stays navigation-only |
 | G4a | **The tree reports `visible=false` for a node whose pixels the app painted** (GR4). `tree/18.json`: the bottom bar's active label `[512,2214][642,2251]` is `visible: false` because it lies below the root's `visible_bounds` bottom (`2209`) in a `insets: carve` session, while the bound frame `frames/18.png` paints its glyphs at png `y 2088–2122`, `x 513–640` (bounds − `display_origin.y` 128). AOSP's `View.getGlobalVisibleRect` intersects with the display and ancestor clips, not with the nav-bar band, so a real a11y tree reports it visible (a tap there would still land on the system bar, so fail-closed is defensible — the *classification* is what is inconsistent). Lowest layer: per-node `visible`/`visible_bounds` vs the carved visible frame, surfaced as `ELEMENT_OFFSCREEN` (`crates/acos-verify/src/native.rs`). Verification false-negative only, **never a false pass**. Worked around in scenarios: target the tab pressable's `content_desc`, never the label (`results/gaten/GR4.md` §2.2, §5) | node visibility vs frame | classification matches the pixels | high (tree + frame, same bound frame) | low (decide the policy, then align) | low | **open, found by GR4 (E13.9)** |
 | G4b | **Tree frame metadata reports `density: 420` for a `density_dpi: 400` run** (GR4): every `tree/*.json` frame record says 420 while `repro.json`/`verdict.json` echo the scenario's 400. Either the guest boots at the reference 420 on this path or the tree's `FrameMeta` is stamped from the reference default; not root-caused. Consequence: density-dependent geometry cannot be audited from tree metadata, which is exactly the density-fix area. Pixels are correct either way (116 px wordmark glyphs, GR4 §4) | tree/frame metadata integrity | metadata agrees with the launch spec | high (36 runs, all 420) | low (thread the launch density into the tree record) | low | **open, found by GR4 (E13.9)** |
 | G4c | **A scenario can pass 3/3 while proving nothing, and nothing in the harness notices** (GR4). A `tap` on a control that is already in the asserted state writes nothing — Gaten's Kanji reference `select()` returns early when `next === source`, and the guest's default was already the asserted value — so the post-tap assertions hold on state that never changed. The only evidence was pixel-level: the before/after bound captures were byte-identical (0 changed px) where the claim needs a change. Candidate: an explicit step (`expect_change` / `assert_frame_differs`) or a writer-side rule that a `capture` pair around a mutating tap must differ, so a vacuous flow fails instead of passing. Worked around in GR4 by asserting the hub label's *other* value is absent at each hop and by diffing the captures by hand (`results/gaten/GR4.md` §2.3) | verify semantics / false-pass class | no vacuous pass | high (reproduced + rewritten) | medium (new step + schema + provenance rule) | medium (a legitimate no-op must stay expressible) | **open, found by GR4 (E13.9)** |

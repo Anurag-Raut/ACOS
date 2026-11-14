@@ -346,6 +346,15 @@ pub fn run_scenario(
             &mut capabilities_used,
         )
         };
+        // ---- SE2: a requested content settle must be honoured ----------------
+        // If a step asked for `settle: content` and the backend returned a
+        // frame with no content record (or another rule's record), the step did
+        // not get the rule it asked for. Fail closed instead of letting a
+        // strict/fast observation stand in for a content-stable one.
+        let exec = match content_settle_unhonored(step, &exec) {
+            Some(failure) => failure,
+            None => exec,
+        };
         // ---- SE1: the opt-in `expect_change` rule ---------------------------
         // P12 keeps "a step whose action changed no pixels still settles and
         // passes"; `expect_change: true` is the per-step opt-in that turns the
@@ -1615,6 +1624,82 @@ fn fast_bound_failure(kind: &str) -> StepExec {
     })
 }
 
+/// SE2: did a step request `settle: content` without receiving a content
+/// record?
+///
+/// A backend that cannot implement the content rule must not answer as if it
+/// had: the scenario asked for content-stable evidence, and a strict/fast (or
+/// absent) record is not that. This is the one place the mode is enforced from
+/// the scenario side, so no future backend can silently downgrade it.
+fn content_settle_unhonored(step: &Step, exec: &StepExec) -> Option<StepExec> {
+    let requested = match step.as_step() {
+        Some(StepRef::Tap(tap)) => matches!(tap.settle, Some(StepSettle::Content)),
+        Some(StepRef::Type(ty)) => matches!(ty.settle, Some(StepSettle::Content)),
+        Some(StepRef::Key(key)) => matches!(key.settle, Some(StepSettle::Content)),
+        Some(StepRef::Launch(launch)) => matches!(launch.settle, Some(StepSettle::Content)),
+        _ => false,
+    };
+    if !requested || exec.status != Status::Pass {
+        return None;
+    }
+    let settle = exec
+        .observation
+        .as_ref()
+        .and_then(|observation| {
+            observation
+                .settle
+                .clone()
+                .or_else(|| observation.input.as_ref()?.settle.clone())
+        })
+        .or_else(|| exec.settle.clone());
+    if settle
+        .as_ref()
+        .and_then(|settle| settle.get("mode"))
+        .and_then(serde_json::Value::as_str)
+        == Some("content")
+    {
+        return None;
+    }
+    let mut failure = StepExec::failed(Evaluated {
+        result: AssertionResult {
+            kind: "settle".to_string(),
+            passed: false,
+            diff: Some(AssertionDiff {
+                expected: serde_json::json!({"settle": "content"}),
+                actual: settle.unwrap_or(serde_json::Value::Null),
+                path: Some("step.settle".to_string()),
+                detail: Some(
+                    "the step asked for `settle: content` but the backend returned no content \
+                     record, so the content-stable rule was not applied"
+                        .to_string(),
+                ),
+            }),
+            matched_node_ids: Vec::new(),
+            message: None,
+        },
+        error: Some(BackendError::Protocol {
+            code: ErrorCode::UnsupportedAssertion,
+            detail: format!(
+                "{}: `settle: content` was requested but this backend supplied no content \
+                 settle record",
+                step.kind()
+            ),
+            hint: Some(
+                "An unapplied settle rule never passes. Run the step on the ART engine \
+                 (which implements `settle: content`), or drop the option and say what rule \
+                 actually backs the observation."
+                    .to_string(),
+            ),
+            details: Some(serde_json::json!({
+                "reason": "content_settle_unhonored",
+                "step_kind": step.kind(),
+            })),
+        }),
+    });
+    failure.observation = exec.observation.clone();
+    Some(failure)
+}
+
 /// SE2: a pixel/frame assertion whose bound frame was only content-settled.
 ///
 /// `settle: content` proves that the UI tree content (text, nodes, bounds,
@@ -2737,6 +2822,26 @@ mod content_settle_tests {
         ));
         let fast = fast_bound_failure(parsed.steps[1].kind());
         assert_eq!(fast.error.as_ref().unwrap().code, ErrorCode::AssertionFailed);
+    }
+
+    /// SE2: a step that asks for content settle and gets no content record
+    /// fails closed (no backend can silently downgrade the rule).
+    #[test]
+    fn a_content_step_without_a_content_record_fails_closed() {
+        let parsed = scenario(&format!(
+            "{HEADER}  - tap: {{x: 1, y: 2, settle: content}}\n"
+        ));
+        let step = &parsed.steps[1];
+        let mut exec = StepExec::pass();
+        exec.settle = Some(serde_json::json!({"mode": "strict", "settled": true}));
+        let failure = content_settle_unhonored(step, &exec).expect("downgrade is refused");
+        assert_eq!(failure.status, Status::Unsupported);
+        assert_eq!(
+            failure.error.as_ref().unwrap().code,
+            ErrorCode::UnsupportedAssertion
+        );
+        exec.settle = Some(content_record());
+        assert!(content_settle_unhonored(step, &exec).is_none());
     }
 
     /// SE2: `expect_change` (a pixel claim) cannot combine with content settle.

@@ -775,7 +775,10 @@ frame and pixel assertions work again — pixels are settled by pixels.
 
 `settle:"fast"` is unchanged: it is immediate navigation and never backs a
 pass. `expect_change: true` (a pixel claim) with `settle: content` is
-`INVALID_SCENARIO`, exactly like `fast`.
+`INVALID_SCENARIO`, exactly like `fast`. If a backend cannot supply a content
+record for a step that asked for `settle: content`, the step fails closed with
+`UNSUPPORTED_ASSERTION`, `details.reason:"content_settle_unhonored"` — the rule
+is never silently downgraded to strict/fast.
 
 ### 8.6.5 `animations:"on"|"off"` (P12)
 
