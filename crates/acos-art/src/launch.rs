@@ -5243,9 +5243,19 @@ fn interactive_serve(
                     SettleEnd::Unsupported(marker) => {
                         let reply = serde_json::json!({
                             "ok": false, "cmd": cmd, "code": "UNSUPPORTED_ANDROID_API",
+                            // The guest's own `detail` is part of the message: the
+                            // host turns it into a situation-specific hint (an
+                            // implicit-intent `startActivity` has no Settings/browser
+                            // to reach, which is a different next action from "this
+                            // launcher has no second Activity").
                             "error": format!(
-                                "the app called {} and the launcher has no multi-Activity path; the guest stayed alive and no Activity was fabricated",
-                                marker.get("call").and_then(|v| v.as_str()).unwrap_or("startActivity")
+                                "the app called {} and the launcher has no multi-Activity path; the guest stayed alive and no Activity was fabricated{}",
+                                marker.get("call").and_then(|v| v.as_str()).unwrap_or("startActivity"),
+                                marker
+                                    .get("detail")
+                                    .and_then(|v| v.as_str())
+                                    .map(|detail| format!(" ({detail})"))
+                                    .unwrap_or_default()
                             ),
                             "unsupported": marker,
                             "gesture": {"seqs": injected.seqs, "token": format!("{:#x}", injected.token.0)},
@@ -5262,9 +5272,15 @@ fn interactive_serve(
                             let reply = serde_json::json!({
                                 "ok": false, "cmd": cmd, "code": "UNSUPPORTED_ANDROID_API",
                                 "error": format!(
-                                    "the app called {} and the launcher has no multi-Activity path",
+                                    "the app called {} and the launcher has no multi-Activity path{}",
                                     marker.as_ref().and_then(|m| m.get("call")).and_then(|v| v.as_str())
-                                        .unwrap_or("startActivity")
+                                        .unwrap_or("startActivity"),
+                                    marker
+                                        .as_ref()
+                                        .and_then(|m| m.get("detail"))
+                                        .and_then(|v| v.as_str())
+                                        .map(|detail| format!(" ({detail})"))
+                                        .unwrap_or_default()
                                 ),
                                 "unsupported": marker,
                                 "gesture": {"seqs": injected.seqs, "token": format!("{:#x}", injected.token.0)},
@@ -6256,6 +6272,8 @@ fn build_launch_guest(root: &ArtRoot) -> Result<PathBuf> {
     let _ = fs::remove_dir_all(&classes);
     fs::create_dir_all(&classes)?;
     let out = Command::new(&javac)
+        // JVM dumps go to ACOS scratch, never the caller's cwd (`crate::jvm`).
+        .args(crate::jvm::dump_args())
         .args(["-nowarn", "-source", "11", "-target", "11"])
         .arg("-cp")
         .arg(&android_jar)
@@ -6274,6 +6292,7 @@ fn build_launch_guest(root: &ArtRoot) -> Result<PathBuf> {
     walk_classes(&classes, &mut class_files)?;
     class_files.sort();
     let out = Command::new(&d8)
+        .args(crate::jvm::dump_args())
         .arg("--lib")
         .arg(&android_jar)
         .args(["--min-api", "34", "--output"])

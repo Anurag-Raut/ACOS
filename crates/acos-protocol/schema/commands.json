@@ -991,7 +991,7 @@
       "type": "object"
     },
     "Fidelity": {
-      "description": "How faithful the execution behind a result is.\n\n* `static-analysis` — host parsing only. Proves nothing about runtime behaviour. * `jvm-reference` — host OpenJDK. Proves pure-Java semantics only; never Android/ART/framework/JNI/rendering behaviour. * `native-runtime` — executed by ACOS itself (its Rust VM/loader/renderer). This is **not** validated against ART unless `validated_against` says so. * `art-reference` — real ART on a reference Android image. Authoritative for Android framework behaviour at the stated API/ABI. * `physical-device` — a real device/OEM target. * `simulated` — a mock/stub path. A simulated success is not an Android success.",
+      "description": "How faithful the execution behind a result is.\n\n* `static-analysis` — host parsing only. Proves nothing about runtime behaviour. * `jvm-reference` — host OpenJDK. Proves pure-Java semantics only; never Android/ART/framework/JNI/rendering behaviour. * `native-runtime` — executed by ACOS itself (its Rust VM/loader/renderer). This is **not** validated against ART unless `validated_against` says so. * `art-reference` — real ART on a reference Android image. Authoritative for Android framework behaviour at the stated API/ABI. * `physical-device` — a real device/OEM target. * `simulated` — a mock/stub path. A simulated success is not an Android success. * `n/a` — a **meta** reply: a tool that reports on ACOS itself (`acos_help`, `acos_capabilities`, `acos_doctor`). It says nothing about app behaviour, so labelling it `static-analysis` would imply the reply was derived from the APK. `n/a` never satisfies a fidelity requirement and is never a pass.",
       "oneOf": [
         {
           "description": "Static host analysis only.",
@@ -1032,6 +1032,13 @@
           "description": "Mocked/simulated behaviour.",
           "enum": [
             "simulated"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Not applicable: a meta reply about ACOS itself (help/capabilities/doctor).",
+          "enum": [
+            "n/a"
           ],
           "type": "string"
         }

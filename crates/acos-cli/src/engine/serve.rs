@@ -887,7 +887,7 @@ impl ServeEngine {
             "acos_text" => type_text(&mut session, args),
             "acos_key" => key(&mut session, args),
             "acos_assert" => assert(&mut session, args, trust),
-            "acos_logs" => logs(&mut session),
+            "acos_logs" => logs(&mut session, args),
             "acos_status" => Ok(status_value(&session)),
             "acos_reset" => reset(&mut session, args),
             "acos_swipe" => Err(BackendError::unsupported(
@@ -1780,9 +1780,85 @@ fn regex_lite_matches(pattern: &str, text: &str) -> Result<bool, String> {
     Ok(tree.find_one(&selector).is_some())
 }
 
-fn logs(session: &mut ArtSession) -> Result<Value, BackendError> {
+/// The **default** log view: `min_priority` `W` plus the app's own package.
+///
+/// Why: an agent that calls `acos_logs` to learn what the app said got ~235
+/// lines of SoLoader/ViewManagerPropertyUpdater noise before the first
+/// app-specific record, and paid for all of it in context. The default now
+/// keeps records at warning or above **and** anything whose tag or message
+/// names the launched package — a two-line view of the same run.
+///
+/// Nothing is lost: the guest buffer is untouched (and `logs/logcat.txt` in a
+/// verify run is still the full log), `"all": true` or `min_priority: "V"`
+/// returns every record, and an explicit `tag` narrows further.
+fn logs(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let records = session.logs_since(0)?;
     let crash = session.last_crash();
+    let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
+    let requested = args.get("min_priority");
+    let explicit_priority = match requested {
+        None | Some(Value::Null) => None,
+        Some(value) => {
+            let text = match value {
+                Value::String(text) => text.clone(),
+                Value::Number(number) => number.to_string(),
+                other => other.to_string(),
+            };
+            match acos_runtime::session::parse_log_priority(&text) {
+                Some(priority) => Some(priority),
+                None => {
+                    return Err(BackendError::Error {
+                        code: ErrorCode::InvalidArgument,
+                        detail: format!(
+                            "min_priority `{text}` is not a logcat priority; use V/D/I/W/E/F or 2..7"
+                        ),
+                    })
+                }
+            }
+        }
+    };
+    let tag = args
+        .get("tag")
+        .and_then(Value::as_str)
+        .map(str::to_ascii_lowercase);
+    let package = session.package().to_string();
+    // An explicit request disables the default package union: the caller asked
+    // for one filter and must get exactly that.
+    let default_view = !all && explicit_priority.is_none() && tag.is_none();
+    let floor = if all {
+        2
+    } else {
+        explicit_priority.unwrap_or(5)
+    };
+    let package_filter = default_view && !package.is_empty();
+    let total = records.len();
+    let package = if package_filter {
+        Some(package.as_str())
+    } else {
+        None
+    };
+    let records: Vec<_> = records
+        .into_iter()
+        .filter(|record| {
+            keep_log_record(
+                log_level_rank(record.level),
+                &record.tag,
+                &record.message,
+                floor,
+                tag.as_deref(),
+                package,
+            )
+        })
+        .collect();
+    let filtered = total - records.len();
+    let min_priority = match floor {
+        2 => "V",
+        3 => "D",
+        4 => "I",
+        5 => "W",
+        6 => "E",
+        _ => "F",
+    };
     let lines: Vec<Value> = records
         .iter()
         .map(|record| {
@@ -1806,9 +1882,21 @@ fn logs(session: &mut ArtSession) -> Result<Value, BackendError> {
     Ok(json!({
         "launched": true,
         "stage_reached": "first_frame",
-        "total": records.len(),
+        "total": total,
         "count": records.len(),
         "collapsed": 0,
+        "filter": {
+            "min_priority": min_priority,
+            "package": if package_filter { json!(package) } else { Value::Null },
+            "default_view": default_view,
+            "dropped": filtered,
+            "note": if default_view {
+                "default view: priority >= W plus records naming the app package; pass \
+                 \"all\": true (or min_priority \"V\") for the whole buffer"
+            } else {
+                "explicit filter applied; the guest buffer and logs/logcat.txt keep every record"
+            },
+        },
         "logs": lines,
         "crash": crash.map(|crash| json!({
             "exception": crash.exception,
@@ -1837,6 +1925,43 @@ fn merge_zygote_fields(result: &mut Value, session: &ArtSession) {
     for (key, value) in fields {
         object.insert(key, value);
     }
+}
+
+/// logcat priority rank for a [`LogLevel`] (`2` = verbose … `6`/`7` = error).
+fn log_level_rank(level: LogLevel) -> i32 {
+    match level {
+        LogLevel::Verbose => 2,
+        LogLevel::Debug => 3,
+        LogLevel::Info => 4,
+        LogLevel::Warn => 5,
+        LogLevel::Error => 6,
+    }
+}
+
+/// One record's fate under the applied filter.
+///
+/// * an explicit `tag` substring is a hard AND filter (the caller asked for it);
+/// * a record at or above `floor` is kept;
+/// * otherwise a record is kept only when the default view is on **and** its tag
+///   or message names the app's own package (so the app's `I`-level line about
+///   itself survives the `W` floor while framework noise does not).
+fn keep_log_record(
+    rank: i32,
+    tag: &str,
+    message: &str,
+    floor: i32,
+    tag_filter: Option<&str>,
+    package: Option<&str>,
+) -> bool {
+    if let Some(filter) = tag_filter {
+        if !tag.to_ascii_lowercase().contains(filter) {
+            return false;
+        }
+    }
+    if rank >= floor {
+        return true;
+    }
+    package.is_some_and(|package| tag.contains(package) || message.contains(package))
 }
 
 fn status_value(session: &ArtSession) -> Value {
@@ -2656,6 +2781,88 @@ fn sanitize_session_id(id: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::{keep_log_record, log_level_rank};
+    use acos_protocol::LogLevel;
+
+    /// FB6 (5): the default log view is `W` + the app's own package.
+    #[test]
+    fn default_log_view_drops_framework_info_but_keeps_app_lines_and_warnings() {
+        let pkg = Some("dev.acos.fixtures.counter");
+        // Framework `I` noise before the app ever spoke.
+        assert!(!keep_log_record(
+            log_level_rank(LogLevel::Info),
+            "SoLoader",
+            "libworklets.so found",
+            5,
+            None,
+            pkg
+        ));
+        // The app's own `I` line names the package: kept in the default view.
+        assert!(keep_log_record(
+            log_level_rank(LogLevel::Info),
+            "AcosCounter",
+            "dev.acos.fixtures.counter: onCreate",
+            5,
+            None,
+            pkg
+        ));
+        // A warning is agent-relevant even when it names nothing.
+        assert!(keep_log_record(
+            log_level_rank(LogLevel::Warn),
+            "ViewRootImpl",
+            "sendUserActionEvent() returned",
+            5,
+            None,
+            pkg
+        ));
+        // An error is kept.
+        assert!(keep_log_record(
+            log_level_rank(LogLevel::Error),
+            "AndroidRuntime",
+            "FATAL EXCEPTION",
+            5,
+            None,
+            pkg
+        ));
+        // `min_priority: "V"` (floor 2) or `all: true` keeps everything, package or not.
+        assert!(keep_log_record(
+            log_level_rank(LogLevel::Verbose),
+            "SoLoader",
+            "noise",
+            2,
+            None,
+            pkg
+        ));
+        // An explicit tag filter is a hard AND filter: nothing else survives it.
+        assert!(!keep_log_record(
+            log_level_rank(LogLevel::Error),
+            "AndroidRuntime",
+            "FATAL EXCEPTION",
+            5,
+            Some("acoscounter"),
+            pkg
+        ));
+        // An explicit `tag` narrows but does not lift the priority floor: an
+        // `I`-level record of that tag needs `min_priority: "V"` (floor 2) —
+        // which is also what `all: true` selects.
+        assert!(!keep_log_record(
+            log_level_rank(LogLevel::Info),
+            "AcosCounter",
+            "onCreate",
+            5,
+            Some("acoscounter"),
+            pkg
+        ));
+        assert!(keep_log_record(
+            log_level_rank(LogLevel::Info),
+            "AcosCounter",
+            "onCreate",
+            2,
+            Some("acoscounter"),
+            pkg
+        ));
+    }
+
     use super::*;
     use acos_protocol::ui::Bounds;
 

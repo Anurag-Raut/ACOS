@@ -16,7 +16,7 @@ use acos_protocol::Fidelity;
 use serde_json::{json, Value};
 
 use crate::backend::{BackendInfo, Capabilities};
-use crate::descriptors::{command_fidelity, tool_infos};
+use crate::descriptors::{command_fidelity, tool_infos, ToolInfo};
 
 /// The agent guide, embedded at build time from `docs/AGENT_GUIDE.md`.
 ///
@@ -34,6 +34,33 @@ pub const TOPICS: &[&str] = &["overview", "workflow", "cli", "scenarios", "error
 
 /// `topic: "all"` returns everything.
 pub const ALL_TOPIC: &str = "all";
+
+/// The MCP cheat-sheet topic.
+///
+/// Unlike every other topic it is not a section of `docs/AGENT_GUIDE.md`: it is
+/// **generated from the live tool descriptors** on every reply (see
+/// [`mcp_topic`]), because the advertised tool set changes with the build. A
+/// hand-written tool table would drift the day a tool is added, renamed or
+/// hidden again — and an agent that trusts a stale table wastes a round trip per
+/// wrong call.
+pub const MCP_TOPIC: &str = "mcp";
+
+/// Topics that are generated from code instead of sliced out of the guide.
+pub const GENERATED_TOPICS: &[&str] = &[MCP_TOPIC];
+
+/// Every topic name `acos_help {"topic": ...}` accepts, guide sections first.
+#[must_use]
+pub fn topic_list() -> Vec<&'static str> {
+    let mut topics: Vec<&'static str> = TOPICS.to_vec();
+    topics.extend_from_slice(GENERATED_TOPICS);
+    topics
+}
+
+/// Is `topic` one this build serves?
+#[must_use]
+pub fn is_topic(topic: &str) -> bool {
+    topic == ALL_TOPIC || topic_list().contains(&topic)
+}
 
 /// The whole guide, trimmed.
 #[must_use]
@@ -73,9 +100,260 @@ pub fn guide(topic: Option<&str>) -> String {
     match topic {
         None => skeleton(),
         Some(ALL_TOPIC) => full_guide(),
+        // The generated topics need live descriptors; without a capability
+        // snapshot only the always-available server tools can be advertised,
+        // which would be a *wrong* table. Callers that have a snapshot use
+        // [`guide_with`].
+        Some(MCP_TOPIC) => mcp_topic(&tool_infos(&Capabilities::unprobed())),
         Some(topic) if TOPICS.contains(&topic) => section(topic).unwrap_or_else(skeleton),
         Some(_) => skeleton(),
     }
+}
+
+/// [`guide`] for a request the server answered with a live capability snapshot:
+/// the generated topics (`mcp`) are built from the advertised tool set.
+#[must_use]
+pub fn guide_with(topic: Option<&str>, infos: &[ToolInfo]) -> String {
+    match topic {
+        Some(MCP_TOPIC) => mcp_topic(infos),
+        other => guide(other),
+    }
+}
+
+/// The `mcp` topic: a table of **every advertised MCP tool** -> required and
+/// optional arguments -> one example call -> what it returns, plus the recipes
+/// that used to be impossible to answer from the tool list alone.
+///
+/// Generated: the rows come from the same descriptors `tools/list` serves, so a
+/// tool that is added, renamed, gains an argument or is hidden appears (or
+/// disappears) here in the same build. Tools that are not advertised are not
+/// listed at all — `acos_help` must not teach a call that returns
+/// `unsupported`.
+#[must_use]
+pub fn mcp_topic(infos: &[ToolInfo]) -> String {
+    let mut out = String::new();
+    out.push_str("## MCP tools (this build, generated from the live tool list)\n\n");
+    out.push_str(
+        "Each row is a tool `tools/list` advertises right now: the arguments it takes, one call \
+         you can paste, and what comes back. `session_id` defaults to this server's own session \
+         (`mcp-<pid>`), so a single-agent loop never has to pass one. Tools that are NOT in this \
+         table are not implemented by this build and are not advertised; a call to one still \
+         returns a structured `unsupported` rather than a fake pass.\n\n",
+    );
+    out.push_str("| tool | required | optional | example | returns |\n");
+    out.push_str("|---|---|---|---|---|\n");
+    for tool in infos.iter().filter(|tool| tool.available) {
+        let required = required_args(&tool.input_schema);
+        let optional = optional_args(&tool.input_schema);
+        out.push_str(&format!(
+            "| `{}` | {} | {} | `{}` | {} |\n",
+            tool.tool_name,
+            list_cell(&required),
+            list_cell(&optional),
+            example_call(tool),
+            tool_returns(tool),
+        ));
+    }
+    out.push_str(
+        "\n### Recipes\n\n\
+         * **Take a screenshot.** Today the MCP path has no capture tool. Either (a) put a \
+         `capture: {name: shot, format: png, fresh: true}` step in the `acos_verify` scenario — the \
+         PNG lands as `frames/<seq>.png` under the artifacts directory and the step JSON names it — \
+         or (b) with the CLI on a live daemon session, `acos observe --screenshot out/shot.png \
+         --json`. Coming: `screenshot: true` on `acos_observe_tree`, returning the PNG path in the \
+         reply (never a silent no-op; a frame with no pixels becomes `NO_FRESH_FRAME`).\n\
+         * **Type into a field.** `acos_observe_tree` -> `acos_tap {\"id\": \"...\"}` or \
+         `{\"text\": \"...\"}` on the field -> `acos_text {\"text\": \"Ada\"}` -> `acos_observe_tree` \
+         again to read the value. Type goes to the *focused* editor through the real \
+         `InputConnection`; if the reply is `ELEMENT_NOT_FOUND` with `details.kind` \
+         `NoFocusedEditor`, the tap did not land on an editable field. Live-session typing is the \
+         one step that is still a gap on some builds — if `acos_text` answers \
+         `UNSUPPORTED_BACKEND`, put the same interaction in a scenario `type:` step and run \
+         `acos_verify`, which uses the same channel family and does work.\n\
+         * **Find a control by `content_desc`.** `acos_observe_tree` returns every node with \
+         `text` *and* `content_desc`; an icon button usually has an empty `text` and its name in \
+         `content_desc` (for example `\"Search Japanese dictionary\"`). Select by it in a scenario \
+         with `selector: {content_desc: {contains: Search}}`, and tap by handing the label to \
+         `acos_tap {\"text\": ...}` (text or content-desc) or by computing the centre of the node's \
+         `bounds` and tapping `x`/`y`. Never guess a coordinate from a screenshot: PNG space is \
+         offset by `frame.display_origin`.\n\
+         * **Prove a flow.** Write a YAML scenario (`acos_help {\"topic\": \"scenarios\"}) and run \
+         `acos_verify {\"apk\": ..., \"scenario\": ...}` (real ART by default). Read \
+         `verdict.json`, the per-step JSON and the referenced frames: a `pass` counts only with its \
+         evidence on disk, and `expect_change: true` on the taps whose point is to change the screen \
+         is what makes the pass mean something.\n\
+         * **Assert, do not eyeball.** `assert_text` with `bounds`, `assert_visible` / \
+         `assert_not_visible` (collapsed content stays in the tree with `visible: false`) and \
+         `assert_log` turn a visual claim into a machine check with a diff.\n",
+    );
+    out.trim_end().to_string()
+}
+
+fn list_cell(names: &[String]) -> String {
+    if names.is_empty() {
+        "-".to_string()
+    } else {
+        names
+            .iter()
+            .map(|name| format!("`{name}`"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+fn schema_properties(schema: &Value) -> Vec<String> {
+    schema
+        .get("properties")
+        .and_then(Value::as_object)
+        .map(|map| map.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
+/// `base` is the identity envelope every tool carries (`request_id` /
+/// `session_id`); a cheat sheet says `session_id` defaults to this server's own
+/// session, so repeating `base` in every row would be noise.
+fn required_args(schema: &Value) -> Vec<String> {
+    schema
+        .get("required")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .filter(|name| *name != "base")
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The one argument that makes an example worth pasting, for tools whose real
+/// input is optional in the schema (`acos_launch` without `apk` boots nothing).
+fn primary_args(tool_name: &str) -> &'static [&'static str] {
+    match tool_name {
+        "acos_launch" | "acos_verify" | "acos_inspect" | "acos_run" => &["apk"],
+        "acos_run_dex" => &["main"],
+        "acos_tap" => &["id"],
+        "acos_text" => &["text"],
+        "acos_key" => &["code"],
+        "acos_observe" => &["tree"],
+        "acos_swipe" => &["from", "to"],
+        _ => &[],
+    }
+}
+
+fn optional_args(schema: &Value) -> Vec<String> {
+    let required = required_args(schema);
+    // `base` is the identity envelope every session tool accepts; it is noise in
+    // a cheat sheet, so it is left out of the optional column.
+    schema_properties(schema)
+        .into_iter()
+        .filter(|name| !required.contains(name) && name != "base")
+        .collect()
+}
+
+/// A paste-able example for `tool`, built from its required arguments plus the
+/// one argument that actually selects what to act on.
+fn example_call(tool: &ToolInfo) -> String {
+    let mut names = required_args(&tool.input_schema);
+    for primary in primary_args(&tool.tool_name) {
+        if !names.iter().any(|name| name == primary) {
+            names.push((*primary).to_string());
+        }
+    }
+    let mut object = serde_json::Map::new();
+    for name in names {
+        let schema = tool
+            .input_schema
+            .get("properties")
+            .and_then(|props| props.get(&name))
+            .cloned()
+            .unwrap_or(Value::Null);
+        object.insert(name.clone(), sample_value(&name, &schema));
+    }
+    if object.is_empty() {
+        format!("{} {{}}", tool.tool_name)
+    } else {
+        format!("{} {}", tool.tool_name, Value::Object(object))
+    }
+}
+
+fn sample_value(name: &str, schema: &Value) -> Value {
+    match name {
+        "apk" => json!("fixtures/build/apps/counter.apk"),
+        "scenario" => json!("scenarios/counter.yaml"),
+        "artifacts" => json!("out/counter"),
+        "path" => json!("fixtures/build/dexprogs/01_hello/classes.dex"),
+        "main" => json!("Main"),
+        "action" => json!("tap"),
+        "scope" => json!("app"),
+        "topic" => json!(MCP_TOPIC),
+        "text" => json!("Increment"),
+        "code" => json!("back"),
+        "id" => json!("inc"),
+        "label" => json!("my-run"),
+        "tree" => json!(true),
+        "from" => json!({"x": 540, "y": 1800}),
+        "to" => json!({"x": 540, "y": 600}),
+        _ => match schema.get("type").and_then(Value::as_str) {
+            Some("integer") | Some("number") => json!(1),
+            Some("boolean") => json!(true),
+            Some("array") => json!([]),
+            Some("object") => json!({}),
+            _ => json!("<string>"),
+        },
+    }
+}
+
+/// What the tool returns, in one clause.
+///
+/// The table is explicit on purpose: a row that falls back to the generic text
+/// is a *documentation* bug, and `crates/acos-mcp/tests/guide.rs` fails when an
+/// advertised tool has no entry (so a new tool cannot ship undocumented here).
+fn tool_returns(tool: &ToolInfo) -> &'static str {
+    match tool.tool_name.as_str() {
+        "acos_launch" => {
+            "the launch ladder (`stages[]`), `reached_stage`, `package`/`activity`, \n`session_id`, `settle` and the frame identity; a non-ok rung carries the blocker"
+        }
+        "acos_observe_tree" => {
+            "`nodes[]` (id, class, resource_id, text, content_desc, bounds, visible/\nenabled/focused/clickable/scrollable), `windows`, `truncated`, `max_nodes`"
+        }
+        "acos_tap" => "`accepted`, `state_changed`, `input_ack_seq` and `pixels_changed` when it was measured",
+        "acos_text" => "`accepted`, `state_changed`, `text_path` (`input-connection` or `key-events`)",
+        "acos_key" => "`accepted`, `state_changed`, `input_ack_seq`",
+        "acos_swipe" => "`accepted`, `state_changed`, the injected gesture seqs",
+        "acos_logs" => "`logs[]` (priority, tag, message, line, repeat_count), `total`/`count`, `filter`, `stage_reached`, `crash`",
+        "acos_status" => "`launched`, `stage_reached`, `published_frames`, `package`/`activity`, `capabilities`",
+        "acos_doctor" => "`checks[]` with pass/fail and a concrete `fix` per failing check",
+        "acos_capabilities" => "the implemented command list, the resolved `acos` binary/version and the server limits",
+        "acos_help" => "`guide` (the requested section), `guide_topics`, `fidelity_rules`, `supported`/`unsupported`",
+        "acos_inspect" => "package, version, min/target SDK, launcher, permissions, components, DEX/native/asset inventory, signature schemes",
+        "acos_observe" => "the reference session's tree and/or text, plus frame metadata (frame_seq, cause_id, content_hash, meaningful)",
+        "acos_run" => "`session_id`, package, effective isolation/display/fidelity and optionally the first frame (reference engine)",
+        "acos_action" => "`accepted`, `state_changed`, the input-ack event seq and optionally a fresh frame",
+        "acos_verify" => "`verdict` (pass/fail/unsupported per step), reached fidelity, `repro`, artifact paths and the wall time",
+        "acos_reset" => "the relaunched session's ladder and a fresh frame identity (app data is empty)",
+        "acos_destroy" => "`destroyed` and the session id; idempotent",
+        "acos_run_dex" => "`exit_code`, `stdout`, `stderr` and any uncaught exception",
+        // Not advertised in this build (hidden), so never rendered; a new tool
+        // must add its own line here or the guide test fails.
+        _ => "see the tool description (no cheat-sheet entry yet: add one to `help::tool_returns`)",
+    }
+}
+
+/// True when [`tool_returns`] has a real entry (used by the guide test).
+#[must_use]
+pub fn has_returns_entry(tool_name: &str) -> bool {
+    !tool_returns(&ToolInfo {
+        tool_name: tool_name.to_string(),
+        command: None,
+        description: String::new(),
+        input_schema: Value::Null,
+        available: true,
+        fidelity: Fidelity::NotApplicable,
+        reason: None,
+    })
+    .starts_with("see the tool description")
 }
 
 /// One `<!-- topic:NAME -->` section of the guide.
@@ -206,7 +484,8 @@ pub fn build_help_topic(
             {"level": "native-runtime", "proves": "ACOS executed it; not ART-validated unless validated_against says so"},
             {"level": "art-reference", "proves": "real ART on a reference image; authoritative for the stated API/ABI"},
             {"level": "physical-device", "proves": "a real device/OEM target"},
-            {"level": "simulated", "proves": "the mock path only; not an Android success"}
+            {"level": "simulated", "proves": "the mock path only; not an Android success"},
+            {"level": "n/a", "proves": "nothing about app behaviour: this is a meta reply (help/capabilities/doctor) about ACOS itself"}
         ],
         "supported": supported,
         "unsupported": unsupported,
@@ -226,14 +505,13 @@ pub fn build_help_topic(
         "markdown": markdown,
         // The agent guide (embedded from `docs/AGENT_GUIDE.md`): the full text,
         // the requested topic when one was asked for, and the topic list.
-        "guide": guide(topic),
+        "guide": guide_with(topic, &infos),
         "guide_topic": match topic {
-            Some(topic) if topic == ALL_TOPIC => Some(ALL_TOPIC),
-            Some(topic) if TOPICS.contains(&topic) => Some(topic),
+            Some(topic) if is_topic(topic) => Some(topic),
             _ => None,
         },
-        "guide_unknown_topic": topic.is_some_and(|t| t != ALL_TOPIC && !TOPICS.contains(&t)),
-        "guide_topics": TOPICS,
+        "guide_unknown_topic": topic.is_some_and(|t| !is_topic(t)),
+        "guide_topics": topic_list(),
         "guide_all_topic": ALL_TOPIC,
         "guide_source": "docs/AGENT_GUIDE.md",
     })

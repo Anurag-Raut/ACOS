@@ -91,8 +91,8 @@ fn every_topic_slices_a_real_section() {
 fn the_default_help_reply_is_a_bounded_skeleton() {
     let skeleton = acos_mcp::help::guide(None);
     assert!(
-        skeleton.len() < 4000,
-        "the acos_help default reply is {} bytes; it must fit one frame",
+        skeleton.len() < 3072,
+        "the acos_help default reply is {} bytes; the budget is 3 KiB (FB6)",
         skeleton.len()
     );
     for expected in [
@@ -173,8 +173,8 @@ fn help_tool_serves_the_guide_and_its_topics() {
     // The default reply is the skeleton, not the whole 6.4k-token guide.
     assert_eq!(guide, acos_mcp::help::guide(None));
     assert!(
-        guide.len() < 4000,
-        "the default acos_help reply is {} bytes",
+        guide.len() < 3072,
+        "the default acos_help reply is {} bytes; the budget is 3 KiB",
         guide.len()
     );
     assert_eq!(
@@ -355,4 +355,215 @@ fn verify_android_flow_prompt_is_usable() {
     );
     let unknown = client.request("prompts/get", json!({"name": "nope"}));
     assert_eq!(unknown.pointer("/error/code").and_then(Value::as_i64), Some(-32602));
+}
+
+/// **FB6 (1): the `mcp` topic is generated from the live tool list.**
+///
+/// The cheat sheet an agent needs ("which tool, which arguments, what comes
+/// back") used to be unanswerable from `acos_help`: the workflow topic taught
+/// the *CLI*, so an MCP agent had to guess the tool for a screenshot. The table
+/// is generated from the same descriptors `tools/list` serves, so it cannot
+/// drift — and this test is the drift alarm:
+///
+/// * every **advertised** tool has a row, with a paste-able example and a real
+///   "what it returns" clause;
+/// * no **hidden** tool (a command this build does not implement) appears, so
+///   the guide never teaches a call that answers `unsupported`;
+/// * the topic is discoverable (its name is in `guide_topics` and in the
+///   default skeleton) and stays small.
+#[test]
+fn the_mcp_topic_is_generated_from_the_advertised_tools() {
+    let mut client = McpClient::with_real_acos();
+    client.initialize("2025-03-26");
+
+    // The advertised set, straight from `tools/list`.
+    let list = client.request("tools/list", json!({}));
+    let advertised: Vec<String> = list
+        .pointer("/result/tools")
+        .and_then(Value::as_array)
+        .expect("tools array")
+        .iter()
+        .filter_map(|tool| tool.get("name").and_then(Value::as_str))
+        .map(str::to_string)
+        .collect();
+    assert!(
+        advertised.iter().any(|name| name == "acos_verify"),
+        "the real backend must advertise acos_verify: {advertised:?}"
+    );
+
+    let reply = client.call_tool("acos_help", json!({"topic": "mcp"}));
+    assert!(!common::is_error(&reply), "acos_help mcp must not error: {reply}");
+    let envelope = common::envelope_of(&reply);
+    assert_eq!(
+        envelope.pointer("/result/guide_topic").and_then(Value::as_str),
+        Some("mcp")
+    );
+    assert_eq!(
+        envelope.pointer("/result/guide_unknown_topic"),
+        Some(&json!(false))
+    );
+    let topic = envelope
+        .pointer("/result/guide")
+        .and_then(Value::as_str)
+        .expect("result.guide");
+    assert!(topic.starts_with("## MCP tools"), "{topic}");
+    assert!(
+        envelope
+            .pointer("/result/guide_topics")
+            .and_then(Value::as_array)
+            .expect("guide_topics")
+            .iter()
+            .any(|name| name == "mcp"),
+        "the topic list must advertise `mcp`"
+    );
+
+    // Every advertised tool has a row, and that row is usable.
+    for name in &advertised {
+        let row = topic
+            .lines()
+            .find(|line| line.starts_with(&format!("| `{name}` |")))
+            .unwrap_or_else(|| panic!("the mcp topic has no row for advertised tool {name}:\n{topic}"));
+        let cells: Vec<&str> = row.trim_matches('|').split('|').map(str::trim).collect();
+        assert_eq!(cells.len(), 5, "a row must be tool|required|optional|example|returns: {row}");
+        assert!(
+            cells[3].starts_with(&format!("`{name} ")),
+            "the example call for {name} must be paste-able: {row}"
+        );
+        assert!(
+            !cells[4].contains("no cheat-sheet entry"),
+            "advertised tool {name} has no \"what it returns\" entry: {row}"
+        );
+    }
+
+    // No hidden tool: a protocol command this build does not implement is not in
+    // `tools/list` and must not be taught here either.
+    for hidden in [
+        "acos_capture",
+        "acos_assert",
+        "acos_events",
+        "acos_profile",
+        "acos_capability_report",
+    ] {
+        assert!(
+            !advertised.iter().any(|name| name == hidden),
+            "{hidden} must not be advertised by this build (test premise)"
+        );
+        assert!(
+            !topic.contains(&format!("`{hidden}`")),
+            "the mcp topic teaches hidden tool {hidden}"
+        );
+    }
+
+    // Recipes: the four questions agents actually asked, answered up front.
+    let workflow = acos_mcp::help::guide(Some("workflow"));
+    for expected in [
+        "Take a screenshot",
+        "Type into a field",
+        "content_desc",
+        "Prove a flow",
+        // The screenshot answer must name a route that works today and say what
+        // is coming, not leave the agent with a tool that does not exist.
+        "acos observe --screenshot",
+        "capture: {name: shot, format: png, fresh: true}",
+        "Coming:",
+    ] {
+        assert!(workflow.contains(expected), "the workflow recipes lost {expected:?}");
+    }
+    assert!(
+        workflow.find("## Recipes").unwrap() < workflow.find("## The loop").unwrap(),
+        "the recipes must come first in the workflow topic"
+    );
+}
+
+/// **FB6: the generated tool text never mentions ACOS's internal lab tooling.**
+///
+/// `run-exclusive.sh`, the ART lock slot and the dev gates are how *this*
+/// repository serialises its own runs; an agent driving the product must never
+/// be told to use them.
+#[test]
+fn no_help_topic_mentions_internal_tooling() {
+    let mut client = McpClient::with_real_acos();
+    client.initialize("2025-03-26");
+    for topic in ["mcp", "workflow", "cli", "overview", "limits", "scenarios", "errors", "all"] {
+        let reply = client.call_tool("acos_help", json!({"topic": topic}));
+        let envelope = common::envelope_of(&reply);
+        let text = envelope
+            .pointer("/result/guide")
+            .and_then(Value::as_str)
+            .unwrap_or_else(|| panic!("no guide text for topic {topic}"));
+        for forbidden in [
+            "run-exclusive",
+            "art.lock",
+            "ACOS_ART_LOCK_SLOT",
+            "slot file",
+            "session queue",
+            "ACOS_LOCK_WAIT_SECS",
+        ] {
+            assert!(
+                !text.contains(forbidden),
+                "the {topic} reply must not mention internal tooling {forbidden:?}"
+            );
+        }
+    }
+}
+
+/// **FB6 (1): a topic can be fetched as an MCP resource too** — the `mcp`
+/// cheat sheet must serve the same generated text as the tool.
+#[test]
+fn the_mcp_topic_is_served_as_a_resource() {
+    let mut client = McpClient::with_real_acos();
+    client.initialize("2025-03-26");
+    let read = client.request("resources/read", json!({"uri": "acos://guide/mcp"}));
+    let text = read
+        .pointer("/result/contents/0/text")
+        .and_then(Value::as_str)
+        .expect("contents text");
+    assert!(text.starts_with("## MCP tools"), "{text}");
+    assert!(text.contains("`acos_verify`"));
+    let list = client.request("resources/list", json!({}));
+    assert!(
+        list.pointer("/result/resources")
+            .and_then(Value::as_array)
+            .expect("resources")
+            .iter()
+            .any(|r| r.get("uri").and_then(Value::as_str) == Some("acos://guide/mcp")),
+        "acos://guide/mcp must be listed"
+    );
+}
+
+/// **FB6 (4): the meta tools report `fidelity: "n/a"`**, not a misleading
+/// `static-analysis` (they say nothing about the app under test).
+#[test]
+fn meta_tools_report_fidelity_not_applicable() {
+    let mut client = McpClient::with_real_acos();
+    client.initialize("2025-06-18");
+    let list = client.request("tools/list", json!({}));
+    let tools = list
+        .pointer("/result/tools")
+        .and_then(Value::as_array)
+        .expect("tools array");
+    for name in ["acos_help", "acos_capabilities", "acos_doctor"] {
+        let tool = tools
+            .iter()
+            .find(|tool| tool.get("name").and_then(Value::as_str) == Some(name))
+            .unwrap_or_else(|| panic!("{name} must be advertised"));
+        assert_eq!(
+            tool.pointer("/annotations/fidelity").and_then(Value::as_str),
+            Some("n/a"),
+            "{name} must report fidelity n/a: {tool}"
+        );
+        assert_eq!(
+            tool.pointer("/_meta/acos/fidelity").and_then(Value::as_str),
+            Some("n/a")
+        );
+    }
+    // The session tools genuinely run the app: they keep a real fidelity.
+    let launch = tools
+        .iter()
+        .find(|tool| tool.get("name").and_then(Value::as_str) == Some("acos_launch"))
+        .expect("acos_launch");
+    assert_eq!(
+        launch.pointer("/annotations/fidelity").and_then(Value::as_str),
+        Some("native-runtime")
+    );
 }

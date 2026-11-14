@@ -120,6 +120,11 @@ impl std::fmt::Display for Backend {
 ///   Android framework behaviour at the stated API/ABI.
 /// * `physical-device` — a real device/OEM target.
 /// * `simulated` — a mock/stub path. A simulated success is not an Android success.
+/// * `n/a` — a **meta** reply: a tool that reports on ACOS itself
+///   (`acos_help`, `acos_capabilities`, `acos_doctor`). It says nothing about
+///   app behaviour, so labelling it `static-analysis` would imply the reply was
+///   derived from the APK. `n/a` never satisfies a fidelity requirement and is
+///   never a pass.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum Fidelity {
@@ -135,6 +140,9 @@ pub enum Fidelity {
     PhysicalDevice,
     /// Mocked/simulated behaviour.
     Simulated,
+    /// Not applicable: a meta reply about ACOS itself (help/capabilities/doctor).
+    #[serde(rename = "n/a")]
+    NotApplicable,
 }
 
 impl Fidelity {
@@ -147,6 +155,7 @@ impl Fidelity {
             Fidelity::ArtReference => "art-reference",
             Fidelity::PhysicalDevice => "physical-device",
             Fidelity::Simulated => "simulated",
+            Fidelity::NotApplicable => "n/a",
         }
     }
 
@@ -167,6 +176,7 @@ impl Fidelity {
             }
             Fidelity::PhysicalDevice => "executed on a physical device/OEM target",
             Fidelity::Simulated => "mocked/simulated behaviour; not an Android success",
+            Fidelity::NotApplicable => "not applicable: a meta reply about ACOS itself, not about app behaviour",
         }
     }
 
@@ -192,6 +202,9 @@ impl Fidelity {
             Fidelity::PhysicalDevice => matches!(self, Fidelity::PhysicalDevice),
             Fidelity::StaticAnalysis => true,
             Fidelity::Simulated => matches!(self, Fidelity::Simulated),
+            // A meta reply proves nothing about the app, and no execution
+            // fidelity can stand in for one.
+            Fidelity::NotApplicable => false,
         }
     }
 }

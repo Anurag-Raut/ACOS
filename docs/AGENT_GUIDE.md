@@ -53,7 +53,10 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
 `acos_help {"topic": "<name>"}` returns one section; `"all"` returns everything.
 
 * `overview` — this page: the three rules, the loop in ten lines, the topic list.
-* `workflow` — the loop step by step, with what each reply tells you.
+* `mcp` — every MCP tool this build advertises: arguments, one example call, what
+  it returns (generated from the tool descriptors, so it cannot drift).
+* `workflow` — the loop step by step, plus the screenshot / type / find-by-
+  content_desc / prove-a-flow recipes.
 * `cli` — every `acos` command with a runnable example.
 * `scenarios` — writing a YAML scenario: steps, selectors, settle rules.
 * `errors` — error code → what to do next.
@@ -66,6 +69,44 @@ Call `acos_help {"topic": "workflow"}` next if you are about to run an app.
 <!-- /topic:overview -->
 
 <!-- topic:workflow -->
+## Recipes (answer these first)
+
+**Take a screenshot.** There is no capture tool on the MCP surface yet. Two
+routes work today: (a) a `capture: {name: shot, format: png, fresh: true}` step
+in an `acos_verify` scenario — the PNG lands as `frames/<seq>.png` under the
+artifacts directory and the step JSON names it; (b) with the CLI on a live
+daemon session, `acos observe --screenshot out/shot.png --json`. Coming:
+`screenshot: true` on `acos_observe_tree`, which returns the PNG path in the
+reply (and `NO_FRESH_FRAME` instead of a silent no-op when the frame carries no
+pixels).
+
+**Type into a field.** Observe the tree, tap the field (`acos_tap {"id": ...}`
+or `{"text": ...}`), type with `acos_text {"text": "Ada"}`, then observe again to
+read the value. Text goes to the *focused* editor through the real
+`InputConnection`; `ELEMENT_NOT_FOUND` with `details.kind = NoFocusedEditor`
+means the tap did not land on an editable field. If `acos_text` answers
+`UNSUPPORTED_BACKEND` on a live session, the same interaction as a scenario
+`type:` step runs through `acos_verify` and does work.
+
+**Find a control by `content_desc`.** `acos_observe_tree` returns `text` **and**
+`content_desc` per node; icon buttons usually carry their name only in
+`content_desc` (for example `Search Japanese dictionary`). Select it in a
+scenario with `selector: {content_desc: {contains: Search}}`, or hand the label
+to `acos_tap {"text": ...}` (text or content-desc), or tap the centre of the
+node's `bounds` with `x`/`y`. Never read a coordinate off a PNG: PNG space is
+offset by `frame.display_origin`.
+
+**Prove a flow.** Put the interaction in a YAML scenario (`topic: "scenarios"`)
+and run `acos_verify` (real ART by default). The pass counts only with its
+evidence on disk: `verdict.json`, `steps/NN-*.json` and the referenced frames —
+and `expect_change: true` on the taps whose point is to change the screen is
+what makes the pass mean something.
+
+**Assert, do not eyeball.** `assert_text` (optionally with `bounds`),
+`assert_visible` / `assert_not_visible` (collapsed content stays in the tree with
+`visible: false`, so assert visibility, never presence) and `assert_log` turn a
+visual claim into a machine check with a diff.
+
 ## The loop
 
 ```
@@ -108,7 +149,11 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    but the screen did not change — read the in-band `note`.
 6. **Read the app's own words.** `acos_logs` returns the guest log buffer and
    also `launched` / `stage_reached`, so an empty buffer is only clean if the
-   app actually reached `onCreate`.
+   app actually reached `onCreate`. The **default view is `min_priority: "W"`
+   plus the app's own package** (records at warning or above, plus anything that
+   names the app), which keeps SoLoader/framework noise out of the reply. The
+   full buffer stays on disk (`logs/logcat.txt` in a verify run), `"all": true`
+   or `min_priority: "V"` returns all of it, and `tag` narrows further.
 7. **Prove the flow.** `acos_verify {"apk": ..., "scenario": ...}` (or
    `acos verify <scenario.yaml> --artifacts out/<name>`) runs a YAML scenario and
    writes `verdict.json`, per-step JSON and the frames. The tool runs **real
@@ -405,10 +450,14 @@ Two session-specific hints worth memorising:
 * **Rotation is not supported** on the ART session channel: the guest line
   protocol has no `rotate`, so a `rotate` step returns `UNSUPPORTED_BACKEND`
   (`capability: input`). Do not build a scenario that depends on it.
-* **Flutter and React Native are deferred.** Their APKs are recognised
-  structurally, and the native-child session paths exist, but full driver
-  coverage is not there; treat any result as experimental, never as the
-  framework-View verdict. Framework (View-based) APKs are the supported path.
+* **App types, one row per route.** Same APK, same engine, same verdict rules:
+
+  | app type | MCP session tools (`acos_launch` -> `acos_verify`) | CLI `acos launch/observe/verify --engine art` | notes |
+  |---|---|---|---|
+  | Framework Views (Java/Kotlin native) | supported | supported | The reference path: real ART, real `View` tree, real frames. |
+  | React Native | **supported** (real ART via the MCP session tools, since v0.2.0) | **supported** (real ART, since v0.2.0) | Verified end-to-end on a React Native release APK: launch ladder, tree, taps and `acos_verify` pass with `fidelity: art-reference`. The tree is the framework `View` hierarchy the RN host creates, not a JS component tree. |
+  | Flutter | deferred | deferred | Recognised structurally; no driver coverage, so any result is a structural observation, never a Flutter framework verdict. |
+
 * **`reset` is host-side**: it stops the guest and starts the same APK again in
   a fresh process with an empty app-data directory. That is the honest meaning
   of "back to the initial UI" on this channel; the app's own Reset button is

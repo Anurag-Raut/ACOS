@@ -36,13 +36,38 @@ fn acos() -> &'static str {
 }
 
 fn scratch(tag: &str) -> PathBuf {
-    let dir = repo_root()
-        .join(".cache")
-        .join(format!("w50-test-{tag}-{}", std::process::id()));
+    // A unix socket path must fit SUN_LEN (108 bytes including the NUL), i.e. at
+    // most 107 characters. `repo_root()` is built from `CARGO_MANIFEST_DIR`, so a
+    // git worktree under `.t3/worktrees/<repo>/<uuid>/` adds ~50 characters and
+    // the readable directory name below overflows the limit: the daemon then
+    // cannot bind and the socket never appears. Keep the readable name when it
+    // fits and fall back to a short hash of it when it does not (still inside
+    // this checkout's `.cache`, never /tmp).
+    let pid = std::process::id();
+    let mut dir = repo_root().join(".cache").join(format!("w50-test-{tag}-{pid}"));
+    let budget = 107 - "/serve.sock".len();
+    if dir.as_os_str().len() > budget {
+        let mut hash = 0xcbf2_9ce4_8422_2325u64;
+        for byte in format!("{tag}-{pid}").bytes() {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x100_0000_01b3);
+        }
+        dir = repo_root().join(".cache").join(format!("w50-{hash:016x}"));
+    }
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("runtime")).unwrap();
     std::fs::create_dir_all(dir.join("cache")).unwrap();
-    std::fs::canonicalize(&dir).unwrap_or(dir)
+    // Resolve it (a worktree root can carry a `..` segment) before it is used as
+    // a socket path, and prove the resolved path still fits.
+    let dir = std::fs::canonicalize(&dir).unwrap_or(dir);
+    let socket = dir.join("serve.sock");
+    assert!(
+        socket.as_os_str().len() <= 107,
+        "the test's own socket path {} is {} characters; SUN_LEN allows 107",
+        socket.display(),
+        socket.as_os_str().len()
+    );
+    dir
 }
 
 struct Daemon {

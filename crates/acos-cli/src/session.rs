@@ -650,7 +650,7 @@ pub struct LogsArgs {
     pub tag: Option<String>,
 
     /// Only keep records at or above this logcat priority (`V`/`D`/`I`/`W`/`E`/`F`
-    /// or `2`..=`7`).
+    /// or `2`..=`7`). Defaults to `W`; pass `V` for the whole buffer.
     #[arg(long = "min-priority")]
     pub min_priority: Option<String>,
 
@@ -679,10 +679,14 @@ pub fn logs(args: LogsArgs) -> ExitCode {
     let envelope = match session.logs() {
         Ok(lines) => {
             let status = session.status().ok();
-            let min_priority = args
-                .min_priority
-                .as_deref()
-                .and_then(acos_runtime::session::parse_log_priority);
+            // Default view: `W` and above (an agent reading logs wants the app's
+            // problems, not 235 lines of SoLoader noise); `--min-priority V`
+            // still returns the whole buffer, which is also what stays in
+            // `logs/logcat.txt` on an artifacts run.
+            let min_priority = match args.min_priority.as_deref() {
+                Some(text) => acos_runtime::session::parse_log_priority(text),
+                None => Some(5),
+            };
             let records: Vec<Value> =
                 acos_runtime::session::summarize_logs(&lines, args.tag.as_deref(), min_priority)
                     .into_iter()
@@ -725,6 +729,10 @@ pub fn logs(args: LogsArgs) -> ExitCode {
                 "total": lines.len(),
                 "count": records.len(),
                 "collapsed": collapsed,
+                "filter": {
+                    "min_priority": args.min_priority.clone().unwrap_or_else(|| "W".to_string()),
+                    "default_view": args.min_priority.is_none(),
+                },
                 "logs": records,
                 "note": if records.is_empty() {
                     "empty is valid only if the app reached onCreate; check stage_reached (and `acos launch`) before concluding anything"
@@ -763,6 +771,7 @@ pub struct SessionCmdArgs {
     pub tag: Option<String>,
 
     /// Only keep log records at or above this priority (`session logs`).
+    /// Defaults to `W`; pass `V` for the whole buffer.
     #[arg(long = "min-priority")]
     pub min_priority: Option<String>,
 

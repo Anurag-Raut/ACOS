@@ -271,8 +271,8 @@ server.
 | `acos_destroy` | protocol | `destroy` | `native-runtime` | `base` |
 | `acos_verify` | protocol | `verify` | `native-runtime` | `artifacts`, `base`, `scenario` |
 | `acos_capability_report` | protocol | `capability-report` | `static-analysis` | `apk`, `base` |
-| `acos_capabilities` | server | - | `static-analysis` | - |
-| `acos_help` | server | - | `static-analysis` | - |
+| `acos_capabilities` | server | - | `n/a` | - |
+| `acos_help` | server | - | `n/a` | - |
 | `acos_launch` | server | - | `native-runtime` | - |
 | `acos_observe_tree` | server | - | `native-runtime` | - |
 | `acos_tap` | server | - | `native-runtime` | - |
@@ -281,7 +281,7 @@ server.
 | `acos_swipe` | server | - | `native-runtime` | - |
 | `acos_logs` | server | - | `native-runtime` | - |
 | `acos_status` | server | - | `native-runtime` | - |
-| `acos_doctor` | server | - | `static-analysis` | - |
+| `acos_doctor` | server | - | `n/a` | - |
 <!-- ACOS_TOOLS_END -->
 
 Regenerate the block with `cargo run -p acos-mcp --example gen-tools-docs`.
@@ -303,7 +303,7 @@ instead of calling tools:
 | uri | content |
 |---|---|
 | `acos://guide` | the complete agent guide (markdown) |
-| `acos://guide/workflow`, `/cli`, `/scenarios`, `/errors`, `/limits` | one section |
+| `acos://guide/workflow`, `/mcp`, `/cli`, `/scenarios`, `/errors`, `/limits` | one section |
 | `acos://errors` | the error-code playbook (alias of `/errors`) |
 
 `resources/list` advertises all of them with `mimeType: text/markdown`,
@@ -326,6 +326,17 @@ the stage ladder; `acos_observe_tree`/`acos_tap`/`acos_key`/`acos_text`/`acos_sw
 drive it; and `acos_doctor` runs the `acos doctor --json` host preflight (Android
 SDK/build-tools, `android.jar`, JDK, workspace helper, debug keystore,
 boot-classpath cache, host memory) and returns each failing check's `fix`.
+
+`acos_logs` returns an **agent-relevant default view**: records at priority `W`
+and above plus anything that names the app's own package, with `filter` naming
+the defaults that were applied. The guest buffer is untouched —
+`logs/logcat.txt` in a verify run is still the full log — and `{"all": true}`
+(or `min_priority: "V"`) returns every record.
+
+The three **meta** tools (`acos_help`, `acos_capabilities`, `acos_doctor`)
+report `fidelity: "n/a"`: they say nothing about the app under test, so
+`static-analysis` would imply the reply came from the APK. `n/a` never satisfies
+a fidelity requirement and is never a pass.
 
 Every `tools/list` entry carries the protocol `description`, an `inputSchema`
 generated from the request type, and annotations:
@@ -364,9 +375,19 @@ files to find. It covers the loop (doctor → inspect → launch →
 observe/observe_tree → tap/text/key/swipe → verify → reset → destroy), every CLI
 command with a runnable example, how to write a scenario YAML (step types,
 selectors, settle modes, `expect_change`, assertion kinds), every error code and
-its next action, and the limits (rotate unsupported, Flutter/RN deferred, x86_64
-native libs, API 34, memory admission). `{"topic": "workflow"|"cli"|
-"scenarios"|"errors"|"limits"}` returns just that section.
+its next action, and the limits (one support row per route for native Views,
+React Native and Flutter; rotate unsupported, x86_64 native libs, API 34, memory
+admission). `{"topic": "workflow"|"mcp"|"cli"|"scenarios"|"errors"|"limits"}`
+returns just that section.
+
+`{"topic": "mcp"}` is special: it is **generated from the tool descriptors on
+every reply**, not a section of the markdown guide. It lists every tool
+`tools/list` advertises for this build with its required and optional arguments,
+one paste-able example call and what the reply contains, plus the recipes that
+used to be unanswerable from the tool list (how to get a screenshot today, how
+to type into a field, how to find a control by `content_desc`, how to prove a
+flow). A tool this build does not implement is absent from the table, so the
+guide never teaches a call that answers `unsupported`.
 
 ---
 

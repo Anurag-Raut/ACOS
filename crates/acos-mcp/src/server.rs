@@ -459,7 +459,8 @@ impl<B: Backend> Server<B> {
             "resources/list" => jsonrpc::result(id, json!({ "resources": resources() })),
             "resources/read" => {
                 let uri = params.get("uri").and_then(Value::as_str).unwrap_or("");
-                match read_resource(uri) {
+                let caps = self.backend.capabilities();
+                match read_resource(uri, &caps) {
                     Some(contents) => jsonrpc::result(id, json!({ "contents": contents })),
                     None => jsonrpc::error(
                         id,
@@ -764,11 +765,12 @@ fn write_value<W: Write>(sink: &Mutex<W>, value: &Value) {
 pub fn resource_uris() -> Vec<&'static str> {
     let mut uris = vec!["acos://guide", "acos://errors"];
     uris.extend(
-        help::TOPICS
+        help::topic_list()
             .iter()
             .filter(|topic| **topic != "errors")
             .map(|topic| match *topic {
                 "overview" => "acos://guide/overview",
+                "mcp" => "acos://guide/mcp",
                 "workflow" => "acos://guide/workflow",
                 "cli" => "acos://guide/cli",
                 "scenarios" => "acos://guide/scenarios",
@@ -798,13 +800,14 @@ pub fn resources() -> Vec<Value> {
         "description": "Every error code the engine can return and the action it demands.",
         "mimeType": "text/markdown",
     }));
-    for topic in help::TOPICS {
+    for topic in help::topic_list() {
         list.push(json!({
             "uri": format!("acos://guide/{topic}"),
             "name": format!("agent-guide-{topic}"),
             "title": format!("ACOS agent guide: {topic}"),
-            "description": match *topic {
+            "description": match topic {
                 "overview" => "The three status rules, the loop in ten lines and the topic list (the `acos_help` default).",
+                "mcp" => "Every advertised MCP tool with its arguments, one example call and what it returns (generated from the tool descriptors).",
                 "workflow" => "The doctor -> inspect -> launch -> observe -> act -> verify loop.",
                 "cli" => "Every `acos` command with a runnable example.",
                 "scenarios" => "How to write a scenario YAML for `acos verify` (steps, selectors, settle, assertions).",
@@ -830,7 +833,10 @@ pub fn resource_templates() -> Vec<Value> {
 }
 
 /// `resources/read`: the contents for a URI, or `None` when it is not ours.
-pub fn read_resource(uri: &str) -> Option<Vec<Value>> {
+///
+/// The capability snapshot is threaded through because the generated `mcp`
+/// topic must list exactly the tools `tools/list` advertises for this build.
+pub fn read_resource(uri: &str, caps: &Capabilities) -> Option<Vec<Value>> {
     // `acos://guide` is the **complete** guide (a resource read is a deliberate,
     // unlimited fetch); the `acos_help` tool defaults to the skeleton instead.
     let topic = match uri {
@@ -839,12 +845,7 @@ pub fn read_resource(uri: &str) -> Option<Vec<Value>> {
         "acos://errors" => Some("errors"),
         other => {
             let name = other.strip_prefix("acos://guide/")?;
-            Some(
-                help::TOPICS
-                    .iter()
-                    .copied()
-                    .find(|t| *t == name)?,
-            )
+            Some(help::topic_list().into_iter().find(|t| *t == name)?)
         }
     };
     Some(vec![json!({
@@ -856,7 +857,10 @@ pub fn read_resource(uri: &str) -> Option<Vec<Value>> {
             topic.map_or("ACOS agent guide".to_string(), |t| format!("ACOS agent guide: {t}"))
         },
         "mimeType": "text/markdown",
-        "text": help::guide(topic),
+        "text": match topic {
+            Some(topic) => help::guide_with(Some(topic), &crate::descriptors::tool_infos(caps)),
+            None => help::guide(None),
+        },
     })])
 }
 

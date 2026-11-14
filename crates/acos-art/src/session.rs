@@ -228,6 +228,9 @@ pub fn build_session_guest(root: &ArtRoot) -> Result<super::app::GuestDex> {
     fs::create_dir_all(&classes)?;
     let mut javac = Command::new(std::env::var("JAVAC").unwrap_or_else(|_| "javac".into()));
     javac
+        // JVM dumps (fatal error / compiler replay) go to ACOS scratch, never
+        // the caller's working directory (`crate::jvm`).
+        .args(crate::jvm::dump_args())
         .args(["-nowarn", "-source", "11", "-target", "11"])
         .arg("-cp")
         .arg(&android_jar)
@@ -255,6 +258,7 @@ pub fn build_session_guest(root: &ArtRoot) -> Result<super::app::GuestDex> {
         }
     }
     let out = Command::new(&d8)
+        .args(crate::jvm::dump_args())
         .arg("--lib")
         .arg(&android_jar)
         .args(["--min-api", "34", "--output"])

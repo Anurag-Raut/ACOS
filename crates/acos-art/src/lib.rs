@@ -34,6 +34,7 @@ pub mod cgroup;
 pub mod crash;
 pub mod host_zygote;
 pub mod zygote_prod;
+pub mod jvm;
 pub mod launch;
 pub mod session;
 pub mod landlock;
