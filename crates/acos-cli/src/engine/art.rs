@@ -2430,8 +2430,13 @@ impl ArtSession {
         // SERVELEAK: the guest has its own group (`acos-art` spawns it with
         // `process_group(0)`), so a drop that only killed the launcher's group
         // left bwrap/dalvikvm64 running. Kill both, always.
+        //
+        // Only the *recorded* groups are killed here: `*self = fresh` drops the
+        // previous incarnation after `reset` has already spawned the
+        // replacement, which names the same artifacts directory, so a
+        // directory-wide leftover sweep would kill the guest that just started.
+        // The sweep belongs to an explicit destroy (see `reap_leftovers`).
         self.sigkill_guest_group();
-        self.reap_session_leftovers();
         self.stdin = None;
     }
 

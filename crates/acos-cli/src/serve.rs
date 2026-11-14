@@ -66,6 +66,16 @@ pub struct ServeArgs {
     #[arg(long, default_value_t = 0)]
     pub heap_max_mb: u64,
 
+    /// Exit (destroying every session first) when this pid is gone (SERVELEAK).
+    ///
+    /// Set by a caller that spawns the daemon for its own use — the bench, a CI
+    /// job, a wrapper: if that process disappears (even by `kill -9`), nobody
+    /// will ever address the sessions again, so the daemon takes them down with
+    /// it instead of holding live guests for `--idle-timeout`. A shared daemon
+    /// (`acos session …` auto-start) passes no owner: another client may attach.
+    #[arg(long)]
+    pub owner_pid: Option<i32>,
+
     /// Emit a JSON startup banner on stdout and do not detach.
     #[arg(long)]
     pub json: bool,
@@ -154,6 +164,9 @@ pub fn run(args: ServeArgs) -> ExitCode {
         active: AtomicUsize::new(0),
     });
 
+    if let Some(owner) = args.owner_pid.filter(|pid| *pid > 1) {
+        eprintln!("acos serve: owned by pid {owner}; exiting when it is gone");
+    }
     if args.json {
         println!(
             "{}",
@@ -164,6 +177,7 @@ pub fn run(args: ServeArgs) -> ExitCode {
                 "pid": std::process::id(),
                 "engine": default_engine.as_str(),
                 "art_artifacts": artifacts_root.display().to_string(),
+                "owner_pid": args.owner_pid,
             })
         );
     }
@@ -245,6 +259,16 @@ pub fn run(args: ServeArgs) -> ExitCode {
                 break;
             }
         }
+        // SERVELEAK: the process that spawned this daemon for its own use is
+        // gone, so its sessions have no owner left: take them down and exit.
+        if args
+            .owner_pid
+            .filter(|pid| *pid > 1)
+            .is_some_and(|pid| !process_is_alive(pid))
+        {
+            eprintln!("acos serve: owner pid is gone; destroying sessions and exiting");
+            break;
+        }
         if shutdown_requested() {
             eprintln!(
                 "acos serve: shutdown signal received; destroying {} session(s) first",
@@ -271,6 +295,21 @@ pub fn run(args: ServeArgs) -> ExitCode {
     engine.shutdown();
     let _ = std::fs::remove_file(&socket);
     ExitCode::SUCCESS
+}
+
+/// Is `pid` still alive (a zombie counts as gone: it cannot use the daemon)?
+fn process_is_alive(pid: i32) -> bool {
+    // SAFETY: signal 0 performs the existence/permission check only.
+    if unsafe { libc::kill(pid, 0) } != 0 {
+        return false;
+    }
+    match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
+        Ok(stat) => stat
+            .rsplit_once(')')
+            .map(|(_, rest)| !rest.trim_start().starts_with('Z'))
+            .unwrap_or(true),
+        Err(_) => false,
+    }
 }
 
 /// A shutdown signal (SIGTERM/SIGINT/SIGHUP) was delivered.

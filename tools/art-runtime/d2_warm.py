@@ -274,9 +274,15 @@ class Serve:
                    ACOS_RUNTIME_DIR=str(self.scratch / "runtime"),
                    ACOS_CACHE_DIR=str(self.scratch / "cache"),
                    ACOS_SERVE_ARTIFACTS=str(self.scratch / "sessions"))
+        # SERVELEAK: `--owner-pid` ties this rep's daemon to the harness. If the
+        # harness dies hard (kill -9, a killed guard), the daemon destroys its
+        # guest sessions and exits instead of holding live ART guests for
+        # `idle` seconds. The daemon is nobody else's: it is spawned here, with
+        # this rep's socket under this rep's scratch.
         self.argv = [acos, "serve", "--socket", self.socket_path,
                      "--engine", engine, "--idle-timeout", str(idle),
-                     "--max-sessions", str(max_sessions)]
+                     "--max-sessions", str(max_sessions),
+                     "--owner-pid", str(os.getpid())]
         self.proc = subprocess.Popen(self.argv, cwd=str(REPO), env=env,
                                      stdin=subprocess.DEVNULL,
                                      stdout=self.stdout, stderr=self.stderr,
