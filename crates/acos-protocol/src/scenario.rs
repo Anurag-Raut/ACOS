@@ -90,7 +90,7 @@ pub struct Step {
     pub key: Option<KeyStep>,
     /// Press Back.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub back: Option<EmptyStep>,
+    pub back: Option<BackStep>,
     /// Rotate the display.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rotate: Option<RotateStep>,
@@ -166,7 +166,7 @@ pub enum StepRef<'a> {
     /// See [`Step::key`].
     Key(&'a KeyStep),
     /// See [`Step::back`].
-    Back(&'a EmptyStep),
+    Back(&'a BackStep),
     /// See [`Step::rotate`].
     Rotate(&'a RotateStep),
     /// See [`Step::assert_text`].
@@ -365,7 +365,7 @@ impl Step {
     /// Convenience: a `back` step.
     pub fn back() -> Self {
         Step {
-            back: Some(EmptyStep {}),
+            back: Some(BackStep::default()),
             ..Step::default()
         }
     }
@@ -379,9 +379,16 @@ impl Step {
     }
 }
 
-/// An empty step payload (`- back: {}`).
+/// The `back` payload (`- back: {}`).
+///
+/// It has no target: Back goes to the focused window. SE1's opt-in
+/// `expect_change` is the only field, so `- back: {}` keeps parsing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
-pub struct EmptyStep {}
+pub struct BackStep {
+    /// SE1: fail the step when the settled frame's pixels are unchanged.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub expect_change: bool,
+}
 
 /// `launch`.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
@@ -454,6 +461,13 @@ pub struct TapStep {
     /// Settle rule for this input (`strict` default, `fast` navigation).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settle: Option<StepSettle>,
+    /// SE1: fail the step when the settled frame's pixels are unchanged.
+    ///
+    /// Opt-in and strict-only: `expect_change: true` with `settle: fast` is
+    /// rejected at scenario-validation time, because a fast frame may be
+    /// mid-animation and can never back a claim.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub expect_change: bool,
 }
 
 /// `type`.
@@ -473,6 +487,9 @@ pub struct TypeStep {
     /// Settle rule for this input (`strict` default, `fast` navigation).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settle: Option<StepSettle>,
+    /// SE1: fail the step when the settled frame's pixels are unchanged.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub expect_change: bool,
 }
 
 /// `key`.
@@ -486,6 +503,9 @@ pub struct KeyStep {
     /// Settle rule for this input (`strict` default, `fast` navigation).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settle: Option<StepSettle>,
+    /// SE1: fail the step when the settled frame's pixels are unchanged.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub expect_change: bool,
 }
 
 /// `rotate`.
@@ -668,6 +688,11 @@ const fn default_true() -> bool {
     true
 }
 
+/// `skip_serializing_if` for the opt-in boolean flags (false is the default).
+const fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 const fn default_timeout_ms() -> u64 {
     5_000
 }
@@ -717,6 +742,15 @@ pub struct Scenario {
     /// it is never for animation/transition testing. Launch-time only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub animations: Option<String>,
+    /// W7b: per-session app-window inset model (`carve`/`report`).
+    ///
+    /// Selects the model for this scenario exactly as `ACOS_WM_INSETS` does,
+    /// and takes precedence over the environment. A scenario that pins the
+    /// model is self-contained: it cannot silently change meaning when the
+    /// build default or the caller's environment changes. Launch-time only;
+    /// the Rust VM has no window insets and ignores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub insets: Option<String>,
 }
 
 impl Scenario {
@@ -887,6 +921,28 @@ fn validate_regex(validation: &mut ScenarioValidation, path: &str, pattern: &str
     }
 }
 
+/// SE1: `expect_change` is strict-only.
+///
+/// A `settle: fast` frame may be mid-animation and is never verification
+/// evidence (ADR-0026 decision 5), so `expect_change: true` on a fast input
+/// would be an unverifiable pass. Reject it at parse time with a stable path
+/// instead of discovering it after the action ran.
+fn validate_expect_change(
+    validation: &mut ScenarioValidation,
+    path: &str,
+    expect_change: bool,
+    settle: Option<StepSettle>,
+) {
+    if expect_change && matches!(settle, Some(StepSettle::Fast)) {
+        validation.push(
+            format!("{path}.expect_change"),
+            "`expect_change: true` cannot be combined with `settle: fast`: a fast frame may be \
+             mid-animation and is never verification evidence. Drop `settle` (strict is the \
+             default) or use `settle: strict`; an unverifiable pass is never accepted.",
+        );
+    }
+}
+
 fn validate_action_like(
     validation: &mut ScenarioValidation,
     path: &str,
@@ -942,6 +998,11 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
     if let Some(animations) = &scenario.animations {
         if !animations.eq_ignore_ascii_case("on") && !animations.eq_ignore_ascii_case("off") {
             v.push("$.animations", "animations must be `on` or `off`");
+        }
+    }
+    if let Some(insets) = &scenario.insets {
+        if !insets.eq_ignore_ascii_case("carve") && !insets.eq_ignore_ascii_case("report") {
+            v.push("$.insets", "insets must be `carve` or `report`");
         }
     }
     match scenario.display {
@@ -1021,7 +1082,8 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                 }
             }
             StepRef::Tap(tap) => {
-                validate_action_like(&mut v, &format!("steps[{index}]"), tap, "tap")
+                validate_action_like(&mut v, &format!("steps[{index}]"), tap, "tap");
+                validate_expect_change(&mut v, &path, tap.expect_change, tap.settle);
             }
             StepRef::Type(ty) => {
                 if ty.selector.is_none() {
@@ -1036,8 +1098,10 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                 if ty.text.is_empty() && !ty.clear {
                     v.push(&path, "type needs non-empty `text` (or `clear: true`)");
                 }
+                validate_expect_change(&mut v, &path, ty.expect_change, ty.settle);
             }
-            StepRef::Key(_) | StepRef::Back(_) | StepRef::Rotate(_) => {}
+            StepRef::Key(key) => validate_expect_change(&mut v, &path, key.expect_change, key.settle),
+            StepRef::Back(_) | StepRef::Rotate(_) => {}
             StepRef::AssertText(assertion) => {
                 validate_selector(&mut v, &path, &assertion.selector, "selector");
                 if let Some(problem) = assertion.text.validate() {
@@ -1355,5 +1419,80 @@ steps: []
         let action = Action::Key { key: KeyName::Back };
         assert_eq!(action.kind(), "key");
         let _ = Point { x: 1, y: 2 };
+    }
+
+    const EXPECT_CHANGE: &str = r#"
+version: 1
+name: expect-change
+app: fixtures/build/apps/counter.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+steps:
+  - launch: {activity: .MainActivity}
+  - tap: {selector: {id: inc}, expect_change: true}
+  - back: {expect_change: true}
+"#;
+
+    /// SE1: the flag is a bool on the action payloads and defaults to false
+    /// (so every existing scenario keeps the P12 rule).
+    #[test]
+    fn expect_change_parses_as_a_bool_and_defaults_false() {
+        let scenario = Scenario::from_yaml_str(EXPECT_CHANGE).expect("valid scenario");
+        assert!(scenario.validate().is_ok(), "{:?}", scenario.validate());
+        assert!(scenario.steps[1].tap.as_ref().unwrap().expect_change);
+        assert!(scenario.steps[2].back.as_ref().unwrap().expect_change);
+
+        let plain = Scenario::from_yaml_str(
+            "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {mode: offscreen, width: 8, height: 8, density_dpi: 420}\nsteps:\n  - tap: {x: 1, y: 2}\n  - back: {}\n",
+        )
+        .expect("valid scenario");
+        assert!(plain.validate().is_ok(), "{:?}", plain.validate());
+        assert!(!plain.steps[0].tap.as_ref().unwrap().expect_change);
+        assert!(!plain.steps[1].back.as_ref().unwrap().expect_change);
+        // A false flag is not written back: the wire form is unchanged.
+        assert!(!plain.to_yaml_string().unwrap().contains("expect_change"));
+    }
+
+    /// SE1: a non-bool is a parse error, never a silently ignored field.
+    #[test]
+    fn expect_change_rejects_a_non_bool() {
+        for value in ["yes", "1", "\"true\"", "[true]"] {
+            let yaml = format!(
+                "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {{mode: offscreen, width: 8, height: 8, density_dpi: 420}}\nsteps:\n  - tap: {{x: 1, y: 2, expect_change: {value}}}\n"
+            );
+            let error = Scenario::from_yaml_str(&yaml)
+                .err()
+                .unwrap_or_else(|| panic!("expect_change: {value} must not parse"));
+            assert!(error.errors.iter().all(|e| e.code == ErrorCode::InvalidScenario));
+        }
+    }
+
+    /// SE1: `expect_change` + `settle: fast` is an unverifiable pass, so it is
+    /// rejected at parse time with a stable path - and never at run time after
+    /// the action already happened.
+    #[test]
+    fn expect_change_with_fast_settle_is_invalid() {
+        for (kind, body) in [
+            ("tap", "{selector: {id: inc}, settle: fast, expect_change: true}"),
+            ("type", "{text: hi, settle: fast, expect_change: true}"),
+            ("key", "{key: back, settle: fast, expect_change: true}"),
+        ] {
+            let yaml = format!(
+                "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {{mode: offscreen, width: 8, height: 8, density_dpi: 420}}\nsteps:\n  - launch: {{activity: .MainActivity}}\n  - {kind}: {body}\n"
+            );
+            let scenario = Scenario::from_yaml_str_unvalidated(&yaml).expect("parses");
+            let validation = scenario.validate();
+            assert!(!validation.is_ok(), "{kind}: must be rejected");
+            let expected_path = format!("steps[1].{kind}.expect_change");
+            assert!(
+                validation.errors.iter().any(|e| e.path == expected_path),
+                "{kind}: expected {expected_path}, got {:?}",
+                validation.errors
+            );
+            assert!(validation
+                .errors
+                .iter()
+                .all(|e| e.code == ErrorCode::InvalidScenario));
+        }
     }
 }

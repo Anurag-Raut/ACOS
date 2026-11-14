@@ -24,6 +24,10 @@ app: fixtures/build/apps/multi-activity.apk
 engine: native-preferred
 fallback: report-and-escalate
 api_level: 34
+# The re-blessed region hash below is the report-model frame (ADR-0026 decision
+# 6): display-sized PNG, origin [0,0]. A carve run needs `--insets carve` and
+# the pre-W7b hash.
+insets: report
 isolation: process
 display:
   mode: offscreen
@@ -115,12 +119,16 @@ steps:
       name: back-to-main
       format: png
       fresh: true
+  # W7b: the frame is display-sized now (`report` default, origin [0,0]).
+  # This hash is the W7 carve hash re-blessed for exactly one known
+  # anti-aliased row (display y=411, 122 px, G 210->211); every other pixel of
+  # the overlapping display area is identical. Proof: results/handoff/W7B.md.
   - assert_region:
       x: 600
       y: 317
       w: 438
       h: 118
-      hash: "dee05db89a0d3856d6bb88f91fa271ef36f7429c496a3a48dc69c2ffb7d0746d"
+      hash: "5edac422cd1d5530ca12b5d4b5285a8e29a938861a126557bd84370206eb86df"
   - assert_region:
       x: 42
       y: 435

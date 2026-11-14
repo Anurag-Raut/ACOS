@@ -418,7 +418,7 @@ fn fw_client_window_frames(p: &mut Parcel) -> ([i32; 4], [i32; 4], [i32; 4], Opt
 
 #[test]
 fn add_to_display_as_user_reply_reads_exactly_in_the_framework_order() {
-    let mut host = ServiceHost::standard();
+    let mut host = ServiceHost::standard_with_insets(acos_services::wms::InsetsMode::Carve);
     let session = open_session(&mut host);
     let window = BinderId(0x6101);
     let mut reply = transact(&mut host, session, ADD_TO_DISPLAY_AS_USER, &mut add_request(window));
@@ -504,7 +504,7 @@ fn add_to_display_as_user_reply_reads_exactly_in_the_framework_order() {
 
 #[test]
 fn relayout_reply_reads_exactly_in_the_framework_order() {
-    let mut host = ServiceHost::standard();
+    let mut host = ServiceHost::standard_with_insets(acos_services::wms::InsetsMode::Carve);
     let session = open_session(&mut host);
     let window = BinderId(0x6102);
     let _ = transact(&mut host, session, ADD_TO_DISPLAY_AS_USER, &mut add_request(window));

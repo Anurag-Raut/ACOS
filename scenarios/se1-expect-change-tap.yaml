@@ -1,0 +1,60 @@
+# se1-expect-change-tap: the positive half of SE1's `expect_change` gate.
+#
+# ADR-0026 decision 2 keeps the P12 rule (a delivered action that changes no
+# pixel still settles and passes) and adds an **opt-in per-step**
+# `expect_change: true`: after the strict settle, a frame that is pixel-identical
+# to the pre-action frame fails the step with `ASSERTION_FAILED`
+# (`details.reason = "expect_change"`).
+#
+# This scenario is the case the flag must NOT break: the Increment tap really
+# changes the count from 0 to 1, so the settled frame's pixels differ
+# (`settle.pixels_changed: true`) and the step passes. The assertions after it
+# are the ordinary proof that the state moved.
+#
+# The wrong twin (`scenarios/negative/se1-expect-change-noop.yaml`) taps a
+# non-interactive area with the same flag and must fail with that code: a no-op
+# action can no longer back a claim (GR4 G4c).
+version: 1
+name: se1-expect-change-tap
+description: >-
+  Launch counter on real ART, tap Increment with `expect_change: true`, and
+  assert the count really moved 0 -> 1 in the frame the tap produced.
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.counter/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: count}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "0"}
+
+  # The measured transition: the tap must change the settled frame's pixels.
+  - tap:
+      selector: {id: inc}
+      expect_change: true
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "1"}

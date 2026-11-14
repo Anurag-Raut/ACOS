@@ -441,9 +441,17 @@ impl DisplayInfo {
     /// `carve` keeps the pre-W7 application area (`height - status - nav`).
     #[must_use]
     pub fn hello_views() -> Self {
-        let insets_mode = acos_wm::display::InsetsMode::from_env(
+        Self::hello_views_with(acos_wm::display::InsetsMode::from_env(
             acos_wm::display::DEFAULT_INSETS_MODE,
-        );
+        ))
+    }
+
+    /// W7b: [`Self::hello_views`] with an explicit app-window inset model.
+    ///
+    /// The standard service set passes the WMS model here so `getDisplayInfo`
+    /// and the window frames can never disagree about the app area.
+    #[must_use]
+    pub fn hello_views_with(insets_mode: acos_wm::display::InsetsMode) -> Self {
         let mut d = Self {
             display_id: 0,
             layer_stack: 0,

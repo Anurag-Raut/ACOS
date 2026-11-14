@@ -181,6 +181,14 @@ pub fn install(host: &mut ServiceHost) {
 /// Install the standard ACOS service set and return the handles a live session
 /// drives (`InputHost`, C1 state).
 pub fn install_with_handles(host: &mut ServiceHost) -> LiveHandles {
+    install_with_handles_and_insets(host, None)
+}
+
+/// W7b: [`install_with_handles`] with an explicit app-window inset model.
+pub fn install_with_handles_and_insets(
+    host: &mut ServiceHost,
+    insets: Option<crate::wms::InsetsMode>,
+) -> LiveHandles {
     use crate::host::ServiceObject;
     use std::sync::{Arc, Mutex};
 
@@ -194,7 +202,7 @@ pub fn install_with_handles(host: &mut ServiceHost) -> LiveHandles {
     host.register_aux("android.content.pm.IPackageInstaller");
 
     // WMS state machine (T-29); the runtime transport owns the wire codecs.
-    let wms_state = crate::wms::install(host);
+    let wms_state = crate::wms::install_with_insets(host, insets);
 
     // W-R T2: the frame clock. `android.gui.ISurfaceComposer` is served under
     // the `ServiceManager` name `SurfaceFlinger` (that is how
@@ -244,7 +252,9 @@ pub fn install_with_handles(host: &mut ServiceHost) -> LiveHandles {
     let atms = Arc::new(Mutex::new(crate::atms::AtmsState::new()));
     let settings = Arc::new(Mutex::new(crate::provider::SettingsState::new()));
     let display = Arc::new(Mutex::new(crate::display::DisplayState::new(
-        crate::display::DisplayInfo::hello_views(),
+        crate::display::DisplayInfo::hello_views_with(insets.unwrap_or_else(|| {
+            crate::wms::InsetsMode::from_env(crate::wms::DEFAULT_INSETS_MODE)
+        })),
     )));
     let a11y = Arc::new(Mutex::new(crate::misc::A11yState::new()));
     let input = Arc::new(Mutex::new(crate::misc::InputState::new()));

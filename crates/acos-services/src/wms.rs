@@ -155,7 +155,15 @@ impl WmsState {
     /// A state machine on the reference display with one open session.
     #[must_use]
     pub fn new() -> Self {
-        let insets_mode = InsetsMode::from_env(acos_wm::display::DEFAULT_INSETS_MODE);
+        Self::new_with_insets(InsetsMode::from_env(acos_wm::display::DEFAULT_INSETS_MODE))
+    }
+
+    /// W7b: [`Self::new`] with an explicit app-window inset model.
+    ///
+    /// Tests and replay drivers use this so their frame expectations do not
+    /// depend on the caller's `ACOS_WM_INSETS`.
+    #[must_use]
+    pub fn new_with_insets(insets_mode: InsetsMode) -> Self {
         let display = match crate::display::display_override() {
             Some(o) => DisplaySpec::custom_with_insets(
                 o.width,
@@ -607,7 +615,22 @@ impl ServiceObject for WmsService {
 /// Kept in this module so `registry` only needs the one-line call; the shared
 /// state is returned so the runtime's transport can drive the same object.
 pub fn install(host: &mut crate::host::ServiceHost) -> Arc<Mutex<WmsState>> {
-    let state = Arc::new(Mutex::new(WmsState::new()));
+    install_with_insets(host, None)
+}
+
+/// W7b: [`install`] with an explicitly chosen app-window inset model.
+///
+/// `None` keeps the process environment / build default. Tests that pin the
+/// pre-W7 carved wire geometry use `Some(InsetsMode::Carve)` instead of
+/// mutating the process environment (which is not thread-safe).
+pub fn install_with_insets(
+    host: &mut crate::host::ServiceHost,
+    insets: Option<InsetsMode>,
+) -> Arc<Mutex<WmsState>> {
+    let state = Arc::new(Mutex::new(match insets {
+        Some(mode) => WmsState::new_with_insets(mode),
+        None => WmsState::new(),
+    }));
     let factory_state = Arc::clone(&state);
     host.register(
         "window",
@@ -620,6 +643,29 @@ pub fn install(host: &mut crate::host::ServiceHost) -> Arc<Mutex<WmsState>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_inset_model_is_report() {
+        // ADR-0026 decision 6: phone-like edge-to-edge is the build default.
+        assert_eq!(DEFAULT_INSETS_MODE, InsetsMode::Report);
+    }
+
+    #[test]
+    fn report_model_gives_the_app_the_full_display() {
+        let mut st = WmsState::new_with_insets(InsetsMode::Report);
+        let add = st
+            .add_to_display_as_user(BinderId(0x12), app_params(), 0)
+            .unwrap();
+        assert_eq!(add.result, ADD_OKAY);
+        assert_eq!(add.out_frame, RectI::new(0, 0, 1080, 2400));
+        assert_eq!(
+            add.insets_state
+                .visible_insets_for(inset_type::STATUS_BAR)
+                .top,
+            128,
+            "report model still reports the status bar"
+        );
+    }
     use acos_wm::codec::inset_type;
     use acos_wm::geom::RectI;
     use acos_wm::wms::{ADD_BAD_APP_TOKEN, ADD_OKAY, RELAYOUT_RES_FIRST_TIME};
@@ -630,7 +676,10 @@ mod tests {
 
     #[test]
     fn add_relayout_and_finish_drawing_are_recorded() {
-        let mut st = WmsState::new();
+        // The pre-W7 carved frame, pinned explicitly: the build default is
+        // `report` since W7b (ADR-0026 decision 6), and this test asserts the
+        // frozen carve geometry.
+        let mut st = WmsState::new_with_insets(InsetsMode::Carve);
         let add = st
             .add_to_display_as_user(BinderId(0x11), app_params(), 0)
             .unwrap();
