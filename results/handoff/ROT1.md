@@ -484,6 +484,9 @@ action: do that, then re-run `v1-recreate` and `counter.yaml`'s tail (`assert_no
 ## 4. Measured this pass
 
 * `cargo test --release --offline -p acos-wm` → 55 lib tests green (2 new geometry tests).
+* `cargo test --release --offline -p acos-cli -p acos-art` → all green except the known
+  worktree-path-only `w50_serve_art::an_unknown_session_is_not_routed_to_the_frozen_rust_vm`
+  (the unix-socket path is too long under `.t3/worktrees/...`; unchanged by this pass).
 * `scenarios/rot1-rotate.yaml` **3/3 pass**, `scenarios/negative/rot1-rotate-wrong.yaml`
   **3/3 `ASSERTION_FAILED`** (`.cache/rot5/suite/rot-{1,2,3}.json` / `negrot-{1,2,3}.json`).
 * 15 gates: 10 pass, `suite/T03-render-wrong` + `w7-insets-carve-negative` +
