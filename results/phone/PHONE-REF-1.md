@@ -38,6 +38,15 @@ difference below is therefore classified **(c) app-build difference** and cannot
 be read as an ACOS defect. Installing an arm64 build of `f344272` on the phone is
 the smallest next action for that part.
 
+Version-code caution: gaten computes `versionCode = base * 10 + abiCode`
+(`app/build.gradle.kts`), so the repo's own x86_64 release metadata reads
+`versionCode 11 / versionName 0.1.0` and the phone's arm64 install reads **12**
+for the same `base`. The versionCode alone therefore proves nothing; the build
+difference rests on the install timestamp (20:07 IST) being earlier than
+`f344272` (21:12 IST) **and** on the visibly different onboarding UI, which the
+source at `f344272` (`src/rn/ui/onboarding/OnboardingFlow.tsx`, "each page has its
+own Skip") says must have a `Skip`.
+
 ### Fixture APKs — same build on both sides
 
 | APK | SHA-256 (prefix) |
