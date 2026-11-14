@@ -1264,6 +1264,14 @@ pub(crate) fn launch_session(
     if let Ok(v) = std::env::var("ACOS_ART_KEYSTORE") {
         sb.env("ACOS_ART_KEYSTORE", &v);
     }
+    // K5b: the keystore probe's mode and its list of paths to reach for
+    // (`fixtures/apps/keystore-probe`). Test-only names: nothing else reads
+    // them, and an unset variable leaves the guest environment unchanged.
+    for knob in ["ACOS_ART_KEYPROBE_MODE", "ACOS_ART_KEYPROBE_TARGETS"] {
+        if let Ok(v) = std::env::var(knob) {
+            sb.env(knob, &v);
+        }
+    }
     acos_services::animation::set_enabled(opts.animations.is_on());
     set_animations_state(opts.animations.is_on());
     crate::watchdog::note_guest_priority_gap("launch");

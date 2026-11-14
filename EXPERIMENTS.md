@@ -2349,3 +2349,58 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | G3c | **First frame can be a near-empty tree** (1 node in GR3, **10 nodes in 34 % of 60 measured launches**, 243 two seconds later). Fixed (E13.8): `ArtSession::bind_first_frame` re-traverses while the tree is still the window skeleton (no text/content-desc/hint, ≤ 40 nodes) within 900 ms / 4 traversals; a retry that does not settle rolls the frame *and* its settle verdict back, so no launch turns into a TIMEOUT; a frame that never gains content is `first_frame.placeholder` + `meaningful:false` | first-frame predicate / Gaten first paint | launch frame is the app's content | medium | medium | medium | **done, E13.8** (34 % thin → 0/40; launch p50 2.336 → 2.433 s) |
 | G3d | **Gaten launch SIGSEGV** (1 of 6 `gaten-tabs` runs in GR3): `SIGSEGV code 2 (SEGV_ACCERR)`, thread 2 `com.gaten`, libc frame. Root cause named (E13.8): GWP-ASan's sampled-allocation backtrace, `android_unsafe_frame_pointer_chase+0x117` (`mov 0x8(%r12),%rcx`) reading a stack guard page; the only GOT consumer of that function in libc is `MaybeInitGwpAsan`. Fixed by keeping the sampled allocator out of guests | ART guest native fault | name the faulting frame, then 10/10 | high | low | low | **done, E13.8** (forced-on 4/4 crash reproduces it; default 40/40 clean) |
 | G3e | **No verification semantics for a screen that animates forever in a region that does not matter.** Options (stable tree content, region mask, navigation-only fast, explicit non-settle assertion) + false-pass analysis in `results/gaten/GR3.md` §4.3 | verify semantics | owner decision | — | — | — | **owner decision; do not weaken until then** |
+
+## K5b — AndroidKeyStore fidelity and the JCA provider-fallback trap (2026-11-14)
+
+**Branch/tree:** `compat-k5-keystore` after the `--no-ff` merge of `main`
+`3e11d9c` (`43554b0`). Runs under `tools/art-runtime/run-exclusive.sh --task K5B`
++ `tools/guarded.sh`; driver `tools/keystore-k5b/run.sh`.
+
+**Question.** Can a *provider-level* guard enforce AndroidKeyStore key
+characteristics (purposes, validity, randomized IV) the way keystore2 does, given
+that ACOS's keys are ordinary JCA objects rather than keymaster handles?
+
+**Experiment 1 — hidden-API reachability.** Reflection on
+`android.security.keystore.KeyInfo`'s 22-argument `@hide` constructor and on
+`KeyGenParameterSpec`'s `@hide` getters works in the guest (no hidden-API
+policy): `KEYINFO size=256 purposes=3 hw=false level=0`. The constructor's exact
+descriptor was read from the image's `framework/classes3.dex` with `dexdump`
+(`(Ljava/lang/String;ZIILjava/util/Date;...;II)V`) and its parameter→field
+mapping confirmed from the bytecode. So `KeyInfo` is answered by the real
+framework class, not a stub.
+
+**Experiment 2 — provider selection.** `Provider.put("Cipher.<t>", cls)` is not
+enough: JCA instantiates an SPI through a **public no-arg constructor**, and a
+package-private one made `Cipher.getInstance("AES/CBC/PKCS7Padding")` fall
+through to Conscrypt with no error at all (`CIPHER_PROVIDER=AndroidOpenSSL`).
+With the constructor public the guard was selected
+(`CIPHER_PROVIDER=AndroidKeyStoreGuard`), but `CipherSpi` is never told which
+transformation it serves, so the provider now registers its services through a
+`Provider.Service` subclass that records the algorithm in a thread-local read by
+the SPI constructor.
+
+**Experiment 3 — the refusal was swallowed.** With the guard selected, the
+purpose check fired (`GUARD refusing purpose`) and the app still got a working
+cipher: `DECRYPT_ALLOWED_FOR_ENCRYPT_ONLY (bad) provider=AndroidOpenSSL`.
+`javax.crypto.Cipher` retries the next provider when the first one's
+`engineInit` throws a checked exception — including AOSP's own
+`InvalidKeyException` — and also swallowed a `ProviderException`. An `Error`
+was not swallowed: `DECRYPT_REFUSED=java.lang.AssertionError: INCOMPATIBLE_PURPOSE: ...`.
+Refusals are therefore `KeystoreRefusal extends Error` carrying the keystore2
+code; the deviation from AOSP's exception types is documented in
+`results/compat/K5.md`.
+
+**Experiment 4 — DER certificate chains.** A hand-built X.509 v3 (Conscrypt only,
+no BouncyCastle certificate builder in the image: no
+`com/android/org/bouncycastle` in any boot dex) failed
+`OPENSSL_internal:WRONG_TAG`. `openssl asn1parse` showed the
+AttributeTypeAndValue holding a nested `SEQUENCE{OID}` instead of the OID
+directly. After using `derOid(...)` for the attribute type and setting version 2,
+`getCertificateChain` returns one self-signed certificate that verifies with its
+own public key, for RSA and EC (`fidelity.chain.verifies`, `fidelity.chain.ec`).
+
+**Result.** `fidelity` 30/30 checks pass on real ART
+(`results/compat/K5B-evidence/fidelity.jsonl`). The cross-session phase reaches
+A's `create.*` checks but the driver cannot find A's material after the guest
+exits (`acos-art run` removes its run root at teardown); it must copy the
+app-data out from inside the locked shell while A is alive.
