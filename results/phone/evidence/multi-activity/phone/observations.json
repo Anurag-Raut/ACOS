@@ -21,7 +21,7 @@
   "density_dpi": 400,
   "font_scale": "1.0"
  },
- "started": "2026-11-14T09:48:57.560+00:00",
+ "started": "2026-11-14T09:56:46.522+00:00",
  "steps": [
   {
    "index": 0,
@@ -229,9 +229,9 @@
      "^Main.onResume$"
     ],
     "lines": [
-     "I/AcosMulti( 3392): Main.onCreate",
-     "I/AcosMulti( 3392): Main.onStart",
-     "I/AcosMulti( 3392): Main.onResume"
+     "I/AcosMulti( 6600): Main.onCreate",
+     "I/AcosMulti( 6600): Main.onStart",
+     "I/AcosMulti( 6600): Main.onResume"
     ]
    },
    "screenshot": "screenshot-04-assert_log.png",
@@ -294,7 +294,7 @@
    },
    "target": {
     "text": "",
-    "content_desc": "Message",
+    "content_desc": "Hello",
     "identifier": "dev.acos.fixtures.multiactivity:id/message",
     "enabled": true,
     "checked": null,
@@ -400,14 +400,14 @@
      "^Second.received=Hello$"
     ],
     "lines": [
-     "I/AcosMulti( 3392): Main.send message=Hello",
-     "I/AcosMulti( 3392): Main.onPause",
-     "I/AcosMulti( 3392): Second.onCreate",
-     "I/AcosMulti( 3392): Second.received=Hello",
-     "I/AcosMulti( 3392): Second.onStart",
-     "I/AcosMulti( 3392): Second.onResume",
-     "I/AcosMulti( 3392): Main.onStop",
-     "I/AcosMulti( 3392): Main.onSaveInstanceState message=Hello"
+     "I/AcosMulti( 6600): Main.send message=Hello",
+     "I/AcosMulti( 6600): Main.onPause",
+     "I/AcosMulti( 6600): Second.onCreate",
+     "I/AcosMulti( 6600): Second.received=Hello",
+     "I/AcosMulti( 6600): Second.onStart",
+     "I/AcosMulti( 6600): Second.onResume",
+     "I/AcosMulti( 6600): Main.onStop",
+     "I/AcosMulti( 6600): Main.onSaveInstanceState message=Hello"
     ]
    },
    "screenshot": "screenshot-08-assert_log.png",
@@ -568,10 +568,10 @@
      "^Second.finish$"
     ],
     "lines": [
-     "I/AcosMulti( 3392): Second.finish",
-     "I/AcosMulti( 3392): Second.onPause",
-     "I/AcosMulti( 3392): Second.onStop",
-     "I/AcosMulti( 3392): Second.onDestroy"
+     "I/AcosMulti( 6600): Second.finish",
+     "I/AcosMulti( 6600): Second.onPause",
+     "I/AcosMulti( 6600): Second.onStop",
+     "I/AcosMulti( 6600): Second.onDestroy"
     ]
    },
    "screenshot": "screenshot-12-assert_log.png",
@@ -688,8 +688,8 @@
     "passed": false,
     "matched": [],
     "lines": [
-     "I/AcosMulti( 3392): Main.onDestroy",
-     "I/AcosMulti( 3392): Main.restored message=Hello"
+     "I/AcosMulti( 6600): Main.onDestroy",
+     "I/AcosMulti( 6600): Main.restored message=Hello"
     ]
    },
    "screenshot": "screenshot-15-assert_log.png",
@@ -844,7 +844,7 @@
    "visible_texts": [],
    "visible_descs": [],
    "screen": {
-    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "activity": "com.motorola.launcher3/com.android.launcher3.CustomizationPanelLauncher",
     "package": "dev.acos.fixtures.multiactivity",
     "app_bundle_in_snapshot": "dev.acos.fixtures.multiactivity"
    },
@@ -863,7 +863,7 @@
    "visible_texts": [],
    "visible_descs": [],
    "screen": {
-    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "activity": "com.motorola.launcher3/com.android.launcher3.CustomizationPanelLauncher",
     "package": "dev.acos.fixtures.multiactivity",
     "app_bundle_in_snapshot": "dev.acos.fixtures.multiactivity"
    },
@@ -878,7 +878,7 @@
    "node_count": 0
   }
  ],
- "finished": "2026-11-14T09:49:27.507+00:00",
+ "finished": "2026-11-14T09:57:17.075+00:00",
  "commands": [
   {
    "tool": "adb",
@@ -888,7 +888,7 @@
     "list",
     "packages"
    ],
-   "ts": "2026-11-14T09:48:56.939+00:00"
+   "ts": "2026-11-14T09:56:46.196+00:00"
   },
   {
    "tool": "adb",
@@ -897,7 +897,7 @@
     "getprop",
     "ro.build.fingerprint"
    ],
-   "ts": "2026-11-14T09:48:57.086+00:00"
+   "ts": "2026-11-14T09:56:46.256+00:00"
   },
   {
    "tool": "adb",
@@ -906,7 +906,7 @@
     "getprop",
     "ro.build.version.sdk"
    ],
-   "ts": "2026-11-14T09:48:57.134+00:00"
+   "ts": "2026-11-14T09:56:46.287+00:00"
   },
   {
    "tool": "adb",
@@ -915,7 +915,7 @@
     "getprop",
     "ro.build.version.release"
    ],
-   "ts": "2026-11-14T09:48:57.184+00:00"
+   "ts": "2026-11-14T09:56:46.317+00:00"
   },
   {
    "tool": "adb",
@@ -924,7 +924,7 @@
     "getprop",
     "ro.product.model"
    ],
-   "ts": "2026-11-14T09:48:57.236+00:00"
+   "ts": "2026-11-14T09:56:46.342+00:00"
   },
   {
    "tool": "adb",
@@ -933,7 +933,7 @@
     "wm",
     "size"
    ],
-   "ts": "2026-11-14T09:48:57.286+00:00"
+   "ts": "2026-11-14T09:56:46.371+00:00"
   },
   {
    "tool": "adb",
@@ -942,7 +942,7 @@
     "wm",
     "density"
    ],
-   "ts": "2026-11-14T09:48:57.377+00:00"
+   "ts": "2026-11-14T09:56:46.425+00:00"
   },
   {
    "tool": "adb",
@@ -953,7 +953,7 @@
     "system",
     "font_scale"
    ],
-   "ts": "2026-11-14T09:48:57.467+00:00"
+   "ts": "2026-11-14T09:56:46.474+00:00"
   },
   {
    "tool": "adb",
@@ -963,7 +963,7 @@
     "-v",
     "brief"
    ],
-   "ts": "2026-11-14T09:48:57.560+00:00"
+   "ts": "2026-11-14T09:56:46.522+00:00"
   },
   {
    "tool": "adb",
@@ -973,7 +973,7 @@
     "clear",
     "dev.acos.fixtures.multiactivity"
    ],
-   "ts": "2026-11-14T09:48:57.681+00:00"
+   "ts": "2026-11-14T09:56:46.619+00:00"
   },
   {
    "tool": "agent-device",
@@ -986,7 +986,7 @@
     "--foreground",
     "--json"
    ],
-   "ts": "2026-11-14T09:48:57.789+00:00"
+   "ts": "2026-11-14T09:56:46.692+00:00"
   },
   {
    "tool": "agent-device",
@@ -995,7 +995,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:00.274+00:00"
+   "ts": "2026-11-14T09:56:48.850+00:00"
   },
   {
    "tool": "adb",
@@ -1004,7 +1004,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:00.402+00:00"
+   "ts": "2026-11-14T09:56:48.973+00:00"
   },
   {
    "tool": "agent-device",
@@ -1012,7 +1012,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-00-launch.png"
    ],
-   "ts": "2026-11-14T09:49:00.507+00:00"
+   "ts": "2026-11-14T09:56:49.062+00:00"
   },
   {
    "tool": "agent-device",
@@ -1021,7 +1021,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:00.902+00:00"
+   "ts": "2026-11-14T09:56:49.449+00:00"
   },
   {
    "tool": "agent-device",
@@ -1030,7 +1030,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:01.025+00:00"
+   "ts": "2026-11-14T09:56:49.562+00:00"
   },
   {
    "tool": "adb",
@@ -1039,7 +1039,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:01.156+00:00"
+   "ts": "2026-11-14T09:56:49.684+00:00"
   },
   {
    "tool": "agent-device",
@@ -1047,7 +1047,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-01-wait_for.png"
    ],
-   "ts": "2026-11-14T09:49:01.270+00:00"
+   "ts": "2026-11-14T09:56:49.812+00:00"
   },
   {
    "tool": "agent-device",
@@ -1056,7 +1056,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:01.585+00:00"
+   "ts": "2026-11-14T09:56:50.110+00:00"
   },
   {
    "tool": "agent-device",
@@ -1065,7 +1065,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:01.687+00:00"
+   "ts": "2026-11-14T09:56:50.226+00:00"
   },
   {
    "tool": "adb",
@@ -1074,7 +1074,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:01.801+00:00"
+   "ts": "2026-11-14T09:56:50.336+00:00"
   },
   {
    "tool": "agent-device",
@@ -1082,7 +1082,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-02-assert_text.png"
    ],
-   "ts": "2026-11-14T09:49:01.904+00:00"
+   "ts": "2026-11-14T09:56:50.425+00:00"
   },
   {
    "tool": "agent-device",
@@ -1091,7 +1091,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:02.189+00:00"
+   "ts": "2026-11-14T09:56:50.717+00:00"
   },
   {
    "tool": "agent-device",
@@ -1100,7 +1100,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:02.296+00:00"
+   "ts": "2026-11-14T09:56:50.853+00:00"
   },
   {
    "tool": "adb",
@@ -1109,7 +1109,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:02.400+00:00"
+   "ts": "2026-11-14T09:56:50.976+00:00"
   },
   {
    "tool": "agent-device",
@@ -1117,7 +1117,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-03-assert_text.png"
    ],
-   "ts": "2026-11-14T09:49:02.514+00:00"
+   "ts": "2026-11-14T09:56:51.055+00:00"
   },
   {
    "tool": "adb",
@@ -1127,7 +1127,7 @@
     "-v",
     "brief"
    ],
-   "ts": "2026-11-14T09:49:02.808+00:00"
+   "ts": "2026-11-14T09:56:51.345+00:00"
   },
   {
    "tool": "agent-device",
@@ -1136,7 +1136,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:02.932+00:00"
+   "ts": "2026-11-14T09:56:51.478+00:00"
   },
   {
    "tool": "adb",
@@ -1145,7 +1145,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:03.035+00:00"
+   "ts": "2026-11-14T09:56:51.592+00:00"
   },
   {
    "tool": "agent-device",
@@ -1153,7 +1153,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-04-assert_log.png"
    ],
-   "ts": "2026-11-14T09:49:03.150+00:00"
+   "ts": "2026-11-14T09:56:51.662+00:00"
   },
   {
    "tool": "agent-device",
@@ -1162,7 +1162,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:03.447+00:00"
+   "ts": "2026-11-14T09:56:51.942+00:00"
   },
   {
    "tool": "agent-device",
@@ -1172,7 +1172,7 @@
     "344",
     "--settle"
    ],
-   "ts": "2026-11-14T09:49:03.561+00:00"
+   "ts": "2026-11-14T09:56:52.053+00:00"
   },
   {
    "tool": "agent-device",
@@ -1181,7 +1181,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:04.953+00:00"
+   "ts": "2026-11-14T09:56:53.437+00:00"
   },
   {
    "tool": "adb",
@@ -1190,7 +1190,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:05.171+00:00"
+   "ts": "2026-11-14T09:56:53.657+00:00"
   },
   {
    "tool": "agent-device",
@@ -1198,7 +1198,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-05-tap.png"
    ],
-   "ts": "2026-11-14T09:49:05.282+00:00"
+   "ts": "2026-11-14T09:56:53.787+00:00"
   },
   {
    "tool": "agent-device",
@@ -1207,7 +1207,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:05.606+00:00"
+   "ts": "2026-11-14T09:56:54.125+00:00"
   },
   {
    "tool": "agent-device",
@@ -1217,7 +1217,7 @@
     "344",
     "--settle"
    ],
-   "ts": "2026-11-14T09:49:05.873+00:00"
+   "ts": "2026-11-14T09:56:54.313+00:00"
   },
   {
    "tool": "agent-device",
@@ -1225,7 +1225,7 @@
     "type",
     "Hello"
    ],
-   "ts": "2026-11-14T09:49:06.964+00:00"
+   "ts": "2026-11-14T09:56:55.411+00:00"
   },
   {
    "tool": "agent-device",
@@ -1234,7 +1234,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:07.483+00:00"
+   "ts": "2026-11-14T09:56:55.937+00:00"
   },
   {
    "tool": "adb",
@@ -1243,7 +1243,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:07.701+00:00"
+   "ts": "2026-11-14T09:56:56.137+00:00"
   },
   {
    "tool": "agent-device",
@@ -1251,7 +1251,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-06-type.png"
    ],
-   "ts": "2026-11-14T09:49:07.778+00:00"
+   "ts": "2026-11-14T09:56:56.204+00:00"
   },
   {
    "tool": "agent-device",
@@ -1260,7 +1260,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:08.080+00:00"
+   "ts": "2026-11-14T09:56:56.498+00:00"
   },
   {
    "tool": "agent-device",
@@ -1270,7 +1270,7 @@
     "460",
     "--settle"
    ],
-   "ts": "2026-11-14T09:49:08.265+00:00"
+   "ts": "2026-11-14T09:56:56.655+00:00"
   },
   {
    "tool": "agent-device",
@@ -1279,7 +1279,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:09.597+00:00"
+   "ts": "2026-11-14T09:56:57.932+00:00"
   },
   {
    "tool": "adb",
@@ -1288,7 +1288,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:09.720+00:00"
+   "ts": "2026-11-14T09:56:58.056+00:00"
   },
   {
    "tool": "agent-device",
@@ -1296,7 +1296,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-07-tap.png"
    ],
-   "ts": "2026-11-14T09:49:09.839+00:00"
+   "ts": "2026-11-14T09:56:58.161+00:00"
   },
   {
    "tool": "adb",
@@ -1306,7 +1306,7 @@
     "-v",
     "brief"
    ],
-   "ts": "2026-11-14T09:49:10.139+00:00"
+   "ts": "2026-11-14T09:56:58.477+00:00"
   },
   {
    "tool": "agent-device",
@@ -1315,7 +1315,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:10.255+00:00"
+   "ts": "2026-11-14T09:56:58.603+00:00"
   },
   {
    "tool": "adb",
@@ -1324,7 +1324,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:10.369+00:00"
+   "ts": "2026-11-14T09:56:58.715+00:00"
   },
   {
    "tool": "agent-device",
@@ -1332,7 +1332,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-08-assert_log.png"
    ],
-   "ts": "2026-11-14T09:49:10.478+00:00"
+   "ts": "2026-11-14T09:56:58.817+00:00"
   },
   {
    "tool": "agent-device",
@@ -1341,7 +1341,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:10.785+00:00"
+   "ts": "2026-11-14T09:56:59.110+00:00"
   },
   {
    "tool": "agent-device",
@@ -1350,7 +1350,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:10.890+00:00"
+   "ts": "2026-11-14T09:56:59.216+00:00"
   },
   {
    "tool": "adb",
@@ -1359,7 +1359,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:11.004+00:00"
+   "ts": "2026-11-14T09:56:59.331+00:00"
   },
   {
    "tool": "agent-device",
@@ -1367,7 +1367,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-09-assert_text.png"
    ],
-   "ts": "2026-11-14T09:49:11.118+00:00"
+   "ts": "2026-11-14T09:56:59.435+00:00"
   },
   {
    "tool": "agent-device",
@@ -1376,7 +1376,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:11.421+00:00"
+   "ts": "2026-11-14T09:56:59.739+00:00"
   },
   {
    "tool": "adb",
@@ -1385,7 +1385,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:11.571+00:00"
+   "ts": "2026-11-14T09:56:59.884+00:00"
   },
   {
    "tool": "agent-device",
@@ -1393,7 +1393,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-10-capture-second-activity.png"
    ],
-   "ts": "2026-11-14T09:49:11.675+00:00"
+   "ts": "2026-11-14T09:56:59.964+00:00"
   },
   {
    "tool": "agent-device",
@@ -1402,7 +1402,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:11.962+00:00"
+   "ts": "2026-11-14T09:57:00.261+00:00"
   },
   {
    "tool": "agent-device",
@@ -1412,7 +1412,7 @@
     "394",
     "--settle"
    ],
-   "ts": "2026-11-14T09:49:12.070+00:00"
+   "ts": "2026-11-14T09:57:00.374+00:00"
   },
   {
    "tool": "agent-device",
@@ -1421,7 +1421,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:13.526+00:00"
+   "ts": "2026-11-14T09:57:01.815+00:00"
   },
   {
    "tool": "adb",
@@ -1430,7 +1430,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:13.737+00:00"
+   "ts": "2026-11-14T09:57:02.026+00:00"
   },
   {
    "tool": "agent-device",
@@ -1438,7 +1438,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-11-tap.png"
    ],
-   "ts": "2026-11-14T09:49:13.844+00:00"
+   "ts": "2026-11-14T09:57:02.141+00:00"
   },
   {
    "tool": "adb",
@@ -1448,7 +1448,7 @@
     "-v",
     "brief"
    ],
-   "ts": "2026-11-14T09:49:14.154+00:00"
+   "ts": "2026-11-14T09:57:02.480+00:00"
   },
   {
    "tool": "agent-device",
@@ -1457,7 +1457,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:14.283+00:00"
+   "ts": "2026-11-14T09:57:02.601+00:00"
   },
   {
    "tool": "adb",
@@ -1466,7 +1466,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:14.462+00:00"
+   "ts": "2026-11-14T09:57:02.763+00:00"
   },
   {
    "tool": "agent-device",
@@ -1474,7 +1474,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-12-assert_log.png"
    ],
-   "ts": "2026-11-14T09:49:14.562+00:00"
+   "ts": "2026-11-14T09:57:02.869+00:00"
   },
   {
    "tool": "agent-device",
@@ -1483,7 +1483,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:14.860+00:00"
+   "ts": "2026-11-14T09:57:03.186+00:00"
   },
   {
    "tool": "agent-device",
@@ -1492,7 +1492,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:15.033+00:00"
+   "ts": "2026-11-14T09:57:03.358+00:00"
   },
   {
    "tool": "adb",
@@ -1501,7 +1501,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:15.242+00:00"
+   "ts": "2026-11-14T09:57:03.554+00:00"
   },
   {
    "tool": "agent-device",
@@ -1509,7 +1509,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-13-assert_text.png"
    ],
-   "ts": "2026-11-14T09:49:15.346+00:00"
+   "ts": "2026-11-14T09:57:03.666+00:00"
   },
   {
    "tool": "agent-device",
@@ -1517,7 +1517,7 @@
     "orientation",
     "landscape-left"
    ],
-   "ts": "2026-11-14T09:49:15.677+00:00"
+   "ts": "2026-11-14T09:57:03.992+00:00"
   },
   {
    "tool": "agent-device",
@@ -1525,7 +1525,7 @@
     "keyboard",
     "dismiss"
    ],
-   "ts": "2026-11-14T09:49:18.109+00:00"
+   "ts": "2026-11-14T09:57:06.725+00:00"
   },
   {
    "tool": "agent-device",
@@ -1534,7 +1534,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:19.145+00:00"
+   "ts": "2026-11-14T09:57:07.829+00:00"
   },
   {
    "tool": "adb",
@@ -1543,7 +1543,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:19.234+00:00"
+   "ts": "2026-11-14T09:57:07.916+00:00"
   },
   {
    "tool": "agent-device",
@@ -1551,7 +1551,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-14-rotate.png"
    ],
-   "ts": "2026-11-14T09:49:19.302+00:00"
+   "ts": "2026-11-14T09:57:07.981+00:00"
   },
   {
    "tool": "adb",
@@ -1561,7 +1561,7 @@
     "-v",
     "brief"
    ],
-   "ts": "2026-11-14T09:49:19.611+00:00"
+   "ts": "2026-11-14T09:57:08.291+00:00"
   },
   {
    "tool": "agent-device",
@@ -1570,7 +1570,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:19.732+00:00"
+   "ts": "2026-11-14T09:57:08.406+00:00"
   },
   {
    "tool": "adb",
@@ -1579,7 +1579,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:19.843+00:00"
+   "ts": "2026-11-14T09:57:08.515+00:00"
   },
   {
    "tool": "agent-device",
@@ -1587,7 +1587,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-15-assert_log.png"
    ],
-   "ts": "2026-11-14T09:49:19.938+00:00"
+   "ts": "2026-11-14T09:57:08.593+00:00"
   },
   {
    "tool": "agent-device",
@@ -1596,7 +1596,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:20.222+00:00"
+   "ts": "2026-11-14T09:57:08.907+00:00"
   },
   {
    "tool": "agent-device",
@@ -1605,7 +1605,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:20.327+00:00"
+   "ts": "2026-11-14T09:57:09.017+00:00"
   },
   {
    "tool": "adb",
@@ -1614,7 +1614,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:20.443+00:00"
+   "ts": "2026-11-14T09:57:09.132+00:00"
   },
   {
    "tool": "agent-device",
@@ -1622,7 +1622,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-16-assert_text.png"
    ],
-   "ts": "2026-11-14T09:49:20.551+00:00"
+   "ts": "2026-11-14T09:57:09.206+00:00"
   },
   {
    "tool": "agent-device",
@@ -1630,7 +1630,7 @@
     "orientation",
     "portrait"
    ],
-   "ts": "2026-11-14T09:49:20.850+00:00"
+   "ts": "2026-11-14T09:57:09.505+00:00"
   },
   {
    "tool": "agent-device",
@@ -1638,7 +1638,7 @@
     "keyboard",
     "dismiss"
    ],
-   "ts": "2026-11-14T09:49:23.278+00:00"
+   "ts": "2026-11-14T09:57:12.050+00:00"
   },
   {
    "tool": "agent-device",
@@ -1647,7 +1647,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:23.894+00:00"
+   "ts": "2026-11-14T09:57:12.692+00:00"
   },
   {
    "tool": "adb",
@@ -1656,7 +1656,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:24.007+00:00"
+   "ts": "2026-11-14T09:57:12.792+00:00"
   },
   {
    "tool": "agent-device",
@@ -1664,7 +1664,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-17-rotate.png"
    ],
-   "ts": "2026-11-14T09:49:24.106+00:00"
+   "ts": "2026-11-14T09:57:12.901+00:00"
   },
   {
    "tool": "agent-device",
@@ -1673,7 +1673,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:24.404+00:00"
+   "ts": "2026-11-14T09:57:13.221+00:00"
   },
   {
    "tool": "agent-device",
@@ -1682,7 +1682,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:24.513+00:00"
+   "ts": "2026-11-14T09:57:13.330+00:00"
   },
   {
    "tool": "adb",
@@ -1691,7 +1691,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:24.631+00:00"
+   "ts": "2026-11-14T09:57:13.440+00:00"
   },
   {
    "tool": "agent-device",
@@ -1699,7 +1699,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-18-assert_text.png"
    ],
-   "ts": "2026-11-14T09:49:24.735+00:00"
+   "ts": "2026-11-14T09:57:13.578+00:00"
   },
   {
    "tool": "agent-device",
@@ -1707,7 +1707,7 @@
     "back",
     "--settle"
    ],
-   "ts": "2026-11-14T09:49:25.031+00:00"
+   "ts": "2026-11-14T09:57:13.868+00:00"
   },
   {
    "tool": "agent-device",
@@ -1716,7 +1716,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:26.339+00:00"
+   "ts": "2026-11-14T09:57:14.908+00:00"
   },
   {
    "tool": "adb",
@@ -1725,7 +1725,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:26.463+00:00"
+   "ts": "2026-11-14T09:57:15.008+00:00"
   },
   {
    "tool": "agent-device",
@@ -1733,7 +1733,7 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-19-back.png"
    ],
-   "ts": "2026-11-14T09:49:26.558+00:00"
+   "ts": "2026-11-14T09:57:15.071+00:00"
   },
   {
    "tool": "adb",
@@ -1743,7 +1743,7 @@
     "-v",
     "brief"
    ],
-   "ts": "2026-11-14T09:49:26.874+00:00"
+   "ts": "2026-11-14T09:57:15.959+00:00"
   },
   {
    "tool": "agent-device",
@@ -1752,7 +1752,7 @@
     "--force-full",
     "--json"
    ],
-   "ts": "2026-11-14T09:49:26.995+00:00"
+   "ts": "2026-11-14T09:57:16.043+00:00"
   },
   {
    "tool": "adb",
@@ -1761,7 +1761,7 @@
     "dumpsys",
     "window"
    ],
-   "ts": "2026-11-14T09:49:27.109+00:00"
+   "ts": "2026-11-14T09:57:16.140+00:00"
   },
   {
    "tool": "agent-device",
@@ -1769,21 +1769,21 @@
     "screenshot",
     ".cache/phone-probe/multi-activity/screenshot-20-assert_no_crash.png"
    ],
-   "ts": "2026-11-14T09:49:27.211+00:00"
+   "ts": "2026-11-14T09:57:16.200+00:00"
   },
   {
    "tool": "agent-device",
    "args": [
     "close"
    ],
-   "ts": "2026-11-14T09:49:27.507+00:00"
+   "ts": "2026-11-14T09:57:17.075+00:00"
   },
   {
    "tool": "agent-device",
    "args": [
     "home"
    ],
-   "ts": "2026-11-14T09:49:27.620+00:00"
+   "ts": "2026-11-14T09:57:17.186+00:00"
   }
  ]
 }

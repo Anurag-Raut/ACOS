@@ -10,7 +10,7 @@
 | 5 | assert_text | `{"id": "result"}` | pass / clicks: 0 / [42,612][175,663] | pass / clicks: 0 / [40,566][166,612] | - | - | **bounds** |
 | 6 | assert_log | `-` | pass / - / - | pass / - / - | - | Enter your name, Greet, Hello ACOS, Hello Views, clicks: 0 | **text-set** |
 | 7 | tap | `{"id": "input"}` | pass / Enter your name / [42,368][1038,486] | pass / Enter your name / [40,334][1040,446] | - | - | **bounds** |
-| 8 | type | `{"id": "input"}` | pass / World / [42,368][1038,486] | pass / Enter your name / [40,334][1040,446] | - | - | **state** |
+| 8 | type | `{"id": "input"}` | pass / World / [42,368][1038,486] | pass / World / [40,334][1040,446] | - | - | **bounds** |
 | 9 | tap | `{"id": "btn"}` | pass / Greet / [42,486][273,612] | pass / Greet / [40,446][260,566] | - | - | **bounds** |
 | 10 | assert_log | `-` | pass / - / - | pass / - / - | - | Greet, Hello ACOS, Hello Views, Hello, World! clicks: 1, World | **text-set** |
 | 11 | assert_text | `{"id": "result"}` | pass / Hello, World! clicks: 1 / [42,612][392,663] | pass / Hello, World! clicks: 1 / [40,566][372,612] | - | - | **bounds** |
@@ -29,4 +29,4 @@
 | 24 | assert_log | `-` | - / - / - | pass_with_failure / - / - | - | - | **missing-side** |
 | 25 | assert_no_crash | `-` | - / - / - | pass / - / - | - | - | **missing-side** |
 
-Counts: bounds=10, match=1, missing-side=9, state=1, status=1, text-set=4
+Counts: bounds=11, match=1, missing-side=9, status=1, text-set=4

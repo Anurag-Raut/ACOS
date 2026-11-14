@@ -84,8 +84,8 @@ screen identity, and a screenshot (evidence, ≤540 px wide).
 | `form-validation` | **pass** 28/28 | **pass** 28/28 | 28 | bounds=17, match=1, text-set=10 |
 | `gaten-home` | **pass** 14/14 | launch + first tap pass, then blocked (no `Skip` on this build) | 2 of 14 | match=1, missing-on-phone=10, text-set=3 |
 | `todo-list` | **unsupported** at step 22 `rotate` (`UNSUPPORTED_BACKEND`, `input.rotate`) | **pass** 29/29 | 22 | bounds=13, match=4, missing-side=6, status=1, text-set=5 |
-| `hello-views` | **unsupported** at step 16 `rotate` | **pass** 26/26 | 16 | bounds=10, match=1, missing-side=9, state=1, status=1, text-set=4 |
-| `multi-activity` | **unsupported** at step 14 `rotate` (`UNSUPPORTED_BACKEND`, `input.rotate`) | **pass** 21/21 | 14 | bounds=6, match=3, missing-side=6, state=1, status=1, text-set=4 |
+| `hello-views` | **unsupported** at step 16 `rotate` | **pass** 26/26 | 16 | bounds=11, match=1, missing-side=9, status=1, text-set=4 |
+| `multi-activity` | **unsupported** at step 14 `rotate` (`UNSUPPORTED_BACKEND`, `input.rotate`) | **pass** 21/21 | 14 | bounds=7, match=3, missing-side=6, status=1, text-set=4 |
 | `negative/form-wrong-error` | expectation **fail** (as designed) | assertion **false** — the error node does not exist before Submit | 3 | twin really wrong on both sides |
 
 Two capability facts fall out of this table and matter more than any single row:
@@ -108,7 +108,6 @@ are those files.
 
 ### 4.1 `form-validation` — the fair comparison (identical APK)
 
-### form-validation
 
 | step | kind | selector | ACOS status/target/bounds | phone status/target/bounds | text only ACOS | text only phone | class |
 |---|---|---|---|---|---|---|---|
@@ -171,7 +170,6 @@ Reading of this table:
 
 ### 4.2 `gaten-home` — build-blocked
 
-### gaten-home
 
 | step | kind | selector | ACOS status/target/bounds | phone status/target/bounds | text only ACOS | text only phone | class |
 |---|---|---|---|---|---|---|---|
@@ -213,7 +211,6 @@ phone.
 
 ### 4.3 `todo-list`
 
-### todo-list
 
 | step | kind | selector | ACOS status/target/bounds | phone status/target/bounds | text only ACOS | text only phone | class |
 |---|---|---|---|---|---|---|---|
@@ -261,8 +258,6 @@ Counts: bounds=13, match=4, missing-side=6, status=1, text-set=5
 
 ### 4.4 `hello-views`
 
-### hello-views
-
 | step | kind | selector | ACOS status/target/bounds | phone status/target/bounds | text only ACOS | text only phone | class |
 |---|---|---|---|---|---|---|---|
 | 0 | launch | `-` | pass / - / - | pass / - / - | - | Enter your name, Greet, Hello ACOS, Hello Views, clicks: 0 | **text-set** |
@@ -273,7 +268,7 @@ Counts: bounds=13, match=4, missing-side=6, status=1, text-set=5
 | 5 | assert_text | `{"id": "result"}` | pass / clicks: 0 / [42,612][175,663] | pass / clicks: 0 / [40,566][166,612] | - | - | **bounds** |
 | 6 | assert_log | `-` | pass / - / - | pass / - / - | - | Enter your name, Greet, Hello ACOS, Hello Views, clicks: 0 | **text-set** |
 | 7 | tap | `{"id": "input"}` | pass / Enter your name / [42,368][1038,486] | pass / Enter your name / [40,334][1040,446] | - | - | **bounds** |
-| 8 | type | `{"id": "input"}` | pass / World / [42,368][1038,486] | pass / Enter your name / [40,334][1040,446] | - | - | **state** |
+| 8 | type | `{"id": "input"}` | pass / World / [42,368][1038,486] | pass / World / [40,334][1040,446] | - | - | **bounds** |
 | 9 | tap | `{"id": "btn"}` | pass / Greet / [42,486][273,612] | pass / Greet / [40,446][260,566] | - | - | **bounds** |
 | 10 | assert_log | `-` | pass / - / - | pass / - / - | - | Greet, Hello ACOS, Hello Views, Hello, World! clicks: 1, World | **text-set** |
 | 11 | assert_text | `{"id": "result"}` | pass / Hello, World! clicks: 1 / [42,612][392,663] | pass / Hello, World! clicks: 1 / [40,566][372,612] | - | - | **bounds** |
@@ -292,10 +287,12 @@ Counts: bounds=13, match=4, missing-side=6, status=1, text-set=5
 | 24 | assert_log | `-` | - / - / - | pass_with_failure / - / - | - | - | **missing-side** |
 | 25 | assert_no_crash | `-` | - / - / - | pass / - / - | - | - | **missing-side** |
 
-Counts: bounds=10, match=1, missing-side=9, state=1, status=1, text-set=4
+Counts: bounds=11, match=1, missing-side=9, status=1, text-set=4
+
 
 * Steps 0–15 (counter text and clicks, `Hello, World! clicks: N`, the id-based
-  asserts): same texts and targets; 10 `bounds` rows.
+  asserts, including the typed `World` landing in `id/input`): same texts and
+  targets; 11 `bounds` rows.
 * Step 16 `rotate`: ACOS unsupported, phone rotates → steps 17–25 have no ACOS
   observation.
 * Phone-only note: three lifecycle `assert_log` steps after the rotate
@@ -308,7 +305,6 @@ Counts: bounds=10, match=1, missing-side=9, state=1, status=1, text-set=4
 
 ### 4.5 `multi-activity`
 
-
 | step | kind | selector | ACOS status/target/bounds | phone status/target/bounds | text only ACOS | text only phone | class |
 |---|---|---|---|---|---|---|---|
 | 0 | launch | `-` | pass / - / - | pass / - / - | - | Message, Multi Activity, Send | **text-set** |
@@ -317,7 +313,7 @@ Counts: bounds=10, match=1, missing-side=9, state=1, status=1, text-set=4
 | 3 | assert_text | `{"id": "send"}` | pass / Send / [42,435][273,561] | pass / Send / [40,400][260,520] | - | - | **bounds** |
 | 4 | assert_log | `-` | pass / - / - | pass / - / - | - | Message, Multi Activity, Send | **text-set** |
 | 5 | tap | `{"id": "message"}` | pass / Message / [42,317][1038,435] | pass / Message / [40,288][1040,400] | - | - | **bounds** |
-| 6 | type | `{"id": "message"}` | pass / Hello / [42,317][1038,435] | pass / Message / [40,288][1040,400] | - | - | **state** |
+| 6 | type | `{"id": "message"}` | pass / Hello / [42,317][1038,435] | pass / Hello / [40,288][1040,400] | - | - | **bounds** |
 | 7 | tap | `{"id": "send"}` | pass / - / - | pass / Send / [40,400][260,520] | - | - | **match** |
 | 8 | assert_log | `-` | pass / - / - | pass / - / - | - | Finish, Multi Activity, Received: Hello | **text-set** |
 | 9 | assert_text | `{"id": "received"}` | pass / Received: Hello / [42,317][295,368] | pass / Received: Hello / [40,288][282,334] | - | - | **bounds** |
@@ -333,13 +329,13 @@ Counts: bounds=10, match=1, missing-side=9, state=1, status=1, text-set=4
 | 19 | back | `-` | - / - / - | pass / - / - | - | - | **missing-side** |
 | 20 | assert_no_crash | `-` | - / - / - | pass / - / - | - | - | **missing-side** |
 
-Counts: bounds=6, match=3, missing-side=6, state=1, status=1, text-set=4
+Counts: bounds=7, match=3, missing-side=6, status=1, text-set=4
 
 Phone: **pass 21/21** (launch, first activity, `Next` to the second activity,
 `Back`, texts and ids at each step). ACOS reaches step 13 and then stops at the
 `rotate` with the same `UNSUPPORTED_BACKEND`/`input.rotate` as the other two
 flows, so steps 14–20 have no ACOS observation. Where both sides ran, the same
-texts and ids were observed; the 6 `bounds` rows are the density/inset shift.
+texts and ids were observed; the 7 `bounds` rows are the density/inset shift.
 
 ## 5. Classification of every difference
 
