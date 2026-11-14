@@ -2237,7 +2237,7 @@ wire/native bugs, and keep a bounded `HostGuard` in `render_views` so a future
 guest loop fails loudly. File the five real failures as T1a–T1e; do not weaken
 any verify/assertion or mark a real failure `#[ignore]`.
 
-## E13.9 — SE1: an opt-in per-step `expect_change` closes GR4's vacuous-flow gap (a no-op tap can no longer pass) — PASS (ADR-0026 decision 2 shipped; 0 false passes)
+## E13.10 — SE1: an opt-in per-step `expect_change` closes GR4's vacuous-flow gap (a no-op tap can no longer pass) — PASS (ADR-0026 decision 2 shipped; 0 false passes)
 
 **Date:** 2026-11-14. **Commit:** the SE1 commit on branch `settle-se1-expect-change`
 (base `main` `3e11d9c`). **Responsible agent:** SE1 (worktree `3oxa6xao/gr4`,

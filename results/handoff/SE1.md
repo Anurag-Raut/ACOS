@@ -48,7 +48,7 @@ Files:
   (`ASSERTION_FAILED`, `UNSUPPORTED_ASSERTION` rows).
 * New gates `scenarios/se1-expect-change-tap.yaml` (pass) and
   `scenarios/negative/se1-expect-change-noop.yaml` (`ASSERTION_FAILED`).
-* `EXPERIMENTS.md` E13.9.
+* `EXPERIMENTS.md` E13.10.
 
 ## 2. Evidence (all under one ART lock per batch, `--engine art`, animations on)
 
