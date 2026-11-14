@@ -77,6 +77,9 @@
     "AssertionResult": {
       "description": "The result of one assertion, stored per step in the verdict.",
       "properties": {
+        "actual": {
+          "description": "What the runtime actually observed, echoed on pass and failure."
+        },
         "diff": {
           "anyOf": [
             {
@@ -87,6 +90,9 @@
             }
           ],
           "description": "Present when the assertion failed or produced an explainable result."
+        },
+        "expected": {
+          "description": "What the assertion expected, echoed on pass **and** failure.\n\nFor `text`/`visible`/`state` this names the selector, the matcher and every expected bound/flag; for `log` the patterns. From the artifacts alone a reviewer can then tell *what* was asserted, not only that it held."
         },
         "kind": {
           "description": "Assertion kind (`text`, `visible`, `log`, ...).",
@@ -1389,6 +1395,13 @@
           "minimum": 0.0,
           "type": "integer"
         },
+        "name": {
+          "description": "`capture` step name (the scenario's own label for this screenshot).\n\nWritten into the step JSON so \"the screenshot for X\" is answerable from the artifacts; the same name keys `verdict.json`'s `captures` map.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "settle": {
           "description": "Settle evidence for an input step (P12): `mode`, `settled`, `bound`, `pixels_changed`, `reason`, ... `None` for steps with no settle reply."
         },
@@ -1431,6 +1444,13 @@
         }
       ],
       "description": "Backend that produced the verdict."
+    },
+    "captures": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "`capture` step names mapped to the PNG that step wrote (`{\"meanings-collapsed\": \"frames/16-meanings-collapsed.png\"}`). Relative to the artifacts directory, like every other evidence path.",
+      "type": "object"
     },
     "failure": {
       "anyOf": [
@@ -1526,6 +1546,15 @@
     "started_at": {
       "description": "RFC 3339 UTC start time.",
       "type": "string"
+    },
+    "status": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Status"
+        }
+      ],
+      "default": "fail",
+      "description": "The same outcome as [`Verdict::verdict`], under the envelope's field name and vocabulary (`pass`/`fail`/`unsupported`/`blocked`/`error`/`timeout`/ `crash`). `verdict` is kept for compatibility; a reader that checks `status` (as it does on every envelope) gets the same answer."
     },
     "steps": {
       "description": "Per-step results, in execution order.",

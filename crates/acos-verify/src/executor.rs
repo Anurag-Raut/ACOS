@@ -8,7 +8,7 @@
 //! * a negative scenario that somehow passes is converted into an `INTERNAL`
 //!   harness failure instead of being reported as a successful test.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -222,6 +222,9 @@ pub fn run_scenario(
     let mut status = Status::Pass;
     let mut failure: Option<FailureClassification> = None;
     let mut notes: Vec<String> = Vec::new();
+    // `capture` step names -> the PNG that step wrote. Written into the verdict
+    // so the scenario's own label answers "the screenshot for X".
+    let mut captures: BTreeMap<String, String> = BTreeMap::new();
 
     // The advisor frame-binding ledger: the completed frame every pure UI or
     // screenshot assertion must describe, plus the highest frame seen (for
@@ -380,6 +383,10 @@ pub fn run_scenario(
 
         // Write evidence and declare it.
         let step_artifact = acos_protocol::step_file_name(index, step.kind());
+        let capture_name = match step.as_step() {
+            Some(StepRef::Capture(capture)) => Some(capture.name.clone()),
+            _ => None,
+        };
         if let Some(observation) = &exec.observation {
             let seq = observation.frame.frame_seq;
             step_result.frame_seq = Some(seq);
@@ -392,6 +399,28 @@ pub fn run_scenario(
                 step_result.evidence.push(ArtifactRef::new(
                     "frame",
                     acos_protocol::frame_file_name(seq),
+                ));
+                // A `capture` step's own name is evidence: the step JSON gets
+                // `name`, the PNG gets a named copy, and the verdict gets the
+                // name -> path map.
+                if let Some(name) = &capture_name {
+                    let named = acos_protocol::artifacts::capture_frame_file_name(seq, name);
+                    artifacts::write_capture_frame(
+                        &options.artifacts_dir,
+                        &acos_protocol::frame_file_name(seq),
+                        &named,
+                    )?;
+                    step_result.name = Some(name.clone());
+                    step_result
+                        .evidence
+                        .push(ArtifactRef::new("capture", named.clone()));
+                    captures.insert(name.clone(), named);
+                }
+            } else if let Some(name) = &capture_name {
+                // No pixels: the capture cannot pass, and a name without a file
+                // would be a dangling declaration. Record the gap honestly.
+                notes.push(format!(
+                    "capture step {index} ({name}) produced no frame bytes; no captures entry was written"
                 ));
             }
             produced_frames.push(observation.frame.clone());
@@ -569,6 +598,7 @@ pub fn run_scenario(
     verdict.required_fidelity = options.required_fidelity;
     verdict.session_id = session_id.clone();
     verdict.steps = steps.clone();
+    verdict.captures = captures;
     verdict.failure = failure;
     verdict.notes = notes;
 
@@ -1567,6 +1597,8 @@ fn expect_change_failure(
         result: AssertionResult {
             kind: kind.to_string(),
             passed: false,
+            expected: Some(serde_json::json!({"pixels_changed": true})),
+            actual: Some(serde_json::json!({"pixels_changed": pixels_changed})),
             diff: Some(AssertionDiff {
                 expected: serde_json::json!({"pixels_changed": true}),
                 actual: serde_json::json!({"pixels_changed": pixels_changed}),
@@ -1610,6 +1642,8 @@ fn fast_bound_failure(kind: &str) -> StepExec {
         result: AssertionResult {
             kind: "frame_binding".to_string(),
             passed: false,
+            expected: Some(serde_json::json!({"settle": "strict"})),
+            actual: Some(serde_json::json!({"settle": "fast"})),
             diff: Some(AssertionDiff {
                 expected: serde_json::json!({"settle": "strict"}),
                 actual: serde_json::json!({"settle": "fast"}),
@@ -1635,6 +1669,8 @@ fn frame_binding_failure(bound: u64, observation: &SessionObservation) -> StepEx
         result: AssertionResult {
             kind: "frame_binding".to_string(),
             passed: false,
+            expected: Some(serde_json::json!({"frame_seq": bound})),
+            actual: Some(serde_json::json!({"frame_seq": observation.frame.frame_seq})),
             diff: Some(AssertionDiff {
                 expected: serde_json::json!({"frame_seq": bound}),
                 actual: serde_json::json!({"frame_seq": observation.frame.frame_seq}),
@@ -1682,6 +1718,12 @@ fn eval_tap_change(
                     "host-observed input delivery ({acks} guest ack(s)); no visual change; \
                      no state change claimed"
                 )),
+                serde_json::json!({"delivered": true}),
+                serde_json::json!({
+                    "delivered": delivery.delivered,
+                    "acks": acks,
+                    "visual_change": delivery.visual_change,
+                }),
             );
         }
         if !delivery.delivered {
@@ -1706,6 +1748,8 @@ fn eval_tap_change(
             "state_change",
             Vec::new(),
             Some("no previous observation to compare; change not claimed".to_string()),
+            serde_json::json!({"compared": false}),
+            serde_json::json!({"previous_observation": false}),
         );
     };
     let change = current.changed_from(previous);
@@ -1722,7 +1766,16 @@ fn eval_tap_change(
             (false, true) => "screenshot changed (no UI tree evidence available)".to_string(),
             (false, false) => "no evidence channel available to compare".to_string(),
         };
-        return Evaluated::pass("state_change", Vec::new(), Some(message));
+        return Evaluated::pass(
+            "state_change",
+            Vec::new(),
+            Some(message),
+            serde_json::json!({"tree_changed": true, "screenshot_changed": true}),
+            serde_json::json!({
+                "tree_changed": change.tree_changed,
+                "screenshot_changed": change.screenshot_changed,
+            }),
+        );
     }
     let detail = if !tree_ok {
         "the UI tree did not change".to_string()
@@ -1854,7 +1907,16 @@ fn eval_screenshot(
                 "masked_regions": diff.masked_regions,
             });
             if diff.passed {
-                return Evaluated::pass("screenshot", Vec::new(), Some(detail));
+                return Evaluated::pass(
+                    "screenshot",
+                    Vec::new(),
+                    Some(detail),
+                    serde_json::json!({
+                        "baseline": assertion.baseline,
+                        "tolerance": assertion.tolerance,
+                    }),
+                    actual_value,
+                );
             }
             Evaluated::fail(
                 "screenshot",
@@ -2144,6 +2206,12 @@ fn eval_region(
                 frame_region.top(),
                 checks.join(", ")
             )),
+            serde_json::json!({
+                "criteria": checks,
+                "display_region": [assertion.x, assertion.y, assertion.w, assertion.h],
+                "display_origin": frame_meta.display_origin,
+            }),
+            actual_value,
         );
     }
     let detail = failures.join("; ");

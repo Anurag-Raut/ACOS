@@ -111,6 +111,28 @@ pub fn write_frame(dir: &Path, seq: u64, png: &[u8]) -> Result<(), VerifyError> 
     write_bytes(dir, &frame_file_name(seq), png)
 }
 
+/// Write the named copy of a capture frame (`frames/<seq>-<name>.png`).
+///
+/// Same bytes as `frames/<seq>.png` (the file `steps[].frame_seq` names): a
+/// hardlink when the filesystem allows it (no extra bytes), a copy otherwise.
+/// The label is what makes "the screenshot for X" answerable from the artifacts.
+pub fn write_capture_frame(
+    dir: &Path,
+    canonical: &str,
+    named: &str,
+) -> Result<(), VerifyError> {
+    let source = dir.join(canonical);
+    let target = dir.join(named);
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| artifact_error(named, &e))?;
+    }
+    if std::fs::hard_link(&source, &target).is_ok() {
+        return Ok(());
+    }
+    let bytes = std::fs::read(&source).map_err(|e| artifact_error(canonical, &e))?;
+    write_bytes(dir, named, &bytes)
+}
+
 /// Write `logs/logcat.txt` in Android logcat form.
 pub fn write_logcat(dir: &Path, logs: &[LogRecord]) -> Result<(), VerifyError> {
     let mut text = String::from("--------- beginning of main\n");

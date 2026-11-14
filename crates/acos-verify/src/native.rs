@@ -743,7 +743,7 @@ impl NativeBackend {
             return Err(BackendError::Failed {
                 code: ErrorCode::ElementOffscreen,
                 detail: format!(
-                    "selector {selector:?} matched only a node that is not visible to the user \
+                    "selector {selector} matched only a node that is not visible to the user \
                      (id {}, text {:?}, bounds {}, visible_bounds {})",
                     node.id,
                     node.text,
@@ -758,7 +758,7 @@ impl NativeBackend {
             .cloned()
             .ok_or_else(|| BackendError::Failed {
                 code: ErrorCode::ElementNotFound,
-                detail: format!("selector {selector:?} matched no node in the live view tree"),
+                detail: format!("selector {selector} matched no node in the live view tree"),
             })
     }
 }

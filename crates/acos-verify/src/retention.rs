@@ -432,19 +432,27 @@ pub(crate) fn apply_with_warning(
 ///
 /// `none-on-pass` says "no pixels at all". The verdict must then stop declaring
 /// frames — a report may never name a file that retention is about to remove —
-/// so the declared frame artifacts and each step's `frame_seq` are dropped and
-/// the trees, logs and assertion results remain the evidence. Returns the number
-/// of declarations removed.
+/// so the declared frame artifacts, each step's `frame_seq`, the named `capture`
+/// evidence and the `captures` map are dropped, and the trees, logs and
+/// assertion results remain the evidence. Returns the number of declarations
+/// removed.
 pub fn strip_frame_evidence(verdict: &mut Verdict) -> usize {
     let mut stripped = 0;
     for step in &mut verdict.steps {
         let before = step.evidence.len();
-        step.evidence.retain(|evidence| evidence.kind != "frame");
+        step.evidence
+            .retain(|evidence| evidence.kind != "frame" && evidence.kind != "capture");
         stripped += before - step.evidence.len();
         if step.frame_seq.take().is_some() {
             stripped += 1;
         }
+        // A name without its file would break the captures invariant.
+        if step.name.take().is_some() {
+            stripped += 1;
+        }
     }
+    stripped += verdict.captures.len();
+    verdict.captures.clear();
     stripped
 }
 

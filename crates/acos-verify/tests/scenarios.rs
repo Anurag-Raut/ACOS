@@ -281,6 +281,7 @@ fn verify_envelope_satisfies_protocol_invariants() {
         apk: Some(workspace().join(&scenario.app).display().to_string()),
         scenario: scenario_path("negative/wrong-text.yaml").display().to_string(),
         artifacts: scratch("envelope").display().to_string(),
+        overwrite: false,
         reference: Some(reference_dir("hello-views").display().to_string()),
         required_fidelity: None,
         engine: acos_protocol::VerifyEngine::RustVm,
@@ -546,6 +547,102 @@ fn run_slice_with_settle(
     let outcome = run_scenario(&scenario, &options, &mut backend, &clock).expect("run");
     let _ = std::fs::remove_dir_all(&artifacts);
     outcome
+}
+
+/// Like [`run_slice`], but keeps the artifacts directory so a test can read the
+/// files a verdict declares.
+fn run_slice_keep(
+    yaml: &str,
+    mode: SliceMode,
+    initial: Vec<u8>,
+    after: Vec<u8>,
+) -> (RunOutcome, PathBuf) {
+    let scenario = Scenario::from_yaml_str(yaml).expect("valid scenario");
+    let artifacts = scratch("slice-keep");
+    let mut backend = SliceBackend::new(mode, initial, after);
+    let options = RunOptions {
+        apk: workspace().join("fixtures/build/apps/hello-views.apk"),
+        scenario_path: workspace().join("scenarios/hello-views.yaml"),
+        artifacts_dir: artifacts.clone(),
+        required_fidelity: None,
+        request_id: "req_slice_keep".to_string(),
+        flags: Vec::new(),
+        acos_version: "0.1.0".to_string(),
+    };
+    let clock = FixedClock::new(1_794_318_674_000);
+    let outcome = run_scenario(&scenario, &options, &mut backend, &clock).expect("run");
+    (outcome, artifacts)
+}
+
+#[test]
+fn capture_name_is_persisted_in_the_step_file_name_and_verdict_map() {
+    let yaml = r#"
+version: 1
+name: capture-named
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+steps:
+  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
+  - capture: {name: "meanings collapsed", format: png, fresh: true}
+"#;
+    let (outcome, artifacts) = run_slice_keep(
+        yaml,
+        SliceMode::Good,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+    );
+    assert_eq!(outcome.verdict.verdict, Status::Pass);
+    let step = outcome
+        .verdict
+        .steps
+        .iter()
+        .find(|step| step.step == "capture")
+        .expect("a capture step");
+    // 1. The step carries its own name.
+    assert_eq!(step.name.as_deref(), Some("meanings collapsed"));
+    let seq = step.frame_seq.expect("the capture bound a frame");
+    // 2. The PNG exists under the sanitised name, with the frame sequence.
+    let named = format!("frames/{seq}-meanings-collapsed.png");
+    assert!(
+        artifacts.join(&named).is_file(),
+        "named capture frame missing: {}",
+        artifacts.join(&named).display()
+    );
+    // The canonical frame the validator requires is still there, same bytes.
+    let canonical = artifacts.join(format!("frames/{seq}.png"));
+    assert!(canonical.is_file());
+    assert_eq!(
+        std::fs::read(&canonical).unwrap(),
+        std::fs::read(artifacts.join(&named)).unwrap()
+    );
+    // 3. The verdict maps the scenario's own name to the file, and declares it
+    //    as evidence.
+    assert_eq!(outcome.verdict.captures.get("meanings collapsed"), Some(&named));
+    assert!(
+        step.evidence
+            .iter()
+            .any(|evidence| evidence.kind == "capture" && evidence.path == named),
+        "the named frame is declared evidence"
+    );
+    // The same three facts survive on disk (the step JSON and verdict.json).
+    let step_json: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(artifacts.join("steps/01-capture.json")).expect("step JSON on disk"),
+    )
+    .unwrap();
+    assert_eq!(step_json["name"], "meanings collapsed");
+    let verdict_json: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(artifacts.join("verdict.json")).expect("verdict.json on disk"),
+    )
+    .unwrap();
+    assert_eq!(verdict_json["captures"]["meanings collapsed"], named);
+    assert_eq!(verdict_json["status"], "pass", "status mirrors the envelope");
+    assert_eq!(verdict_json["verdict"], "pass");
+    // 0 dangling references: the run's own validator accepts the directory.
+    let validation = acos_protocol::artifacts::validate_artifacts_dir(&artifacts);
+    assert!(validation.ok, "{:?}", validation.issues);
+    let _ = std::fs::remove_dir_all(&artifacts);
 }
 
 const TAP_SCENARIO: &str = r#"
