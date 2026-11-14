@@ -1256,6 +1256,413 @@ public final class LaunchMain {
         return "[" + r.left + ',' + r.top + "][" + r.right + ',' + r.bottom + ']';
     }
 
+    /**
+     * ROT3: the guest display geometry for a target rotation (0..3).
+     *
+     * <p>One quarter turn swaps the panel dimensions; the app window
+     * (`APP_W`/`APP_H`) follows, and the `Configuration` is rebuilt with the
+     * framework's own fields: `orientation`, `screenWidthDp`/`screenHeightDp`,
+     * `smallestScreenWidthDp` (unchanged: the smallest width of a display does
+     * not rotate), and the `WindowConfiguration` bounds/appBounds, exactly as
+     * `DisplayContent.updateBaseConfiguration` recomputes them.
+     */
+    static int sRotation = 0;
+    static int sBasePanelW = -1;
+    static int sBasePanelH = -1;
+
+    static Configuration rotatedConfiguration(int rotation) {
+        if (sBasePanelW < 0) {
+            sBasePanelW = PANEL_W;
+            sBasePanelH = PANEL_H;
+        }
+        boolean odd = (rotation % 2) != 0;
+        PANEL_W = odd ? sBasePanelH : sBasePanelW;
+        PANEL_H = odd ? sBasePanelW : sBasePanelH;
+        APP_W = PANEL_W;
+        APP_H = REPORT_INSETS ? PANEL_H : PANEL_H - STATUS_INSET - NAV_INSET;
+        Configuration cfg = displayConfiguration();
+        cfg.orientation = PANEL_W > PANEL_H
+                ? Configuration.ORIENTATION_LANDSCAPE
+                : Configuration.ORIENTATION_PORTRAIT;
+        android.graphics.Rect bounds = new android.graphics.Rect(0, 0, PANEL_W, PANEL_H);
+        // `Configuration.windowConfiguration` and `WindowConfiguration`'s
+        // setters are `@hide`, so they are reached by reflection (same as every
+        // other internal field on this path).
+        Object wc = get(cfg, "windowConfiguration");
+        if (wc != null) {
+            android.graphics.Rect app = REPORT_INSETS
+                    ? new android.graphics.Rect(0, 0, PANEL_W, PANEL_H)
+                    : new android.graphics.Rect(0, STATUS_INSET, PANEL_W, PANEL_H - NAV_INSET);
+            try {
+                wc.getClass().getMethod("setBounds", android.graphics.Rect.class).invoke(wc, bounds);
+                wc.getClass().getMethod("setAppBounds", android.graphics.Rect.class).invoke(wc, app);
+                wc.getClass().getMethod("setMaxBounds", android.graphics.Rect.class).invoke(wc, bounds);
+            } catch (Throwable t) {
+                System.out.println("ACOSLAUNCH MARK rotate-window-configuration-failed " + unwrap(t));
+            }
+        }
+        return cfg;
+    }
+
+    /**
+     * ROT3: rotate the display to `want` (a target rotation, 0..3) and let the
+     * *framework* decide what happens to the Activity.
+     *
+     * <p>This is the AOSP sequence with the WMS half already done by the host
+     * (`IWindowSession.relayout` now answers the rotated frame + rotated
+     * `MergedConfiguration`):
+     *
+     * <ol>
+     *   <li>`ActivityThread.handleConfigurationChanged(newConfig, 0)` — the
+     *       process-wide configuration (the same entry point the real
+     *       `ActivityThread` receives from AMS).</li>
+     *   <li>the activity-level decision is `ActivityInfo.getRealConfigChanged()`
+     *       against the four configuration bits a rotation changes
+     *       (`orientation|screenLayout|screenSize|smallestScreenSize`), i.e.
+     *       `ActivityRecord.getRealConfigChanged()`. When the manifest declares
+     *       all four, `handleActivityConfigurationChanged` reports the change to
+     *       the live instance; otherwise the record is relaunched through
+     *       `scheduleRelaunchActivity` + `handleRelaunchActivity`, whose
+     *       `handleRelaunchActivityInner` performs the AOSP order (pause →
+     *       stop(saveState) → destroy → launch(state restored)).</li>
+     *   <li>`ViewRootImpl.mForceNextWindowRelayout` + `requestLayout()` so the
+     *       next traversal actually calls `relayoutWindow` and picks up the new
+     *       frame (the WMS sends no unsolicited `resized` in ACOS).</li>
+     * </ol>
+     */
+    /**
+     * `ActivityRelaunchItem.obtain(...)` for this image's parameter list: the
+     * token, the merged configuration, the pending-config-changes int, the
+     * window-info instance (when the image has one), and nulls for the pending
+     * results/intents lists.
+     */
+    static Object obtainRelaunchItem(Class<?> cls, IBinder token, Object mergedConfig,
+            Object windowInfo) throws Throwable {
+        java.lang.reflect.Method best = null;
+        for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+            if (!m.getName().equals("obtain")) continue;
+            for (Class<?> p : m.getParameterTypes()) {
+                if (p.getName().equals("android.util.MergedConfiguration")) {
+                    best = m;
+                    break;
+                }
+            }
+            if (best != null) break;
+        }
+        if (best == null) {
+            throw new NoSuchMethodException(cls.getName() + ".obtain(MergedConfiguration)");
+        }
+        best.setAccessible(true);
+        StringBuilder shape = new StringBuilder();
+        for (Class<?> p : best.getParameterTypes()) {
+            shape.append(' ').append(p.getSimpleName());
+        }
+        System.out.println("ACOSLAUNCH MARK obtain-shape " + cls.getSimpleName() + shape);
+        try {
+            return best.invoke(null, relaunchArgs(best, token, mergedConfig, windowInfo));
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            throw e.getCause() != null ? e.getCause() : e;
+        }
+    }
+
+    /**
+     * ROT4: after the relaunch/config-change transaction has run, force one
+     * relayout on the (possibly new) resumed Activity's decor and publish one
+     * probe sample at the new size. This is the rotation's bound frame.
+     */
+    static void finishRotation(int target, boolean relaunch, String rung, int handled) {
+        Object activity = null;
+        try {
+            Object thread = sThread;
+            activity = thread == null ? null : resumedActivity(thread);
+            if (activity != null) {
+                Object window = activity.getClass().getMethod("getWindow").invoke(activity);
+                Object decor = window.getClass().getMethod("getDecorView").invoke(window);
+                if (decor instanceof View) {
+                    Object vr = null;
+                    try {
+                        // `View.getViewRootImpl()` is `@hide`.
+                        vr = decor.getClass().getMethod("getViewRootImpl").invoke(decor);
+                    } catch (Throwable ignored) {
+                    }
+                    if (vr != null) {
+                        setFieldForce(vr.getClass(), vr, "mForceNextWindowRelayout", Boolean.TRUE);
+                    }
+                    ((View) decor).requestLayout();
+                }
+            }
+        } catch (Throwable t) {
+            System.out.println("ACOSLAUNCH MARK rotate-relayout-failed " + unwrap(t));
+        }
+        // One sample at the new size backs the host's reply.
+        sDirtyAtMs = 0;
+        sTreeDirty.set(true);
+        synchronized (sProbeWake) {
+            sProbeRequested = true;
+            sProbeWake.notifyAll();
+        }
+        System.out.println("ACOSLAUNCH MARK rotate rotation=" + target
+                + " relaunch=" + relaunch + " via=" + rung
+                + " handled=0x" + Integer.toHexString(handled)
+                + " activity=" + (activity == null ? "<none>" : activity.getClass().getName())
+                + " panel=" + PANEL_W + "x" + PANEL_H);
+        System.out.flush();
+    }
+
+    /** The image's window-info argument instance, or null when it has none. */
+    static Object newWindowInfo() {
+        for (String name : new String[]{"android.window.ActivityWindowInfo",
+                "android.app.ActivityWindowInfo"}) {
+            try {
+                Class<?> cls = Class.forName(name);
+                java.lang.reflect.Constructor<?> ctor = cls.getDeclaredConstructor();
+                ctor.setAccessible(true);
+                return ctor.newInstance();
+            } catch (Throwable ignored) {
+            }
+        }
+        return null;
+    }
+
+    /** The first method `name` whose parameters include `pinnedParamType`. */
+    static java.lang.reflect.Method findMethod(Class<?> cls, String name, String pinnedParamType) {
+        for (java.lang.reflect.Method m : cls.getDeclaredMethods()) {
+            if (!m.getName().equals(name)) continue;
+            for (Class<?> p : m.getParameterTypes()) {
+                if (p.getName().equals(pinnedParamType)) return m;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Fill one discovered framework method's arguments by *type*: `Object` is
+     * matched by identity against `objects`, `int` takes the pending config
+     * changes, `boolean` false (not resumed / no preserveWindow), and any other
+     * class is the window-info slot (the given instance, or null).
+     */
+    static Object[] relaunchArgs(java.lang.reflect.Method m, Object... objects) {
+        Class<?>[] params = m.getParameterTypes();
+        Object[] args = new Object[params.length];
+        for (int i = 0; i < params.length; i++) {
+            Class<?> p = params[i];
+            if (p == int.class) {
+                args[i] = 0;
+            } else if (p == boolean.class) {
+                args[i] = Boolean.FALSE;
+            } else if (p == IBinder.class) {
+                args[i] = null;
+            } else {
+                // Object-typed slots: an exact class match wins, then the
+                // window-info instance when the slot is not one we know.
+                Object chosen = null;
+                for (Object o : objects) {
+                    if (o != null && p.isInstance(o)) {
+                        chosen = o;
+                        break;
+                    }
+                }
+                args[i] = chosen;
+            }
+        }
+        // A `MergedConfiguration` slot always takes the merged configuration
+        // even when a broader type (Object) matched a different object first.
+        for (int i = 0; i < params.length; i++) {
+            if (params[i].getName().equals("android.util.MergedConfiguration")) {
+                for (Object o : objects) {
+                    if (o != null && params[i].isInstance(o)) args[i] = o;
+                }
+            }
+            if (params[i].getName().endsWith("ActivityWindowInfo")) {
+                for (Object o : objects) {
+                    if (o != null && params[i].isInstance(o)) args[i] = o;
+                }
+            }
+            if (params[i] == Configuration.class) {
+                for (Object o : objects) {
+                    if (o instanceof Configuration) args[i] = o;
+                }
+            }
+        }
+        // The token slot (first IBinder) is always the live token.
+        for (int i = 0; i < params.length; i++) {
+            if (params[i] == IBinder.class) args[i] = sCurrentToken;
+        }
+        // The one int slot: pending config changes for a relaunch, the display
+        // id for a configuration-change report (display 0).
+        final int intArg = m.getName().equals("handleActivityConfigurationChanged")
+                ? 0 : rotationBitsStatic;
+        for (int i = 0; i < params.length; i++) {
+            if (params[i] == int.class) {
+                args[i] = intArg;
+            }
+        }
+        return args;
+    }
+
+    /** The four rotation bits, cached for {@link #relaunchArgs}. */
+    static int rotationBitsStatic =
+            android.content.pm.ActivityInfo.CONFIG_ORIENTATION
+                    | android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT
+                    | android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE
+                    | android.content.pm.ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE;
+
+    static void applyRotation(int want) {
+        final int target = ((want % 4) + 4) % 4;
+        final int rotationBits =
+                android.content.pm.ActivityInfo.CONFIG_ORIENTATION
+                        | android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT
+                        | android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE
+                        | android.content.pm.ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE;
+        try {
+            Object thread = sThread;
+            if (thread == null) throw new IllegalStateException("no ActivityThread");
+            Configuration cfg = rotatedConfiguration(target);
+            sRotation = target;
+            Class<?> at = Class.forName("android.app.ActivityThread");
+            java.lang.reflect.Method hcc =
+                    at.getMethod("handleConfigurationChanged", Configuration.class, int.class);
+            hcc.invoke(thread, cfg, 0);
+            Object r = null;
+            Object activities = get(thread, "mActivities");
+            if (activities instanceof java.util.Map && sCurrentToken != null) {
+                r = ((java.util.Map<?, ?>) activities).get(sCurrentToken);
+            }
+            if (r == null) {
+                throw new IllegalStateException("no ActivityClientRecord for token");
+            }
+            Object ai = get(r, "activityInfo");
+            int handled = 0;
+            if (ai != null) {
+                // `ActivityInfo.getRealConfigChanged()` is `@hide`.
+                try {
+                    java.lang.reflect.Method g = ai.getClass().getMethod("getRealConfigChanged");
+                    handled = (Integer) g.invoke(ai);
+                } catch (Throwable t) {
+                    System.out.println("ACOSLAUNCH MARK rotate-getRealConfigChanged-failed "
+                            + unwrap(t));
+                }
+            }
+            boolean relaunch = (handled & rotationBits) != rotationBits;
+            String rung = relaunch ? "relaunch" : "config-change";
+            Class<?> rec = Class.forName("android.app.ActivityThread$ActivityClientRecord");
+            // The window-info argument class differs across the 14 tag and
+            // this image (`android.window.ActivityWindowInfo` is absent from
+            // the boot image), so the relaunch/configuration entry points are
+            // *discovered* by name and their arguments filled by type. A null
+            // window-info is what AOSP's own local paths pass when there is
+            // none to report.
+            Object windowInfo = newWindowInfo();
+            if (relaunch) {
+                // ROT4: the *AMS* side of a relaunch, which ROT3 was missing.
+                //
+                // `scheduleRelaunchActivity(IBinder)` cannot be used with this
+                // Activity: it calls `scheduleRelaunchActivityIfPossible`,
+                // whose first guard is
+                // `... || r.token instanceof Binder -> return`, and this
+                // Activity is attached with a local `Binder` token (the same
+                // guard `ActivityGroup` activities hit). So nothing was ever
+                // put on `mRelaunchingActivities`, and
+                // `handleRelaunchActivity` then aborted at its own guard
+                // ("activity not relaunching") and returned:
+                // `handleRelaunchActivityInner` (pause -> stop(saveState) ->
+                // destroy -> launch(state restored)) never ran. The tree kept
+                // the old instance, which is why the count survived a
+                // "relaunch" that delivered no lifecycle callbacks.
+                //
+                // The framework's entry point for the caller that *does* own
+                // the record (AMS, and here the local test harness) is
+                // `prepareRelaunchActivity`: it creates the relaunch record on
+                // `mRelaunchingActivities` and returns it, which is exactly
+                // what `handleRelaunchActivity` resolves the token against.
+                Class<?> pta =
+                        Class.forName("android.app.servertransaction.PendingTransactionActions");
+                java.lang.reflect.Constructor<?> ctor = pta.getDeclaredConstructor();
+                ctor.setAccessible(true);
+                Object actions = ctor.newInstance();
+                Class<?> merged = Class.forName("android.util.MergedConfiguration");
+                java.lang.reflect.Constructor<?> mergedCtor =
+                        merged.getConstructor(Configuration.class, Configuration.class);
+                mergedCtor.setAccessible(true);
+                // Empty override: `Configuration.updateFrom` treats an empty
+                // config as "no delta", the same as a null override.
+                Object mergedConfig = mergedCtor.newInstance(cfg, new Configuration());
+                // ROT4: deliver the relaunch the way AMS does — one stock
+                // `ClientTransaction` whose item is `ActivityRelaunchItem`,
+                // executed by the framework's own `TransactionExecutor` on the
+                // main thread. Its `preExecute` calls
+                // `ActivityThread.prepareRelaunchActivity` (which is what puts
+                // the record on `mRelaunchingActivities`); `execute` calls
+                // `handleRelaunchActivity`, whose inner path runs pause ->
+                // stop(saveState) -> destroy -> launch(state restored).
+                //
+                // Calling `handleRelaunchActivity` by hand (ROT3) is not enough:
+                // nothing was ever prepared on `mRelaunchingActivities` because
+                // `scheduleRelaunchActivity(token)` refuses a local `Binder`
+                // token (`r.token instanceof Binder` guard in
+                // `scheduleRelaunchActivityIfPossible`), so it aborted before
+                // any lifecycle callback. Driving the item itself keeps that
+                // ordering in the framework, not in this harness.
+                Class<?> ctxCls =
+                        Class.forName("android.app.servertransaction.ClientTransaction");
+                Class<?> iatCls = Class.forName("android.app.IApplicationThread");
+                Class<?> relaunchCls =
+                        Class.forName("android.app.servertransaction.ActivityRelaunchItem");
+                Class<?> resumeCls =
+                        Class.forName("android.app.servertransaction.ResumeActivityItem");
+                Object tx = ctxCls.getMethod("obtain", iatCls, IBinder.class)
+                        .invoke(null, sClient, sCurrentToken);
+                Object item = obtainRelaunchItem(relaunchCls, sCurrentToken, mergedConfig,
+                        windowInfo);
+                Object resumeItem = obtainResume(resumeCls);
+                java.util.ArrayList<Object> callbacks = new java.util.ArrayList<Object>();
+                callbacks.add(item);
+                setPrivateField(ctxCls, tx, "mActivityCallbacks", callbacks);
+                setPrivateField(ctxCls, tx, "mLifecycleStateRequest", resumeItem);
+                setPrivateFieldIfPresent(ctxCls, tx, "mTransactionItems", callbacks);
+                scheduleLocal(tx);
+                rung = "ActivityRelaunchItem(ClientTransaction)";
+            } else {
+                java.lang.reflect.Method hac = findMethod(
+                        at, "handleActivityConfigurationChanged",
+                        "android.app.ActivityThread$ActivityClientRecord");
+                if (hac == null) {
+                    throw new IllegalStateException(
+                            "ActivityThread.handleActivityConfigurationChanged is absent from "
+                                    + "this image");
+                }
+                hac.setAccessible(true);
+                // An empty override is not a zeroed Configuration (framework
+                // `Configuration.updateFrom` treats it as "no delta").
+                Configuration override = new Configuration();
+                override.setTo(new Configuration());
+                hac.invoke(thread, relaunchArgs(hac, r, override, windowInfo));
+                rung = "handleActivityConfigurationChanged";
+            }
+            // The transaction is *posted* to the same main looper this method
+            // runs on, so the relaunch executes after we return. Forcing the
+            // relayout and publishing the probe from a follow-up message means
+            // both happen on the **new** window: the previous ordering forced
+            // the old Activity's decor, and the relaunched window's first
+            // traversal was published as the rotation's frame (a transient
+            // layout that only the next input settled).
+            final int fTarget = target;
+            final boolean fRelaunch = relaunch;
+            final String fRung = rung;
+            final int fHandled = handled;
+            new android.os.Handler(Looper.getMainLooper()).post(new Runnable() {
+                @Override
+                public void run() {
+                    finishRotation(fTarget, fRelaunch, fRung, fHandled);
+                }
+            });
+        } catch (Throwable t) {
+            System.out.println("ACOSLAUNCH MARK rotate-failed rotation=" + target + " " + unwrap(t));
+            t.printStackTrace(System.out);
+            System.out.flush();
+        }
+    }
+
     static void startLiveProbe(final Object activity) {
         final android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
         final java.util.concurrent.atomic.AtomicBoolean pending =
@@ -1281,11 +1688,31 @@ public final class LaunchMain {
                             new java.io.InputStreamReader(System.in));
                     String line;
                     while ((line = reader.readLine()) != null) {
-                        if (line.trim().equalsIgnoreCase("PROBE")) {
+                        String word = line.trim();
+                        if (word.equalsIgnoreCase("PROBE")) {
                             synchronized (sProbeWake) {
                                 sProbeRequested = true;
                                 sProbeWake.notifyAll();
                             }
+                        } else if (word.toUpperCase().startsWith("ROTATE")) {
+                            // ROT3: a display rotation. It must run on the main
+                            // looper (configuration changes are a main-thread
+                            // framework operation), so the control thread only
+                            // posts it.
+                            final int want;
+                            try {
+                                want = Integer.parseInt(word.substring(6).trim());
+                            } catch (Throwable bad) {
+                                System.out.println("ACOSLAUNCH MARK rotate-bad-arg line=" + word);
+                                System.out.flush();
+                                continue;
+                            }
+                            main.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    applyRotation(want);
+                                }
+                            });
                         }
                     }
                 } catch (Throwable ignored) {
@@ -1354,7 +1781,12 @@ public final class LaunchMain {
                                 @Override
                                 public void run() {
                                     try {
-                                        emitProbe(activity, n, why);
+                                        // ROT3: after a relaunch the Activity
+                                        // instance is a new one; a sample must
+                                        // describe the *resumed* Activity, not
+                                        // the instance captured at launch.
+                                        Object live = resumedActivity(sThread);
+                                        emitProbe(live != null ? live : activity, n, why);
                                         // H2: the first emitted sample is the
                                         // host's `ready` (first frame). Request
                                         // ART's own background collection now
@@ -2375,6 +2807,11 @@ public final class LaunchMain {
             Object tx = buildLaunchTransaction(sClient, token, app, sActivity);
             scheduleLocal(tx);
             sCurrentToken = token;
+            // ROT6: the Activity was launched, so it is the top of the task and the
+            // last one: when the app finishes it (`Activity.finish()`), the *server*
+            // side owns the rest of the lifecycle. Start the watcher that delivers
+            // it (see [`startTopFinishWatcher`]).
+            startTopFinishWatcher(token);
             System.out.println("ACOSLAUNCH MARK schedule-transaction-delivered activity="
                     + sActivity + " token=binder:" + Integer.toHexString(System.identityHashCode(token))
                     + " transport=local-iapplicationthread");
@@ -3585,7 +4022,12 @@ public final class LaunchMain {
                 sActivityLabelText.isEmpty() ? null : sActivityLabelText);
         setFieldForce(cls, ai, "flags", 0);          // no FLAG_HARDWARE_ACCELERATED
         setFieldForce(cls, ai, "screenOrientation", -1);
-        setFieldForce(cls, ai, "configChanges", 0);
+        // ROT2: the manifest's `android:configChanges` bitmask (resolved by
+        // `acos_services::manifest_resolve`, forced MCC/MNC included), not 0:
+        // `ActivityRecord.getRealConfigChanged()` compares exactly this field
+        // when a display rotation has to decide re-create vs
+        // `onConfigurationChanged`.
+        setFieldForce(cls, ai, "configChanges", (int) envLong("ACOSLAUNCH_CONFIG_CHANGES", 0));
         setFieldForce(cls, ai, "softInputMode", 0);
         setFieldForce(cls, ai, "uiOptions", 0);
         setFieldForce(cls, ai, "exported", true);
@@ -3849,6 +4291,71 @@ public final class LaunchMain {
                 }
             }
         }, "acos-stop-watcher");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /**
+     * ROT6: deliver the lifecycle of a **finished top Activity**.
+     *
+     * <p>`Activity.finish()` only marks the record (`mFinished`) and tells the
+     * server (`IActivityClientController.finishActivity`). Everything an app
+     * observes after that — `onPause`, `onSaveInstanceState`/`onStop`,
+     * `onDestroy` — is a `ClientTransaction` the *server* sends next. ACOS's
+     * ATMS records the finish but has no transaction scheduler for the ART
+     * guest, so a plain `back` on a single-Activity app marked the record and
+     * then did nothing: the guest acked the key as handled (`Activity.onKeyDown`
+     * tracks BACK, `onKeyUp` calls `onBackPressed`), and no lifecycle ran and no
+     * frame changed.
+     *
+     * <p>This is the same shape W38's two-Activity path uses for the Activity it
+     * replaced, extended to the three items stock sends for the last one:
+     * `PauseActivityItem(finished=true)`, `StopActivityItem(showWindow=false)`,
+     * `DestroyActivityItem(finished=true)` — each in its own transaction (a
+     * transaction carries one token and one lifecycle state), executed by the
+     * framework's own `TransactionExecutor` on the main thread, which is what
+     * runs the real `ActivityThread.handlePauseActivity` /
+     * `handleStopActivity` / `handleDestroyActivity` and therefore the app's own
+     * callbacks. Nothing is fabricated: the items are the framework's, and the
+     * trigger is the framework's own `mFinished` flag.
+     */
+    static void startTopFinishWatcher(final IBinder token) {
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    long deadline = System.currentTimeMillis() + 120000;
+                    android.util.Log.i("AcosRot6", "ACOSLAUNCH MARK top-finish-watcher-started");
+                    Object activity = null;
+                    while (System.currentTimeMillis() < deadline) {
+                        activity = activityForToken(token);
+                        if (activity != null && Boolean.TRUE.equals(get(activity, "mFinished"))) break;
+                        Thread.sleep(10);
+                    }
+                    if (activity == null || !Boolean.TRUE.equals(get(activity, "mFinished"))) {
+                        android.util.Log.i("AcosRot6", "ACOSLAUNCH MARK top-finish-watcher-timeout");
+                                                return;
+                    }
+                    Class<?> pauseCls = Class.forName("android.app.servertransaction.PauseActivityItem");
+                    Class<?> stopCls = Class.forName("android.app.servertransaction.StopActivityItem");
+                    Class<?> destroyCls =
+                            Class.forName("android.app.servertransaction.DestroyActivityItem");
+                    // PauseActivityItem.obtain(finished, userLeaving, configChanges, dontReport)
+                    scheduleLocal(lifecycleTransaction(token,
+                            obtainPrimitiveItem(pauseCls, new boolean[]{true, false, false})));
+                    scheduleLocal(lifecycleTransaction(token,
+                            obtainPrimitiveItem(stopCls, new boolean[]{false})));
+                    scheduleLocal(lifecycleTransaction(token,
+                            obtainPrimitiveItem(destroyCls, new boolean[]{true, false, false})));
+                    android.util.Log.i("AcosRot6", "ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:"
+                            + Integer.toHexString(System.identityHashCode(token))
+                            + " order=Pause(finished)->Stop->Destroy");
+                                    } catch (Throwable x) {
+                    android.util.Log.i("AcosRot6", "ACOSLAUNCH MARK top-finish-watcher-error " + x);
+                    x.printStackTrace(System.out);
+                                    }
+            }
+        }, "acos-top-finish-watcher");
         t.setDaemon(true);
         t.start();
     }

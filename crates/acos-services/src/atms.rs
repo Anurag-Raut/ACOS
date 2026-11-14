@@ -802,7 +802,22 @@ impl AtmsState {
 
     /// `finishActivity` (the app asked to finish).
     pub fn finish_activity(&mut self, token: u64) -> Result<()> {
-        let index = self.ensure_known(token)?;
+        if std::env::var_os("ACOS_ATMS_TRACE").is_some() {
+            eprintln!(
+                "ACOSATMS finish-request token={token:#x} known={:?} n={}",
+                self.activities.iter().map(|a| a.token).collect::<Vec<_>>(),
+                self.activities.len()
+            );
+        }
+        let index = match self.ensure_known(token) {
+            Ok(index) => index,
+            Err(e) => {
+                if std::env::var_os("ACOS_ATMS_TRACE").is_some() {
+                    eprintln!("ACOSATMS finish-rejected token={token:#x} {e}");
+                }
+                return Err(e);
+            }
+        };
         self.activities[index].finished = true;
         // Keep `AmsState`'s task stack in step: the finished Activity leaves the
         // task, so the record below it is the new top (what the guest's

@@ -3939,6 +3939,207 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | G4b | **Tree frame metadata reports `density: 420` for a `density_dpi: 400` run** (GR4): every `tree/*.json` frame record says 420 while `repro.json`/`verdict.json` echo the scenario's 400. Either the guest boots at the reference 420 on this path or the tree's `FrameMeta` is stamped from the reference default; not root-caused. Consequence: density-dependent geometry cannot be audited from tree metadata, which is exactly the density-fix area. Pixels are correct either way (116 px wordmark glyphs, GR4 §4) | tree/frame metadata integrity | metadata agrees with the launch spec | high (36 runs, all 420) | low (thread the launch density into the tree record) | low | **open, found by GR4 (E13.9)** |
 | G4c | **A scenario can pass 3/3 while proving nothing, and nothing in the harness notices** (GR4). A `tap` on a control that is already in the asserted state writes nothing — Gaten's Kanji reference `select()` returns early when `next === source`, and the guest's default was already the asserted value — so the post-tap assertions hold on state that never changed. The only evidence was pixel-level: the before/after bound captures were byte-identical (0 changed px) where the claim needs a change. Candidate: an explicit step (`expect_change` / `assert_frame_differs`) or a writer-side rule that a `capture` pair around a mutating tap must differ, so a vacuous flow fails instead of passing. Worked around in GR4 by asserting the hub label's *other* value is absent at each hop and by diffing the captures by hand (`results/gaten/GR4.md` §2.3) | verify semantics / false-pass class | no vacuous pass | high (reproduced + rewritten) | medium (new step + schema + provenance rule) | medium (a legitimate no-op must stay expressible) | **open, found by GR4 (E13.9)** |
 
+## E13.13 — ROT1: display rotation on the ART backend — geometry + the AOSP relaunch decision landed, end-to-end rotate is **not** in this commit (PARTIAL, 60-minute checkpoint)
+
+| item | state |
+|---|---|
+| rotation geometry (`DisplaySpec::rotated`, `SystemBars::rotate_quarters`, `RectI::rotate_quarters`) | **done**, 5 unit tests in `crates/acos-wm/src/display.rs` (frame swap 1080x2400 → 2400x1080, bar rects rotated with the frame, app bounds/insets re-derived from where each bar hugs the new frame, density/refresh unchanged, dp size from the frame, round trip restores portrait) |
+| the AOSP decision (`RotationRelaunch`: `configChanges & rotation_changes`) | **done**, unit-testable, mirrors `ActivityRecord.getRealConfigChanged()`: `orientation\|screenSize\|screenLayout\|smallestScreenSize` all change on a rotation, so only an Activity declaring all four keeps its instance |
+| protocol `{"cmd":"rotate"}` (host → guest), `ArtSession::rotate`, `InputAction::Rotate` wiring | **not done**: `input.rotate` still answers `UNSUPPORTED_BACKEND`/`input.rotate`. Nothing was flipped to "supported", so no run can claim a rotate pass |
+| guest side (ViewRootImpl-less session: real re-measure/layout at the rotated frame, real `Activity.onConfigurationChanged` or real `performSaveInstanceState` → `performDestroy` → `performCreate(state)` → `performStart` → `performResume`) | **not done**; the design is in `results/handoff/ROT1.md` §4 |
+| new gate scenario + negative control, 3/3 each | **not done** |
+| A/B latency check | not run (no behavioural change on non-rotating paths; `cargo test -p acos-wm` 53/53 and `cargo check -p acos-services -p acos-cli -p acos-verify` green) |
+
+Why it stopped: the 60-minute task rule. The measured geometry model and the manifest
+decision are the two halves of rotate that can be proven without a guest run; both landed
+with tests. The remaining work is a guest-side config change through a hand-rolled,
+ViewRootImpl-less window path, which needs several multi-minute ART runs to get right and
+must not be half-plumbed behind a "supported" capability.
+
+### E13.13 / ROT2 — `android:configChanges` lands on `ActivityInfo`; the rotation sequence itself still needs the window path (PARTIAL)
+
+Same experiment, second pass (branch `art-rotate-1`, base `1870756`). What this pass
+settles, and what it learned that changes the plan:
+
+| item | state |
+|---|---|
+| `android:configChanges` parsing (`acos-services::manifest_resolve`) | **done.** `PackageParser.parseActivity` rules: the attribute is one `int` bitmask in the binary XML (`ActivityInfo.CONFIG_*`), read into `LauncherActivity::config_changes`; an `<activity-alias>` inherits the target's value (`parseActivityAlias`: `info.configChanges = target.info.configChanges`, the alias schema has no such attribute); `getActivityConfigChanges(declared, 0)` is applied exactly (`declared \| (~recreateOnConfigChanges & CONFIG_MCC\|CONFIG_MNC)`). Three unit tests on synthetic AXML DOM fixtures: `orientation\|screenSize` → `0x480\|0x3` and `RotationRelaunch::missing() == screenLayout\|smallestScreenSize`; all four rotation bits → no relaunch; unset (every fixture APK) → `0x3` → relaunch; alias inherits. The fixtures' relaunch decision is unchanged from ROT1, which is what `counter.yaml`/`v1-recreate.yaml`/`multi-activity.yaml` `assert_log` blocks already expect |
+| carrying it to the guest | **done for the engine's path**: `acos-art launch` resolves it once from the APK and forwards `ACOSLAUNCH_CONFIG_CHANGES`; `LaunchMain.buildActivityInfoNamed` sets `ActivityInfo.configChanges` from it instead of a hardcoded `0`, which is the field `ActivityRecord.getRealConfigChanged()` compares. Inert until a configuration actually changes, so no measured path moved (11 gates + 5 Gaten flows + 5 negatives unchanged, §below) |
+| `{"cmd":"rotate"}` / `ArtSession::rotate` / `InputAction::Rotate` | **still not done**, and **`input.rotate` still answers `UNSUPPORTED_BACKEND`/`input.rotate`**. Nothing was flipped to supported, so no run can claim a rotate pass |
+| D1's relaunch sequence in the guest | **not started**; the design note below is a correction of ROT1's target |
+| gate + negative, 3/3 | not done (impossible while rotate does not work) |
+| A/B | see §below |
+
+**Correction to ROT1's handoff, found while wiring the carry.** The engine's live path
+(`crates/acos-cli/src/engine/art.rs` → `acos-art launch --interactive`) runs
+**`LaunchMain.java`**, not `SessionMain.java`: `launch.rs::GUEST_CLASS = dev.acos.art.LaunchMain`,
+and its interactive stdin accepts exactly one word, `PROBE` (`LaunchMain` reader thread). The
+JSON `dispatchCommand` loop ROT1 §2 pointed at belongs to `acos-art session`
+(`SessionMain`, `session.rs::SESSION_CLASS`, argv-driven, no `ActivityThread` transaction
+path). Consequences for the rotate design:
+
+* a `{"cmd":"rotate"}` line has no reader on the engine's path — the guest side must be a new
+  stdin verb next to `PROBE` (or an out-of-band control), not a `SessionMain`-style switch;
+* `LaunchMain` builds the Activity through a **real** `ClientTransaction`
+  (`scheduleTransaction` + `LaunchActivityItem`/`ResumeActivityItem`) against a real
+  `ActivityThread`, and its window is driven by the local `mWMS`, so the AOSP-faithful rotate is
+  `mWMS` display-rotation + `ActivityThread.handleConfigurationChanged` with a real
+  `MergedConfiguration`, i.e. the framework path D1 describes *minus* the hand-rolled part. That
+  is a WMS/binder-shaped change, not a session-shaped one, and it is the reason this pass
+  stopped instead of half-plumbing it;
+* `SessionMain`'s ViewRootImpl-less decor (`traversal()` at `AppMain.W x PANEL_H`) is still the
+  cheaper place to *prove* the Activity-level sequence D1 names (`performSaveInstanceState` →
+  `performStop` → `performDestroy` → `attach(newConfig)` → `performCreate(state)` →
+  `performStart` → `callActivityOnRestoreInstanceState` → `performResume`, vs
+  `onConfigurationChanged` when the manifest declares all four bits) — but that scenario only
+  exercises `acos-art session`, which the verify engine does not use, so it cannot back a
+  `input.rotate` pass on its own.
+
+Verification of this pass (all on `art-rotate-1`, `CARGO_TARGET_DIR=.cache/h4-target`):
+
+* `cargo test --release --offline -p acos-services` → 84 lib tests + 2 integration files green,
+  including the three new `config_changes_*` tests.
+* the 11 gates (`v2-art-counter`, `w22-counter-reset`, `w54-dialog-pixels`, `w42-back-frame`,
+  `w15-dialog-menu`, `form-validation`, `suite/T03-render-good`, `v1-offscreen-pager` pass;
+  `suite/T03-render-wrong` `ASSERTION_FAILED`, `negative/offscreen-pager-visible`
+  `ELEMENT_OFFSCREEN`, `p11-progress-timeout` `TIMEOUT`), the 5 Gaten flows (pass) and the 5
+  Gaten negatives (`ASSERTION_FAILED`) are byte-for-byte the outcomes the pre-change branch had:
+  `.cache/rot2/suite/gate-*.json`, `.cache/rot2/suite/{scenarios,neg}-*.json`.
+
+Out of scope but observed while running the copied gate script: `w7-insets-report`,
+`w7-insets-carve-negative` fail `ASSERTION_FAILED` (`expected text "status=128", got "status=0"`)
+and the two `se1-expect-change*` scenarios error `INVALID_SCENARIO` on this base. None is in the
+ROT2 gate list, none can be affected by `ActivityInfo.configChanges` (no session in them
+changes configuration), and `se1-*` names a step this base does not implement — recorded here so
+the next pass does not mistake them for rotate fallout.
+
+**A/B (latency arm), interleaved, 1 rep per arm** — `ACOS_BENCH_TASK=ROT2
+tools/bench/acos-bench.sh --reps 1 --groups "a:latency:8G:300" --latency-reps 12 --no-build`
+with the main arm read-only from `.cache/wt-abmain2` (target `.cache/ab-target`, never built
+here). 3 reps per arm **did not fit** the 60-minute rule (one rep ≈ 4.5–5 min under the ART
+lock); one rep each is recorded and is enough to see that the inert change did not move
+latency: M4 strict 308.83 → 308.96 ms (+0.04 %), M4 fast 173.92 → 174.65 (+0.42 %), M5 24.26
+→ 24.79 (+2.2 %, +0.53 ms, the only metric above +0.5 %), M6 strict 319.57 → 320.84 (+0.4 %),
+M6 fast 187.91 → 188.71 (+0.4 %), M8 tap strict counter 961.72 → 957.63 (−0.4 %), M8 form
+935.73 → 933.15 (−0.3 %), M8 fast +0.1/+0.4 %, tap ack 5.00 → 5.00. Every gate
+(≤ +5 % **and** ≤ +2 ms) holds. Raw: `.cache/rot2/ab/{main-1,branch-1}.json` (gitignored).
+
+### E13.13 / ROT3 — the rotate protocol exists end to end in code; `input.rotate` stays unsupported until a live run proves it (PARTIAL, 60-minute checkpoint)
+
+Branch `art-rotate-1`, `main` merged into it (`0c0b322`, EXPERIMENTS.md both sides kept).
+Landed this pass: the WMS display rotation, the host `rotate` command and the guest
+`ROTATE <quarters>` framework path. Deliberately **not** landed: the engine/CLI wiring.
+
+| item | state |
+|---|---|
+| `WmsState::rotate(rotation)` (`acos-services/src/wms.rs`) | **done.** Rotates the live `DisplaySpec` (`DisplaySpec::rotated`), updates `DisplayFacts` width/height; every later `IWindowSession.relayout` reply therefore carries the new frame. `LiveHandles` now exposes the same `Arc<Mutex<WmsState>>` so a live session can drive it |
+| WMS `MergedConfiguration` for a rotated display (`acos-wm/src/wms.rs`) | **done**, unit-tested: landscape `orientation=2`, `screenWidthDp/HeightDp` 914x411, `smallestScreenWidthDp` unchanged (a display property that does not rotate), `windowConfiguration.bounds` swapped, `rotation`/`displayRotation` = display rotation, density unchanged; carve keeps the frozen 411x842 baseline only at rotation 0. 86 `acos-wm` + 84 `acos-services` lib tests green |
+| host `{"cmd":"rotate","rotation":n}` (`acos-art/src/launch.rs`) | **done.** Rotates the WMS display, writes `ROTATE <n>` on the guest stdin, and only answers `ok:true` with a probe sample **newer** than the request (else `NO_FRESH_TREE`, or `GUEST_EXITED`) — a stale sample can never back a rotate reply |
+| guest `ROTATE <quarters>` (`LaunchMain`, the engine's real guest class) | **done in code**: control thread posts to the main looper; new `Configuration` (orientation, dp size, `WindowConfiguration` bounds/appBounds) → real `ActivityThread.handleConfigurationChanged(config, 0)` → activity-level decision from `ActivityInfo.getRealConfigChanged()` against `orientation\|screenLayout\|screenSize\|smallestScreenSize` → `handleActivityConfigurationChanged` (manifest declares all four) or `scheduleRelaunchActivity` + `handleRelaunchActivity` (AOSP `handleRelaunchActivityInner` order: pause → stop(saveState) → destroy → launch(state restored)) → `ViewRootImpl.mForceNextWindowRelayout` + `requestLayout()` → one `ACOSPROBE` at the new size |
+| `ArtSession::rotate` / `SessionCapabilities{rotate}` / `InputAction::Rotate` | **not done.** `crates/acos-cli/src/engine/mod.rs:980` still answers `UNSUPPORTED_BACKEND`/`input.rotate`, so no scenario can claim a rotate pass |
+| `acos-wm` rotated input mapping, `scenarios/rot1-rotate.yaml` + negative, the 3 unsupported rotate scenarios | **not done** |
+| one live rotate run | **obtained, and it proves the window half only.** Interactive `ACOSLAUNCH_INTERACTIVE=1 acos-art launch --apk counter.apk`, stdin `tree` → `rotate rotation=1` → `tree` → `rotate rotation=0` → `tree`: both rotate replies are `ok:true` with a probe sample newer than the request, `24 rotation=1 2400x1080 probe_seq=13` / `rotation=0 1080x2400 probe_seq=19`, and the sample's root `DecorView` bounds are `[0,0][2400,1080]` then `[0,0][1080,2400]` — the window really relaid out at the rotated frame and back. **But the tree stayed a 1-node DecorView skeleton and the guest log has exactly one `onCreate/onStart/onResume`**, i.e. the Activity-level config-change/relaunch rung did not run (or failed silently): `ACOSLAUNCH MARK rotate…`/`rotate-failed…` goes to guest stdout, which the host consumes without echoing into the session trace, so the failing rung is not yet named. Not a rotate pass. Evidence: `.cache/rot3/run2/{stdout.txt,live-session.json}` (gitignored) |
+| gates / Gaten / A-B | not run (no behavioural change on non-rotating paths — the rotate command is only reachable from the interactive stdin, which no gate drives) |
+
+Also fixed during the run: the live probe used the Activity instance captured at launch, so
+after a relaunch it walked the destroyed decor; it now re-resolves `resumedActivity()` per
+sample.
+
+The smallest next action is to make the guest's `ACOSLAUNCH MARK rotate…`/`rotate-failed…`
+line visible to the host (echo it into the session trace / stderr) and re-run the same three
+commands: that names whether `mActivities` lookup, `PendingTransactionActions`, or
+`handleRelaunchActivity` is the failing rung. Only after the content tree survives the rotate
+may `input.rotate` be flipped.
+
+### E13.13 / ROT4 — rotate works end to end on ART: the relaunch rung is named and fixed, `input.rotate` is supported, gate + negative are 3/3 (COMPLETE)
+
+Branch `art-rotate-1`, `main` merged at `9225a01`. This pass answers ROT3's open question, fixes
+the rung it could not name, and flips `input.rotate` only after the end-to-end proof below.
+
+**1. The guest diagnostics are forwarded (ROT3's smallest next action).** In the interactive
+session every guest line starting `ACOSLAUNCH ` or `ACOSPROBE-STALL` is now echoed to the
+launcher's stderr unconditionally (`acos-art: guest: …`) and kept in a 64-line ring on
+`ProbeState`, in addition to the env-gated `ACOS_ART_INPUT_TRACE` sink it already reached. A
+swallowed diagnostic was the reason the failing rung went unnamed; nothing about it is
+debug-only, so it is not gated.
+
+**2. The "1-node skeleton tree" in ROT3 was a misreading, not a defect.** The probe's `tree`
+JSON is a *forest*: `tree.nodes` is one entry per **window** root, each root carrying its
+full `children` chain. The counter session's reply has one root and **14 views** with the real
+texts (`0`, `Increment`, `Reset`, `Counter`) in both orientations
+(`.cache/rot4/live1/stdout.jsonl`). Nothing about the tree had to be fixed; the counter value
+proved the same thing in the gate.
+
+**3. The failing rung, named and fixed: relaunch *scheduling*, not the record lookup.**
+The one-line answer to ROT3's list (`mActivities` record lookup / `PendingTransactionActions` /
+`handleRelaunchActivity`): **none of those; the *scheduling* guard.** AOSP
+`ActivityThread.scheduleRelaunchActivity(token)` →
+`scheduleRelaunchActivityIfPossible(r, …)` returns immediately for
+`r.token instanceof Binder` — and this Activity is attached with a local `Binder` token. So
+nothing was ever put on `mRelaunchingActivities`, and `handleRelaunchActivity` then aborted at
+its own guard (`tmp == null` → "Abort, activity not relaunching") **without any lifecycle
+callback and without an exception**: the old instance stayed, which is exactly why the count
+"survived" a relaunch that never happened and why ROT3 saw one `onCreate` only. The fix is the
+AMS-shaped delivery: build one stock `ClientTransaction` whose item is
+`ActivityRelaunchItem.obtain(token, null, null, configChanges, MergedConfiguration,
+preserveWindow=false)` with a `ResumeActivityItem` lifecycle request, and `scheduleLocal(tx)`.
+The framework's own `TransactionExecutor` then runs `preExecute`
+(`prepareRelaunchActivity` → record on `mRelaunchingActivities`) and `execute`
+(`handleRelaunchActivity` → `handleRelaunchActivityInner`: pause → stop(saveState) → destroy →
+launch(state restored) → resume). Two further image facts: `ActivityWindowInfo` is not in the
+boot image, so the window-info slot is discovered by name and passed null; and the forced
+relayout/probe must be *posted after* the transaction (it runs on the same main looper), or it
+forces the **old** decor and the new window's first traversal — a transient layout — becomes
+the rotation's frame.
+
+**4. The lifecycle is now real, not recorded-only.** `counter.apk` (no `android:configChanges`)
+on one rotate: `onPause → onStop → onSaveInstanceState count=2 → onDestroy → onCreate →
+restored count=2 → onStart → onResume` (`out/counter/logs/logcat.txt`, and
+`scenarios/counter.yaml`'s ordered `assert_log` block passes). Guest MARK:
+`ACOSLAUNCH MARK rotate rotation=1 relaunch=true via=ActivityRelaunchItem(ClientTransaction)
+handled=0x3 activity=dev.acos.fixtures.counter.MainActivity panel=2400x1080`.
+
+| item | state |
+|---|---|
+| MARK forwarding (`launch.rs`) | **done** (unconditional stderr + 64-line ring); a hand-driven session now names every rung |
+| relaunch rung | **done**: `ActivityRelaunchItem` ClientTransaction; the guard that blocked ROT3 is named above |
+| `ArtSession::rotate` / `SessionCapabilities.rotate` / `InputAction::Rotate` | **done.** Capability `"rotate"` appears in the engine's supported list; the rotate reply's own probe must be newer than the request, then one strict traversal becomes the action's frame (so a stale sample can never back the step). A backend without the command (`rust_vm`, `fake`) answers a `rotate` step with `UNSUPPORTED_BACKEND` naming `input.rotate` (unit test `rotate_on_a_session_without_the_command_is_a_structured_unsupported`) |
+| `acos-wm` rotated input mapping | **no code change was needed**: ROT3's `WmsState::rotate` already moves the display the dispatcher maps into, and the rotate step's own traversal refreshes `window_offsets`. Proven empirically by the gate: after `rotate: landscape`, a tap on `{id: inc}` at its **landscape** bounds [105,219][336,345] increments 1 → 2 |
+| `scenarios/rot1-rotate.yaml` | **done, 3/3 pass.** inc → rotate landscape → landscape bounds of `inc`/`reset`/`count` on the 2400x1080 frame (window inset by the rotated nav bar: x +63) + count preserved → tap `inc` → 2 → rotate portrait → the exact portrait bounds + 2. Evidence `.cache/rot4/suite/rot-{1,2,3}.json`, `out/rot1-rotate/{tree,steps}` (`tree/5.json` frame 2400x1080, `tree/10.json` 1080x2400) |
+| `scenarios/negative/rot1-rotate-wrong.yaml` | **done, 3/3 `ASSERTION_FAILED`.** It demands the *portrait* bounds of `inc` after rotating to landscape: every run reports `expected bounds [42,368][273,494], got [105,219][336,345]` on the rotated frame (`.cache/rot4/suite/negrot-{1,2,3}.json`) |
+| the previously unsupported rotate scenarios | they **run** now. `v1-recreate`: rotate steps + both lifecycle `assert_log` blocks + restored text pass; it fails later at an unrelated `back` settle `TIMEOUT` (`no-draw-after-action`). `counter`: the rotate step, the lifecycle `assert_log` and the portrait assertions pass; its landscape `count` baseline was re-blessed to the measured `[105,168][126,219]` (rotated-bar geometry). `hello-views`: same class of stale landscape baseline (`input` expected `[170,282][2358,400]`, measured `[105,219][2230,337]`) — recorded, not re-blessed |
+| host-side `out/` scratch | deleted after the runs (4.9 GB of PNG frames); the small verdict/tree/step evidence is kept |
+
+Verification of this pass (all on `art-rotate-1`, `CARGO_TARGET_DIR=.cache/g3f1-target`):
+
+* **15 gates, outcomes exactly as specified**: `v2-art-counter`, `w22-counter-reset`,
+  `w54-dialog-pixels`, `w42-back-frame`, `w15-dialog-menu`, `form-validation`,
+  `suite/T03-render-good`, `v1-offscreen-pager`, `w7-insets-report`, `se1-expect-change-tap`
+  pass; `suite/T03-render-wrong`, `w7-insets-carve-negative`, `negative/se1-expect-change-noop`
+  `ASSERTION_FAILED`; `negative/offscreen-pager-visible` `ELEMENT_OFFSCREEN`;
+  `p11-progress-timeout` `TIMEOUT`. `.cache/rot4/suite/gate-*.json`, runner
+  `.cache/rot4/run_suite.sh` (gitignored).
+* **5 Gaten flows pass** (`gaten-home/tabs/settings/search/lesson`) and **5 Gaten negatives**
+  `ASSERTION_FAILED` (`.cache/rot4/suite/{scenarios,neg}-*.json`).
+* **Crate tests**: `cargo test --release --offline -j 8 -p acos-wm -p acos-services -p acos-cli
+  -p acos-verify` green except the known environmental
+  `w50_serve_art::an_unknown_session_is_not_routed_to_the_frozen_rust_vm` (this worktree's
+  AF_UNIX path exceeds 108 bytes; unmodified test). `acos-art`: `--test-threads=1 --skip
+  refuses_to_run_when_no_cgroup_can_be_created` → 163 passed, 0 failed; that test alone in a
+  **fresh** lock acquisition (`--test sandbox_s5`, fresh `ACOS_ART_DATA`) → 7 passed.
+* **Regression**: the source guard `the_guest_ready_path_has_no_forced_traversal…` was scoped
+  to the ready path (`awaitFirstTraversal`) instead of the whole file. ROT3's rotate path
+  already contained `requestLayout()`, so the whole-file guard was latently red; forcing a
+  relayout is *required* on the rotate path and is not the launch regression the guard
+  protects.
+* **A/B**: not run (integration runs it). The only non-rotate-path change is the guest-line
+  echo and the capability bit; the rotate command is reachable only from a `rotate` step.
+
+Not fixed / out of scope: `hello-views.yaml`'s landscape pixel baseline (one number, needs a
+measured re-bless); `v1-recreate`'s Back settle `TIMEOUT`; D2 (bars follow `DisplayPolicy`)
+remains the open geometry item — the landscape window is currently inset by the rotated bars
+that `DisplaySpec::rotated` models, which is what the gate pins.
+
 ## K5b — AndroidKeyStore fidelity and the JCA provider-fallback trap (2026-11-14)
 
 **Branch/tree:** `compat-k5-keystore` after the `--no-ff` merge of `main`
@@ -4241,3 +4442,112 @@ smallest follow-up.
   teardown deltas remain arm-vs-arm).
 - **Regression / false pass:** none claimed. No flag default, assertion, settle horizon, scenario or
   gate was touched; the two new ON-arm failures are reported, not explained away.
+### E13.13 / ROT5 — landscape bars follow the reference device's `DisplayPolicy`, not a blind quarter turn; the residual is one named inset and one named key-delivery rung
+
+Branch `art-rotate-1`, `main` (`cb5bd04`) merged in. This pass answers ROT4 §6.1 (the stale
+landscape baseline) with the oracle instead of a re-bless, and names the two remaining
+failures. Nothing here is a re-bless from a measurement: every geometry number is derived
+from the *reference device's own dump*.
+
+| item | state |
+|---|---|
+| landscape bar placement (`RectI::rotate_quarters`, `SystemBars::rotate_quarters`) | **fixed.** The old code rotated every rect with `(x,y) -> (h-y, x)`, which put the status bar on the **right** at rotation 1 and carried the navigation bar onto the **left** edge as a 63 px band. The reference phone says otherwise: `mDecorInsetsInfo` in `fixtures/reference/hello-views/art-api34-x86_64/display.txt` (a real API-34 x86_64 emulator, `serial emulator-5554`, 1080x2400 @ 420 dpi, `dumpsys window displays`) is `ROTATION_0 [0,128][0,63]`, `ROTATION_90 [128,0][0,63]`, `ROTATION_180 [0,0][0,191]`, `ROTATION_270 [0,0][128,63]` — the status bar goes to the **left** on a quarter turn and the navigation bar **stays on the bottom** in every rotation (`mNavigationBarCanMove=false`), its 63 px and the status bar's 128 px adding up at 180°. New test `every_rotation_matches_the_reference_decor_insets` pins all four rows against `frame - app_insets()` (the oracle's `nonDecorFrame`), plus the bar-in-frame invariant |
+| which baseline is right (`hello-views` `input`) | **the scenario's.** The expected `[170,282][2358,400]` is the oracle's own node bound (`ui_after_recreate.xml`, `<hierarchy rotation="1">`, `android:id/input` — the file whose capture the scenario header names, `commands.txt`: `settings put system user_rotation 1`). It is consistent with the oracle's `configInsets=[128,63][0,63]` and the 16dp/42 px fixture padding (`128+42=170`, `2400-42=2358`). No hand-written number needed replacing; the *engine* was wrong. The measured `[105,219][2230,337]` was the old `(h-y,x)` + moving-nav-bar model (`63+42=105`, `2272-42=2230`) |
+| measured after the fix | `hello-views` landscape `input` = `[170,219][2358,337]`: the x range is the oracle's to the pixel, the residual **63 px in y** is AOSP's landscape `configInsets` top (`[128,63][0,63]` vs `nonDecorInsets [128,0][0,63]`), i.e. the status bar's 24dp/63 px strip that the **app's own decor** reserves at the top of the window in landscape (`ui_after_recreate.xml`: `statusBarBackground [128,0][2400,63]`, `action_bar_container [128,63][2400,189]`, `content [128,189][2400,1017]`). The guest's decor currently gets `nonDecorInsets` only, so its action bar sits at y=0 and every landscape node is 63 px high. Same single number in all three scenarios: `hello-views` −63, `todo-list` (`input` `[170,475][2358,601]` expected vs `[170,412][2230,538]` measured → y −63), `multi-activity` (y −63) |
+| `rot1-rotate.yaml` / `counter.yaml` landscape baselines | **re-derived, not copied.** x = 128 + the same 42 px (16dp) padding the portrait bounds show (`inc [170,219][401,345]`, `reset [170,345][401,471]`, `count [170,168][191,219]`), which is what the fixed engine measures. Both files now carry the derivation and the oracle line in the comment |
+| `scenarios/rot1-rotate.yaml` + negative | **3/3 pass** and **3/3 `ASSERTION_FAILED`** after the change (`.cache/rot5/suite/rot-{1,2,3}.json`, `negrot-{1,2,3}.json`) |
+| 15 gates | **exactly the expected 15**: 10 pass (`v2-art-counter`, `w22-counter-reset`, `w54-dialog-pixels`, `w42-back-frame`, `w15-dialog-menu`, `form-validation`, `suite/T03-render-good`, `v1-offscreen-pager`, `w7-insets-report`, `se1-expect-change-tap`); `suite/T03-render-wrong`, `w7-insets-carve-negative`, `negative/se1-expect-change-noop` `ASSERTION_FAILED`; `negative/offscreen-pager-visible` `ELEMENT_OFFSCREEN`; `p11-progress-timeout` `TIMEOUT`. `v2-art-counter` proves the re-derived landscape baseline on the gate path (`.cache/rot5/suite/gate-*.json`) |
+| 5 Gaten flows / 5 Gaten negatives | **not re-run in this window** (60-minute rule; the change is inert at rotation 0, and every Gaten flow asserts portrait geometry only — ROT4's 5/5 + 5/5 evidence stands). This is a gap in this pass's evidence, not a known failure |
+| `v1-recreate` `back` after a relaunch | **named, not yet fixed.** The key is *delivered* — `ack_ms: 5`, `pixels_changed: false`, `state_changed: null`, `frame_seq` unchanged (`steps/14-back.json`) — and nothing happens: no `onPause`/`onStop`/`onDestroy` line after the last `onResume`. A control run of the *same* step without the two rotations (`08-back` in `.cache/rot5/back-probe.yaml`) **passes**: it draws, the activity finishes and logs the destroy. So the rung is the relaunch, not the key path. Mechanism (one line, unproven because the budget ran out): the relaunch replaces the window (new `ViewRootImpl`, new token) but the **WMS/dispatcher focus is still the pre-relaunch window**, so the new `ViewRootImpl` never receives `windowFocusChanged(true)` and drops key events, while touch still works because it is hit-test routed to the new window's bounds (ROT4's post-rotate tap increments the counter). AOSP's `DisplayContent.updateFocusedWindowLocked` is the missing half |
+
+Verification (this pass): `cargo test --release --offline -p acos-wm` → 55 lib tests green
+(2 new). Runs: `.cache/rot5/{base,rebless,suite,backprobe}`. The three other rotate scenarios
+end at their first landscape assertion with the 63 px number above, so they are blocked by the
+same inset, not by rotation.
+
+Smallest next actions, in order: (1) carry the landscape `configInsets` top (`status_bar_height`,
+24dp = 63 px in the landscape config) into what the guest's decor consumes — the reference
+`DisplayPolicy` computes it as `nonDecorInsets` + that strip for `rotation != 0` — then re-run
+`hello-views`/`todo-list`/`multi-activity` (expect their oracle bounds exactly); (2) after
+`ActivityRelaunchItem`, hand focus to the new window (`addToDisplay` → focus + `windowFocusChanged`
+callback) and re-run `v1-recreate`; (3) then the Gaten flows.
+
+### E13.13 / ROT6 — the landscape 63 px is `configInsets` and it now reaches the guest; `back` is **not** a focus problem (PARTIAL)
+
+Branch `art-rotate-1`, `main` (`c517a76`) merged in (`b11ee68`), two commits: `af8970b`
+(the inset), `7d5b00b` (baselines + the partial finish path).
+
+**1. GAP 1 is closed, from the oracle, without hard-coded bounds.** `DisplayPolicy` keeps two
+inset sets per rotation and ACOS only ever delivered the first:
+
+* `nonDecorInsets` — the *physical* bars (`app_insets()`): `[0,128][0,63]`, `[128,0][0,63]`,
+  `[0,0][0,191]`, `[0,0][128,63]` for ROTATION 0/90/180/270;
+* `configInsets` — the same plus a **status-bar strip at the top of the app's configuration**
+  whenever `rotation != 0`: `[0,128][0,63]`, `[128,63][0,63]`, `[0,63][0,191]`, `[0,63][128,63]`,
+  with `configFrame` = `frame - configInsets`.
+
+The strip is `status_bar_height` (24 dp × 2.625 = 63 px) and it is not a second bar: on the
+reference phone's rotated tree (`ui_after_recreate.xml`) the app's own decor draws it —
+`statusBarBackground [128,0][2400,63]`, `action_bar_container [128,63][2400,189]`,
+`content [128,189][2400,1017]` — while the *physical* status bar is the 128 px left strip.
+The guest only ever sees insets as `InsetsState` sources (the config/non-decor split is
+`WindowManagerService`-internal), so the strip is delivered as a status-bars source at the top of
+the rotated frame (`SystemBars::status_bar_config`, `CONFIG_STATUS_BAR_SOURCE_ID`); the guest's
+own `InsetsState.calculateInsets` takes the per-edge maximum, so the window gets the physical
+left strip *and* the config top strip, i.e. exactly `configInsets`. Two new tests pin the four
+fixture rows (`nonDecorInsets`/`configInsets`/`configFrame`, `config_status_bar_height() == 63`)
+and the delivered source. No node bound was written from a measurement.
+
+Measured (`.cache/rot6/suite/scen-*.out`): `hello-views` landscape `action_bar [128,63][2400,189]`,
+`content [128,189][2400,1017]`, `input [170,282][2358,400]`, `result [170,526][303,577]` —
+**every asserted bound is the oracle's to the pixel**, and all 22 steps before `back` pass.
+`todo-list` **29/29 pass** (whole scenario, oracle landscape bounds included). `multi-activity`
+19/20 and `v1-recreate` 14/15 — the one failure in each is the trailing `back`.
+
+**2. GAP 2's named mechanism is wrong; the real rung is the server half of
+`Activity.finish()`.** ROT5 said "the relaunch leaves WMS/dispatcher focus on the old window".
+Measured against it (host trace `ACOS_ART_INPUT_TRACE`, `ACOS_ATMS_TRACE`):
+
+* `back`'s DOWN **and** UP are acked `handled=true`, 5 ms, on the *current* window's channel
+  (`key acks_returned seqs=[3,4] acks=[(3,true,5066),(4,true,5066)]` — seqs 3/4 are the pair
+  right after that channel's `TOUCH_MODE`+`FOCUS`, so the channel and its focus are the new
+  window's);
+* the guest logs **no** `Dropping event` (`ViewRootImpl$InputStage.shouldDropInputEvent` writes
+  one to Slog for "no window focus", and the logd sink captures every entry);
+* it fails just the same **without any relaunch** (`probe-back.yaml`: launch → `wait_for` →
+  `back` → TIMEOUT), so the relaunch is not the discriminator;
+* `Activity.mFinished` never flips (a watcher that polls it from the launch never sees it), and
+  `ACOS_ATMS_TRACE` shows **no** `finishActivity` request at all.
+
+That is the AOSP shape: `Activity.finish(I)` sets `mFinished` only if
+`IActivityClientController.finishActivity` returns true, and every callback after it
+(`onPause` → `onSaveInstanceState`/`onStop` → `onDestroy`) is a `ClientTransaction` the
+**server** sends. ACOS's ATMS only records a finish (`AtmsState::finish_activity`) and has no
+transaction scheduler for the ART guest, and its `activities` never learn the token the guest
+harness mints at launch, so a token-keyed finish cannot resolve either. `Activity.onKeyUp`
+(API-34 bytecode) also requires `mDefaultBackCallback != null` before it calls
+`onBackPressed()` — that flag is what the harness never installs, which is why `back`'s UP can
+be "handled" twice with no finish.
+
+Landed this pass: the guest half of the delivery — `startTopFinishWatcher`, which sends
+`PauseActivityItem(finished=true)` → `StopActivityItem` → `DestroyActivityItem` through the
+framework's own `TransactionExecutor` (the shape W38's two-Activity path already uses) as soon
+as `mFinished` flips — plus the `ACOS_ATMS_TRACE` gate. **It does not fire yet**, so `back` still
+ends in `TIMEOUT`; the missing trigger is the ATMS half (see the handoff's next actions).
+
+**3. Everything else is exactly as ROT5 left it, re-measured on the merged tree.**
+`scenarios/rot1-rotate.yaml` **3/3 pass** + its negative **3/3 `ASSERTION_FAILED`**
+(`.cache/rot6/suite/rot-{1,2,3}.json`, `negrot-{1,2,3}.json`); `counter.yaml` and
+`rot1-rotate.yaml` landscape bounds re-derived from the counter's own oracle
+(`fixtures/reference/counter/art-api34-x86_64/ui_after_recreate.xml`: `count [170,231][191,282]`,
+`inc [170,282][401,408]`, `reset [170,408][401,534]` — +63 from the ROT5 measurement, no
+re-bless); 15 gates **exactly the expected 15** (10 pass, `T03-render-wrong` /
+`w7-insets-carve-negative` / `negative/se1-expect-change-noop` `ASSERTION_FAILED`,
+`negative/offscreen-pager-visible` `ELEMENT_OFFSCREEN`, `p11-progress-timeout` `TIMEOUT`) with
+`w7-insets-report` green, i.e. portrait insets unchanged; 5 Gaten flows **pass** and 5 Gaten
+negatives **`ASSERTION_FAILED`** (first time since ROT4 — Gaten was not run in ROT5);
+`cargo test -p acos-wm -p acos-services -p acos-art` green (acos-wm 57 lib tests, +2), only the
+known worktree-path `w50_serve_art` socket test fails.
+
+Host: peak guest cgroup 432 MiB, MemAvailable never below 29 GiB (49 % of 60 GiB used), disk
+83 % after pruning this worktree's stale target/scratch dirs.

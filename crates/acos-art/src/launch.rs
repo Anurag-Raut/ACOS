@@ -1143,6 +1143,18 @@ pub(crate) fn launch_session(
         "ACOSLAUNCH_SCREEN_LAYOUT",
         &acos_services::wms::REFERENCE_SCREEN_LAYOUT.to_string(),
     );
+    // ROT2: the Activity's `android:configChanges` bitmask, resolved from the
+    // binary manifest the way `PackageParser.getActivityConfigChanges` builds it
+    // (declared bits + the forced `CONFIG_MCC|CONFIG_MNC`). `LaunchMain` puts it
+    // on the `ActivityInfo` it hands `Activity.attach`, so
+    // `ActivityInfo.configChanges` is the manifest's value instead of a
+    // hardcoded 0 — that field is what `ActivityRecord
+    // .getRealConfigChanged()` compares when a rotation has to decide between a
+    // re-create (`ActivityRelaunchItem`) and `onConfigurationChanged`.
+    let config_changes = acos_services::manifest_resolve::launcher_activity(&apk)
+        .map(|l| l.config_changes)
+        .unwrap_or(0);
+    sb.env("ACOSLAUNCH_CONFIG_CHANGES", &config_changes.to_string());
     if std::env::var_os("E3G_DEBUG").is_some() {
         sb.env("E3G_DEBUG", "1");
     }
@@ -2096,6 +2108,9 @@ struct ProbeState {
     trace: Option<TraceSink>,
     /// P9: event-driven wake for the startup loop (see [`ProbeWake`]).
     wake: Arc<ProbeWake>,
+    /// ROT4: the guest's own diagnostic lines (`ACOSLAUNCH MARK …`), oldest
+    /// first, so an interactive reply can carry the rungs that ran for it.
+    marks: std::collections::VecDeque<String>,
 }
 
 /// W59 latency trace: `elapsed_us tag text` per line, written under one lock
@@ -2712,8 +2727,19 @@ fn drain_tee_lines<R: std::io::Read>(
         // W59: keep the guest's own timing evidence (its `ACOSLAUNCH TRACE`
         // looper lines and stall dumps) next to the host's input markers. Only
         // small, human-readable lines go in; probe JSON is already in the tree.
+        // ROT4: the guest's diagnostic lines (`ACOSLAUNCH MARK …`, one per
+        // lifecycle/config rung, and its stall dumps) are forwarded to the
+        // launcher's stderr unconditionally, so the interactive session trace
+        // names a failing rung instead of swallowing it (ROT3 could not tell
+        // why the Activity-level rotate sequence did not run). Not env-gated:
+        // a swallowed diagnostic is a correctness cost, not a debug nicety.
         if trimmed.starts_with("ACOSLAUNCH ") || trimmed.starts_with("ACOSPROBE-STALL") {
+            eprintln!("acos-art: guest: {trimmed}");
             let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+            state.marks.push_back(trimmed.to_string());
+            while state.marks.len() > 64 {
+                state.marks.pop_front();
+            }
             if let Some(trace) = state.trace.as_mut() {
                 trace.line("GUEST", trimmed);
             }
@@ -4957,6 +4983,99 @@ fn interactive_serve(
                     evidence.push(reply);
                 }
             },
+            "rotate" => {
+                // ROT3: a display rotation is a WMS operation plus a
+                // configuration change in the guest. The host rotates the
+                // live `WmsState` display first (so every later `relayout`
+                // reply carries the new frame + MergedConfiguration), then
+                // asks the guest to build the new `Configuration` and let
+                // `ActivityThread.handleConfigurationChanged` decide
+                // relaunch vs `onConfigurationChanged` from the manifest's
+                // real `ActivityInfo.configChanges`.
+                let rotation = request
+                    .get("rotation")
+                    .and_then(|v| v.as_i64())
+                    .or_else(|| {
+                        request.get("orientation").and_then(|v| v.as_str()).map(|o| {
+                            if o.eq_ignore_ascii_case("landscape") { 1 } else { 0 }
+                        })
+                    });
+                let Some(rotation) = rotation.filter(|r| (0..=3).contains(r)) else {
+                    let reply = serde_json::json!({
+                        "ok": false, "cmd": "rotate", "code": "BAD_REQUEST",
+                        "error": "rotate needs rotation 0..3 or orientation portrait|landscape",
+                    });
+                    protocol_write(&reply);
+                    evidence.push(reply);
+                    continue;
+                };
+                let display = live
+                    .wms
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .rotate(rotation as u8);
+                let before = latest_probe(probe_state).map(|p| p.seq).unwrap_or(0);
+                if let Some(writer) = guest_stdin.as_mut() {
+                    use std::io::Write;
+                    let _ = writeln!(writer, "ROTATE {rotation}");
+                    let _ = writer.flush();
+                }
+                // The reply is bound to a *new* probe sample: the guest posts
+                // the rotation on its main looper and emits one sample at the
+                // new size, so a sample older than the request can never back
+                // the answer.
+                let deadline = Instant::now() + frame_wait;
+                let mut fresh = None;
+                while Instant::now() < deadline {
+                    if let Some(sample) = latest_probe(probe_state) {
+                        if sample.seq > before {
+                            fresh = Some(sample);
+                            break;
+                        }
+                    }
+                    if let Ok(Some(status)) = child.try_wait() {
+                        let reply = serde_json::json!({
+                            "ok": false, "cmd": "rotate", "code": "GUEST_EXITED",
+                            "error": format!("the guest exited before it published a rotated probe: {status}"),
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                match fresh {
+                    Some(sample) => {
+                        let reply = serde_json::json!({
+                            "ok": true, "cmd": "rotate",
+                            "rotation": rotation,
+                            "width": display.frame.width(),
+                            "height": display.frame.height(),
+                            "probe_seq": sample.seq,
+                            "tree": sample.tree,
+                        });
+                        protocol_write(&reply);
+                        evidence.push(reply);
+                    }
+                    None => {
+                        // No fresh sample: the rotation did not reach the
+                        // guest (no reader, or the guest refused). Fail closed
+                        // with a structured error, never a pass.
+                        if !evidence
+                            .last()
+                            .map(|r| r.get("cmd") == Some(&serde_json::json!("rotate")))
+                            .unwrap_or(false)
+                        {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": "rotate", "code": "NO_FRESH_TREE",
+                                "error": "the guest published no probe sample at the rotated size",
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                        }
+                    }
+                }
+            }
             "tap" | "key" | "type_text" => {
                 let text_arg = request
                     .get("text")
@@ -6212,6 +6331,7 @@ mod probe_line_tests {
                 oversized_lines: self.oversized_lines,
                 bad_probe_lines: self.bad_probe_lines,
                 trace: None,
+                marks: self.marks.clone(),
                 wake: Arc::clone(&self.wake),
                 anim_traced: self.anim_traced.clone(),
                 touch_traced: self.touch_traced,
@@ -6520,16 +6640,34 @@ mod skipped_traversal_tests {
     #[test]
     fn the_guest_ready_path_has_no_forced_traversal_and_publishes_the_evidence() {
         let src = include_str!("../guest/java/dev/acos/art/LaunchMain.java");
+        // App-visibility replay is wrong on *every* guest path.
         for forbidden in [
             "redeliverAppVisibility",
             "requesting one redraw",
             ".dispatchAppVisibility(",
             "\"dispatchAppVisibility\"",
-            "requestLayout()",
-            "invalidate()",
         ] {
             assert!(
                 !src.contains(forbidden),
+                "the guest must not contain `{forbidden}` (S3PERF E2.16)"
+            );
+        }
+        // Forced traversals are the measured one-frame regression *on the ready
+        // path*, so the guard is scoped to that path: ROT4's rotation path must
+        // force a relayout (`mForceNextWindowRelayout` + `requestLayout()`) to
+        // pick up the rotated frame, and that is a different path from the
+        // launch/ready one this test protects.
+        let ready_start = src
+            .find("static boolean awaitFirstTraversal")
+            .expect("the ready path function must exist");
+        let ready_end = src[ready_start + 1..]
+            .find("\n    static ")
+            .map(|offset| ready_start + 1 + offset)
+            .expect("the ready path function must end before the next static method");
+        let ready = &src[ready_start..ready_end];
+        for forbidden in ["requestLayout()", "invalidate()"] {
+            assert!(
+                !ready.contains(forbidden),
                 "the guest ready path must not contain `{forbidden}` (S3PERF E2.16)"
             );
         }

@@ -115,6 +115,18 @@ steps:
         - '^onStart$'
         - '^onResume$'
 
+  # ROT6: the landscape window's insets are the reference phone's
+  # `mDecorInsetsInfo` **configInsets** for ROTATION_90 — `[128,63][0,63]`:
+  # the 128 px status bar on the LEFT (the window frame/inset x offset) plus a
+  # 63 px status strip at the TOP, which the app's own decor reserves
+  # (`statusBarBackground`, then the 126 px action bar). x is 128 + the same
+  # 16dp/42 px padding portrait shows; y is 63 (config strip) + 126 (action bar)
+  # + 42 (content padding) = 231. Source: fixtures/reference/counter/
+  # art-api34-x86_64/ui_after_recreate.xml, `count [170,231][191,282]`,
+  # `inc [170,282][401,408]`, `reset [170,408][401,534]`. The portrait
+  # assertion below is unchanged. The lifecycle order above is the AOSP one the
+  # relaunch really delivers (`onPause -> onStop -> onSaveInstanceState -> onDestroy
+  # -> onCreate -> onStart -> onResume`).
   - assert_text:
       selector: {id: count}
       text: {exact: "2"}
