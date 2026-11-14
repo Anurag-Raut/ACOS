@@ -273,7 +273,8 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=600.0, help="per tool call, seconds")
     ap.add_argument(
         "--mode",
-        choices=["counter", "gaten"],        default="counter",
+        choices=["counter", "gaten"],
+        default="counter",
         help="counter: 0 -> tap Increment -> 1 -> reset -> 0; gaten: launch, read the "
         "real RN tree, tap a bottom tab and require the tree to change",
     )
@@ -352,15 +353,21 @@ def main() -> int:
             available,
         )
 
-        # REL3b F12: `acos_help` with no topic returns the whole guide's overview
-        # *skeleton*; the full text is one `topic: "all"` away. Both are checked,
-        # so a shipped-but-empty guide cannot pass either.
+        # REL3b F12: `acos_help` with no topic returns the short overview
+        # (REL3b, F12); the whole guide is one `topic: "all"` away. Both are
+        # checked, so a shipped-but-empty guide cannot pass either.
         help_env = envelope(client.call_tool("acos_help", {}))
-        guide = help_env.get("result", {}).get("guide") or ""
+        overview = help_env.get("result", {}).get("guide") or ""
+        full_env = envelope(client.call_tool("acos_help", {"topic": "all"}))
+        guide = full_env.get("result", {}).get("guide") or ""
         check(
             "acos_help",
-            help_env.get("status") == "pass" and len(guide) > 1500,
-            {"chars": len(guide)},
+            help_env.get("status") == "pass"
+            and 1000 < len(overview) < 6000
+            and full_env.get("status") == "pass"
+            and len(guide) > 20000
+            and "acos_tap" in guide,
+            {"overview_chars": len(overview), "full_chars": len(guide)},
         )
         full_env = envelope(client.call_tool("acos_help", {"topic": "all"}))
         full_guide = full_env.get("result", {}).get("guide") or ""
