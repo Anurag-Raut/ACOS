@@ -1537,6 +1537,7 @@ mod engine_tests {
             animations: None,
             insets: None,
             untrusted: false,
+            keep_artifacts: Some("all".to_string()),
             json,
         }
     }

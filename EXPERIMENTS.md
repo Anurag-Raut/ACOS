@@ -2951,3 +2951,89 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | G4a | **The tree reports `visible=false` for a node whose pixels the app painted** (GR4). `tree/18.json`: the bottom bar's active label `[512,2214][642,2251]` is `visible: false` because it lies below the root's `visible_bounds` bottom (`2209`) in a `insets: carve` session, while the bound frame `frames/18.png` paints its glyphs at png `y 2088–2122`, `x 513–640` (bounds − `display_origin.y` 128). AOSP's `View.getGlobalVisibleRect` intersects with the display and ancestor clips, not with the nav-bar band, so a real a11y tree reports it visible (a tap there would still land on the system bar, so fail-closed is defensible — the *classification* is what is inconsistent). Lowest layer: per-node `visible`/`visible_bounds` vs the carved visible frame, surfaced as `ELEMENT_OFFSCREEN` (`crates/acos-verify/src/native.rs`). Verification false-negative only, **never a false pass**. Worked around in scenarios: target the tab pressable's `content_desc`, never the label (`results/gaten/GR4.md` §2.2, §5) | node visibility vs frame | classification matches the pixels | high (tree + frame, same bound frame) | low (decide the policy, then align) | low | **open, found by GR4 (E13.9)** |
 | G4b | **Tree frame metadata reports `density: 420` for a `density_dpi: 400` run** (GR4): every `tree/*.json` frame record says 420 while `repro.json`/`verdict.json` echo the scenario's 400. Either the guest boots at the reference 420 on this path or the tree's `FrameMeta` is stamped from the reference default; not root-caused. Consequence: density-dependent geometry cannot be audited from tree metadata, which is exactly the density-fix area. Pixels are correct either way (116 px wordmark glyphs, GR4 §4) | tree/frame metadata integrity | metadata agrees with the launch spec | high (36 runs, all 420) | low (thread the launch density into the tree record) | low | **open, found by GR4 (E13.9)** |
 | G4c | **A scenario can pass 3/3 while proving nothing, and nothing in the harness notices** (GR4). A `tap` on a control that is already in the asserted state writes nothing — Gaten's Kanji reference `select()` returns early when `next === source`, and the guest's default was already the asserted value — so the post-tap assertions hold on state that never changed. The only evidence was pixel-level: the before/after bound captures were byte-identical (0 changed px) where the claim needs a change. Candidate: an explicit step (`expect_change` / `assert_frame_differs`) or a writer-side rule that a `capture` pair around a mutating tap must differ, so a vacuous flow fails instead of passing. Worked around in GR4 by asserting the hub label's *other* value is absent at each hop and by diffing the captures by hand (`results/gaten/GR4.md` §2.3) | verify semantics / false-pass class | no vacuous pass | high (reproduced + rewritten) | medium (new step + schema + provenance rule) | medium (a legitimate no-op must stay expressible) | **open, found by GR4 (E13.9)** |
+
+## E9.3 — ARTGC: bounded artifacts without losing evidence — PASS (retention, `gc`, and every gate/Gaten/GR4 code unchanged)
+
+- **Date / commit:** 2026-11-15; branch `artgc-retention` off `main` `389429a`
+  (worktree `/home/Qui/.paseo/worktrees/3oxa6xao/k5`). Report:
+  `results/handoff/ARTGC.md`.
+- **Question / goal:** every `acos verify` run wrote 0.5–2 GB of artifacts — one
+  integration worktree's `out/` reached 20 GB and the host disk hit 85 % three
+  times in one day, with a release about to ship to other agents. Bound the
+  artifacts without losing evidence: keep everything for a failing run, keep only
+  what a passing verdict declares, and give the collection a `gc`.
+- **Method:** measure first (one passing and one failing run, artifacts broken
+  down by directory and size), then implement the decision as a pure function of
+  the run status, then prove the gates still read their frames and that no
+  retained JSON dangles.
+- **Inputs:** API-34 image `.cache/boot/android-34`, Gaten APK
+  `.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk`, release
+  `acos`/`acos-art` from `.cache/k5-target/release`, every ART run under
+  `/home/Qui/Projects/acos/tools/art-runtime/run-exclusive.sh --task ARTGC --
+  tools/guarded.sh --mem 12G --time …`. Scratch `.cache/artgc/`.
+- **Result:**
+  - *Measurement (before).* `gaten-home` (pass) wrote 435 MiB: 311 MiB
+    `art-frames/live-frames/` (30 mirrored C1 captures), 114 MiB `frames/`
+    (11 PNGs), 10 MiB `tree/`, 0.1 MiB `events.jsonl`. `gaten-content-welcome`
+    wrote 2246 MiB of which 2126 MiB was `live-frames/` and only 3 of its 11
+    `frames/` PNGs were declared by any step. **Every PNG was exactly 10 371 258
+    bytes** for 1080×2400: the ART capture path writes zlib *stored* blocks with
+    filter 0 — an unfiltered raw 9.5 MiB RGBA buffer in a PNG wrapper. So the
+    "raw buffers" the task names *are* the frames, and pruning alone can only
+    reach ~72 % on the best case.
+  - *Retention* (`crates/acos-verify/src/retention.rs`, `--keep-artifacts` /
+    `ACOS_KEEP_ARTIFACTS`): the decision is `decision(status, mode)` — only
+    `pass` is ever pruned, and `all` keeps everything. A pass keeps every
+    declared artifact (each step's `frame_seq` → `frames/<seq>.png` +
+    `tree/<seq>.json`, every `evidence[]` path, `steps/`, `logs/`, the reports),
+    plus the first and last frame, and drops the rest of `frames/` and all but
+    the first and last mirrored capture. Before removing a candidate the runner
+    scans every retained JSON document (and the serialized verdict) for the path;
+    a hit un-prunes it (`kept_because_referenced`). `live-session.json` is
+    rewritten (`png` → `png_pruned: true`); because the launcher writes it at
+    shutdown — *after* pruning — `retention::finalize` reconciles it again in
+    `verify::annotate`.
+  - *The 10 MiB PNGs.* Retained frames are re-encoded losslessly (`png` crate,
+    `Compression::Best` + `FilterType::Sub`): the same pixels, ~10× smaller. A
+    failing run keeps its original bytes untouched.
+  - *Measured after* (`retention.json` per run, 1080×2400):
+
+    | scenario | status | before | after | reduction |
+    |---|---|---|---|---|
+    | `v2-art-counter` | pass | 109.0 MiB | 0.3 MiB | −99.7 % |
+    | `gaten-home` | pass | 195.3 MiB | 8.8 MiB | −95.5 % |
+    | `negative/gaten-home-wrong` | fail `ASSERTION_FAILED` | 131.8 MiB | 131.8 MiB | 0 % (by design) |
+
+  - *`acos artifacts gc`* (`crates/acos-cli/src/artifacts_gc.rs`): prunes run
+    directories under an artifacts root, grouped by `verdict.scenario.name`,
+    never the newest `--keep-last` (default 1) per scenario, never a non-pass run
+    younger than `--older-than` (default 24h), never a run whose verdict cannot
+    be read, and `--dry-run` reports the same freed-byte figure without removing
+    anything. Five unit tests build a temp tree with `set_modified` ages.
+  - *No dangling evidence:* `tools/check-artifact-references.py` walks every run
+    directory, scans every JSON/JSONL for artifact paths (`frames/`, `tree/`,
+    `steps/`, `logs/`, `art-frames/`) and resolves each one (including
+    cwd-relative paths recorded by the launcher). It skips `retention.json`'s
+    `pruned` key, which is a deletion receipt by construction.
+  - *Gates unchanged:* the 15 gates, the 5 Gaten flows, the 5 Gaten negatives and
+    GR4 (4 flows + 4 negatives) all produced exactly the expected statuses and
+    codes with retention on (`referenced`), and the pixel gates
+    (`w54-dialog-pixels`, `w42-back-frame`, `suite/T03-render-good`,
+    `suite/T03-render-wrong`) still read their frames — those frames are exactly
+    what the verdict declares, so they are never candidates.
+  - *Tests:* `cargo test --release --offline -p acos-cli -p acos-verify` green,
+    including 11 new retention tests (decision per status, referenced-frame
+    preservation, first/last frame, `none-on-pass` + its verdict rewrite,
+    live-session rewrite, reference-wins, lossless re-encode) and 5 `gc` tests
+    (ordering/keep-last, recent-failure protection, dry-run parity,
+    unreadable-verdict protection, nested scenario dirs).
+- **Decision:** the default is `referenced` (not `all`). A pass keeps every file
+  its own verdict names, so a green run can never be *less* provable than before;
+  the bytes that disappear are the ones no report ever mentioned. `none-on-pass`
+  also strips the frame declarations from the pass's verdict (trees, logs and
+  assertion results remain the evidence) so "no frames" can never produce a
+  dangling path or an invalid pass.
+- **Not done:** no compression-level change on the capture critical path (the
+  ART encoder still writes stored blocks — deliberate, it is on the screenshot
+  path; re-encoding happens in the evidence pass). `gc` has no size budget
+  (`--max-bytes`) yet.
