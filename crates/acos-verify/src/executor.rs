@@ -1845,6 +1845,8 @@ fn content_settle_unhonored(step: &Step, exec: &StepExec) -> Option<StepExec> {
         result: AssertionResult {
             kind: "settle".to_string(),
             passed: false,
+            expected: Some(serde_json::json!({"settle": "content"})),
+            actual: Some(settle.clone().unwrap_or(serde_json::Value::Null)),
             diff: Some(AssertionDiff {
                 expected: serde_json::json!({"settle": "content"}),
                 actual: settle.clone().unwrap_or(serde_json::Value::Null),
@@ -1913,6 +1915,8 @@ fn content_settle_pixel_failure(
         result: AssertionResult {
             kind: "frame_binding".to_string(),
             passed: false,
+            expected: Some(serde_json::json!({"settle": "strict", "pixel_evidence": true})),
+            actual: Some(serde_json::json!({"settle": "content", "pixel_evidence": false})),
             diff: Some(AssertionDiff {
                 expected: serde_json::json!({"settle": "strict", "pixel_evidence": true}),
                 actual: serde_json::json!({"settle": "content", "pixel_evidence": false}),
@@ -2006,6 +2010,8 @@ fn content_settle_geometry_failure(
         result: AssertionResult {
             kind: "frame_binding".to_string(),
             passed: false,
+            expected: Some(serde_json::json!({"settle": "strict", "geometry_evidence": true})),
+            actual: Some(serde_json::json!({"settle": "content", "geometry_hashed": false})),
             diff: Some(AssertionDiff {
                 expected: serde_json::json!({"settle": "strict", "geometry_evidence": true}),
                 actual: serde_json::json!({"settle": "content", "geometry_hashed": false}),
