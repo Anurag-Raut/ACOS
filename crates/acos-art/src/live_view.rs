@@ -61,6 +61,17 @@ pub const MAX_SUBSCRIBE_LINE: usize = 4096;
 pub const MAX_MESSAGE_BYTES: usize = 64 * 1024 * 1024;
 /// Default frame rate cap.
 pub const DEFAULT_MAX_FPS: u32 = 15;
+/// Default image format: **PNG**.
+///
+/// Measured on this host at scale 0.5 (540x1200), producer-side encoder clock,
+/// 2026-11-14: PNG (fast deflate + adaptive filter) costs 1.1-1.3 ms and
+/// 20-54 KB per frame; JPEG q75 costs 9.4-11.6 ms and 23-38 KB. PNG is 8-9x
+/// cheaper in CPU (which is the scarce resource: the encoder shares the host
+/// with the real guest) and smaller on a flat UI screen, and it is lossless so
+/// half-resolution text is exactly the framework's pixels. `jpeg` stays
+/// selectable per subscriber / `ACOS_VIEW_FORMAT`; it wins on bytes for
+/// image-heavy screens. See `docs/LIVE_VIEW.md` §7.
+pub const DEFAULT_FORMAT: FrameFormat = FrameFormat::Png;
 /// Default downscale factor (half resolution: 1080x2400 → 540x1200).
 pub const DEFAULT_SCALE: f32 = 0.5;
 /// Default JPEG quality (readable UI text at scale 0.5).
@@ -75,7 +86,9 @@ pub const MASKED_TEXT: &str = "[masked]";
 /// Image format of the frame stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FrameFormat {
-    /// JPEG (lossy, the default: smallest per frame).
+    /// JPEG (lossy; smaller than PNG on image-heavy screens, ~8x the encoder
+    /// CPU). Selectable per subscriber, not the default (see
+    /// [`DEFAULT_FORMAT`]).
     Jpeg,
     /// PNG (lossless).
     Png,
@@ -332,6 +345,9 @@ struct Inner {
     /// The focused activity the feed last reported (a change emits an
     /// `activity` event).
     last_activity: Mutex<Option<String>>,
+    /// The command the launcher is currently executing. The event feed reports
+    /// the *request*'s coordinates/key/text (a reply need not echo them).
+    pending_request: Mutex<Option<serde_json::Value>>,
 }
 
 impl Inner {
@@ -350,7 +366,7 @@ impl Inner {
 
     fn format(&self) -> FrameFormat {
         FrameFormat::from_code(self.active_format.load(Ordering::Relaxed) as u8)
-            .unwrap_or(FrameFormat::Jpeg)
+            .unwrap_or(DEFAULT_FORMAT)
     }
 
     fn scale(&self) -> f32 {
@@ -385,7 +401,7 @@ impl Inner {
                 .and_then(|v| v.as_str())
                 .and_then(FrameFormat::parse)
                 .or(self.config.format)
-                .unwrap_or(FrameFormat::Jpeg);
+                .unwrap_or(DEFAULT_FORMAT);
             self.active_format
                 .store(u32::from(requested.code()), Ordering::Release);
         }
@@ -575,6 +591,7 @@ impl LiveView {
             last_encode_bytes: AtomicU64::new(0),
             focused_password: AtomicBool::new(false),
             last_activity: Mutex::new(None),
+            pending_request: Mutex::new(None),
         });
         let view = Arc::new(Self {
             inner: Arc::clone(&inner),
@@ -663,10 +680,30 @@ impl LiveView {
     /// result status; a focused-activity change becomes an `activity` event;
     /// launch/reset/close become `lifecycle` events; a reply that carries an
     /// unsettled observation becomes a `settle` event.
+    /// Record the command the launcher is about to execute, so its reply's
+    /// event carries the request's own coordinates/key/text.
+    pub fn observe_request(&self, request: &serde_json::Value) {
+        if self.inner.subscriber_count.load(Ordering::Acquire) == 0 {
+            return;
+        }
+        let mut slot = self
+            .inner
+            .pending_request
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        *slot = Some(request.clone());
+    }
+
     pub fn observe_reply(&self, reply: &serde_json::Value) {
         if self.inner.subscriber_count.load(Ordering::Acquire) == 0 {
             return;
         }
+        let request = self
+            .inner
+            .pending_request
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
         if let Some(tree) = reply.get("tree") {
             self.inner
                 .focused_password
@@ -697,9 +734,16 @@ impl LiveView {
                 self.inner.push_event(activity_event(activity, frame_seq));
             }
         }
-        if let Some(event) =
+        if let Some(mut event) =
             event_from_reply(reply, self.inner.focused_password.load(Ordering::Relaxed))
         {
+            if let Some(request) = request.as_ref() {
+                merge_request(
+                    &mut event,
+                    request,
+                    self.inner.focused_password.load(Ordering::Relaxed),
+                );
+            }
             self.inner.push_event(event);
         }
     }
@@ -753,9 +797,51 @@ impl LiveView {
         }
     }
 
+    /// The producer's counters and active shape as one JSON object.
+    ///
+    /// Used by the dev-only `ACOS_VIEW_STATS_FILE` seam (the launcher writes it
+    /// when a session ends) so a measurement run can report the encoder's own
+    /// per-frame cost and bytes without adding a protocol message.
+    #[must_use]
+    pub fn stats_json(&self) -> serde_json::Value {
+        let stats = self.stats();
+        serde_json::json!({
+            "format": self.inner.format().as_str(),
+            "scale": self.inner.scale(),
+            "max_fps": self.inner.max_fps(),
+            "jpeg_quality": self.inner.config.jpeg_quality,
+            "display": {"w": self.inner.display.0, "h": self.inner.display.1},
+            "stats": {
+                "ticks": stats.ticks,
+                "source_calls": stats.source_calls,
+                "frames_captured": stats.frames_captured,
+                "encodes": stats.encodes,
+                "mean_encode_ms": stats.mean_encode_ms(),
+                "mean_bytes": stats.mean_bytes(),
+                "last_encode_us": stats.last_encode_us,
+                "last_encode_bytes": stats.last_encode_bytes,
+                "frames_sent": stats.frames_sent,
+                "events_sent": stats.events_sent,
+                "events_dropped": stats.events_dropped,
+                "subscribers_dropped": stats.subscribers_dropped,
+                "frames_dropped_latest": stats.frames_dropped_latest,
+                "subscribers": stats.subscribers,
+            },
+        })
+    }
+
     /// Stop the threads and remove the socket. Idempotent.
     pub fn shutdown(&self) {
-        self.inner.shutdown.store(true, Ordering::Release);
+        let already = self.inner.shutdown.swap(true, Ordering::AcqRel);
+        if !already {
+            // Dev-only measurement seam (never in user docs): the producer's own
+            // counters, so an A/B can report the encoder's per-frame ms/bytes.
+            // Written here, synchronously, because the tap thread may be killed
+            // by process exit before it notices the shutdown.
+            if let Some(path) = std::env::var_os("ACOS_VIEW_STATS_FILE") {
+                let _ = std::fs::write(path, self.stats_json().to_string());
+            }
+        }
         self.inner.notify();
         // Wake the blocking accept with a self-connection.
         let _ = UnixStream::connect(&self.path);
@@ -1177,6 +1263,45 @@ pub fn event_from_reply(
         }
     }
     Some(event)
+}
+
+/// Fill an event's input fields from the command request that produced it.
+///
+/// A reply does not echo `x`/`y`/`key`/`text`; the request is the record of what
+/// the agent asked for. Text is masked for a password field and truncated, and
+/// the reply's own value (when it has one) always wins.
+pub fn merge_request(
+    event: &mut serde_json::Value,
+    request: &serde_json::Value,
+    focused_password: bool,
+) {
+    let Some(map) = event.as_object_mut() else {
+        return;
+    };
+    for key in ["x", "y", "x2", "y2"] {
+        if !map.contains_key(key) {
+            if let Some(value) = request.get(key).filter(|value| value.is_i64()) {
+                map.insert(key.to_string(), value.clone());
+            }
+        }
+    }
+    if !map.contains_key("key") {
+        if let Some(value) = request.get("key").or_else(|| request.get("code")) {
+            if value.is_i64() {
+                map.insert("key".to_string(), value.clone());
+            }
+        }
+    }
+    if !map.contains_key("text") {
+        if let Some(text) = request.get("text").and_then(|value| value.as_str()) {
+            let text = if focused_password {
+                MASKED_TEXT.to_string()
+            } else {
+                truncate_text(text)
+            };
+            map.insert("text".to_string(), serde_json::json!(text));
+        }
+    }
 }
 
 /// Build the `activity` event a session emits when the focused activity changes.

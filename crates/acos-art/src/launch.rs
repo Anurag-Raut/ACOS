@@ -4040,6 +4040,11 @@ fn spawn_live_view_tap(
         .spawn(move || {
             let mut seen = 0u64;
             let mut last_seq = 0u64;
+            // Dev-only measurement seam: refresh the stats file every 2 s while a
+            // viewer is attached, so the numbers survive a session that is
+            // killed by teardown instead of exiting cleanly.
+            let stats_path = std::env::var_os("ACOS_VIEW_STATS_FILE");
+            let mut stats_at = Instant::now();
             let mut source = || -> Option<crate::live_view::SourceFrame> {
                 let state = compositor.lock().unwrap_or_else(|e| e.into_inner());
                 let seq = state.latest_generation();
@@ -4059,6 +4064,12 @@ fn spawn_live_view_tap(
             };
             while !view.is_shutdown() {
                 view.tick(&mut source);
+                if let Some(path) = stats_path.as_ref() {
+                    if stats_at.elapsed() >= Duration::from_secs(2) && view.has_subscribers() {
+                        let _ = std::fs::write(path, view.stats_json().to_string());
+                        stats_at = Instant::now();
+                    }
+                }
                 wake.wait(&mut seen, Duration::from_millis(200));
             }
         });
@@ -4427,6 +4438,11 @@ fn interactive_serve(
             }
         };
         let cmd = request.get("cmd").and_then(|v| v.as_str()).unwrap_or("");
+        // VIEW1a: the event feed reports the *request*'s coordinates/key/text
+        // (a reply need not echo them); no-op with no viewer attached.
+        if let Some(view) = LIVE_VIEW.get() {
+            view.observe_request(&request);
+        }
         match cmd {
             "tree" => {
                 // P3: absolute phase marks across processes (epoch microseconds).

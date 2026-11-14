@@ -297,7 +297,11 @@ pub struct ReadEntry {
 }
 
 /// Read every entry in `dir` (unreadable files are skipped, never fatal).
+///
+/// The reader half of the protocol: `acos view` (VIEW1b) uses these three
+/// functions; the producer never calls them, hence `allow(dead_code)` here.
 #[must_use]
+#[allow(dead_code)]
 pub fn read_entries(dir: &Path) -> Vec<ReadEntry> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
@@ -321,6 +325,7 @@ pub fn read_entries(dir: &Path) -> Vec<ReadEntry> {
 }
 
 /// Remove every stale entry (the hub's sweep). Returns how many were removed.
+#[allow(dead_code)]
 pub fn sweep(dir: &Path) -> usize {
     let mut removed = 0;
     for entry in read_entries(dir) {
@@ -346,6 +351,7 @@ pub fn is_stale(doc: &serde_json::Value) -> bool {
 /// `true` when `pid` exists and this user may signal it (`EPERM` counts as
 /// alive: the process is there, it is just not ours).
 #[must_use]
+#[allow(dead_code)]
 pub fn pid_alive(pid: u32) -> bool {
     if pid == 0 {
         return false;

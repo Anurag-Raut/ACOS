@@ -26,7 +26,7 @@ One JSON line, sent immediately after connecting, then nothing else. The stream
 is **view-only**: the producer ignores any later input (ADR-0027 §5).
 
 ```json
-{"v":1,"subscribe":{"frames":true,"events":true,"max_fps":15,"scale":0.5,"format":"jpeg"}}
+{"v":1,"subscribe":{"frames":true,"events":true,"max_fps":15,"scale":0.5,"format":"png"}}
 ```
 
 | field | meaning |
@@ -36,7 +36,7 @@ is **view-only**: the producer ignores any later input (ADR-0027 §5).
 | `subscribe.events` | deliver `E` messages (default `true`) |
 | `subscribe.max_fps` | 1..30 (default 15) |
 | `subscribe.scale` | 0.05..1.0 (default 0.5 → 540×1200 for a 1080×2400 session) |
-| `subscribe.format` | `"jpeg"` or `"png"` (default `"jpeg"`) |
+| `subscribe.format` | `"png"` (default, measured cheapest) or `"jpeg"` |
 
 **One encoder per session.** The *first* subscriber fixes `format`, `scale` and
 `max_fps`; the hello says which values are active, and a later subscriber's
@@ -67,7 +67,7 @@ A consumer must refuse `length == 0` and should refuse `length > 64 MiB`.
 JSON object:
 
 ```json
-{"v":1,"session":12345,"display":{"w":1080,"h":2400},"format":"jpeg","scale":0.5}
+{"v":1,"session":12345,"display":{"w":1080,"h":2400},"format":"png","scale":0.5}
 ```
 
 | field | meaning |
@@ -84,7 +84,7 @@ Payload = a JSON header **line terminated by `\n`**, immediately followed by the
 encoded image bytes (no length prefix of their own: the rest of the payload).
 
 ```json
-{"seq":42,"generation":41,"w":540,"h":1200,"format":"jpeg","ts_ms":1763158000123}
+{"seq":42,"generation":41,"w":540,"h":1200,"format":"png","ts_ms":1763158000123}
 ```
 
 | field | meaning |
@@ -225,7 +225,30 @@ tools/view/stream_probe.py --socket "$SOCK" --out .cache/view1-probe/run1 \
 `--idle-exit S` makes it end by itself S seconds after the last message, which is
 how a probe watches a live session without a kill.
 
-## 7. Measurements (2026-11-14, this host, scale 0.5, 1080×2400 → 540×1200)
+## 7. Measurements and the default format
 
-Encoded by the producer's encoder thread, one frame per encode, JPEG quality 75.
-See `results/handoff/VIEW1a.md` for the full A/B and the viewer-on bench table.
+Measured 2026-11-14 on this host (60 GiB, release build) from the producer's own
+encoder clock during a real streamed session at scale 0.5 (1080×2400 → 540×1200,
+`ACOS_VIEW_STATS_FILE`, one encode per frame, JPEG quality 75):
+
+| screen | format | mean bytes/frame | mean encode ms | frames | note |
+|---|---|---|---|---|---|
+| `counter.apk` (flat UI + text) | **png** | 20,042 | **1.23** | 29 | lossless, text exactly the framework's pixels |
+| `counter.apk` | jpeg q75 | 22,657 | 11.57 | 26 | ringing around text, still readable |
+| Gaten (RN, images/gradients) | **png** | 53,727 | **1.12** | 52 | 15 KB/frame larger than jpeg |
+| Gaten | jpeg q75 | 38,337 | 9.44 | 46 | smaller on bytes, ~8× the CPU |
+
+**Default: PNG.** It is 8-9× cheaper in CPU, which is the scarce resource — the
+encoder thread shares the host with the real ART guest, so its cost must stay
+away from the tracked M4–M8 metrics — and it is lossless, so half-resolution UI
+text is readable by construction. JPEG stays selectable (per subscriber, or
+`ACOS_VIEW_FORMAT=jpeg`) and wins on bytes for image-heavy screens. Both are far
+below the 15 fps budget (66 ms): a frame costs ≤ 12 ms of a separate thread.
+
+Readability at 0.5 is checked by eye on the saved frames (`counter`: "Counter",
+"1", "Increment", "Reset" all legible in both formats).
+
+A subscriber only receives events that happen **while it is connected**; the
+current activity is in the registry entry and the `H` hello names the display
+and the active format/scale. See `results/handoff/VIEW1a.md` for the viewer-on
+benchmark table and the viewer-off A/B.

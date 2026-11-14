@@ -29,7 +29,7 @@ TYPE_EVENT = b"E"
 
 DEFAULT_MAX_FPS = 15
 DEFAULT_SCALE = 0.5
-DEFAULT_FORMAT = "jpeg"
+DEFAULT_FORMAT = "png"
 
 
 def recv_exact(sock: socket.socket, count: int) -> bytes | None:
