@@ -201,3 +201,193 @@ with a real copy. Both are gitignored/untracked and unchanged by this branch.
 * The bench itself was not run (not needed): the driver teardown was changed in
   `d2_warm.Serve.close()` + the new `acos-bench.sh` trap, and the daemon-side behaviour is
   covered by 3.3/3.4.
+
+---
+
+# SERVELEAK2 — the kill paths may only kill what this session provably started
+
+Follows SERVELEAK. A safety review (fresh Opus, read-only) said **do not merge**:
+SERVELEAK made destroy/shutdown *kill* leftovers, but the kill paths could kill
+processes the session never started. ACOS runs many agents' guests on one host,
+all binding the same shared sysroot/boot/font paths, so "the same paths on the
+command line" is not ownership. This section maps every finding to its fix, its
+test and its live evidence. Branch `serve-leak-reap`, merged with `main cb5bd04`.
+
+## F3 first (it decides what the shipped preview needs) — does the collision
+## already exist on `main` cb5bd04 / the installed 0.2.0 build?
+
+**The collision is a real hazard in the source; the destructive half exists only
+on this branch.** Facts, checked on `main` cb5bd04 and on the installed build:
+
+* `acos-mcp` uses the daemon backend **only** when `ACOS_SESSION_DAEMON` is truthy
+  (`daemon::mcp_daemon_requested`). It is unset in this environment and in the
+  owner's agent configs, so the default MCP server holds sessions **in-process**,
+  where the id space is per process: two servers' `s_mcp` cannot collide.
+* `main` has **no** destroy-on-exit: `Server::serve` on stdin EOF only calls
+  `shutdown_and_join()` (transport); there is no `Backend::shutdown` call. So even
+  in daemon mode with a shared id, another server's EOF destroys nothing.
+* The installed 0.2.0 `acos-mcp` (`~/.local/share/acos/0.2.0/bin/acos-mcp`,
+  installed 2026-11-14 from `.cache/h4-target`) contains no
+  `acos-mcp: destroyed session` string: it predates SERVELEAK's destroy-on-exit
+  entirely. The shipped preview therefore cannot kill another agent's guest.
+* What *is* already true on `main`: with `ACOS_SESSION_DAEMON=1` and one shared
+  daemon, two agents using the default id address the same held session — the
+  second launch replaces the first's guest (a correctness hazard: A then talks to
+  B's guest), and the daemon falls back to the constant `s_mcp` for a missing
+  `base.session_id` (`engine/serve.rs::session_id`). No cross-agent kill.
+
+So the F3 fix is **separable** (its own commit, `serve: a default session id
+belongs to one server, not to every agent`) and is the piece to cherry-pick if a
+release ever carries SERVELEAK's destroy-on-exit. It is additive on the wire: an
+older daemon that does not report tokens keeps SERVELEAK's id-only behaviour.
+
+## Fixes
+
+### F1 (HIGH) — a command-line substring is not ownership
+`processes_mentioning` matched `acos-art` + *any* command line containing the
+artifacts path, and it was a **kill** path (`reap_session_leftovers` →
+`sigkill_group` → `shutdown`/`reap_leftovers`). Agent A `acos verify counter.yaml`
+and agent B the same in another worktree both name `out/counter`; inside one
+daemon `s1` matched `…/art-sessions/s10`. Now:
+
+* **Ownership is proved three ways and nothing else** (`ArtSession::owned_pids`):
+  membership of a process group the session recorded; the `/proc` ppid chain from
+  the launcher pid this session spawned; and a random per-session token exported
+  as `ACOS_ART_SESSION_TOKEN` into the launcher's environment, which `bwrap`
+  inherits (the guest runs under `bwrap --clearenv`, so the token reaches bwrap
+  and the guest is covered by bwrap's group/descendant proofs).
+* **Only provable pids are signalled** (`provable_pids`, i.e. descendants + token).
+  A recorded group's members that cannot be attributed are still *reported* as
+  survivors (never a false clean) but are never killed on a guess
+  (`serve: report a group member the session cannot attribute, never hide it`).
+* `kill(-group)` is issued only for `owned_live_groups` — groups that currently
+  hold at least one provable pid (F4 below).
+* The command-line match survives **report-only** (`foreign_artifacts_mentions`,
+  written to the dm6 trace): it canonicalises the artifacts directory and
+  requires a whole argv element to equal it or start with `<dir>/`, so
+  `out/counter` cannot match `…/out/counter2`.
+* Per-daemon session directories: `acos serve` already separates daemons by
+  `ACOS_RUNTIME_DIR`/`XDG_RUNTIME_DIR`, but two daemons under the same runtime
+  dir would still share `<runtime>/art-sessions`. The teardown no longer depends
+  on directory identity at all (ownership does), so a shared `art-sessions` root
+  is no longer a kill hazard; the F3 token/per-launch id work additionally makes
+  an MCP-side id unique per server instance.
+
+### F2 (MEDIUM) — the bench trap reaped a *shared* scratch root
+`acos-bench.sh`'s trap fired on normal EXIT and matched
+`pgrep -f "acos serve .*$SCRATCH_ROOT/r[0-9]"`; `SCRATCH_ROOT` defaults to the
+shared `.cache/h6` and both runs create `r1-<group>`, so the first run to finish
+SIGKILLed the other run's daemons. Now:
+
+* the bench exports a per-run `ACOS_BENCH_RUN_ID` and `ACOS_BENCH_PIDFILE`;
+  `d2_warm.Serve` records `pid starttime` for every daemon it spawns;
+* `tools/bench/reap-daemons.sh` reaps **only those pids**, re-verifying each one
+  immediately before signalling (exists, run id in `/proc/<pid>/environ`, still
+  `acos serve`, identical `/proc/<pid>/stat` start time — a recycled pid fails);
+* the leak report (`d2_warm.survivors`) filters by run id, so a concurrent run's
+  processes are not reported as this run's survivors.
+
+### F3 (MEDIUM) — a default session id belonged to every agent
+See above. `default_session_id()` is `mcp-<pid>-<random>` (per server instance),
+injected into the forwarded args (`with_default_session`) because the daemon
+otherwise defaults a missing id to `s_mcp`; every `acos_launch` returns a
+`session_token` that `session_list` reports, and `SessionBackend::shutdown`
+destroys only a session whose current token is still the one it launched.
+
+### F4 (LOW) — a recycled group id must never be signalled
+* `shutdown` clears `process_group`/`guest_group`/`launcher_pid`/token/pidfd once
+  the teardown **proves** the tree empty (`proven_empty`); a later `Drop` or
+  repeat `shutdown` therefore issues no `kill(-group)` at all.
+* The launcher is held by a **pidfd** (`pidfd_open`) and SIGKILLed through it;
+  the process-group signal is only sent while the leader is still unreaped (its
+  pid, hence its group id, cannot be recycled), and group signals are derived
+  from provable members (`owned_live_groups`), never from a stale record.
+* `d2_warm.Serve.close()` no longer `killpg`s after `wait()`: the group is
+  signalled *before* the leader is reaped.
+* `kill_group_signals()` (a process-wide counter) is the test seam.
+
+## Evidence
+
+### Tests (new, all green)
+
+| finding | test |
+|---|---|
+| F1 | `engine::art::tests::destroy_kills_only_its_own_guest_when_artifact_paths_share_a_prefix` (`out/counter` vs `<dir>/x/out/counter`) |
+| F1 | `engine::art::tests::destroy_kills_only_its_own_guest_when_session_dirs_are_prefixes` (`s1` vs `s10`) |
+| F2 | `tools/bench/test-reap-scope.sh` — two fake runs, one `SCRATCH_ROOT`: only the caller's daemon is reaped; a recycled-pid record and a wrong-run-id daemon are refused (4/4 PASS) |
+| F3 | `crates/acos-mcp/tests/serveleak2_ownership.rs::a_default_id_does_not_let_one_server_destroy_another_servers_session` — two `Server`s against one fake daemon, A's EOF leaves B's session alive, B's EOF destroys it |
+| F4 | `engine::art::tests::a_proven_empty_session_issues_no_further_group_signal` |
+
+Plus SERVELEAK's own regressions
+(`destroy_kills_the_guest_group_the_launcher_reports`,
+`destroy_kills_the_whole_tree_when_close_is_ignored`,
+`serveleak_shutdown::stdin_eof_destroys_the_sessions_the_server_launched`).
+
+`cargo test --release --offline -p acos-cli -p acos-mcp` under
+`run-exclusive.sh --task SERVELEAK2` + `guarded.sh --mem 10G --time 900`:
+**28 result groups, 0 failed** (`.cache/serveleak2/suite2.log`).
+
+### Live repros (real ART/API 34, worktree `.cache/serveleak2/`)
+
+* **B1** owner `kill -9`: daemon + launcher + both bwrap gone in **0.337 s**,
+  `left = {}`, `daemon_alive = false` (`evidence/live-repro-b1.json`).
+* **B2** MCP stdin EOF: guest gone at MCP exit **0.063 s** (log
+  `acos-mcp: destroyed session … on exit`), shared daemon exits by its 2 s idle
+  timeout, `left = []` (`evidence/live-repro-b2.json`).
+* **B3 (new)** two concurrent verifies with the *same relative* artifacts path
+  (`out/counter`) from two different directories, one nested inside the other:
+  A = `w22-counter-reset` (9 steps, finished 2.47 s), B = `form-validation`
+  (28 steps, 8.54 s). Both **pass**, `overlap: true`, B was **live when A's
+  teardown ran** (`alive_when_a_exited: true`, 1 live guest), no leftovers
+  (`evidence/live-repro-b3.json`). This is the run that, before the fix, killed
+  B's guest.
+
+### Gates (`acos verify --engine art`, real ART)
+
+| scenario | verdict | engine | steps |
+|---|---|---|---|
+| `v2-art-counter` | pass | art | 11 |
+| `w22-counter-reset` | pass | art | 9 |
+| `form-validation` | pass | art | 28 |
+
+## Decisions / notes
+
+* A recorded-group member that no proof attributes is **reported, not killed**
+  (a false `PROCESS_TREE_DIRTY` is the honest outcome; a guess-kill is not).
+* The token is best-effort by design: `bwrap --clearenv` strips it from the
+  guest's own environment, so the guest rests on the recorded guest group and on
+  bwrap's token/descendant chain. All three proofs overlap deliberately.
+* `processes_mentioning` is now trace-only; nothing in a teardown decision reads
+  a command line.
+* Not done: the per-session TTL noted in SERVELEAK §4 is still absent; the
+  `pdf`/framebuffer leaks are untouched; the bench was not run end to end (F2 is
+  covered by the dry test — wrapping `acos-bench.sh` in `run-exclusive.sh` is
+  forbidden by the operating directives).
+
+## Reproduce
+
+```sh
+# tests (both crates, incl. the F1/F3/F4 tests)
+tools/art-runtime/run-exclusive.sh --task SERVELEAK2 -- tools/guarded.sh --mem 10G --time 900 -- \
+  env CARGO_TARGET_DIR=$PWD/.cache/k5-target cargo test --release --offline -p acos-cli -p acos-mcp
+
+# F2 dry test (no ART)
+sh tools/bench/test-reap-scope.sh
+
+# gates
+for s in v2-art-counter w22-counter-reset form-validation; do
+  tools/art-runtime/run-exclusive.sh --task SERVELEAK2 -- tools/guarded.sh --mem 10G --time 900 -- \
+    .cache/k5-target/release/acos verify --scenario scenarios/$s.yaml --engine art --json
+done
+
+# B3 (two lock slots, one per concurrent run)
+WT=$PWD ACOS_BIN=$PWD/.cache/k5-target/release/acos \
+  ACOS_WRAP="/home/Qui/Projects/acos/tools/art-runtime/run-exclusive.sh --task SERVELEAK2 -- \
+  /home/Qui/Projects/acos/tools/guarded.sh --mem 10G --time 900 --" \
+  python3 .cache/serveleak2/b3.py .cache/serveleak2/b3
+```
+
+Environment note (not code): `acos-art` must be built in the same target dir as
+`acos` (`cargo build --release -p acos-cli -p acos-art`), otherwise a stale
+launcher builds the guest from an old source list and every run fails with
+`javac failed … SoftwareKeyStore`.
