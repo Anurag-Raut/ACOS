@@ -7,7 +7,7 @@ resolves under that root and no checkout is needed (or touched).
 ## Install
 
 ```bash
-tools/release/install.sh --prefix ~/.local --version 0.2.0
+tools/release/install.sh --prefix ~/.local --version 0.2.1
 # build the three release binaries and install (idempotent; ~1.5 GB)
 ```
 
@@ -18,7 +18,7 @@ tools/release/install.sh --prefix ~/.local --from-target target
 ```
 
 Options: `--prefix DIR` (default `$ACOS_PREFIX`, else `~/.local`), `--version V`
-(default `0.2.0`), `--from-target DIR`, `--force`, `--register-mcp`. It prints
+(default `0.2.1`), `--from-target DIR`, `--force`, `--register-mcp`. It prints
 the install size and the next steps. No root, no downloads. `--force` is
 required only when the version directory already exists and was not left by this
 installer for that version.
@@ -35,8 +35,8 @@ re-register after moving the prefix. Other MCP clients get the equivalent
 ```
 <prefix>/bin/acos                 wrapper: exports ACOS_HOME, execs the binary
 <prefix>/bin/acos-mcp             wrapper (same)
-<prefix>/share/acos/current -> 0.2.0
-<prefix>/share/acos/0.2.0/
+<prefix>/share/acos/current -> 0.2.1
+<prefix>/share/acos/0.2.1/
   bin/{acos,acos-art,acos-mcp}
   VERSION, MANIFEST.txt
   .cache/art/sysroot/             ART sysroot, the framework (~860 MB)

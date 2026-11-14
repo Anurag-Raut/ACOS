@@ -169,8 +169,8 @@ impl BackendConfig {
         }
     }
 
-    /// Discover the binary: `ACOS_BIN`, then the `acos` next to this
-    /// executable, then `acos` on `PATH`, then `target/release/acos` walking up from the cwd/executable.
+    /// Discover the binary: `ACOS_BIN`, then `$ACOS_HOME/bin/acos`, then the
+    /// `acos` next to this executable, then `acos` on `PATH`, then `target/release/acos` walking up from the cwd/executable.
     pub fn discover() -> Self {
         BackendConfig {
             binary: discover_binary(),
@@ -184,6 +184,13 @@ pub fn discover_binary() -> Option<PathBuf> {
     if let Ok(value) = std::env::var("ACOS_BIN") {
         if !value.trim().is_empty() {
             return Some(PathBuf::from(value));
+        }
+    }
+    // An explicit ACOS_HOME names the install to use.
+    if let Some(home) = std::env::var_os("ACOS_HOME").filter(|v| !v.is_empty()) {
+        let candidate = PathBuf::from(home).join("bin").join("acos");
+        if candidate.is_file() {
+            return Some(candidate);
         }
     }
     // The `acos` installed next to this server (same prefix, same version)
