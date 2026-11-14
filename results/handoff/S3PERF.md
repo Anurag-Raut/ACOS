@@ -1,4 +1,61 @@
-# S3PERF handoff — why the S3AB readiness hardening costs a frame (root cause + measured candidate)
+# S3PERF handoff — the readiness gate is off the ready path (S3PERF2)
+
+**Status: PARTIAL at the 60-minute checkpoint.** Implementation committed (`2c6c64f`), unit tests
+green, per-launch probe clean (ready path main-identical, `draw_skip` evidence present). The
+interleaved A/B (3 reps/arm), the crate-test sweep, the gate sweep and the N=10 reliability smoke
+were still running / not started when the time box expired: the host had 5–7 ART-lock waiters and
+every acquisition queued 4–8 min. Nothing below this line is a claim about the fix's latency: it is
+the E2.16 root-cause record this attempt built on (see `EXPERIMENTS.md` E2.17 for the new state).
+
+## S3PERF2 — what changed (commit `2c6c64f`, branch `fix-s3ab-perf`)
+
+Binaries: fix `acos` sha256 `f53c87712fc9efeafb3b3db6e7a50e7caad24d1bde459e84b503b97a9572a769`,
+`acos-art` `bf59ef19015cbca534e1627c0a08d7fcb91067d26485225b33751a06dc4e2cd5`; main arm `acos`
+`5a2ea97d95d16dd173915fb858a26a3d35e01cb5ce0dd1d89d8fe48110d95850` (the E2.16 main build).
+
+1. **Guest ready path = main, byte for byte.** `LaunchMain.awaitFirstTraversal` again reports
+   ready as soon as a first traversal exists (else waits for the next `OnDraw`); the forced
+   `requestLayout()`/`invalidate()` and the `dispatchAppVisibility(true)` replay are deleted, not
+   disabled. The skip is published as evidence in the `activity-resumed.marker`
+   (`draw_skip=<reason>`, `first_traversal=traversed=true app_visible=… skip=…`) and in the
+   `ACOSLAUNCH MARK activity-resumed` line.
+2. **The S3a protection moved to the no-frame path.** `acos-art`'s interactive startup loop reads
+   `draw_skip=` from the marker. If a skip was reported and no live C1 frame
+   (`c1_generation > 0`) arrives within `SKIPPED_TRAVERSAL_NO_FRAME_BUDGET` (2000 ms, named and
+   documented as two 60 Hz frames and `<= sResumeReadyMs`), it kills the guest and answers
+   `{"ok":false,"code":"POST_RESUME_NOT_READY","draw_skip":"…","first_traversal":"…"}` instead of
+   waiting out the 60 s `NO_LIVE_FRAME` budget. A launch still requires a live frame, so a skipped
+   draw is never certified. `POST_RESUME_NOT_READY` now maps to `NoFreshFrame`
+   (`acos-cli/src/failure.rs`); it was previously an unregistered code.
+3. **Parity bar for the A/B:** M4 strict/fast, M6 strict/fast within ±5 % of main (target equal);
+   M5/M7/M8 unchanged. No `ADD_FLAG_APP_VISIBLE` retry, no redraw on the skip path.
+
+**Probe evidence** (`results/bench/S3PERF-evidence/probe-{main,fix,fix2}.json`, 10/8/8 sequential
+single-session counter launches): fix `forced_redraws=0`, `ready_path=main-identical`,
+`draw_skip` evidence 10/10 markers, p50 **315.5 ms** vs main **315.5 ms** (+0.01 %) vs `int-s3ab`
+**325.0 ms** (+3.0 %). 5/10 launches printed `first-traversal-skipped traversal:view_not_visible`
+with `app_visible=true` at the check (the host callback had landed); the rest took the
+`OnDraw`/`first-traversal-drew` branch.
+
+**Unit tests** (`cargo test -p acos-art --lib skipped_traversal`, 6/6): budget fires at 2000 ms
+(not 1999 ms), a live frame or a no-skip marker never expires, budget is >= 2 frames and <= 2 s,
+marker fields parse, the failure reply carries `POST_RESUME_NOT_READY` + `draw_skip=`, and a source
+guard forbids `redeliverAppVisibility` / `requestLayout()` / `invalidate()` / a
+`dispatchAppVisibility` call / "requesting one redraw" in the guest.
+
+**Running / remaining:** `.cache/s3perf2/run_ab2.sh` (setsid) alternates main and fix,
+`acos-bench.sh --reps 1 --groups "a:latency:8G:300" --latency-reps 12 --no-build`, three reps per
+arm, into `results/bench/S3PERF-evidence/ab/`; summarize with `ab/extract.py`. Then: crate tests
+(`acos-cli`, `acos-art`, `acos-services`, `acos-verify`; run acos-art with `--test-threads=1
+--skip refuses_to_run_when_no_cgroup_can_be_created` then that test alone with `--exact`), the
+11-gate sweep (`results/bench/S3PERF-evidence/gates/`), Gaten scenarios/negatives, and the N=10
+smoke `python3 tools/bench/s3ab_repro.py --acos <WT>/.cache/gr4-target/release/acos --out
+.cache/s3perf2/n10.json --scratch .cache/s3perf2/n10 --n 10 --tasks 1 --reps 10 --animations on`
+under `--mem 20G --time 590`.
+
+---
+
+# S3PERF (E2.16, previous attempt) — why the S3AB readiness hardening costs a frame (root cause + measured candidate)
 
 **Date:** 2026-11-14 ~15:40 UTC. **Branch:** `fix-s3ab-perf` off `int-s3ab` (`d1541ea`).
 **State:** **root cause named with evidence; two fix candidates measured; no product change

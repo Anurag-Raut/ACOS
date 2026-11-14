@@ -2162,6 +2162,64 @@ still requires a live frame (`c1_generation`), so a skipped draw is never certif
 implemented and A/B'd next. Do not re-try `ADD_FLAG_APP_VISIBLE` (regresses T03) or a
 `requestLayout()`/`invalidate()` on the skip path (one frame, measured here).
 
+## E2.17 — S3PERF2: the readiness gate moves off the ready path (guest publishes skip evidence, the no-frame path bounds it) — IMPLEMENTED, PROBE-CLEAN, A/B IN PROGRESS
+
+**Date:** 2026-11-14. **Branch:** `fix-s3ab-perf` off `int-s3ab` (`d1541ea`), commit `2c6c64f`.
+**Binaries:** fix `acos` sha256 `f53c8771…`, `acos-art` `bf59ef19…`; main arm `acos`
+`5a2ea97d…` (unchanged from E2.16). **Report:** `results/handoff/S3PERF.md`; evidence
+`results/bench/S3PERF-evidence/` (`probe-main.json`, `probe-fix.json`, `probe-fix2.json`,
+`ab/`); probe `tools/bench/s3perf_probe.py`.
+
+**Decision implemented (orchestrator-approved):** `int-s3ab`'s draw-evidence *gate* on
+readiness is replaced by draw-skip *evidence*:
+
+* **Guest (`LaunchMain.awaitFirstTraversal`)** — readiness is main `3e11d9c`'s rule byte for
+  byte: if the first traversal already exists, report ready immediately; otherwise wait for the
+  next `OnDraw`. No `requestLayout()`/`invalidate()`, no `dispatchAppVisibility(true)` replay
+  (the replay is deleted, not disabled). The skipped draw is published as
+  `draw_skip=<reason>` and `first_traversal=traversed=true app_visible=… skip=…` in the
+  `activity-resumed.marker` and the `ACOSLAUNCH MARK activity-resumed` line. The old
+  `activity-not-ready` failure keeps its `draw_skip=` for the no-traversal-at-all timeout.
+* **Engine (`acos-art` interactive startup loop)** — reads the marker's `draw_skip`. When the
+  guest reported a skip and no live C1 frame (`c1_generation == 0`) arrives within
+  `SKIPPED_TRAVERSAL_NO_FRAME_BUDGET` = **2000 ms** (named const, documented as two 60 Hz frames
+  and `<= sResumeReadyMs`), it kills the guest and answers
+  `{"ok":false,"code":"POST_RESUME_NOT_READY","draw_skip":"…","first_traversal":"…"}` instead of
+  waiting out the 60 s `NO_LIVE_FRAME` budget. A launch still requires `c1_generation > 0`; a
+  skipped draw is never certified ready. `POST_RESUME_NOT_READY` now maps to
+  `NoFreshFrame` in `acos-cli/src/failure.rs` (it was an unregistered code).
+* S3AB's other parts (bounded relaunch retry + classifier in `engine/art.rs`,
+  `display_events.rs` spawn retry, `guarded.sh` TasksMax, `c1_state_summary`) are unchanged.
+
+**Probe (10 sequential single-session counter launches, strict, `tools/bench/s3perf_probe.py`):**
+
+| binary | measured | took the skip path | marker `draw_skip` | forced redraws | ready path | p50 launch |
+|---|---:|---:|---:|---:|---|---:|
+| main `3e11d9c` | 8 | 0 (no gate; no evidence field) | – | 0 | main | 315.5 ms |
+| `int-s3ab` (`d54249d9…`) | 8 | 7 | n/a | 8 | forced-traversal | 325.0 ms |
+| **this fix** (`f53c8771…`) | 10 | 5 | **10/10** (`none` or `traversal:view_not_visible`) | **0** | **main-identical** | **315.5 ms** |
+
+`skips` counts the `first-traversal-skipped` stdout marks; several launches instead take the
+`OnDraw` branch (`first-traversal-drew`, marker `draw_skip=none`), so the mark count is lower than
+the launch count. The marker evidence is present on every measured launch. p50 is back to main
+(315.5 vs 315.5 ms, +0.01 %; `int-s3ab` was +3.0 %).
+
+**Tests (green):** `cargo test -p acos-art --lib skipped_traversal` — 6 tests: the budget fires at
+2000 ms and not at 1999 ms, a live frame (`c1_generation > 0`) and a no-skip marker never expire,
+the budget is >= 2 frames and <= 2 s, marker fields parse (`draw_skip=`/`first_traversal=`,
+including values with spaces), the reply is `POST_RESUME_NOT_READY` + `draw_skip=`, and a source
+guard asserts the guest ready path contains no `redeliverAppVisibility`, `requestLayout()`,
+`invalidate()`, `.dispatchAppVisibility(`/`"dispatchAppVisibility"` call or "requesting one
+redraw", while publishing the evidence.
+
+**A/B and gate sweep: IN PROGRESS at the 60-minute checkpoint.** Host was saturated (5–7 ART
+waiters; every acquisition queued 4–8 min). The interleaved chain
+`.cache/s3perf2/run_ab2.sh` is running `acos-bench.sh --reps 1 --groups "a:latency:8G:300"
+--latency-reps 12` alternating main (`5a2ea97d…`) and fix, three reps per arm, writing
+`results/bench/S3PERF-evidence/ab/{main,fix}-r{1,2,3}.json` (extract with
+`results/bench/S3PERF-evidence/ab/extract.py`). Crate tests, the 11-gate sweep and the N=10
+reliability smoke remain. No acceptance claim is made for them here.
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).
