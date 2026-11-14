@@ -320,12 +320,19 @@ def main() -> int:
             available,
         )
 
+        # acos_help with no topic returns the short overview (REL3b); the whole
+        # guide is topic "all".
         help_env = envelope(client.call_tool("acos_help", {}))
-        guide = help_env.get("result", {}).get("guide") or ""
+        overview = help_env.get("result", {}).get("guide") or ""
+        full_env = envelope(client.call_tool("acos_help", {"topic": "all"}))
+        guide = full_env.get("result", {}).get("guide") or ""
         check(
             "acos_help",
-            help_env.get("status") == "pass" and len(guide) > 5000,
-            {"chars": len(guide)},
+            help_env.get("status") == "pass"
+            and 1000 < len(overview) < 6000
+            and full_env.get("status") == "pass"
+            and len(guide) > 5000,
+            {"overview_chars": len(overview), "full_chars": len(guide)},
         )
 
         launched = envelope(
