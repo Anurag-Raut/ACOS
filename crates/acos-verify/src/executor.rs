@@ -329,6 +329,15 @@ pub fn run_scenario(
             &mut capabilities_used,
         )
         };
+        // ---- SE1: the opt-in `expect_change` rule ---------------------------
+        // P12 keeps "a step whose action changed no pixels still settles and
+        // passes"; `expect_change: true` is the per-step opt-in that turns the
+        // measured fact into a failure. It runs after the strict settle, on the
+        // same settle record the reply reports (`pixels_changed`).
+        let exec = match expect_change_failure(step, &exec, previous_observation.as_ref()) {
+            Some(failure) => failure,
+            None => exec,
+        };
         let duration_ms = clock.now_unix_ms().saturating_sub(step_started);
 
         // ---- W58: complete the frame evidence at the verifier's boundary ----
@@ -1374,6 +1383,155 @@ fn fast_input_step(step: &Step) -> bool {
         Some(StepRef::Key(key)) => matches!(key.settle, Some(StepSettle::Fast)),
         _ => false,
     }
+}
+
+/// SE1: did this step opt into the per-step pixel-change requirement?
+///
+/// Only the input actions that carry a strict settle record may ask for it:
+/// `tap`, `type`, `key` and `back`. Every other step kind has no after-action
+/// frame of its own, so it cannot express the rule.
+fn expect_change_requested(step: &Step) -> bool {
+    match step.as_step() {
+        Some(StepRef::Tap(tap)) => tap.expect_change,
+        Some(StepRef::Type(ty)) => ty.expect_change,
+        Some(StepRef::Key(key)) => key.expect_change,
+        Some(StepRef::Back(back)) => back.expect_change,
+        _ => false,
+    }
+}
+
+/// The artifact reference for one observation's frame, when it was captured.
+///
+/// The executor writes `frames/<seq>.png` for every observation that carried
+/// PNG bytes, so the ref is only named when those bytes exist.
+fn frame_ref(observation: Option<&SessionObservation>) -> serde_json::Value {
+    let Some(observation) = observation else {
+        return serde_json::Value::Null;
+    };
+    let seq = observation.frame.frame_seq;
+    serde_json::json!({
+        "frame_seq": seq,
+        "frame": if observation.screenshot_png.is_some() {
+            serde_json::Value::String(acos_protocol::frame_file_name(seq))
+        } else {
+            serde_json::Value::Null
+        },
+    })
+}
+
+/// SE1: enforce an opt-in `expect_change: true` on an input step.
+///
+/// ADR-0026 decision 2 keeps the P12 rule: a step whose action drew but changed
+/// no pixels still settles and passes, and its reply reports
+/// `pixels_changed:false`. `expect_change: true` turns that measured fact into
+/// a failure (`ASSERTION_FAILED`, `details.reason = "expect_change"`) with the
+/// pre-action and post-action frame refs.
+///
+/// Three honesty rules:
+/// * a step that already failed keeps its own error - it is the better evidence;
+/// * "could not measure" never passes: a backend that returns no settle record
+///   (or a fast label, which validation rejects) is `UNSUPPORTED_ASSERTION` -
+///   the engine cannot supply the evidence, so the step is not a pass;
+/// * the check runs on the settle record the reply reported, not on a second
+///   pixel comparison invented here.
+fn expect_change_failure(
+    step: &Step,
+    exec: &StepExec,
+    previous: Option<&SessionObservation>,
+) -> Option<StepExec> {
+    if !expect_change_requested(step) || exec.status != Status::Pass {
+        return None;
+    }
+    let observation = exec.observation.as_ref();
+    let settle = observation
+        .and_then(|observation| observation.input.as_ref())
+        .and_then(|delivery| delivery.settle.as_ref());
+    let pixels_changed = settle
+        .and_then(|settle| settle.get("pixels_changed"))
+        .and_then(serde_json::Value::as_bool);
+    let fast = settle
+        .and_then(|settle| settle.get("mode"))
+        .and_then(serde_json::Value::as_str)
+        == Some("fast");
+    let before = frame_ref(previous);
+    let after = frame_ref(observation);
+    if pixels_changed == Some(true) {
+        return None;
+    }
+
+    let (error, kind, diff_detail) = if !fast && pixels_changed == Some(false) {
+        (
+            BackendError::Protocol {
+                code: ErrorCode::AssertionFailed,
+                detail: format!(
+                    "{}: the settled frame is pixel-identical to the pre-action frame \
+                     (`settle.pixels_changed:false`); the step proved no visual change",
+                    step.kind()
+                ),
+                hint: Some(
+                    "The action was delivered and settled, but nothing on screen changed, so \
+                     anything asserted afterwards would describe state this step never produced \
+                     (GR4 G4c). Target the control that really writes the state, or drop \
+                     `expect_change` if this action legitimately changes no pixels."
+                        .to_string(),
+                ),
+                details: Some(serde_json::json!({
+                    "reason": "expect_change",
+                    "pixels_changed": false,
+                    "step_kind": step.kind(),
+                    "before": before,
+                    "after": after,
+                })),
+            },
+            "expect_change",
+            "the settled frame did not change from the pre-action frame",
+        )
+    } else {
+        (
+            BackendError::Protocol {
+                code: ErrorCode::UnsupportedAssertion,
+                detail: format!(
+                    "{}: `expect_change` cannot be verified on this backend/settle rule \
+                     (no measured `settle.pixels_changed`)",
+                    step.kind()
+                ),
+                hint: Some(
+                    "A pixel-change claim needs a strict settle record that measures the pixels. \
+                     Run the step on a backend that reports `pixels_changed` (the ART engine, \
+                     strict settle), or drop `expect_change`; an unmeasured change never passes."
+                        .to_string(),
+                ),
+                details: Some(serde_json::json!({
+                    "reason": "expect_change",
+                    "pixels_changed": serde_json::Value::Null,
+                    "step_kind": step.kind(),
+                    "settle": settle.cloned(),
+                    "before": before,
+                    "after": after,
+                })),
+            },
+            "expect_change_unverified",
+            "no measured `settle.pixels_changed` on the action's reply",
+        )
+    };
+    let mut failure = StepExec::failed(Evaluated {
+        result: AssertionResult {
+            kind: kind.to_string(),
+            passed: false,
+            diff: Some(AssertionDiff {
+                expected: serde_json::json!({"pixels_changed": true}),
+                actual: serde_json::json!({"pixels_changed": pixels_changed}),
+                path: Some("settle.pixels_changed".to_string()),
+                detail: Some(diff_detail.to_string()),
+            }),
+            matched_node_ids: Vec::new(),
+            message: None,
+        },
+        error: Some(error),
+    });
+    // Keep the observation: the failing step's tree/frame are still evidence.
+    failure.observation = observation.cloned();
+    Some(failure)
 }
 
 /// Steps that evaluate the bound frame itself (UI-tree assertions, a non-fresh

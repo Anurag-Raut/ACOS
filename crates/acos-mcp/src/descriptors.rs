@@ -392,7 +392,19 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                     "type": "integer", "minimum": 1, "maximum": 600000,
                     "description": "P12: bound the settle wait. On timeout the reply still carries the \
                                     latest tree and frame identity with `settled:false`, `bound:timeout`."
-                }
+                },
+                "expect_change": {
+                    "type": "boolean",
+                    "description": "SE1: opt-in verification of the action's effect. After the \
+                                    strict settle, fail the action (ASSERTION_FAILED, \
+                                    `details.reason=\"expect_change\"`, `pixels_changed:false`, \
+                                    before/after frame refs) when the settled frame's pixels are \
+                                    identical to the pre-action frame. Use it on a tap/type/key \
+                                    whose point is to change the screen; `settle:fast` with \
+                                    `expect_change:true` is rejected (a fast frame is never \
+                                    assertion evidence), and a reply with no measured \
+                                    `pixels_changed` is UNSUPPORTED_ASSERTION, never a pass."
+                },
             })),
         ),
         "acos_key" => (
@@ -400,7 +412,19 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              3=HOME) or a name (`back`, `home`, `enter`, `menu`, `tab`, `escape`, `delete`). \
              Common errors: ELEMENT_NOT_FOUND with `details.kind=NoFocusedWindow` (launch/observe first).",
             with_base(json!({
-                "code": {"type": ["integer", "string"], "description": "Numeric key code or name."}
+                "code": {"type": ["integer", "string"], "description": "Numeric key code or name."},
+                "expect_change": {
+                    "type": "boolean",
+                    "description": "SE1: opt-in verification of the action's effect. After the \
+                                    strict settle, fail the action (ASSERTION_FAILED, \
+                                    `details.reason=\"expect_change\"`, `pixels_changed:false`, \
+                                    before/after frame refs) when the settled frame's pixels are \
+                                    identical to the pre-action frame. Use it on a tap/type/key \
+                                    whose point is to change the screen; `settle:fast` with \
+                                    `expect_change:true` is rejected (a fast frame is never \
+                                    assertion evidence), and a reply with no measured \
+                                    `pixels_changed` is UNSUPPORTED_ASSERTION, never a pass."
+                },
             })),
         ),
         "acos_text" => (
@@ -415,7 +439,19 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              represented on the key-event fallback. Composing text and IME actions are not \
              modelled.",
             with_base(json!({
-                "text": {"type": "string", "description": "Text to type into the focused field."}
+                "text": {"type": "string", "description": "Text to type into the focused field."},
+                "expect_change": {
+                    "type": "boolean",
+                    "description": "SE1: opt-in verification of the action's effect. After the \
+                                    strict settle, fail the action (ASSERTION_FAILED, \
+                                    `details.reason=\"expect_change\"`, `pixels_changed:false`, \
+                                    before/after frame refs) when the settled frame's pixels are \
+                                    identical to the pre-action frame. Use it on a tap/type/key \
+                                    whose point is to change the screen; `settle:fast` with \
+                                    `expect_change:true` is rejected (a fast frame is never \
+                                    assertion evidence), and a reply with no measured \
+                                    `pixels_changed` is UNSUPPORTED_ASSERTION, never a pass."
+                },
             })),
         ),
         "acos_swipe" => (
