@@ -2183,6 +2183,44 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   (`ACOS_ART_ZYGOTE=on`), adds the per-child cgroup memory limit (F3) and then runs the Z7 loop for
   the ≥25 % gate. Exact commands and acceptance: `results/handoff/ZPROD1.md`.
 
+## E2.18 — ZPROD2: the persistent zygote's host half (`PersistentZygote`) — MEASURED (unit/gateway level); engine wiring NOT done
+
+- **Date / commit:** 2026-11-14; branch `zygote-prod-1` (merge of `main` `0c0b322`, then the step-1
+  commit). Design `docs/decisions/2026-11-14-zygote-prod.md`. (E2.17 was claimed by ZPROD1's
+  mechanism section in this file; E2.18 is used here to leave E2.17 free for S3PERF on the other
+  branch.)
+- **Question / goal:** P2 of `results/handoff/ZPROD1.md`: make the persistent zygote a *library* the
+  engine can own — keeper launcher, plan dir, command FIFO, `spawn`/`kill`/`boot_epoch`/`reset`
+  with file-based acks, every failure a structured `ZYGOTE_DEAD` — before any product path depends
+  on it. (Step 2 of the same task, wiring it into `acos serve`, was not reached.)
+- **Method:** a Rust port of `research/zygote-proto/z4/reset.py` steps 1–4 into
+  `crates/acos-art/src/zygote_prod.rs`, tested two ways: (a) pure functions/paths (key naming, Z4
+  contract parsing, run-root wipe, `binds`), (b) a **mock keeper** — a `sh` script that speaks the
+  exact file protocol (`<plan>/ready`, `<plan>/<tag>/{spawned,reaped,pid}`, `cmd` FIFO) with no ART,
+  so the host half is proven deterministically at 0.1 s instead of 8 s per ART boot.
+- **Result:** 7/7 new tests green; `cargo test -p acos-art` 107 lib + all integration targets green
+  (0 failed, the cgroup-conditional test green when run alone with `--exact`); `-p acos-cli` 147
+  passed / 0 failed (that crate was not modified, so this is the flag-off baseline). Proven in the
+  mock-keeper test: `spawn` → child pid 101; `reset` → `previous 101`, fresh child **102**, the old
+  run root wiped, **boot epoch and zygote pid unchanged**; `shutdown` leaves no keeper process.
+  Proven for failures: a dead keeper and a missing ack both surface as `ZYGOTE_DEAD: …` carrying the
+  exit status and the last 20 log lines, and no write is attempted — there is no silent fallback to
+  the exec path in the module.
+- **Finding (proven vs hypothesis):** proven — the Z4 driver's steps 1–4 are a self-contained Rust
+  component with file-acked verbs and a leak-free lifetime. Not measured (no claim): anything on
+  real ART through this component, any gate or Gaten run, any latency/throughput number. The host
+  ART lock was held by other agents' runs (`--exclusive` latency bench, `G3F1`, `K5C-T2`) for the
+  whole window in which the gate list would have run, so no gate JSON exists for this tree.
+- **Fidelity / evidence:** `real-ART` not exercised in this increment (mock keeper only);
+  `results/handoff/ZPROD2.md` has the exact commands, the test table and the remaining task list.
+- **Regression / false pass:** none; the only code added to the product path is a new module and one
+  `acos_art::Error::Zygote` variant — no engine line changed, so the flag-off path is untouched by
+  construction (and `-p acos-cli` 147/0 confirms it). 0 false passes; nothing is claimed at gate
+  level.
+- **Conclusion / next:** step 2 (engine wiring: `ZygoteHost`, `ArtSession` zygote branch,
+  reset/status reply fields, `ErrorCode::ZygoteDead`, `shutdown_all`) is the immediate next task,
+  then the flag-off gate list and the flag-on counter/reset/Gaten checks from the task brief.
+
 ## E13.10 — SE1: an opt-in per-step `expect_change` closes GR4's vacuous-flow gap (a no-op tap can no longer pass) — PASS (ADR-0026 decision 2 shipped; 0 false passes)
 
 **Date:** 2026-11-14. **Commit:** the SE1 commit on branch `settle-se1-expect-change`
