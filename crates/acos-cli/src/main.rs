@@ -25,6 +25,7 @@ mod serve;
 mod session;
 mod trust;
 mod verify;
+mod view;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -102,6 +103,8 @@ enum Command {
     SandboxProbe,
     /// Preflight the host toolchain (SDK, JDK, helper, memory) before building.
     Doctor(doctor::DoctorArgs),
+    /// Serve a 127.0.0.1-only, token-gated, view-only live view of live sessions.
+    View(view::ViewArgs),
 }
 
 #[derive(Debug, clap::Args)]
@@ -215,6 +218,7 @@ fn main() -> ExitCode {
             Command::NativeInventory(args) => native_inventory::run(args),
             Command::SandboxProbe => sandbox_probe::run(),
             Command::Doctor(args) => doctor::run(args),
+            Command::View(args) => view::run(args),
         }
     }));
     match dispatch {
