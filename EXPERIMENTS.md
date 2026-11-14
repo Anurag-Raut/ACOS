@@ -2180,6 +2180,14 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   suite/T03-render-wrong `ASSERTION_FAILED`; negative/offscreen-pager-visible `ELEMENT_OFFSCREEN`;
   p11-progress-timeout `TIMEOUT`. `gaten-{home,tabs,settings,search,lesson}` **3/3 each (15/15)**;
   `scenarios/negative/gaten-*-wrong` **5/5 `ASSERTION_FAILED`**. 0 false passes.
+- **Crate tests (final branch):** `acos-art` 149/149 (`--test-threads=1 --skip
+  refuses_to_run_when_no_cgroup_can_be_created`, and that test alone passes), `acos-verify` 66/66,
+  `acos-services` 302/302, `acos-cli` 153 passed / 1 failed — the failure is
+  `w50_serve_art::an_unknown_session_is_not_routed_to_the_frozen_rust_vm`, which cannot bind its
+  daemon socket in this worktree (its scratch path is 108 bytes, `AF_UNIX` max 108 with the NUL;
+  measured: 107 binds, 108 `AF_UNIX path too long`). Environmental, not the diff.
+  The M4 A/B on the counter fixture was **not measured** (lock queue 200–500 s per acquisition;
+  the counter's first frame carries text, so no second traversal is sent — a code reading).
 - **False passes:** 0. A placeholder is still published only as `placeholder: true` +
   `meaningful:false`; a `change-draw` frame is published with `settled: false` in its own settle
   block and the launch's `result.settle` is untouched by P9's restore rule.
