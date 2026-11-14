@@ -3445,7 +3445,14 @@ impl SessionBackend for ArtSession {
     fn tap_text(&mut self, text: &str) -> Result<(), BackendError> {
         let tree = self.require_cached_tree()?;
         let selector = Selector::by_text(text);
-        let node = match tree.find_one(&selector) {
+        // Input resolution, not evidence resolution: the target is the node the
+        // platform's *accessible name* designates (`text`, else
+        // `contentDescription`) among the nodes visible to the user -- see
+        // `UiTree::find_input_target`. A React Native pressable carries its whole
+        // name in the content description and no text at all, so a tap by the
+        // label an agent reads on screen must reach it. A node that is not
+        // visible to the user is never tapped: it stays `ELEMENT_OFFSCREEN`.
+        let node = match tree.find_input_target(&selector) {
             Some(node) => node,
             None => {
                 if let Some(offscreen) = tree.find_invisible(&selector) {
