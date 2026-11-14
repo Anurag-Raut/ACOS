@@ -46,22 +46,10 @@ pub fn is_react_native(apk: &Path) -> bool {
     matches!(acos_jni::react_native::detect(apk), Ok(Some(_)))
 }
 
-/// The workspace root, derived from this crate's manifest directory.
-fn repo_root_hint() -> Option<PathBuf> {
-    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-    manifest.parent().and_then(Path::parent).map(Path::to_path_buf)
-}
-
-/// Resolve `rel` against the workspace root, falling back to the process cwd.
+/// Resolve a repo-relative asset through the shared rule: `$ACOS_HOME/<rel>`
+/// when installed, else the legacy checkout lookup (`crate::paths`).
 fn repo_relative(rel: &str) -> PathBuf {
-    let direct = PathBuf::from(rel);
-    if direct.exists() {
-        return direct;
-    }
-    repo_root_hint()
-        .map(|root| root.join(rel))
-        .filter(|p| p.exists())
-        .unwrap_or(direct)
+    crate::paths::runtime_path(rel)
 }
 
 /// Default Java driver dex, overridable by env (`--rn-dex` re-exports it).
@@ -74,8 +62,11 @@ pub fn default_driver_dex() -> PathBuf {
 
 /// Boot-classpath directory, when present.
 ///
-/// Walks up from the process cwd (and the manifest root) so a session running
-/// from a linked worktree still finds the checkout's `.cache/boot/android-34`.
+/// `ACOS_BOOT_DIR` wins, then an installed ACOS reads exactly
+/// `$ACOS_HOME/.cache/boot/android-34` (never the checkout). With `ACOS_HOME`
+/// unset the legacy lookup is unchanged: walk up from the process cwd (and the
+/// manifest root) so a session running from a linked worktree still finds the
+/// checkout's `.cache/boot/android-34`.
 fn default_boot_dir() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("ACOS_BOOT_DIR") {
         let path = PathBuf::from(dir);
@@ -83,11 +74,15 @@ fn default_boot_dir() -> Option<PathBuf> {
             return Some(path);
         }
     }
+    if let Some(home) = crate::paths::acos_home() {
+        return crate::paths::installed_boot_dir_with(Some(&home))
+            .filter(|dir| dir.join("BOOTCLASSPATH").is_file());
+    }
     let mut bases: Vec<PathBuf> = Vec::new();
     if let Ok(cwd) = std::env::current_dir() {
         bases.push(cwd);
     }
-    if let Some(root) = repo_root_hint() {
+    if let Some(root) = crate::paths::dev_root() {
         bases.push(root);
     }
     for base in bases {

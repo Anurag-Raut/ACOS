@@ -1,0 +1,31 @@
+{
+  "assertions": [],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 84,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/2.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/2.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/01-wait_for.json"
+    }
+  ],
+  "frame_seq": 2,
+  "index": 1,
+  "provenance": {
+    "tree": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "wait_for",
+  "trust": "trusted"
+}

@@ -27,9 +27,10 @@
 //! A cache hit therefore costs one `stat` per input (~30 files), not a build.
 //!
 //! The entry directory is `<cache>/fixed-<input-hash>/`; `<cache>` is
-//! `ACOS_BOOT_IMAGE_CACHE`, else `ACOS_CACHE_DIR`, else `$XDG_CACHE_HOME/acos`,
-//! else `~/.cache/acos` (the same chain `acos-runtime`'s boot cache uses),
-//! followed by `art/boot-images`. It is private (`0700`) and never `/tmp`.
+//! `ACOS_BOOT_IMAGE_CACHE`, else `ACOS_CACHE_DIR`, else `$ACOS_HOME/.cache/acos`
+//! (an install stays self-contained), else `$XDG_CACHE_HOME/acos`, else
+//! `~/.cache/acos` (the same chain `acos-runtime`'s boot cache uses), followed
+//! by `art/boot-images`. It is private (`0700`) and never `/tmp`.
 //!
 //! **Atomic publish.** The image is built into a unique temp directory in the
 //! same filesystem (`.tmp-<pid>-<nonce>`), every file is `fsync`ed, a
@@ -377,6 +378,7 @@ fn validate_dir(dir: &Path) -> Result<()> {
 // ---------------------------------------------------------------------------
 
 /// The cache root: `ACOS_BOOT_IMAGE_CACHE`, else `ACOS_CACHE_DIR`, else
+/// `$ACOS_HOME/.cache/acos` (an installed layout stays self-contained), else
 /// `$XDG_CACHE_HOME/acos`, else `~/.cache/acos`; then `art/boot-images`.
 pub fn cache_root() -> Result<PathBuf> {
     if let Some(explicit) = std::env::var_os(ENV_CACHE_DIR) {
@@ -386,6 +388,8 @@ pub fn cache_root() -> Result<PathBuf> {
     }
     let base = if let Some(dir) = std::env::var_os("ACOS_CACHE_DIR") {
         PathBuf::from(dir)
+    } else if let Some(home) = crate::acos_home() {
+        home.join(".cache/acos")
     } else if let Some(xdg) = std::env::var_os("XDG_CACHE_HOME") {
         PathBuf::from(xdg).join("acos")
     } else if let Some(home) = std::env::var_os("HOME") {

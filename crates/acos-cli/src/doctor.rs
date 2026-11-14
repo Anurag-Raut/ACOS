@@ -9,7 +9,7 @@
 //!
 //! Nothing here mutates the host: it only reads paths and runs `java -version`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
 use serde::Serialize;
@@ -215,7 +215,7 @@ fn check_sdk(args: &DoctorArgs) -> Check {
     }
 }
 
-fn check_build_tools(args: &DoctorArgs) -> Vec<Check> {
+fn check_build_tools(args: &DoctorArgs, installed: bool) -> Vec<Check> {
     let Some(root) = sdk_root(args) else {
         return vec![Check::fail(
             "build_tools",
@@ -237,10 +237,38 @@ fn check_build_tools(args: &DoctorArgs) -> Vec<Check> {
         return out;
     }
     out.push(Check::ok("build_tools", format!("{}", bt.display())));
-    for tool in ["aapt2", "d8", "zipalign", "apksigner"] {
+    // `aapt2` and `d8` are executed by `acos-art` on every launch (APK manifest +
+    // resources, and the guest DEX compile), so they are runtime requirements and
+    // a missing one refuses the launch. `zipalign`/`apksigner` only sign and
+    // align fixture APKs that the build scripts produce, so an installed ACOS
+    // does not need them.
+    for (tool, runtime) in [
+        ("aapt2", true),
+        ("d8", true),
+        ("zipalign", false),
+        ("apksigner", false),
+    ] {
         let path = bt.join(tool);
         if path.is_file() {
             out.push(Check::ok(tool, format!("{}", path.display())));
+        } else if runtime {
+            out.push(Check::fail(
+                tool,
+                format!("missing {} (needed at run time)", path.display()),
+                format!(
+                    "Reinstall build-tools;{} (the file is part of that package).",
+                    args.build_tools
+                ),
+            ));
+        } else if installed {
+            out.push(Check::warn(
+                tool,
+                format!("missing {} (build-fixtures only)", path.display()),
+                format!(
+                    "Not needed to run an APK; install build-tools;{} only to build fixtures.",
+                    args.build_tools
+                ),
+            ));
         } else {
             out.push(Check::fail(
                 tool,
@@ -278,7 +306,8 @@ fn check_android_jar(args: &DoctorArgs) -> Check {
 
 fn check_java() -> Vec<Check> {
     let mut out = Vec::new();
-    for tool in ["java", "javac", "keytool"] {
+    // `javac` compiles the guest Java sources on every (cold) launch.
+    for (tool, runtime) in [("java", true), ("javac", true), ("keytool", false)] {
         match which(tool) {
             Some(path) => {
                 let version = java_version(tool).unwrap_or_else(|| path.display().to_string());
@@ -286,7 +315,10 @@ fn check_java() -> Vec<Check> {
             }
             None => out.push(Check::fail(
                 tool,
-                format!("`{tool}` not on PATH"),
+                format!(
+                    "`{tool}` not on PATH{}",
+                    if runtime { " (needed at run time)" } else { " (fixtures only)" }
+                ),
                 "Install a JDK 11+ (e.g. `apt install openjdk-17-jdk`) and put its bin/ on PATH.",
             )),
         }
@@ -294,12 +326,23 @@ fn check_java() -> Vec<Check> {
     out
 }
 
-fn check_workspace() -> Vec<Check> {
+fn check_workspace(installed: bool) -> Vec<Check> {
     match find_root() {
+        None if installed => vec![
+            Check::ok(
+                "workspace",
+                "installed layout (no checkout: runtime assets come from ACOS_HOME)",
+            ),
+            Check::warn(
+                "apk_append",
+                "not installed (fixture builds only)",
+                "Nothing to do to run APKs; the fixture build scripts live in the ACOS checkout.",
+            ),
+        ],
         None => vec![Check::fail(
             "workspace",
             "could not find a workspace root (no tools/apk_append.py walking up)",
-            "Run `acos doctor` from inside the ACOS checkout.",
+            "Run `acos doctor` from inside the ACOS checkout, or set ACOS_HOME to an installed ACOS.",
         )],
         Some(root) => {
             let mut out = vec![Check::ok("workspace", format!("{}", root.display()))];
@@ -345,6 +388,156 @@ fn check_workspace() -> Vec<Check> {
     }
 }
 
+/// REL1a: the installed layout. Only run when `ACOS_HOME` is set: every runtime
+/// asset must live under that root (the checkout is not consulted, and nothing
+/// is written into it).
+fn check_install(home: &Path) -> Vec<Check> {
+    let mut out = Vec::new();
+    if home.is_dir() {
+        out.push(Check::ok("acos_home", format!("{}", home.display())));
+    } else {
+        return vec![Check::fail(
+            "acos_home",
+            format!("ACOS_HOME={} is not a directory", home.display()),
+            "Point ACOS_HOME at an install root (tools/release/install.sh prints it), or unset it to use a checkout.",
+        )];
+    }
+    match std::fs::read_to_string(home.join("VERSION")) {
+        Ok(version) => out.push(Check::ok("install_version", version.trim().to_string())),
+        Err(_) => out.push(Check::warn(
+            "install_version",
+            format!("no {}/VERSION marker", home.display()),
+            "Reinstall with tools/release/install.sh so the root is complete and labelled.",
+        )),
+    }
+    // The ART runtime: the sysroot is the framework, and without it nothing runs.
+    let sysroot = home.join(".cache/art/sysroot");
+    if sysroot.join("system/apex").is_dir() {
+        out.push(Check::ok("install_sysroot", format!("{}", sysroot.display())));
+    } else {
+        out.push(Check::fail(
+            "install_sysroot",
+            format!("{} has no system/apex", sysroot.display()),
+            "The install is incomplete: reinstall with tools/release/install.sh (it copies $ACOS_HOME/.cache/art/sysroot).",
+        ));
+    }
+    // Boot assets: fonts decide whether text renders at all, the overlays decide
+    // the framework resources, both ship in the install.
+    let boot = home.join(".cache/boot/android-34");
+    if boot.join("fonts").is_dir() {
+        out.push(Check::ok("install_fonts", format!("{}", boot.join("fonts").display())));
+    } else {
+        out.push(Check::fail(
+            "install_fonts",
+            format!("{} is missing", boot.join("fonts").display()),
+            "Text layout needs the boot-cache fonts; reinstall with tools/release/install.sh.",
+        ));
+    }
+    if boot.join("overlays").is_dir() {
+        out.push(Check::ok("install_overlays", format!("{}", boot.join("overlays").display())));
+    } else {
+        out.push(Check::warn(
+            "install_overlays",
+            format!("{} is missing", boot.join("overlays").display()),
+            "The app still renders, un-overlaid (INCREMENT instead of the device's label); reinstall to restore them.",
+        ));
+    }
+    if boot.join("BOOTCLASSPATH").is_file() {
+        out.push(Check::ok("install_bootclasspath", format!("{}", boot.join("BOOTCLASSPATH").display())));
+    } else {
+        out.push(Check::warn(
+            "install_bootclasspath",
+            format!("{} is missing", boot.join("BOOTCLASSPATH").display()),
+            "Only legacy sysroots need the jar-name list; reinstall to be safe.",
+        ));
+    }
+    // The guest Java sources are compiled by `javac`+`d8` on a cold launch.
+    let guest = home.join("crates/acos-art/guest/java/dev/acos/art/AppMain.java");
+    if guest.is_file() {
+        out.push(Check::ok("install_guest_sources", format!("{}", guest.display())));
+    } else {
+        out.push(Check::fail(
+            "install_guest_sources",
+            format!("{} is missing", guest.display()),
+            "Every launch compiles the guest from these sources; reinstall with tools/release/install.sh.",
+        ));
+    }
+    // `acos` spawns `acos-art` from its own directory.
+    let art = home.join("bin/acos-art");
+    if art.is_file() {
+        out.push(Check::ok("install_acos_art", format!("{}", art.display())));
+    } else {
+        out.push(Check::fail(
+            "install_acos_art",
+            format!("{} is missing", art.display()),
+            "Reinstall with tools/release/install.sh, or set ACOS_ART_BIN.",
+        ));
+    }
+    // Mutable state: created on demand, but it must be writable, never the repo.
+    let state = home.join(".cache");
+    match std::fs::create_dir_all(state.join("art/data")) {
+        Ok(()) => out.push(Check::ok(
+            "install_state",
+            format!("{} (data, sessions, sockets, build caches)", state.display()),
+        )),
+        Err(error) => out.push(Check::fail(
+            "install_state",
+            format!("cannot write {}: {error}", state.join("art/data").display()),
+            "The install root must be writable by the user that runs ACOS.",
+        )),
+    }
+    out
+}
+
+/// The host helpers the sandbox and the cgroup limit need: `bwrap` for the
+/// namespace, `systemd-run --user --scope` for the memory cgroup. Both are
+/// required at run time, in a checkout and in an install.
+fn check_sandbox_helpers() -> Vec<Check> {
+    let mut out = Vec::new();
+    for tool in ["bwrap", "systemd-run"] {
+        match which(tool) {
+            Some(path) => out.push(Check::ok(tool, format!("{}", path.display()))),
+            None => out.push(Check::fail(
+                tool,
+                format!("`{tool}` not on PATH (needed at run time)"),
+                if tool == "bwrap" {
+                    "Install bubblewrap (`apt install bubblewrap`); the guest runs inside it."
+                } else {
+                    "Install systemd (`apt install systemd`); it provides the per-run memory cgroup."
+                },
+            )),
+        }
+    }
+    out
+}
+
+/// The NDK clang `acos-art` compiles its JNI shims with at run time.
+fn check_ndk(args: &DoctorArgs) -> Check {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Some(p) = std::env::var_os("ANDROID_NDK_HOME").or_else(|| std::env::var_os("ANDROID_NDK_ROOT")) {
+        roots.push(PathBuf::from(p));
+    }
+    if let Some(sdk) = sdk_root(args) {
+        if let Ok(entries) = std::fs::read_dir(sdk.join("ndk")) {
+            let mut found: Vec<PathBuf> = entries.filter_map(|e| e.ok()).map(|e| e.path()).collect();
+            found.sort();
+            found.reverse();
+            roots.extend(found);
+        }
+    }
+    for root in roots {
+        let bin = root.join("toolchains/llvm/prebuilt/linux-x86_64/bin");
+        if bin.join("x86_64-linux-android34-clang").is_file() {
+            return Check::ok("ndk_clang", format!("{}", bin.display()));
+        }
+    }
+    Check::fail(
+        "ndk_clang",
+        "no x86_64-linux-android34-clang (needed at run time)",
+        "sdkmanager \"ndk;27.0.12077973\", or set ANDROID_NDK_HOME; the guest's JNI shims are built with it.",
+    )
+}
+
 fn check_memory() -> Check {
     let Ok(meminfo) = std::fs::read_to_string("/proc/meminfo") else {
         return Check::warn(
@@ -381,14 +574,24 @@ fn check_memory() -> Check {
 /// Run all checks and build the report.
 #[must_use]
 pub fn diagnose(args: &DoctorArgs) -> DoctorReport {
-    let mut checks = vec![check_sdk(args)];
-    checks.extend(check_build_tools(args));
+    let install = crate::root::acos_home();
+    let installed = install.is_some();
+    let mut checks = Vec::new();
+    if let Some(home) = &install {
+        checks.extend(check_install(home));
+    }
+    checks.push(check_sdk(args));
+    checks.extend(check_build_tools(args, installed));
     checks.push(check_android_jar(args));
     checks.extend(check_java());
-    checks.extend(check_workspace());
+    checks.push(check_ndk(args));
+    checks.extend(check_sandbox_helpers());
+    checks.extend(check_workspace(installed));
     checks.push(check_memory());
     let subject = json!({
         "acos_version": env!("CARGO_PKG_VERSION"),
+        "layout": if installed { "installed" } else { "checkout" },
+        "acos_home": install.as_ref().map(|p| p.display().to_string()),
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
         "cwd": std::env::current_dir().ok().map(|p| p.display().to_string()),

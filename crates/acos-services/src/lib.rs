@@ -77,14 +77,25 @@ pub use host::{CallResult, PendingDelivery, ServiceHost, ServiceObject, Wiring};
 pub use parcelable::{FieldOp, ParcelableSpec, Verification};
 pub use value::{Bundle, Parcelable, Value};
 
-/// Resolve a repo-relative path from the CWD or the crate manifest dir.
+/// Resolve a repo-relative path from the install root, the CWD or the crate
+/// manifest dir.
 ///
 /// Tests run with the crate directory as their CWD, so the fixture/DEX paths in
-/// the repo root are found by walking ancestors. The runtime never depends on
-/// this: in production the native layer passes explicit paths.
+/// the repo root are found by walking ancestors. An installed ACOS resolves them
+/// against `$ACOS_HOME` first (REL1a). The runtime never depends on this: in
+/// production the native layer passes explicit paths.
 #[must_use]
 pub fn workspace_path(rel: &str) -> Option<std::path::PathBuf> {
     let mut bases = Vec::new();
+    if let Some(home) = std::env::var_os("ACOS_HOME") {
+        if !home.is_empty() {
+            let home = std::path::PathBuf::from(home);
+            let candidate = home.join(rel);
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
     if let Ok(cwd) = std::env::current_dir() {
         bases.push(cwd);
     }

@@ -143,6 +143,12 @@ fn cache_root() -> Option<PathBuf> {
             return Some(PathBuf::from(d));
         }
     }
+    // REL1a: an installed ACOS keeps its mutable state under ACOS_HOME.
+    if let Some(home) = std::env::var_os("ACOS_HOME") {
+        if !home.is_empty() {
+            return Some(PathBuf::from(home).join(".cache/acos"));
+        }
+    }
     if let Some(x) = std::env::var_os("XDG_CACHE_HOME") {
         if !x.is_empty() {
             return Some(PathBuf::from(x).join("acos"));

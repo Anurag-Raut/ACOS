@@ -554,8 +554,9 @@ pub fn keycode(label: &str) -> Option<i32> {
 }
 
 /// The keychars directory: `ACOS_KEYCHARS_DIR`, then the sysroot the launcher
-/// resolves, then the productised/feasibility `.cache` locations (repo root is
-/// the compile-time workspace root), and finally a guest-like `/system`.
+/// resolves, then the productised/feasibility `.cache` locations under
+/// `$ACOS_HOME` (REL1a) or the compile-time workspace root, and finally a
+/// guest-like `/system`.
 #[must_use]
 pub fn keychars_dir() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("ACOS_KEYCHARS_DIR") {
@@ -570,17 +571,23 @@ pub fn keychars_dir() -> Option<PathBuf> {
             return Some(dir);
         }
     }
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    for cand in [
-        repo.join(".cache/art/sysroot/system/usr/keychars"),
-        repo.join(".cache/art-exp/sysroot/system/usr/keychars"),
-        PathBuf::from("/system/usr/keychars"),
-    ] {
-        if cand.is_dir() {
-            return Some(cand);
+    let mut roots = Vec::new();
+    if let Some(home) = std::env::var_os("ACOS_HOME") {
+        if !home.is_empty() {
+            roots.push(PathBuf::from(home));
         }
     }
-    None
+    roots.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."));
+    for repo in roots {
+        for rel in [".cache/art/sysroot", ".cache/art-exp/sysroot"] {
+            let cand = repo.join(rel).join("system/usr/keychars");
+            if cand.is_dir() {
+                return Some(cand);
+            }
+        }
+    }
+    let guest = PathBuf::from("/system/usr/keychars");
+    guest.is_dir().then_some(guest)
 }
 
 /// The two stock maps the synthetic InputDevices use, parsed once.

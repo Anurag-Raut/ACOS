@@ -27,10 +27,22 @@ pub fn repo_root() -> PathBuf {
 /// The built `acos` CLI, preferring the release profile.
 pub fn acos_bin() -> PathBuf {
     let root = repo_root();
-    for profile in ["release", "debug"] {
-        let candidate = root.join("target").join(profile).join("acos");
-        if candidate.is_file() {
-            return candidate;
+    if let Some(bin) = std::env::var_os("ACOS_BIN").filter(|v| !v.is_empty()) {
+        let bin = PathBuf::from(bin);
+        assert!(bin.is_file(), "ACOS_BIN={} is not a file", bin.display());
+        return bin;
+    }
+    let mut targets = Vec::new();
+    if let Some(dir) = std::env::var_os("CARGO_TARGET_DIR").filter(|v| !v.is_empty()) {
+        targets.push(PathBuf::from(dir));
+    }
+    targets.push(root.join("target"));
+    for target in &targets {
+        for profile in ["release", "debug"] {
+            let candidate = target.join(profile).join("acos");
+            if candidate.is_file() {
+                return candidate;
+            }
         }
     }
     panic!(
