@@ -2236,8 +2236,17 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   flag-off touches no zygote (no keeper, no directory), reply fields exist only with a zygote child,
   dead keeper → `ZYGOTE_DEAD` + `details.zygote.fallback:"none"` + registry empty, and
   `shutdown_all` leaves no keeper pid and no child behind while the reset refork reuses the tag and
-  keeps the boot epoch. Real-ART gate runs for this increment are queued on the host ART lock; see
-  `results/handoff/ZPROD3.md` for the exact commands and whatever the lock allowed.
+  keeps the boot epoch. Real-ART gates: **flag off PASS** (`v2-art-counter`, `w22-counter-reset`,
+  `gaten-home` pass; `suite/T03-render-wrong` and `negative/gaten-home-wrong` fail
+  `ASSERTION_FAILED`). **Flag on FAIL**: the keeper boots on real ART (`epoch=30988051884
+  boot_ms=14`), forks a child (`ZP1 forked tag=0 child=8`), serves frames and a `tap` that changes
+  pixels, then the post-tap `assert_text` never gets a fresh probe sample (`capture: strict settle
+  timed out (probe-floor)`, `probe_seq=41`, `tree_age_ms=1639`). Two real defects were found by
+  checking zygote facts instead of only `status=pass`: `acos verify` did not use the zygote at all
+  (fixed: one `ZygoteHost` per run) and the keeper did not export the guest seams, so the child
+  published no probe (fixed: `ACOSLAUNCH_INTERACTIVE`/`LIVE_PROBE`/`FRAME_WAIT_SECS`/
+  `ACOS_INPUT_ACK_MS`/`ACOS_ZYGOTE_PROBE` on the keeper). No flag-on claim is made; the exact
+  evidence and the next probe-floor diagnostic are in `results/handoff/ZPROD3.md`.
 - **Conclusion / next:** step 2 (engine wiring: `ZygoteHost`, `ArtSession` zygote branch,
   reset/status reply fields, `ErrorCode::ZygoteDead`, `shutdown_all`) is landed; the flag-off gate
   list and the flag-on counter/reset/Gaten checks are the evidence that remains, then ZYGOTE_DEAD
