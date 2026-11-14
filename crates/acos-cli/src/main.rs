@@ -350,9 +350,41 @@ fn load_and_build(path: &PathBuf) -> Result<Value, ApkError> {
         None => json!({"detected": false}),
     };
 
+    // FB2: the static half of "why did the launch never mount?". `acos launch`
+    // reports a launch that never mounts as `blocked` / PLACEHOLDER_CONTENT; this
+    // says which native library the APK asks for and does not ship, before
+    // anything runs. Two sources, both read from the APK's own bytes: the ELF
+    // `DT_NEEDED` of every bundled library, and the string arguments of the
+    // app's own `loadLibrary` call sites (see `acos_apk::native`).
+    let host_abi = string_abis_first(apk.native_abis(), acos_apk::HOST_ABI);
+    let (native_lib_abi, native_lib_warnings) = match host_abi {
+        Some(abi) => {
+            let warnings = acos_apk::missing_native_libs(&apk, &abi);
+            let json: Vec<Value> = warnings
+                .iter()
+                .map(|w| {
+                    json!({
+                        "code": w.code,
+                        "lib": w.lib,
+                        "abi": w.abi,
+                        "source": w.source,
+                        "referenced_by": w.referenced_by,
+                    })
+                })
+                .collect();
+            (Some(abi), json)
+        }
+        None => (None, Vec::new()),
+    };
+
     let result = json!({
         "apk_path": apk.source,
         "flutter": flutter_json,
+        "native_lib_check": {
+            "abi": native_lib_abi,
+            "warnings": native_lib_warnings,
+            "platform_libs_ignored": acos_apk::SYSTEM_LIBS.len(),
+        },
         "apk_size_bytes": apk.raw_bytes().len(),
         "zip_entries": apk.entries.len(),
         "package": manifest.package,
@@ -427,6 +459,15 @@ fn components_json(components: &[Component], res: Option<&ResourceTable>) -> Vec
             })
         })
         .collect()
+}
+
+/// The ABI the native-library cross-check runs against: `preferred` when the
+/// APK ships it (the ABI ACOS will execute), else the APK's first sorted ABI.
+fn string_abis_first(abis: Vec<String>, preferred: &str) -> Option<String> {
+    if abis.iter().any(|abi| abi == preferred) {
+        return Some(preferred.to_string());
+    }
+    abis.into_iter().next()
 }
 
 fn kind_name(kind: ComponentKind) -> &'static str {
@@ -811,6 +852,36 @@ fn print_text(result: &Value) {
             .collect();
         if !list.is_empty() {
             println!("  native libs: {}", list.join(", "));
+        }
+    }
+
+    // FB2: the references the APK does not satisfy. Empty on a healthy APK, so
+    // the line only appears when there is something to act on.
+    if let Some(check) = result.get("native_lib_check") {
+        let abi = check.get("abi").and_then(Value::as_str).unwrap_or("");
+        let warnings = check
+            .get("warnings")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        if warnings.is_empty() {
+            println!("  native lib check ({abi}): all referenced libraries present");
+        } else {
+            for w in &warnings {
+                println!(
+                    "  warning: NATIVE_LIB_MISSING {} for abi {abi} ({}: {}); the app asks for it and the APK does not ship it",
+                    w.get("lib").and_then(Value::as_str).unwrap_or(""),
+                    w.get("source").and_then(Value::as_str).unwrap_or(""),
+                    w.get("referenced_by")
+                        .and_then(Value::as_array)
+                        .map(|arr| arr
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .collect::<Vec<_>>()
+                            .join(", "))
+                        .unwrap_or_default(),
+                );
+            }
         }
     }
 

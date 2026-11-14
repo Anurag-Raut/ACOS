@@ -180,16 +180,46 @@ impl BackendConfig {
 }
 
 /// Find the `acos` binary.
+///
+/// Order: `ACOS_BIN`, then the CLI installed **next to this executable** (the
+/// REL1a layout: `<prefix>/bin/acos` beside `<prefix>/bin/acos-mcp`), then
+/// `$ACOS_HOME/bin/acos`, then `acos` on `PATH`, then `target/{release,debug}/acos`
+/// walking up from the cwd. The installed sibling must come before `PATH`: an
+/// agent that installs ACOS into a scratch prefix and runs it from an unrelated
+/// directory otherwise silently drives whatever *other* `acos` happens to be on
+/// `PATH` — a different build, with different verbs and verdicts.
 pub fn discover_binary() -> Option<PathBuf> {
     if let Ok(value) = std::env::var("ACOS_BIN") {
         if !value.trim().is_empty() {
             return Some(PathBuf::from(value));
         }
     }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(sibling) = installed_sibling(&exe, "acos") {
+            return Some(sibling);
+        }
+    }
+    if let Some(home) = std::env::var_os("ACOS_HOME") {
+        let candidate = PathBuf::from(home).join("bin").join("acos");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
     if let Some(path) = find_on_path("acos") {
         return Some(path);
     }
     find_repo_binary()
+}
+
+/// `<exe dir>/<name>` when that file exists and is not the executable itself.
+pub(crate) fn installed_sibling(exe: &Path, name: &str) -> Option<PathBuf> {
+    let dir = exe.parent()?;
+    let candidate = dir.join(name);
+    if candidate.is_file() && candidate != exe {
+        Some(candidate)
+    } else {
+        None
+    }
 }
 
 fn find_on_path(name: &str) -> Option<PathBuf> {
@@ -1012,6 +1042,25 @@ fn truncate(text: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_installed_cli_beside_this_binary_wins_over_path() {
+        // The REL1a layout: <prefix>/bin/acos-mcp sits beside <prefix>/bin/acos.
+        let dir = std::env::temp_dir().join(format!("acos-sibling-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let exe = dir.join("acos-mcp");
+        std::fs::write(&exe, b"").unwrap();
+        assert_eq!(installed_sibling(&exe, "acos"), None, "nothing beside it yet");
+        let sibling = dir.join("acos");
+        std::fs::write(&sibling, b"").unwrap();
+        assert_eq!(installed_sibling(&exe, "acos"), Some(sibling.clone()));
+        assert_eq!(
+            installed_sibling(&sibling, "acos"),
+            None,
+            "the executable is never its own backend"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn help_parsing_finds_clap_commands() {

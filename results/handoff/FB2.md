@@ -13,12 +13,11 @@ item 3-style evidence, and the **Triage** FB2 line.
 > instead of a silent no-op, placeholder-that-never-mounts → `blocked:
 > placeholder-content` (not pass), missing-native-lib cross-check in inspect.
 
-**Status: PARTIAL.** Items (2) and (1) are implemented with tests and committed.
-The APK-level acceptance (crafted Gaten APK, 15 gates, 5 Gaten flows + 5
-negatives, live MCP smoke on Gaten) was **not run**: the 60-minute budget went on
-(2) and (1). Item (3) (`acos_inspect` native-lib cross-check) is **not started**.
-Nothing here weakens an assertion, a gate or a status: every change makes a
-non-pass more likely, never a pass.
+**Status: DONE (FB2b).** Items (1) and (2) landed in FB2 (§1, §2 below); FB2b
+adds the APK-level acceptance (§7: 15 gates, 5 Gaten flows + 5 negatives), the
+live MCP smoke on Gaten (§8), the crafted-APK proof (§9) and item (3), the
+`acos_inspect` native-lib cross-check (§10). Nothing here weakens an assertion,
+a gate or a status: every change makes a non-pass more likely, never a pass.
 
 ---
 
@@ -216,24 +215,210 @@ acceptance, the live MCP smoke.
   not a pass). That is intended: same false green, one layer down. It is why the
   gates must be re-run before this is called done.
 
-## 6. Remaining + smallest next action
+## 6. FB2b — the APK-level acceptance, run for real
 
-1. **Run the acceptance suite** (needs the ART lock, ~30-40 min):
-   `tools/art-runtime/run-exclusive.sh` + `tools/guarded.sh` around the gate
-   runner, expecting 10 pass / 3 `ASSERTION_FAILED` / 1 `ELEMENT_OFFSCREEN` /
-   1 `TIMEOUT`, then the 5 Gaten flows + 5 negatives. The risk to watch: a Gaten
-   launch that lands on a placeholder would now fail the launch step where it
-   previously passed — that would be the *right* verdict but it must be
-   confirmed that Gaten is not affected in practice (243-node content frame, so
-   it should not be).
-2. **MCP smoke on Gaten**: `acos_observe_tree {"screenshot": true}` → a PNG
-   < 1 MB on disk that decodes, `display_origin` present, inline preview in the
-   reply; and the crafted APK (one `lib/x86_64/lib*.so` removed, re-signed with
-   the fixture debug key, scratch under `.cache/fb2/`) → launch `blocked` /
-   `PLACEHOLDER_CONTENT`, `acos_inspect` warns the library is missing.
-3. **Item (3)**: `acos_inspect` — cross-check the library names the APK
-   references (`System.loadLibrary` / `SoLoader.loadLibrary` string constants in
-   the dex, `libappmodules`/`libworklets`-style RN names) against the APK's
-   `lib/<abi>/` entries and add a `warnings` array to the inspect reply. Two
-   tests: a crafted copy missing one library warns exactly that one; the stock
-   APK warns nothing (0 false alarms).
+Everything below ran on the release binaries from `.cache/gr4-target` with the
+main checkout's lock: `tools/art-runtime/run-exclusive.sh --task FB2b-* --
+tools/guarded.sh --mem 10G --time 900 -- <cmd>`. Raw evidence:
+`results/fb2b/sweep.log`, `results/fb2b/gates-summary.tsv`,
+`results/fb2b/gaten-summary.tsv`, `.cache/fb2/*.jsonl`.
+
+### 6.1 The 15 gates (A)
+
+Runner `.cache/fb2/run_gates.sh` (one binary, sequentially,
+`acos verify <scenario> --engine art --artifacts .cache/fb2/gates/artifacts/<stem>`).
+**15/15 as specified — 0 false passes, 0 false failures.**
+
+| gate | expected | observed | code |
+|---|---|---|---|
+| `v2-art-counter` | pass | pass | - |
+| `w22-counter-reset` | pass | pass | - |
+| `w54-dialog-pixels` | pass | pass | - |
+| `w42-back-frame` | pass | pass | - |
+| `w15-dialog-menu` | pass | pass | - |
+| `form-validation` | pass | pass | - |
+| `suite/T03-render-good` | pass | pass | - |
+| `v1-offscreen-pager` | pass | pass | - |
+| `w7-insets-report` | pass | pass | - |
+| `se1-expect-change-tap` | pass | pass | - |
+| `suite/T03-render-wrong` | fail | fail | `ASSERTION_FAILED` |
+| `w7-insets-carve-negative` | fail | fail | `ASSERTION_FAILED` |
+| `negative/se1-expect-change-noop` | fail | fail | `ASSERTION_FAILED` |
+| `negative/offscreen-pager-visible` | fail | fail | `ELEMENT_OFFSCREEN` |
+| `p11-progress-timeout` | timeout | timeout | `TIMEOUT` |
+
+**No launch landed on `PLACEHOLDER_CONTENT`**: `grep -l PLACEHOLDER_CONTENT` over
+all 15 reply JSONs is empty, so the detector did not need a fix and no gate was
+weakened. (The new code would have caught it: every gate's launch ladder still
+ends `first_frame` with `ok: true`.)
+
+### 6.2 The 5 Gaten flows + 5 negatives (A)
+
+Runner `.cache/fb2/run_gaten.sh`, APK
+`/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk`
+(the one the gaten gates name), read-only.
+
+`gaten-home`, `gaten-tabs`, `gaten-settings`, `gaten-search`, `gaten-lesson` →
+**pass** (7/10/12/11/12 s). `scenarios/negative/gaten-{home,tabs,settings,
+search,lesson}-wrong` → **fail `ASSERTION_FAILED`** (5/5, 5-8 s each). 10/10,
+0 false passes.
+
+## 7. (B) Live MCP smoke — a screenshot through the observe verb
+
+`tools/release/mcp_smoke.py` gained `--mode gaten-shot`: launch the APK, call
+`acos_observe_tree {"screenshot": true}`, then assert the PNG on disk and the
+reply's inline preview. Driven from an **empty directory outside any checkout**
+(`.cache/fb2/outside`), **defaults** (no `ACOS_*` env), against the scratch
+install `tools/release/install.sh --from-target .cache/gr4-target --prefix
+.cache/fb2/prefix`. Evidence: `.cache/fb2/mcp-gaten-shot.jsonl` (every JSON-RPC
+frame + one `{"check":...}` line per assertion).
+
+```text
+acos_launch                       pass   engine=art stage=first_frame
+observe_tree_screenshot_status    pass
+screenshot_path_absolute_and_exists pass /run/user/1000/acos/art-sessions/mcp-3418842/screenshots/observe_tree-3.png
+screenshot_bytes_under_1MB        pass   138 839 bytes (< 1 MiB)
+screenshot_is_a_png               pass   magic 89504e470d0a1a0a, IHDR 1080x2400
+screenshot_geometry               pass   display_size [1080,2400], display_origin [0,0], IHDR == reported
+screenshot_inline_preview_present  pass   one image/png content item
+screenshot_inline_preview_bounded  pass   80 394 bytes (<= 512 KiB), 576x1280 (<= 1280 long side)
+screenshot_preview_names_the_lossless_file pass  "screenshot: 576x1280 downscaled preview of 1080x2400; lossless file: <path> (138839 bytes)"
+acos_destroy / status_after_destroy pass   SESSION_NOT_FOUND
+smoke: ok
+```
+
+### 7.1 A discovery bug this exposed (fixed)
+
+The first run returned `status: pass` with **no** `screenshot` field. The cause
+was not the observe verb: `acos-mcp` resolves its CLI backend with
+`ACOS_BIN -> acos on PATH -> target/{release,debug}/acos`, so the scratch-prefix
+server silently drove the **`~/.local/bin/acos`** of another installation
+(`acos backend: /home/Qui/.local/bin/acos` in its stderr log), a build without
+the FB2 screenshot code. Fixed in `crates/acos-mcp/src/backend.rs`
+(`discover_binary`): after `ACOS_BIN`, prefer **the `acos` installed beside the
+running executable** (the REL1a layout), then `$ACOS_HOME/bin/acos`, then
+`PATH`, then the repo walk. Unit test
+`the_installed_cli_beside_this_binary_wins_over_path`. An agent that installs
+into a prefix and runs from anywhere now drives *that* install, not whatever
+`acos` PATH happens to hold.
+
+## 8. (C) Crafted APK — a launch that cannot mount is `blocked`
+
+Craft (scratch `.cache/fb2/crafted/`, script `.cache/fb2/crafted_check.py`):
+copy the stock Gaten APK, rewrite the zip **without**
+`lib/x86_64/libworklets.so`, `zipalign -f 4`, then `apksigner sign` with the
+fixture debug key exactly as `tools/build-apps.sh` does
+(`fixtures/build/apps/debug.keystore`, alias `androiddebugkey`, pass `android`,
+v1+v2+v3). `apksigner verify --print-certs` → `CN=Android Debug, O=Android,
+C=US`. `libreanimated.so` and `libgesturehandler.so` both carry
+`DT_NEEDED libworklets.so`, so the removal is a real dangling dependency.
+
+Over MCP stdio (empty dir, scratch prefix, `.cache/fb2/crafted.jsonl`):
+
+| check | result |
+|---|---|
+| `acos_inspect` on the crafted APK | `warnings: [{code: NATIVE_LIB_MISSING, lib: libworklets.so, abi: x86_64, source: elf-needed, referenced_by: [libgesturehandler.so, libreanimated.so]}]` — exactly one, the removed library |
+| `acos_launch` on the crafted APK | `status: blocked`, `error.code: PLACEHOLDER_CONTENT`, `result.stage_reached: window`, `result.content: {mounted: false, reason: placeholder-content}`, `details: {nodes: 9, traversals: 8, waited_ms: 267, event_waits: 7, frame_number: 1}` |
+| the hint | quotes the guest log line: `... java.lang.UnsatisfiedLinkError: No implementation found for boolean ai.onnxruntime.telemetry.HttpClient.isDeviceIdCollectionEnabled() ... is the library loaded, e.g. System.loadLibrary?` |
+| `acos_verify` of `gaten-home` on the crafted APK | **not a pass**: `PLACEHOLDER_CONTENT` ("launch reached the window skeleton but the app's content never mounted (9 node(s), no app text) after 8 traversal(s)/267 ms") |
+
+Before FB2 this APK was a green `pass` / `first_frame` with an empty RN surface.
+
+## 9. (D) `acos_inspect` cross-checks the native libraries
+
+New module `crates/acos-apk/src/native.rs` (no new dependency, no `unsafe`):
+
+* `elf_needed(bytes)` — `DT_NEEDED` of an ELF32/ELF64 **little-endian** object,
+  bounds-checked, never panics on a truncated/hostile file;
+* `dex_load_library_names(bytes)` — the **call sites**: a
+  `const-string`/`jumbo` string index is followed within 16 bytes by an
+  `invoke-static`/`invoke-static/range` whose `method_id` is named
+  `loadLibrary` on a class whose descriptor names `System` or `SoLoader`
+  (`System.loadLibrary`, `SoLoader.loadLibrary`). A bare string that merely
+  looks like a library is *not* a reference — that is what keeps the stock APK
+  at zero warnings;
+* `missing_native_libs(apk, abi)` — the two sources above minus what
+  `lib/<abi>/` contains minus the documented platform set `SYSTEM_LIBS`
+  (`libc.so`, `libm.so`, `libdl.so`, `liblog.so`, `libandroid.so`,
+  `libjnigraphics.so`, `libEGL/libGLESv2`, `libz.so`, …24 entries), each warning
+  `{code: NATIVE_LIB_MISSING, lib, abi, source, referenced_by}`.
+
+`acos inspect` reports it as `result.native_lib_check = {abi, warnings,
+platform_libs_ignored}` for the ABI ACOS would run (host `x86_64` when present,
+else the APK's first ABI), and prints one `warning:` line per entry (a healthy
+APK prints `native lib check (x86_64): all referenced libraries present`).
+`acos_inspect` forwards it unchanged (the tool runs `acos inspect --json`).
+
+**Real APK checks (0 false alarms):**
+
+| APK | abi | warnings |
+|---|---|---|
+| stock Gaten `gaten-dev-f344272-x86_64-release-unsigned.apk` | x86_64 | `[]` (0) |
+| crafted `gaten-no-worklets.apk` (lib/x86_64/libworklets.so removed, re-signed) | x86_64 | exactly `libworklets.so` (`source: elf-needed`, `referenced_by: [libgesturehandler.so, libreanimated.so]`) |
+
+Cost: `acos inspect` on the 114 MB Gaten APK is 0.23 s wall.
+
+**Unit tests** (`cargo test -p acos-apk`, 29 lib tests): `tiny_elf` DT_NEEDED
+parsing (64-bit, plus truncation/non-ELF/empty), a hand-built DEX whose
+`SoLoader.loadLibrary("worklets")` call site yields `libworklets.so` (and a
+`libfoo.so` argument is normalised), a synthetic APK **with** the library →
+0 warnings and the same APK **without** it → exactly `libworklets.so` from both
+sources with `libc.so` never warned, plus name/`SYSTEM_LIBS` guards. **Real APK
+checks** are the two rows above (both run, output in §9 and §8).
+
+## 10. Docs
+
+* `docs/AGENT_GUIDE.md`: workflow step 2 (inspect's `native_lib_check` +
+  `NATIVE_LIB_MISSING`), step 3 (`PLACEHOLDER_CONTENT` as a blocked launch, what
+  `log_hint` and `content.mounted: false` mean, "do not retry with a longer
+  timeout"), the errors table row for `PLACEHOLDER_CONTENT`, and the scenarios
+  topic's screenshot section (`acos_observe_tree {"screenshot": true}`, absolute
+  path, `display_origin`, `NO_FRESH_FRAME` on a placeholder).
+* `docs/MCP.md`: the `screenshot` argument on `acos_observe_tree`/`acos_observe`
+  (including the `display_origin` mapping), a "a launch that never mounts is
+  `blocked`" section, and the `acos_inspect` `native_lib_check` shape with its
+  two reference sources; both tools' rows in the tool table now name the
+  argument.
+
+## 11. Tests actually run
+
+`cargo test --release --offline -p acos-cli -p acos-art -p acos-mcp
+-p acos-verify -p acos-protocol -p acos-apk`, `CARGO_TARGET_DIR=.cache/gr4-target`,
+through the lock and `tools/guarded.sh` — see §12 for the final result and the
+one host-load flake that had to be re-run.
+
+## 12. Remaining + smallest next action
+
+Nothing in FB2's scope is left open. See §13 for the run log and §14 for the
+decisions; the two follow-ups that are **not** FB2's to do are listed there.
+
+## 13. FB2b run log (chronological, for a re-audit)
+
+```text
+01:26  gates, first pass       15 runs, 14 OK / 1 FAIL -- p11-progress-timeout
+                               reported status=timeout, my runner expected "fail"
+                               (runner bug, gate correct: the code was TIMEOUT)
+01:27  gates, second pass      OK=15 FAIL=0 (results/fb2b/gates-summary.tsv)
+01:29  gaten sweep             OK=10 FAIL=0 (flows pass, negatives ASSERTION_FAILED)
+01:41  crafted APK             stripped + zipalign + apksigner (debug key)
+01:45  MCP smoke (B)           smoke: ok, PNG 138 839 B, preview 576x1280
+01:45  crafted check (C)       blocked/PLACEHOLDER_CONTENT, inspect warns 1 lib,
+                               verify gaten-home not a pass
+```
+
+## 14. Decisions for the orchestrator
+
+* **`acos-mcp` backend discovery now prefers the sibling `acos`** (then
+  `ACOS_HOME`, then `PATH`). This is a behaviour change beyond "screenshot in
+  observe": it is the bug that made a fresh install worthless when any other
+  `acos` is on `PATH`. If the release layout ever moves `acos` out of
+  `<prefix>/bin`, `ACOS_BIN` is still the escape hatch.
+* **`NATIVE_LIB_MISSING` is a warning, not an error and not a verdict.** An APK
+  that references a system-only library outside the 24-entry `SYSTEM_LIBS` set
+  would warn spuriously; the set is documented in `acos_apk::native` and is the
+  only place that needs extending if that ever happens. The stock Gaten APK
+  (23 bundled libs) is the regression check: 0 warnings.
+* **`acos verify` is affected too** (a placeholder launch step is now an error,
+  not a pass) — intended, same false green one layer down, and the Gaten sweep
+  above proves the pass paths are untouched.
+* **`PLACEHOLDER_CONTENT` as a `blocked` status, not a new rung**: FB2 §5.

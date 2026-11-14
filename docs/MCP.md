@@ -230,7 +230,7 @@ server.
 | `acos_inspect` | protocol | `inspect` | `static-analysis` | `apk`, `base` |
 | `acos_run_dex` | protocol | `run-dex` | `native-runtime` | `base`, `path` |
 | `acos_run` | protocol | `run` | `native-runtime` | `apk`, `base` |
-| `acos_observe` | protocol | `observe` | `native-runtime` | `base` |
+| `acos_observe` | protocol | `observe` | `native-runtime` | `base` (`screenshot` optional) |
 | `acos_capture` | protocol | `capture` | `native-runtime` | `base` |
 | `acos_action` | protocol | `action` | `native-runtime` | `action`, `base` |
 | `acos_assert` | protocol | `assert` | `native-runtime` | `assertion`, `base` |
@@ -243,7 +243,7 @@ server.
 | `acos_capabilities` | server | - | `static-analysis` | - |
 | `acos_help` | server | - | `static-analysis` | - |
 | `acos_launch` | server | - | `native-runtime` | - |
-| `acos_observe_tree` | server | - | `native-runtime` | - |
+| `acos_observe_tree` | server | - | `native-runtime` | `session_id` (`screenshot` optional) |
 | `acos_tap` | server | - | `native-runtime` | - |
 | `acos_key` | server | - | `native-runtime` | - |
 | `acos_text` | server | - | `native-runtime` | - |
@@ -290,6 +290,66 @@ the stage ladder; `acos_observe_tree`/`acos_tap`/`acos_key`/`acos_text`/`acos_sw
 drive it; and `acos_doctor` runs the `acos doctor --json` host preflight (Android
 SDK/build-tools, `android.jar`, JDK, workspace helper, debug keystore,
 boot-classpath cache, host memory) and returns each failing check's `fix`.
+
+### Getting a screenshot through the observe verbs
+
+`acos_observe_tree` and `acos_observe` both take `screenshot`:
+
+```json
+{"name": "acos_observe_tree", "arguments": {"session_id": "mcp-1234", "screenshot": true}}
+{"name": "acos_observe_tree", "arguments": {"session_id": "mcp-1234", "screenshot": "/abs/out/home.png"}}
+```
+
+* `true` writes `<session artifacts>/screenshots/<verb>-<frame_seq>.png`; a path
+  writes there and is made absolute. Anything else (`7`, `""`) is
+  `INVALID_ARGUMENT` — never a silent no-op.
+* The reply's `result.screenshot` carries `path` (absolute), `bytes`, `md5`,
+  `frame_seq`, `width`/`height` from the PNG's IHDR, and the coordinate mapping
+  `display_size` + `display_origin`: PNG pixels are display pixels shifted by
+  `display_origin` (`png_x = display_x - origin.x`), the same offset the input
+  channel applies, so a tap by eye is not off by the status bar.
+* The bytes are the launcher's own lossless artifact (60-140 KB for a 1080x2400
+  frame), copied — never re-encoded.
+* A placeholder frame (window exists, app content never mounted) has no app
+  pixels: the call answers `NO_FRESH_FRAME` with `details.reason =
+  "placeholder-content"` instead of writing the splash.
+* The MCP reply also inlines the bounded preview (see *Content items* below) and
+  a text line naming the lossless file, so the agent gets pixels and a path in
+  one call.
+
+### A launch that never mounts is `blocked`, not `pass`
+
+`acos_launch` (and `acos_verify`'s `launch` step) report
+`status: "blocked"` with `error.code = PLACEHOLDER_CONTENT` when the window and
+its decor exist but the app's own content never mounts (<= 16 nodes, no app text
+anywhere, after the whole first-frame budget). The reply keeps the ladder in
+`result` for diagnosis: `stage_reached: "window"`, `content: {"mounted": false,
+"reason": "placeholder-content"}`, the `first_frame` rung rewritten to
+`blocked`, and `error.details.log_hint` with the one guest log line that explains
+it (`UnsatisfiedLinkError`, `SoLoader`, `couldn't find`, `FATAL`, else the first
+`E` line). Never retry a placeholder launch with a longer timeout: read the log
+line, then `acos_inspect`.
+
+### `acos_inspect` cross-checks the native libraries
+
+`acos_inspect` stays static, but it now also answers "does the APK ship the
+native libraries it asks for?": `result.native_lib_check` =
+
+```json
+{"abi": "x86_64", "platform_libs_ignored": 24,
+ "warnings": [{"code": "NATIVE_LIB_MISSING", "lib": "libworklets.so",
+               "abi": "x86_64", "source": "elf-needed",
+               "referenced_by": ["libgesturehandler.so", "libreanimated.so"]}]}
+```
+
+References come from two places inside the APK: the ELF `DT_NEEDED` entries of
+the libraries the APK ships for that ABI (`source: "elf-needed"`), and the string
+arguments of the app's own `System.loadLibrary`/`SoLoader.loadLibrary` call sites
+in the DEX (`source: "dex-load-library"`). A reference that resolves to a
+`lib/<abi>/` entry is never a warning, and platform libraries (`libc.so`,
+`libm.so`, …: the documented `SYSTEM_LIBS` set) are never warnings, so a healthy
+APK answers `warnings: []` and a non-empty list is a packaging bug — usually the
+cause of a `PLACEHOLDER_CONTENT` launch.
 
 Every `tools/list` entry carries the protocol `description`, an `inputSchema`
 generated from the request type, and annotations:
