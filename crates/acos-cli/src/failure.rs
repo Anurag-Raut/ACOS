@@ -465,6 +465,38 @@ pub fn install_panic_hook() {
 mod tests {
     use super::*;
 
+    /// FB6 (6): an implicit-intent `startActivity` gets its own hint, because the
+    /// generic taxonomy hint ("avoid the API / mark unsupported") does not tell an
+    /// agent *why* the screen is unreachable or what to assert instead.
+    #[test]
+    fn implicit_intent_start_activity_has_a_dedicated_hint() {
+        let dir = std::env::temp_dir().join(format!("acos-failure-fb6-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let error = art_error(
+            "UNSUPPORTED_ANDROID_API",
+            "the app called android.app.IActivityTaskManager.startActivity and the launcher has \
+             no multi-Activity path (the request has no explicit component and ACOS has no \
+             package-manager Intent resolution; no Activity was fabricated)",
+            &dir,
+        );
+        assert_eq!(error.code, ErrorCode::UnsupportedAndroidApi);
+        assert!(
+            error.hint.contains("no other apps"),
+            "the dedicated hint must say no other apps exist in the guest: {}",
+            error.hint
+        );
+        assert!(error.hint.contains("assert up to the intent"));
+        // A different UNSUPPORTED_ANDROID_API (a real API gap) keeps the generic
+        // hint: the special case must not swallow every unsupported API.
+        let generic = art_error(
+            "UNSUPPORTED_ANDROID_API",
+            "android.view.SurfaceControl.Transaction#setDropInputMode is not implemented",
+            &dir,
+        );
+        assert!(!generic.hint.contains("no other apps"), "{}", generic.hint);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn every_art_code_maps_explicitly_and_host_codes_are_retryable() {
         for (code, expected) in [
