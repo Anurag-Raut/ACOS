@@ -287,6 +287,13 @@ class Serve:
                                      stdin=subprocess.DEVNULL,
                                      stdout=self.stdout, stderr=self.stderr,
                                      start_new_session=True)
+        # SERVELEAK2/F2: record this daemon (pid + start time) for the run's
+        # reaper. `acos-bench.sh` sets ACOS_BENCH_PIDFILE per run and exports
+        # ACOS_BENCH_RUN_ID, which this daemon inherits through `env`; the reaper
+        # re-verifies both before it signals anything, so a concurrent bench run
+        # sharing the scratch root can never reap this daemon (or be reaped by
+        # it).
+        _record_daemon(self.proc.pid)
         deadline = time.time() + 30
         while time.time() < deadline:
             if Path(self.socket_path).exists():
@@ -314,16 +321,18 @@ class Serve:
                 try:
                     self.proc.wait(timeout=20)
                 except subprocess.TimeoutExpired:
+                    # SERVELEAK2/F4: signal the group **while the leader is still
+                    # unreaped**. Its pid (hence its group id) cannot be recycled
+                    # until it is waited for, so `killpg` here names this rep's
+                    # own group and never a stranger's. A `killpg` after `wait()`
+                    # is the hazard the review found: the id is free by then and
+                    # another agent's `setsid`/`bwrap` can own it.
+                    try:
+                        os.killpg(self.proc.pid, signal.SIGKILL)
+                    except OSError:
+                        pass
                     self.proc.kill()
                     self.proc.wait(timeout=10)
-            # A daemon that had to be SIGKILLed took no teardown path with it:
-            # kill its (own, new-session) process group as the last resort.
-            if self.proc.returncode is not None and self.proc.returncode < 0 \
-                    and self.proc.returncode != -15:
-                try:
-                    os.killpg(self.proc.pid, signal.SIGKILL)
-                except OSError:
-                    pass
         finally:
             for fh in (self.stdout, self.stderr):
                 try:
@@ -345,6 +354,14 @@ def survivors(scratch):
         except OSError:
             continue
         if str(scratch) in cmd and int(name) != os.getpid():
+            # SERVELEAK2/F2/F1: a name match is not ownership. Two runs sharing
+            # the default scratch root name the same paths, so a report must be
+            # filtered by the run id every process this run started inherits
+            # (`acos-bench.sh` exports it; the daemon passes it on). A process
+            # without our run id belongs to another run: not a leak of ours.
+            run_id = os.environ.get("ACOS_BENCH_RUN_ID")
+            if run_id and not _environ_has(int(name), "ACOS_BENCH_RUN_ID=" + run_id):
+                continue
             out.append({"pid": int(name), "comm": comm_of(int(name)), "cmd": cmd[:240]})
     return out
 

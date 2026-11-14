@@ -1401,6 +1401,12 @@ impl SessionBackend {
     pub fn session_call(&self, name: &str, args: &Value, ctx: &CallContext) -> Option<Envelope> {
         if name != "acos_doctor" && !name.is_empty() {
             if let Some(daemon) = &self.daemon {
+                // SERVELEAK2/F3: the daemon defaults a missing `base.session_id`
+                // to the shared constant `s_mcp`, so two agents' launches would
+                // land on the same held session there. State this server
+                // instance's own default id explicitly instead of letting the
+                // daemon choose a shared one.
+                let args = &with_default_session(args);
                 let mut client = daemon.lock().unwrap_or_else(|e| e.into_inner());
                 let envelope = match client.call(name, args) {
                     Ok(envelope) => envelope,
@@ -1718,6 +1724,31 @@ impl Backend for SessionBackend {
         }
     }
 
+}
+
+/// SERVELEAK2/F3: the arguments to forward to the daemon, with this server
+/// instance's default session id made explicit when the caller named none.
+fn with_default_session(args: &Value) -> Value {
+    let mut args = args.clone();
+    if args.pointer("/base/session_id").and_then(Value::as_str).is_some() {
+        return args;
+    }
+    match args.as_object_mut() {
+        Some(object) => {
+            let base = object
+                .entry("base")
+                .or_insert_with(|| Value::Object(Default::default()));
+            if let Some(base) = base.as_object_mut() {
+                base.insert(
+                    "session_id".to_string(),
+                    Value::String(default_session_id().to_string()),
+                );
+            }
+            args
+        }
+        // A non-object argument cannot carry a session id; forward it untouched.
+        None => args,
+    }
 }
 
 fn session_id(args: &Value) -> String {
