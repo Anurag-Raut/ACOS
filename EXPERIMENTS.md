@@ -3842,3 +3842,52 @@ smallest follow-up.
   ART encoder still writes stored blocks — deliberate, it is on the screenshot
   path; re-encoding happens in the evidence pass). `gc` has no size budget
   (`--max-bytes`) yet.
+
+### E2.18 — ZPROD7: the forked child's log stream (CHECKPOINT: shim fixed + pinned by test, gate gap still open)
+
+- **Date / branch:** 2026-11-14; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/g3cd`, branch
+  `zygote-prod-1` (first `git merge --no-edit main` = `92e09bf`; both sides of every conflict kept:
+  `acos-art::Error::{Zygote, InvalidGuestUid}`, `ErrorCode::{ZygoteDead, HostMemoryLow}`).
+  All ART runs under `tools/art-runtime/run-exclusive.sh --task ZPROD7`; scratch `.cache/zprod7`.
+  Checkpoint (the owner reprioritised the queue mid-increment): GOAL 2 (F11 `shared-fixed`) and the
+  interleaved A/B were **not** attempted.
+- **Question / goal:** with the flag on, `form-validation` fails deterministically at step 5
+  `assert_log` with an **empty** guest log buffer (`^onCreate$ ^onStart$ ^onResume$`), because a
+  forked child's log lines land in the keeper's buffer, not its session's. Route each child's guest
+  log stream to **its own** session, and never to a sibling's, with two concurrent sessions.
+- **Change (one function, `crates/acos-art/shim/artshim.c`):** a zygote child inherits the shim's
+  *connected descriptor*, not the path — the keeper resolves `/dev/socket/logdw` (its own socket
+  dir) before it forks. `log_socket()` now **re-resolves the sink path when the pid changes**
+  (one `getpid()` per formatted entry, on the non-hot dump/crash paths), and a failed connect is
+  **no longer sticky** (a `-1` used to be permanent; the next entry retries, so one entry at most is
+  lost when a reset re-binds the sink). The path is `ACOSART_LOGD_SOCK`, default
+  `"/dev/socket/logdw"` — the build-time default is unchanged and pinned by a test; the `-D`
+  override exists only so a host test can exercise the shipped code outside a guest.
+- **Tests (`crates/acos-art/tests/logd_route.rs`, 3 new, real processes + a real `fork()`):** the
+  *shipped* shim source (`acos_art::SHIM_SOURCE`) is compiled and preloaded into two concurrent
+  writers whose sink path is the same string resolved against a per-process working directory (the
+  host stand-in for the per-mount `/dev/socket`). Proved: the keeper sink holds exactly the
+  pre-fork lines, session *k* holds exactly its own three post-fork lines, no foreign tag appears,
+  nothing falls back to stderr; a missing sink does not silence the stream; the shipped default
+  path is unchanged. **Inverse check:** with the ZPROD6 rule restored (no pid check, sticky
+  failure) the two behavioural tests **fail** — the suite pins the behaviour, 0 false passes.
+- **Result:** `cargo test -p acos-cli` 183/0, `cargo test -p acos-art` 181/0. **15-gate matrix,
+  same binary, both arms (`.cache/zprod7/gates/gates.log`):** OFF **10 pass / 5 fail exactly as
+  specified** (so the flag-off path is untouched). ON: 7 pass; **three** differences from OFF —
+  `form-validation` (step 5 `assert_log`, `actual: []`, the known gap) **and `w54-dialog-pixels`,
+  `w42-back-frame`** (`ASSERTION_FAILED`; new information, no earlier increment ran them with the
+  flag on; neither failing step is a log assertion, so they are not attributed to this change).
+- **Ruled out for the remaining gap:** the shim's `-O2` path resolution (a `bwrap` namespace with a
+  real `logdw` socket bound at `/dev/socket` received the frame from the default build); a stale
+  shim (`build_shim` keys on `SHIM_SOURCE`, mtime matches); a `sun_path`/session-dir defect
+  (ZPROD5's class — the ON runs pass 5 of 6 steps). **Not isolated:** the live path still delivers
+  nothing to the session sink; next candidates are (1) the child's `/dev/socket` bind not carrying
+  the session launcher's `logdw` inode (a `prepare_session` wipe/bind race), (2) the child's lines
+  not passing through the shim at all, (3) a second `Logd` instance serving the session. The
+  cheapest decisive test is a live one with the plan root kept (`ACOS_ART_ZYGOTE_KEEP=1`) plus
+  `/proc/<child>/mountinfo`, the `logdw` inode and the keeper log's `[art]` fallback lines.
+- **Not run:** the ZPROD5/6 live `serve` proof (13/13), the interleaved OFF/ON A/B (conditional on
+  GOAL 2), F11 (`shared-fixed` for `-Xzygote`; the ON arm still pins `lz4`, so the launch/reset/
+  teardown deltas remain arm-vs-arm).
+- **Regression / false pass:** none claimed. No flag default, assertion, settle horizon, scenario or
+  gate was touched; the two new ON-arm failures are reported, not explained away.
