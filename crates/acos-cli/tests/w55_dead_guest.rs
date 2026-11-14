@@ -25,6 +25,10 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
+mod common;
+
+use common::ShortSocketDir;
+
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -112,6 +116,8 @@ struct Daemon {
     dir: PathBuf,
     socket: PathBuf,
     art_dir: PathBuf,
+    // Last field: outlives every use of `socket`, removed with the daemon.
+    sockets: ShortSocketDir,
 }
 
 impl Daemon {
@@ -120,7 +126,9 @@ impl Daemon {
         let art_dir = dir.join("art-home");
         std::fs::create_dir_all(art_dir.join("art-frames")).unwrap();
         let fake = fake_art(&art_dir);
-        let socket = dir.join("serve.sock");
+        // `sun_path` is 108 bytes: the socket never lives under the worktree.
+        let sockets = ShortSocketDir::new(tag);
+        let socket = sockets.socket("serve.sock");
         let child = Command::new(env!("CARGO_BIN_EXE_acos"))
             .arg("serve")
             .arg("--socket")
@@ -144,6 +152,7 @@ impl Daemon {
             dir,
             socket,
             art_dir,
+            sockets,
         }
     }
 

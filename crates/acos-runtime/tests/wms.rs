@@ -123,6 +123,7 @@ fn window_manager_scalars_and_open_session() {
 }
 
 #[test]
+#[ignore = "frozen legacy Rust VM: asserts the pre-W7 carved outFrame (0,128,1080,2337); W7b (18622e5) made report the default inset model, ADR-0026 #6, so the app window is the full display — see results/handoff/TESTHYG2.md"]
 fn add_to_display_as_user_returns_reference_frame_and_insets() {
     let mut reply = call(IWS, "addToDisplayAsUser", 4);
     assert_eq!(reply.read_int32().unwrap(), 0, "no exception");
@@ -166,6 +167,7 @@ fn add_to_display_as_user_returns_reference_frame_and_insets() {
 }
 
 #[test]
+#[ignore = "frozen legacy Rust VM: asserts the pre-W7 carved ClientWindowFrames (frame 0,128,1080,2337, surface 1080x2209); W7b (18622e5) made report the default inset model, ADR-0026 #6, so the window is the full display — see results/handoff/TESTHYG2.md"]
 fn relayout_returns_a_valid_surface_control_and_reference_frames() {
     let _ = call(IWS, "addToDisplayAsUser", 4);
     let mut reply = call(IWS, "relayout", 6);

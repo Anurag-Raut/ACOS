@@ -89,6 +89,7 @@ fn injected_tap_reaches_the_real_window_channel() {
 }
 
 #[test]
+#[ignore = "frozen legacy Rust VM: a tap at (5,5) is inside the app window since W7b (18622e5) made report the default inset model (ADR-0026 #6): the window is the full display and the bars are only reported as insets — see results/handoff/TESTHYG2.md"]
 fn tap_outside_every_window_is_a_structured_error() {
     let (_reply, _fd) = add_window_and_get_client_fd();
     let err = input_java::inject_tap(5.0, 5.0).unwrap_err();
