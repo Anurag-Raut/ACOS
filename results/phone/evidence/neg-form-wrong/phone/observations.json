@@ -1,0 +1,348 @@
+{
+ "schema_version": 1,
+ "source": "phone",
+ "fidelity": "physical-device",
+ "scenario": {
+  "name": "negative-form-wrong-error",
+  "path": "scenarios/negative/form-wrong-error.yaml",
+  "sha256": "a0d3b8c5342118e218927417758e67a2b60511dfe6c564ec2a3f56129f58cdce"
+ },
+ "app": {
+  "package": "dev.acos.fixtures.formvalidation",
+  "activity": "dev.acos.fixtures.formvalidation/.MainActivity",
+  "apk": "fixtures/build/apps/form-validation.apk"
+ },
+ "device": {
+  "ro.build.fingerprint": "motorola/manila_g/manila:15/VUOA35.116-151/a43dc2:user/release-keys",
+  "ro.build.version.sdk": "35",
+  "ro.build.version.release": "15",
+  "ro.product.model": "moto g35 5G",
+  "wm_size": "1080x2400",
+  "density_dpi": 400,
+  "font_scale": "1.0"
+ },
+ "started": "2026-11-14T09:44:18.854+00:00",
+ "steps": [
+  {
+   "index": 0,
+   "kind": "launch",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-00-launch.png",
+   "error": null,
+   "visible_labels": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "node_count": 8
+  },
+  {
+   "index": 1,
+   "kind": "wait_for",
+   "status": "pass",
+   "selector": {
+    "id": "submit"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Submit",
+    "identifier": "dev.acos.fixtures.formvalidation:id/submit",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     512,
+     260,
+     632
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-01-wait_for.png",
+   "error": null,
+   "visible_labels": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "node_count": 8
+  },
+  {
+   "index": 2,
+   "kind": "assert_text",
+   "status": "fail",
+   "selector": {
+    "id": "error"
+   },
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "Name is required",
+    "mode": "exact",
+    "passed": false,
+    "expected_bounds": null
+   },
+   "screenshot": "screenshot-02-assert_text.png",
+   "error": "ASSERTION_FAILED",
+   "visible_labels": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "node_count": 8
+  }
+ ],
+ "finished": "2026-11-14T09:44:23.338+00:00",
+ "commands": [
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "pm",
+    "list",
+    "packages"
+   ],
+   "ts": "2026-11-14T09:44:18.264+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "getprop",
+    "ro.build.fingerprint"
+   ],
+   "ts": "2026-11-14T09:44:18.381+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "getprop",
+    "ro.build.version.sdk"
+   ],
+   "ts": "2026-11-14T09:44:18.430+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "getprop",
+    "ro.build.version.release"
+   ],
+   "ts": "2026-11-14T09:44:18.479+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "getprop",
+    "ro.product.model"
+   ],
+   "ts": "2026-11-14T09:44:18.529+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "wm",
+    "size"
+   ],
+   "ts": "2026-11-14T09:44:18.580+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "wm",
+    "density"
+   ],
+   "ts": "2026-11-14T09:44:18.675+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "settings",
+    "get",
+    "system",
+    "font_scale"
+   ],
+   "ts": "2026-11-14T09:44:18.764+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "pm",
+    "clear",
+    "dev.acos.fixtures.formvalidation"
+   ],
+   "ts": "2026-11-14T09:44:18.854+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "open",
+    "dev.acos.fixtures.formvalidation",
+    "--activity",
+    "dev.acos.fixtures.formvalidation/.MainActivity",
+    "--relaunch",
+    "--foreground",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:44:19.047+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:44:21.453+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:44:21.583+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/neg-form-wrong/screenshot-00-launch.png"
+   ],
+   "ts": "2026-11-14T09:44:21.696+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:44:22.082+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:44:22.191+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:44:22.303+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/neg-form-wrong/screenshot-01-wait_for.png"
+   ],
+   "ts": "2026-11-14T09:44:22.417+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:44:22.728+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:44:22.829+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:44:22.940+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/neg-form-wrong/screenshot-02-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:44:23.039+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "close"
+   ],
+   "ts": "2026-11-14T09:44:23.338+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "home"
+   ],
+   "ts": "2026-11-14T09:44:23.471+00:00"
+  }
+ ]
+}

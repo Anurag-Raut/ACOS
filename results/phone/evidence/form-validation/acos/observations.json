@@ -1,0 +1,1129 @@
+{
+  "schema_version": 1,
+  "source": "acos",
+  "fidelity": "art-reference",
+  "scenario": {
+    "name": "form-validation",
+    "path": "scenarios/form-validation.yaml",
+    "sha256": "a74b24cfd8987ae92d132863c76657660f45a948ec1485eed7d6c4d0a248c802"
+  },
+  "app": {
+    "package": "dev.acos.fixtures.formvalidation",
+    "activity": "dev.acos.fixtures.formvalidation/.MainActivity",
+    "sha256": "d8c277d7476a54f8a09288962fd3d9a864ad53b934350721af81725cb3ba7aa9"
+  },
+  "engine": {
+    "backend": "acos-native",
+    "isolation": "process",
+    "verdict": "pass",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    }
+  },
+  "started": "2026-11-14T09:48:17.670+00:00",
+  "steps": [
+    {
+      "index": 0,
+      "kind": "launch",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [],
+      "screen": {},
+      "assertion": null,
+      "screenshot": null,
+      "error": null
+    },
+    {
+      "index": 1,
+      "kind": "wait_for",
+      "status": "pass",
+      "selector": {
+        "id": "submit"
+      },
+      "target": {
+        "text": "Submit",
+        "content_desc": "",
+        "identifier": "dev.acos.fixtures.formvalidation:id/submit",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          42,
+          553,
+          273,
+          679
+        ]
+      },
+      "visible_texts": [
+        "Email",
+        "Form Validation",
+        "Name",
+        "Submit"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 2,
+        "content_hash": "001a6665b419e7ee6a2908d6354cf081"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-01-wait_for.png",
+      "error": null,
+      "visible_labels": [
+        "Email",
+        "Form Validation",
+        "Name",
+        "Submit"
+      ],
+      "node_count": 13
+    },
+    {
+      "index": 2,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "id": "name"
+      },
+      "target": {
+        "text": "Name",
+        "content_desc": "",
+        "identifier": "dev.acos.fixtures.formvalidation:id/name",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          42,
+          317,
+          1038,
+          435
+        ]
+      },
+      "visible_texts": [
+        "Email",
+        "Form Validation",
+        "Name",
+        "Submit"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 2,
+        "content_hash": "001a6665b419e7ee6a2908d6354cf081"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Name"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-02-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Email",
+        "Form Validation",
+        "Name",
+        "Submit"
+      ],
+      "node_count": 13
+    },
+    {
+      "index": 3,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "id": "email"
+      },
+      "target": {
+        "text": "Email",
+        "content_desc": "",
+        "identifier": "dev.acos.fixtures.formvalidation:id/email",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          42,
+          435,
+          1038,
+          553
+        ]
+      },
+      "visible_texts": [
+        "Email",
+        "Form Validation",
+        "Name",
+        "Submit"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 2,
+        "content_hash": "001a6665b419e7ee6a2908d6354cf081"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Email"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-03-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Email",
+        "Form Validation",
+        "Name",
+        "Submit"
+      ],
+      "node_count": 13
+    },
+    {
+      "index": 4,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "id": "submit"
+      },
+      "target": {
+        "text": "Submit",
+        "content_desc": "",
+        "identifier": "dev.acos.fixtures.formvalidation:id/submit",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          42,
+          553,
+          273,
+          679
+        ]
+      },
+      "visible_texts": [
+        "Email",
+        "Form Validation",
+        "Name",
+        "Submit"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 2,
+        "content_hash": "001a6665b419e7ee6a2908d6354cf081"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Submit"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-04-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Email",
+        "Form Validation",
+        "Name",
+        "Submit"
+      ],
+      "node_count": 13
+    },
+    {
+      "index": 5,
+      "kind": "assert_log",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [],
+      "screen": {},
+      "assertion": {
+        "kind": "log",
+        "passed": true,
+        "expected": null,
+        "message": null
+      },
+      "screenshot": null,
+      "error": null
+    },
+    {
+      "index": 6,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "id": "submit"
+      },
+      "target": {
+        "text": "Submit",
+        "content_desc": "",
+        "identifier": "dev.acos.fixtures.formvalidation:id/submit",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          42,
+          553,
+          273,
+          679
+        ]
+      },
+      "visible_texts": [
+        "Email",
+        "Form Validation",
+        "Name",
+        "Name is required",
+        "Submit"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 4,
+        "content_hash": "e4d877086930eab3a63c8d091eaebe32"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-06-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Email",
+        "Form Validation",
+        "Name",
+        "Name is required",
+        "Submit"
+      ],
+      "node_count": 13
+    },
+    {
+      "index": 7,
+      "kind": "assert_log",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [],
+      "screen": {},
+      "assertion": {
+        "kind": "log",
+        "passed": true,
+        "expected": null,
+        "message": null
+      },
+      "screenshot": null,
+      "error": null
+    },
+    {
+      "index": 8,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "id": "error"
+      },
+      "target": {
+        "text": "Name is required",
+        "content_desc": "",
+        "identifier": "dev.acos.fixtures.formvalidation:id/error",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          42,
+          679,
+          323,
+          730
+        ]
+      },
+      "visible_texts": [
+        "Email",
+        "Form Validation",
+        "Name",
+        "Name is required",
+        "Submit"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 4,
+        "content_hash": "e4d877086930eab3a63c8d091eaebe32"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Name is required"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-08-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Email",
+        "Form Validation",
+        "Name",
+        "Name is required",
+        "Submit"
+      ],
+      "node_count": 13
+    },
+    {
+      "index": 9,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "id": "name"
+      },
+      "target": {
+        "text": "Name",
+        "content_desc": "",
+        "identifier": "dev.acos.fixtures.formvalidation:id/name",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          42,
+          317,
+          1038,
+          435
+        ]
+      },
+      "visible_texts": [
+        "Email",
+        "Form Validation",
+        "Name",
+        "Name is required",
+        "Submit"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 6,
+        "content_hash": "e4d877086930eab3a63c8d091eaebe32"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-09-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Email",
+        "Form Validation",
+        "Name",
+        "Name is required",
+        "Submit"
+      ],
+      "node_count": 13
+    },
+    {
+      "index": 10,
+      "kind": "type",
+      "status": "pass",
+      "selector": {
+        "id": "name"
+      },
+      "target": {
+        "text": "Ada",
+        "content_desc": "",
+        "identifier": "dev.acos.fixtures.formvalidation:id/name",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          42,
+          317,
+          1038,
+          435
+        ]
+      },
+      "visible_texts": [
+        "Ada",
+        "Email",
+        "Form Validation",
+        "Name is required",
+        "Submit"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 7,
+        "content_hash": "948384e79b82610d575259951530aa52"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-10-type.png",
+      "error": null,
+      "visible_labels": [
+        "Ada",
+        "Email",
+        "Form Validation",
+        "Name is required",
+        "Submit"
+      ],
+      "node_count": 13
+    },
+    {
+      "index": 11,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "id": "submit"
+      },
+      "target": {
+        "text": "Submit",
+        "content_desc": "",
+        "identifier": "dev.acos.fixtures.formvalidation:id/submit",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          42,
+          553,
+          273,
+          679
+        ]
+      },
+      "visible_texts": [
+        "Ada",
+        "Email",
+        "Email is required",
+        "Form Validation",
+        "Submit"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 9,
+        "content_hash": "2ca7498fc12171a93e7fee5010b639a1"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-11-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Ada",
+        "Email",
+        "Email is required",
+        "Form Validation",
+        "Submit"
+      ],
+      "node_count": 13
+    },
+    {
+      "index": 12,
+      "kind": "assert_log",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [],
+      "screen": {},
+      "assertion": {
+        "kind": "log",
+        "passed": true,
+        "expected": null,
+        "message": null
+      },
+      "screenshot": null,
+      "error": null
+    },
+    {
+      "index": 13,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "id": "error"
+      },
+      "target": {
+        "text": "Email is required",
+        "content_desc": "",
+        "identifier": "dev.acos.fixtures.formvalidation:id/error",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          42,
+          679,
+          316,
+          730
+        ]
+      },
+      "visible_texts": [
+        "Ada",
+        "Email",
+        "Email is required",
+        "Form Validation",
+        "Submit"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 9,
+        "content_hash": "2ca7498fc12171a93e7fee5010b639a1"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Email is required"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-13-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Ada",
+        "Email",
+        "Email is required",
+        "Form Validation",
+        "Submit"
+      ],
+      "node_count": 13
+    },
+    {
+      "index": 14,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "id": "email"
+      },
+      "target": {
+        "text": "Email",
+        "content_desc": "",
+        "identifier": "dev.acos.fixtures.formvalidation:id/email",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          42,
+          435,
+          1038,
+          553
+        ]
+      },
+      "visible_texts": [
+        "Ada",
+        "Email",
+        "Email is required",
+        "Form Validation",
+        "Submit"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 11,
+        "content_hash": "e89b3aeb54ca41d02d1c2b4570ab366b"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-14-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Ada",
+        "Email",
+        "Email is required",
+        "Form Validation",
+        "Submit"
+      ],
+      "node_count": 13
+    },
+    {
+      "index": 15,
+      "kind": "type",
+      "status": "pass",
+      "selector": {
+        "id": "email"
+      },
+      "target": {
+        "text": "not-an-email",
+        "content_desc": "",
+        "identifier": "dev.acos.fixtures.formvalidation:id/email",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          42,
+          435,
+          1038,
+          553
+        ]
+      },
+      "visible_texts": [
+        "Ada",
+        "Email is required",
+        "Form Validation",
+        "Submit",
+        "not-an-email"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 12,
+        "content_hash": "10dc03a3b9d48a0f872f8f7710b0c92f"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-15-type.png",
+      "error": null,
+      "visible_labels": [
+        "Ada",
+        "Email is required",
+        "Form Validation",
+        "Submit",
+        "not-an-email"
+      ],
+      "node_count": 13
+    },
+    {
+      "index": 16,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "id": "submit"
+      },
+      "target": {
+        "text": "Submit",
+        "content_desc": "",
+        "identifier": "dev.acos.fixtures.formvalidation:id/submit",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          42,
+          553,
+          273,
+          679
+        ]
+      },
+      "visible_texts": [
+        "Ada",
+        "Form Validation",
+        "Invalid email",
+        "Submit",
+        "not-an-email"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 14,
+        "content_hash": "a6f5edaaa7384fc3eb37cfa4036cafc3"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-16-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Ada",
+        "Form Validation",
+        "Invalid email",
+        "Submit",
+        "not-an-email"
+      ],
+      "node_count": 13
+    },
+    {
+      "index": 17,
+      "kind": "assert_log",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [],
+      "screen": {},
+      "assertion": {
+        "kind": "log",
+        "passed": true,
+        "expected": null,
+        "message": null
+      },
+      "screenshot": null,
+      "error": null
+    },
+    {
+      "index": 18,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "id": "error"
+      },
+      "target": {
+        "text": "Invalid email",
+        "content_desc": "",
+        "identifier": "dev.acos.fixtures.formvalidation:id/error",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          42,
+          679,
+          248,
+          730
+        ]
+      },
+      "visible_texts": [
+        "Ada",
+        "Form Validation",
+        "Invalid email",
+        "Submit",
+        "not-an-email"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 14,
+        "content_hash": "a6f5edaaa7384fc3eb37cfa4036cafc3"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Invalid email"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-18-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Ada",
+        "Form Validation",
+        "Invalid email",
+        "Submit",
+        "not-an-email"
+      ],
+      "node_count": 13
+    },
+    {
+      "index": 19,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "Ada",
+        "Form Validation",
+        "Invalid email",
+        "Submit",
+        "not-an-email"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 15,
+        "content_hash": "a6f5edaaa7384fc3eb37cfa4036cafc3"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-19-capture.png",
+      "error": null,
+      "visible_labels": [
+        "Ada",
+        "Form Validation",
+        "Invalid email",
+        "Submit",
+        "not-an-email"
+      ],
+      "node_count": 13
+    },
+    {
+      "index": 20,
+      "kind": "type",
+      "status": "pass",
+      "selector": {
+        "id": "email"
+      },
+      "target": {
+        "text": "ada@example.com",
+        "content_desc": "",
+        "identifier": "dev.acos.fixtures.formvalidation:id/email",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          42,
+          435,
+          1038,
+          553
+        ]
+      },
+      "visible_texts": [
+        "Ada",
+        "Form Validation",
+        "Invalid email",
+        "Submit",
+        "ada@example.com"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 29,
+        "content_hash": "fcc872022adeb7d313e0d9470d41e171"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-20-type.png",
+      "error": null,
+      "visible_labels": [
+        "Ada",
+        "Form Validation",
+        "Invalid email",
+        "Submit",
+        "ada@example.com"
+      ],
+      "node_count": 13
+    },
+    {
+      "index": 21,
+      "kind": "tap",
+      "status": "pass",
+      "selector": {
+        "id": "submit"
+      },
+      "target": {
+        "text": "Submit",
+        "content_desc": "",
+        "identifier": "dev.acos.fixtures.formvalidation:id/submit",
+        "enabled": true,
+        "checked": false,
+        "clickable": true,
+        "bounds": [
+          42,
+          553,
+          273,
+          679
+        ]
+      },
+      "visible_texts": [
+        "Ada",
+        "Form Validation",
+        "OK",
+        "Submit",
+        "Submitted: Ada",
+        "Success",
+        "ada@example.com"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 31,
+        "content_hash": "410a2b4bc3760c224d878f9142b6e3a3"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-21-tap.png",
+      "error": null,
+      "visible_labels": [
+        "Ada",
+        "Form Validation",
+        "OK",
+        "Submit",
+        "Submitted: Ada",
+        "Success",
+        "ada@example.com"
+      ],
+      "node_count": 37
+    },
+    {
+      "index": 22,
+      "kind": "assert_log",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [],
+      "screen": {},
+      "assertion": {
+        "kind": "log",
+        "passed": true,
+        "expected": null,
+        "message": null
+      },
+      "screenshot": null,
+      "error": null
+    },
+    {
+      "index": 23,
+      "kind": "assert_text",
+      "status": "pass",
+      "selector": {
+        "id": "message"
+      },
+      "target": {
+        "text": "Submitted: Ada",
+        "content_desc": "",
+        "identifier": "android:id/message",
+        "enabled": true,
+        "checked": false,
+        "clickable": false,
+        "bounds": [
+          70,
+          1157,
+          1010,
+          1214
+        ]
+      },
+      "visible_texts": [
+        "Ada",
+        "Form Validation",
+        "OK",
+        "Submit",
+        "Submitted: Ada",
+        "Success",
+        "ada@example.com"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 31,
+        "content_hash": "410a2b4bc3760c224d878f9142b6e3a3"
+      },
+      "assertion": {
+        "kind": "text",
+        "passed": true,
+        "expected": {
+          "exact": "Submitted: Ada"
+        },
+        "message": null
+      },
+      "screenshot": "screenshot-23-assert_text.png",
+      "error": null,
+      "visible_labels": [
+        "Ada",
+        "Form Validation",
+        "OK",
+        "Submit",
+        "Submitted: Ada",
+        "Success",
+        "ada@example.com"
+      ],
+      "node_count": 37
+    },
+    {
+      "index": 24,
+      "kind": "capture",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "Ada",
+        "Form Validation",
+        "OK",
+        "Submit",
+        "Submitted: Ada",
+        "Success",
+        "ada@example.com"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 32,
+        "content_hash": "410a2b4bc3760c224d878f9142b6e3a3"
+      },
+      "assertion": null,
+      "screenshot": "screenshot-24-capture.png",
+      "error": null,
+      "visible_labels": [
+        "Ada",
+        "Form Validation",
+        "OK",
+        "Submit",
+        "Submitted: Ada",
+        "Success",
+        "ada@example.com"
+      ],
+      "node_count": 37
+    },
+    {
+      "index": 25,
+      "kind": "assert_region",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "Ada",
+        "Form Validation",
+        "OK",
+        "Submit",
+        "Submitted: Ada",
+        "Success",
+        "ada@example.com"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 33,
+        "content_hash": "909bf1e4b76d9f7584e7a2c67abcfb02"
+      },
+      "assertion": {
+        "kind": "region",
+        "passed": true,
+        "expected": null,
+        "message": "display region [200,1038,200,40] (frame [200,910]) matched (hash=e753006d4f666db1697d1562fda113a024aa37c5dc76e492514832ff346ae79c)"
+      },
+      "screenshot": "screenshot-25-assert_region.png",
+      "error": null,
+      "visible_labels": [
+        "Ada",
+        "Form Validation",
+        "OK",
+        "Submit",
+        "Submitted: Ada",
+        "Success",
+        "ada@example.com"
+      ],
+      "node_count": 37
+    },
+    {
+      "index": 26,
+      "kind": "assert_region",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [
+        "Ada",
+        "Form Validation",
+        "OK",
+        "Submit",
+        "Submitted: Ada",
+        "Success",
+        "ada@example.com"
+      ],
+      "visible_descs": [],
+      "screen": {
+        "package": "dev.acos.fixtures.formvalidation",
+        "frame_seq": 34,
+        "content_hash": "909bf1e4b76d9f7584e7a2c67abcfb02"
+      },
+      "assertion": {
+        "kind": "region",
+        "passed": true,
+        "expected": null,
+        "message": "display region [90,1128,40,100] (frame [90,1000]) matched (hash=a72e051873a520049475589e02061ef34a2445a43be991d44228bb3a2cc9be29)"
+      },
+      "screenshot": "screenshot-26-assert_region.png",
+      "error": null,
+      "visible_labels": [
+        "Ada",
+        "Form Validation",
+        "OK",
+        "Submit",
+        "Submitted: Ada",
+        "Success",
+        "ada@example.com"
+      ],
+      "node_count": 37
+    },
+    {
+      "index": 27,
+      "kind": "assert_no_crash",
+      "status": "pass",
+      "selector": null,
+      "target": null,
+      "visible_texts": [],
+      "visible_descs": [],
+      "screen": {},
+      "assertion": {
+        "kind": "no_crash",
+        "passed": true,
+        "expected": null,
+        "message": "no crash recorded"
+      },
+      "screenshot": null,
+      "error": null
+    }
+  ],
+  "finished": "2026-11-14T09:48:18.519+00:00",
+  "available": ".cache/phone-probe/acos/form-validation"
+}

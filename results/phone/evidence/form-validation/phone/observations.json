@@ -1,0 +1,2615 @@
+{
+ "schema_version": 1,
+ "source": "phone",
+ "fidelity": "physical-device",
+ "scenario": {
+  "name": "form-validation",
+  "path": "scenarios/form-validation.yaml",
+  "sha256": "a74b24cfd8987ae92d132863c76657660f45a948ec1485eed7d6c4d0a248c802"
+ },
+ "app": {
+  "package": "dev.acos.fixtures.formvalidation",
+  "activity": "dev.acos.fixtures.formvalidation/.MainActivity",
+  "apk": "fixtures/build/apps/form-validation.apk"
+ },
+ "device": {
+  "ro.build.fingerprint": "motorola/manila_g/manila:15/VUOA35.116-151/a43dc2:user/release-keys",
+  "ro.build.version.sdk": "35",
+  "ro.build.version.release": "15",
+  "ro.product.model": "moto g35 5G",
+  "wm_size": "1080x2400",
+  "density_dpi": 400,
+  "font_scale": "1.0"
+ },
+ "started": "2026-11-14T09:50:50.839+00:00",
+ "steps": [
+  {
+   "index": 0,
+   "kind": "launch",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-00-launch.png",
+   "error": null,
+   "visible_labels": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "node_count": 8
+  },
+  {
+   "index": 1,
+   "kind": "wait_for",
+   "status": "pass",
+   "selector": {
+    "id": "submit"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Submit",
+    "identifier": "dev.acos.fixtures.formvalidation:id/submit",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     512,
+     260,
+     632
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-01-wait_for.png",
+   "error": null,
+   "visible_labels": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "node_count": 8
+  },
+  {
+   "index": 2,
+   "kind": "assert_text",
+   "status": "pass",
+   "selector": {
+    "id": "name"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Name",
+    "identifier": "dev.acos.fixtures.formvalidation:id/name",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     288,
+     1040,
+     400
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "Name",
+    "mode": "exact",
+    "passed": true,
+    "expected_bounds": [
+     42,
+     317,
+     1038,
+     435
+    ]
+   },
+   "screenshot": "screenshot-02-assert_text.png",
+   "error": null,
+   "visible_labels": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "node_count": 8
+  },
+  {
+   "index": 3,
+   "kind": "assert_text",
+   "status": "pass",
+   "selector": {
+    "id": "email"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Email",
+    "identifier": "dev.acos.fixtures.formvalidation:id/email",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     400,
+     1040,
+     512
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "Email",
+    "mode": "exact",
+    "passed": true,
+    "expected_bounds": [
+     42,
+     435,
+     1038,
+     553
+    ]
+   },
+   "screenshot": "screenshot-03-assert_text.png",
+   "error": null,
+   "visible_labels": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "node_count": 8
+  },
+  {
+   "index": 4,
+   "kind": "assert_text",
+   "status": "pass",
+   "selector": {
+    "id": "submit"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Submit",
+    "identifier": "dev.acos.fixtures.formvalidation:id/submit",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     512,
+     260,
+     632
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "Submit",
+    "mode": "exact",
+    "passed": true,
+    "expected_bounds": [
+     42,
+     553,
+     273,
+     679
+    ]
+   },
+   "screenshot": "screenshot-04-assert_text.png",
+   "error": null,
+   "visible_labels": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "node_count": 8
+  },
+  {
+   "index": 5,
+   "kind": "assert_log",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": {
+    "kind": "log",
+    "expected": [
+     "^onCreate$",
+     "^onStart$",
+     "^onResume$"
+    ],
+    "passed": true,
+    "matched": [
+     "^onCreate$",
+     "^onStart$",
+     "^onResume$"
+    ],
+    "lines": [
+     "I/AcosForm( 4121): onCreate",
+     "I/AcosForm( 4121): onStart",
+     "I/AcosForm( 4121): onResume"
+    ]
+   },
+   "screenshot": "screenshot-05-assert_log.png",
+   "error": null,
+   "visible_labels": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Submit"
+   ],
+   "node_count": 8
+  },
+  {
+   "index": 6,
+   "kind": "tap",
+   "status": "pass",
+   "selector": {
+    "id": "submit"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Submit",
+    "identifier": "dev.acos.fixtures.formvalidation:id/submit",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     512,
+     260,
+     632
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Name is required",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-06-tap.png",
+   "error": null,
+   "visible_labels": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Name is required",
+    "Submit"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 7,
+   "kind": "assert_log",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Name is required",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": {
+    "kind": "log",
+    "expected": [
+     "^validation_failed reason=name message=Name is required$"
+    ],
+    "passed": true,
+    "matched": [
+     "^validation_failed reason=name message=Name is required$"
+    ],
+    "lines": [
+     "I/AcosForm( 4121): validation_failed reason=name message=Name is required"
+    ]
+   },
+   "screenshot": "screenshot-07-assert_log.png",
+   "error": null,
+   "visible_labels": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Name is required",
+    "Submit"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 8,
+   "kind": "assert_text",
+   "status": "pass",
+   "selector": {
+    "id": "error"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Name is required",
+    "identifier": "dev.acos.fixtures.formvalidation:id/error",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     632,
+     312,
+     678
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Name is required",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "Name is required",
+    "mode": "exact",
+    "passed": true,
+    "expected_bounds": [
+     42,
+     679,
+     323,
+     730
+    ]
+   },
+   "screenshot": "screenshot-08-assert_text.png",
+   "error": null,
+   "visible_labels": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Name is required",
+    "Submit"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 9,
+   "kind": "tap",
+   "status": "pass",
+   "selector": {
+    "id": "name"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Name",
+    "identifier": "dev.acos.fixtures.formvalidation:id/name",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     288,
+     1040,
+     400
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Name is required",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-09-tap.png",
+   "error": null,
+   "visible_labels": [
+    "Email",
+    "Form Validation",
+    "Name",
+    "Name is required",
+    "Submit"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 10,
+   "kind": "type",
+   "status": "pass",
+   "selector": {
+    "id": "name"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Ada",
+    "identifier": "dev.acos.fixtures.formvalidation:id/name",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     288,
+     1040,
+     400
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Ada",
+    "Email",
+    "Form Validation",
+    "Name is required",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-10-type.png",
+   "error": null,
+   "visible_labels": [
+    "Ada",
+    "Email",
+    "Form Validation",
+    "Name is required",
+    "Submit"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 11,
+   "kind": "tap",
+   "status": "pass",
+   "selector": {
+    "id": "submit"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Submit",
+    "identifier": "dev.acos.fixtures.formvalidation:id/submit",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     512,
+     260,
+     632
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Ada",
+    "Email",
+    "Email is required",
+    "Form Validation",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-11-tap.png",
+   "error": null,
+   "visible_labels": [
+    "Ada",
+    "Email",
+    "Email is required",
+    "Form Validation",
+    "Submit"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 12,
+   "kind": "assert_log",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Ada",
+    "Email",
+    "Email is required",
+    "Form Validation",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": {
+    "kind": "log",
+    "expected": [
+     "^validation_failed reason=email message=Email is required$"
+    ],
+    "passed": true,
+    "matched": [
+     "^validation_failed reason=email message=Email is required$"
+    ],
+    "lines": [
+     "I/AcosForm( 4121): validation_failed reason=email message=Email is required"
+    ]
+   },
+   "screenshot": "screenshot-12-assert_log.png",
+   "error": null,
+   "visible_labels": [
+    "Ada",
+    "Email",
+    "Email is required",
+    "Form Validation",
+    "Submit"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 13,
+   "kind": "assert_text",
+   "status": "pass",
+   "selector": {
+    "id": "error"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Email is required",
+    "identifier": "dev.acos.fixtures.formvalidation:id/error",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     632,
+     307,
+     678
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Ada",
+    "Email",
+    "Email is required",
+    "Form Validation",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "Email is required",
+    "mode": "exact",
+    "passed": true,
+    "expected_bounds": [
+     42,
+     679,
+     316,
+     730
+    ]
+   },
+   "screenshot": "screenshot-13-assert_text.png",
+   "error": null,
+   "visible_labels": [
+    "Ada",
+    "Email",
+    "Email is required",
+    "Form Validation",
+    "Submit"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 14,
+   "kind": "tap",
+   "status": "pass",
+   "selector": {
+    "id": "email"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Email",
+    "identifier": "dev.acos.fixtures.formvalidation:id/email",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     400,
+     1040,
+     512
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Ada",
+    "Email",
+    "Email is required",
+    "Form Validation",
+    "Submit"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-14-tap.png",
+   "error": null,
+   "visible_labels": [
+    "Ada",
+    "Email",
+    "Email is required",
+    "Form Validation",
+    "Submit"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 15,
+   "kind": "type",
+   "status": "pass",
+   "selector": {
+    "id": "email"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "not-an-email",
+    "identifier": "dev.acos.fixtures.formvalidation:id/email",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     400,
+     1040,
+     512
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Ada",
+    "Email is required",
+    "Form Validation",
+    "Submit",
+    "not-an-email"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-15-type.png",
+   "error": null,
+   "visible_labels": [
+    "Ada",
+    "Email is required",
+    "Form Validation",
+    "Submit",
+    "not-an-email"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 16,
+   "kind": "tap",
+   "status": "pass",
+   "selector": {
+    "id": "submit"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Submit",
+    "identifier": "dev.acos.fixtures.formvalidation:id/submit",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     512,
+     260,
+     632
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Ada",
+    "Form Validation",
+    "Invalid email",
+    "Submit",
+    "not-an-email"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-16-tap.png",
+   "error": null,
+   "visible_labels": [
+    "Ada",
+    "Form Validation",
+    "Invalid email",
+    "Submit",
+    "not-an-email"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 17,
+   "kind": "assert_log",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Ada",
+    "Form Validation",
+    "Invalid email",
+    "Submit",
+    "not-an-email"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": {
+    "kind": "log",
+    "expected": [
+     "^validation_failed reason=email_format message=Invalid email$"
+    ],
+    "passed": true,
+    "matched": [
+     "^validation_failed reason=email_format message=Invalid email$"
+    ],
+    "lines": [
+     "I/AcosForm( 4121): validation_failed reason=email_format message=Invalid email"
+    ]
+   },
+   "screenshot": "screenshot-17-assert_log.png",
+   "error": null,
+   "visible_labels": [
+    "Ada",
+    "Form Validation",
+    "Invalid email",
+    "Submit",
+    "not-an-email"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 18,
+   "kind": "assert_text",
+   "status": "pass",
+   "selector": {
+    "id": "error"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Invalid email",
+    "identifier": "dev.acos.fixtures.formvalidation:id/error",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     632,
+     242,
+     678
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Ada",
+    "Form Validation",
+    "Invalid email",
+    "Submit",
+    "not-an-email"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "Invalid email",
+    "mode": "exact",
+    "passed": true,
+    "expected_bounds": [
+     42,
+     679,
+     248,
+     730
+    ]
+   },
+   "screenshot": "screenshot-18-assert_text.png",
+   "error": null,
+   "visible_labels": [
+    "Ada",
+    "Form Validation",
+    "Invalid email",
+    "Submit",
+    "not-an-email"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 19,
+   "kind": "capture",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Ada",
+    "Form Validation",
+    "Invalid email",
+    "Submit",
+    "not-an-email"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-19-capture-after-invalid-email.png",
+   "error": null,
+   "visible_labels": [
+    "Ada",
+    "Form Validation",
+    "Invalid email",
+    "Submit",
+    "not-an-email"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 20,
+   "kind": "type",
+   "status": "pass",
+   "selector": {
+    "id": "email"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "ada@example.com",
+    "identifier": "dev.acos.fixtures.formvalidation:id/email",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     400,
+     1040,
+     512
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Ada",
+    "Form Validation",
+    "Invalid email",
+    "Submit",
+    "ada@example.com"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-20-type.png",
+   "error": null,
+   "visible_labels": [
+    "Ada",
+    "Form Validation",
+    "Invalid email",
+    "Submit",
+    "ada@example.com"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 21,
+   "kind": "tap",
+   "status": "pass",
+   "selector": {
+    "id": "submit"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Submit",
+    "identifier": "dev.acos.fixtures.formvalidation:id/submit",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     512,
+     260,
+     632
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "OK",
+    "Submitted: Ada",
+    "Success"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-21-tap.png",
+   "error": null,
+   "visible_labels": [
+    "OK",
+    "Submitted: Ada",
+    "Success"
+   ],
+   "node_count": 10
+  },
+  {
+   "index": 22,
+   "kind": "assert_log",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "OK",
+    "Submitted: Ada",
+    "Success"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": {
+    "kind": "log",
+    "expected": [
+     "^validation_ok name=Ada email=ada@example.com$"
+    ],
+    "passed": true,
+    "matched": [
+     "^validation_ok name=Ada email=ada@example.com$"
+    ],
+    "lines": [
+     "I/AcosForm( 4121): validation_ok name=Ada email=ada@example.com"
+    ]
+   },
+   "screenshot": "screenshot-22-assert_log.png",
+   "error": null,
+   "visible_labels": [
+    "OK",
+    "Submitted: Ada",
+    "Success"
+   ],
+   "node_count": 10
+  },
+  {
+   "index": 23,
+   "kind": "assert_text",
+   "status": "pass",
+   "selector": {
+    "id": "message"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Submitted: Ada",
+    "identifier": "android:id/message",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     67,
+     1182,
+     1013,
+     1236
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "OK",
+    "Submitted: Ada",
+    "Success"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "Submitted: Ada",
+    "mode": "exact",
+    "passed": true,
+    "expected_bounds": [
+     70,
+     1157,
+     1010,
+     1214
+    ]
+   },
+   "screenshot": "screenshot-23-assert_text.png",
+   "error": null,
+   "visible_labels": [
+    "OK",
+    "Submitted: Ada",
+    "Success"
+   ],
+   "node_count": 10
+  },
+  {
+   "index": 24,
+   "kind": "capture",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "OK",
+    "Submitted: Ada",
+    "Success"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-24-capture-success-dialog.png",
+   "error": null,
+   "visible_labels": [
+    "OK",
+    "Submitted: Ada",
+    "Success"
+   ],
+   "node_count": 10
+  },
+  {
+   "index": 25,
+   "kind": "assert_region",
+   "status": "not_compared",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "OK",
+    "Submitted: Ada",
+    "Success"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": {
+    "kind": "region",
+    "passed": null,
+    "note": "pixel region hash is calibrated to the ACOS frame geometry; not asserted on the phone"
+   },
+   "screenshot": "screenshot-25-assert_region.png",
+   "error": null,
+   "visible_labels": [
+    "OK",
+    "Submitted: Ada",
+    "Success"
+   ],
+   "node_count": 10
+  },
+  {
+   "index": 26,
+   "kind": "assert_region",
+   "status": "not_compared",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "OK",
+    "Submitted: Ada",
+    "Success"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": {
+    "kind": "region",
+    "passed": null,
+    "note": "pixel region hash is calibrated to the ACOS frame geometry; not asserted on the phone"
+   },
+   "screenshot": "screenshot-26-assert_region.png",
+   "error": null,
+   "visible_labels": [
+    "OK",
+    "Submitted: Ada",
+    "Success"
+   ],
+   "node_count": 10
+  },
+  {
+   "index": 27,
+   "kind": "assert_no_crash",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "OK",
+    "Submitted: Ada",
+    "Success"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.formvalidation",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.formvalidation"
+   },
+   "assertion": {
+    "kind": "no_crash",
+    "passed": true,
+    "matched": []
+   },
+   "screenshot": "screenshot-27-assert_no_crash.png",
+   "error": null,
+   "visible_labels": [
+    "OK",
+    "Submitted: Ada",
+    "Success"
+   ],
+   "node_count": 10
+  }
+ ],
+ "finished": "2026-11-14T09:51:25.774+00:00",
+ "commands": [
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "pm",
+    "list",
+    "packages"
+   ],
+   "ts": "2026-11-14T09:50:50.214+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "getprop",
+    "ro.build.fingerprint"
+   ],
+   "ts": "2026-11-14T09:50:50.375+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "getprop",
+    "ro.build.version.sdk"
+   ],
+   "ts": "2026-11-14T09:50:50.429+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "getprop",
+    "ro.build.version.release"
+   ],
+   "ts": "2026-11-14T09:50:50.481+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "getprop",
+    "ro.product.model"
+   ],
+   "ts": "2026-11-14T09:50:50.526+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "wm",
+    "size"
+   ],
+   "ts": "2026-11-14T09:50:50.582+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "wm",
+    "density"
+   ],
+   "ts": "2026-11-14T09:50:50.669+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "settings",
+    "get",
+    "system",
+    "font_scale"
+   ],
+   "ts": "2026-11-14T09:50:50.752+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "logcat",
+    "-d",
+    "-v",
+    "brief"
+   ],
+   "ts": "2026-11-14T09:50:50.839+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "pm",
+    "clear",
+    "dev.acos.fixtures.formvalidation"
+   ],
+   "ts": "2026-11-14T09:50:50.965+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "open",
+    "dev.acos.fixtures.formvalidation",
+    "--activity",
+    "dev.acos.fixtures.formvalidation/.MainActivity",
+    "--relaunch",
+    "--foreground",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:50:51.094+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:50:53.612+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:50:53.713+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-00-launch.png"
+   ],
+   "ts": "2026-11-14T09:50:53.818+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:50:54.224+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:50:54.325+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:50:54.438+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-01-wait_for.png"
+   ],
+   "ts": "2026-11-14T09:50:54.559+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:50:54.853+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:50:54.966+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:50:55.082+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-02-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:50:55.181+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:50:55.475+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:50:55.593+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:50:55.717+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-03-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:50:55.828+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:50:56.119+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:50:56.232+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:50:56.352+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-04-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:50:56.472+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "logcat",
+    "-d",
+    "-v",
+    "brief"
+   ],
+   "ts": "2026-11-14T09:50:56.761+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:50:56.881+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:50:56.995+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-05-assert_log.png"
+   ],
+   "ts": "2026-11-14T09:50:57.108+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:50:57.387+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "press",
+    "150",
+    "572",
+    "--settle"
+   ],
+   "ts": "2026-11-14T09:50:57.500+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:50:58.324+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:50:58.455+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-06-tap.png"
+   ],
+   "ts": "2026-11-14T09:50:58.587+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "logcat",
+    "-d",
+    "-v",
+    "brief"
+   ],
+   "ts": "2026-11-14T09:50:58.875+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:50:58.993+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:50:59.102+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-07-assert_log.png"
+   ],
+   "ts": "2026-11-14T09:50:59.201+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:50:59.515+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:50:59.624+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:50:59.743+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-08-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:50:59.847+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:00.140+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "press",
+    "540",
+    "344",
+    "--settle"
+   ],
+   "ts": "2026-11-14T09:51:00.252+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:01.658+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:01.880+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-09-tap.png"
+   ],
+   "ts": "2026-11-14T09:51:01.989+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:02.301+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "press",
+    "540",
+    "344",
+    "--settle"
+   ],
+   "ts": "2026-11-14T09:51:02.480+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "type",
+    "Ada"
+   ],
+   "ts": "2026-11-14T09:51:03.435+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:03.951+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:04.169+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-10-type.png"
+   ],
+   "ts": "2026-11-14T09:51:04.234+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:04.517+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "press",
+    "150",
+    "572",
+    "--settle"
+   ],
+   "ts": "2026-11-14T09:51:04.687+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:05.655+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:05.796+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-11-tap.png"
+   ],
+   "ts": "2026-11-14T09:51:05.903+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "logcat",
+    "-d",
+    "-v",
+    "brief"
+   ],
+   "ts": "2026-11-14T09:51:06.204+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:06.337+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:06.515+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-12-assert_log.png"
+   ],
+   "ts": "2026-11-14T09:51:06.632+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:06.945+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:07.116+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:07.312+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-13-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:51:07.421+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:07.730+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "press",
+    "540",
+    "456",
+    "--settle"
+   ],
+   "ts": "2026-11-14T09:51:07.919+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:09.261+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:09.519+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-14-tap.png"
+   ],
+   "ts": "2026-11-14T09:51:09.630+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:09.936+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "press",
+    "540",
+    "456",
+    "--settle"
+   ],
+   "ts": "2026-11-14T09:51:10.155+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "type",
+    "not-an-email"
+   ],
+   "ts": "2026-11-14T09:51:11.310+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:11.893+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:12.113+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-15-type.png"
+   ],
+   "ts": "2026-11-14T09:51:12.184+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:12.462+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "press",
+    "150",
+    "572",
+    "--settle"
+   ],
+   "ts": "2026-11-14T09:51:12.618+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:13.616+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:13.819+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-16-tap.png"
+   ],
+   "ts": "2026-11-14T09:51:13.948+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "logcat",
+    "-d",
+    "-v",
+    "brief"
+   ],
+   "ts": "2026-11-14T09:51:14.289+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:14.411+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:14.601+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-17-assert_log.png"
+   ],
+   "ts": "2026-11-14T09:51:14.704+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:15.022+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:15.195+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:15.417+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-18-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:51:15.512+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:15.855+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:16.042+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-19-capture-after-invalid-email.png"
+   ],
+   "ts": "2026-11-14T09:51:16.152+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:16.477+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "press",
+    "540",
+    "456",
+    "--settle"
+   ],
+   "ts": "2026-11-14T09:51:16.648+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "123"
+   ],
+   "ts": "2026-11-14T09:51:17.693+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "67"
+   ],
+   "ts": "2026-11-14T09:51:17.811+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "67"
+   ],
+   "ts": "2026-11-14T09:51:17.890+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "67"
+   ],
+   "ts": "2026-11-14T09:51:17.983+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "67"
+   ],
+   "ts": "2026-11-14T09:51:18.045+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "67"
+   ],
+   "ts": "2026-11-14T09:51:18.144+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "67"
+   ],
+   "ts": "2026-11-14T09:51:18.228+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "67"
+   ],
+   "ts": "2026-11-14T09:51:18.311+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "67"
+   ],
+   "ts": "2026-11-14T09:51:18.396+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "67"
+   ],
+   "ts": "2026-11-14T09:51:18.462+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "67"
+   ],
+   "ts": "2026-11-14T09:51:18.544+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "67"
+   ],
+   "ts": "2026-11-14T09:51:18.621+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "67"
+   ],
+   "ts": "2026-11-14T09:51:18.705+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "67"
+   ],
+   "ts": "2026-11-14T09:51:18.789+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "67"
+   ],
+   "ts": "2026-11-14T09:51:18.855+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "67"
+   ],
+   "ts": "2026-11-14T09:51:18.922+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "input",
+    "keyevent",
+    "67"
+   ],
+   "ts": "2026-11-14T09:51:18.981+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "type",
+    "ada@example.com"
+   ],
+   "ts": "2026-11-14T09:51:19.043+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:19.534+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:19.750+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-20-type.png"
+   ],
+   "ts": "2026-11-14T09:51:19.816+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:20.119+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "press",
+    "150",
+    "572",
+    "--settle"
+   ],
+   "ts": "2026-11-14T09:51:20.305+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:21.641+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:21.766+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-21-tap.png"
+   ],
+   "ts": "2026-11-14T09:51:21.881+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "logcat",
+    "-d",
+    "-v",
+    "brief"
+   ],
+   "ts": "2026-11-14T09:51:22.207+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:22.331+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:22.458+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-22-assert_log.png"
+   ],
+   "ts": "2026-11-14T09:51:22.561+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:22.885+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:22.990+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:23.108+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-23-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:51:23.218+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:23.532+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:23.645+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-24-capture-success-dialog.png"
+   ],
+   "ts": "2026-11-14T09:51:23.739+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:24.051+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:24.160+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-25-assert_region.png"
+   ],
+   "ts": "2026-11-14T09:51:24.263+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:24.590+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:24.703+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-26-assert_region.png"
+   ],
+   "ts": "2026-11-14T09:51:24.803+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "logcat",
+    "-d",
+    "-v",
+    "brief"
+   ],
+   "ts": "2026-11-14T09:51:25.115+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:51:25.239+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:51:25.352+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/form-validation/screenshot-27-assert_no_crash.png"
+   ],
+   "ts": "2026-11-14T09:51:25.463+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "close"
+   ],
+   "ts": "2026-11-14T09:51:25.774+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "home"
+   ],
+   "ts": "2026-11-14T09:51:25.903+00:00"
+  }
+ ]
+}
