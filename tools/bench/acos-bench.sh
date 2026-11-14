@@ -198,6 +198,31 @@ phase_time() {
 }
 phase_mem() { [ "$1" = memory ] && echo "$MEM_PHASE_MEM" || echo "$OTHER_MEM"; }
 
+# SERVELEAK: a daemon a phase spawned must never outlive the run. Each phase's
+# own `finally` destroys its daemon (and every ART guest with it), but a phase
+# that dies hard (killed guard, panic, SIGINT) can skip that. This reaps only
+# daemons whose command line names *this* run's scratch root, never another
+# agent's: `<scratch_root>/r<rep>-<group>/...`.
+bench_reap_daemons() {
+    local pid cmd
+    for pid in $(pgrep -f -- "acos serve .*${SCRATCH_ROOT%/}/r[0-9]" 2>/dev/null || true); do
+        [ "$pid" = "$$" ] && continue
+        cmd="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
+        case "$cmd" in
+            *"acos serve"*"${SCRATCH_ROOT%/}/r"*)
+                echo "acos-bench: reaping leftover session daemon $pid" >&2
+                kill -TERM "$pid" 2>/dev/null || true
+                for _ in $(seq 1 50); do
+                    [ -d "/proc/$pid" ] || break
+                    sleep 0.1
+                done
+                [ -d "/proc/$pid" ] && kill -KILL "$pid" 2>/dev/null || true
+                ;;
+        esac
+    done
+}
+trap 'bench_reap_daemons' EXIT INT TERM
+
 FAILED=0
 for rep in $(seq 1 "$REPS"); do
     repdir="$RUN_DIR/rep-$rep"

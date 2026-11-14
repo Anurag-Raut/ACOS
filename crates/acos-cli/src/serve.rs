@@ -182,6 +182,14 @@ pub fn run(args: ServeArgs) -> ExitCode {
     // eviction does not pay P7's +198 ms. Never on the verification path.
     crate::prewarm::spawn_if_enabled(default_engine);
 
+    // SERVELEAK: a daemon that is terminated must take its guests with it.
+    // Without this, `SIGTERM` (a bench teardown, a CI job, `kill`) ended the
+    // process before `engine.shutdown()` ever ran and every live session's
+    // guest (bwrap + dalvikvm64) was orphaned. The handlers only record the
+    // request; the accept loop breaks and the same shutdown path runs, so a
+    // guest is always destroyed *and* proven gone before the socket disappears.
+    install_shutdown_signals();
+
     let idle = Duration::from_secs(args.idle_timeout.max(1));
     loop {
         match listener.accept() {
@@ -237,6 +245,13 @@ pub fn run(args: ServeArgs) -> ExitCode {
                 break;
             }
         }
+        if shutdown_requested() {
+            eprintln!(
+                "acos serve: shutdown signal received; destroying {} session(s) first",
+                engine.session_count()
+            );
+            break;
+        }
         let idle_elapsed = shared
             .last_activity
             .lock()
@@ -257,6 +272,41 @@ pub fn run(args: ServeArgs) -> ExitCode {
     let _ = std::fs::remove_file(&socket);
     ExitCode::SUCCESS
 }
+
+/// A shutdown signal (SIGTERM/SIGINT/SIGHUP) was delivered.
+static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn shutdown_requested() -> bool {
+    SHUTDOWN.load(Ordering::SeqCst)
+}
+
+/// Record SIGTERM/SIGINT/SIGHUP as a shutdown request.
+///
+/// The handler only sets a flag (`async-signal-safe`): the accept loop exits and
+/// the daemon runs its ordinary `engine.shutdown()` path, so the *guests* are
+/// destroyed and proven gone, not just this process. `sa_flags` deliberately
+/// omits `SA_RESTART` so the blocking `poll`/`accept` returns `EINTR` and the
+/// loop re-checks the flag within a millisecond instead of after its timeout.
+#[cfg(target_os = "linux")]
+fn install_shutdown_signals() {
+    extern "C" fn on_signal(_signal: libc::c_int) {
+        SHUTDOWN.store(true, Ordering::SeqCst);
+    }
+    for signal in [libc::SIGTERM, libc::SIGINT, libc::SIGHUP] {
+        // SAFETY: `sigaction` is given a zeroed struct with a plain function
+        // pointer handler and an empty mask; the handler only touches an atomic.
+        unsafe {
+            let mut action: libc::sigaction = std::mem::zeroed();
+            action.sa_sigaction = on_signal as usize;
+            action.sa_flags = 0;
+            libc::sigemptyset(&mut action.sa_mask);
+            libc::sigaction(signal, &action, std::ptr::null_mut());
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn install_shutdown_signals() {}
 
 struct SharedState {
     last_activity: Mutex<Instant>,

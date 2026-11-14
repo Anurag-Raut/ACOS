@@ -132,6 +132,12 @@ pub struct ArtSession {
     crash: Option<CrashRecord>,
     /// The process group the session child leads (its pid).
     process_group: Option<i32>,
+    /// SERVELEAK: the process group the **guest** leads, which `acos-art` puts in
+    /// its own group (`launcher.rs: process_group(0)`), so it is *not* a member of
+    /// [`Self::process_group`]. Reported by the launcher's ready line as
+    /// `guest_process_group`. Without it a teardown proof covers only the launcher
+    /// and a live bwrap/dalvikvm64 could be reported as a clean tree.
+    guest_group: Option<i32>,
     /// Host-observed delivery of the most recent input action.
     last_input: Option<InputDelivery>,
     /// `(dx, dy)` from display/screen coordinates to the input channel's
@@ -1351,6 +1357,7 @@ impl ArtSession {
             logs_total_raw: 0,
             crash: None,
             process_group: Some(_pid as i32),
+            guest_group: None,
             last_input: None,
             input_offset: (0, 0),
             window_offsets: HashMap::new(),
@@ -1440,6 +1447,13 @@ impl ArtSession {
             }
             return Err(BackendError::from_protocol(error));
         }
+        // SERVELEAK: the guest's own process group, so `shutdown` can kill and
+        // prove the *guest*, not just the launcher that spawned it.
+        session.guest_group = ready
+            .get("guest_process_group")
+            .and_then(|v| v.as_i64())
+            .and_then(|v| i32::try_from(v).ok())
+            .filter(|group| *group > 1);
         if let Some(width) = ready.get("width").and_then(|v| v.as_u64()) {
             session.width = width as u32;
         }
@@ -2413,32 +2427,118 @@ impl ArtSession {
             }
             let _ = child.wait();
         }
+        // SERVELEAK: the guest has its own group (`acos-art` spawns it with
+        // `process_group(0)`), so a drop that only killed the launcher's group
+        // left bwrap/dalvikvm64 running. Kill both, always.
+        self.sigkill_guest_group();
+        self.reap_session_leftovers();
         self.stdin = None;
     }
 
-    /// Members of the session's process group (empty when it has no group).
-    fn group_survivors(&self) -> Vec<u32> {
-        self.process_group
-            .map(processes_in_group)
-            .unwrap_or_default()
+    /// Every process group this session owns, guarded.
+    ///
+    /// The launcher's group and the guest's group are distinct by design
+    /// (`crates/acos-art/src/launcher.rs` spawns the guest with
+    /// `process_group(0)`). A group id is only ever signalled when it is a real
+    /// positive pid-like value and **not** this process's own group, so a
+    /// malformed or stale record can never signal the daemon's (or a caller's)
+    /// group.
+    fn own_groups(&self) -> Vec<i32> {
+        // SAFETY: `getpgrp` takes no arguments and cannot fail.
+        let own = unsafe { libc::getpgrp() };
+        let mut groups: Vec<i32> = Vec::new();
+        for group in [self.process_group, self.guest_group].into_iter().flatten() {
+            if group > 1 && group != own && !groups.contains(&group) {
+                groups.push(group);
+            }
+        }
+        groups
     }
 
-    /// SIGKILL the session's whole process group (idempotent; `ESRCH` is fine).
-    fn sigkill_group(&self) {
-        let Some(group) = self.process_group else {
+    /// SIGKILL the guest's own group (idempotent; `ESRCH` is fine).
+    fn sigkill_guest_group(&self) {
+        let own = self.process_group;
+        let Some(group) = self.guest_group.filter(|group| Some(*group) != own) else {
             return;
         };
+        if group <= 1 || !self.own_groups().contains(&group) {
+            return;
+        }
         dm6_trace(serde_json::json!({
-            "event": "sigkill.group",
+            "event": "sigkill.guest_group",
             "session": self.artifacts.display().to_string(),
-            "process_group": group,
+            "guest_process_group": group,
             "unix_ms": now_unix_ms(),
         }));
-        // SAFETY: `group` was the child's own process group id
-        // (`process_group(0)`), so `-group` names that group and no other.
+        // SAFETY: `group` is the guest's own process group id (`process_group(0)`
+        // in the launcher), so `-group` names that group and no other process.
         unsafe {
             libc::kill(-group, libc::SIGKILL);
         }
+    }
+
+    /// SIGKILL any live process still naming this session's own artifacts
+    /// directory with `acos-art` on its command line (a launcher left behind by
+    /// an earlier incarnation). Idempotent.
+    fn reap_session_leftovers(&self) -> usize {
+        let leftovers = processes_mentioning(&self.artifacts);
+        let own = std::process::id();
+        for pid in &leftovers {
+            if *pid == own {
+                continue;
+            }
+            // SAFETY: `pid` was read from /proc as a live process naming this
+            // session's private artifacts directory; a dead pid is `ESRCH`.
+            unsafe {
+                libc::kill(*pid as i32, libc::SIGKILL);
+            }
+        }
+        leftovers.len()
+    }
+
+    /// Members of every process group the session owns, plus any live process
+    /// still naming this session's private artifacts directory.
+    ///
+    /// SERVELEAK: the launcher and the guest are in *different* groups
+    /// (`crates/acos-art/src/launcher.rs` gives the guest its own with
+    /// `process_group(0)`), so a proof that only walked the launcher's group
+    /// reported "clean" while bwrap/dalvikvm64 kept running.
+    fn group_survivors(&self) -> Vec<u32> {
+        let mut survivors: Vec<u32> = Vec::new();
+        for group in self.own_groups() {
+            for pid in processes_in_group(group) {
+                if !survivors.contains(&pid) {
+                    survivors.push(pid);
+                }
+            }
+        }
+        for pid in processes_mentioning(&self.artifacts) {
+            if !survivors.contains(&pid) {
+                survivors.push(pid);
+            }
+        }
+        survivors.sort_unstable();
+        survivors
+    }
+
+    /// SIGKILL every process group the session owns (idempotent; `ESRCH` is
+    /// fine) and any launcher still naming the session directory.
+    fn sigkill_group(&self) {
+        for group in self.own_groups() {
+            dm6_trace(serde_json::json!({
+                "event": "sigkill.group",
+                "session": self.artifacts.display().to_string(),
+                "process_group": group,
+                "unix_ms": now_unix_ms(),
+            }));
+            // SAFETY: every id in `own_groups` is a process group this session
+            // created (`process_group(0)` at spawn) and is never this process's
+            // own group; `-group` names that group and no other.
+            unsafe {
+                libc::kill(-group, libc::SIGKILL);
+            }
+        }
+        self.reap_session_leftovers();
     }
 
     /// Stop the guest and prove its whole process group is gone. Shared by
@@ -2486,6 +2586,11 @@ impl ArtSession {
         } else {
             self.group_survivors()
         };
+        // SERVELEAK: a survivor is not reported until it has been **killed**.
+        // The old code returned `Err(PROCESS_TREE_DIRTY)` here without ever
+        // signalling the guest group, so a destroy could fail *and* leave the
+        // guest running. Every group the session owns is SIGKILLed first (the
+        // guest's own group included), then the proof is re-taken.
         if !survivors.is_empty() {
             self.sigkill_group();
         }
@@ -2500,6 +2605,9 @@ impl ArtSession {
             while Instant::now() < grace && !report.survivors.is_empty() {
                 std::thread::sleep(step);
                 step = (step * 2).min(Duration::from_millis(10));
+                // A process may have forked between the scan and the signal;
+                // re-signal the whole tree before re-taking the proof.
+                self.sigkill_group();
                 report = self.teardown_report();
             }
         }
@@ -2578,7 +2686,27 @@ impl ArtSession {
     /// then the proof and the survivor list. No group recorded (`None`) keeps
     /// the old unverified-report behaviour.
     fn group_is_empty(&self) -> bool {
-        self.process_group.map(group_is_empty).unwrap_or(true)
+        // Every group the session owns, not just the launcher's (SERVELEAK).
+        let groups = self.own_groups();
+        groups.is_empty() || groups.iter().all(|group| group_is_empty(*group))
+    }
+
+    /// Kill any process still naming this session's artifacts directory with
+    /// `acos-art` on its command line, then report what is still alive after a
+    /// short bounded wait. Called by `acos_destroy` (SERVELEAK): a destroy that
+    /// names a leftover must kill it, never only report it.
+    pub fn reap_leftovers(&self) -> Vec<u32> {
+        self.reap_session_leftovers();
+        let mut alive = processes_mentioning(&self.artifacts);
+        let deadline = Instant::now() + Duration::from_millis(500);
+        let mut step = Duration::from_millis(1);
+        while !alive.is_empty() && Instant::now() < deadline {
+            std::thread::sleep(step);
+            step = (step * 2).min(Duration::from_millis(10));
+            self.sigkill_group();
+            alive = processes_mentioning(&self.artifacts);
+        }
+        alive
     }
 
     /// Wait for the child to exit, without polling, up to `deadline`.
@@ -2642,7 +2770,7 @@ impl ArtSession {
         };
         TeardownReport {
             process_group: Some(group),
-            survivors: processes_in_group(group),
+            survivors: self.group_survivors(),
             verified: true,
         }
     }
@@ -4479,6 +4607,178 @@ mod tests {
     /// Scratch under the worktree `.cache/` (never `/tmp`), per O2.
     /// Serialises tests that point `ACOS_ART_BIN` at a fake launcher: the
     /// variable is process-global, so parallel tests would race on it.
+    /// SERVELEAK: a fake `acos-art` whose guest runs in its **own** process group
+    /// (exactly like the real launcher, `crates/acos-art/src/launcher.rs` uses
+    /// `process_group(0)`), reports it in the ready line, and — this is the bug —
+    /// leaves it running when `close` arrives.
+    ///
+    /// `ignore_close` makes the launcher ignore `close` entirely, which forces
+    /// `shutdown`'s bounded grace to expire and take the killed path.
+    fn fake_art_with_own_guest_group(dir: &Path, ignore_close: bool) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let script = dir.join(if ignore_close {
+            "fake-acos-art-guest-ignores-close.sh"
+        } else {
+            "fake-acos-art-guest-outlives-close.sh"
+        });
+        let guest_pid_file = dir.join("guest.pid");
+        let mut body = String::new();
+        body.push_str("#!/bin/sh\n");
+        body.push_str(&format!(
+            "guest_pid_file='{}'\n",
+            guest_pid_file.display()
+        ));
+        // The guest: its own session (hence its own process group), the way the
+        // real launcher spawns bwrap.
+        body.push_str("setsid sleep 600 &\n");
+        body.push_str("guest=$!\n");
+        body.push_str("echo \"$guest\" > \"$guest_pid_file\"\n");
+        body.push_str(&format!(
+            "echo '{{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.test\",\"activity\":\"dev.test/.Main\",\"width\":1080,\"height\":2400,\"density\":420,\"guest_process_group\":'\"$guest\"'}}'\n"
+        ));
+        body.push_str("while IFS= read -r line; do\n");
+        body.push_str("  case \"$line\" in\n");
+        body.push_str("    *'\"cmd\":\"close\"'*)\n");
+        body.push_str("      echo '{\"ok\":true,\"cmd\":\"close\"}'\n");
+        if ignore_close {
+            // Keep running (and past the EOF `shutdown` causes by closing the
+            // pipe): the caller's grace must expire and kill the tree.
+            body.push_str("      sleep 600\n");
+            body.push_str("      ;;\n");
+        } else {
+            // The graceful path replies and exits, and the guest it started is
+            // left behind — the leaked-guest shape SERVELEAK reported.
+            body.push_str("      exit 0\n");
+            body.push_str("      ;;\n");
+        }
+        body.push_str("    *'\"cmd\":\"tree\"'*)\n");
+        body.push_str("      echo '{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"tree\":{\"nodes\":[]}}'\n");
+        body.push_str("      ;;\n");
+        body.push_str("    *)\n");
+        body.push_str("      echo '{\"ok\":false,\"code\":\"UNSUPPORTED_ANDROID_API\",\"error\":\"unsupported\"}'\n");
+        body.push_str("      ;;\n");
+        body.push_str("  esac\n");
+        body.push_str("done\n");
+        std::fs::write(&script, body).unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+        script
+    }
+
+    /// Is `pid` still a live (non-zombie) process?
+    fn process_is_alive(pid: u32) -> bool {
+        match std::fs::read_to_string(format!("/proc/{pid}/status")) {
+            Ok(status) => !status
+                .lines()
+                .find(|line| line.starts_with("State:"))
+                .map(|line| line.split_whitespace().nth(1) == Some("Z"))
+                .unwrap_or(false),
+            Err(_) => false,
+        }
+    }
+
+    fn wait_until_gone(pid: u32, within: Duration) -> bool {
+        let deadline = Instant::now() + within;
+        while Instant::now() < deadline {
+            if !process_is_alive(pid) {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        !process_is_alive(pid)
+    }
+
+    /// SERVELEAK regression 1 — the bench's shape: the graceful `close` path
+    /// succeeds (the launcher exits by itself, `lifecycle`), but the guest it
+    /// started is in its own process group and is still running. Before the fix
+    /// the destroy's proof only covered the launcher's group, so it either
+    /// reported a clean tree over a live guest or failed with `INTERNAL` and
+    /// killed nothing. A destroy must leave no guest process behind.
+    #[test]
+    fn destroy_kills_the_guest_group_the_launcher_reports() {
+        let dir = scratch_dir("guest-group-lifecycle");
+        let script = fake_art_with_own_guest_group(&dir, false);
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let guest_pid_file = dir.join("guest.pid");
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        let guest: u32 = std::fs::read_to_string(&guest_pid_file)
+            .expect("the fake launcher wrote its guest pid")
+            .trim()
+            .parse()
+            .expect("guest pid");
+        assert!(
+            process_is_alive(guest),
+            "the fake guest must be running before the destroy"
+        );
+        assert_eq!(
+            session.last_teardown(),
+            None,
+            "no teardown has happened yet"
+        );
+        let report = session.teardown().expect("teardown reports no survivors");
+        assert!(
+            report.is_clean(),
+            "the destroy proof must be clean once the guest group is killed: {report:?}"
+        );
+        assert_eq!(
+            session.last_teardown().map(|(path, _)| path),
+            Some(TeardownPath::Lifecycle),
+            "the launcher itself ended by lifecycle"
+        );
+        assert!(
+            wait_until_gone(guest, Duration::from_secs(3)),
+            "the guest process {guest} must not survive its session's destroy"
+        );
+        assert!(
+            session.session_leftovers().is_empty(),
+            "no launcher leftover may remain: {:?}",
+            session.session_leftovers()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// SERVELEAK regression 2 — the graceful path fails outright: the launcher
+    /// ignores `close`, so the bounded grace expires and the killed path runs.
+    /// Both groups (launcher and guest) must die, and the reply must still say
+    /// which path was taken.
+    #[test]
+    fn destroy_kills_the_whole_tree_when_close_is_ignored() {
+        let dir = scratch_dir("guest-group-killed");
+        let script = fake_art_with_own_guest_group(&dir, true);
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let guest_pid_file = dir.join("guest.pid");
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        std::env::set_var("ACOS_ART_TEARDOWN_GRACE_MS", "150");
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        let guest: u32 = std::fs::read_to_string(&guest_pid_file)
+            .expect("the fake launcher wrote its guest pid")
+            .trim()
+            .parse()
+            .expect("guest pid");
+        let report = session.teardown().expect("teardown reports no survivors");
+        std::env::remove_var("ACOS_ART_TEARDOWN_GRACE_MS");
+        assert!(
+            report.is_clean(),
+            "a killed tree is still a clean teardown: {report:?}"
+        );
+        assert_eq!(
+            session.last_teardown().map(|(path, _)| path),
+            Some(TeardownPath::Killed),
+            "an ignored close takes the bounded-kill path"
+        );
+        assert!(
+            wait_until_gone(guest, Duration::from_secs(3)),
+            "the guest process {guest} must not survive the killed path"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn art_bin_env_lock() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
         LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())

@@ -40,6 +40,7 @@ import glob
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -294,14 +295,29 @@ class Serve:
         return agent_loop.Daemon(self.socket_path, timeout=180.0)
 
     def close(self):
+        """Stop the daemon and prove it is gone (SERVELEAK).
+
+        `acos serve` destroys its guest sessions on SIGTERM before it exits, so a
+        terminated daemon cannot leave a bwrap/dalvikvm64 behind. The daemon is
+        started with `start_new_session=True`, so the group kill below can only
+        reach processes this rep created — never another agent's.
+        """
         try:
             if self.proc.poll() is None:
                 self.proc.terminate()
                 try:
-                    self.proc.wait(timeout=15)
+                    self.proc.wait(timeout=20)
                 except subprocess.TimeoutExpired:
                     self.proc.kill()
                     self.proc.wait(timeout=10)
+            # A daemon that had to be SIGKILLed took no teardown path with it:
+            # kill its (own, new-session) process group as the last resort.
+            if self.proc.returncode is not None and self.proc.returncode < 0 \
+                    and self.proc.returncode != -15:
+                try:
+                    os.killpg(self.proc.pid, signal.SIGKILL)
+                except OSError:
+                    pass
         finally:
             for fh in (self.stdout, self.stderr):
                 try:

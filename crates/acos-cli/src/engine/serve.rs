@@ -662,7 +662,12 @@ impl ServeEngine {
                 .last_teardown()
                 .map(|(path, ms)| (path.as_str(), ms))
                 .unwrap_or(("unknown", 0));
-            let leftovers = session.session_leftovers();
+            // SERVELEAK: a destroy that names a leftover must kill it. The
+            // teardown proves every process group the session owns (launcher and
+            // guest); this is the wider session check (a launcher left behind
+            // outside those groups) and it *acts*: it SIGKILLs what it finds and
+            // reports only what is still alive afterwards.
+            let leftovers = session.reap_leftovers();
             let (ok, detail) = match report {
                 Ok(report) => {
                     let clean = report.is_clean() && leftovers.is_empty();
@@ -675,10 +680,22 @@ impl ServeEngine {
                             "lifecycle": path,
                             "teardown_ms": teardown_ms,
                             "session_leftovers": leftovers,
+                            "session_leftovers_reaped": true,
                         }),
                     )
                 }
-                Err(error) => (false, json!({"error": error.to_protocol_error()})),
+                // The cleanup above still ran: the reply reports the failure
+                // **after** the tree was killed and proven, never instead.
+                Err(error) => (
+                    false,
+                    json!({
+                        "error": error.to_protocol_error(),
+                        "lifecycle": path,
+                        "teardown_ms": teardown_ms,
+                        "session_leftovers": leftovers,
+                        "session_leftovers_reaped": true,
+                    }),
+                ),
             };
             let mut result = json!({
                 "session_id": id,

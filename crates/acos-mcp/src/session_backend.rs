@@ -16,7 +16,7 @@
 //! `SESSION_NOT_FOUND`. `destroy` removes the session; the next read creates a
 //! new one. This mirrors the CLI's process-local session.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -71,6 +71,9 @@ pub struct SessionBackend {
     flutter: FlutterSessions,
     /// React Native sessions owned by this process (the confined child).
     rn: RnSessions,
+    /// Session ids this process launched (SERVELEAK). `shutdown` destroys
+    /// exactly these and nothing a different client created.
+    owned: Mutex<HashSet<String>>,
 }
 
 impl std::fmt::Debug for SessionBackend {
@@ -97,6 +100,7 @@ impl SessionBackend {
             daemon: None,
             flutter: FlutterSessions::default(),
             rn: RnSessions::default(),
+            owned: Mutex::new(HashSet::new()),
         }
     }
 
@@ -112,6 +116,7 @@ impl SessionBackend {
             daemon: None,
             flutter: FlutterSessions::default(),
             rn: RnSessions::default(),
+            owned: Mutex::new(HashSet::new()),
         }
     }
 
@@ -1376,14 +1381,30 @@ impl SessionBackend {
     }
 
     /// Server-local session tools (`acos_launch`, `acos_tap`, ...).
+    /// Record a session id this process created (SERVELEAK).
+    fn remember_owned(&self, id: &str) {
+        self.owned
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id.to_string());
+    }
+
     pub fn session_call(&self, name: &str, args: &Value, ctx: &CallContext) -> Option<Envelope> {
         if name != "acos_doctor" && !name.is_empty() {
             if let Some(daemon) = &self.daemon {
                 let mut client = daemon.lock().unwrap_or_else(|e| e.into_inner());
-                return Some(match client.call(name, args) {
+                let envelope = match client.call(name, args) {
                     Ok(envelope) => envelope,
                     Err(e) => daemon_error(&request_id(args), args, &e.to_string()),
-                });
+                };
+                // SERVELEAK: remember what this process launched *in the
+                // daemon*, so stdin EOF can destroy exactly those sessions (the
+                // daemon outlives this process by design; its guests must not
+                // outlive their purpose).
+                if name == "acos_launch" && envelope.ok() {
+                    self.remember_owned(&session_id(args));
+                }
+                return Some(envelope);
             }
         }
         let request_id = request_id(args);
@@ -1577,7 +1598,53 @@ impl Backend for SessionBackend {
     }
 
     fn session_call(&self, name: &str, args: &Value, ctx: &CallContext) -> Option<Envelope> {
-        SessionBackend::session_call(self, name, args, ctx)
+        let envelope = SessionBackend::session_call(self, name, args, ctx);
+        if name == "acos_launch" && envelope.as_ref().is_some_and(Envelope::ok) {
+            self.remember_owned(&session_id(args));
+        }
+        envelope
+    }
+
+    /// Destroy every session this process created (SERVELEAK).
+    ///
+    /// Called when the MCP transport ends. Each owned session is destroyed
+    /// through its own engine — the daemon's `acos_destroy` (which kills and
+    /// proves the ART guest tree) or the in-process one — so a client that
+    /// closes stdin never leaves a live guest behind. Failures are logged, not
+    /// ignored silently; the process is exiting either way.
+    fn shutdown(&self) {
+        let ids: Vec<String> = {
+            let mut owned = self.owned.lock().unwrap_or_else(|e| e.into_inner());
+            let ids: Vec<String> = owned.drain().collect();
+            ids
+        };
+        if ids.is_empty() {
+            return;
+        }
+        let ctx = CallContext {
+            cancel: crate::process::CancelToken::new(),
+            deadline: std::time::Instant::now() + std::time::Duration::from_secs(30),
+            budget: acos_protocol::ResourceBudget::default(),
+            allowed_roots: Vec::new(),
+            artifacts_dir: std::path::PathBuf::from("."),
+            max_arg_chars: 8 * 1024,
+            max_output_bytes: 1024 * 1024,
+        };
+        for id in ids {
+            let args = json!({"base": {"request_id": "req_shutdown", "session_id": id}});
+            let envelope = SessionBackend::session_call(self, "acos_destroy", &args, &ctx);
+            match envelope {
+                Some(envelope) if envelope.ok() => eprintln!("acos-mcp: destroyed session {id} on exit"),
+                Some(envelope) => eprintln!(
+                    "acos-mcp: session {id} teardown reported {} on exit",
+                    envelope
+                        .error()
+                        .map(|e| e.code.as_str().to_string())
+                        .unwrap_or_else(|| "a non-pass reply".to_string())
+                ),
+                None => eprintln!("acos-mcp: session {id} could not be destroyed on exit"),
+            }
+        }
     }
 }
 

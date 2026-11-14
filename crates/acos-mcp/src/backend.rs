@@ -134,6 +134,14 @@ pub trait Backend: Send + Sync + 'static {
     fn session_call(&self, _name: &str, _args: &Value, _ctx: &CallContext) -> Option<Envelope> {
         None
     }
+    /// Destroy the sessions this process created (SERVELEAK).
+    ///
+    /// Called once when the transport ends (stdin EOF on stdio), so a client
+    /// that exits cannot leave the backend holding a live guest it will never
+    /// address again. A backend that holds no sessions keeps the default no-op;
+    /// sessions a *different* process created (a shared daemon's) are never
+    /// touched.
+    fn shutdown(&self) {}
 }
 
 /// Configuration for [`CliBackend`].
