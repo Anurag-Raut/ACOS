@@ -206,6 +206,11 @@ pub struct LaunchResult {
     /// the heap configuration that produced it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub heap: Option<serde_json::Value>,
+    /// H13b: `{mode, cache: hit|built|fallback|external|none, reason}` — which
+    /// boot image this launch used and whether the shared-image cache hit, so a
+    /// caller (and a benchmark row) can tell a warm serve from a cold one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boot_image: Option<crate::boot_image::BootImageReport>,
     pub marker: Option<String>,
 }
 
@@ -879,7 +884,13 @@ pub(crate) fn launch_session(
     let zygote_app: Option<PathBuf> = std::env::var_os("ACOS_ZYGOTE_APP").map(PathBuf::from);
     // H13/B3: the boot-image source is resolved before the sandbox is wired so
     // a bad knob fails the launch instead of silently running another image.
-    let boot_image = crate::boot_image::resolve(root)?;
+    // H13b: the default (`shared-fixed`) is served from a content-addressed
+    // on-disk cache; `report` is the reply field, set even when the default
+    // falls back to the sysroot LZ4 image.
+    let resolution = crate::boot_image::resolve(root)?;
+    let boot_image = resolution.image.clone();
+    let boot_image_report = resolution.report.clone();
+    eprintln!("acos-art: launch: {}", boot_image_report.line());
     let mut argv: Vec<String> = Vec::new();
     if let Some(image) = &boot_image {
         // `with_image` below ro-binds the prepared directory to /data/img.
@@ -1470,6 +1481,7 @@ pub(crate) fn launch_session(
         let frames_dir = out.join("live-frames");
         let dead = interactive_serve(
             opts.density_dpi,
+            &boot_image_report,
             &mut child,
             &mut cgroup,
             &live,
@@ -1711,6 +1723,7 @@ pub(crate) fn launch_session(
     if let Some(image) = &boot_image {
         unsupported_notes.push(image.note());
     }
+    unsupported_notes.push(boot_image_report.line());
     unsupported_notes.push(cgroup.summary());
     if cgroup.oom_kills() > 0 {
         unsupported_notes.push(format!(
@@ -1757,6 +1770,7 @@ pub(crate) fn launch_session(
     let mut result = LaunchResult {
         outcome,
         code,
+        boot_image: Some(boot_image_report),
         apk: opts.apk.display().to_string(),
         package,
         until: opts.until.clone(),
@@ -2398,6 +2412,8 @@ fn disk_full_result(opts: &LaunchOpts, package: &str, free: u64, min: u64) -> La
     LaunchResult {
         outcome: Outcome::Unsupported,
         code: Some("HOST_DISK_FULL".to_string()),
+        // The disk-full refusal happens before the image is resolved.
+        boot_image: None,
         apk: opts.apk.display().to_string(),
         package: package.to_string(),
         until: opts.until.clone(),
@@ -2946,6 +2962,46 @@ fn latest_generation(live: &acos_services::registry::LiveHandles) -> u64 {
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .latest_generation()
+}
+
+/// S3a: a bounded, self-describing snapshot of the C1 state at a startup
+/// timeout. The earlier record only said `c1_generation=0`, which cannot
+/// distinguish "no surface was ever created" (relayout/window path) from "the
+/// surface exists and received transactions but no buffer" (draw path) from
+/// "a layer was created and destroyed again". The layer list is capped; the
+/// counters are exact.
+fn c1_state_summary(live: &acos_services::registry::LiveHandles) -> String {
+    let state = live
+        .compositor
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    let mut layers: Vec<String> = state
+        .layers()
+        .take(8)
+        .map(|layer| {
+            format!(
+                "{}:id{}:tx{}:gen{}:buf{}:hidden{}:placed{}",
+                layer.name,
+                layer.layer_id,
+                layer.transactions,
+                layer.latest_generation,
+                u8::from(layer.latest.is_some()),
+                u8::from(layer.hidden),
+                u8::from(layer.placement.is_some())
+            )
+        })
+        .collect();
+    let total = state.layers().count();
+    if total > layers.len() {
+        layers.push(format!("+{} more", total - layers.len()));
+    }
+    format!(
+        "c1_layers={total} c1_transactions={} c1_retained={} c1_destroyed={} layers=[{}]",
+        state.transactions_decoded,
+        state.retained_buffers(),
+        state.destroyed_layers(),
+        layers.join(",")
+    )
 }
 
 /// D-M5: microseconds since the Unix epoch (realtime), so a phase measured in
@@ -3858,6 +3914,77 @@ fn wait_for_fast_tree(
     }
 }
 
+/// S3PERF: how long the startup loop waits for a live C1 frame after the guest's
+/// `activity-resumed` marker reported a **skipped first traversal**.
+///
+/// A skipped first traversal is the *normal* path: ACOS does not set
+/// `ADD_FLAG_APP_VISIBLE`, so `ViewRootImpl`'s first traversal sees
+/// `mAppVisible=false` and skips the draw; the host's oneway
+/// `dispatchAppVisibility(true)` arrives afterwards and the app draws on the
+/// next frame (F+1). The guest therefore publishes readiness exactly as main
+/// does (no draw wait, no forced traversal) and reports the skip as evidence
+/// (`draw_skip=`, `first_traversal=`) in its marker. Only a skip that never
+/// produces a frame is the S3a failure, and it is bounded here instead of by
+/// the 60 s no-frame budget: two 60 Hz frames plus slack, and never longer
+/// than the guest's own `sResumeReadyMs` (2000 ms). A launch still requires
+/// `c1_generation > 0`, so a skipped draw is never certified ready.
+const SKIPPED_TRAVERSAL_NO_FRAME_BUDGET: Duration = Duration::from_millis(2000);
+
+/// S3PERF: the bounded no-frame budget for a marker that reported a skipped
+/// first traversal. Factored out of the startup loop so the decision is
+/// testable without a guest.
+#[derive(Debug)]
+struct SkippedTraversalFrameBudget {
+    budget: Duration,
+    since: Option<Instant>,
+}
+
+impl SkippedTraversalFrameBudget {
+    fn new(budget: Duration) -> Self {
+        Self {
+            budget,
+            since: None,
+        }
+    }
+
+    /// Has the budget expired? A live C1 frame (`generation > 0`) always wins:
+    /// the marker's skip is then just the normal pre-visibility traversal and
+    /// the launch is ready. Without a frame, the clock starts at the first
+    /// observation of the skip and expires `budget` later.
+    fn expired(&mut self, at: Instant, skip: Option<&str>, generation: u64) -> bool {
+        if skip.is_none() || generation > 0 {
+            self.since = None;
+            return false;
+        }
+        let since = *self.since.get_or_insert(at);
+        at.saturating_duration_since(since) >= self.budget
+    }
+}
+
+/// S3PERF: the ready-line failure for a skipped first traversal that never
+/// produced a live frame. Factored out of the loop so a test asserts the code
+/// and its evidence without a guest.
+fn skipped_traversal_no_frame_reply(
+    reason: &str,
+    first_traversal: &str,
+    generation: u64,
+    c1: &str,
+) -> serde_json::Value {
+    serde_json::json!({
+        "ok": false, "cmd": "ready", "code": "POST_RESUME_NOT_READY",
+        "retryable": false,
+        "draw_skip": reason,
+        "first_traversal": first_traversal,
+        "error": format!(
+            "the first traversal skipped its draw (draw_skip={reason}) and no live frame \
+             arrived within {}ms: activity_resumed=true c1_generation={generation} \
+             first_traversal={first_traversal} {c1}",
+            SKIPPED_TRAVERSAL_NO_FRAME_BUDGET.as_millis()
+        ),
+        "capture_source": CAPTURE_SOURCE,
+    })
+}
+
 /// H4: the interactive session's idle wake sources.
 ///
 /// The old loop woke every 100 ms to call `try_wait`, the watchdog and the
@@ -3876,6 +4003,7 @@ enum ServeEvent {
 #[allow(clippy::too_many_arguments)]
 fn interactive_serve(
     density_dpi: u32,
+    boot_image: &crate::boot_image::BootImageReport,
     child: &mut std::process::Child,
     cgroup: &mut crate::cgroup::RunCgroup,
     live: &acos_services::registry::LiveHandles,
@@ -3909,6 +4037,11 @@ fn interactive_serve(
     // sleep. `wake_seen` is the tick this loop has already consumed.
     let wake = Arc::clone(&probe_state.lock().unwrap_or_else(|e| e.into_inner()).wake);
     let mut wake_seen = 0u64;
+    // S3PERF: the marker may report a skipped first traversal. That is evidence
+    // (the normal F -> F+1 path), not a gate; the budget only bounds the case
+    // where no frame ever follows it.
+    let mut skipped_frame = SkippedTraversalFrameBudget::new(SKIPPED_TRAVERSAL_NO_FRAME_BUDGET);
+    let mut marker_text: Option<String> = None;
     // Startup: the real Activity is resumed, the guest probe has produced a
     // sample, and C1 has stored at least one buffer. Ready means all three.
     loop {
@@ -3943,18 +4076,80 @@ fn interactive_serve(
             }
         }
         cgroup.sample();
-        let marker = staging.join("activity-resumed.marker").is_file();
+        let marker_path = staging.join("activity-resumed.marker");
+        let marker = marker_path.is_file();
+        // Read the marker once it carries the evidence field (a partial read is
+        // retried next tick; the field is written last, in one file write).
+        if marker && marker_text.is_none() {
+            if let Ok(text) = fs::read_to_string(&marker_path) {
+                if marker_field(&text, "draw_skip").is_some() {
+                    marker_text = Some(text);
+                }
+            }
+        }
         let probe = latest_probe(probe_state);
         let generation = latest_generation(live);
         if marker && probe.is_some() && generation > 0 {
             break;
         }
+        // S3a/S3PERF: the guest reported a skipped first traversal and no live
+        // frame has arrived. Two frames is generous for the host's oneway
+        // `dispatchAppVisibility(true)`; past it, fail fast and loudly with the
+        // guest's own reason instead of waiting out the 60 s no-frame budget.
+        let skip = marker_text
+            .as_deref()
+            .and_then(|text| resumed_marker_draw_skip(text));
+        if marker && skipped_frame.expired(Instant::now(), skip.as_deref(), generation) {
+            let reason = skip.as_deref().unwrap_or("none");
+            let first = marker_text
+                .as_deref()
+                .and_then(|text| marker_field(text, "first_traversal"))
+                .unwrap_or("unknown");
+            let c1 = c1_state_summary(live);
+            kill_guest(child, cgroup);
+            // A distinct reason string, not `none`: this is a skipped draw that
+            // never produced a frame, so the caller can tell it from a generic
+            // no-frame timeout and from a clean main-parity launch.
+            let _ = fs::write(
+                staging.join("activity-not-resumed.marker"),
+                format!(
+                    "package={package}\nreason=POST_RESUME_NOT_READY\ndraw_skip={reason}\n\
+                     first_traversal={first}\ntimeout_ms={}\n",
+                    SKIPPED_TRAVERSAL_NO_FRAME_BUDGET.as_millis()
+                ),
+            );
+            let reply = skipped_traversal_no_frame_reply(reason, first, generation, &c1);
+            protocol_write(&reply);
+            evidence.push(reply);
+            write_session_evidence(out, &evidence);
+            return Ok(SessionEnd {
+                status: None,
+                clean: false,
+            });
+        }
         if Instant::now() >= startup_deadline {
+            // S3a evidence: the old line named only `c1_generation=0`. A
+            // timeout now carries the C1 layer/transaction state and the
+            // newest probe age, so the next occurrence says which side never
+            // produced a frame. A *reported skipped draw* never reaches this
+            // 60 s budget: it fails earlier with `POST_RESUME_NOT_READY` and
+            // `draw_skip=` (SKIPPED_TRAVERSAL_NO_FRAME_BUDGET).
+            let c1 = c1_state_summary(live);
+            let probe_facts = match probe.as_ref() {
+                Some(p) => format!(
+                    "probe_seq={} probe_age_ms={} probe_gen={} probe_draw_seq={}",
+                    p.seq,
+                    host_ms().saturating_sub(p.at_ms),
+                    p.generation,
+                    p.draw_seq
+                ),
+                None => "probe_seq=none".to_string(),
+            };
             kill_guest(child, cgroup);
             let reply = serde_json::json!({
                 "ok": false, "cmd": "ready", "code": "NO_LIVE_FRAME",
                 "error": format!(
-                    "no live frame within {}s: activity_resumed={marker} probe={} c1_generation={generation}",
+                    "no live frame within {}s: activity_resumed={marker} probe={} c1_generation={generation} {probe_facts} {c1}",
                     startup_budget.as_secs(),
                     probe.is_some()
                 ),
@@ -3996,6 +4191,9 @@ fn interactive_serve(
         "capture_source": CAPTURE_SOURCE,
         "buffer_generation": latest_generation(live),
         "probe_seq": probe.seq,
+        // H13b: the boot-image mode and cache outcome of *this* session, so a
+        // serve's launch reply can report a warm cache without a second probe.
+        "boot_image": boot_image,
         "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
     });
     protocol_write(&ready);
@@ -5689,12 +5887,30 @@ fn apk_launcher_activity(apk: &Path) -> Result<acos_services::manifest_resolve::
     })
 }
 
-/// Read `key=value` from a marker file's lines.
+/// Read one `key=value` field from a marker file's lines. The guest writes one
+/// field per line, so the value is the rest of that line.
+fn marker_field<'a>(marker: &'a str, key: &str) -> Option<&'a str> {
+    marker.lines().find_map(|line| {
+        line.strip_prefix(key)?
+            .strip_prefix('=')
+            .map(str::trim)
+    })
+}
+
+/// Read a numeric `key=value` from a marker file's lines.
 fn marker_u64(marker: &str, key: &str) -> Option<u64> {
-    marker
-        .lines()
-        .find_map(|l| l.strip_prefix(key)?.strip_prefix('='))
-        .and_then(|v| v.trim().parse().ok())
+    marker_field(marker, key).and_then(|v| v.parse().ok())
+}
+
+/// S3PERF: the skipped-draw reason the guest published in its
+/// `activity-resumed.marker`, or `None` when the first traversal drew (or an
+/// older guest wrote no evidence at all). `none`/empty means "it drew".
+fn resumed_marker_draw_skip(marker: &str) -> Option<String> {
+    let value = marker_field(marker, "draw_skip")?;
+    if value.is_empty() || value == "none" {
+        return None;
+    }
+    Some(value.to_string())
 }
 
 fn tail(s: &str, max: usize) -> String {
@@ -5927,3 +6143,148 @@ mod md5_frame_tests;
 #[cfg(test)]
 #[path = "probe_channel_tests.rs"]
 mod probe_channel_tests;
+
+/// S3PERF (E2.17): the skipped-draw evidence is never a readiness gate.
+///
+/// The guest publishes readiness exactly as main does; a skipped first
+/// traversal is the normal pre-visibility traversal. Only a skip that never
+/// produces a live C1 frame is a failure, and it is bounded (not the 60 s
+/// no-frame budget) and named (`POST_RESUME_NOT_READY` + `draw_skip=`).
+#[cfg(test)]
+mod skipped_traversal_tests {
+    use super::*;
+    use std::time::Duration;
+
+    /// The failure fires at the bounded budget, not before, and never for a
+    /// launch that produced a live frame.
+    #[test]
+    fn a_skipped_traversal_with_no_frame_fails_within_the_bounded_budget() {
+        let mut gate = SkippedTraversalFrameBudget::new(SKIPPED_TRAVERSAL_NO_FRAME_BUDGET);
+        let t0 = Instant::now();
+        let skip = Some("traversal:view_not_visible");
+        assert!(
+            !gate.expired(t0, skip, 0),
+            "the first observation starts the clock, it does not fail"
+        );
+        assert!(
+            !gate.expired(t0 + Duration::from_millis(1999), skip, 0),
+            "1999 ms is still inside the 2 s budget"
+        );
+        assert!(
+            gate.expired(t0 + SKIPPED_TRAVERSAL_NO_FRAME_BUDGET, skip, 0),
+            "at the budget the skipped draw fails"
+        );
+    }
+
+    /// Normal launch (the skip is the F -> F+1 path): a live frame makes it
+    /// ready at any time, and a marker with no skip evidence never takes the
+    /// bound at all.
+    #[test]
+    fn a_live_frame_leaves_the_normal_skipped_traversal_untouched() {
+        let mut gate = SkippedTraversalFrameBudget::new(SKIPPED_TRAVERSAL_NO_FRAME_BUDGET);
+        let t0 = Instant::now();
+        let skip = Some("traversal:view_not_visible");
+        assert!(!gate.expired(t0, skip, 1), "generation 1 is a live frame");
+        assert!(
+            !gate.expired(t0 + Duration::from_secs(10), skip, 1),
+            "a live frame can never fail the skipped-draw bound"
+        );
+        // A marker that drew (or an older guest with no evidence) keeps the
+        // unchanged 60 s no-frame budget.
+        assert!(!gate.expired(t0, None, 0));
+        assert!(!gate.expired(t0 + Duration::from_secs(10), None, 0));
+    }
+
+    /// The bound is at least two 60 Hz frames and never longer than the guest's
+    /// own post-resume readiness deadline (`sResumeReadyMs` = 2 s).
+    #[test]
+    fn the_budget_is_two_frames_and_at_most_the_guest_resume_deadline() {
+        assert!(SKIPPED_TRAVERSAL_NO_FRAME_BUDGET >= Duration::from_millis(33));
+        assert!(SKIPPED_TRAVERSAL_NO_FRAME_BUDGET <= Duration::from_millis(2000));
+    }
+
+    /// The marker fields the loop reads are exactly the ones the guest writes.
+    #[test]
+    fn the_marker_evidence_fields_are_parsed() {
+        let marker = "package=dev.acos.fixture.counter\n\
+                      first_traversal=traversed=true app_visible=false skip=traversal:view_not_visible\n\
+                      draw_skip=traversal:view_not_visible\n\
+                      timeout_ms=2000\n\
+                      resume_ready=first-traversal\n";
+        assert_eq!(
+            marker_field(marker, "draw_skip"),
+            Some("traversal:view_not_visible")
+        );
+        assert_eq!(
+            resumed_marker_draw_skip(marker).as_deref(),
+            Some("traversal:view_not_visible")
+        );
+        assert_eq!(
+            marker_field(marker, "first_traversal"),
+            Some("traversed=true app_visible=false skip=traversal:view_not_visible")
+        );
+        // A traversal that drew, and a marker without the field, are both "no skip".
+        assert_eq!(
+            resumed_marker_draw_skip("draw_skip=none\nfirst_traversal=traversed=true\n"),
+            None
+        );
+        assert_eq!(resumed_marker_draw_skip("package=x\n"), None);
+    }
+
+    /// The failure reply carries the code the S3a contract names plus the
+    /// guest's own evidence, and never claims success.
+    #[test]
+    fn the_failure_reply_names_post_resume_not_ready_and_draw_skip() {
+        let reply = skipped_traversal_no_frame_reply(
+            "traversal:view_not_visible",
+            "traversed=true app_visible=false skip=traversal:view_not_visible",
+            0,
+            "c1_layers=1 c1_transactions=2",
+        );
+        assert_eq!(reply["ok"], serde_json::json!(false));
+        assert_eq!(reply["code"], serde_json::json!("POST_RESUME_NOT_READY"));
+        assert_eq!(reply["draw_skip"], serde_json::json!("traversal:view_not_visible"));
+        assert_eq!(reply["retryable"], serde_json::json!(false));
+        assert!(reply["first_traversal"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("app_visible=false"));
+        let error = reply["error"].as_str().unwrap_or_default();
+        assert!(error.contains("draw_skip=traversal:view_not_visible"), "{error}");
+        assert!(error.contains("c1_generation=0"), "{error}");
+        assert!(error.contains("c1_layers=1"), "{error}");
+    }
+
+    /// The guest's ready path must stay main's: no forced traversal, no
+    /// visibility replay, and the evidence the launcher reads must be present.
+    /// A source guard is the cheapest way to keep a later edit from silently
+    /// reintroducing the measured one-frame regression (E2.16).
+    #[test]
+    fn the_guest_ready_path_has_no_forced_traversal_and_publishes_the_evidence() {
+        let src = include_str!("../guest/java/dev/acos/art/LaunchMain.java");
+        for forbidden in [
+            "redeliverAppVisibility",
+            "requesting one redraw",
+            ".dispatchAppVisibility(",
+            "\"dispatchAppVisibility\"",
+            "requestLayout()",
+            "invalidate()",
+        ] {
+            assert!(
+                !src.contains(forbidden),
+                "the guest ready path must not contain `{forbidden}` (S3PERF E2.16)"
+            );
+        }
+        for required in [
+            "first-traversal-skipped",
+            "draw_skip=",
+            "first_traversal=",
+            "sFirstTraversalEvidence",
+        ] {
+            assert!(
+                src.contains(required),
+                "the guest must publish `{required}` as evidence"
+            );
+        }
+    }
+}

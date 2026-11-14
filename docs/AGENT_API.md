@@ -1546,41 +1546,61 @@ can otherwise drive the host to tens of gigabytes (host-safety incident
 
 ---
 
-## 16.1 Boot-image source: `ACOS_ART_BOOT_IMAGE` (H13)
+## 16.1 Boot-image source: `ACOS_ART_BOOT_IMAGE` (H13 / H13b)
 
 `acos-art`, and therefore every ART session started by `acos serve` or
 `acos verify --engine art`, reads the boot image from one of three sources. The
 knob is an **environment seam**, not a CLI flag: `acos serve` inherits it and
-every launch child sees it. Unset and `lz4` are the same (the product default).
+every launch child sees it. **Unset means `shared-fixed`** (ADR-0026 §4).
 
-| Value | Image | Address policy | Cost / use |
+| Value | Image | Address policy | Cache |
 |---|---|---|---|
-| unset, `lz4` | the sysroot's stock LZ4 boot image | ART relocates per process (stock image ASLR) | status quo; each session decompresses ~26.3 MiB into private anon memory |
-| `shared-fixed` | uncompressed image at the recorded base `0x70000000` (B2/B3; or the directory in `ACOS_SHARED_BOOT_IMAGE`, which is still honoured) | `-Xnorelocate`: **no image ASLR** | trusted workloads only; ~−12 MiB/session, but the image base is predictable in every session |
-| `shared-aslr` | uncompressed image built once per **serve cohort** at a random page-aligned base | `-Xnorelocate`: fixed for the cohort, new base for every serve start | best shared-image option for a long-lived serve; first launch of a cohort pays the one-time `dex2oat64` build (measured **3.6 s**, ±load) and every later session of that cohort maps it file-backed and shared |
+| unset, `shared-fixed` (**default**) | uncompressed image at the recorded base `0x70000000` (B2/B3; `ACOS_SHARED_BOOT_IMAGE` still names an explicit directory) | `-Xnorelocate`: **no image ASLR** (owner accepted) | content-addressed on disk, built once per machine and reused by every serve and session |
+| `lz4` | the sysroot's stock LZ4 boot image | ART relocates per process (stock image ASLR) | none; each session decompresses ~26.3 MiB privately |
+| `shared-aslr` | uncompressed image relocated to a random page-aligned base once per **serve cohort** | `-Xnorelocate`: fixed for the cohort, a new base per serve | per-cohort directory under `<ACOS_ART_DATA>/boot-image/` |
 
 Rules and behaviour:
 
 * A set-but-unknown value fails the launch (`Error::Layout`) before any guest
-  starts; there is no silent fallback to LZ4. `shared-aslr` also refuses a
-  simultaneous `ACOS_SHARED_BOOT_IMAGE` (that variable names a fixed-base image).
-* `shared-aslr` chooses `ART_BASE_ADDRESS (±128 MiB)` with 4 KiB alignment —
-  ART's own `ART_BASE_ADDRESS_MIN/MAX_DELTA` window, **16 bits** of entropy —
-  and stores the prepared tree under `<ACOS_ART_DATA>/boot-image/`. The
-  directory is `0700`, files are `0444`, and the guest gets a **read-only**
-  bind at `/data/img`.
-* The cohort key is the invoking process (parent pid + start time), so one
-  `acos serve` (or one `acos verify`) shares one base and a new serve gets a new
-  one. `ACOS_ART_BOOT_IMAGE_GENERATION` overrides the key for diagnostics.
-* Do not point `ACOS_SHARED_BOOT_IMAGE` at a stale directory and expect
-  relocation: the image's recorded base is what ART maps.
-* Measurement on this branch (host load recorded in
-  `results/vm/H13.md`): `shared-aslr` at N=5/10 saves **~10–12 MiB/session**
-  on the M2 cgroup anon+shmem metric versus `lz4`; warm M4 launch and P11 gates
-  are unchanged. The costs are the one-time **+3.6 s** on the first launch of a
-  new serve (M3 cold) and ~173 MiB of disk per prepared cohort. It is **not**
-  the default; the owner decides whether those costs are acceptable for
-  untrusted runs.
+  starts. `shared-aslr` refuses a simultaneous `ACOS_SHARED_BOOT_IMAGE`.
+* **The `shared-fixed` cache (H13b).** The entry directory is
+  `fixed-<input-hash>/` under `ACOS_BOOT_IMAGE_CACHE`, else `ACOS_CACHE_DIR`,
+  else `$XDG_CACHE_HOME/acos`, else `~/.cache/acos`, then `art/boot-images`
+  (private `0700`, files `0444`, never `/tmp`). The hash covers the ACOS
+  image-format version, the `dex2oat64` flags (`--image-format=uncompressed`,
+  `--base`, `--instruction-set`), the boot-classpath environ text and the
+  identity (path, size, mtime) of every sysroot boot jar
+  (`system/framework/*.jar`, `system/apex/*/jars/*.jar`) and of `dex2oat64`,
+  `dalvikvm64`, `libart.so`, `libartbase.so`, `libnativehelper.so`. A changed
+  image, jar or runtime rebuilds once; everything else hits.
+* **Atomic and concurrent-safe.** The build runs in a unique temp directory on
+  the same filesystem, every file is `fsync`ed, `manifest.json` is written,
+  and the directory is `rename`d into place; the build holds an exclusive
+  `flock` on `<cache>/.lock`, so two serves starting together build once and
+  the second hits.
+* **Corruption is detected.** `manifest.json` records the input hash, the
+  image-format version and, per file, its size and a sampled checksum (first
+  and last 4 KiB). A truncated or partially written entry fails validation and
+  is rebuilt; a cache miss, an input change and damage are all the same
+  rebuild path.
+* **Failure policy.** An explicit `ACOS_ART_BOOT_IMAGE=shared-fixed` fails the
+  launch closed. The *default* (knob unset) falls back to the sysroot LZ4 image
+  and reports it: the default must not make a machine that cannot build the
+  image unable to run any app.
+* **Reply field.** Every launch reply, `acos verify` verdict
+  (`engine.timing.boot_image` in the artifact `engine.json`) and `acos serve`
+  session list/launch reply carries
+  `boot_image: {mode, cache, reason?, dir?, input_hash?, base?, prep_ms?}` with
+  `cache` ∈ `hit` (validated existing entry), `built` (this launch built it,
+  `prep_ms` is the cost), `fallback` (the default build failed; `reason` says
+  why, the LZ4 image is in use), `external` (`ACOS_SHARED_BOOT_IMAGE`) or
+  `none` (LZ4).
+* **Measured (H13b, `results/bench/H13b.md`).** Cold cache: first launch of the
+  machine builds in **3.58 s** (`session_start_ms` 3.82 s). Warm cache: every
+  later serve/session reports `cache: hit` and boots in **153–161 ms**, the
+  same as LZ4 (158–177 ms) — the +3.6 s per-serve cost H13 measured is gone.
+  Memory and gates are unchanged (the image is the same file H13 measured:
+  ~−10–12 MiB/session at N=5/10).
 
 ---
 

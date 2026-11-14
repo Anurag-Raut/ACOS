@@ -2424,6 +2424,435 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   three sibling worktrees (~92 GB host-wide), including the required symlinks
   and the prebuilt target; they were recreated and the release rebuilt. Other
   tracks' `.cache` scratch evidence is gone.
+## E2.15 — H13b: `shared-fixed` boot image is the default and cached on disk — MEASURED (accepted by ADR-0026 §4; H13C closed the serve-path and memory/loop rows)
+
+- **Date / commit:** 2026-11-14; branch `perf-h13b-shared-image` off `main`
+  `3e11d9c`; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/h4`. Host: Ryzen 9
+  9950X, 62 GiB (load1 7.89 → 5.66 during the A/B; recorded in
+  `results/bench/H13b.md`). Binaries: `acos-art 03e9832c…`, `acos 9905ccbf…`.
+- **Question.** ADR-0026 §4 makes the shared uncompressed image the default and
+  gives up image ASLR. H13 measured the cost that blocked it: **+3.6 s on every
+  serve's first launch** (one `dex2oat64` build, ~173 MiB). Can the build be
+  cached on disk so every serve after the first pays ~0, and can that cache be
+  atomic, concurrent-safe and corruption-detecting?
+- **Change.** `crates/acos-art/src/boot_image.rs`: unset
+  `ACOS_ART_BOOT_IMAGE` = `shared-fixed`; `<cache>/fixed-<input-hash>/` entries
+  with `manifest.json` (input hash, image-format version, per-file size and a
+  sampled FNV-1a checksum of the first/last 4 KiB); atomic publish (temp dir on
+  the same fs, `fsync`, `rename`, `fsync` dir); exclusive `flock` around
+  check+build+publish so two serves build once; the input hash covers the ACOS
+  image-format version, the `dex2oat64` flags, the boot-classpath environ text
+  and the identity (path, size, mtime) of every sysroot boot jar (37 here) and
+  of `dex2oat64`/`dalvikvm64`/`libart.so`/`libartbase.so`/`libnativehelper.so`.
+  Cache root `ACOS_BOOT_IMAGE_CACHE` → `ACOS_CACHE_DIR` →
+  `$XDG_CACHE_HOME/acos` → `~/.cache/acos`, then `art/boot-images` (0700/0444,
+  never `/tmp`). New reply field `boot_image: {mode, cache, reason, dir,
+  input_hash, base, prep_ms}` in `LaunchResult`, the interactive ready line,
+  `acos verify`'s `engine.timing.boot_image` and `acos serve`'s launch reply +
+  session list. `acos-cli` prewarm warms the entry named by `current.json`.
+- **Failure policy (decided here).** Explicit `shared-fixed` fails closed;
+  the *default* falls back to the sysroot LZ4 image with
+  `cache: "fallback"` + `reason` in the reply and the log. Justification: the
+  default must not be less available than `lz4` was (a machine without
+  `dex2oat64` or with a full disk would otherwise fail every launch), and the
+  fallback is reported, not silent, so a benchmark and a gate can assert on it.
+- **Method.** Cold: `ACOS_BOOT_IMAGE_CACHE=.cache/h13b/cache2` empty, one
+  `acos verify scenarios/v2-art-counter.yaml --engine art`; warm: two more runs.
+  A/B: one lock acquisition, alternating `lz4` / `shared-fixed` (3 reps each,
+  one process per sample). Goldens: no assertion or scenario touched. Gates
+  11/11 and Gaten 5 flows + 5 negatives through `.cache/h13b/run_suite.sh`.
+- **Cold vs warm (launch-side metric `session_start_ms`, guest boot to ready).**
+
+| arm | `session_start_ms` | `boot_image` |
+|---|---:|---|
+| cold cache (build) | **3817** | `shared-fixed/built prep_ms=3584 input=4b0adb4f56cff1ad` |
+| warm cache | **153** | `shared-fixed/hit` |
+| warm again | **151** | `shared-fixed/hit` |
+
+- **Interleaved A/B, old default vs new default (3 reps).** lz4 174 / 176 / 169
+  ms, shared-fixed 175 / 166 / 162 ms (medians **174 vs 166**, load1 2.64 →
+  2.41), all shared-fixed samples `cache: hit`. The shared image is not slower on a warm
+  cache; the +3.6 s H13 measured moves from per-serve to per-machine (and to
+  zero after the first serve).
+- **Correctness.** Gates: `v2-art-counter`, `w22-counter-reset`,
+  `w54-dialog-pixels`, `w42-back-frame`, `w15-dialog-menu`, `form-validation`,
+  `suite/T03-render-good`, `v1-offscreen-pager` pass; `suite/T03-render-wrong`
+  → `ASSERTION_FAILED`; `negative/offscreen-pager-visible` →
+  `ELEMENT_OFFSCREEN`; `p11-progress-timeout` → `TIMEOUT`. Gaten
+  `scenarios/gaten-{home,tabs,settings,search,lesson}.yaml` 5/5 pass,
+  `scenarios/negative/gaten-*-wrong.yaml` 5/5 `ASSERTION_FAILED`. 0 false
+  passes. `w7-insets-report` is main-side red (W7B), excluded.
+  `cargo test --release -p acos-art` (the order-dependent
+  `sandbox_s5::refuses_to_run_when_no_cgroup_can_be_created` run separately and
+  passing), `-p acos-cli`, `-p acos-services`, `-p acos-verify`: green.
+- **Cache unit tests (14 in `boot_image::tests`).** Cold miss builds; second run
+  hits without calling the builder; a changed input set is a new entry; a
+  truncated file (size mismatch, file named) and a same-size corruption
+  (checksum, file named) both rebuild; two concurrent builders produce exactly
+  one build (`Built` + `Hit`); a failed/empty build is a structured error and
+  leaves no entry; pruning keeps 2 entries.
+- **H13C follow-up (serve path + memory/loop rows, same branch `0676c6f`).**
+  The handoff's "`acos serve` dies `GUEST_EXITED` 134 on both arms" was the probe
+  fixture, not the serve path: `fixtures/build/apps/acos-counter.apk` is a 47 MB
+  **Flutter** app that SIGABRTs in its `1.raster` thread (`__android_log_assert`
+  through `/data/shim/libartshim.so`, logcat `tid 19 name 1.raster >>> …
+  dalvikvm64 <<<`) on main `3e11d9c` **and** on this branch, while the plain
+  `counter.apk` — the fixture every scenario and `acos_bench.py` uses — serves
+  and launches `first_frame` on both arms. A second probe mistake set
+  `XDG_RUNTIME_DIR` to a private dir, which breaks `systemd-run --user --scope`
+  (the mandatory cgroup) → `MEMORY_CGROUP_UNAVAILABLE`. No code change; the
+  proof and the abort evidence are in `results/bench/H13b/serve/`.
+- **Serve reply proof.** `boot_image: {mode:shared-fixed, cache:built,
+  prep_ms:3628, input_hash:4b0adb4f56cff1ad, base:0x70000000, reason:"no usable
+  manifest…"}` in the `acos_launch` reply and in the `session list` row for
+  `s_cli`; the next serve reports `cache:"hit"` in both.
+- **M1/M2 + N=10 loop, interleaved 3 reps, `--groups "ml:memory,loop10:16G:600"`,
+  animations on, load1 1.2–1.9, MemAvail 51.4–52.3 GiB.** cgroup anon+shmem
+  per session: lz4 **64.85 / 65.35 / 65.89** → shared-fixed **53.95 / 53.45 /
+  53.55** MiB at N=1/5/10 (medians, **−10.9 / −11.9 / −12.3 MiB**, −16.8…−18.7 %);
+  M1 idle 66.41 → 55.53 MiB (−16.4 %); ΣPss/session at N=10 61.09 → 54.37
+  (−11.0 %). N=10 loop latency **1431.2 → 1413.9 ms/task** (−1.2 %, tie). One
+  pre-existing lz4 flake (`reset → GUEST_EXITED`, 49/50, fail-closed, 0 false
+  passes); no shared-fixed task failed. The page-cache-included
+  `tasks/GiB-min` cell (819.6 vs 664.9) is *not* an A/B claim: it charges the
+  ~173 MiB image file pages per session and its cohort sampler covered
+  0.55–0.64 of guests; the label-matched anon+shmem cell ties (571.0 vs 575.1).
+- **Conclusion.** Accepted as ADR-0026 §4's default: the shared image's memory
+  win is kept, image ASLR is traded away (owner accepted), and the cold-start
+  cost that blocked H13 is paid once per machine instead of once per serve.
+  Raw evidence: `.cache/h13b/{cache2,boot-images,art,out,ab,suite}`,
+  `results/bench/H13b.md`, `results/handoff/H13B.md`.
+
+## E13.14 — PHONE-REF-1: real-device reference (moto g35, API 35) vs ACOS — MEASURED: fixtures match step-for-step, Gaten blocked by a build mismatch, rotation unsupported
+
+- **Date / commit:** 2026-11-14, base `3e11d9c` on `main` (branch `phone-ref-1`; `main` moved to `863def1` mid-track, not merged here)
+- **Question / goal:** the owner connected a real phone. Does an agent running the same scenario observe the same thing on the phone as on ACOS — texts, resource ids, enabled/checked state, dialogs, log order, screen identity — and how many of the differences are ACOS bugs?
+- **Method:** new `tools/phone/replay_scenario.py` replays a scenario YAML on the phone through `agent-device` (selector resolved against the accessibility snapshot, action dispatched at the resolved node, screenshot + tree per step) and emits the same per-step observation JSON as a normalizer over `acos verify --artifacts DIR`; `tools/phone/compare_observations.py` diffs the two. Phone work under `flock .cache/phone.lock`; only `com.gaten` + `dev.acos.fixtures.*`; `pm clear` only; phone left on its home screen. ACOS runs through `art-runtime/run-exclusive.sh` with `guarded.sh --mem 10G --time 600`.
+- **Inputs:** phone `motorola/manila_g/manila:15/VUOA35.116-151/a43dc2:user/release-keys`, API 35, 1080x2400 @400 dpi, arm64. ACOS scenario display 1080x2400 @420 dpi, API 34, x86_64. Gaten: phone `versionCode 12 / versionName 0.1.0` installed 2026-11-12 20:07 IST vs ACOS `gaten-dev-f344272-x86_64-release-unsigned.apk` sha256 `e04c7ffc…` from gaten `f344272` (2026-11-12 21:12 IST) — **different builds**. Fixtures identical both sides (`form-validation` sha256 `d8c277d7…`, `todo-list` `1d94c4c9…`, `hello-views` `25d06157…`, `multi-activity` `986dbb18…`).
+- **Result:** `form-validation` 28/28 steps, same status on both sides, same texts, same `AcosForm` log lines (`onCreate/onStart/onResume`, `validation_failed reason=name|email|email_format`, `validation_ok name=Ada email=ada@example.com`), same `Submitted: Ada` dialog (`android:id/message`); differences are 17 pixel-bounds rows only. `todo-list` 22 comparable steps identical until ACOS reports `UNSUPPORTED_BACKEND input.rotate` at step 22; the phone rotates, recreates and restores the list from SharedPreferences (the remaining 6 steps the phone exercised have no ACOS observation). `hello-views` the same at step 16; `multi-activity` the same at step 14. `gaten-home` matches on launch + the first `Set up Gaten` tap, then the phone has **no `Skip` node** (its onboarding is the older coach-mark tour) while ACOS has `Skip` at `[498,2163][582,2209]` → 10 `missing-on-phone` rows; the other four Gaten scenarios share those first steps and were not replayed. Negative twin `negative/form-wrong-error` is false on the phone too (no `error` node before Submit), so the twin is really wrong. `assert_region` (pixel hashes calibrated to ACOS frame geometry) recorded `not_compared`.
+- **Finding:** no (a) ACOS bug found on any flow where both sides ran the same APK. Every difference classified: (c) Gaten build mismatch (blocks the Gaten reference until an arm64 `f344272` build is installed); (b) density 400 vs 420 dpi + API 35 edge-to-edge insets for every bounds row; (b) tool scope (the phone's accessibility snapshot exposes only the dialog window when an `AlertDialog` is up, ACOS keeps app + dialog); (b) `verify` artifacts carry no tree/frame for `launch` and `assert_log` steps (an artifact-reading agent cannot diff the first screen); (b) real-phone IME covers the list across a rotation, offscreen ACOS has no IME window; (b) `input.rotate` unsupported on the ART backend, honestly reported; (d) none/timing for the dialog frame and for lifecycle log slicing after a recreate. Three candidate ACOS bugs were checked and rejected (the tap reply *does* contain the dialog it opened — `tree/31.json`; the inline error sequence is identical; the dialog card is the same card shifted by density/insets).
+- **Fidelity / evidence:** `physical-device` reference; report `results/phone/PHONE-REF-1.md`, per-flow tables + paired ≤540 px screenshots + both `observations.json` under `results/phone/evidence/<flow>/`.
+- **Regression / false pass:** none — the tool never converts a missing element into a pass, log steps that do not match are recorded `pass_with_failure` and never counted, and `assert_region` is `not_compared` rather than assumed.
+- **Conclusion / next:** (1) install an arm64 build of gaten `f344272` on the phone and re-run `gaten-{home,tabs,settings,search,lesson}` — that is the only thing standing between this track and a full Gaten parity result; (2) add tree/frame evidence for `launch`/`assert_log` steps in `verify` artifacts (small, unblocks artifact-level diffing); (3) decide whether `input.rotate` is in scope for the ART backend (rotation is a gate step in three fixture scenarios and currently unverifiable on ACOS); (4) keep `tools/phone/replay_scenario.py` in the per-change check once (1) lands.
+
+## E5.10 — NET1: `IConnectivityManager` callbacks (the RN NetInfo wall) — MEASURED (Joplin 3/3, gates pending)
+
+**Question.** `main` (`3e11d9c`) aborts every React Native app at launch:
+`RNCNetInfo` → `IConnectivityManager` code 42 `requestNetwork` →
+`UnsupportedOperationException` → `JniException` → SIGABRT on the JS thread
+(3/3, identical logd, `results/compat/K5.md`). The connectivity state machine
+that `a98e839` (T-38/T-39) added answered queries only. Can ACOS serve the
+`NetworkCallback` protocol AOSP serves, without inventing a network it cannot
+back?
+
+**Setup.** Real ART, API-34 image, stock `android.net.ConnectivityManager` and
+`NetworkRequest`/`NetworkCapabilities`/`LinkProperties` marshalling. The guest
+runs `--unshare-net` (no interface, no sockets). One launch per acquisition
+through `run-exclusive.sh --task NET1` + `guarded.sh --mem 8G`.
+
+**What was tried.**
+1. *Echo the caller's `NetworkCapabilities` in the reply.* Wrong: RN's
+   `registerDefaultNetworkCallback` sends `null` capabilities with
+   `TRACK_DEFAULT`, and AOSP replaces them
+   (`ConnectivityService.requestNetwork`: "the passed networkCapabilities is
+   unused and will be replaced"). The first real launch panicked in the callback
+   bundle writer (`bad reply for parcelable::null`), which the harness classified
+   as `HOST_PANIC` — a useful failure, and the reason the null-capabilities rule
+   is now explicit and tested.
+2. *Answer a legacy `NetworkInfo` for the emulated network.* After the
+   registration and the four callbacks worked, Joplin's
+   `NetworkCallbackConnectivityReceiver.updateAndSend` called
+   `getNetworkInfoForUid` (code 6) and the app died on the refusal. Implementing
+   it is what moved `application_on_create` from false to true.
+3. *`VALIDATED`.* Kept unset: AOSP sets it after a captive-portal probe reached
+   the internet; ACOS cannot probe, so claiming it would be a false success.
+   Apps see `isConnected` true, `isInternetReachable` false.
+
+**Measurement** (`results/compat/NET1/run{1,2,3}`, `.cache/net1/runs-r{1,2,3}`).
+
+| run | process_start | on_create | first_frame | tree | screenshot | unsupported.jsonl |
+|---|---|---|---|---|---|---|
+| 1 | ✓ | ✓ | 1633.5 ms | ✓ | ✓ | empty |
+| 2 | ✓ | ✓ | 1630.9 ms | ✓ | ✓ | empty |
+| 3 | ✓ | ✓ | 1821.2 ms | ✓ | ✓ | empty |
+
+All three: `activity_resumed: true`, `guest_crash: null`, no SIGABRT.
+`cargo test -p acos-services --test net1_connectivity`: 10/10, including a scan of the image's own `writeToParcel` for all four classes (`NetworkRequest` and `NetworkInfo` full-match).
+
+**Interpretation.** The wall was ACOS policy, not RN: the framework's
+`NetworkCallback` machinery works unchanged against a declared network. The
+callback path provably ran in the app (the pre-fix run's `session-exit.json`
+carries `NetworkCallbackConnectivityReceiver.updateAndSend` in its stack), and
+the parcel shapes are asserted against the framework's own readers in the unit
+tests.
+
+**Not proven.** The JS-level NetInfo state (no guest logd is persisted by
+`tools/compat/k1-run.py`), the gate battery, the crate suites and the 2×42-app
+corpus. A non-null `getActiveNetwork` is the one plausible regression vector
+(an app that now believes it is online can block on a socket it cannot open),
+so the corpus diff is required before this is called accepted.
+
+**Found in passing.** `parcelable::write_dynamic`/`read_dynamic` put a length
+word after `VAL_PARCELABLE`; API 34's `Parcel.writeValue` does not. ACOS is
+self-consistent but not framework-compatible for a `Bundle` containing a
+parcelable. The callback messages avoid the shared path
+(`write_parcelable_bundle`), and the defect is reported rather than silently
+changed inside this track.
+
+**Files.** `crates/acos-services/src/{connectivity.rs,parcelable.rs,declared.rs,
+registry.rs,lib.rs}`, `crates/acos-services/tests/net1_connectivity.rs`,
+`results/compat/NET1.md`, `results/handoff/NET1.md`.
+
+## E5.10b — NET1 verification (crate suites, gates, Gaten, guest logd) — MEASURED
+
+**Question.** `E5.10` left three gaps: the crate suites, the gate battery and the
+app-side NetInfo state had not been run on the connectivity tree. Do they hold,
+and does answering `getActiveNetwork`/`getNetworkCapabilities` non-null move any
+gate?
+
+**Setup.** Branch `compat-net1-connectivity` at `e5eeba3`, binaries built from it
+in `.cache/s3ab-target/release`, every ART run under
+`run-exclusive.sh --task NET1B` + `guarded.sh --mem 8–10G`. Gate/Gaten runner
+copied from the int reference (`run_suite.sh`) with paths retargeted. Host was
+shared the whole window (queue waits of 30–170 s per acquisition).
+
+**Measured.**
+
+| check | result |
+|---|---|
+| `acos-services` (41 binaries) | 312 passed, 0 failed |
+| `acos-verify` (3) | 66 passed, 0 failed |
+| `acos-art` (14 + 1 alone) | 150 passed, 0 failed |
+| `acos-cli` (15) | 60 passed, 0 failed, 5 pre-existing ignored |
+| gates, 8 positive | pass 8/8 |
+| gates, 3 negative | `ASSERTION_FAILED` (T03-render-wrong), `ELEMENT_OFFSCREEN` (offscreen-pager-visible), `TIMEOUT` (p11-progress-timeout) — 3/3 as designed |
+| Gaten flows | 5/5 pass (`home`, `tabs`, `settings`, `search`, `lesson`), ~67 s each; `gaten-home` is the K4-era red and is green here |
+| Gaten negatives | 5/5 fail `ASSERTION_FAILED` |
+| Joplin + guest logd | 266 records, `ReactNativeJS` ×105, JS reached `go: initial route`, no connectivity refusal |
+
+**Interpretation.** A declared network that answers the framework's own
+`NetworkCallback` protocol changes no measured behaviour: every positive gate
+and flow passes, every negative one still fails with its designed code (0 false
+passes), and the crate suites are unaffected. The one class the gates cannot
+rule out — an app that now believes it is online and blocks on a socket — is the
+corpus's job (§E5.10c).
+
+**Found in passing (harness).** `tools/compat/k1-run.py` threw the guest logd
+away with the guest, so no app-side evidence survived a run. It now calls
+`acos_logs` before destroy and writes `06-logs.json` (bounded by
+`--logs-limit`, default 3000, `--no-logs` to skip). Joplin's release bundle
+does not log NetInfo, so the JS `isConnected` value is still not quoted; the logd
+proves instead that the JS bundle evaluated past the module init that aborted on
+`main`, and that no connectivity call was refused.
+
+**Found in passing (flake recipe).** The documented `acos-art` recipe (skip
+`sandbox_s5::refuses_to_run_when_no_cgroup_can_be_created` in the batch, then run
+it alone `--exact`) fails on a warm host: `RunCgroup::prepare` reads a per-boot
+capability stamp under `ACOS_ART_DATA` (H15), so the fake-`systemd-run` probe the
+test installs is never consulted and `prepare` returns `Ok(cg:"")`. Running it
+with a cold `ACOS_ART_DATA` exercises the intended path and passes. The recipe
+should say so.
+
+## E5.10c — NET1 2×42-app corpus, round 1 — MEASURED (accepted at integration on round 1; round 2 stopped at 6/42, all 6 reproduced round 1)
+
+**Question.** A non-null `getActiveNetwork`/`getNetworkCapabilities` is the one
+plausible regression vector for the connectivity work: an app that now believes
+it is online can block on a socket it cannot open. Does any app move *down* a
+rung?
+
+**Setup.** K1 corpus (42 real apps) through `tools/compat/k1-run.py`, both arms
+in the same acquisition per app, branch (`compat-net1-connectivity` @
+`e5eeba3`, `.cache/s3ab-target/release`) then main (`3e11d9c`, read-only
+`.cache/wt-abmain/.cache/ab-target/release`), one `serve --engine art` per app
+per arm. Runs `.cache/net1b/corpus/r1/<arm>/<pkg>`, driver
+`.cache/net1b/corpus.sh`, table `.cache/net1b/rung.py`.
+
+**Measured (42/42 apps, both arms).**
+
+| rung | main | branch |
+|---|---:|---:|
+| inspect | 42 | 42 |
+| process_start | 41 | **42** |
+| onCreate | 41 | **42** |
+| first frame | 15 | **16** |
+| tree | 15 | **16** |
+| tap | 9 | 9 |
+
+**Two apps differ, both upward, none explained away:**
+
+* `net.cozic.joplin`: `first_frame`/`tree` `.`→`Y` (1650 ms). Main dies at
+  `RNCNetInfo` → `IConnectivityManager code 42`.
+* `com.nextcloud.client`: `process_start`/`oncreate` `.`→`Y`, still no frame on
+  either arm. Main's wall is the *same* code 42 (`Unable to instantiate
+  application com.owncloud.android.MainApp … unsupported Android API
+  android.net.IConnectivityManager code 42`); the branch gets past it and dies in
+  its own database code (`NullPointerException … Cursor.moveToFirst() on a null
+  object reference`). A new wall, reached only because the old one is gone.
+
+**Interpretation.** Zero unexplained regressions, zero downward moves: the
+declared network changes nothing for the 40 apps that were unaffected and
+unblocks the two that registered a default-network callback during startup. No
+app blocks on a socket because it now sees a network.
+
+**Not proven.** Round 2 (determinism; started 10:05 UTC, 6 of 42 apps done, then
+stopped at the window close to release the shared ART queue) — see
+`results/compat/NET1.md` §7.5.
+## E2.19 — S3ab: the S3 reset/relaunch defects — S3b class A fixed, class B mitigated (retry proven to fire), S3a hardened without a reproduction
+
+**Date:** 2026-11-14. **Branch:** `fix-s3ab-reset` off `main` `6301c06`. **Binary:** `acos` sha256
+`6a758637203350e9b981aa8c0caf6fb9145193a8b9c4ceac59917b05471dfd98`.
+**Report:** `results/bench/S3ab.md`; evidence `results/bench/S3ab-evidence/`.
+
+**S3b class A (root-caused, fixed):** the guarded scope's `TasksMax=512` was exhausted by an
+N=20/40 cohort; the hosted vsync thread could not spawn (`EAGAIN`), the guest's
+`DisplayEventReceiver` init returned `-ENODEV`, `Choreographer` threw, the guest exited 1
+(`results/bench/S3ab-evidence/repro-n40-thread-eagain/`). `tools/guarded.sh` now defaults
+`TasksMax=8192` (env-overridable) and `ConnectionClock::new` retries `WouldBlock`/`OutOfMemory`
+20 × 10 ms and names the attempt count instead of leaking a bare `EAGAIN`.
+
+**S3b class B (mitigated, root cause open):** a malformed `addToDisplayAsUser` reply
+(`ipcSetDataReference: unsupported type object (7209057) at offset 16`, then
+`Unknown exception code: -1040187388`, `Adding window failed`) makes the relaunched guest exit 1
+after resume. Reset now retries **once**, only for named host-transport strings, after copying the
+first attempt's own evidence to `<artifacts>/relaunch-retry-1/`; the reply and evidence name the
+retry, so it is never a silent pass. A generic app wall is never retried.
+
+**Method:** `tools/bench/s3ab_repro.py` (P5 loop in 1-task reps, evidence kept per failing rep,
+PNGs deleted), 600 tasks per arm, under the shared ART lock + guard (`--mem 24G --time 590`).
+Gate: three crate test suites + 15 scenarios (11 pass / 4 designed-fail) on the same binary.
+
+**Results (3 000 resets attempted, 0 resets counted as verified on a failure):**
+
+| arm | attempted | verified | false pass | retries |
+|---|---:|---:|---:|---:|
+| N=20 on | 600 | 600 | 0 | 1 (recovered) |
+| N=10 on | 600 | 600 | 0 | 1 (recovered) |
+| N=20 off | 600 | 600 | 0 | 0 |
+| N=10 off | 600 | 600 | 0 | 0 |
+| N=40 on (class-A stress) | 600 | 600 | 0 | 0 |
+
+Both natural class-B occurrences preserved the first failure and produced a live frame on the
+retry (`repro-n20-binder-parcel-retry-2026-11-14/`, `repro-n10-binder-parcel-retry-2026-11-14/`).
+The retry path also has a deterministic committed test (fake launcher fails its second spawn with
+the class-B `session-exit.json`, must succeed on a third spawn with byte-identical preserved
+evidence; and an app wall must not be retried): `reset_retries_a_host_transport_relaunch_once_and_preserves_the_first_failure`.
+`suite/T03-render-good` passes — the earlier `ADD_FLAG_APP_VISIBLE` attempt regressed it (945 bytes,
+~198k pixels) and was reverted; do not re-apply it.
+
+**S3a (no reproduction; reason-based hardening):** 0 `NO_LIVE_FRAME` in >6 000 resets across the
+worktree's runs. `LaunchMain.awaitFirstTraversal` no longer accepts `ViewRootImpl.mFirst == false`
+as readiness — AOSP clears `mFirst` before the draw decision, so a draw-skipping first traversal
+used to certify a window with no buffer. It now requires draw evidence, replays the host's
+`dispatchAppVisibility(true)` only when the skip reason is `not_visible` (after the first traversal,
+so focus/pixel order is preserved), forces a redraw and fails with `POST_RESUME_NOT_READY` +
+`draw_skip=` instead of hanging 60 s; `NO_LIVE_FRAME` now carries a C1 layer/transaction snapshot.
+
+**Decision:** class-A fix and class-B mitigation accepted; class B's root cause (binder object
+table / InputChannel name in the reply) stays **open** — no speculative parcel fix shipped.
+S3a is **hardened, unproven end-to-end**.
+
+## E2.20 — S3PERF: the S3AB readiness gate fires on every normal launch and costs one frame (M4 fast +9 %, M4 strict +5 %) — ROOT CAUSE MEASURED, NOT FIXED
+
+**Date:** 2026-11-14. **Branch:** `fix-s3ab-perf` off `int-s3ab` (`d1541ea`). **Binaries:** main
+`3e11d9c` sha256 `5a2ea97d…`, `int-s3ab` / candidate A `d54249d9…`. **Report:**
+`results/handoff/S3PERF.md`; evidence `results/bench/S3PERF-evidence/`; probe
+`tools/bench/s3perf_probe.py`.
+
+**Finding 1 — the skip path is the normal path, not a stale reason.** A per-launch probe
+(sequential single-session counter launches, guest `ACOSLAUNCH MARK` lines teed via
+`ACOSLAUNCH_GUEST_STDOUT_FILE`) shows **7 of 8** `int-s3ab` launches take `awaitFirstTraversal`'s
+new draw-evidence branch, always with `traversal:view_not_visible` (main: 0, it has no gate).
+AOSP explains it exactly: `ViewRootImpl.mAppVisible` defaults true (:520) but `setView` overwrites
+it from the add reply's `ADD_FLAG_APP_VISIBLE` bit (:1606), which ACOS does not set (E2.15 §2.4),
+so the first traversal is invisible, skips the draw (`mLastPerformTraversalsSkipDrawReason =
+"view_not_visible"`, :4059) after `mFirst` is already false (:4015), and the host's oneway
+`dispatchAppVisibility(true)` arrives afterwards and draws at the next frame. The probe shows
+`app_visible=true` already at the check, i.e. the callback landed between the traversal and the
+posted readiness check. So `int-s3ab` waits for a draw main never waited for — one 60 Hz frame.
+
+**Finding 2 — removing the forced redraw is not enough (candidate A).** Patch (kept as
+`variant-a-no-forced-redraw.diff`, not committed): on a skipped traversal record `draw_skip` and
+wait for the next OnDraw only — no `dispatchAppVisibility` replay, no
+`requestLayout()`/`invalidate()`. Interleaved A/B, 3 reps/arm, `acos-bench.sh --reps 1 --groups
+"a:latency:8G:300"`:
+
+| metric | main p50 med | candidate A p50 med | Δ |
+|---|---:|---:|---:|
+| M4 warm launch strict | 309.5 ms | 325.4 | **+5.1 %** |
+| M4 warm launch fast | 173.9 | 189.9 | **+9.2 %** |
+| M6 reset strict | 329.2 | 336.1 | +2.1 % |
+| M6 reset fast | 191.0 | 204.7 | **+7.2 %** |
+| M7 tree strict / M8 tap strict / M5 shot | 41.2 / 952.9 / 24.9 | 41.2 / 955.3 / 24.7 | 0.0 / +0.3 / −0.8 % |
+
+The fast arm (`settle: fast`, M4 fast 175 → 190 ms) proves the launch reply does wait for the
+guest's `activity-resumed` marker, so **any ready-level draw gate costs a frame**; the strict arm
+pays it too because the reply's settle waits for the same frame the gate blocks on.
+
+**Decision:** not fixed in this experiment. The gate must move from readiness to the no-frame
+path: publish `draw_skip` as *evidence* in the `activity-resumed` marker (ready path byte-identical
+to main), and have the engine's `NO_LIVE_FRAME` loop use a ≤2 s budget and fail with
+`POST_RESUME_NOT_READY` + `draw_skip=` when the guest reported a skipped traversal — a launch
+still requires a live frame (`c1_generation`), so a skipped draw is never certified. To be
+implemented and A/B'd next. Do not re-try `ADD_FLAG_APP_VISIBLE` (regresses T03) or a
+`requestLayout()`/`invalidate()` on the skip path (one frame, measured here).
+
+## E2.21 — S3PERF2: the readiness gate moves off the ready path (guest publishes skip evidence, the no-frame path bounds it) — ACCEPTED (probe main-identical; interleaved A/B 3 reps: M4 strict −0.2 %, M4 fast −8.7 %, M6 strict +0.8 %, M8 strict −0.3 %; integration verify in results/bench/INT-SH-AB.md)
+
+**Date:** 2026-11-14. **Branch:** `fix-s3ab-perf` off `int-s3ab` (`d1541ea`), commit `2c6c64f`.
+**Binaries:** fix `acos` sha256 `f53c8771…`, `acos-art` `bf59ef19…`; main arm `acos`
+`5a2ea97d…` (unchanged from E2.16). **Report:** `results/handoff/S3PERF.md`; evidence
+`results/bench/S3PERF-evidence/` (`probe-main.json`, `probe-fix.json`, `probe-fix2.json`,
+`ab/`); probe `tools/bench/s3perf_probe.py`.
+
+**Decision implemented (orchestrator-approved):** `int-s3ab`'s draw-evidence *gate* on
+readiness is replaced by draw-skip *evidence*:
+
+* **Guest (`LaunchMain.awaitFirstTraversal`)** — readiness is main `3e11d9c`'s rule byte for
+  byte: if the first traversal already exists, report ready immediately; otherwise wait for the
+  next `OnDraw`. No `requestLayout()`/`invalidate()`, no `dispatchAppVisibility(true)` replay
+  (the replay is deleted, not disabled). The skipped draw is published as
+  `draw_skip=<reason>` and `first_traversal=traversed=true app_visible=… skip=…` in the
+  `activity-resumed.marker` and the `ACOSLAUNCH MARK activity-resumed` line. The old
+  `activity-not-ready` failure keeps its `draw_skip=` for the no-traversal-at-all timeout.
+* **Engine (`acos-art` interactive startup loop)** — reads the marker's `draw_skip`. When the
+  guest reported a skip and no live C1 frame (`c1_generation == 0`) arrives within
+  `SKIPPED_TRAVERSAL_NO_FRAME_BUDGET` = **2000 ms** (named const, documented as two 60 Hz frames
+  and `<= sResumeReadyMs`), it kills the guest and answers
+  `{"ok":false,"code":"POST_RESUME_NOT_READY","draw_skip":"…","first_traversal":"…"}` instead of
+  waiting out the 60 s `NO_LIVE_FRAME` budget. A launch still requires `c1_generation > 0`; a
+  skipped draw is never certified ready. `POST_RESUME_NOT_READY` now maps to
+  `NoFreshFrame` in `acos-cli/src/failure.rs` (it was an unregistered code).
+* S3AB's other parts (bounded relaunch retry + classifier in `engine/art.rs`,
+  `display_events.rs` spawn retry, `guarded.sh` TasksMax, `c1_state_summary`) are unchanged.
+
+**Probe (10 sequential single-session counter launches, strict, `tools/bench/s3perf_probe.py`):**
+
+| binary | measured | took the skip path | marker `draw_skip` | forced redraws | ready path | p50 launch |
+|---|---:|---:|---:|---:|---|---:|
+| main `3e11d9c` | 8 | 0 (no gate; no evidence field) | – | 0 | main | 315.5 ms |
+| `int-s3ab` (`d54249d9…`) | 8 | 7 | n/a | 8 | forced-traversal | 325.0 ms |
+| **this fix** (`f53c8771…`) | 10 | 5 | **10/10** (`none` or `traversal:view_not_visible`) | **0** | **main-identical** | **315.5 ms** |
+
+`skips` counts the `first-traversal-skipped` stdout marks; several launches instead take the
+`OnDraw` branch (`first-traversal-drew`, marker `draw_skip=none`), so the mark count is lower than
+the launch count. The marker evidence is present on every measured launch. p50 is back to main
+(315.5 vs 315.5 ms, +0.01 %; `int-s3ab` was +3.0 %).
+
+**Tests (green):** `cargo test -p acos-art --lib skipped_traversal` — 6 tests: the budget fires at
+2000 ms and not at 1999 ms, a live frame (`c1_generation > 0`) and a no-skip marker never expire,
+the budget is >= 2 frames and <= 2 s, marker fields parse (`draw_skip=`/`first_traversal=`,
+including values with spaces), the reply is `POST_RESUME_NOT_READY` + `draw_skip=`, and a source
+guard asserts the guest ready path contains no `redeliverAppVisibility`, `requestLayout()`,
+`invalidate()`, `.dispatchAppVisibility(`/`"dispatchAppVisibility"` call or "requesting one
+redraw", while publishing the evidence.
+
+**A/B and gate sweep: IN PROGRESS at the 60-minute checkpoint.** Host was saturated (5–7 ART
+waiters; every acquisition queued 4–8 min). The interleaved chain
+`.cache/s3perf2/run_ab2.sh` is running `acos-bench.sh --reps 1 --groups "a:latency:8G:300"
+--latency-reps 12` alternating main (`5a2ea97d…`) and fix, three reps per arm, writing
+`results/bench/S3PERF-evidence/ab/{main,fix}-r{1,2,3}.json` (extract with
+`results/bench/S3PERF-evidence/ab/extract.py`). Crate tests, the 11-gate sweep and the N=10
+reliability smoke remain. No acceptance claim is made for them here.
 
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
@@ -2453,11 +2882,15 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | Memory / extra session | **64.96 / 65.22 / 65.59 MiB cgroup anon+shmem** at N=1/5/10; ΣPss 195.4 / 76.8 / 62.6 MiB | main `4958703` (H2 on) | B2, E3.2 | 2026-11-13 | pre-H2 97.3/98.0/97.7 cgroup and 213/108/94 Pss — **−33 %** anon+shmem, −29/−33 % ΣPss at N=5/N=10 |
 | Memory / extra session, opt-in shared boot image (H13) | **65.5 (N=1) / 66.9 (N=5) / 64.4 (N=10) MiB cgroup anon+shmem, lz4 + H2**; best opt-in shared image **56.7 / 55.2 / 54.1** (`shared-aslr`, N=5/10 median of 2 cohorts; `shared-fixed` 54.3/53.6/53.0) | `mem-h13-shared-image` off `f9f6ffa` | H13, E2.12 | 2026-11-13 | H2 on; shared image −8.7 / −11.6 / −10.3 MiB/session vs lz4, +3.6 s first launch. Pre-H2 H6 row: 97.3/98.0/97.7 |
 | Idle CPU / wakeups | **0.166 / 0.743 / 1.394 %** of one core at N=1/5/10 (**0.139 %**/session at N=10); **1.21 / 2.06 / 3.08** wakeups/s | `perf-h4-idle-cpu` (H4) off `4737bb7` | H4, E2.16 | 2026-11-14 | interleaved 3-rep A/B vs `4737bb7`: wakeups **−96.4/−97.7/−98.1 %**, CPU **−73.0/−70.8/−71.6 %**; latency unchanged (worst +1.0 %, loop −1.1 %), 0 false passes. Supersedes the B2 row (0.647/2.77/5.28 %, 34.1/90.8/161.7 wakeups/s, main `4958703`) |
+| Boot-image cold start (default `shared-fixed`) | **3.58 s once per machine** (`session_start_ms` 3 817 ms including the boot it replaces), then **153–161 ms** with `cache: hit` on every later serve; lz4 median 173 ms in the same interleaved window | `perf-h13b-shared-image` off `main` `3e11d9c` | H13b, E2.15 | 2026-11-14 | ADR-0026 §4 default; H13's +3.6 s per serve was the only blocker and is now per machine |
+| Memory / extra session, default shared boot image (H13b/H13C) | **53.95 / 53.45 / 53.55 MiB cgroup anon+shmem** at N=1/5/10 (lz4 64.85 / 65.35 / 65.89 in the same interleaved window; ΣPss 54.37 vs 61.09 at N=10); M1 idle 55.53 vs 66.41 | `perf-h13b-shared-image` `0676c6f` off `main` `3e11d9c` | H13C (E2.15) | 2026-11-14 | **−10.9 / −11.9 / −12.3 MiB/session** vs lz4, cached image at ~0 per serve; N=10 loop latency 1431.2 → 1413.9 ms/task (tie) |
+| Idle CPU / wakeups | **0.647 / 2.77 / 5.28 %** of one core at N=1/5/10 (0.647/0.554/0.528 per session); **34.1 / 90.8 / 161.7** wakeups/s | main `4958703` | B2, E3.2 | 2026-11-13 | pre-H2 0.61/2.44/4.47 % — within the 21–38 % load-derived bands; wakeups unchanged |
 | Teardown | **12 ms** (`teardown_ms`, lifecycle) | main `4958703` | B2, E3.2 | 2026-11-13 | tie with GL1 12 ms (−33…−40 % vs 18–20) |
 | Agent loop (animations on) | **1421.9 ms/task; 0.658 tasks/s, 281.6 (page cache) / 891.7 (anon+shmem) tasks/GiB-min at N=1; 1424.6 ms, 2.699 tasks/s, 681.3 / 846.6 at N=5** (H15 binary, 3 reps, verified 1.000); main `4958703` measured 1437.6 / 1441.0 ms in the same H15 window | `perf-h15-reset` (H15) off main `1ce336b`; B2 row for main `4958703` | H15, E2.14 (B2, E3.2) | 2026-11-13 | H15 vs its own interleaved base: **−1.1 % latency at N=1 and N=5**; 0 false passes, verified rate 1.000 |
 | Agent loop (animations off, functional-check mode) | **507–523 ms/task, 1.79 tasks/s, 5239 tasks/GiB-min (anon+shmem) at N=1; 537 ms / 6.28 / 3942 at N=5; 530 ms / 10.22 / 3798 at N=10**; H15 re-measured 490.8 (base) / 501.7 (H15 binary) at N=1 and 518.3 / 516.9 at N=5 | main `4958703`, `--animations off` | H14, E3.3 (H15, E2.14) | 2026-11-13 | 2.71–2.84× latency; the 5.8×/5.0×/8.7× anon+shmem tasks/GiB-min ratios at N=1/5/10 were the S3c denominator bias — corrected (E3.5) the *latency* ratio 2.76–2.79× holds and the cohort GiB-min ratio tracks throughput (1.23–1.30× at N=20); loop becomes reset-bound (48 %); not a default change. H15's Δ is inside noise (±5 % threshold, overlapping rep ranges) |
 | False passes | **0** — P11 0/105, scenarios 0/12 (negative control = honest `timeout`), loop 0; verified 63/63 (N=1) and 75/75 (N=5) | main `4958703` | B2, E3.2 | 2026-11-13 | H6's 1-in-75 strict-assert flake (H16) did not reproduce |
-| Agent loop N=10 reliability | **100 %: 600/600 verified over 12 reps** (load1 1.0–4.6), 0 false passes; 428/450 (95.1 %) before the fix (exit 1/126 torn Landlock plan, exit 135 SIGBUS on the truncated mapped APK) | `fix-h17-n10-reset` off main `84fc8bc`, 10 sessions / one serve | H17, E2.13 | 2026-11-13 | fixed two shared-input races (atomic publish + per-run APK); see E2.13 |
+| Agent loop N=10 reliability | **100 %: 600/600 verified, 30 × 20 first; 60 × 10 after (both animations on)** with `TasksMax=8192`, 0 false passes, **0 unrecovered failures, 1 class-B retry (recovered, first failure preserved)**; before S3ab: 428/450 (95.1 %) for H17 and 599/600 (1 class-B exit 1) | `fix-s3ab-reset` off main `6301c06`, 10/20 sessions / one serve, `tools/bench/s3ab_repro.py` 1-task reps | S3ab, E2.15 | 2026-11-14 | S3b class A was the 512-task scope (vsync thread `EAGAIN`), fixed in `tools/guarded.sh`; class B is a malformed `addToDisplayAsUser` reply and is **mitigated** (one bounded, evidence-preserving retry), root cause open; S3a did not occur in 3 000 resets |
+| Agent loop N=20 reliability | **100 %: 600/600 verified on and 600/600 off**, 0 false passes, **1 class-B retry (recovered)** on the on arm, none off; **600/600 at N=40 on** (class-A stress) | same branch, same harness | S3ab, E2.15 | 2026-11-14 | S3's 298/300 N=20 and its 1/100 reset defects: class A fixed in the harness, class B retried once with the first failure kept; no 60 s `NO_LIVE_FRAME` in 3 000 resets |
 | Compat first-frame rate (K1 corpus, real ART, N=1) | **17/42 (40.5 %)**; tree/screenshot 16/42 (38.1 %); tap 9/42 (21.4 %); `onCreate` completed **20/42** (47.6 %); first frame p50 **808 ms** / p90 **1269 ms** (K3 12/42, tap 7/42, 16/42, 647/1050 ms). Same binary with app providers off: 14/42 first frame, tap 8/42, 18/42, p50 546/p90 1043 ms — ON is >= OFF at every rung with zero per-app regressions, so ON is the default | K4 `compat-k4-metadata` (E5.8 K3d metadata+sourceDir, E5.9 K3e binder-driver refill) | K4/K3d–K3e, E5.8–E5.9 | 2026-11-13 |
 | Agent loop at N=20 | **1460.4 ms/task p50 / 1501.8 p90; 7.41 verified tasks/s; 471.9 (page cache) / 603.0 (anon+shmem) tasks/GiB-min; 73 MiB anon+shmem and 53 MiB ΣPss per session; 21.2 % of one core; 298/300 verified, 0 false passes** | `scale-s3-n20` off main `15849a5` (H2+P12+H17), 20 sessions / one serve, 3 reps, animations on | S3, E3.4 | 2026-11-13 | latency +1.6 % vs N=1 and throughput 11.4×; the 2 losses are the new reset defects S3a/S3b. ‡ The **anon+shmem GiB-min is corrected (S3c/E3.5)**: 427–474 tasks/GiB-min (before 603–768), 66.7–68.1 MiB/session; at 65.6 MiB/session the per-busy-session rate stays 641 |
 | Agent loop at N=20 (animations off, functional-check mode) | **543.8 ms/task p50 / 575.3 p90; 10.49 verified tasks/s; 711.7 / 1414.2 † tasks/GiB-min; 65 MiB/session anon+shmem; 300/300 verified, 0 false passes** | same branch, `--animations off` | S3, E3.4 | 2026-11-13 | 2.7× the on-arm throughput. † The old denominator undercounted guests (S3c): corrected N=20 value **553.5–557.0 tasks/GiB-min** (before 1182–1226) and **66.5–68.9 MiB anon+shmem / 53.1–57.0 MiB ΣPss per session** with 0 zero readings (before 2.7–43.8 / 0.0–55.0); E3.5, `results/bench/S3c.md` |
@@ -2518,6 +2951,90 @@ wire/native bugs, and keep a bounded `HostGuard` in `render_views` so a future
 guest loop fails loudly. File the five real failures as T1a–T1e; do not weaken
 any verify/assertion or mark a real failure `#[ignore]`.
 
+## E9.2 — HYG1: an order-dependent S5 refusal test, and the `writeValue` length word that `VAL_MAP` was missing — PASS (all suites, gates and Gaten flows as expected)
+
+- **Date / commit:** 2026-11-14; branch `hyg1-tests-parcel` off `main` `863def1`
+  (worktree `/home/Qui/.paseo/worktrees/3oxa6xao/s3ab`). Reported in
+  `results/handoff/HYG1.md`.
+- **Question / goal:** (1) make `acos-art`'s
+  `sandbox_s5::refuses_to_run_when_no_cgroup_can_be_created` independent of test
+  order and host warmth, without changing production behaviour; (2) make
+  `parcelable::write_dynamic`/`read_dynamic` match API 34's
+  `Parcel.writeValue` for every `VAL_*` type the module writes, with byte-layout
+  goldens and AOSP citations, and prove no caller depended on a wrong layout.
+- **Method:** reproduce first (`cargo test -p acos-art --test sandbox_s5 --
+  refuses_… --exact` under one ART-lock acquisition with the **warm**
+  productised `ACOS_ART_DATA=.cache/art/data`), then read
+  `.cache/aosp/base/core/java/android/os/Parcel.java` (android-14.0.0_r75) for
+  `writeValue`/`readValue`/`isLengthPrefixed`/`writeMap`/`writeParcelable`,
+  confirm the shipped image carries the same method
+  (`grep isLengthPrefixed` in the `framework.jar` dex), fix, and re-run every
+  suite plus the ART gates and Gaten flows.
+- **Inputs:** API-34 image `.cache/boot/android-34` (framework.jar + dex),
+  Gaten APK `.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk`,
+  release `acos`/`acos-art` from `.cache/s3ab-target/release`. Scratch
+  `.cache/hyg1/`.
+- **Result:**
+  - *Cause of (1):* `RunCgroup::prepare` → `host_scope_capability()` answers
+    from a per-process `OnceLock` and the per-boot stamp
+    `<ACOS_ART_DATA>/cgroup-capability.json` before probing, so the test's fake
+    failing `systemd-run` was never consulted (`RunCgroup { cg: "" }`).
+  - *Fix (1):* the two `OnceLock`s became one `Mutex<CapabilityCache>` plus a
+    `#[doc(hidden)] set_capability_test_seam(data_root, probe_dir)`; the S5 test
+    owns a fresh scratch data root and fake probe dir (no `PATH` mutation) and
+    holds the guest mutex. New unit test
+    `warm_stamp_answers_without_probing_and_a_cold_root_probes` proves both the
+    refusal and that the per-boot cache still works in production.
+  - *Cause of (2):* `VAL_PARCELABLE` **is** length-prefixed in API 34
+    (`Parcel.writeValue` 2458-2481 backpatches `end - start`;
+    `isLengthPrefixed` 4908-4926; `readValue` 4529-4546) and ACOS already wrote
+    that word correctly. `VAL_MAP` is length-prefixed too and ACOS did **not**
+    write or read it, so a real framework client would take `writeMap`'s size as
+    the byte count and the first key's type tag as the entry count — the
+    `LIST_config` reply's `value` `HashMap` is exactly that path, and the
+    host-vs-peer byte test was self-consistent on the wrong layout.
+  - *Fix (2):* shared `write_value_length_prefixed` / `read_value_length` /
+    `check_value_length`, used by both length-prefixed types; the read side
+    bounds the declared length by the bytes left (before allocating) and refuses
+    a body/length mismatch where AOSP only `Slog.wtfStack`s; a null class name
+    in `VAL_PARCELABLE` now decodes as null (AOSP `readParcelableCreatorInternal`
+    5081-5085). No other `VAL_*` type got a length word.
+  - *Tests:* `crates/acos-services/tests/parcel_dynamic_golden.rs` (16 golden
+    byte-layout tests, one or more per `VAL_*` type written, plus teeth: legacy
+    length-less map refused, length/body mismatch refused, length beyond the
+    parcel refused) and `gate1_bounds.rs` updated to the API-34 layout (hostile
+    `i32::MAX` count still refused without allocating).
+
+| suite / run | result |
+|---|---|
+| `acos-art` default (parallel) | **rc=0, 151 passed, 0 failed** |
+| `acos-art --test-threads=1` | **rc=0, 151 passed, 0 failed** |
+| S5 refusal test alone, warm host, twice | **1 passed**, **1 passed** |
+| `acos-services` | **rc=0, 41 binaries, 319 passed, 0 failed** |
+| `acos-cli` / `acos-verify` | **147 passed / 66 passed**, rc=0 both |
+| gates (11) | 8 pass (`v2-art-counter`, `w22-counter-reset`, `w54-dialog-pixels`, `w42-back-frame`, `w15-dialog-menu`, `form-validation`, `suite/T03-render-good`, `v1-offscreen-pager`); `suite/T03-render-wrong` → `ASSERTION_FAILED`; `negative/offscreen-pager-visible` → `ELEMENT_OFFSCREEN`; `p11-progress-timeout` → `TIMEOUT` |
+| Gaten flows / negatives | 5/5 pass (`home`, `tabs`, `settings`, `search`, `lesson`); 5/5 negatives `ASSERTION_FAILED` |
+
+- **Finding:** the S5 failure was a test-isolation defect, not a product one:
+  the H15 cache is correct and is still proven by the new unit test. The parcel
+  defect was real but not where the brief put it — the length word belongs on
+  `VAL_MAP` (and was already right on `VAL_PARCELABLE`); the old layout was
+  self-consistent between ACOS' writer and reader, which is why only a byte
+  golden (not a round trip) could see it. Gates and Gaten are unchanged, so the
+  binder-path change is behaviour-neutral for every currently verified flow.
+- **Fidelity / evidence:** measured, logs under `.cache/hyg1/`
+  (`art-default.log`, `art-serial.log`, `services2.log`, `cli.log`,
+  `verify.log`, `suite/gate-*.json`, `suite/gaten-*.json`); layout citations are
+  file:line against the local android-14.0.0_r75 sparse checkout.
+- **Regression / false pass:** none — no assertion weakened, nothing
+  `#[ignore]`d; the golden tests fail against the old layout (the legacy-map
+  teeth test). The gates' three deliberate failures still fail with their
+  expected codes, so no false pass was introduced.
+- **Conclusion / next:** keep the seam test-only and documented; the remaining
+  open item is that no verified flow exercises a *non-empty* `HashMap` value
+  through a real framework client (`LIST_config` is empty on this image), so the
+  new map layout is proven at the byte level, not yet end-to-end from the guest.
+
 ## Backlog (optimization hypotheses; rank = impact × confidence ÷ (cost × risk))
 
 Re-ranked by B2 (E3.2) on the measured objective: **verified tasks per second per
@@ -2528,11 +3045,11 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 
 | ID | Hypothesis | Metric | Expected | Confidence | Cost | Risk | Status |
 |---|---|---|---|---|---|---|---|
-| S3a | **Reset relaunch can hang with no live frame (60 s).** `acos_reset` → relaunch → `NO_FRESH_FRAME`/`LIVE_FRAME_UNAVAILABLE` after 60 048 ms: `no live frame within 60s: activity_resumed=true probe=true c1_generation=0` (`crates/acos-art/src/launch.rs` startup-budget expiry). The guest resumed its Activity and the probe produced tree samples, but C1 stored no frame for 60 s, so the launcher killed it. 1/100 tasks at N=20 (bench r2-on) + 1/100 reproduced; one N=20 off rep also has a 60 s successful reset. Evidence `results/bench/S3-evidence/loop-n20-reset-nofreshframe.json` | loop verified rate at N≥10 | back to 100 % | high (reproduced, named path) | low (add C1/FrameStore state to the timeout record) | low | **open, found by S3 (E3.4)** |
-| S3b | **Reset relaunch guest exits 1 in 133–301 ms.** `GUEST_EXITED: the guest ended before its first live frame (status exit status: 1)`; 1/150 tasks at N=10, 1/300 at N=20, 1/100 reproduced. No signal, no `native_crash` record (R3 retention only fires on a crash signal) and the guard line was not kept, so the cause is unnamed; it is the symptom class H17 fixed (torn `<data>/seccomp/landlock.plan` or mapped APK), which must be ruled out first. Evidence `results/bench/S3-evidence/loop-n20-reset-guestexited.json` | loop verified rate at N≥10 | back to 100 % | high (reproduced) | low (retain guard/`session-exit.json` for exit 1, then re-read) | low | **open, found by S3 (E3.4)** |
+| S3a | **Reset relaunch can hang with no live frame (60 s).** `activity_resumed=true probe=true c1_generation=0`: AOSP `ViewRootImpl` clears `mFirst` **before** the draw decision, so a draw-skipping first traversal certified readiness; the oneway `dispatchAppVisibility(true)` may have been late/lost. Hardening landed (E2.15): readiness now requires draw evidence, a `not_visible` skip replays `dispatchAppVisibility(true)` and forces a redraw, a never-drawn window fails as `POST_RESUME_NOT_READY`/`draw_skip=` instead of hanging, and `NO_LIVE_FRAME` carries a C1 layer/transaction snapshot. **No occurrence reproduced** in >6 000 resets (0 `NO_LIVE_FRAME`), so the fix is reason-based, not proven end-to-end. Do NOT re-try `ADD_FLAG_APP_VISIBLE` (regressed `T03-render-good`) | loop verified rate at N≥10 | back to 100 % | medium (AOSP-reasoned, unreproduced) | low (done) | low | **hardened, unproven e2e; E2.15** |
+| S3b | **Reset relaunch guest exits 1 in 133–301 ms — two unrelated classes.** **Class A (fixed):** the guarded scope's `TasksMax=512` was exhausted (`EAGAIN` in the hosted vsync thread → `DisplayEventReceiver -ENODEV` → `Choreographer` throw → exit 1; `results/bench/S3ab-evidence/repro-n40-thread-eagain/`). `guarded.sh` now defaults `TasksMax=8192`; `display_events.rs` retries the thread spawn 20 × 10 ms and names it. **Class B (mitigated, root cause open):** the guest cannot parse the `addToDisplayAsUser` reply (`ipcSetDataReference: unsupported type object (7209057)`, `Unknown exception code: -1040187388`, `Adding window failed`). Reset retries **once** only for named host-transport strings, preserving the first attempt's evidence under `relaunch-retry-1/` and stating the retry in the reply; an app wall is never retried. Retry proven by a committed synthetic test **and** by 2 natural occurrences in 3 000 resets (both recovered). Leading root-cause lead: InputChannel name bytes in the binder object table (`peer.rs::frame_from_parcel`) — **not fixed** | loop verified rate at N≥10 | back to 100 % | high (class A proven) / medium (class B mitigated) | done (A) / medium (B root cause) | low | **A fixed, B mitigated (root cause open), E2.15; 3 000/3 000 verified, 0 false passes** |
 | S3c | **The bench's anon+shmem and Pss sampling undercounts churn.** `WarmSampler` rediscovers guest cgroups every 1 s, so guests that live < 1 s (every animations-off task, every short compat app) are missing from most samples: the anon+shmem GiB-min integral is inflated 5–10× on the off arm and ~1.4× on the on arm (E3.3's 5–8.7× off-arm ratio is this bias; the true ratio is 2.7–2.9×). `session_pss()` sums the serve's *current* children, so during a relaunch burst it sees launchers without guests (off N=20 read 2.7 / 0.0 / 51.5 MiB per session). | tasks/GiB-min, M2 | trustworthy GiB metric | high (measured both arms) | low (discover on change; Pss per session id) | low (metric only) | **open, found by S3 (E3.4)** |
 | H15 | **Measured: the reset's 341 ms is 13 stop + 186 cold boot + 142 strict bind, and 117 ms of that bind is a framework animator run (`RippleAnimationSession`/`StateListAnimator`) that redraws byte-identical pixels for 7 frames.** Implemented (in the worktree, uncommitted): the per-boot cgroup capability cache (≈7 ms/launch; pooled fast reset −1.4 %, p95 −7.7 %). Strict reset does not move outside noise without a rule/architecture change | M6, loop | −150–200 ms/task → −10…14 % loop (on), −30…40 % (off) | high (split measured) | medium | medium | **done 2026-11-13, E2.14: strict −0.6 % (noise), fast −3.9 %, loop −1.1 % both modes, 0 false passes.** The 25 % target needs an owner decision: (A) content-stable strict confirmation (prize −117 ms = −34 % M6 strict, loop −8 %/−22 %; cost an async C1 content hash — `capture_composite` is 10–30 ms), or (B) let the agent loop's reset step use `settle: fast` (harness, −142 ms/task; the next strict step still backs the verdict). Zygote (C) would cut the 186 ms boot and is declined (H3) |
-| H13 | **Memory per session (now 65–67 MiB with H2) is the GiB denominator.** B3's shared uncompressed image is implemented as `ACOS_ART_BOOT_IMAGE=lz4|shared-fixed|shared-aslr`; `shared-aslr` relocates once per serve (16-bit base) and saves 10–12 MiB/session at N=5/10 | M2, tasks/GiB-min | −10–12 MiB/session (shared image); zygote CoW still −25–60 % at N≥5 | high (shared image) / medium (zygote) | low (shared image) / medium | medium (fixed image address for `shared-fixed`; +3.6 s first launch) | **#1, implemented opt-in (E2.12); not default — owner decision. Next: offline relocator or zygote CoW** |
+| H13 | **Memory per session (now 65–67 MiB with H2) is the GiB denominator.** B3's shared uncompressed image is implemented as `ACOS_ART_BOOT_IMAGE=lz4|shared-fixed|shared-aslr`; `shared-aslr` relocates once per serve (16-bit base) and saves 10–12 MiB/session at N=5/10 | M2, tasks/GiB-min | −10–12 MiB/session (shared image); zygote CoW still −25–60 % at N≥5 | high (shared image) / medium (zygote) | low (shared image) / medium | medium (fixed image address for `shared-fixed`; +3.6 s first launch) | **done as the default, E2.15 (ADR-0026 §4): `shared-fixed` is unset's value and is served from a content-addressed disk cache — cold build 3.58 s once per machine, every later serve `cache: hit` at 153–161 ms (`session_start_ms`, same as lz4 173 ms median). H13's per-serve +3.6 s is gone. Next: M1/M2 + N=10 loop rows** |
 | H14 | **Strict tap 956 ms with the framework press/elevation animator.** Adopted the P12 `animations:off` switch as the agent-facing functional-check mode: 7.34×/8.35× taps, 2.71–2.84× loop, 5–8.7× tasks/GiB-min (anon+shmem), 0 false passes. Defaults unchanged | M8, loop | measured | high | low | medium (verification semantics: fast never backs an assertion) | **done: mode available, E3.3; use it for functional checks** |
 | H17 | **N=10 verified loop: fixed.** Two shared-input races: `<data>/seccomp/landlock.plan` rewritten in place by every launch and read by the guard at start (`ERR landlock=plan-missing`, exit 126/1), and the shared `<data>/app/<apk>` truncated by `fs::copy` while ART had it mapped (SIGBUS, exit 135). Atomic `publish_atomic` + per-run APK. 428/450 → **600/600** verified over 12 after-reps, 0 false passes; N=5 75/75, N=20 40/40 | loop verified rate at N≥8 | 100 % | high | done | low | **done 2026-11-13, E2.13** |
 | H17b | **The M6 bench harness ignored its launch result** (H17 follow-up): a failed launch became 20 fast reset refusals and `ok=True`; P5/s3_scale also admitted failed-task latency and always exited 0, and per-task PNGs grew without bound. Fixed by checking every step, excluding failed tasks from latency, exiting non-zero on harness failures, capping screenshots and porting all harnesses to `ChurnSampler` with coverage. Negative proof: main 20+20 fast samples (0.009–0.010 ms), `ok=true`, exit 0 → after 0 latency values, 170 coded failures, exit 1; N=5 45/45 verified, p50 1431.8 → 1448.9 ms (noise). | harness integrity | no false good numbers | high (measured) | done | low | **done 2026-11-13, E3.6** |

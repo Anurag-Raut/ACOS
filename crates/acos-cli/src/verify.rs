@@ -347,6 +347,8 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     let mut session_boot_ms: Option<u64> = None;
     let mut session_animations: Option<&'static str> = None;
     let mut session_insets: Option<&'static str> = None;
+    // H13b: the boot image the guest booted and whether its cache hit.
+    let mut session_boot_image: Option<serde_json::Value> = None;
     let backend: EngineBackend = match engine {
         // The default route is forwarded verbatim: engine selection does not
         // change Rust VM behaviour.
@@ -391,6 +393,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                     session_boot_ms = Some(session.session_start_ms());
                     session_animations = Some(session.animations());
                     session_insets = Some(session.insets());
+                    session_boot_image = session.boot_image().cloned();
                     EngineBackend::session(Box::new(session))
                 }
                 Err(error) => {
@@ -432,6 +435,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         session_boot_ms,
         session_animations,
         session_insets,
+        session_boot_image,
     );
     finish_run(&envelope, &args, &artifacts, Some(trust))
 }
@@ -449,6 +453,7 @@ pub(crate) fn annotate(
     session_boot_ms: Option<u64>,
     session_animations: Option<&'static str>,
     session_insets: Option<&'static str>,
+    session_boot_image: Option<serde_json::Value>,
 ) {
     let engine = engine.unwrap_or(Engine::RustVm);
     let Some(result) = envelope.result().cloned() else {
@@ -494,7 +499,8 @@ pub(crate) fn annotate(
     let session_exit_summary = session_exit
         .as_ref()
         .map(|doc| crate::failure::session_exit_summary(doc, artifacts));
-    let timing = step_timing(&verdict, session_boot_ms);
+    let mut timing = step_timing(&verdict, session_boot_ms);
+    timing["boot_image"] = session_boot_image.unwrap_or(serde_json::Value::Null);
     let engine_block = serde_json::json!({
         "engine": engine.as_str(),
         "mode": mode.as_str(),

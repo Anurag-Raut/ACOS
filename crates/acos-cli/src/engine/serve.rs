@@ -177,6 +177,7 @@ impl ServeEngine {
                     session.frame_info().map(|f| f.0).unwrap_or(0)
                 },
                 "engine": ENGINE_ART,
+                "boot_image": session.boot_image().cloned().unwrap_or(Value::Null),
                 "mode": if exit.is_some() { "dead" } else { "live" },
                 "live": exit.is_none(),
                 "guest_exit": exit.as_ref().map(GuestExit::to_json),
@@ -1220,6 +1221,11 @@ fn launch_reply(
     merge_zygote_fields(&mut result, session);
     result["animations"] = json!(session.animations());
     result["insets"] = json!(session.insets());
+    // H13b: which boot image this session booted and whether its cache hit.
+    result["boot_image"] = session
+        .boot_image()
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
     label_frame(&mut result, session);
     // P9: the same `settle` object the tree verbs return, so a launch says how
     // its tree was bound (`strict-event` on the P12 event rule, or
@@ -1773,13 +1779,12 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
         "settle": session.last_tree_settle().cloned().unwrap_or(Value::Null),
         "note": "the guest process was stopped and the same APK relaunched with empty app-data",
     });
-    // ZPROD3 (design §4.5): a zygote reset proves freshness with the same
-    // `state_reset`/`data_cleared` facts **plus** a new `child_pid`, the
-    // `previous_child_pid` it replaced, the new `run_root` and an **unchanged**
-    // `zygote_boot_epoch` (a reset that silently restarted the zygote would show
-    // up here). Memory is not per child yet (F3 deferred), which `memory_scope`
-    // states instead of implying a limit that does not exist.
     merge_zygote_fields(&mut reply, session);
+    // S3b: never a silent retry. The first host-transport failure and the path
+    // to its preserved evidence travel with the successful reset reply.
+    if let Some(retry) = session.relaunch_retry() {
+        reply["relaunch_retry"] = retry.clone();
+    }
     Ok(reply)
 }
 

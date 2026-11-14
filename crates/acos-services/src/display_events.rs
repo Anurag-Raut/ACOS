@@ -487,11 +487,65 @@ impl ConnectionClock {
             period_ns: period_ns.max(1),
             display_id,
         });
-        let thread_shared = Arc::clone(&shared);
-        let writer = std::thread::Builder::new()
-            .name("acos-vsync".into())
-            .spawn(move || writer_loop(thread_shared, send))
-            .map_err(|e| ServiceError::Internal(format!("vsync thread: {e}")))?;
+        // S3b: a cohort can exhaust the job scope's task budget. The first
+        // thread creation to hit `EAGAIN` used to be this one; the error then
+        // reached the guest as `createDisplayEventConnection` failing, which
+        // the framework reports as "Failed to initialize display event
+        // receiver" and turns into `System.exit(1)`. EAGAIN is transient (the
+        // limit is freed as peers' short-lived guests end), so acquire this
+        // one thread with a bounded, logged backoff. If every attempt fails the
+        // caller still gets the honest error (now naming the attempt count);
+        // nothing is hidden and no guest is relaunched here.
+        const SPAWN_ATTEMPTS: u32 = 20;
+        const SPAWN_BACKOFF: Duration = Duration::from_millis(10);
+        let mut writer = None;
+        let mut last_error = None;
+        for attempt in 1..=SPAWN_ATTEMPTS {
+            let send_try = match send.try_clone() {
+                Ok(fd) => fd,
+                Err(e) => {
+                    return Err(ServiceError::Internal(format!(
+                        "vsync thread: dup send end: {e}"
+                    )))
+                }
+            };
+            let thread_shared = Arc::clone(&shared);
+            match std::thread::Builder::new()
+                .name("acos-vsync".into())
+                .spawn(move || writer_loop(thread_shared, send_try))
+            {
+                Ok(handle) => {
+                    writer = Some(handle);
+                    break;
+                }
+                Err(e) => {
+                    let transient = matches!(
+                        e.kind(),
+                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::OutOfMemory
+                    );
+                    last_error = Some(e);
+                    if transient && attempt < SPAWN_ATTEMPTS {
+                        if attempt == 1 || attempt % 5 == 0 {
+                            eprintln!(
+                                "acos-services: vsync thread spawn hit a host task limit \
+                                 (attempt {attempt}/{SPAWN_ATTEMPTS}); retrying"
+                            );
+                        }
+                        std::thread::sleep(SPAWN_BACKOFF);
+                        continue;
+                    }
+                    break;
+                }
+            }
+        }
+        let writer = writer.ok_or_else(|| {
+            let detail = last_error
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "unknown spawn error".to_string());
+            ServiceError::Internal(format!(
+                "vsync thread: {detail} (after {SPAWN_ATTEMPTS} attempts)"
+            ))
+        })?;
         Ok(Self {
             shared,
             writer: Some(writer),
