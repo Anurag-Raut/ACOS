@@ -28,7 +28,7 @@ left on its home screen.
 |---|---|---|
 | Package | `com.gaten` | `com.gaten` |
 | versionName / versionCode | `0.1.0` / **12** | not extractable from the x86_64 APK on this host (no aapt/aapt2); APK is `gaten-dev-f344272-x86_64-release-unsigned.apk` |
-| SHA-256 | not pulled from the device | `e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29` |
+| APK SHA-256 | `378bef5a324a89851b4a25e7aebac5585e84e734e49c225b8e94f9a208643075` (arm64) | `e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29` (x86_64) |
 | Source | installed **2026-11-12 20:07 IST** (`dumpsys package`) | gaten HEAD `f344272` committed **2026-11-12 21:12 IST** |
 | ABI | arm64 | x86_64 |
 
@@ -49,16 +49,19 @@ own Skip") says must have a `Skip`.
 
 ### Fixture APKs — same build on both sides
 
-| APK | SHA-256 (prefix) |
-|---|---|
-| `form-validation.apk` | `d8c277d7476a54f8a092…` |
-| `todo-list.apk` | `1d94c4c9806be2f3a9e6…` |
-| `hello-views.apk` | `25d0615792c4c3c74624…` |
-| `multi-activity.apk` | `986dbb18f33973df81dd…` |
+| package | phone APK SHA-256 (arm64) | ACOS APK SHA-256 (x86_64) |
+|---|---|---|
+| `dev.acos.fixtures.formvalidation` | `1ebeee51d86d1f295c0ac55d206faa23edbe7659b3188f623579d12acb39da5c` | `d8c277d7476a54f8a092…` |
+| `dev.acos.fixtures.todolist` | `81c9eedd8194e81c68f5a13790b907e5e31e667f5307849cb56fe0907fef4441` | `1d94c4c9806be2f3a9e6…` |
+| `dev.acos.fixtures.helloviews` | `05f1fd30049fa5d1cb5794f43e0d58cecd92949d62f5b3e6fae183f2c499d8de` | `25d0615792c4c3c74624…` |
+| `dev.acos.fixtures.multiactivity` | `9f809ab544d6feed0c268a26aeaa5f35c6b38e5ed14b37cecab85e7ba01d2a60` | `986dbb18f33973df81dd…` |
 
-The phone has the arm64 installs of the same fixture sources; ids, texts and log
-tags are the same strings the scenarios select on, which is what makes these
-flows a fair comparison.
+The hashes differ because the phone installs are arm64 and ACOS runs x86_64
+builds of the **same fixture sources** — that is the expected ABI difference, not
+a version difference. What makes these flows a fair comparison is that every id,
+text and log tag the scenarios select on resolves on both sides, and (for
+`form-validation`, where the ACOS artifact's APK hash is recorded in its verdict)
+the ACOS run's `app.sha256` is the local x86_64 fixture APK, `d8c277d7…`.
 
 ## 2. How it was measured
 
