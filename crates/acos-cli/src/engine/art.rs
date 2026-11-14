@@ -744,7 +744,8 @@ struct CachedFrame {
     captured_at: String,
 }
 
-impl CachedFrame {    /// Load this frame's PNG, verifying that the artifact is the bound one.
+impl CachedFrame {
+    /// Load this frame's PNG, verifying that the artifact is the bound one.
     fn png_bytes(&self) -> Result<Vec<u8>, BackendError> {
         let artifact = self.png.as_ref().ok_or_else(|| {
             live_frame_unavailable(
@@ -3865,7 +3866,6 @@ impl ArtSession {
             _ => acos_protocol::TreeChanges::none(frames, activity),
         }
     }
-
 }
 
 impl SessionBackend for ArtSession {

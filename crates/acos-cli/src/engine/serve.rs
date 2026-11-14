@@ -2726,11 +2726,15 @@ mod tests {
         assert!(!diff_requested(&json!({"diff": false})).unwrap());
         let err = diff_requested(&json!({"diff": "no"})).unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidArgument);
-        assert!(err.to_string().contains("`diff` must be a boolean"), "{err}");
+        assert!(
+            err.to_string().contains("`diff` must be a boolean"),
+            "{err}"
+        );
     }
 
     #[test]
-    fn frozen_label_and_default_engine_are_distinct_strings() {        // The gate W50 exists for: a caller can tell the frozen Rust VM apart
+    fn frozen_label_and_default_engine_are_distinct_strings() {
+        // The gate W50 exists for: a caller can tell the frozen Rust VM apart
         // from real ART in every reply.
         assert_eq!(ENGINE_ART, "art");
         assert_eq!(ENGINE_RUST_VM, "rust-vm, frozen");

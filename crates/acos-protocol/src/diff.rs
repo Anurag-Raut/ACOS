@@ -31,6 +31,8 @@
 //! be read as "that was everything". This keeps an action reply inside the MCP
 //! reply bound (REL3b) even for a whole-screen navigation.
 
+use std::collections::{BTreeMap, HashMap, HashSet};
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -82,7 +84,7 @@ pub struct ChangedNode {
     #[serde(flatten)]
     pub node: NodeRef,
     /// Which fields changed, `old` → `new`. Never empty.
-    pub fields: std::collections::BTreeMap<String, FieldChange>,
+    pub fields: BTreeMap<String, FieldChange>,
 }
 
 /// True totals of each list, before the [`MAX_DIFF_NODES`] cap.
@@ -156,32 +158,43 @@ impl TreeChanges {
     /// the reply then says `baseline: "none"` and lists nothing rather than
     /// inventing an all-added diff.
     #[must_use]
-    pub fn diff(before: Option<&UiTree>, after: &UiTree, frames: DiffFrames, activity: &str) -> Self {
-        let focused = after
-            .nodes
-            .iter()
-            .find_map(find_focused)
-            .map(NodeRef::of);
+    pub fn diff(
+        before: Option<&UiTree>,
+        after: &UiTree,
+        frames: DiffFrames,
+        activity: &str,
+    ) -> Self {
+        let focused = after.nodes.iter().find_map(find_focused).map(NodeRef::of);
         let Some(before) = before else {
             return TreeChanges::none(frames, activity);
         };
         let before_nodes = identity_map(before);
         let after_nodes = identity_map(after);
+        // Indexed by identity path: a lookup per node, not a scan of the other
+        // tree, so the cost stays linear in the tree size on the input hot path.
+        let before_index: HashMap<&str, &UiNode> = before_nodes
+            .iter()
+            .map(|(key, node)| (key.as_str(), *node))
+            .collect();
+        let after_index: HashMap<&str, &UiNode> = after_nodes
+            .iter()
+            .map(|(key, node)| (key.as_str(), *node))
+            .collect();
         let mut added = Vec::new();
         for (key, node) in &after_nodes {
-            if !before_nodes.iter().any(|(other, _)| other == key) {
+            if !before_index.contains_key(key.as_str()) {
                 added.push(NodeRef::of(node));
             }
         }
         let mut removed = Vec::new();
         for (key, node) in &before_nodes {
-            if !after_nodes.iter().any(|(other, _)| other == key) {
+            if !after_index.contains_key(key.as_str()) {
                 removed.push(NodeRef::of(node));
             }
         }
         let mut changed = Vec::new();
         for (key, node) in &after_nodes {
-            let Some((_, old)) = before_nodes.iter().find(|(other, _)| other == key) else {
+            let Some(old) = before_index.get(key.as_str()) else {
                 continue;
             };
             let fields = field_changes(old, node);
@@ -239,13 +252,18 @@ fn find_focused(node: &UiNode) -> Option<&UiNode> {
 /// only thing that tells three anonymous `TextView`s apart.
 fn identity_map(tree: &UiTree) -> Vec<(String, &UiNode)> {
     let mut out = Vec::new();
-    walk_siblings(&tree.nodes, "", &mut out);
+    let mut taken = HashSet::new();
+    walk_siblings(&tree.nodes, "", &mut out, &mut taken);
     out
 }
 
-fn walk_siblings<'a>(siblings: &'a [UiNode], prefix: &str, out: &mut Vec<(String, &'a UiNode)>) {
-    let mut anonymous_ordinal: std::collections::BTreeMap<&str, usize> =
-        std::collections::BTreeMap::new();
+fn walk_siblings<'a>(
+    siblings: &'a [UiNode],
+    prefix: &str,
+    out: &mut Vec<(String, &'a UiNode)>,
+    taken: &mut HashSet<String>,
+) {
+    let mut anonymous_ordinal: BTreeMap<&str, usize> = BTreeMap::new();
     for node in siblings {
         let segment = if node.resource_id.is_empty() {
             let ordinal = anonymous_ordinal.entry(node.class.as_str()).or_insert(0);
@@ -260,19 +278,20 @@ fn walk_siblings<'a>(siblings: &'a [UiNode], prefix: &str, out: &mut Vec<(String
         // is disambiguated in document order, never silently merged.
         let mut key = path.clone();
         let mut suffix = 1usize;
-        while out.iter().any(|(existing, _)| existing == &key) {
+        while taken.contains(&key) {
             suffix += 1;
             key = format!("{path}~{suffix}");
         }
+        taken.insert(key.clone());
         out.push((key, node));
         let child_prefix = format!("{path}/");
-        walk_siblings(&node.children, &child_prefix, out);
+        walk_siblings(&node.children, &child_prefix, out, taken);
     }
 }
 
 /// Which compared fields differ, `old` → `new`.
-fn field_changes(old: &UiNode, new: &UiNode) -> std::collections::BTreeMap<String, FieldChange> {
-    let mut fields = std::collections::BTreeMap::new();
+fn field_changes(old: &UiNode, new: &UiNode) -> BTreeMap<String, FieldChange> {
+    let mut fields = BTreeMap::new();
     let mut text = |name: &str, before: String, after: String| {
         if before != after {
             fields.insert(
@@ -375,8 +394,8 @@ mod tests {
         button.bounds = Bounds::new(42, 368, 273, 494);
         button.clickable = true;
         button.focused = button_focused;
-        let root = node("n0", "android.widget.FrameLayout", "", "")
-            .with_children(vec![number, button]);
+        let root =
+            node("n0", "android.widget.FrameLayout", "", "").with_children(vec![number, button]);
         tree(vec![root])
     }
 
@@ -394,11 +413,14 @@ mod tests {
             "dev.acos.test.Main",
         );
         assert_eq!(changes.baseline, "session");
-        assert_eq!(changes.counts, ChangeCounts {
-            added: 0,
-            removed: 0,
-            changed: 1
-        });
+        assert_eq!(
+            changes.counts,
+            ChangeCounts {
+                added: 0,
+                removed: 0,
+                changed: 1
+            }
+        );
         assert!(changes.added.is_empty());
         assert!(changes.removed.is_empty());
         let entry = &changes.changed[0];
@@ -423,16 +445,14 @@ mod tests {
         let header = node("n1", "android.widget.TextView", "app:id/header", "Header");
         let body = node("n2", "android.widget.FrameLayout", "app:id/body", "")
             .with_children(vec![node("n3", "android.widget.TextView", "", "one")]);
-        let root = node("n0", "android.widget.LinearLayout", "", "")
-            .with_children(vec![header, body]);
+        let root =
+            node("n0", "android.widget.LinearLayout", "", "").with_children(vec![header, body]);
         let before = tree(vec![root]);
 
-        let body = node("n1", "android.widget.FrameLayout", "app:id/body", "").with_children(
-            vec![
-                node("n2", "android.widget.TextView", "", "one"),
-                node("n3", "android.widget.TextView", "app:id/extra", "two"),
-            ],
-        );
+        let body = node("n1", "android.widget.FrameLayout", "app:id/body", "").with_children(vec![
+            node("n2", "android.widget.TextView", "", "one"),
+            node("n3", "android.widget.TextView", "app:id/extra", "two"),
+        ]);
         let root = node("n0", "android.widget.LinearLayout", "", "").with_children(vec![body]);
         let after = tree(vec![root]);
 
@@ -473,14 +493,8 @@ mod tests {
         let fields = &changes.changed[0].fields;
         assert_eq!(fields["focused"].old, Value::Bool(false));
         assert_eq!(fields["focused"].new, Value::Bool(true));
-        assert_eq!(
-            fields["bounds"].old,
-            serde_json::json!([42, 368, 273, 494])
-        );
-        assert_eq!(
-            fields["bounds"].new,
-            serde_json::json!([42, 368, 273, 500])
-        );
+        assert_eq!(fields["bounds"].old, serde_json::json!([42, 368, 273, 494]));
+        assert_eq!(fields["bounds"].new, serde_json::json!([42, 368, 273, 500]));
     }
 
     #[test]
@@ -490,7 +504,7 @@ mod tests {
             .map(|i| node(&format!("n{i}"), "android.widget.TextView", "", "x"))
             .collect();
         let after = tree(vec![
-            node("n0", "android.widget.FrameLayout", "", "").with_children(children),
+            node("n0", "android.widget.FrameLayout", "", "").with_children(children)
         ]);
         let changes = TreeChanges::diff(
             Some(&before),
@@ -520,7 +534,9 @@ mod tests {
         );
         assert_eq!(changes.baseline, "none");
         assert!(changes.is_empty());
-        assert!(changes.added.is_empty() && changes.removed.is_empty() && changes.changed.is_empty());
+        assert!(
+            changes.added.is_empty() && changes.removed.is_empty() && changes.changed.is_empty()
+        );
         assert_eq!(changes.frames.after, 5);
         assert_eq!(changes.activity, "dev.acos.test.Main");
         assert_eq!(
@@ -552,13 +568,82 @@ mod tests {
                 node("n1", "android.widget.TextView", "", "a"),
                 node("n2", "android.widget.TextView", "", "c"),
             ])]);
-        let changes = TreeChanges::diff(
-            Some(&before),
-            &after,
-            DiffFrames::default(),
-            "",
-        );
+        let changes = TreeChanges::diff(Some(&before), &after, DiffFrames::default(), "");
         assert_eq!(changes.counts.changed, 1);
         assert_eq!(changes.changed[0].node.text, "c");
+    }
+
+    #[test]
+    fn pure_addition_reports_only_added() {
+        let before = counter_tree("0", false);
+        let mut after = counter_tree("0", false);
+        after.nodes[0].children.push(node(
+            "n9",
+            "android.widget.TextView",
+            "app:id/toast",
+            "Saved",
+        ));
+        let changes = TreeChanges::diff(Some(&before), &after, DiffFrames::default(), "");
+        assert_eq!(
+            changes.counts,
+            ChangeCounts {
+                added: 1,
+                removed: 0,
+                changed: 0
+            }
+        );
+        assert_eq!(changes.added[0].text, "Saved");
+        assert_eq!(changes.added[0].id, "n9");
+        assert!(changes.removed.is_empty() && changes.changed.is_empty());
+        assert!(!changes.truncated);
+    }
+
+    #[test]
+    fn pure_removal_reports_only_removed() {
+        let before = counter_tree("0", false);
+        let mut after = counter_tree("0", false);
+        after.nodes[0]
+            .children
+            .retain(|child| child.resource_id != "app:id/inc");
+        let changes = TreeChanges::diff(Some(&before), &after, DiffFrames::default(), "");
+        assert_eq!(
+            changes.counts,
+            ChangeCounts {
+                added: 0,
+                removed: 1,
+                changed: 0
+            }
+        );
+        assert_eq!(changes.removed[0].text, "Increment");
+        assert_eq!(changes.removed[0].id, "n2");
+        assert!(changes.added.is_empty() && changes.changed.is_empty());
+    }
+
+    #[test]
+    fn removed_and_changed_lists_are_capped_with_true_counts() {
+        let make = |text: &str| {
+            let children: Vec<UiNode> = (0..(MAX_DIFF_NODES + 3))
+                .map(|i| node(&format!("c{i}"), "android.widget.TextView", "", text))
+                .collect();
+            tree(vec![
+                node("n0", "android.widget.FrameLayout", "", "").with_children(children)
+            ])
+        };
+        let before = make("old");
+        let after = make("new");
+        let changes = TreeChanges::diff(Some(&before), &after, DiffFrames::default(), "");
+        assert_eq!(changes.counts.changed, MAX_DIFF_NODES + 3);
+        assert_eq!(changes.changed.len(), MAX_DIFF_NODES);
+        assert_eq!(
+            changes.changed[0].fields["text"].old,
+            Value::String("old".into())
+        );
+        assert!(changes.truncated);
+
+        let empty = tree(vec![node("n0", "android.widget.FrameLayout", "", "")]);
+        let removed = TreeChanges::diff(Some(&before), &empty, DiffFrames::default(), "");
+        assert_eq!(removed.counts.removed, MAX_DIFF_NODES + 3);
+        assert_eq!(removed.removed.len(), MAX_DIFF_NODES);
+        assert!(removed.truncated);
     }
 }
