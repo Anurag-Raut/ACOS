@@ -28,7 +28,7 @@ use std::process::Command;
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use acos_art::cgroup::{MemoryLimits, RunCgroup, DEFAULT_MEM_MAX};
+use acos_art::cgroup::{set_capability_test_seam, MemoryLimits, RunCgroup, DEFAULT_MEM_MAX};
 use acos_art::{ArtRoot, Error};
 
 static ONE_GUEST: Mutex<()> = Mutex::new(());
@@ -80,19 +80,22 @@ fn refuses_to_run_when_no_cgroup_can_be_created() {
     // A `systemd-run` that always fails is the honest stand-in for a host
     // without a usable user manager: the run must be refused, not downgraded
     // to `ulimit -v` (which breaks Scudo).
+    //
+    // HYG1: the probe answer is cached per process and the stamp per boot under
+    // `ACOS_ART_DATA`, so this test owns both instead of inheriting them — a
+    // fresh data root (no stamp for this boot can mask the probe) and a probe
+    // directory holding the failing binary (no `PATH` mutation, so a sibling
+    // test that spawns a real scope in this process is not poisoned). The guest
+    // mutex is taken because that seam is process-global.
+    let _g = guard();
     let dir = scratch("no-cgroup");
     let fake = dir.join("systemd-run");
     std::fs::write(&fake, "#!/bin/sh\necho 'Failed to connect to bus' >&2\nexit 1\n").unwrap();
     std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
-    let path = format!("{}:{}", dir.display(), std::env::var("PATH").unwrap_or_default());
-    // `prepare` probes with `systemd-run` from PATH; the fake fails.
-    let old = std::env::var_os("PATH");
-    std::env::set_var("PATH", &path);
+    // The probe from this directory, the stamp from this (empty) data root.
+    set_capability_test_seam(Some(&dir), Some(&dir));
     let result = RunCgroup::prepare(MemoryLimits::default(), dir.join("cgroup-info"));
-    match old {
-        Some(p) => std::env::set_var("PATH", p),
-        None => std::env::remove_var("PATH"),
-    }
+    set_capability_test_seam(None, None);
     let err = result.expect_err("a host without a cgroup must refuse the run");
     assert!(
         matches!(err, Error::CgroupUnavailable(_)),

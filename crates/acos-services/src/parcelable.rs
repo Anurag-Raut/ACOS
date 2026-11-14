@@ -2982,6 +2982,66 @@ fn value_to_dynamic(v: &Value) -> Result<crate::value::DynamicValue> {
     })
 }
 
+/// Read the length word `Parcel.readValue` consumes for a **length-prefixed**
+/// `VAL_*` type, and return `(declared_bytes, body_start)`.
+///
+/// AOSP android-14.0.0_r75 `base/core/java/android/os/Parcel.java`: the table of
+/// length-prefixed types is `isLengthPrefixed` (lines 4908-4926: `VAL_MAP`,
+/// `VAL_PARCELABLE`, `VAL_LIST`, `VAL_SPARSEARRAY`, `VAL_PARCELABLEARRAY`,
+/// `VAL_OBJECTARRAY`, `VAL_SERIALIZABLE`), `writeValue` writes the tag, a
+/// placeholder and then backpatches `end - start` (lines 2458-2481), and
+/// `readValue` reads that word and compares it to the bytes the body consumed
+/// (lines 4529-4546). A negative count, or one larger than the bytes left in the
+/// parcel, is refused before anything is allocated.
+fn read_value_length(parcel: &mut Parcel, tag: i32) -> Result<(usize, usize)> {
+    let declared = parcel.read_int32()?;
+    if declared < 0 {
+        return Err(bad(format!("VAL_{tag} body length {declared} is negative")));
+    }
+    let declared = declared as usize;
+    let start = parcel.data_position();
+    if declared > parcel.remaining() {
+        return Err(bad(format!(
+            "VAL_{tag} body length {declared} exceeds the {} bytes left in the parcel",
+            parcel.remaining()
+        )));
+    }
+    Ok((declared, start))
+}
+
+/// Where AOSP's `readValue` logs `Slog.wtfStack` ("… consumed N bytes, but M
+/// expected", Parcel.java:4539-4543) on a length mismatch, ACOS refuses: a
+/// desynchronised parcel must never be handed to the next field reader.
+fn check_value_length(parcel: &Parcel, declared: usize, start: usize, tag: i32) -> Result<()> {
+    let actual = parcel.data_position().saturating_sub(start);
+    if actual != declared {
+        return Err(bad(format!(
+            "VAL_{tag} body consumed {actual} bytes but declared {declared}"
+        )));
+    }
+    Ok(())
+}
+
+/// Write a length-prefixed `writeValue` body exactly as `Parcel.writeValue`
+/// does (android-14.0.0_r75 `base/core/java/android/os/Parcel.java:2458-2481`):
+/// the tag, a backpatched byte count of everything after it, then the body.
+fn write_value_length_prefixed(
+    parcel: &mut Parcel,
+    tag: i32,
+    body: impl FnOnce(&mut Parcel) -> Result<()>,
+) -> Result<()> {
+    parcel.write_int32(tag);
+    let length_at = parcel.data_size();
+    parcel.write_int32(0);
+    let start = parcel.data_size();
+    body(parcel)?;
+    let end = parcel.data_size();
+    parcel.set_data_position(length_at);
+    parcel.write_int32(i32::try_from(end - start).map_err(|_| bad("writeValue body too large"))?);
+    parcel.set_data_position(end);
+    Ok(())
+}
+
 /// Read a `writeValue` payload.
 pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
     use crate::value::DynamicValue as D;
@@ -3002,21 +3062,32 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
         }
         val::IBINDER => D::Binder(parcel.read_strong_binder()?),
         val::PARCELABLE => {
-            // `Parcel.writeValue` length-prefixes `VAL_PARCELABLE`.
-            let _len = parcel.read_int32()?;
-            let class = parcel.read_string16()?.ok_or_else(|| ServiceError::BadRequest {
-                interface: "bundle".into(),
-                method: "readValue".into(),
-                detail: "VAL_PARCELABLE with a null class name".into(),
-            })?;
-            D::Parcelable(read_payload(&class, parcel)?)
+            // `VAL_PARCELABLE` is length-prefixed (`isLengthPrefixed`,
+            // Parcel.java:4908-4926; the writer is `writeValue` at 2458-2481 +
+            // `writeParcelable` at 2688 + case 2594-2595), and the length covers
+            // the class name *and* the `writeToParcel` body.
+            let (declared, start) = read_value_length(parcel, val::PARCELABLE)?;
+            let value = match parcel.read_string16()? {
+                // `readParcelableCreatorInternal` returns null for a null class
+                // name (Parcel.java:5081-5085) and `readParcelableInternal`
+                // turns that into a null Parcelable (5006-5011): a null name is
+                // a null value, not a malformed parcel.
+                None => D::Null,
+                Some(class) => D::Parcelable(read_payload(&class, parcel)?),
+            };
+            check_value_length(parcel, declared, start, val::PARCELABLE)?;
+            value
         }
         val::MAP => {
-            // `Parcel.readHashMap`: a size (-1 for null) then alternating
-            // key/value `writeValue` payloads. `Settings$NameValueCache`
-            // reads the `LIST_config` reply's `value` key this way.
+            // `VAL_MAP` is length-prefixed too (`isLengthPrefixed`,
+            // Parcel.java:4908-4926): the length word precedes `writeMap`'s
+            // size + alternating key/value `writeValue` payloads
+            // (`writeMap`, Parcel.java:2586; `readHashMapInternal` 5432).
+            // `Settings$NameValueCache` reads the `LIST_config` reply's `value`
+            // key as one of these.
+            let (declared, start) = read_value_length(parcel, val::MAP)?;
             let size = parcel.read_int32()?;
-            if size < 0 {
+            let value = if size < 0 {
                 D::Null
             } else {
                 // Guest-controlled count: every entry is at least two 4-byte
@@ -3031,7 +3102,9 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
                     entries.push((k, v));
                 }
                 D::Map(entries)
-            }
+            };
+            check_value_length(parcel, declared, start, val::MAP)?;
+            value
         }
         val::BUNDLE => {
             let b = read_bundle(parcel)?;
@@ -3119,16 +3192,17 @@ pub fn write_dynamic(parcel: &mut Parcel, value: &crate::value::DynamicValue) ->
             return Err(bad("VAL_LONGARRAY is not modelled"));
         }
         D::Parcelable(p) => {
-            parcel.write_int32(val::PARCELABLE);
-            // `Parcel.writeValue` length-prefixes `VAL_PARCELABLE`; backpatch it.
-            let start = parcel.data_size();
-            parcel.write_int32(0);
-            let payload_start = parcel.data_size();
-            match p {
-                Parcelable::Null => parcel.write_string16_opt(None)?,
+            // `VAL_PARCELABLE` is length-prefixed (`isLengthPrefixed`,
+            // Parcel.java:4908-4926) and the count covers the class name plus
+            // the `writeToParcel` body (`writeValue` 2458-2481, case 2594-2595).
+            write_value_length_prefixed(parcel, val::PARCELABLE, |parcel| match p {
+                Parcelable::Null => {
+                    parcel.write_string16_opt(None)?;
+                    Ok(())
+                }
                 Parcelable::Ordered { class, .. } => {
                     parcel.write_string16(class)?;
-                    write_payload(parcel, p)?;
+                    write_payload(parcel, p)
                 }
                 Parcelable::Fd(fd) => {
                     // Match `ParcelFileDescriptor.writeToParcel`: the `mCommFd`
@@ -3142,25 +3216,26 @@ pub fn write_dynamic(parcel: &mut Parcel, value: &crate::value::DynamicValue) ->
                                 .and_then(|f| f.try_clone().ok())
                                 .map(RawFdValue),
                         ),
-                    )?;
+                    )
                 }
-            }
-            let end = parcel.data_size();
-            let len = end - payload_start;
-            parcel.set_data_position(start);
-            parcel.write_int32(i32::try_from(len).map_err(|_| bad("parcelable too large"))?);
-            parcel.set_data_position(end);
+            })?;
         }
         D::Map(entries) => {
-            // `Parcel.writeMap`: size then alternating `writeValue` pairs. A
-            // `HashMap` is written as `VAL_MAP` (it is a `Map`, so
-            // `writeValue` never reaches the `Serializable` branch).
-            parcel.write_int32(val::MAP);
-            parcel.write_int32(i32::try_from(entries.len()).map_err(|_| bad("map too large"))?);
-            for (k, v) in entries {
-                write_dynamic(parcel, k)?;
-                write_dynamic(parcel, v)?;
-            }
+            // `VAL_MAP` is length-prefixed (`isLengthPrefixed`,
+            // Parcel.java:4908-4926) and `writeMap` (Parcel.java:2586) is the
+            // body: size then alternating `writeValue` pairs. A `HashMap` is
+            // written as `VAL_MAP` (it is a `Map`, so `writeValue` never reaches
+            // the `Serializable` branch).
+            write_value_length_prefixed(parcel, val::MAP, |parcel| {
+                parcel.write_int32(
+                    i32::try_from(entries.len()).map_err(|_| bad("map too large"))?,
+                );
+                for (k, v) in entries {
+                    write_dynamic(parcel, k)?;
+                    write_dynamic(parcel, v)?;
+                }
+                Ok(())
+            })?;
         }
         D::Skipped { tag } => {
             return Err(bad(format!("cannot re-write skipped VAL_* tag {tag}")));

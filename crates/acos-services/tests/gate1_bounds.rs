@@ -11,6 +11,10 @@ use acos_services::parcelable;
 fn a_hostile_val_map_count_is_refused_without_allocating() {
     let mut p = Parcel::new();
     p.write_int32(parcelable::val::MAP);
+    // API 34: the `VAL_MAP` body is length-prefixed (`Parcel.isLengthPrefixed`,
+    // android-14.0.0_r75 `base/core/java/android/os/Parcel.java:4908-4926`), so
+    // the word after the tag is the byte count, then `writeMap`'s size.
+    p.write_int32(4); // declared body: the size word only
     p.write_int32(i32::MAX); // entry count, nothing follows
     p.set_data_position(0);
     // Before the fix this reserved i32::MAX * sizeof((DynamicValue, DynamicValue))
@@ -20,9 +24,21 @@ fn a_hostile_val_map_count_is_refused_without_allocating() {
 }
 
 #[test]
+fn a_val_map_length_beyond_the_parcel_is_refused() {
+    let mut p = Parcel::new();
+    p.write_int32(parcelable::val::MAP);
+    p.write_int32(i32::MAX); // declared body size, nothing follows
+    p.set_data_position(0);
+    let err = parcelable::read_dynamic(&mut p).expect_err("must refuse");
+    assert!(format!("{err}").contains("exceeds"), "{err}");
+}
+
+#[test]
 fn a_val_map_that_fits_still_decodes() {
     let mut p = Parcel::new();
     p.write_int32(parcelable::val::MAP);
+    // Size (4) + two `VAL_INTEGER` entries (4 + 4 bytes each) = 20 bytes.
+    p.write_int32(20);
     p.write_int32(1);
     p.write_int32(parcelable::val::INTEGER);
     p.write_int32(7);
@@ -31,6 +47,7 @@ fn a_val_map_that_fits_still_decodes() {
     p.set_data_position(0);
     let v = parcelable::read_dynamic(&mut p).expect("a one-entry map decodes");
     assert!(format!("{v:?}").contains('7'));
+    assert_eq!(p.data_avail(), 0, "the length word and the body agree");
 }
 
 #[test]

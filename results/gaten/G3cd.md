@@ -283,6 +283,11 @@ byte-identical to `main`): `host_scope_capability()` caches its probe in a per-p
 `PATH` — only passes when it is the first probe in the process. Serialised after another test it fails
 (`RunCgroup { cg: "" }` returned). That is a test-design issue in the repo, not a product defect; it is
 untouched here (no assertion was changed, nothing was `#[ignore]`d) and is reported for its owner.
+**Fixed 2026-11-14 (HYG1, branch `hyg1-tests-parcel`, `EXPERIMENTS.md` E9.2):** the cache is now
+one `Mutex<CapabilityCache>` with a test-only seam, so the S5 refusal test owns a fresh data root
+and its own fake `systemd-run`; it passes alone on a warm host, twice in a row, and in
+`--test-threads=1` order. Production caching is unchanged, and a new unit test proves a warm stamp
+still answers without probing.
 
 ### Gates (one `acos verify` each, `.cache/g3cd/suite3/gate-*.json`)
 
