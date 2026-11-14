@@ -25,7 +25,8 @@ import agent_loop  # noqa: E402
 import d2_warm  # noqa: E402
 
 COUNTER = Path("/home/Qui/Projects/acos/fixtures/build/apps/counter.apk")
-MARK_KEYS = ("first-traversal-skipped", "visibility-redelivered", "activity-not-ready")
+MARK_KEYS = ("first-traversal-skipped", "first-traversal-drew",
+             "visibility-redelivered", "activity-not-ready")
 
 
 def marks(path):
@@ -39,6 +40,41 @@ def marks(path):
     except OSError:
         pass
     return out
+
+
+def newest_marker(scratch):
+    """The newest `activity-resumed.marker` under the probe scratch.
+
+    The guest publishes the skipped-draw evidence there (`draw_skip=`,
+    `first_traversal=`); the probe reports what it says, not what it guesses.
+    """
+    try:
+        files = sorted(scratch.rglob("activity-resumed.marker"),
+                       key=lambda p: p.stat().st_mtime)
+    except OSError:
+        return None
+    return files[-1] if files else None
+
+
+def marker_fields(path):
+    fields = {}
+    if path is None:
+        return fields
+    try:
+        for line in Path(path).read_text(errors="replace").splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                fields[k.strip()] = v.strip()
+    except OSError:
+        pass
+    return fields
+
+
+def forced_redraw(row):
+    """Did this launch force a second traversal / replay visibility (the
+    int-s3ab cost)? Main and this fix must both answer False."""
+    return any(("requesting one redraw" in m) or m.startswith("visibility-redelivered")
+               for m in row["marks"])
 
 
 def main():
@@ -72,6 +108,7 @@ def main():
             env = r.get("envelope") or {}
             value = env.get("result") or {}
             mk = marks(guest_out)
+            mf = marker_fields(newest_marker(scratch))
             row = {
                 "i": i,
                 "ok": bool(env.get("ok")),
@@ -80,7 +117,10 @@ def main():
                 "settle_ms": (value.get("settle") or {}).get("total_ms"),
                 "marks": mk,
                 "skip": [m for m in mk if m.startswith("first-traversal-skipped")],
+                "marker_draw_skip": mf.get("draw_skip"),
+                "marker_first_traversal": mf.get("first_traversal"),
             }
+            row["forced_redraw"] = forced_redraw(row)
             rows.append(row)
             print(json.dumps(row), flush=True)
             d.call("acos_destroy", {"base": base})
@@ -97,13 +137,24 @@ def main():
         "measured": len(measured),
         "skips": sum(1 for r in measured if r["skip"]),
         "skip_reasons": sorted({s for r in measured for s in r["skip"]}),
+        "draw_skip_evidence": sum(1 for r in measured
+                                  if r.get("marker_draw_skip")),
+        "marker_draw_skips": sorted({r["marker_draw_skip"] for r in measured
+                                     if r.get("marker_draw_skip")}),
+        "forced_redraws": sum(1 for r in measured if r["forced_redraw"]),
+        "ready_path": ("main-identical" if not any(r["forced_redraw"] for r in measured)
+                       else "forced-traversal"),
+        "fetch_failures": sum(1 for r in measured
+                              if r.get("code") == "POST_RESUME_NOT_READY"),
         "p50_ms": statistics.median(w) if w else None,
         "min_ms": w[0] if w else None,
         "max_ms": w[-1] if w else None,
     }
     Path(args.out).write_text(json.dumps(doc, indent=2) + "\n")
-    print(json.dumps({k: doc[k] for k in ("measured", "skips", "skip_reasons",
-                                          "p50_ms", "min_ms", "max_ms")}))
+    print(json.dumps({k: doc[k] for k in (
+        "measured", "skips", "skip_reasons", "draw_skip_evidence",
+        "marker_draw_skips", "forced_redraws", "ready_path", "fetch_failures",
+        "p50_ms", "min_ms", "max_ms")}))
 
 
 if __name__ == "__main__":
