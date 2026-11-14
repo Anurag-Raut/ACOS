@@ -35,7 +35,7 @@ sets it.
 | `ACOS_FLUTTER_LIB_DIR`, `ACOS_FLUTTER_DRIVER_DEX`, `ACOS_RN_DRIVER_DEX` | `acos-mcp`, `acos-runtime`, `acos-jni` | Guest code loaded into the confined child (engine lib, driver DEX) | Only point these at artifacts you built; the child still runs confined, but the code is not otherwise authenticated |
 | `ACOS_FLUTTER_SCRATCH`, `ACOS_RN_SCRATCH` | `acos-mcp` | Scratch dirs for engine/RN staging (fallback when `ACOS_SESSION_ROOT` is unset) | Inside the session root by default |
 | `ACOS_NO_BOOT_CACHE`, `ACOS_BOOT_CACHE_NO_IMAGE`, `ACOS_BOOT_CACHE_DEX_TABLES` | `acos-runtime` (`session_pool.rs`), `acos-cli` | Turn the boot cache (or parts of it) **off** | These only reduce trust in the cache — they are the safe direction. The cache payload is validated on restore and a crafted entry can only cause a cache miss |
-| `ACOS_ART_BOOT_IMAGE` | `acos-art` (`boot_image.rs`, `launch.rs`, H13) | `lz4` (default) / `shared-fixed` / `shared-aslr`. Shared modes ro-bind an uncompressed image dir and pass `-Ximage:/data/img/boot.art -Xnorelocate`; `shared-aslr` builds one relocated image per serve cohort and reuses it for that cohort's sessions | **Shared mapping and image ASLR policy**: `shared-fixed` keeps the base at `0x70000000` in every session (trusted only). `shared-aslr` uses ART's own ±128 MiB, 4 KiB-aligned window (**16 bits**, same shape as the stock zygote's per-boot choice) and changes the base per serve start. A session can read the base of its own mapping and therefore of its siblings in the same serve — exactly what a stock Android app learns from the zygote image. A bad value fails the launch |
+| `ACOS_ART_BOOT_IMAGE` | `acos-art` (`boot_image.rs`, `launch.rs`, H13/H13b) | `shared-fixed` (**default**, ADR-0026 §4; cached on disk) / `lz4` / `shared-aslr`. Shared modes ro-bind an uncompressed image dir and pass `-Ximage:/data/img/boot.art -Xnorelocate`; `shared-aslr` builds one relocated image per serve cohort and reuses it for that cohort's sessions | **Shared mapping and image ASLR policy**: `shared-fixed` keeps the base at `0x70000000` in every session (trusted only). `shared-aslr` uses ART's own ±128 MiB, 4 KiB-aligned window (**16 bits**, same shape as the stock zygote's per-boot choice) and changes the base per serve start. A session can read the base of its own mapping and therefore of its siblings in the same serve — exactly what a stock Android app learns from the zygote image. A bad value fails the launch |
 | `ACOS_SHARED_BOOT_IMAGE` | `acos-art` (`launch.rs`, B3 compatibility) | Explicit directory for the **fixed-base** image; equivalent to `ACOS_ART_BOOT_IMAGE=shared-fixed` with that directory | Same fixed-base ASLR warning as `shared-fixed`; refused when combined with `shared-aslr` |
 | `ACOS_ZYGOTE_APP` | `acos-art` (`launch.rs`, Z3) | Research/trusted only, **off by default**: runs the guest as a pre-initialised ART zygote that forks the app child | Binds an arbitrary host build dir into the guest and copies a native shim into the session's `<data>/shim`; adds `-Xzygote -Xhidden-api-policy:disabled`. Only point it at a dir you built from `research/zygote-proto/z3/`. Never for untrusted APKs: the zygote sandbox failed security review for untrusted code (ZS, 2026-11-12) |
 | `ACOS_ART_XMS`, `ACOS_ART_XMX`, `ACOS_ART_HEAP_TARGET_UTILIZATION` | `acos-art` (`launch.rs`, Z7) | Research/trusted only, **off by default**: passes the value as the real ART argv `-Xms`/`-Xmx`/`-XX:HeapTargetUtilization=` to `dalvikvm64` | Changes the guest's heap policy; a too-small ceiling can make an app fail (OOM) or GC more. Values are validated and a bad value fails the launch. Unset = argv unchanged |
@@ -90,8 +90,17 @@ The security trade is address-space information, not data integrity:
   not add a new host read surface; it removes the per-process relocation cost,
   not the guest's ability to inspect its own address space.
 * **`shared-fixed` is different.** It keeps `0x70000000` in every session and
-  across every serve. That is a real loss of image ASLR and remains
-  trusted-workloads-only (see `results/art-runtime/ZS-security-review.md` F10).
+  across every serve. That is a real loss of image ASLR; the owner accepted it
+  as the default in ADR-0026 §4 (H13b). It is still trusted-workloads-only for
+  untrusted APKs (see `results/art-runtime/ZS-security-review.md` F10): a
+  predictable image base is a fixed target for a memory-corruption exploit.
+* **The H13b image cache adds no new host surface.** Entries live in
+  `$ACOS_BOOT_IMAGE_CACHE`/`$ACOS_CACHE_DIR`/`$XDG_CACHE_HOME/acos` (private
+  `0700`, image files `0444`, never `/tmp`), are keyed by a hash of the sysroot
+  jars and ART binaries, and are validated against a manifest (size + sampled
+  checksum) before use; the guest still gets a read-only `--ro-bind` at
+  `/data/img`. The cache is a performance cache, not a trust boundary: damage
+  is a rebuild, never a launch on an unvalidated image.
 * **Disk / cgroup.** A prepared cohort costs ~173 MiB on disk and its pages are
   file-backed page cache, not anonymous memory. A new cohort sweeps the previous
   cohort's images; a killed serve can leave one behind until the next cohort or
