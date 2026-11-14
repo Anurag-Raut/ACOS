@@ -138,6 +138,12 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         .artifacts
         .clone()
         .unwrap_or_else(|| default_artifacts(&scenario));
+    // The default directory (`out/<scenario stem>`) belongs to the scenario, not
+    // to one run: the inspect -> verify -> fix -> rerun loop replaces the previous
+    // run there (recorded as `overwrote_run_id` / `artifacts_overwrote_run`, never
+    // an interleave). A directory the caller names explicitly keeps the refusal
+    // and needs `--overwrite`.
+    let overwrite = args.overwrite || args.artifacts.is_none();
 
     // A run owns its artifacts directory (FB4). Claim it **before** any session,
     // step or frame is written: a directory another run owns is refused with a
@@ -161,7 +167,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
             .unwrap_or_default(),
         env!("CARGO_PKG_VERSION"),
     );
-    if let Err(error) = acos_protocol::artifacts::claim_run_dir(&artifacts, &marker, args.overwrite) {
+    if let Err(error) = acos_protocol::artifacts::claim_run_dir(&artifacts, &marker, overwrite) {
         let envelope = Envelope::failure(
             request_id,
             ProtocolBackend::AcosNative,
@@ -413,7 +419,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         apk: args.apk.as_ref().map(|path| path.display().to_string()),
         scenario: scenario.display().to_string(),
         artifacts: artifacts.display().to_string(),
-        overwrite: args.overwrite,
+        overwrite,
         reference: args
             .reference
             .as_ref()

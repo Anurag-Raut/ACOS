@@ -260,3 +260,42 @@ fn verify_without_apk_uses_the_scenario_app() {
     assert_eq!(value["status"], "fail");
     let _ = std::fs::remove_dir_all(&artifacts);
 }
+
+/// FB4 follow-up: without `--artifacts` the run writes `out/<scenario stem>`,
+/// and the rerun loop replaces the previous run there (recorded), instead of
+/// being refused on the second iteration.
+#[test]
+fn a_rerun_into_the_default_artifacts_dir_replaces_the_previous_run() {
+    let cwd = scratch("default-dir");
+    std::fs::create_dir_all(&cwd).unwrap();
+    let run = || {
+        Command::cargo_bin("acos")
+            .unwrap()
+            .current_dir(&cwd)
+            .arg("verify")
+            .arg(workspace().join("scenarios/negative/wrong-text.yaml"))
+            .arg("--apk")
+            .arg(require_hello_views_apk())
+            .arg("--reference")
+            .arg(workspace().join("fixtures/reference/hello-views/art-api34-x86_64"))
+            .arg("--json")
+            .output()
+            .expect("run acos verify")
+    };
+    let dir = cwd.join("out/wrong-text");
+    let first = run();
+    assert!(!first.status.success(), "the negative scenario fails by design");
+    let first_run = serde_json::from_slice::<Value>(&std::fs::read(dir.join("verdict.json")).unwrap())
+        .unwrap()["request_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let second = run();
+    let envelope: Value = serde_json::from_slice(&second.stdout).expect("JSON envelope");
+    assert_eq!(envelope["status"], "fail", "a rerun is a real run, not a refusal: {envelope}");
+    assert_ne!(envelope["error"]["code"], "INVALID_ARGUMENT");
+    let verdict: Value = serde_json::from_slice(&std::fs::read(dir.join("verdict.json")).unwrap()).unwrap();
+    assert_ne!(verdict["request_id"], first_run.as_str());
+    assert_eq!(verdict["artifacts_overwrote_run"], first_run.as_str());
+    let _ = std::fs::remove_dir_all(&cwd);
+}

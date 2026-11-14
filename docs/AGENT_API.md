@@ -1499,6 +1499,10 @@ an agent must never ship, so:
   the existing contents are removed first, then the new run writes its own. The
   new `run.json` records `overwrote_run_id`, and the verdict carries
   `artifacts_overwrote_run` plus a note.
+* The **default** directory (no `--artifacts`: `out/<scenario stem>`) belongs to
+  the scenario, so a rerun replaces the previous run there exactly as
+  `--overwrite` would (recorded in `run.json` / the verdict). Only a directory
+  you name explicitly is refused.
 * An **empty** directory (for example one a runner just `mkdir`-ed) is claimed
   without complaint. A partially written directory from a crashed run is not
   fresh either: it is refused as "an incomplete earlier run" (no run id to name).
@@ -1865,8 +1869,9 @@ acos verify <scenario.yaml> [--apk <apk>] [--artifacts <dir>] [--overwrite] \
 
 * `--apk` overrides the scenario's `app`; otherwise the scenario path is used.
 * `--artifacts` defaults to `out/<scenario stem>` and receives the full evidence
-  directory (§10). The run owns that directory: a non-empty directory written by
-  another run is refused (`INVALID_ARGUMENT`, naming the previous run id) unless
+  directory (§10). The run owns that directory. A rerun into the default
+  directory replaces the previous run; a non-empty directory you name explicitly
+  is refused (`INVALID_ARGUMENT`, naming the previous run id) unless
   `--overwrite` is passed (§10.4).
 * `--reference` selects the **reference-replay** backend (below). Without it the
   *native* backend runs.

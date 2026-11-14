@@ -172,7 +172,8 @@ Notes that save a run:
 * `acos verify --artifacts <dir>` gives one run ownership of that directory. A
   non-empty dir written by another run is refused (`INVALID_ARGUMENT` naming the
   previous run id); use a fresh dir, or `--overwrite` to replace that evidence
-  deliberately.
+  deliberately. Without `--artifacts` the run uses `out/<scenario stem>`, and a
+  rerun there simply replaces the previous run (the fix -> rerun loop needs no flag).
 
 <!-- /topic:cli -->
 
