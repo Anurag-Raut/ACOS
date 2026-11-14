@@ -5607,7 +5607,7 @@ fn build_driver(root: &ArtRoot) -> Result<PathBuf> {
 /// Compile only the launch guest (`LaunchMain` + `RenderNat`) so unrelated
 /// guest sources under `guest/java` cannot break this command.
 fn build_launch_guest(root: &ArtRoot) -> Result<PathBuf> {
-    let src_dir = PathBuf::from(crate::app::GUEST_SOURCE);
+    let src_dir = crate::app::guest_source_dir();
     let out_dir = root.data.join("app/launch-guest");
     fs::create_dir_all(&out_dir)?;
     let sources = [

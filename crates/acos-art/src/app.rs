@@ -93,8 +93,16 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-/// The guest Java source tree (`dev.acos.art.AppMain` + `RenderNat`).
+/// The guest Java source tree (`dev.acos.art.AppMain` + `RenderNat`) as it was
+/// compiled into this binary. Read-only fallback of [`guest_source_dir`].
 pub const GUEST_SOURCE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/guest/java");
+
+/// The guest Java source tree the launcher compiles at run time: the install
+/// root's copy when `ACOS_HOME` names one, else the checkout's, else the path
+/// compiled into this binary (REL1a).
+pub fn guest_source_dir() -> PathBuf {
+    crate::asset_path("crates/acos-art/guest/java")
+}
 /// The substrate shim source (`dev.acos.art.RenderNat`'s JNI side).
 pub const RENDER_SHIM_SOURCE: &str = include_str!("../shim/render_shim.c");
 
@@ -1306,7 +1314,7 @@ pub struct GuestDex {
 /// let an unrelated in-flight guest file break `render-app` (exactly what a
 /// `LaunchMain` referencing a not-yet-present `dev.acos.e3g` did in P3c).
 pub fn render_guest_sources() -> Vec<PathBuf> {
-    let dir = PathBuf::from(GUEST_SOURCE).join("dev/acos/art");
+    let dir = guest_source_dir().join("dev/acos/art");
     ["AppMain.java", "RenderNat.java"]
         .iter()
         .map(|f| dir.join(f))
@@ -1318,7 +1326,7 @@ pub fn render_guest_sources() -> Vec<PathBuf> {
 /// compile happens **once** per (sources, toolchain) in the shared
 /// content-addressed build cache; later launches only install `classes.dex`.
 pub fn build_guest(root: &ArtRoot) -> Result<GuestDex> {
-    let src_dir = PathBuf::from(GUEST_SOURCE);
+    let src_dir = guest_source_dir();
     let out_dir = root.data.join("app/guest");
     let sources = render_guest_sources();
     if sources.is_empty() {

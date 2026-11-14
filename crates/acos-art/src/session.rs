@@ -184,7 +184,7 @@ impl SessionReport {
 /// from a concurrent `LaunchMain.java` that referenced a not-yet-existing
 /// package and took `render-app` down with it).
 pub fn session_guest_sources() -> Vec<PathBuf> {
-    let dir = PathBuf::from(super::app::GUEST_SOURCE).join("dev/acos/art");
+    let dir = crate::app::guest_source_dir().join("dev/acos/art");
     ["AppMain.java", "RenderNat.java", "SessionMain.java"]
         .iter()
         .map(|f| dir.join(f))

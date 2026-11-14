@@ -105,7 +105,7 @@ const APEX_INFO_MARKER: &str = "<!-- acos-art apex-info-list v3 -->\n";
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("repository root not found (set ACOS_ROOT)")]
+    #[error("runtime root not found (set ACOS_HOME for an installed ACOS, or ACOS_ROOT for a checkout)")]
     NoRepoRoot,
     #[error(
         "ART sysroot not found: {0} (run tools/art-sysroot.sh --out {0}, or set ACOS_ART_SYSROOT)"
@@ -1577,13 +1577,31 @@ fn exec_elapsed_ms() -> u128 {
     ((uptime * 1000.0) as u128).saturating_sub((start_ticks as u128) * 10)
 }
 
-/// The workspace root: `$ACOS_ROOT`, else the nearest ancestor of the cwd or
-/// the executable that contains a `crates/` + `Cargo.toml` pair.
-pub fn repo_root() -> Result<PathBuf> {
+/// The `ACOS_HOME` install root, when set and non-empty (REL1a, docs/INSTALL.md).
+///
+/// It is the root every runtime path is relative to in an installed layout: the
+/// same relative layout as the checkout (`.cache/art/sysroot`,
+/// `.cache/boot/android-34`, `crates/acos-art/guest/java`, …), so installing is
+/// a copy of those trees, not a second code path. Unset means "a checkout" and
+/// every path keeps resolving exactly as before.
+pub fn acos_home() -> Option<PathBuf> {
+    let raw = std::env::var_os("ACOS_HOME")?;
+    let path = PathBuf::from(raw);
+    if path.as_os_str().is_empty() {
+        return None;
+    }
+    Some(path)
+}
+
+/// The developer checkout, ignoring `ACOS_HOME`: `$ACOS_ROOT`, else the nearest
+/// ancestor of the cwd or the executable that contains `crates/` + `Cargo.toml`.
+/// Only read-only fallbacks use this (the compiled-in guest sources, the
+/// fixture corpora), never writable state.
+pub fn dev_root() -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("ACOS_ROOT") {
         let p = PathBuf::from(p);
         if p.join("Cargo.toml").is_file() {
-            return Ok(p);
+            return Some(p);
         }
     }
     let mut cands: Vec<PathBuf> = Vec::new();
@@ -1595,10 +1613,59 @@ pub fn repo_root() -> Result<PathBuf> {
     }
     for c in cands {
         if c.join("Cargo.toml").is_file() && c.join("crates").is_dir() {
-            return Ok(c);
+            return Some(c);
         }
     }
-    Err(Error::NoRepoRoot)
+    None
+}
+
+/// The root every runtime path is joined onto: `$ACOS_HOME` when set (an
+/// installed layout), else the developer checkout.
+pub fn repo_root() -> Result<PathBuf> {
+    repo_root_with(acos_home())
+}
+
+/// [`repo_root`] with the install root passed in, so tests can prove both arms
+/// without mutating the (process-global) environment.
+pub fn repo_root_with(home: Option<PathBuf>) -> Result<PathBuf> {
+    if let Some(home) = home {
+        return Ok(home);
+    }
+    dev_root().ok_or(Error::NoRepoRoot)
+}
+
+/// The checkout the sources were compiled from: the compile-time fallback of
+/// [`asset_path`].
+fn compiled_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(2)
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+}
+
+/// A read-only file that ships with the tree (guest Java sources, fixture
+/// corpora): `$ACOS_HOME/<rel>` when it exists, else the checkout's copy, else
+/// the path compiled into this binary.
+pub fn asset_path(rel: &str) -> PathBuf {
+    asset_path_with(acos_home().as_deref(), rel)
+}
+
+/// [`asset_path`] with the install root passed in (testable).
+pub fn asset_path_with(home: Option<&Path>, rel: &str) -> PathBuf {
+    if let Some(home) = home {
+        let candidate = home.join(rel);
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+    if let Some(dev) = dev_root() {
+        let candidate = dev.join(rel);
+        if candidate.exists() {
+            return candidate;
+        }
+    }
+    compiled_root().join(rel)
 }
 
 /// Minimal protobuf wire walk: `(field, wire_type, value)` where a
@@ -1795,6 +1862,72 @@ pub(crate) fn simple_hash(s: &str) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---------------------------------------------------------------- REL1a
+    // Path resolution. ACOS_HOME wins over any checkout; unset keeps today's
+    // behaviour byte-identically; the guest sources fall back home -> repo ->
+    // compile-time.
+
+    /// A throw-away install root under the checkout's `.cache/`.
+    fn fake_home(tag: &str) -> PathBuf {
+        let dir = scratch_dir(&format!("home-{tag}"));
+        dir
+    }
+
+    #[test]
+    fn acos_home_overrides_every_root_lookup() {
+        let home = fake_home("override");
+        let resolved = repo_root_with(Some(home.clone())).expect("ACOS_HOME resolves");
+        assert_eq!(resolved, home);
+        // The arm is exercised from inside the checkout (the test binary lives
+        // there), so this also proves ACOS_HOME beats a discovered repo root.
+        assert!(dev_root().is_some(), "the test runs inside the checkout");
+    }
+
+    #[test]
+    fn unset_home_resolves_to_the_checkout_unchanged() {
+        let resolved = repo_root_with(None).expect("a checkout resolves");
+        assert!(resolved.join("Cargo.toml").is_file(), "{}", resolved.display());
+        assert!(resolved.join("crates").is_dir(), "{}", resolved.display());
+        // Today's asset paths, relative to that root.
+        assert!(
+            resolved.join(".cache/boot/android-34").is_dir(),
+            "the dev layout's boot cache is where it always was"
+        );
+    }
+
+    #[test]
+    fn guest_asset_resolves_home_then_checkout_then_compiled_path() {
+        let rel = "crates/acos-art/guest/java/dev/acos/art/AppMain.java";
+        // 1. Install root wins when it carries the file.
+        let home = fake_home("asset");
+        let installed = home.join(rel);
+        fs::create_dir_all(installed.parent().unwrap()).unwrap();
+        fs::write(&installed, b"class AppMain {}\n").unwrap();
+        assert_eq!(asset_path_with(Some(&home), rel), installed);
+        // 2. An install root without it (or no root at all) falls back to the
+        //    checkout, which is where the sources really live.
+        let empty = fake_home("asset-empty");
+        let from_empty = asset_path_with(Some(&empty), rel);
+        assert!(from_empty.is_file(), "{}", from_empty.display());
+        assert!(!from_empty.starts_with(&empty));
+        let from_unset = asset_path_with(None, rel);
+        assert!(from_unset.is_file(), "{}", from_unset.display());
+        // 3. Neither has it: the compiled-in path is returned so the caller can
+        //    name it in the error instead of silently picking something else.
+        let missing = "crates/acos-art/guest/java/does-not-exist";
+        let wanted = asset_path_with(Some(&empty), missing);
+        assert_eq!(wanted, compiled_root().join(missing));
+        assert!(!wanted.exists());
+        let _ = fs::remove_dir_all(&home);
+        let _ = fs::remove_dir_all(&empty);
+    }
+
+    #[test]
+    fn compiled_root_is_the_checkout() {
+        let root = compiled_root();
+        assert!(root.join("crates/acos-art/guest/java").is_dir(), "{}", root.display());
+    }
 
     /// Tiny scratch dir under the repo `.cache/` (never `/tmp`: the directives
     /// keep ART scratch on the repo volume).
