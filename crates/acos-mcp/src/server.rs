@@ -352,9 +352,12 @@ impl<B: Backend> Server<B> {
                 let caps = self.backend.capabilities();
                 let info = self.backend.info();
                 let root = self.config.allowed_roots.first().cloned();
+                // `{"topic": "workflow"|"cli"|"scenarios"|"errors"|"limits"}`
+                // returns one section of the embedded agent guide.
+                let topic = args.get("topic").and_then(Value::as_str);
                 pass_with_result(
                     "req_help",
-                    help::build_help(&caps, &info, root.as_deref()),
+                    help::build_help_topic(&caps, &info, root.as_deref(), topic),
                 )
             }
             ToolRef::Session(name) => {
@@ -401,7 +404,16 @@ impl<B: Backend> Server<B> {
                     id,
                     json!({
                         "protocolVersion": negotiated,
-                        "capabilities": {"tools": {"listChanged": false}},
+                        // Tools, plus the agent guide as resources
+                        // (`acos://guide`, `acos://guide/<topic>`,
+                        // `acos://errors`) and the `verify_android_flow`
+                        // prompt. Nothing here is a capability the server
+                        // does not implement below.
+                        "capabilities": {
+                            "tools": {"listChanged": false},
+                            "resources": {"subscribe": false, "listChanged": false},
+                            "prompts": {"listChanged": false}
+                        },
                         "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
                         "instructions": INSTRUCTIONS,
                     }),
@@ -416,6 +428,30 @@ impl<B: Backend> Server<B> {
                     .map(|tool| tool.to_json(&version))
                     .collect();
                 jsonrpc::result(id, json!({ "tools": tools }))
+            }
+            "resources/list" => jsonrpc::result(id, json!({ "resources": resources() })),
+            "resources/read" => {
+                let uri = params.get("uri").and_then(Value::as_str).unwrap_or("");
+                match read_resource(uri) {
+                    Some(contents) => jsonrpc::result(id, json!({ "contents": contents })),
+                    None => jsonrpc::error(
+                        id,
+                        &RpcError::new(INVALID_PARAMS, format!("unknown resource uri `{uri}`"))
+                            .with_data(json!({ "available": resource_uris() })),
+                    ),
+                }
+            }
+            "resources/templates/list" => {
+                jsonrpc::result(id, json!({ "resourceTemplates": resource_templates() }))
+            }
+            "prompts/list" => jsonrpc::result(id, json!({ "prompts": prompts() })),
+            "prompts/get" => {
+                let name = params.get("name").and_then(Value::as_str).unwrap_or("");
+                let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+                match prompt(name, &args) {
+                    Ok(result) => jsonrpc::result(id, result),
+                    Err(error) => jsonrpc::error(id, &error),
+                }
             }
             "logging/setLevel" => jsonrpc::result(id, json!({})),
             _ => jsonrpc::error(
@@ -649,6 +685,142 @@ fn write_value<W: Write>(sink: &Mutex<W>, value: &Value) {
         let _ = guard.write_all(b"\n");
         let _ = guard.flush();
     }
+}
+
+// ---- resources and prompts: the agent guide as first-class MCP objects ------
+//
+// The guide lives in `docs/AGENT_GUIDE.md`, is embedded at build time
+// (`help::AGENT_GUIDE`) and is served three ways: the `acos_help` tool, these
+// resources, and the `verify_android_flow` prompt. One text, three access
+// paths — nothing here paraphrases it.
+
+/// Every resource URI this server serves.
+pub fn resource_uris() -> Vec<&'static str> {
+    let mut uris = vec!["acos://guide", "acos://errors"];
+    uris.extend(
+        help::TOPICS
+            .iter()
+            .filter(|topic| **topic != "errors")
+            .map(|topic| match *topic {
+                "workflow" => "acos://guide/workflow",
+                "cli" => "acos://guide/cli",
+                "scenarios" => "acos://guide/scenarios",
+                "limits" => "acos://guide/limits",
+                _ => "acos://guide",
+            }),
+    );
+    uris.sort_unstable();
+    uris.dedup();
+    uris
+}
+
+/// `resources/list`: one markdown resource per guide section.
+pub fn resources() -> Vec<Value> {
+    let mut list = vec![json!({
+        "uri": "acos://guide",
+        "name": "agent-guide",
+        "title": "ACOS agent guide (complete)",
+        "description": "How to use ACOS from an agent: the loop, every CLI command with an example, scenario YAML, settle rules, error codes and limits.",
+        "mimeType": "text/markdown",
+    })];
+    // `acos://errors` is the error section under its own, memorable name.
+    list.push(json!({
+        "uri": "acos://errors",
+        "name": "agent-guide-errors",
+        "title": "ACOS error codes -> what to do",
+        "description": "Every error code the engine can return and the action it demands.",
+        "mimeType": "text/markdown",
+    }));
+    for topic in help::TOPICS {
+        list.push(json!({
+            "uri": format!("acos://guide/{topic}"),
+            "name": format!("agent-guide-{topic}"),
+            "title": format!("ACOS agent guide: {topic}"),
+            "description": match *topic {
+                "workflow" => "The doctor -> inspect -> launch -> observe -> act -> verify loop.",
+                "cli" => "Every `acos` command with a runnable example.",
+                "scenarios" => "How to write a scenario YAML for `acos verify` (steps, selectors, settle, assertions).",
+                "errors" => "Every error code and the action it demands.",
+                "limits" => "What the engine does not support and the host admission rules.",
+                _ => "ACOS agent guide section.",
+            },
+            "mimeType": "text/markdown",
+        }));
+    }
+    list
+}
+
+/// `resources/templates/list`: the one dynamic shape (`acos://guide/{topic}`).
+pub fn resource_templates() -> Vec<Value> {
+    vec![json!({
+        "uriTemplate": "acos://guide/{topic}",
+        "name": "agent-guide-topic",
+        "title": "ACOS agent guide, one topic",
+        "description": "One section of the agent guide.",
+        "mimeType": "text/markdown",
+    })]
+}
+
+/// `resources/read`: the contents for a URI, or `None` when it is not ours.
+pub fn read_resource(uri: &str) -> Option<Vec<Value>> {
+    let topic = match uri {
+        "acos://guide" => None,
+        // `acos://errors` is the error section under its own name.
+        "acos://errors" => Some("errors"),
+        other => {
+            let name = other.strip_prefix("acos://guide/")?;
+            Some(help::TOPICS.iter().copied().find(|t| *t == name)?)
+        }
+    };
+    Some(vec![json!({
+        "uri": uri,
+        "name": topic.map_or("agent-guide".to_string(), |t| format!("agent-guide-{t}")),
+        "title": topic.map_or("ACOS agent guide (complete)".to_string(), |t| format!("ACOS agent guide: {t}")),
+        "mimeType": "text/markdown",
+        "text": help::guide(topic),
+    })])
+}
+
+/// `prompts/list`.
+pub fn prompts() -> Vec<Value> {
+    vec![json!({
+        "name": "verify_android_flow",
+        "title": "Verify an Android flow with ACOS",
+        "description": "Produce a scenario YAML for the APK and goal, run `acos verify`, read the verdict and report what is proven (and what is not).",
+        "arguments": [
+            {"name": "apk", "description": "Path to the APK under test (inside ACOS_ALLOWED_ROOTS).", "required": true},
+            {"name": "goal", "description": "The user-visible flow to prove, e.g. `tap Increment and the count reads 1`.", "required": true},
+        ],
+    })]
+}
+
+/// `prompts/get`: the prompt body for `verify_android_flow`.
+pub fn prompt(name: &str, args: &Value) -> Result<Value, RpcError> {
+    if name != "verify_android_flow" {
+        return Err(RpcError::new(
+            INVALID_PARAMS,
+            format!("unknown prompt `{name}`"),
+        )
+        .with_data(json!({"available": ["verify_android_flow"]})));
+    }
+    let apk = args.get("apk").and_then(Value::as_str).unwrap_or("").trim();
+    let goal = args.get("goal").and_then(Value::as_str).unwrap_or("").trim();
+    if apk.is_empty() || goal.is_empty() {
+        return Err(RpcError::new(
+            INVALID_PARAMS,
+            "verify_android_flow requires both `apk` and `goal`",
+        ));
+    }
+    let text = format!(
+        "Verify this Android flow on real ART with ACOS.\n\n         APK: {apk}\n         Flow to prove: {goal}\n\n         1. `acos_help` with topic `scenarios` for the scenario YAML format (one-key step maps, selectors, \n            settle modes, `expect_change`, assertion kinds). Call `acos_inspect` first for the package and \n            launcher activity.\n         2. Write the scenario: `launch` (with the real activity), `wait_for` the first node you will assert, \n            then `assert_text` for the initial state, the input step with `expect_change: true`, and \n            `assert_text`/`assert_log` for the result. Assertions are strict: never ask for `settle: fast` on \n            an assertion, and do not add sleeps.\n         3. Run it: `acos_verify` with `apk`, `scenario` and an artifacts directory (or `acos verify \n            <scenario.yaml> --artifacts out/<name> --json`).\n         4. Read `verdict.json` and `steps/NN-*.json`. Branch on `error.code`: `fail` means the app is wrong, \n            `unsupported`/`blocked` means ACOS cannot do it (report it, never a pass), `HOST_MEMORY_LOW` means \n            the host had no room and nothing ran.\n         5. Report what the evidence proves, quote the failing step and its code, and state plainly what was \n            not verified."
+    );
+    Ok(json!({
+        "description": format!("Verify `{goal}` in `{apk}` with an ACOS scenario"),
+        "messages": [{
+            "role": "user",
+            "content": {"type": "text", "text": text},
+        }],
+    }))
 }
 
 /// Convenience: the capability snapshot of a server (used by tests).
