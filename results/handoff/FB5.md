@@ -186,3 +186,47 @@ weakened and not touched.
 - **L1 (should)**: `owned_status` (~2074-2120) joins on id only -> filter by token like the sweep; never report another client's guest/RSS; read `guest_pid` only while the session is provably ours.
 - **L2**: `session_list` must not touch the default session (fixed by H1).
 - **L3**: SIGTERM + stdin EOF together -> main must wait for the signal thread's teardown to finish (join); a second SIGTERM/SIGINT during teardown is handled (exit promptly after a bounded wait).
+
+## FB5b — fixes for the review above (idle-expiry ownership)
+
+Commits on `fb5-session-hygiene`: `17540cc` (fixes + tests), plus the
+serveleak2 test follow-up. Evidence: `.cache/fb5b/logs/live.log`,
+`.cache/fb5b/logs/two-instance.log`, `.cache/fb5b/gates-*.json`,
+`.cache/fb5/cargo-test-fb5b.log`.
+
+| finding | fix (file) | test |
+|---|---|---|
+| **H1** | `daemon_sessions` calls `forward_to_daemon_opts` directly; `forward_session_tool_opts` short-circuits `session_list` before the tombstone/touch/in-flight path (`session_backend.rs`). `sweep_idle`: on the EXTERNAL daemon a failed listing destroys nothing, logs, returns `true` and the reaper backs off 5 s. Private daemon keeps its id fallback (ids can only be ours). | `fb5_hygiene`: `h1_default_session_expiry_does_not_break_the_next_sweeps_listing` (default session expires, second sweep lists and destroys only ours, `s_foreign` untouched, `session_list` on the tombstoned default id is not an expiry answer), `h1_a_relaunched_foreign_session_with_the_same_id_is_never_destroyed`, `h1_a_failed_listing_destroys_nothing_on_the_external_daemon`; unit `session_list_ignores_a_default_session_tombstone` |
+| **M1** | `OwnedSession` gains `seq`, `in_flight`, `expiring`. `begin_call` marks the call in flight and renews `last_used` BEFORE forwarding; the RAII `InFlight` guard renews it again when the call ends. The sweep *claims* due sessions under the `owned` lock after re-checking clock + in-flight (so a call arriving between selection and destroy wins), then lists and destroys. A call arriving mid-destroy gets the `idle_ttl_expired` envelope (a launch waits ≤ 20 s for the reclaim). The reaper's own destroy uses a raw forward (no tombstone loop); tombstone is written before the record is dropped. | unit `in_flight_calls_protect_a_session_and_mid_destroy_calls_get_the_reason`, `a_guard_of_a_replaced_launch_does_not_touch_the_new_record`; `fb5_hygiene::m1_a_slow_call_in_flight_is_not_idleness` (1.5 s call, 1 s TTL) |
+| **M2** | external daemon + empty launch token ⇒ the session's `idle_ttl_s` is recorded and reported as `0` (logged once at launch); the sweep also skips tokenless records on the external daemon. | `m2_tokenless_sessions_are_never_expired_on_the_external_daemon` |
+| **M3** | `daemon::ensure_private_dir`: `symlink_metadata`, creates with `DirBuilder::mode(0o700)`, refuses a symlink / non-dir, never chmods. `ensure_runtime_base`: never chmods through a link (a link to an ours-and-private dir is accepted unrepaired; otherwise refused). | `daemon::tests::symlinked_private_dirs_are_refused_and_never_chmodded` |
+| **L1** | `owned_status` attributes a daemon entry to us only when its token equals ours (another client's relaunch ⇒ not listed, no pid/RSS); tokenless on the external daemon ⇒ listed without daemon facts. | `l1_status_ignores_a_session_another_client_relaunched` |
+| **L2** | `session_list` never touches the default session (H1). | covered by the H1 test |
+| **L3** | `signals.rs`: shared `TeardownState`; `main` calls `join_teardown()` (≤ 30 s) after stdin EOF so a SIGTERM racing EOF is never cut off; a second SIGTERM/SIGINT during teardown starts a watcher that waits `SECOND_SIGNAL_GRACE` (3 s) and exits 1. | `signals::tests::main_waits_for_a_running_teardown_and_not_for_an_idle_one`, `a_second_signal_wait_is_bounded_when_the_teardown_hangs` |
+
+Existing test touched: `serveleak2_ownership` asserted `session_list` carried the
+default session id (an artefact of the old default-fill H1 removes); it now
+asserts the listing happens (`expect_tool`) — the "A checks the token before
+destroying" semantics and the zero-destroy assertion are unchanged.
+
+### Acceptance
+
+| criterion | result | evidence |
+|---|---|---|
+| unit tests H1/M1/M2/M3/L1/L3 | PASS | `acos-mcp --lib` 77 passed; `fb5_hygiene` 8 passed (incl. 6 new) |
+| `cargo test --release --offline --no-fail-fast -p acos-cli -p acos-mcp -p acos-protocol` | PASS except the known pre-existing flake `process::tests::output_limit_is_enforced` (fails only in the full parallel run, passes alone — noted in §3 above, untouched); 38 other targets ok | `.cache/fb5/cargo-test-fb5b.log`; `cargo test -p acos-mcp --lib` rerun: 77/77 ok |
+| live, scratch install, no XDG override: `idle_ttl_s: 20` expiry, structured expired error, B2 (stdin EOF), SIGTERM teardown 0.06 s, B1 (SIGKILL owner), no foreign `acos serve` signalled | PASS (11/11) | `.cache/fb5b/logs/live.log` |
+| two instances, ONE external `acos serve` (this build, scratch socket `.cache/fb5b/ext.sock`): A (TTL 15) and B relaunch the same explicit id `s_shared`; after A's window B is still live and observable, A logs "launched again by another client; not expiring it" and no longer lists B's guest, B destroys its own session on EOF | PASS (8/8) | `.cache/fb5b/logs/two-instance.log` |
+| gates `v2-art-counter`, `w22-counter-reset`, `form-validation` | PASS (`pass`, `art-reference`) | `.cache/fb5b/gates-*.json` |
+
+### Decisions / remaining
+
+* Shutdown (`destroy_owned_sessions`) still destroys a *tokenless* session by id
+  on an external daemon (B1/B2 against an older `acos serve`). Only idle expiry
+  was in scope; tightening it would leak guests of v0.2.1 serve on every exit.
+  Orchestrator call.
+* `OwnedSession` equality of ownership is still check-then-destroy (list, then
+  `acos_destroy`): the daemon has no "destroy if token" verb, so a relaunch in
+  that microsecond window is theoretically possible. A daemon-side
+  `expect_token` argument would close it.
+* Scratch prefix deleted; the `.cache/fb5-target` build dir was kept for reruns.
