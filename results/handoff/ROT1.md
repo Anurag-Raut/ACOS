@@ -267,3 +267,24 @@ the image: the `ActivityClientRecord` lookup through `mActivities` for the in-pr
    contain it).
 4. `scenarios/rot1-rotate.yaml` + `scenarios/negative/rot1-rotate-wrong.yaml`, 3/3 each; then
    the 3 unsupported rotate scenarios, then the gates and the A/B.
+
+## 3a. Measured on one live run (window half only)
+
+`ACOSLAUNCH_INTERACTIVE=1 acos-art launch --apk counter.apk`, stdin
+`tree` → `rotate rotation=1` → `tree` → `rotate rotation=0` → `tree`:
+
+* `{"cmd":"rotate","ok":true,"rotation":1,"width":2400,"height":1080,"probe_seq":13}` and
+  `{"…","rotation":0,"width":1080,"height":2400,"probe_seq":19}` — both bound to a probe newer
+  than the request;
+* the rotated sample's root `DecorView` bounds are `[0,0][2400,1080]`, and after rotating back
+  `[0,0][1080,2400]`: the WMS rotation + `mForceNextWindowRelayout` relayout really happen;
+* **the tree stayed a 1-node DecorView skeleton and the guest logged one
+  `onCreate/onStart/onResume` only**, so the Activity-level rung (`handleConfigurationChanged`
+  → relaunch/config callback) did not demonstrably run. `ACOSLAUNCH MARK rotate…` /
+  `rotate-failed…` is written to guest stdout, which the host consumes without echoing it into
+  the session trace, so the failing rung is unnamed. This is why `input.rotate` stays
+  unsupported.
+
+Evidence: `.cache/rot3/run2/{stdout.txt,live-session.json}` (gitignored). Also fixed in this
+pass: the live probe re-resolves `resumedActivity()` per sample instead of using the Activity
+instance captured at launch (a relaunch replaces it).

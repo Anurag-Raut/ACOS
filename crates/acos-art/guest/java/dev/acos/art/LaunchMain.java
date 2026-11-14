@@ -1266,11 +1266,22 @@ public final class LaunchMain {
                 ? Configuration.ORIENTATION_LANDSCAPE
                 : Configuration.ORIENTATION_PORTRAIT;
         android.graphics.Rect bounds = new android.graphics.Rect(0, 0, PANEL_W, PANEL_H);
-        cfg.windowConfiguration.setBounds(bounds);
-        cfg.windowConfiguration.setAppBounds(REPORT_INSETS
-                ? new android.graphics.Rect(0, 0, PANEL_W, PANEL_H)
-                : new android.graphics.Rect(0, STATUS_INSET, PANEL_W, PANEL_H - NAV_INSET));
-        cfg.windowConfiguration.setMaxBounds(bounds);
+        // `Configuration.windowConfiguration` and `WindowConfiguration`'s
+        // setters are `@hide`, so they are reached by reflection (same as every
+        // other internal field on this path).
+        Object wc = get(cfg, "windowConfiguration");
+        if (wc != null) {
+            android.graphics.Rect app = REPORT_INSETS
+                    ? new android.graphics.Rect(0, 0, PANEL_W, PANEL_H)
+                    : new android.graphics.Rect(0, STATUS_INSET, PANEL_W, PANEL_H - NAV_INSET);
+            try {
+                wc.getClass().getMethod("setBounds", android.graphics.Rect.class).invoke(wc, bounds);
+                wc.getClass().getMethod("setAppBounds", android.graphics.Rect.class).invoke(wc, app);
+                wc.getClass().getMethod("setMaxBounds", android.graphics.Rect.class).invoke(wc, bounds);
+            } catch (Throwable t) {
+                System.out.println("ACOSLAUNCH MARK rotate-window-configuration-failed " + unwrap(t));
+            }
+        }
         return cfg;
     }
 
@@ -1325,9 +1336,17 @@ public final class LaunchMain {
                 throw new IllegalStateException("no ActivityClientRecord for token");
             }
             Object ai = get(r, "activityInfo");
-            int handled = ai instanceof android.content.pm.ActivityInfo
-                    ? ((android.content.pm.ActivityInfo) ai).getRealConfigChanged()
-                    : 0;
+            int handled = 0;
+            if (ai != null) {
+                // `ActivityInfo.getRealConfigChanged()` is `@hide`.
+                try {
+                    java.lang.reflect.Method g = ai.getClass().getMethod("getRealConfigChanged");
+                    handled = (Integer) g.invoke(ai);
+                } catch (Throwable t) {
+                    System.out.println("ACOSLAUNCH MARK rotate-getRealConfigChanged-failed "
+                            + unwrap(t));
+                }
+            }
             boolean relaunch = (handled & rotationBits) != rotationBits;
             Class<?> rec = Class.forName("android.app.ActivityThread$ActivityClientRecord");
             if (relaunch) {
@@ -1366,7 +1385,12 @@ public final class LaunchMain {
                 Object window = activity.getClass().getMethod("getWindow").invoke(activity);
                 Object decor = window.getClass().getMethod("getDecorView").invoke(window);
                 if (decor instanceof View) {
-                    Object vr = ((View) decor).getViewRootImpl();
+                    Object vr = null;
+                    try {
+                        // `View.getViewRootImpl()` is `@hide`.
+                        vr = decor.getClass().getMethod("getViewRootImpl").invoke(decor);
+                    } catch (Throwable ignored) {
+                    }
                     if (vr != null) {
                         setFieldForce(vr.getClass(), vr, "mForceNextWindowRelayout", Boolean.TRUE);
                     }
@@ -1509,7 +1533,12 @@ public final class LaunchMain {
                                 @Override
                                 public void run() {
                                     try {
-                                        emitProbe(activity, n, why);
+                                        // ROT3: after a relaunch the Activity
+                                        // instance is a new one; a sample must
+                                        // describe the *resumed* Activity, not
+                                        // the instance captured at launch.
+                                        Object live = resumedActivity(sThread);
+                                        emitProbe(live != null ? live : activity, n, why);
                                         // H2: the first emitted sample is the
                                         // host's `ready` (first frame). Request
                                         // ART's own background collection now

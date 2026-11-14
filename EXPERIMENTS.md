@@ -2534,10 +2534,15 @@ Landed this pass: the WMS display rotation, the host `rotate` command and the gu
 | guest `ROTATE <quarters>` (`LaunchMain`, the engine's real guest class) | **done in code**: control thread posts to the main looper; new `Configuration` (orientation, dp size, `WindowConfiguration` bounds/appBounds) → real `ActivityThread.handleConfigurationChanged(config, 0)` → activity-level decision from `ActivityInfo.getRealConfigChanged()` against `orientation\|screenLayout\|screenSize\|smallestScreenSize` → `handleActivityConfigurationChanged` (manifest declares all four) or `scheduleRelaunchActivity` + `handleRelaunchActivity` (AOSP `handleRelaunchActivityInner` order: pause → stop(saveState) → destroy → launch(state restored)) → `ViewRootImpl.mForceNextWindowRelayout` + `requestLayout()` → one `ACOSPROBE` at the new size |
 | `ArtSession::rotate` / `SessionCapabilities{rotate}` / `InputAction::Rotate` | **not done.** `crates/acos-cli/src/engine/mod.rs:980` still answers `UNSUPPORTED_BACKEND`/`input.rotate`, so no scenario can claim a rotate pass |
 | `acos-wm` rotated input mapping, `scenarios/rot1-rotate.yaml` + negative, the 3 unsupported rotate scenarios | **not done** |
-| one live rotate run | **not obtained**: the ART lock had four other holders (a phone run, the interleaved `int` benchmark, two `ZPROD3` arms, `G3F1`); a 300 s acquisition never got a slot, so no guest evidence exists yet. Nothing above is claimed as measured on a device |
+| one live rotate run | **obtained, and it proves the window half only.** Interactive `ACOSLAUNCH_INTERACTIVE=1 acos-art launch --apk counter.apk`, stdin `tree` → `rotate rotation=1` → `tree` → `rotate rotation=0` → `tree`: both rotate replies are `ok:true` with a probe sample newer than the request, `24 rotation=1 2400x1080 probe_seq=13` / `rotation=0 1080x2400 probe_seq=19`, and the sample's root `DecorView` bounds are `[0,0][2400,1080]` then `[0,0][1080,2400]` — the window really relaid out at the rotated frame and back. **But the tree stayed a 1-node DecorView skeleton and the guest log has exactly one `onCreate/onStart/onResume`**, i.e. the Activity-level config-change/relaunch rung did not run (or failed silently): `ACOSLAUNCH MARK rotate…`/`rotate-failed…` goes to guest stdout, which the host consumes without echoing into the session trace, so the failing rung is not yet named. Not a rotate pass. Evidence: `.cache/rot3/run2/{stdout.txt,live-session.json}` (gitignored) |
 | gates / Gaten / A-B | not run (no behavioural change on non-rotating paths — the rotate command is only reachable from the interactive stdin, which no gate drives) |
 
-The smallest next action is therefore one live `ACOSLAUNCH_INTERACTIVE=1` launch with
-`{"cmd":"tree"}` → `{"cmd":"rotate","rotation":1}` → `{"cmd":"tree"}`, which either shows
-`rotate rotation=1 relaunch=… panel=2400x1080` in the guest log plus a landscape root, or
-names the failing rung (`rotate-failed`). Only after that may `input.rotate` be flipped.
+Also fixed during the run: the live probe used the Activity instance captured at launch, so
+after a relaunch it walked the destroyed decor; it now re-resolves `resumedActivity()` per
+sample.
+
+The smallest next action is to make the guest's `ACOSLAUNCH MARK rotate…`/`rotate-failed…`
+line visible to the host (echo it into the session trace / stderr) and re-run the same three
+commands: that names whether `mActivities` lookup, `PendingTransactionActions`, or
+`handleRelaunchActivity` is the failing rung. Only after the content tree survives the rotate
+may `input.rotate` be flipped.
