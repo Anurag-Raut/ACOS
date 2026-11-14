@@ -165,12 +165,26 @@ impl ZygoteHost {
             .ok()
             .filter(|value| !value.is_empty())
             .unwrap_or_else(|| "3".to_string());
+        // ZPROD4 (merge of `main` `389429a`): `main` made `shared-fixed` the
+        // default boot image, and ART refuses it under `-Xzygote` — the zygote's
+        // `only_use_system_oat_files_` rejects a `/data/img` image with
+        // `Registering a non /system oat file: /data/img/boot.oat` (SIGABRT in the
+        // keeper; measured on the first post-merge flag-on run, and a documented
+        // limitation, ZS-security-review F11 / Z1 §5.2). The keeper therefore pins
+        // the in-memory stock `lz4` image (the pre-merge default) unless the caller
+        // explicitly chose an image: a chosen `ACOS_ART_BOOT_IMAGE` is passed
+        // through untouched and still fails closed if ART refuses it.
+        let boot_image = std::env::var("ACOS_ART_BOOT_IMAGE")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "lz4".to_string());
         let keeper_env: Vec<(String, String)> = vec![
             ("ACOSLAUNCH_INTERACTIVE".into(), "1".into()),
             ("ACOSLAUNCH_LIVE_PROBE".into(), "1".into()),
             ("ACOSLAUNCH_FRAME_WAIT_SECS".into(), frame_wait),
             ("ACOS_INPUT_ACK_MS".into(), "2500".into()),
             ("ACOS_ZYGOTE_PROBE".into(), "1".into()),
+            ("ACOS_ART_BOOT_IMAGE".into(), boot_image),
         ];
         let mut keepers = self.lock();
         // ZPROD4 (design §6): a keeper that died is not "a keeper". It is removed

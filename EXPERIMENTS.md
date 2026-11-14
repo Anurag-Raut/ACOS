@@ -2273,6 +2273,45 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   two negatives fail; no zygote artifact is created (all `out/*/zygote` files predate the off run).
   Not measured: flag ON vs OFF latency (lock queue); no number claimed. Evidence
   `.cache/zprod3b/on.log`, `off.log`, `cli.log`, `art.log` and `results/handoff/ZPROD3b.md`.
+- **ZPROD4 (same number, same branch; merge of `main` `389429a` first): the first product-path
+  latency measurement + a dead keeper that restarts.** Merge kept both behaviours: the S3b
+  one-bounded-retry relaunch loop now wraps `start_inner` (so it covers the exec path exactly as
+  `main` and the zygote arm when the flag is on; `ZygoteStart` gained a manual `Clone` so a retry
+  re-spawns the same tag), `ArtSession` keeps H13b `boot_image()` next to the zygote accessors,
+  the reset reply carries BOTH `merge_zygote_fields` and `relaunch_retry`, and `launch.rs` keeps
+  both `probe_channel_tests` and `skipped_traversal_tests`. A/B numbers go in the row below.
+- **ZPROD4 dead keeper:** a keeper that is not alive is removed by `ZygoteHost::prepare`, and the
+  next request boots a fresh keeper — a new zygote, a **new `zygote_boot_epoch`**, a fresh fork.
+  A verb on a session whose keeper is gone (or whose epoch no longer matches) is reported as
+  `ZYGOTE_DEAD` with `details.zygote.session="lost"`, the session's epoch, the keeper's current
+  epoch and `repointed=false`; it is never re-pointed at the new keeper. Found and fixed on the
+  way: a restarted keeper inherited the dead keeper's `plan/ready` (which carries the epoch), so
+  the new zygote answered with the **old** epoch — `PersistentZygote::start` now removes
+  `ready` and `zygote.pid` before spawning (§4.2). Proven by a mock-keeper test (SIGKILL between
+  two requests: new epoch, fresh child, lost session) and LIVE on real ART (see the ZPROD4 run
+  below).
+- **ZPROD4 merge + flag results (measured).** Flag OFF after the merge: the full standing list
+  **25/25 as specified** — 10 gates pass (`v2-art-counter`, `w22-counter-reset`,
+  `w54-dialog-pixels`, `w42-back-frame`, `w15-dialog-menu`, `form-validation`,
+  `suite/T03-render-good`, `v1-offscreen-pager`, `w7-insets-report`, `se1-expect-change-tap`),
+  `suite/T03-render-wrong` / `w7-insets-carve-negative` / `negative/se1-expect-change-noop` fail
+  `ASSERTION_FAILED`, `negative/offscreen-pager-visible` fails `ELEMENT_OFFSCREEN`,
+  `p11-progress-timeout` fails `TIMEOUT`, the 5 Gaten flows pass and the 5 negative flows fail
+  `ASSERTION_FAILED` (`.cache/zprod4/out/off.log`). **Flag ON**: the first post-merge run failed
+  every check with `ZYGOTE_DEAD` — a **merge regression, not noise**: `main` made `shared-fixed`
+  the default boot image (a file under `/data/img`), and `-Xzygote` sets
+  `only_use_system_oat_files_`, so ART aborts with `Registering a non /system oat file:
+  /data/img/boot.oat` (the documented F11 in `results/art-runtime/ZS-security-review.md`, Z1
+  §5.2; the zygote arm had only ever run on the pre-merge `lz4` default). Fix: `ZygoteHost::
+  prepare` pins `ACOS_ART_BOOT_IMAGE=lz4` for the keeper unless the caller chose one explicitly
+  (an explicit value is passed through and still fails closed). After the fix **flag ON PASS**:
+  `v2-art-counter`, `w22-counter-reset`, `gaten-home` pass and both negatives fail
+  `ASSERTION_FAILED`, with real zygote evidence (`ready epoch=17206167546`, `probe_stdin=on`,
+  `forked child=8`; the reset re-forks the same epoch to `child=35`, old child `0x9`). **Not
+  measured: the OFF/ON latency A/B** — the OFF arm's first rep ran, the ON rep was void by
+  construction (the regression above), the chain was stopped, and the disk then reached the
+  standing 85 % stop line; no latency number is claimed (`.cache/zprod4/ab/ab.log`,
+  `results/handoff/ZPROD4.md`).
 - **Conclusion / next:** step 2 (engine wiring: `ZygoteHost`, `ArtSession` zygote branch,
   reset/status reply fields, `ErrorCode::ZygoteDead`, `shutdown_all`) is landed and the flag-on
   counter/reset/Gaten checks now pass with the demand-probe channel plumbed; remaining are the
