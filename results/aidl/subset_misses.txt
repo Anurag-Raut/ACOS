@@ -2,7 +2,5 @@
 
 rows: 217
 onTransact pseudo-rows: 9
-misses: 3
-  android.net.IConnectivityManager::getProxyForNetwork (kind=services, source=services.tsv)
+misses: 1
   android.view.IWindow::windowFocusChanged (kind=services, source=services.tsv)
-  android.net.IConnectivityManager::getProxyForNetwork (kind=proxy, source=binder_calls_launch.tsv)

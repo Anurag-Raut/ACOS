@@ -52,7 +52,10 @@ Rules for the loop:
 * `fail` means the app ran and a check did not hold. Read the assertion diff.
 * `crash`, `timeout`, `blocked`, `error` are not passes either.
 * Keep the artifacts directory from a failing run; it is the evidence for the
-  diagnosis. Reuse the same scenario so the comparison is meaningful.
+  diagnosis. Reuse the same scenario so the comparison is meaningful. A passing
+  run is pruned to the evidence it declares (§10.2); use
+  `--keep-artifacts all` to reproduce a bug against the raw captures, and
+  `acos artifacts gc` to bound the collection of old runs.
 * A pass is valid only when its evidence exists (see §10).
 
 ---
@@ -1223,6 +1226,8 @@ out/
   resources.json            # ResourceReport
   repro.sh
   repro.json                # Reproducer
+  retention.json            # what retention kept/pruned (§10.2)
+  art-frames/               # engine side: live-frames/, live-session.json, session-exit.json
 ```
 
 `steps/NN-<kind>.json` uses a two-digit index and the step kind
@@ -1337,6 +1342,66 @@ safe and existing.
 `repro.json` + `repro.sh` are the deterministic reproduction block: APK SHA-256,
 scenario SHA-256, ACOS version, flags, isolation, display, fidelity and backend.
 Regenerate rather than hand-edit.
+
+### 10.2 Retention: bounded artifacts (`--keep-artifacts`, `ACOS_KEEP_ARTIFACTS`)
+
+A real ART run captures ~10 MiB per frame, so a fifteen-step scenario used to
+write 0.5–2 GB: the mirrored raw captures under `art-frames/live-frames/` plus
+`frames/` PNGs no step ever declared. Retention bounds a run without losing the
+evidence a verdict depends on. The rule is:
+
+| run status | `all` | `referenced` (default) | `none-on-pass` |
+|---|---|---|---|
+| `pass` | everything | declared evidence + first and last frame | reports, trees, logs — no frames |
+| `fail`, `timeout`, `error`, `unsupported`, `crash`, `blocked` | everything | **everything** | **everything** |
+
+* "Declared evidence" is what `verdict.json` and `steps/NN-*.json` name: every
+  step's `frame_seq` (`frames/<seq>.png`, `tree/<seq>.json`), every file in
+  `evidence[]`, `logs/logcat.txt`, the step documents, the reports.
+* Nothing a retained JSON names is ever deleted: before removing a candidate the
+  runner scans every retained JSON document (and the serialized verdict) for the
+  path; a hit keeps the file. `retention.json` then lists it under
+  `kept_because_referenced`.
+* `art-frames/live-session.json` and `art-frames/session-exit.json` are written at
+  session shutdown, after the pruning pass. A `png` field whose capture was
+  pruned becomes `"png_pruned": true` and the document gains a `retention`
+  block, so no session record points at a missing file.
+* Retained PNGs are re-encoded **losslessly** (`png` crate, real deflate, Sub
+  filtering). The ART capture path writes zlib *stored* blocks — an unfiltered
+  raw buffer in a PNG wrapper — so the same pixels take ~10× less space as
+  evidence. The frames a gate reads are unchanged in content; only the
+  compression is.
+* `art-frames/live-frames/` keeps only its first and last capture (session entry
+  and exit state) on a pass; the intermediate duplicates of `frames/` are gone.
+* `retention.json` records `mode`, `decision`, `kept_files`/`kept_bytes`,
+  `pruned_files`/`pruned_bytes`, `frames_reencoded`/`reencode_saved_bytes`, the
+  pruned list (a deletion receipt, capped at 200 entries) and any
+  `kept_because_referenced`. The verdict's `notes` also summarise it.
+
+Measured on this host (API 34, 1080×2400): `v2-art-counter` 109.0 → 0.3 MiB
+(−99.7 %), `gaten-home` 195.3 → 8.8 MiB (−95.5 %), a failing Gaten negative
+131.8 → 131.8 MiB (unchanged, by design). `tools/check-artifact-references.py`
+proves no report dangles after retention.
+
+### 10.3 Pruning the collection: `acos artifacts gc`
+
+Retention bounds one run; `gc` bounds the collection of runs under an artifacts
+root:
+
+```bash
+acos artifacts gc [--dir <out>] [--older-than <dur>] [--keep-last <n>] [--dry-run] [--json]
+```
+
+* `--dir` defaults to `$ACOS_ARTIFACTS_DIR`, else `out`.
+* A run directory is any directory containing `verdict.json` (nested scenario
+  paths such as `out/suite/T03-render-good/` included).
+* `--keep-last` (default 1) never prunes the newest N run directories **per
+  scenario** (scenario = `verdict.scenario.name`).
+* A **non-pass** run younger than `--older-than` (default `24h`) is never
+  touched, and neither is a run whose verdict cannot be read.
+* `--dry-run` prints the same freed-byte figure and removes nothing. The text
+  output ends with `N run(s) pruned, M kept, X freed`; `--json` returns the same
+  as the per-run list.
 
 ---
 
@@ -1621,41 +1686,61 @@ can otherwise drive the host to tens of gigabytes (host-safety incident
 
 ---
 
-## 16.1 Boot-image source: `ACOS_ART_BOOT_IMAGE` (H13)
+## 16.1 Boot-image source: `ACOS_ART_BOOT_IMAGE` (H13 / H13b)
 
 `acos-art`, and therefore every ART session started by `acos serve` or
 `acos verify --engine art`, reads the boot image from one of three sources. The
 knob is an **environment seam**, not a CLI flag: `acos serve` inherits it and
-every launch child sees it. Unset and `lz4` are the same (the product default).
+every launch child sees it. **Unset means `shared-fixed`** (ADR-0026 §4).
 
-| Value | Image | Address policy | Cost / use |
+| Value | Image | Address policy | Cache |
 |---|---|---|---|
-| unset, `lz4` | the sysroot's stock LZ4 boot image | ART relocates per process (stock image ASLR) | status quo; each session decompresses ~26.3 MiB into private anon memory |
-| `shared-fixed` | uncompressed image at the recorded base `0x70000000` (B2/B3; or the directory in `ACOS_SHARED_BOOT_IMAGE`, which is still honoured) | `-Xnorelocate`: **no image ASLR** | trusted workloads only; ~−12 MiB/session, but the image base is predictable in every session |
-| `shared-aslr` | uncompressed image built once per **serve cohort** at a random page-aligned base | `-Xnorelocate`: fixed for the cohort, new base for every serve start | best shared-image option for a long-lived serve; first launch of a cohort pays the one-time `dex2oat64` build (measured **3.6 s**, ±load) and every later session of that cohort maps it file-backed and shared |
+| unset, `shared-fixed` (**default**) | uncompressed image at the recorded base `0x70000000` (B2/B3; `ACOS_SHARED_BOOT_IMAGE` still names an explicit directory) | `-Xnorelocate`: **no image ASLR** (owner accepted) | content-addressed on disk, built once per machine and reused by every serve and session |
+| `lz4` | the sysroot's stock LZ4 boot image | ART relocates per process (stock image ASLR) | none; each session decompresses ~26.3 MiB privately |
+| `shared-aslr` | uncompressed image relocated to a random page-aligned base once per **serve cohort** | `-Xnorelocate`: fixed for the cohort, a new base per serve | per-cohort directory under `<ACOS_ART_DATA>/boot-image/` |
 
 Rules and behaviour:
 
 * A set-but-unknown value fails the launch (`Error::Layout`) before any guest
-  starts; there is no silent fallback to LZ4. `shared-aslr` also refuses a
-  simultaneous `ACOS_SHARED_BOOT_IMAGE` (that variable names a fixed-base image).
-* `shared-aslr` chooses `ART_BASE_ADDRESS (±128 MiB)` with 4 KiB alignment —
-  ART's own `ART_BASE_ADDRESS_MIN/MAX_DELTA` window, **16 bits** of entropy —
-  and stores the prepared tree under `<ACOS_ART_DATA>/boot-image/`. The
-  directory is `0700`, files are `0444`, and the guest gets a **read-only**
-  bind at `/data/img`.
-* The cohort key is the invoking process (parent pid + start time), so one
-  `acos serve` (or one `acos verify`) shares one base and a new serve gets a new
-  one. `ACOS_ART_BOOT_IMAGE_GENERATION` overrides the key for diagnostics.
-* Do not point `ACOS_SHARED_BOOT_IMAGE` at a stale directory and expect
-  relocation: the image's recorded base is what ART maps.
-* Measurement on this branch (host load recorded in
-  `results/vm/H13.md`): `shared-aslr` at N=5/10 saves **~10–12 MiB/session**
-  on the M2 cgroup anon+shmem metric versus `lz4`; warm M4 launch and P11 gates
-  are unchanged. The costs are the one-time **+3.6 s** on the first launch of a
-  new serve (M3 cold) and ~173 MiB of disk per prepared cohort. It is **not**
-  the default; the owner decides whether those costs are acceptable for
-  untrusted runs.
+  starts. `shared-aslr` refuses a simultaneous `ACOS_SHARED_BOOT_IMAGE`.
+* **The `shared-fixed` cache (H13b).** The entry directory is
+  `fixed-<input-hash>/` under `ACOS_BOOT_IMAGE_CACHE`, else `ACOS_CACHE_DIR`,
+  else `$XDG_CACHE_HOME/acos`, else `~/.cache/acos`, then `art/boot-images`
+  (private `0700`, files `0444`, never `/tmp`). The hash covers the ACOS
+  image-format version, the `dex2oat64` flags (`--image-format=uncompressed`,
+  `--base`, `--instruction-set`), the boot-classpath environ text and the
+  identity (path, size, mtime) of every sysroot boot jar
+  (`system/framework/*.jar`, `system/apex/*/jars/*.jar`) and of `dex2oat64`,
+  `dalvikvm64`, `libart.so`, `libartbase.so`, `libnativehelper.so`. A changed
+  image, jar or runtime rebuilds once; everything else hits.
+* **Atomic and concurrent-safe.** The build runs in a unique temp directory on
+  the same filesystem, every file is `fsync`ed, `manifest.json` is written,
+  and the directory is `rename`d into place; the build holds an exclusive
+  `flock` on `<cache>/.lock`, so two serves starting together build once and
+  the second hits.
+* **Corruption is detected.** `manifest.json` records the input hash, the
+  image-format version and, per file, its size and a sampled checksum (first
+  and last 4 KiB). A truncated or partially written entry fails validation and
+  is rebuilt; a cache miss, an input change and damage are all the same
+  rebuild path.
+* **Failure policy.** An explicit `ACOS_ART_BOOT_IMAGE=shared-fixed` fails the
+  launch closed. The *default* (knob unset) falls back to the sysroot LZ4 image
+  and reports it: the default must not make a machine that cannot build the
+  image unable to run any app.
+* **Reply field.** Every launch reply, `acos verify` verdict
+  (`engine.timing.boot_image` in the artifact `engine.json`) and `acos serve`
+  session list/launch reply carries
+  `boot_image: {mode, cache, reason?, dir?, input_hash?, base?, prep_ms?}` with
+  `cache` ∈ `hit` (validated existing entry), `built` (this launch built it,
+  `prep_ms` is the cost), `fallback` (the default build failed; `reason` says
+  why, the LZ4 image is in use), `external` (`ACOS_SHARED_BOOT_IMAGE`) or
+  `none` (LZ4).
+* **Measured (H13b, `results/bench/H13b.md`).** Cold cache: first launch of the
+  machine builds in **3.58 s** (`session_start_ms` 3.82 s). Warm cache: every
+  later serve/session reports `cache: hit` and boots in **153–161 ms**, the
+  same as LZ4 (158–177 ms) — the +3.6 s per-serve cost H13 measured is gone.
+  Memory and gates are unchanged (the image is the same file H13 measured:
+  ~−10–12 MiB/session at N=5/10).
 
 ---
 
@@ -1666,6 +1751,7 @@ The scenario runner lives in `crates/acos-verify` and is exposed as
 
 ```bash
 acos verify <scenario.yaml> [--apk <apk>] [--artifacts <dir>] \
+  [--keep-artifacts all|referenced|none-on-pass] \
   [--reference <art-ref-dir>] [--required-fidelity <f>] [--flag <f>] [--json]
 ```
 
@@ -1674,6 +1760,9 @@ acos verify <scenario.yaml> [--apk <apk>] [--artifacts <dir>] \
   directory (§10).
 * `--reference` selects the **reference-replay** backend (below). Without it the
   *native* backend runs.
+* `--keep-artifacts` selects artifact retention (§10.2). Default `referenced`
+  (`ACOS_KEEP_ARTIFACTS` is the environment equivalent). A non-pass run always
+  keeps every artifact.
 * `--required-fidelity` makes a pass that does not reach that fidelity an
   `unsupported` (`UNSUPPORTED_BACKEND` with
   `required_fidelity`/`achieved_fidelity` in `details`), never an optimistic

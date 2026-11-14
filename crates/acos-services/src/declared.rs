@@ -27,8 +27,8 @@
 //!   `UnsupportedAndroidApi`; the read-only queries answer "nothing enabled".
 //! * `IStatusBarService` → minimal: panel/icon/session transactions are
 //!   recorded no-ops, everything else is unsupported.
-//! * `IConnectivityManager.getProxyForNetwork` → `null` `ProxyInfo` (no proxy),
-//!   the exact reply `services.tsv` records for the launch call.
+//! * `IConnectivityManager` lives in [`crate::connectivity`] (NET1): the
+//!   default-network state machine and the `NetworkCallback` protocol.
 
 use std::sync::{Arc, Mutex};
 
@@ -1056,79 +1056,6 @@ impl ServiceObject for StatusBarService {
             "getNavBarMode" => vec![Value::Int(0)],
             // System-level effects (shutdown, reboot, biometric dialogs, tiles):
             // ACOS cannot perform them; report unsupported rather than success.
-            _ => return Err(unsupported(interface, method)),
-        };
-        Ok(CallResult {
-            reply,
-            deliveries: Vec::new(),
-        })
-    }
-}
-
-// ---------------------------------------------------------------------------
-// IConnectivityManager
-// ---------------------------------------------------------------------------
-
-/// `IConnectivityManager` state: no network, no proxy.
-#[derive(Debug, Default)]
-pub struct ConnectivityState {
-    /// Recorded proxy lookups (`Network` presence marker).
-    pub proxy_lookups: u32,
-}
-
-impl ConnectivityState {
-    /// New empty state.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-/// `IConnectivityManager` handler.
-pub struct ConnectivityService {
-    state: Arc<Mutex<ConnectivityState>>,
-}
-
-impl ConnectivityService {
-    /// Wrap shared state.
-    #[must_use]
-    pub fn new(state: Arc<Mutex<ConnectivityState>>) -> Self {
-        Self { state }
-    }
-}
-
-impl ServiceObject for ConnectivityService {
-    fn call(&mut self, interface: &str, method: &MethodInfo, _args: &[Value]) -> Result<CallResult> {
-        if interface != "android.net.IConnectivityManager" {
-            return Err(unsupported(interface, method));
-        }
-        let reply = match method.name.as_str() {
-            // `services.tsv`: launch call #1, reply `null` (no global proxy).
-            "getProxyForNetwork" | "getGlobalProxy" => {
-                self.state.lock().unwrap().proxy_lookups += 1;
-                vec![Value::TypedObject(crate::value::Parcelable::Null)]
-            }
-            "getActiveNetwork" => vec![Value::TypedObject(crate::value::Parcelable::Null)],
-            // Offline semantics: no network has capabilities. AOSP answers
-            // `null` for a null/unknown `Network`, and ACOS has no default
-            // network to describe, so both the network test and the capability
-            // query are the honest empty answer.
-            "getNetworkCapabilities" | "getNetworkCapabilitiesForPackage" => {
-                vec![Value::TypedObject(crate::value::Parcelable::Null)]
-            }
-            "getActiveNetworkInfo" => {
-                vec![Value::TypedObject(crate::value::Parcelable::Null)]
-            }
-            "getAllNetworks" => vec![Value::List(Some(Vec::new()))],
-            "getAllNetworkInfo" => vec![Value::List(Some(Vec::new()))],
-            "isActiveNetworkMetered" | "shouldAvoidBadWifi" | "isDefaultNetworkActive" => {
-                vec![Value::Bool(false)]
-            }
-            "getMultipathPreference" => vec![Value::Int(0)],
-            "getRestrictBackgroundStatusByCaller" => vec![Value::Int(0)],
-            "getCaptivePortalServerUrl" => vec![Value::Str(Some(String::new()))],
-            "getDefaultRequest" => vec![Value::TypedObject(crate::value::Parcelable::Null)],
-            "reportInetCondition" | "reportNetworkConnectivity" => Vec::new(),
             _ => return Err(unsupported(interface, method)),
         };
         Ok(CallResult {

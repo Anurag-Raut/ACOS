@@ -164,6 +164,7 @@ impl ServeEngine {
                     session.frame_info().map(|f| f.0).unwrap_or(0)
                 },
                 "engine": ENGINE_ART,
+                "boot_image": session.boot_image().cloned().unwrap_or(Value::Null),
                 "mode": if exit.is_some() { "dead" } else { "live" },
                 "live": exit.is_none(),
                 "guest_exit": exit.as_ref().map(GuestExit::to_json),
@@ -595,8 +596,20 @@ impl ServeEngine {
                 let started = match session.ensure_launch_tree(settle, pixels) {
                     Ok(tree) => tree,
                     Err(error) => {
-                        let _ = session.close();
-                        return art_error(request_id, Some(id), trust, &error);
+                        // G3f1: a guest that dies before its first frame must
+                        // keep its evidence and be classified. The launcher
+                        // writes `session-exit.json` (exit status, logd tail,
+                        // native-crash record) as it tears down, i.e. after the
+                        // reply the engine already classified; closing first and
+                        // re-reading is what makes the record complete.
+                        let evidence = session.keep_launch_failure_evidence(&error);
+                        return art_error_with_launch_evidence(
+                            request_id,
+                            Some(id),
+                            trust,
+                            &error,
+                            evidence,
+                        );
                     }
                 };
                 let held = Arc::new(HeldArtSession {
@@ -1197,6 +1210,11 @@ fn launch_reply(
     label_meta(&mut result, ENGINE_ART, held.trust, EVIDENCE_HOST_PIXEL);
     result["animations"] = json!(session.animations());
     result["insets"] = json!(session.insets());
+    // H13b: which boot image this session booted and whether its cache hit.
+    result["boot_image"] = session
+        .boot_image()
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
     label_frame(&mut result, session);
     // P9: the same `settle` object the tree verbs return, so a launch says how
     // its tree was bound (`strict-event` on the P12 event rule, or
@@ -1744,7 +1762,7 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
     // first correct screen" is one round trip (the tree was already bound by
     // reset; serializing it costs ~1 ms). Same shape as the launch reply.
     let (max_nodes, node_count, truncated, tree_value) = tree_json(&tree, 2000);
-    Ok(json!({
+    let mut reply = json!({
         "state_reset": true,
         "data_cleared": true,
         "scope": "all",
@@ -1759,7 +1777,13 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
         "tree_truncated": truncated,
         "settle": session.last_tree_settle().cloned().unwrap_or(Value::Null),
         "note": "the guest process was stopped and the same APK relaunched with empty app-data",
-    }))
+    });
+    // S3b: never a silent retry. The first host-transport failure and the path
+    // to its preserved evidence travel with the successful reset reply.
+    if let Some(retry) = session.relaunch_retry() {
+        reply["relaunch_retry"] = retry.clone();
+    }
+    Ok(reply)
 }
 
 /// P1 part 3: `observe: {tree:true, png:false}` on an input verb.
@@ -2274,6 +2298,71 @@ fn art_failure(
         ProtocolBackend::AcosNative,
         Fidelity::ArtReference,
         error,
+        Metrics::wall_ms(0),
+    );
+    match session_id {
+        Some(id) => envelope.with_session_id(id.to_string()),
+        None => envelope,
+    }
+}
+
+/// G3f1: the launch failure plus the evidence the dead guest left behind.
+///
+/// The classification is the point: a reply that says only `GUEST_EXITED` is not
+/// diagnosable (E13.8 lost one launch that way). `details.launch_failure` names
+/// the class, the exit status/signal, the last logd lines and the artifact paths
+/// that were kept; the hint says where the rest is.
+fn art_error_with_launch_evidence(
+    request_id: &str,
+    session_id: Option<&str>,
+    trust: Trust,
+    error: &BackendError,
+    evidence: Value,
+) -> Envelope {
+    let protocol = error.to_protocol_error();
+    let mut details = protocol.details.clone().unwrap_or_else(|| json!({}));
+    if !details.is_object() {
+        details = json!({"detail": details});
+    }
+    {
+        let object = details.as_object_mut().expect("object");
+        object.insert("engine".into(), json!(ENGINE_ART));
+        object.insert("engine_frozen".into(), json!(false));
+        object.insert("trust".into(), json!(trust.as_str()));
+        object.insert("evidence_label".into(), json!(EVIDENCE_NO_GUEST));
+        object.insert("launch_failure".into(), evidence.clone());
+    }
+    let classification = evidence
+        .get("classification")
+        .cloned()
+        .unwrap_or(Value::Null);
+    let class = classification
+        .get("class")
+        .and_then(Value::as_str)
+        .unwrap_or("unclassified-guest-death");
+    let reason = classification
+        .get("reason")
+        .and_then(Value::as_str)
+        .unwrap_or("the guest died before its first frame");
+    let kept = evidence
+        .get("kept_path")
+        .and_then(Value::as_str)
+        .unwrap_or("(not written)");
+    let hint = format!(
+        "{class}: {reason}. Evidence kept under the session's artifacts: {kept} \
+         (session-exit.json, the logd tail, stdout/stderr tails and any native-crash record \
+         are listed in launch_failure.evidence_files). This launch produced no first frame; a \
+         placeholder is never substituted for it."
+    );
+    let mut failure = ProtocolError::new(protocol.code, protocol.message.clone())
+        .with_details(details)
+        .with_hint(hint);
+    failure.retryable = protocol.retryable;
+    let envelope = Envelope::failure(
+        request_id,
+        ProtocolBackend::AcosNative,
+        Fidelity::ArtReference,
+        failure,
         Metrics::wall_ms(0),
     );
     match session_id {

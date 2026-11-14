@@ -32,6 +32,8 @@ use acos_verify::{
 pub mod art;
 #[cfg(test)]
 pub mod fake;
+/// Host memory admission before an ART guest is spawned.
+pub mod host_mem;
 pub mod rust_vm;
 pub mod serve;
 
@@ -1531,6 +1533,108 @@ mod tests {
     }
 
     #[test]
+    fn edittext_fields_match_the_platforms_accessibility_node_info() {
+        // TREE1: the mapping a real Android AccessibilityNodeInfo produces (and
+        // `uiautomator dump` prints), verified against a moto g35 (Android 15)
+        // dump of Gaten's search field:
+        //   <node text="猫, ねこ, neko..." ... class="android.widget.EditText"
+        //         content-desc="Search Japanese dictionary" ... />
+        // i.e. text = getText() ?: getHint() (TextView.getTextForAccessibility),
+        // content-desc = getContentDescription(), hint = getHintText().
+        let value = serde_json::json!({
+            "nodes": [
+                {
+                    // RN TextInput: no typed text, a placeholder and an
+                    // accessibilityLabel (ReactAccessibilityDelegate).
+                    "class": "android.widget.EditText",
+                    "text": "猫, ねこ, neko...",
+                    "hint": "猫, ねこ, neko...",
+                    "content_description": "Search Japanese dictionary",
+                    "password": false,
+                    "bounds": "[180,336][983,446]",
+                    "visibility": 0
+                },
+                {
+                    // EditText with typed text AND a hint: the node text is the
+                    // text, the hint stays a separate field.
+                    "class": "android.widget.EditText",
+                    "text": "Ada",
+                    "hint": "Name",
+                    "content_description": "",
+                    "bounds": "[42,317][1038,435]",
+                    "visibility": 0
+                },
+                {
+                    // A password-typed field: AOSP API 34 TextView sets the node
+                    // text unconditionally (getTextForAccessibility) and only
+                    // FLAGS the node with setPassword(true) -- a device exposes the
+                    // characters and the flag. ACOS mirrors that instead of
+                    // inventing a redacted tree the platform never produces.
+                    "class": "android.widget.EditText",
+                    "text": "s3cret",
+                    "hint": "Paste your token",
+                    "content_description": "",
+                    "password": true,
+                    "bounds": "[42,435][1038,553]",
+                    "visibility": 0
+                },
+                {
+                    // Plain widgets are unchanged: a TextView's text, a Button's
+                    // text with its content description.
+                    "class": "android.widget.TextView",
+                    "text": "Recently looked up",
+                    "hint": "",
+                    "content_description": "",
+                    "bounds": "[58,1343][1025,1398]",
+                    "visibility": 0
+                },
+                {
+                    "class": "android.widget.Button",
+                    "text": "Skip",
+                    "hint": "",
+                    "content_description": "Skip onboarding",
+                    "bounds": "[498,2163][582,2216]",
+                    "visibility": 0
+                }
+            ]
+        });
+        let frame = FrameMeta::new(1, "2026-11-11T00:00:00Z", "req", 1080, 2400, 400, "h", true);
+        let tree = ui_tree_from_json("com.gaten", frame, &value).unwrap();
+
+        let search = tree
+            .find_one(&Selector {
+                content_desc: Some(acos_protocol::TextMatch::exact("Search Japanese dictionary")),
+                ..Selector::default()
+            })
+            .expect("the RN accessibilityLabel is the node's content description");
+        assert_eq!(search.text, "猫, ねこ, neko...");
+        assert_eq!(search.hint, "猫, ねこ, neko...");
+
+        let name = tree.find_one(&Selector::by_text("Ada")).expect("typed text");
+        assert_eq!(name.text, "Ada");
+        assert_eq!(name.hint, "Name");
+
+        let token = tree
+            .find_one(&Selector {
+                hint: Some(acos_protocol::TextMatch::exact("Paste your token")),
+                ..Selector::default()
+            })
+            .expect("the password field's hint is still readable");
+        assert_eq!(
+            token.text, "s3cret",
+            "the platform's own node text (AOSP sets it for password nodes too)"
+        );
+
+        let label = tree
+            .find_one(&Selector::by_text("Recently looked up"))
+            .expect("TextView text is unchanged");
+        assert_eq!(label.content_desc, "");
+
+        let skip = tree.find_one(&Selector::by_text("Skip")).expect("Button text");
+        assert_eq!(skip.content_desc, "Skip onboarding");
+    }
+
+    #[test]
     fn key_names_map_to_android_keycodes() {
         assert_eq!(key_code(key_name(KeyName::Back)), 4);
         assert_eq!(key_code(key_name(KeyName::Enter)), 66);
@@ -1611,6 +1715,7 @@ mod engine_tests {
             animations: None,
             insets: None,
             untrusted: false,
+            keep_artifacts: Some("all".to_string()),
             json,
         }
     }
@@ -1704,6 +1809,7 @@ mod engine_tests {
             backend.session_capabilities().as_ref(),
             crate::trust::Trust::Trusted,
             &dir,
+            None,
             None,
             None,
             None,
@@ -1811,6 +1917,7 @@ mod engine_tests {
             backend.session_capabilities().as_ref(),
             crate::trust::Trust::Trusted,
             &dir,
+            None,
             None,
             None,
             None,

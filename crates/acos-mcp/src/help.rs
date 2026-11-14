@@ -1,9 +1,14 @@
 //! The `acos_help` self-description.
 //!
-//! Condensed from [`docs/AGENT_API.md`](../../../docs/AGENT_API.md): the agent
-//! loop, the error-code playbook and the fidelity rules. It also reports what is
-//! supported *right now* from the live capability probe, and folds in the
-//! summary lines of `COMPATIBILITY.md` when that file is readable.
+//! The prose comes from [`docs/AGENT_GUIDE.md`](../../../docs/AGENT_GUIDE.md),
+//! embedded with `include_str!` so the installed binary carries the full guide
+//! with no files to find at runtime. The guide is written for agents: the loop,
+//! every CLI command with a runnable example, how to write a scenario, the
+//! settle rules, error codes and their next action, and the limits.
+//!
+//! The payload also reports what is supported *right now* from the live
+//! capability probe (never hard-coded) and folds in the summary lines of
+//! `COMPATIBILITY.md` when that file is readable.
 
 use std::path::Path;
 
@@ -13,11 +18,49 @@ use serde_json::{json, Value};
 use crate::backend::{BackendInfo, Capabilities};
 use crate::descriptors::{command_fidelity, tool_infos};
 
+/// The agent guide, embedded at build time from `docs/AGENT_GUIDE.md`.
+///
+/// One source of truth: the file is the documentation for humans and the text
+/// `acos_help` and the MCP resources return. A test asserts the embedded copy
+/// and the file on disk cannot drift.
+pub const AGENT_GUIDE: &str = include_str!("../../../docs/AGENT_GUIDE.md");
+
+/// The guide topics `acos_help {"topic": ...}` accepts. Each names a
+/// `<!-- topic:NAME -->` … `<!-- /topic:NAME -->` block in the guide.
+pub const TOPICS: &[&str] = &["workflow", "cli", "scenarios", "errors", "limits"];
+
+/// The guide, or exactly one topic block of it. An unknown topic returns the
+/// whole guide (a wrong topic must not hide the documentation).
+#[must_use]
+pub fn guide(topic: Option<&str>) -> String {
+    let Some(topic) = topic.filter(|t| TOPICS.contains(t)) else {
+        return AGENT_GUIDE.trim().to_string();
+    };
+    let start = format!("<!-- topic:{topic} -->");
+    let end = format!("<!-- /topic:{topic} -->");
+    match (AGENT_GUIDE.find(&start), AGENT_GUIDE.find(&end)) {
+        (Some(from), Some(to)) if to > from => AGENT_GUIDE[from + start.len()..to]
+            .trim()
+            .to_string(),
+        _ => AGENT_GUIDE.trim().to_string(),
+    }
+}
+
 /// Build the structured help payload.
 pub fn build_help(
     caps: &Capabilities,
     info: &BackendInfo,
     compatibility_root: Option<&Path>,
+) -> Value {
+    build_help_topic(caps, info, compatibility_root, None)
+}
+
+/// `build_help` for one guide topic (`None` = the whole guide).
+pub fn build_help_topic(
+    caps: &Capabilities,
+    info: &BackendInfo,
+    compatibility_root: Option<&Path>,
+    topic: Option<&str>,
 ) -> Value {
     let infos = tool_infos(caps);
     let supported: Vec<&str> = infos
@@ -137,6 +180,12 @@ pub fn build_help(
         "default_command_fidelity": fidelity.as_str(),
         "compatibility": compatibility,
         "markdown": markdown,
+        // The agent guide (embedded from `docs/AGENT_GUIDE.md`): the full text,
+        // the requested topic when one was asked for, and the topic list.
+        "guide": guide(topic),
+        "guide_topic": topic.filter(|t| TOPICS.contains(t)),
+        "guide_topics": TOPICS,
+        "guide_source": "docs/AGENT_GUIDE.md",
     })
 }
 

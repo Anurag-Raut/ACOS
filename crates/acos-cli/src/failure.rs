@@ -45,7 +45,7 @@ pub fn map_art_code(code: &str) -> ErrorCode {
         | "NONZERO_EXIT" => ErrorCode::GuestExited,
         // Deadlines and missing fresh evidence.
         "TIMEOUT" | "NO_ACTIVITY_RESUMED" => ErrorCode::Timeout,
-        "NO_LIVE_FRAME" | "NO_FRESH_FRAME" => ErrorCode::NoFreshFrame,
+        "NO_LIVE_FRAME" | "NO_FRESH_FRAME" | "POST_RESUME_NOT_READY" => ErrorCode::NoFreshFrame,
         // Guest-visible crashes (ART's own fatal reports).
         "ART_CRASH" | "ART_FATAL_CHECK" | "ART_FATAL_LOG" => ErrorCode::AppCrashed,
         "UNSUPPORTED_SYSCALL" => ErrorCode::SeccompUnavailable,
@@ -127,6 +127,118 @@ fn session_exit_facts(doc: &Value, artifacts: &Path) -> Value {
     })
 }
 
+/// The same facts for a caller outside this module (a launch that died before
+/// its first frame keeps them next to the session's other evidence).
+pub fn session_exit_facts_for(doc: &Value, artifacts: &Path) -> Value {
+    session_exit_facts(doc, artifacts)
+}
+
+/// Wall clock in epoch milliseconds, for an evidence record's own timestamp.
+pub fn host_ms_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// G3f1: classify a launch that died **before its first frame**.
+///
+/// The pre-fix evidence (E13.8) was a bare `GUEST_EXITED` with exit 1 and no
+/// record: facts with no name are not diagnosable. This names the class from the
+/// session's own exit record (the launcher writes it while tearing down) and,
+/// when there is none, from the child's exit status — never from a guess:
+///
+/// * `guest-signal-crash` — SEGV/ABRT/ILL/FPE/BUS; a native-crash record should
+///   exist (`crash_record` says whether it does).
+/// * `guest-signal` — any other terminating signal.
+/// * `guest-exited-before-first-frame` — the app process ended with an exit
+///   code before it had a first frame (the class the pre-fix run hit).
+/// * `guest-exited-zero` — exit 0 with no frame: the app ended itself.
+/// * `unclassified-guest-death` — no record and no exit status: the only honest
+///   answer, and it says so instead of guessing.
+/// * `no-death` — the launch failed before its first frame for another reason.
+pub fn prelaunch_exit_facts(
+    exit_doc: Option<&Value>,
+    child_code: Option<i32>,
+    child_signal: Option<i32>,
+) -> Value {
+    let doc_signal = exit_doc
+        .and_then(|doc| doc.get("guest_signal"))
+        .and_then(Value::as_i64)
+        .map(|value| value as i32);
+    let doc_code = exit_doc
+        .and_then(|doc| doc.get("guest_exit"))
+        .and_then(Value::as_i64)
+        .map(|value| value as i32);
+    let signal = doc_signal.or(child_signal);
+    let code = doc_code.or(child_code);
+    let crash_record = exit_doc
+        .map(|doc| !doc.get("native_crash").map(Value::is_null).unwrap_or(true))
+        .unwrap_or(false);
+    let logd_tail_last = exit_doc
+        .and_then(|doc| doc.get("logd_tail"))
+        .and_then(Value::as_array)
+        .and_then(|lines| lines.last())
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let (class, reason) = match (signal, code) {
+        (Some(signal), _) if matches!(signal, 11 | 6 | 4 | 8 | 7) => (
+            "guest-signal-crash",
+            format!(
+                "the guest was killed by signal {signal} before its first frame{}",
+                if crash_record {
+                    " (a native-crash record was kept)"
+                } else {
+                    " (no native-crash record was produced)"
+                }
+            ),
+        ),
+        (Some(signal), _) => (
+            "guest-signal",
+            format!("the guest was killed by signal {signal} before its first frame"),
+        ),
+        (None, Some(0)) => (
+            "guest-exited-zero",
+            "the guest process exited 0 before its first frame (the app ended itself)"
+                .to_string(),
+        ),
+        (None, Some(code)) => (
+            "guest-exited-before-first-frame",
+            format!(
+                "the guest process exited {code} before its first frame with no crash record{}",
+                if logd_tail_last.is_some() {
+                    " (logd tail kept)"
+                } else {
+                    " (no logd tail: the launcher wrote no exit record)"
+                }
+            ),
+        ),
+        (None, None) if exit_doc.is_none() => (
+            "unclassified-guest-death",
+            "the guest died before its first frame and neither a session-exit record nor an \
+             exit status was available"
+                .to_string(),
+        ),
+        (None, None) => (
+            "no-death",
+            "the launch failed before its first frame, but the guest did not die".to_string(),
+        ),
+    };
+    json!({
+        "class": class,
+        "reason": reason,
+        "guest_exit": code,
+        "guest_signal": signal,
+        "crash_record": crash_record,
+        "stage": exit_doc
+            .and_then(|doc| doc.get("stage"))
+            .cloned()
+            .unwrap_or(Value::Null),
+        "record": if exit_doc.is_some() { "session-exit.json" } else { "child exit status" },
+        "logd_tail_last": logd_tail_last,
+    })
+}
+
 /// Classify a fact record that carries no usable code.
 ///
 /// A guest signal is evidence: SIGSYS is the guard refusing a syscall (host
@@ -205,7 +317,7 @@ pub fn classify_child_exit(status: std::process::ExitStatus) -> Option<(ErrorCod
 pub fn art_error(code: &str, message: &str, artifacts: &Path) -> ProtocolError {
     let known = is_known_art_code(code);
     let mapped = map_art_code(code);
-    let text = if code == "NO_LIVE_FRAME" {
+    let text = if matches!(code, "NO_LIVE_FRAME" | "POST_RESUME_NOT_READY") {
         // Keep the engine's established marker so an agent still sees that no
         // live frame existed, while the code is the honest NO_FRESH_FRAME.
         format!("LIVE_FRAME_UNAVAILABLE: acos-art: {code}: {message}")
@@ -353,6 +465,7 @@ mod tests {
             ("GUEST_EXITED", ErrorCode::GuestExited),
             ("GUEST_KILLED_BY_SIGNAL", ErrorCode::GuestExited),
             ("NO_LIVE_FRAME", ErrorCode::NoFreshFrame),
+            ("POST_RESUME_NOT_READY", ErrorCode::NoFreshFrame),
             ("TIMEOUT", ErrorCode::Timeout),
             ("NO_FRESH_FRAME", ErrorCode::NoFreshFrame),
             ("ART_FATAL_CHECK", ErrorCode::AppCrashed),
@@ -407,4 +520,59 @@ mod tests {
         assert!(classify_session_exit(&dir).is_none(), "a clean end is not a failure");
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    /// G3f1: a launch that died before its first frame is *named*, not left as a
+    /// bare exit code. Each class comes from the record, never from a guess.
+    #[test]
+    fn prelaunch_exit_classes_are_named_from_the_record() {
+        // The pre-fix shape: exit 1, no crash record, a logd tail kept.
+        let doc = serde_json::json!({
+            "outcome": "crash", "code": "GUEST_EXITED", "stage": "teardown-evidence",
+            "guest_exit": 1, "guest_signal": null, "native_crash": null,
+            "logd_tail": ["I/ActivityManager: start", "E/AndroidRuntime: FATAL EXCEPTION: main"],
+        });
+        let facts = prelaunch_exit_facts(Some(&doc), None, None);
+        assert_eq!(facts["class"], "guest-exited-before-first-frame");
+        assert_eq!(facts["guest_exit"], 1);
+        assert_eq!(facts["crash_record"], false);
+        assert_eq!(facts["record"], "session-exit.json");
+        assert!(
+            facts["reason"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("logd tail kept"),
+            "{facts}"
+        );
+        assert!(facts["logd_tail_last"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("FATAL EXCEPTION"));
+
+        // A signal death with a crash record is its own class.
+        let doc = serde_json::json!({
+            "outcome": "crash", "code": "GUEST_KILLED_BY_SIGNAL",
+            "guest_signal": 11, "guest_exit": null,
+            "native_crash": {"fault_addr": "0x1"},
+        });
+        let facts = prelaunch_exit_facts(Some(&doc), None, None);
+        assert_eq!(facts["class"], "guest-signal-crash");
+        assert_eq!(facts["crash_record"], true);
+
+        // No record at all: the child's own status still classifies it.
+        let facts = prelaunch_exit_facts(None, Some(1), None);
+        assert_eq!(facts["class"], "guest-exited-before-first-frame");
+        assert_eq!(facts["record"], "child exit status");
+
+        // Nothing at all is said to be unclassified, never guessed.
+        let facts = prelaunch_exit_facts(None, None, None);
+        assert_eq!(facts["class"], "unclassified-guest-death");
+
+        // An exit 0 before the first frame is the app ending itself.
+        let doc = serde_json::json!({"outcome": "ok", "guest_exit": 0});
+        assert_eq!(
+            prelaunch_exit_facts(Some(&doc), None, None)["class"],
+            "guest-exited-zero"
+        );
+    }
+
 }

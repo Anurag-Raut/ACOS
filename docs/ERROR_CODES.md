@@ -118,6 +118,7 @@ single ELF whose `e_machine` the in-process loader cannot map.
 | `HOST_DISK_FULL` | The host scratch filesystem refused a write (ENOSPC/EDQUOT) or has less free space than `ACOS_ART_MIN_DISK_MB`. Class `host_guard`, **retryable**: free space under `.cache/` (old frames/run data) or move `--artifacts`/`ACOS_ART_DATA`, then retry. | acos-art / acos-cli / acos-verify | 1 / 2 |
 | `HOST_PANIC` | An ACOS harness process panicked. Class `harness`, not retryable; `error.details.session_exit` carries the stage and panic message. The CLI catches the panic, emits this envelope on stderr and exits 1 (never 101 with empty stderr). | acos-art / acos-cli | 1 / 2 |
 | `HOST_MEMORY_LIMIT` | A host memory ceiling was hit (launcher watchdog, cgroup limit, memcg OOM). Class `host_guard`, **retryable** after reducing N/concurrency or freeing memory. | acos-art / acos-cli | 1 / 2 |
+| `HOST_MEMORY_LOW` | No ART session was started: admitting it would leave `MemAvailable` below 10% of `MemTotal` (`MemAvailable` − the session's memory budget < 10% of `MemTotal`). Class `host_guard`, **retryable**; `error.details` carries `mem_available_mib`, `mem_total_mib`, `requested_mib`, `min_free_mib`, `min_free_percent`, `budget_env`. Nothing is queued and no guest, cgroup or artifact directory is created — free memory (destroy a session, clear scratch) and call again. `ACOS_MEMORY_GUARD=off` disables the admission check on a lab host; it never disables the per-session cgroup ceiling (`ACOS_ART_MEM_MAX`, default 2 GiB). Distinct from `HOST_MEMORY_LIMIT`, which is a ceiling hit *during* a run. | acos-cli / acos-mcp | 1 / blocked |
 | `SECCOMP_UNAVAILABLE` | The guest seccomp filter could not be built, installed or proven (`OK guard=active` absent). Class `unsupported`, not retryable; guest code is refused (fail closed). Distinct from `LANDLOCK_UNAVAILABLE`. | acos-art / acos-cli | 1 / 2 |
 | `GUEST_EXITED` | The guest process ended before the requested lifecycle stage. Class `harness` (needs triage), not retryable. `error.details.session_exit` carries `guest_exit`, `guest_signal`, `stage` and the guest's own `ACOSLAUNCH` crash line; a SIGSYS/exit-126 with a guard `ERR` re-classifies to `SECCOMP_UNAVAILABLE`, and a SIGSEGV/ABRT re-classifies to `APP_CRASHED`. | acos-art / acos-cli | 1 / 2 |
 | `INTERNAL` | ACOS itself failed (distinct from an app crash). Class `harness`. Only genuine harness defects and unregistered producer codes (the hint names the code). | acos-cli / harness | 1 |
@@ -149,7 +150,7 @@ owner. Values:
 | `unsupported` | A capability the engine/host cannot provide (never a pass) | every `UNSUPPORTED_*`, `SECCOMP_UNAVAILABLE`, `LANDLOCK_UNAVAILABLE` |
 | `harness` | The ACOS harness itself, or a failure that still needs triage | `INTERNAL`, `HOST_PANIC`, `GUEST_EXITED` |
 | `infra_timeout` | A wall/CPU/log deadline | `TIMEOUT`, `NO_FRESH_FRAME` |
-| `host_guard` | A host resource guard | `HOST_DISK_FULL`, `HOST_MEMORY_LIMIT`, `RAM_GUARD`, `RESOURCE_LIMIT` |
+| `host_guard` | A host resource guard | `HOST_DISK_FULL`, `HOST_MEMORY_LIMIT`, `HOST_MEMORY_LOW`, `RAM_GUARD`, `RESOURCE_LIMIT` |
 
 `acos-cli` maps every launch/reply code from `acos-art` and every fact in
 `<artifacts>/art-frames/session-exit.json` (`art_code`, `stage`, `guest_exit`,

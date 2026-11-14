@@ -79,13 +79,17 @@ pub fn check_apk(apk: &Path) -> Result<(Apk, bool), SessionError> {
 /// the Landlock ruleset can name it before the runtime creates it.
 ///
 /// If `ACOS_SESSION_ROOT` is set it is honoured (the runtime does the same);
-/// otherwise a deterministic root under `.cache/sessions/w59a-<pid>` is chosen
-/// and exported so the runtime uses exactly the confined root.
+/// otherwise a deterministic root under `<root>/.cache/sessions/w59a-<pid>` is
+/// chosen and exported so the runtime uses exactly the confined root. `<root>`
+/// is `$ACOS_HOME` in an installed layout, else the checkout, so an installed
+/// `acos` never writes into a directory it was merely started from (REL1a).
 fn session_root() -> Result<PathBuf, SessionError> {
     let root = match std::env::var_os("ACOS_SESSION_ROOT") {
         Some(path) => PathBuf::from(path),
         None => {
-            let root = PathBuf::from(format!(".cache/sessions/w59a-{}", std::process::id()));
+            let base = crate::root::runtime_root()
+                .unwrap_or_else(|| PathBuf::from("."));
+            let root = base.join(format!(".cache/sessions/w59a-{}", std::process::id()));
             std::env::set_var("ACOS_SESSION_ROOT", &root);
             root
         }
@@ -123,13 +127,14 @@ fn boot_root() -> Option<PathBuf> {
     if let Some(path) = env.filter(|path| path.is_dir()) {
         return Some(path);
     }
-    let candidates = [
-        ".cache/boot/android-34",
-        "target/tmp/boot/android-34",
-    ];
+    // REL1a: an installed ACOS carries its own copy under ACOS_HOME.
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(root) = crate::root::runtime_root() {
+        candidates.push(root.join(".cache/boot/android-34"));
+    }
+    candidates.push(PathBuf::from("target/tmp/boot/android-34"));
     candidates
-        .iter()
-        .map(PathBuf::from)
+        .into_iter()
         .find(|p| p.is_dir())
 }
 

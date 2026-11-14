@@ -12,6 +12,7 @@ import android.os.Parcel;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.TextView;
 
 import java.io.File;
@@ -200,6 +201,25 @@ public final class LaunchMain {
         System.out.println("ACOSLAUNCH MARK resume-budget ms=" + sResumeMs
                 + " ready_ms=" + sResumeReadyMs);
         System.out.flush();
+        // A device's zygote installs the AndroidKeyStore provider once, before
+        // any app process exists (ZygoteInit.warmUpJcaProviders). ACOS starts
+        // dalvikvm64 directly, so the software provider is installed here —
+        // before app code, which is where the platform has it. Session-private
+        // storage: keys live under this run's /data/app-data only.
+        //
+        // OPT-IN: the provider is a compatibility shim (exportable software
+        // keys, no KeyInfo/attestation claims), not device security. It is off
+        // unless `ACOS_ART_KEYSTORE=on` so a normal run keeps the honest
+        // "AndroidKeyStore not found" failure until the K5b fix list lands.
+        try {
+            String ks = System.getenv("ACOS_ART_KEYSTORE");
+            String mode = ks == null ? "" : ks.trim();
+            if ("on".equalsIgnoreCase(mode) || "1".equals(mode) || "software".equalsIgnoreCase(mode)) {
+                SoftwareKeyStore.install("/data/app-data/" + sPkg);
+            }
+        } catch (Throwable t) {
+            System.out.println("ACOSLAUNCH WARN keystore install: " + t);
+        }
         try {
             run(t0);
         } catch (Throwable t) {
@@ -343,7 +363,6 @@ public final class LaunchMain {
         // which `Parcel.marshall()` refuses to carry over the peer byte pipe).
         sThread = thread;
         sClient = iatClient(appThread);
-
         byte[] bind = buildBindApplicationRequest();
         pushToPeer(1, bind);
         System.out.println("ACOSLAUNCH MARK bind-request-pushed bytes=" + bind.length);
@@ -1874,23 +1893,61 @@ public final class LaunchMain {
                 }
             }
         }
+        // TREE1: the node's semantic fields come from the framework's own
+        // AccessibilityNodeInfo for this View -- the object UiAutomator and every
+        // accessibility service read. createAccessibilityNodeInfo() runs the
+        // View's accessibility delegate (React Native installs
+        // ReactAccessibilityDelegate on every node) and TextView's/EditText's
+        // own rules, so an EditText reports what the platform reports:
+        //   text  = getText() ?: getHint()   (TextView.getTextForAccessibility)
+        //   hint  = getHint()                (TextView sets setHintText(mHint))
+        //   desc  = getContentDescription()  (the app's accessibilityLabel)
+        // A password field's characters never leave the process.
         String text = "";
         String hint = "";
+        String contentDescription = "";
+        boolean password = false;
+        boolean fromNode = false;
         try {
-            if (v instanceof TextView) {
-                CharSequence cs = ((TextView) v).getText();
+            AccessibilityNodeInfo info = v.createAccessibilityNodeInfo();
+            if (info != null) {
+                CharSequence cs = info.getText();
                 text = cs == null ? "" : cs.toString();
-                CharSequence h = ((TextView) v).getHint();
+                CharSequence h = info.getHintText();
                 hint = h == null ? "" : h.toString();
-                if (text.isEmpty()) text = hint;
+                CharSequence cd = info.getContentDescription();
+                contentDescription = cd == null ? "" : cd.toString();
+                // AOSP API 34 TextView.onInitializeAccessibilityNodeInfoInternal sets
+                // the text unconditionally -- getTextForAccessibility() -- and only
+                // *flags* the node with setPassword(true). So a device (and
+                // `uiautomator dump`) exposes a password field's characters and the
+                // flag. ACOS mirrors that and publishes the flag; redacting the text
+                // here would invent a tree the platform never exposes (and did: it
+                // broke gaten-lesson's typed-token assertion).
+                password = info.isPassword();
+                fromNode = true;
             }
         } catch (Throwable ignored) {
         }
-        String contentDescription = "";
-        try {
-            CharSequence cd = v.getContentDescription();
-            contentDescription = cd == null ? "" : cd.toString();
-        } catch (Throwable ignored) {
+        if (!fromNode) {
+            // No node info (a detached/hostile View): fall back to the View's own
+            // fields, keeping TextView's accessibility text rule explicit rather
+            // than inventing a value the platform would not expose.
+            try {
+                if (v instanceof TextView) {
+                    CharSequence cs = ((TextView) v).getText();
+                    text = cs == null ? "" : cs.toString();
+                    CharSequence h = ((TextView) v).getHint();
+                    hint = h == null ? "" : h.toString();
+                    if (text.isEmpty()) text = hint;
+                }
+            } catch (Throwable ignored) {
+            }
+            try {
+                CharSequence cd = v.getContentDescription();
+                contentDescription = cd == null ? "" : cd.toString();
+            } catch (Throwable ignored) {
+            }
         }
         int[] screen = new int[2];
         try {
@@ -1949,6 +2006,7 @@ public final class LaunchMain {
                 .append(",\"id\":\"").append(jesc(idName)).append('"')
                 .append(",\"text\":\"").append(jesc(text)).append('"')
                 .append(",\"hint\":\"").append(jesc(hint)).append('"')
+                .append(",\"password\":").append(password)
                 .append(",\"content_description\":\"").append(jesc(contentDescription)).append('"')
                 .append(",\"window\":\"").append(jesc(window)).append('"')
                 .append(",\"bounds\":\"[").append(loc[0]).append(',').append(loc[1])
@@ -2013,6 +2071,20 @@ public final class LaunchMain {
     }
 
     static volatile boolean sActivityResumed;
+    /**
+     * S3a: why the last completed first traversal did not draw (null = it drew).
+     * Recorded in the `POST_RESUME_NOT_READY` failure so a no-frame relaunch
+     * names the skipped draw instead of only "timeout".
+     */
+    static volatile String sTraversalSkipReason;
+    /**
+     * S3a/S3PERF: what the readiness check actually saw, e.g.
+     * {@code traversed=true app_visible=false skip=traversal:view_not_visible}
+     * or {@code traversed=true source=onDraw skip=none}. Published in the
+     * `activity-resumed.marker` and the `ACOSLAUNCH MARK activity-resumed`
+     * line as evidence; it never gates readiness (main parity).
+     */
+    static volatile String sFirstTraversalEvidence;
     /** The framework printed `<<<<< Finished` for the BIND_APPLICATION message. */
     static volatile boolean sBindFinished;
     /** W38: the app's `IApplicationThread` interface object and its ActivityThread. */
@@ -2180,6 +2252,64 @@ public final class LaunchMain {
         t.start();
     }
 
+    /**
+     * The uid facts a phone reports to an app: kernel uid/gid/groups/caps,
+     * the user-namespace map, PMS's own uid answer, and which of the run's
+     * mounts are writable. Printed once in the application-created marker.
+     */
+    static String uidFacts(android.content.Context base) {
+        StringBuilder b = new StringBuilder();
+        try {
+            b.append("\nguest_uid=").append(android.os.Process.myUid());
+        } catch (Throwable t) {
+            b.append("\nguest_uid=error:").append(t);
+        }
+        try {
+            b.append("\npms_uid=").append(base.getPackageManager().getPackageUid(sPkg, 0));
+        } catch (Throwable t) {
+            b.append("\npms_uid=error:").append(t);
+        }
+        try {
+            b.append("\nuid_map=").append(readText("/proc/self/uid_map").trim());
+        } catch (Throwable t) {
+            b.append("\nuid_map=error:").append(t);
+        }
+        try {
+            for (String line : readText("/proc/self/status").split("\n")) {
+                for (String key : new String[]{"Uid:", "Gid:", "Groups:", "CapEff:"}) {
+                    if (line.startsWith(key)) b.append("\nstatus_").append(line.trim());
+                }
+            }
+        } catch (Throwable t) {
+            b.append("\nstatus=error:").append(t);
+        }
+        try {
+            java.io.File files = base.getFilesDir();
+            b.append("\nfiles_dir=").append(files).append(" writable=")
+                    .append(files != null && files.canWrite());
+        } catch (Throwable t) {
+            b.append("\nfiles_dir=error:").append(t);
+        }
+        try {
+            String[] names = new java.io.File("/data/app-data").list();
+            b.append("\napp_data_entries=").append(java.util.Arrays.toString(names));
+        } catch (Throwable t) {
+            b.append("\napp_data_entries=error:").append(t);
+        }
+        return b.toString();
+    }
+
+    static String readText(String path) throws java.io.IOException {
+        java.io.FileInputStream in = new java.io.FileInputStream(path);
+        try {
+            byte[] buf = new byte[4096];
+            int n = in.read(buf);
+            return n <= 0 ? "" : new String(buf, 0, n, "UTF-8");
+        } finally {
+            in.close();
+        }
+    }
+
     static void watch(Object thread, Class<?> at, IBinder appThread) throws Exception {
         long deadline = System.currentTimeMillis() + 20000;
         Object app = get(thread, "mInitialApplication");
@@ -2210,7 +2340,8 @@ public final class LaunchMain {
                 // they came from (manifest-derived vs the historical default).
                 + "\napp_flags=0x" + Integer.toHexString(sAppFlags >= 0 ? sAppFlags : (0x4 | 0x800000))
                 + "\napp_flags_source=" + (sAppFlags >= 0 ? sAppFlagsSource : "default")
-                + "\nsourceDir=" + sApk + "\n";
+                + "\nsourceDir=" + sApk
+                + uidFacts((android.content.Context) get(app, "mBase")) + "\n";
         write(new File(sOut, "application-created.marker"), marker);
         System.out.println("ACOSLAUNCH MARK application-created package=" + sPkg
                 + " application=" + app.getClass().getName()
@@ -2267,11 +2398,15 @@ public final class LaunchMain {
                         System.currentTimeMillis() + sResumeReadyMs, adeadline);
                 if (!awaitFirstTraversal(activity, readyDeadline)) {
                     System.out.println("ACOSLAUNCH MARK activity-not-ready"
-                            + " reason=first-traversal-timeout deadline_ms=" + sResumeReadyMs);
+                            + " reason=first-traversal-timeout deadline_ms=" + sResumeReadyMs
+                            + " draw_skip=" + (sTraversalSkipReason == null
+                                    ? "none" : sTraversalSkipReason));
                     System.out.println("ACOSLAUNCH {\"outcome\":\"crash\","
                             + "\"code\":\"POST_RESUME_NOT_READY\",\"activity_resumed\":true,"
                             + "\"reason\":\"first-traversal-timeout\",\"deadline_ms\":"
-                            + sResumeReadyMs + "}");
+                            + sResumeReadyMs + ",\"draw_skip\":\""
+                            + esc(sTraversalSkipReason == null ? "none" : sTraversalSkipReason)
+                            + "\"}");
                     System.out.flush();
                     write(new File(sOut, "activity-not-resumed.marker"),
                             "package=" + sPkg + "\nactivity=" + sActivity
@@ -2291,7 +2426,10 @@ public final class LaunchMain {
                 crashTestIfRequested(thread, activity);
                 System.out.println("ACOSLAUNCH MARK activity-resumed activity="
                         + activity.getClass().getName() + " window=" + get(activity, "mWindow")
-                        + " resume_ready=first-traversal");
+                        + " resume_ready=first-traversal"
+                        + " draw_skip=" + (sTraversalSkipReason == null
+                                ? "none" : sTraversalSkipReason)
+                        + " first_traversal=\"" + sFirstTraversalEvidence + "\"");
                 // W10 interactive session: instead of a one-shot hold + quit,
                 // keep the real main looper alive and publish a read-only view
                 // tree sample every ~50 ms. The host's line-JSON session reads
@@ -2355,13 +2493,21 @@ public final class LaunchMain {
      * {@code ActivityThread.handleResumeActivity}
      * ({@code base/core/java/android/app/ActivityThread.java:5268}), which is
      * where {@code performResumeActivity} (onResume), {@code addView} and
-     * {@code makeVisible} complete. The posted check then installs an
-     * {@code OnDrawListener} on the decor view; {@code ViewRootImpl.performDraw}
-     * dispatches it ({@code base/core/java/android/view/ViewRootImpl.java:5227})
-     * during the first {@code performTraversals} ({@code ...:3159}), which the
-     * {@code Choreographer} runs as its own main-thread callback. The listener
-     * signals through one more post, so readiness is announced only after that
-     * traversal callback (layout + draw + commit) has returned.
+     * {@code makeVisible} complete. The posted check reports ready as soon as
+     * a traversal exists, exactly as main does (S3PERF: waiting for the draw
+     * here costs one frame on every launch). When the traversal has not run
+     * yet, the check installs an {@code OnDrawListener} and
+     * {@code ViewRootImpl.performDraw} dispatches it
+     * ({@code base/core/java/android/view/ViewRootImpl.java:5227}) during the
+     * first {@code performTraversals} ({@code ...:3159}), which the
+     * {@code Choreographer} runs as its own main-thread callback.
+     *
+     * <p>A first traversal that skipped its draw is recorded as evidence
+     * ({@code draw_skip=}, {@code first_traversal=} in the marker and the
+     * {@code ACOSLAUNCH MARK activity-resumed} line), not treated as a failure:
+     * it is the normal pre-visibility traversal, and the host's oneway
+     * {@code dispatchAppVisibility(true)} makes the next frame draw. The
+     * launcher's no-frame loop bounds the genuinely-stuck case.
      *
      * <p>No timer stands in for the condition: the only time value is the hard
      * deadline. If it expires the caller publishes a structured
@@ -2388,7 +2534,26 @@ public final class LaunchMain {
                         // A window path that already traversed synchronously
                         // (not the normal Choreographer path) has no pending
                         // draw to observe; report the state we actually see.
+                        // This is main's readiness rule unchanged (S3PERF):
+                        // waiting for the draw here costs one frame on *every*
+                        // launch, because the normal first traversal runs
+                        // before the host's oneway `dispatchAppVisibility(true)`
+                        // and therefore skips its draw (AOSP sets `mFirst=false`
+                        // before the draw decision, ViewRootImpl:4015 vs
+                        // performDraw:4093). So a skipped traversal is
+                        // *evidence*, never a gate: its reason and the state
+                        // the check saw go into the marker / `ACOSLAUNCH` line,
+                        // and the launcher's no-frame loop turns "skipped and
+                        // still no C1 frame" into `POST_RESUME_NOT_READY`.
                         if (firstTraversalDone(decor)) {
+                            String skip = drawSkipReason(decor);
+                            sTraversalSkipReason = skip;
+                            sFirstTraversalEvidence = firstTraversalEvidence(decor, skip);
+                            System.out.println("ACOSLAUNCH MARK "
+                                    + (skip == null ? "first-traversal-drew"
+                                                    : "first-traversal-skipped " + skip)
+                                    + " " + sFirstTraversalEvidence);
+                            System.out.flush();
                             ready.set(true);
                             latch.countDown();
                             return;
@@ -2411,6 +2576,14 @@ public final class LaunchMain {
                                                     observer.removeOnDrawListener(self[0]);
                                                 } catch (Throwable ignored) {
                                                 }
+                                                // The first traversal ran after
+                                                // this check was posted and drew:
+                                                // record the evidence the marker
+                                                // publishes (no gate, no wait
+                                                // beyond main's own rule).
+                                                sTraversalSkipReason = null;
+                                                sFirstTraversalEvidence =
+                                                        "traversed=true source=onDraw skip=none";
                                                 ready.set(true);
                                                 latch.countDown();
                                             }
@@ -2431,6 +2604,51 @@ public final class LaunchMain {
             System.out.println("ACOSLAUNCH MARK first-traversal-error " + x);
             return false;
         }
+    }
+
+    /**
+     * S3a: why the last completed traversal did not draw, or {@code null} when
+     * it did. Reads only framework state that `performTraversals` itself
+     * maintains (`mLastPerformTraversalsSkipDrawReason`,
+     * `mLastPerformDrawSkippedReason`, `mLastDrawScreenOff`,
+     * `mLastTraversalWasVisible`); no timer and no fabricated result.
+     */
+    static String drawSkipReason(View decor) {
+        try {
+            Object root = Class.forName("android.view.View")
+                    .getMethod("getViewRootImpl").invoke(decor);
+            if (root == null) return "no_view_root";
+            Object traversalSkip = get(root, "mLastPerformTraversalsSkipDrawReason");
+            if (traversalSkip != null) return "traversal:" + traversalSkip;
+            Object drawSkip = get(root, "mLastPerformDrawSkippedReason");
+            if (drawSkip != null) return "draw:" + drawSkip;
+            if (Boolean.TRUE.equals(get(root, "mLastDrawScreenOff"))) return "draw:screen_off";
+            if (Boolean.FALSE.equals(get(root, "mLastTraversalWasVisible"))) {
+                return "traversal:not_visible";
+            }
+            return null;
+        } catch (Throwable x) {
+            return "probe_error:" + x;
+        }
+    }
+
+    /**
+     * S3a evidence: the framework state the readiness check saw. Read-only
+     * reflection over `ViewRootImpl`; never changes the traversal or waits.
+     */
+    static String firstTraversalEvidence(View decor, String skip) {
+        String appVisible = "?";
+        try {
+            Object root = Class.forName("android.view.View")
+                    .getMethod("getViewRootImpl").invoke(decor);
+            if (root != null) {
+                Object v = get(root, "mAppVisible");
+                if (v != null) appVisible = String.valueOf(v);
+            }
+        } catch (Throwable ignored) {
+        }
+        return "traversed=true app_visible=" + appVisible
+                + " skip=" + (skip == null ? "none" : skip);
     }
 
     /** Whether the decor's `ViewRootImpl` has already completed a traversal. */
@@ -2464,6 +2682,14 @@ public final class LaunchMain {
                 + "\nstopped=" + get(activity, "mStopped")
                 + "\nwindow=" + get(activity, "mWindow")
                 + "\ntimeout_ms=" + sResumeMs
+                // S3PERF: the skipped-draw evidence is published here (and in
+                // the `activity-resumed` MARK line). It is diagnostic only: the
+                // ready path is main's, and the launcher's no-frame loop reads
+                // `draw_skip=` to bound a skip that never draws.
+                + "\nfirst_traversal=" + (sFirstTraversalEvidence == null
+                        ? "unknown" : sFirstTraversalEvidence)
+                + "\ndraw_skip=" + (sTraversalSkipReason == null
+                        ? "none" : sTraversalSkipReason)
                 + (note == null ? "" : "\n" + note) + "\n";
         write(new File(sOut, "activity-resumed.marker"), am);
         return am;

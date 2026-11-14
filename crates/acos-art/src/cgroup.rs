@@ -38,6 +38,7 @@
 use crate::{Error, Result};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 /// Default guest memory ceiling: 2 GiB (overridable with `ACOS_ART_MEM_MAX`).
@@ -141,9 +142,8 @@ pub fn parse_size(raw: &str) -> Option<u64> {
 /// is allowed to continue), and a scope that cannot be created fails at spawn.
 /// A stale *negative* would refuse launches loudly, never silently pass.
 fn host_scope_capability() -> Result<(bool, bool)> {
-    static CACHED: std::sync::OnceLock<(bool, bool)> = std::sync::OnceLock::new();
-    if let Some(hit) = CACHED.get() {
-        return Ok(*hit);
+    if let Some(hit) = capability().answer {
+        return Ok(hit);
     }
     let boot_id = std::fs::read_to_string("/proc/sys/kernel/random/boot_id")
         .map(|s| s.trim().to_string())
@@ -152,16 +152,24 @@ fn host_scope_capability() -> Result<(bool, bool)> {
     if let Some(path) = &cache {
         if let Ok(text) = std::fs::read_to_string(path) {
             if let Some(hit) = parse_capability(&text, &boot_id) {
-                let _ = CACHED.set(hit);
+                capability().answer = Some(hit);
                 return Ok(hit);
             }
         }
     }
     // `systemd-run --user --scope` is the only unprivileged way to get a
-    // writable memory.max on this host (see the module docs).
-    let probe = Command::new("systemd-run")
-        .args(["--user", "--scope", "-q", "-p", "MemoryMax=64M", "true"])
-        .output();
+    // writable memory.max on this host (see the module docs). The seam below
+    // is how a test names the binary to run; production leaves it unset and
+    // execs the one on `PATH`.
+    let probe_dir = capability().probe_dir.clone();
+    let run_probe = |args: &[&str]| {
+        let mut cmd = match &probe_dir {
+            Some(dir) => Command::new(dir.join("systemd-run")),
+            None => Command::new("systemd-run"),
+        };
+        cmd.args(args).output()
+    };
+    let probe = run_probe(&["--user", "--scope", "-q", "-p", "MemoryMax=64M", "true"]);
     match probe {
         Ok(out) if out.status.success() => {}
         Ok(out) => {
@@ -180,13 +188,11 @@ fn host_scope_capability() -> Result<(bool, bool)> {
     // Older systemd has no `MemoryOOMGroup=`; the memory ceiling is still
     // mandatory, only the group-kill refinement is dropped (measured in
     // results/art-runtime/S5.md).
-    let oom_group = Command::new("systemd-run")
-        .args(["--user", "--scope", "-q", "-p", "MemoryOOMGroup=yes", "true"])
-        .output()
+    let oom_group = run_probe(&["--user", "--scope", "-q", "-p", "MemoryOOMGroup=yes", "true"])
         .map(|o| o.status.success())
         .unwrap_or(false);
     let found = (true, oom_group);
-    let _ = CACHED.set(found);
+    capability().answer = Some(found);
     if let Some(path) = &cache {
         // Atomic (temp + rename): a concurrent launcher never reads a torn file.
         let body = format!(
@@ -197,24 +203,63 @@ fn host_scope_capability() -> Result<(bool, bool)> {
     Ok(found)
 }
 
-/// H15: the shared ART data root whose on-disk capability stamp is used. The
-/// launcher sets it from the `ArtRoot` it resolved (the same root every session
-/// of one `acos serve` shares); `ACOS_ART_DATA` is the fallback for a process
-/// that never got that far.
-static CAPABILITY_ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+/// The H15 cache's process-wide state.
+///
+/// A `Mutex`, not an `OnceLock`: an integration test is built against this
+/// crate *without* `cfg(test)`, so the reset seam has to exist in the normal
+/// build, and a test that proved the fail-closed path would otherwise be at the
+/// mercy of whatever answer a sibling test resolved first (HYG1: the S5 refusal
+/// test passed only when it was the first probe in the process, and only when
+/// `ACOS_ART_DATA` carried no stamp for this boot). Production never calls the
+/// seam, so the cache behaves exactly as before.
+struct CapabilityCache {
+    /// The ART data root whose per-boot stamp is used (first setter wins, as the
+    /// `OnceLock` did); the launcher sets it from the `ArtRoot` it resolved, and
+    /// `ACOS_ART_DATA` is the fallback for a process that never got that far.
+    root: Option<PathBuf>,
+    /// The `(scope_ok, oom_group)` answer already resolved in this process.
+    answer: Option<(bool, bool)>,
+    /// Test seam: the directory holding the `systemd-run` the probes exec.
+    probe_dir: Option<PathBuf>,
+}
+
+static CAPABILITY: Mutex<CapabilityCache> =
+    Mutex::new(CapabilityCache { root: None, answer: None, probe_dir: None });
+
+fn capability() -> MutexGuard<'static, CapabilityCache> {
+    CAPABILITY.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 /// Point the capability cache at the shared ART data root (idempotent).
 pub fn set_capability_root(root: &Path) {
-    let _ = CAPABILITY_ROOT.set(root.to_path_buf());
+    let mut cache = capability();
+    if cache.root.is_none() {
+        cache.root = Some(root.to_path_buf());
+    }
+}
+
+/// Test-only seam: forget the in-process answer, then take the per-boot stamp
+/// from `data_root` and the `systemd-run` the probes exec from `probe_dir` (a
+/// directory, not a file). Passing `None` for both restores production lookup
+/// (`ACOS_ART_DATA`/the launcher's root, and `PATH`).
+///
+/// Only tests call this; no product path does, so the cache's production
+/// behaviour (one probe answer per process, one stamp per boot) is unchanged.
+#[doc(hidden)]
+pub fn set_capability_test_seam(data_root: Option<&Path>, probe_dir: Option<&Path>) {
+    let mut cache = capability();
+    cache.answer = None;
+    cache.root = data_root.map(Path::to_path_buf);
+    cache.probe_dir = probe_dir.map(Path::to_path_buf);
 }
 
 /// The stamp file the capability cache lives in (no root known → none).
 fn capability_cache_path() -> Option<PathBuf> {
-    CAPABILITY_ROOT
-        .get()
-        .cloned()
-        .or_else(|| std::env::var_os("ACOS_ART_DATA").map(PathBuf::from))
-        .map(|d| d.join("cgroup-capability.json"))
+    let root = capability()
+        .root
+        .clone()
+        .or_else(|| std::env::var_os("ACOS_ART_DATA").map(PathBuf::from))?;
+    Some(root.join("cgroup-capability.json"))
 }
 
 /// Read a cached capability record; `None` when it belongs to another boot or
@@ -479,6 +524,75 @@ mod tests {
         // A cached negative is carried, not hidden: it is what refuses the run.
         let refused = r#"{"boot_id":"abc-123","scope_ok":false,"oom_group":false}"#;
         assert_eq!(parse_capability(refused, "abc-123"), Some((false, false)));
+    }
+
+    /// The capability seam is process-global: one test at a time.
+    fn capability_serial() -> MutexGuard<'static, ()> {
+        static SERIAL: Mutex<()> = Mutex::new(());
+        SERIAL.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(".cache/s5-tests")
+            .join(format!("{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch under .cache/");
+        dir
+    }
+
+    /// Teeth for both halves of the H15 contract, through the same seam the S5
+    /// refusal test uses (HYG1): a cold root must probe (and a failing probe
+    /// refuses), while a stamp written for *this* boot answers without any
+    /// probe at all — that is the cache still working in production, and the
+    /// reason the refusal test has to own its data root.
+    #[test]
+    fn warm_stamp_answers_without_probing_and_a_cold_root_probes() {
+        use std::os::unix::fs::PermissionsExt;
+        let _serial = capability_serial();
+        let dir = scratch("capability-stamp");
+        let stamp = dir.join("cgroup-capability.json");
+        let fake_bin = dir.join("fake-bin");
+        std::fs::create_dir_all(&fake_bin).unwrap();
+        let fake = fake_bin.join("systemd-run");
+        std::fs::write(&fake, "#!/bin/sh\necho 'Failed to connect to bus' >&2\nexit 1\n").unwrap();
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        // Cold root, failing probe: refused, and a refusal is not stamped as a
+        // success (the next process probes again).
+        set_capability_test_seam(Some(&dir), Some(&fake_bin));
+        let err = host_scope_capability().expect_err("a failing probe must refuse");
+        assert!(matches!(err, Error::CgroupUnavailable(_)), "{err:?}");
+        assert!(!stamp.exists(), "a refused probe must not write a stamp");
+
+        // A stamp for this boot: no probe is run at all (the seam points at a
+        // directory with no `systemd-run`, so a probe would fail).
+        let boot_id = std::fs::read_to_string("/proc/sys/kernel/random/boot_id")
+            .expect("boot id")
+            .trim()
+            .to_string();
+        std::fs::write(
+            &stamp,
+            format!("{{\"boot_id\":\"{boot_id}\",\"scope_ok\":true,\"oom_group\":true}}\n"),
+        )
+        .unwrap();
+        set_capability_test_seam(Some(&dir), Some(&dir.join("no-bin-here")));
+        assert_eq!(host_scope_capability().expect("warm stamp"), (true, true));
+
+        // Another boot's stamp is stale: the probe runs again, and fails.
+        std::fs::write(
+            &stamp,
+            "{\"boot_id\":\"another-boot\",\"scope_ok\":true,\"oom_group\":true}\n",
+        )
+        .unwrap();
+        set_capability_test_seam(Some(&dir), Some(&fake_bin));
+        assert!(
+            host_scope_capability().is_err(),
+            "a stamp from another boot must not be trusted"
+        );
+
+        set_capability_test_seam(None, None);
     }
 
     #[test]

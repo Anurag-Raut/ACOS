@@ -29,17 +29,77 @@ whether or not it is implemented yet; each descriptor is annotated with
 The server needs to know where the `acos` binary and the workspace are. Pass
 them as environment variables in the client config.
 
-### Claude Code
+### One command
 
 ```bash
-claude mcp add acos \
+tools/release/register-mcp.sh                     # install at ~/.local, user scope
+tools/release/register-mcp.sh --prefix <prefix>   # an install elsewhere
+tools/release/register-mcp.sh --dry-run           # prints the exact claude command + JSON
+```
+
+The script registers the server with Claude Code (`claude mcp add --scope user
+-e ACOS_BIN=… -e ACOS_ALLOWED_ROOTS=… -- <acos-mcp>`), resolves both binaries to
+absolute paths, prints the equivalent `mcpServers` JSON for every other client,
+and registers nothing when `--dry-run` is given. It is idempotent: an existing
+`acos` entry at that scope is removed before the new one is added, so a re-run
+repairs stale paths instead of duplicating them.
+
+**Installed ACOS wins.** When `<prefix>/bin/acos` and `<prefix>/bin/acos-mcp`
+exist (default prefix: `$ACOS_PREFIX`, else `~/.local`; `--prefix` to point
+elsewhere) the script registers those **wrappers**, not a checkout build. The
+wrappers export `ACOS_HOME` pinned to the versioned install root, so the server
+and every `acos` it spawns read the installed tree from any directory and never
+touch a checkout. Only when no install is present does it fall back to
+`<checkout>/target/release/{acos,acos-mcp}` (then `PATH`). `tools/release/
+install.sh --register-mcp` calls it for you after installing.
+
+It defaults `ACOS_ALLOWED_ROOTS` to `$HOME` — see below for why.
+
+### Claude Code, by hand
+
+```bash
+claude mcp add --scope user acos \
   --env ACOS_BIN="$PWD/target/release/acos" \
-  --env ACOS_ALLOWED_ROOTS="$PWD" \
+  --env ACOS_ALLOWED_ROOTS="$HOME" \
   -- "$PWD/target/release/acos-mcp"
 ```
 
 Use `claude mcp list` to confirm it is connected and `claude mcp remove acos` to
 remove it.
+
+### `ACOS_ALLOWED_ROOTS`: what value an agent in another repo needs
+
+Every path argument (`apk`, `scenario`, `artifacts`, `path`, …) must live under
+one of the roots in `ACOS_ALLOWED_ROOTS` (a `:`-separated list):
+
+* the path is resolved **and** canonicalised, so a **symlink that escapes the
+  roots is rejected**, even when the link itself is inside one;
+* `..` components are rejected before resolution;
+* anything else — a relative path that climbs out, an absolute path in another
+  repo, a link into `/etc` — fails with **`UNSAFE_PATH`** (`error.hint` names
+  the path and the roots; nothing is read and no guest starts).
+
+`register-mcp.sh` defaults the value to **`$HOME`** so an agent working in
+another repository (for example `~/Projects/gaten`) can pass that repo's APK and
+its own `scenarios/*.yaml` while still being unable to reach outside the home
+directory. The artifacts directory (`ACOS_ARTIFACTS_DIR`) is always allowed in
+addition, and a bare relative path is resolved against the server's working
+directory first. On a shared or multi-user host, list the specific repositories
+instead (`ACOS_ALLOWED_ROOTS=/srv/agent-a:/srv/agent-b`).
+
+**If you get `UNSAFE_PATH`,** pick one:
+
+1. move (or copy) the APK/scenario under an allowed root — the usual fix, since
+   build outputs often live under the repo you are already allowed to read;
+2. or add that repository to `ACOS_ALLOWED_ROOTS` in the client's server config
+   (colon-separated) and restart the server: with Claude Code,
+   `claude mcp remove --scope user acos` and re-run `register-mcp.sh
+   --allowed-roots <roots>`;
+3. keep produced evidence under the artifacts directory instead of the repo.
+
+A symlinked *root* is fine: the roots themselves are canonicalised at startup, so
+`ACOS_ALLOWED_ROOTS=$HOME` accepts a path under a repository reached through a
+link inside `$HOME`.
 
 ### Generic JSON config
 
@@ -70,7 +130,8 @@ Backend selection:
 |---|---|
 | `ACOS_BIN` | path to the `acos` binary (default: `acos` on `PATH`, else `target/{release,debug}/acos` walking up from the cwd) |
 | `ACOS_ALLOWED_ROOTS` | `:`-separated path roots that path arguments may live under (default: the process cwd, plus the artifacts dir) |
-| `ACOS_ARTIFACTS_DIR` | directory that holds produced artifacts (default `<cwd>/.acos-mcp-artifacts`) |
+| `ACOS_ARTIFACTS_DIR` | directory that holds produced artifacts (default `<cwd>/.acos-mcp-artifacts`). `acos_verify` writes `out/<scenario>/` inside it, bounded by retention (below) |
+| `ACOS_KEEP_ARTIFACTS` | artifact retention for runs started through this server: `all`, `referenced` (default) or `none-on-pass` (see `docs/AGENT_API.md` §10.2). A non-pass run always keeps everything |
 
 Server limits (all optional):
 
@@ -85,6 +146,10 @@ Server limits (all optional):
 | `ACOS_MCP_SESSION_TTL_MS` | `600000` | idle session TTL |
 | `ACOS_MCP_SHUTDOWN_GRACE_MS` | `2000` | how long in-flight calls may finish after stdin closes |
 | `ACOS_MCP_QUIET` | unset | silence stderr logging |
+| `ACOS_ART_MEM_MAX` | `2G` | per-session guest cgroup memory ceiling (also the budget the host admission check accounts for) |
+| `ACOS_MEMORY_GUARD` | on | `off` disables the `HOST_MEMORY_LOW` admission check (the cgroup ceiling still applies) |
+| `ACOS_SESSION_DAEMON` | unset | `1` forwards session tools to a running `acos serve` (by default the server holds sessions in-process on the Rust VM; start `acos serve --engine art` for real-ART sessions) |
+| `ACOS_SESSION_SOCKET` | `<runtime dir>/session.sock` | socket of that daemon |
 
 ---
 
@@ -134,6 +199,35 @@ server.
 
 Regenerate the block with `cargo run -p acos-mcp --example gen-tools-docs`.
 
+`acos_verify` also accepts `engine: "art"` (mapped to the CLI's `--engine`).
+Without it `acos verify` uses its default engine, which cannot honour an
+ART-only scenario (`animations: off`); pass `engine: "art"` for real ART.
+
+### `resources` and `prompts`
+
+The same guide is served as MCP resources, for clients that read resources
+instead of calling tools:
+
+| uri | content |
+|---|---|
+| `acos://guide` | the complete agent guide (markdown) |
+| `acos://guide/workflow`, `/cli`, `/scenarios`, `/errors`, `/limits` | one section |
+| `acos://errors` | the error-code playbook (alias of `/errors`) |
+
+`resources/list` advertises all of them with `mimeType: text/markdown`,
+`resources/templates/list` advertises `acos://guide/{topic}`, and
+`resources/read` returns `contents[0].text`. An unknown URI is JSON-RPC
+`-32602` (never an empty read).
+
+One prompt, `verify_android_flow`, takes `apk` and `goal` and returns the
+instruction for the whole verify loop (write the scenario, run `acos_verify`,
+branch on `error.code`, report what the evidence proves). `prompts/get` without
+its arguments is `-32602`.
+
+`initialize` advertises `capabilities.resources` and `capabilities.prompts`
+alongside `capabilities.tools`; both are supported on `2025-03-26` and
+`2025-06-18`.
+
 The server-local tools are served in-process (they never shell out):
 `acos_launch` boots an APK into a session that persists across calls and returns
 the stage ladder; `acos_observe_tree`/`acos_tap`/`acos_key`/`acos_text`/`acos_swipe`/`acos_logs`/`acos_status`
@@ -172,8 +266,15 @@ generated from the request type, and annotations:
 
 `acos_capabilities` re-probes the backend (`{"refresh": true}`) and reports the
 supported/unsupported set, the resolved binary and version. `acos_help` returns
-the agent workflow (inspect → verify → read verdict → fix → rerun), the
-error-code playbook, and the supported/unsupported lists.
+the **agent guide** — [`docs/AGENT_GUIDE.md`](AGENT_GUIDE.md), embedded into the
+binary at build time (`include_str!`), so the installed server carries it with no
+files to find. It covers the loop (doctor → inspect → launch →
+observe/observe_tree → tap/text/key/swipe → verify → reset → destroy), every CLI
+command with a runnable example, how to write a scenario YAML (step types,
+selectors, settle modes, `expect_change`, assertion kinds), every error code and
+its next action, and the limits (rotate unsupported, Flutter/RN deferred, x86_64
+native libs, API 34, memory admission). `{"topic": "workflow"|"cli"|
+"scenarios"|"errors"|"limits"}` returns just that section.
 
 ---
 
@@ -210,6 +311,33 @@ always carries an `error` with a stable `code`, an actionable `hint`,
 Evidence paths under the artifacts directory are returned as MCP
 `resource_link` items (2025-06-18) or text lines; small PNG/JPEG/WebP images are
 inlined as MCP `image` content.
+
+### Artifacts and retention
+
+`acos_verify` writes one run directory per scenario under `ACOS_ARTIFACTS_DIR`
+(§10 of `docs/AGENT_API.md`). Retention applies to MCP runs automatically:
+
+* a **passing** run keeps the verdict, `engine.json`, `retention.json`, the step
+  documents, the UI trees, the logs, the events and the frames its assertions or
+  captures declare (plus the first and last frame). Retained frames are
+  re-encoded losslessly, so a run that used to cost 0.5–2 GB costs single-digit
+  MiB;
+* a **failing, timing-out, erroring or unsupported** run keeps every artifact —
+  that is the diagnosis an agent reads next;
+* no retained JSON names a pruned file. `retention.json` says what was kept or
+  pruned (`decision`, `kept_bytes`, `pruned_bytes`,
+  `kept_because_referenced`), and the verdict's `notes` repeat the summary.
+
+The server never prunes the collection itself. To bound old runs (a long agent
+session accumulates them), run the CLI against the same root:
+
+```bash
+acos artifacts gc --dir "$ACOS_ARTIFACTS_DIR" --older-than 24h --keep-last 2 --dry-run
+```
+
+It never touches a non-pass run younger than `--older-than` nor the newest
+`--keep-last` runs per scenario, and prints the freed bytes. Drop `--dry-run` to
+prune.
 
 ### Example session
 
@@ -290,13 +418,24 @@ snapshot is in [`results/mcp/tools.md`](../results/mcp/tools.md) and
 * **No shell.** Children are spawned with an explicit argv.
 * **Path allow-list.** Every path argument (`apk`, `path`, `scenario`,
   `artifacts`, ...) is resolved, `..` components are rejected, symlinks are
-  resolved, and the result must live under `ACOS_ALLOWED_ROOTS` (default: cwd +
-  artifacts dir). Violations return `UNSAFE_PATH`.
+  resolved (a link that resolves outside the roots is rejected too), and the
+  result must live under `ACOS_ALLOWED_ROOTS` (default: cwd + artifacts dir;
+  `register-mcp.sh` sets it to `$HOME`). Violations return `UNSAFE_PATH`; see
+  §1 for how to fix it.
 * **Argument limits.** String arguments are capped
   (`ACOS_MCP_MAX_REQUEST_BYTES` bounds the whole frame), arrays/objects are
   bounded, nesting is bounded.
 * **Resource limits.** Wall-clock, output size, concurrency and memory budgets
   are enforced; timed-out or cancelled children are killed as a process group.
+* **Host memory admission.** Before starting an ART guest, ACOS compares
+  `MemAvailable` (`/proc/meminfo`) with the session's memory budget
+  (`ACOS_ART_MEM_MAX`, default 2 GiB): if admitting it would leave the host
+  under 10% of `MemTotal`, the launch fails fast with `HOST_MEMORY_LOW`
+  (retryable, `error.details` names the measured `MemAvailable`, `MemTotal` and
+  the requested budget). There is **no queue and no session-count limit** —
+  free memory and call again. Each session still runs in its own cgroup with the
+  `ACOS_ART_MEM_MAX` ceiling. `ACOS_MEMORY_GUARD=off` disables only the
+  admission check.
 * **stdout discipline.** Only protocol frames are written to stdout; all logs
   and diagnostics go to stderr.
 
@@ -336,6 +475,7 @@ that the concurrency gate serialises calls; they are not part of the product.
 * The capability probe parses the clap `--help` listing; if the CLI changes its
   help layout, call the `acos_capabilities` tool with `refresh: true` after a
   rebuild. A future CLI could expose a machine-readable `--commands` list.
-* The server does not yet advertise MCP `resources` or `prompts` capabilities;
-  artifacts are returned as tool-result content.
+* MCP `resources` and `prompts` are advertised, but only for the agent guide
+  (`acos://guide…`, `verify_android_flow`); artifacts are still returned as
+  tool-result content, not as resources.
 * No HTTP/SSE transport (stdio only).

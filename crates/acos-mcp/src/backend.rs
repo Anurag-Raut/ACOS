@@ -391,6 +391,14 @@ impl CliBackend {
             argv.push("--required-fidelity".to_string());
             argv.push(fidelity.to_string());
         }
+        // Engine selection (`art` for real ART). Without it `acos verify` uses
+        // the frozen Rust VM, which cannot honour an ART-only scenario (for
+        // example `animations: off`): the agent has to be able to ask for the
+        // real engine from MCP, exactly as `--engine art` does on the CLI.
+        if let Some(engine) = args.get("engine").and_then(Value::as_str) {
+            argv.push("--engine".to_string());
+            argv.push(engine.to_string());
+        }
         if let Some(flags) = args.get("flags").and_then(Value::as_array) {
             for flag in flags.iter().filter_map(Value::as_str) {
                 argv.push("--flag".to_string());

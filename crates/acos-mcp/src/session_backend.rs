@@ -2221,8 +2221,9 @@ fn child_random_u64() -> u64 {
         ^ (&buf as *const _ as u64)
 }
 
-/// The boot-classpath cache directory (`ACOS_BOOT_DIR`, then walking up from
-/// the working directory, then `~/.cache/acos/boot/android-34`). Mirrors
+/// The boot-classpath cache directory (`ACOS_BOOT_DIR`, then an installed
+/// `$ACOS_HOME/.cache/boot/android-34`, then walking up from the working
+/// directory, then `~/.cache/acos/boot/android-34`). Mirrors
 /// `acos_vm::default_boot_dir` so the child's Landlock rule names the real
 /// resolved tree.
 fn native_boot_root() -> Option<PathBuf> {
@@ -2238,6 +2239,11 @@ fn native_boot_root() -> Option<PathBuf> {
             }
             return Some(path);
         }
+    }
+    if let Some(home) = crate::paths::acos_home() {
+        // An installed ACOS reads its own tree; never fall through to the
+        // checkout just because the cwd happens to be inside one.
+        return crate::paths::installed_boot_dir_with(Some(&home));
     }
     let mut dir = std::env::current_dir().ok()?;
     loop {

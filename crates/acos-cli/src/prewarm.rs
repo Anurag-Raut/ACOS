@@ -231,25 +231,10 @@ pub fn candidates() -> Vec<PathBuf> {
     out
 }
 
-/// `repo_root()` as `acos-art` resolves it: `ACOS_ROOT`, then the binary's
-/// ancestors, then the working directory's.
+/// `acos-art::repo_root()`'s rule, shared: `$ACOS_HOME` (an installed layout),
+/// then `ACOS_ROOT`, then the binary's ancestors, then the working directory's.
 fn repo_root() -> Option<PathBuf> {
-    if let Some(dir) = std::env::var_os("ACOS_ROOT") {
-        let dir = PathBuf::from(dir);
-        if dir.join("Cargo.toml").is_file() {
-            return Some(dir);
-        }
-    }
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        candidates.extend(exe.ancestors().map(Path::to_path_buf));
-    }
-    if let Ok(cwd) = std::env::current_dir() {
-        candidates.extend(cwd.ancestors().map(Path::to_path_buf));
-    }
-    candidates
-        .into_iter()
-        .find(|dir| dir.join("Cargo.toml").is_file() && dir.join("crates").is_dir())
+    crate::root::runtime_root()
 }
 
 /// `ArtRoot::resolve`'s sysroot rule: `ACOS_ART_SYSROOT`, then the productised
@@ -286,14 +271,21 @@ fn boot_image(sysroot: &Path) -> Vec<PathBuf> {
     if let Some(raw) = std::env::var_os("ACOS_SHARED_BOOT_IMAGE") {
         dirs.push(PathBuf::from(raw));
     }
+    let _ = &data;
     match std::env::var("ACOS_ART_BOOT_IMAGE")
         .unwrap_or_default()
         .trim()
         .to_ascii_lowercase()
         .as_str()
     {
-        "shared-fixed" if std::env::var_os("ACOS_SHARED_BOOT_IMAGE").is_none() => {
-            dirs.push(data.join("boot-image/fixed-70000000"));
+        // H13b: unset and `shared-fixed` both mean the cached default. The tree
+        // is content-addressed, so the current entry is named by the pointer
+        // `acos-art` publishes; a cold cache has no pointer yet and this falls
+        // through to the sysroot files (the first launch builds the image).
+        "" | "shared-fixed" if std::env::var_os("ACOS_SHARED_BOOT_IMAGE").is_none() => {
+            if let Some(dir) = shared_cache_entry() {
+                dirs.push(dir);
+            }
         }
         // `shared-aslr` builds its cohort image on the first launch, after
         // this prewarm has run; warming a previous cohort's file would be
@@ -327,6 +319,37 @@ fn boot_image(sysroot: &Path) -> Vec<PathBuf> {
         isa.join("boot.vdex"),
         sysroot.join("system/framework/boot.vdex"),
     ]
+}
+
+/// H13b: the `shared-fixed` cache root, the same chain `acos-art` uses:
+/// `ACOS_BOOT_IMAGE_CACHE`, else `ACOS_CACHE_DIR`, else `$ACOS_HOME/.cache/acos`
+/// (an installed layout stays self-contained), else `$XDG_CACHE_HOME/acos`,
+/// else `~/.cache/acos`; then `art/boot-images`.
+fn shared_cache_root() -> Option<PathBuf> {
+    if let Some(explicit) = std::env::var_os("ACOS_BOOT_IMAGE_CACHE") {
+        if !explicit.is_empty() {
+            return Some(PathBuf::from(explicit));
+        }
+    }
+    let base = if let Some(dir) = std::env::var_os("ACOS_CACHE_DIR") {
+        PathBuf::from(dir)
+    } else if let Some(home) = std::env::var_os("ACOS_HOME").filter(|h| !h.is_empty()) {
+        PathBuf::from(home).join(".cache/acos")
+    } else if let Some(xdg) = std::env::var_os("XDG_CACHE_HOME") {
+        PathBuf::from(xdg).join("acos")
+    } else {
+        PathBuf::from(std::env::var_os("HOME")?).join(".cache/acos")
+    };
+    Some(base.join("art/boot-images"))
+}
+
+/// The cached `shared-fixed` entry named by `<cache>/current.json`, if any.
+fn shared_cache_entry() -> Option<PathBuf> {
+    let root = shared_cache_root()?;
+    let text = std::fs::read_to_string(root.join("current.json")).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let dir = PathBuf::from(value.get("dir")?.as_str()?);
+    dir.join("x86_64/boot.art").is_file().then_some(dir)
 }
 
 /// `dalvikvm64` and the ART libraries it links, from the runtime APEX.

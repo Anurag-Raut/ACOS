@@ -12,7 +12,7 @@
 //! acos-art build-app                                  # guest dex + substrate shim
 //! ```
 
-use acos_art::{launcher, ArtRoot, Error, JitMode, LogMode, Props, Result, RunOpts};
+use acos_art::{asset_path, launcher, ArtRoot, Error, JitMode, LogMode, Props, Result, RunOpts};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
@@ -444,9 +444,10 @@ fn verify(
     rlimit_as_mb: u64,
     json: bool,
 ) -> Result<ExitCode> {
-    let programs = programs.unwrap_or_else(|| root.repo_root.join("fixtures/build/dexprogs"));
-    let expected =
-        expected.unwrap_or_else(|| root.repo_root.join("fixtures/expected-art/dexprogs"));
+    let programs = programs
+        .unwrap_or_else(|| crate::asset_path("fixtures/build/dexprogs"));
+    let expected = expected
+        .unwrap_or_else(|| crate::asset_path("fixtures/expected-art/dexprogs"));
     let mut names: Vec<String> = std::fs::read_dir(&expected)?
         .filter_map(|e| e.ok())
         .filter_map(|e| {

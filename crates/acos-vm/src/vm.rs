@@ -241,7 +241,8 @@ impl Default for VmOptions {
 
 /// Resolve the boot-classpath cache directory.
 ///
-/// Order: explicit path, `$ACOS_BOOT_DIR`, `<repo>/.cache/boot/android-34`
+/// Order: explicit path, `$ACOS_BOOT_DIR`, `$ACOS_HOME/.cache/boot/android-34`
+/// (an installed ACOS, see `docs/INSTALL.md`), `<repo>/.cache/boot/android-34`
 /// (walking up from the current directory), then `~/.cache/acos/boot/android-34`.
 pub fn default_boot_dir(explicit: Option<&Path>) -> Option<PathBuf> {
     if let Some(p) = explicit {
@@ -249,6 +250,29 @@ pub fn default_boot_dir(explicit: Option<&Path>) -> Option<PathBuf> {
     }
     if let Some(p) = std::env::var_os("ACOS_BOOT_DIR") {
         return Some(PathBuf::from(p));
+    }
+    default_boot_dir_with_home(acos_home().as_deref())
+}
+
+/// `$ACOS_HOME` when set and non-empty (an installed ACOS).
+#[must_use]
+pub fn acos_home() -> Option<PathBuf> {
+    let raw = std::env::var_os("ACOS_HOME")?;
+    if raw.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(raw))
+}
+
+/// [`default_boot_dir`] with the install root passed in, so tests can prove
+/// both arms without mutating the process environment.
+#[must_use]
+pub fn default_boot_dir_with_home(home: Option<&Path>) -> Option<PathBuf> {
+    if let Some(home) = home {
+        // One rule: an install reads its own tree, never the checkout it was
+        // compiled in, whatever the current directory is.
+        let cand = home.join(".cache/boot/android-34");
+        return cand.join("BOOTCLASSPATH").is_file().then_some(cand);
     }
     if let Ok(cwd) = std::env::current_dir() {
         let mut dir = Some(cwd.as_path());
@@ -2657,5 +2681,53 @@ mod tests {
         );
         assert_eq!(e.code(), "UNSUPPORTED_JAVA_API");
         assert!(e.to_string().contains("newFixedThreadPool"));
+    }
+}
+
+#[cfg(test)]
+mod boot_dir_tests {
+    use super::*;
+
+    fn unique_dir(tag: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        let dir = std::env::temp_dir().join(format!(
+            "acos-vm-bootdir-{}-{tag}-{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        dir
+    }
+
+    #[test]
+    fn installed_home_wins_over_the_checkout() {
+        let home = unique_dir("home");
+        let boot = home.join(".cache/boot/android-34");
+        std::fs::create_dir_all(&boot).expect("boot dir");
+        std::fs::write(boot.join("BOOTCLASSPATH"), "x\n").expect("marker");
+        assert_eq!(
+            default_boot_dir_with_home(Some(home.as_path())),
+            Some(boot)
+        );
+        std::fs::remove_dir_all(&home).ok();
+    }
+
+    #[test]
+    fn installed_home_without_a_boot_dir_does_not_fall_through() {
+        let home = unique_dir("empty");
+        assert_eq!(default_boot_dir_with_home(Some(&home)), None);
+        std::fs::remove_dir_all(&home).ok();
+    }
+
+    #[test]
+    fn unset_keeps_the_developer_walk() {
+        let got = default_boot_dir_with_home(None);
+        // The test runs inside the checkout, which has the cache; if a host
+        // lacks it, `None` is the same answer the pre-REL1c code gives.
+        if let Some(dir) = got {
+            assert!(dir.ends_with(".cache/boot/android-34"), "{}", dir.display());
+            assert!(dir.join("BOOTCLASSPATH").is_file(), "{}", dir.display());
+        }
     }
 }

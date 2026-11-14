@@ -74,6 +74,9 @@ pub struct RunOutcome {
     pub artifact_validation: acos_protocol::ArtifactValidation,
     /// Capabilities actually exercised.
     pub capabilities_used: Vec<String>,
+    /// What artifact retention did (ARTGC); `None` for runs that never reached
+    /// the artifacts stage.
+    pub retention: Option<crate::retention::RetentionReport>,
 }
 
 /// Internal per-step execution state.
@@ -632,8 +635,49 @@ pub fn run_scenario(
     artifacts::write_events(&options.artifacts_dir, &events)?;
     artifacts::write_resources(&options.artifacts_dir, &resources)?;
     artifacts::write_reproducer(&options.artifacts_dir, &verdict.reproducer)?;
+
+    // ---- ARTGC: bounded artifacts ---------------------------------------
+    // The verdict and every step are on disk, so retention can see exactly what
+    // the run declares. Only a pass is ever pruned (the decision is a pure
+    // function of the status, `crate::retention::decision`), and nothing a
+    // retained report names is deleted. The note is part of the verdict so an
+    // agent reading only `verdict.json` knows what an absent frame means.
+    let (keep_mode, keep_warning) = crate::retention::KeepArtifacts::from_env();
+    // `none-on-pass` removes frames, so the verdict must stop declaring them
+    // before it is written. A report never names a file retention removes.
+    if crate::retention::decision(status, keep_mode) == crate::retention::Decision::PruneAllFrames {
+        let stripped = crate::retention::strip_frame_evidence(&mut verdict);
+        if stripped > 0 {
+            verdict.notes.push(format!(
+                "artifacts: `{keep_mode}` dropped {stripped} frame declaration(s) and every frame;                  trees, logs and assertion results are the evidence for this pass"
+            ));
+        }
+    }
+    artifacts::write_verdict(&options.artifacts_dir, &verdict)?;
+    let retention = crate::retention::apply_with_warning(
+        &options.artifacts_dir,
+        keep_mode,
+        status,
+        &verdict,
+        keep_warning.clone(),
+    )?;
+    if let Some(warning) = keep_warning {
+        verdict.notes.push(format!("artifacts: {warning}; using `{keep_mode}`"));
+    }
+    verdict.notes.push(format!(
+        "artifacts: {} ({}): {} file(s) / {:.1} MiB kept, {} file(s) / {:.1} MiB pruned; see {}",
+        retention.mode,
+        retention.decision,
+        retention.kept_files,
+        retention.kept_bytes as f64 / (1024.0 * 1024.0),
+        retention.pruned_files,
+        retention.pruned_bytes as f64 / (1024.0 * 1024.0),
+        crate::retention::RETENTION_JSON
+    ));
     artifacts::write_verdict(&options.artifacts_dir, &verdict)?;
 
+    // Validate *after* retention: a pruned directory that no longer backs its
+    // own verdict would be an invalid pass, and this is where that shows up.
     let artifact_validation = acos_protocol::validate_artifacts_dir(&options.artifacts_dir);
     // Report only capabilities the backend actually has. A step that was
     // reported `unsupported` must not inflate `capabilities_used`.
@@ -647,6 +691,7 @@ pub fn run_scenario(
         verdict,
         artifact_validation,
         capabilities_used,
+        retention: Some(retention),
     })
 }
 

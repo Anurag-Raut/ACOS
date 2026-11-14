@@ -144,6 +144,20 @@ pub const NAMES: &[(&str, &str)] = &[
     // `TrafficStats.init` asks for this binder on every process start; it only
     // has to resolve, not answer a network query (there is no network).
     ("netstats", "android.net.INetworkStatsService"),
+    // K5: services a real device always publishes and that framework
+    // constructors resolve without a null check. `Geocoder.isPresent()` asks
+    // `location` (a null binder is an NPE in `Objects.requireNonNull`), and
+    // `new KeyguardManager(context)` resolves `trust` with
+    // `ServiceManager.getServiceOrThrow` (a missing service makes
+    // `Context.getSystemService(KeyguardManager.class)` return null, which app
+    // code dereferences). Both handlers are in `crate::extras`; they answer a
+    // device with no geocoder and no credential/keyguard.
+    ("location", "android.location.ILocationManager"),
+    ("trust", "android.app.trust.ITrustManager"),
+    // `RestrictionsManager` is also always resolvable; `com.tailscale.ipn`
+    // dereferences it in `Application.onCreate` (an unmanaged device answers an
+    // empty restrictions Bundle).
+    ("restrictions", "android.content.IRestrictionsManager"),
 ];
 
 /// Descriptor for a `ServiceManager` name.
@@ -276,7 +290,7 @@ pub fn install_with_handles_and_insets(
     let uimode = Arc::new(Mutex::new(crate::declared::UiModeState::new()));
     let notification = Arc::new(Mutex::new(crate::declared::NotificationState::new()));
     let statusbar = Arc::new(Mutex::new(crate::declared::StatusBarState::new()));
-    let connectivity = Arc::new(Mutex::new(crate::declared::ConnectivityState::new()));
+    let connectivity = Arc::new(Mutex::new(crate::connectivity::ConnectivityState::new()));
     let shortcuts = Arc::new(Mutex::new(crate::extras::ShortcutState::new()));
     let jobs = Arc::new(Mutex::new(crate::extras::JobState::new()));
     let power = Arc::new(Mutex::new(crate::extras::PowerState::new()));
@@ -406,6 +420,25 @@ pub fn install_with_handles_and_insets(
         crate::misc::SENSOR_SERVER_DESCRIPTOR,
         Box::new(crate::misc::SensorServer::new(Arc::clone(&sensors))),
     );
+    // K5: the two raw nodes above. Neither interface has a decoded
+    // `acos-aidl` table (their own `raw_transact` answers the exact wire
+    // shape), so they are dynamic nodes registered under their real
+    // `ServiceManager` names — `checkService` answers on the first try.
+    host.register_dynamic_named(
+        "location",
+        crate::extras::LOCATION_DESCRIPTOR,
+        Box::new(crate::extras::LocationService::new()),
+    );
+    host.register_dynamic_named(
+        "trust",
+        crate::extras::TRUST_DESCRIPTOR,
+        Box::new(crate::extras::TrustService::new()),
+    );
+    host.register_dynamic_named(
+        "restrictions",
+        crate::extras::RESTRICTIONS_DESCRIPTOR,
+        Box::new(crate::extras::RestrictionsService::new()),
+    );
     let contentservice = Arc::clone(&settings);
     host.register(
         "content",
@@ -509,7 +542,7 @@ pub fn install_with_handles_and_insets(
         "connectivity",
         "android.net.IConnectivityManager",
         move |_w| {
-            Box::new(crate::declared::ConnectivityService::new(Arc::clone(
+            Box::new(crate::connectivity::ConnectivityService::new(Arc::clone(
                 &connectivity,
             ))) as Box<dyn ServiceObject>
         },

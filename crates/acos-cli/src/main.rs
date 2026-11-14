@@ -4,6 +4,7 @@
 //! Unimplemented subcommands deliberately do not exist yet.
 
 mod bench;
+mod artifacts_gc;
 mod bench_pool;
 mod doctor;
 mod engine;
@@ -17,6 +18,7 @@ mod observe_tree;
 mod parity;
 mod prewarm;
 mod provenance;
+mod root;
 mod sandbox_probe;
 mod serve;
 mod session;
@@ -32,6 +34,13 @@ use acos_apk::manifest::{Component, ComponentKind};
 use acos_apk::{Apk, ApkError};
 use acos_vm::{Vm, VmError, VmOptions};
 use clap::{Parser, Subcommand};
+
+/// `acos artifacts <subcommand>`: the artifact collection, not one run.
+#[derive(Debug, Subcommand)]
+enum ArtifactsCommand {
+    /// Prune old run directories under an artifacts root, keeping failures.
+    Gc(artifacts_gc::ArtifactsGcArgs),
+}
 use serde::Serialize;
 use serde_json::{json, Value};
 
@@ -75,6 +84,11 @@ enum Command {
     },
     /// Run a YAML scenario and write an evidence-backed verdict.
     Verify(verify::VerifyArgs),
+    /// Artifact collection maintenance (bounded evidence: prune old runs).
+    Artifacts {
+        #[command(subcommand)]
+        command: ArtifactsCommand,
+    },
     /// Static import inventory of guest `.so` files or an APK (no execution).
     NativeInventory(native_inventory::NativeInventoryArgs),
     /// Numerically compare two frames (per-pixel + structural diff).
@@ -191,6 +205,9 @@ fn main() -> ExitCode {
             Command::Serve(args) => serve::run(args),
             Command::Session { command } => session::session(command),
             Command::Verify(args) => verify::run(args),
+            Command::Artifacts { command } => match command {
+                ArtifactsCommand::Gc(args) => artifacts_gc::run(args),
+            },
             Command::FrameDiff(args) => frame_diff::run(args),
             Command::Parity(args) => parity::run(args),
             Command::Bench(args) => bench::run(args),
