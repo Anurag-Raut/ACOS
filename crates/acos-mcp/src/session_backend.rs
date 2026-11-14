@@ -16,7 +16,7 @@
 //! `SESSION_NOT_FOUND`. `destroy` removes the session; the next read creates a
 //! new one. This mirrors the CLI's process-local session.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -73,7 +73,15 @@ pub struct SessionBackend {
     rn: RnSessions,
     /// Session ids this process launched (SERVELEAK). `shutdown` destroys
     /// exactly these and nothing a different client created.
-    owned: Mutex<HashSet<String>>,
+    ///
+    /// SERVELEAK2/F3: the value is the **launch token** the daemon returned for
+    /// that launch (empty when the daemon is too old to report one). Ownership
+    /// of a session id is not ownership of a *guest*: two MCP servers pointed at
+    /// the same daemon with the same id meant the second launch replaced the
+    /// first, and the first server's stdin EOF then destroyed the second's live
+    /// guest. `shutdown` re-reads the token from the daemon and destroys only a
+    /// session whose current token is still the one this server launched.
+    owned: Mutex<HashMap<String, String>>,
 }
 
 impl std::fmt::Debug for SessionBackend {
@@ -100,7 +108,7 @@ impl SessionBackend {
             daemon: None,
             flutter: FlutterSessions::default(),
             rn: RnSessions::default(),
-            owned: Mutex::new(HashSet::new()),
+            owned: Mutex::new(HashMap::new()),
         }
     }
 
@@ -116,7 +124,7 @@ impl SessionBackend {
             daemon: None,
             flutter: FlutterSessions::default(),
             rn: RnSessions::default(),
-            owned: Mutex::new(HashSet::new()),
+            owned: Mutex::new(HashMap::new()),
         }
     }
 
@@ -1381,12 +1389,13 @@ impl SessionBackend {
     }
 
     /// Server-local session tools (`acos_launch`, `acos_tap`, ...).
-    /// Record a session id this process created (SERVELEAK).
-    fn remember_owned(&self, id: &str) {
+    /// Record a session this process launched, with the launch token the
+    /// daemon returned for it (SERVELEAK2/F3).
+    fn remember_owned(&self, id: &str, token: &str) {
         self.owned
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .insert(id.to_string());
+            .insert(id.to_string(), token.to_string());
     }
 
     pub fn session_call(&self, name: &str, args: &Value, ctx: &CallContext) -> Option<Envelope> {
@@ -1402,7 +1411,8 @@ impl SessionBackend {
                 // daemon outlives this process by design; its guests must not
                 // outlive their purpose).
                 if name == "acos_launch" && envelope.ok() {
-                    self.remember_owned(&session_id(args));
+                    let token = launch_token(&envelope);
+                    self.remember_owned(&session_id(args), &token);
                 }
                 return Some(envelope);
             }
@@ -1548,6 +1558,40 @@ impl SessionBackend {
             Err(err) => session_error_envelope(request_id, Some(&id), &err),
         })
     }
+
+    /// The launch token the daemon currently reports per session id
+    /// (SERVELEAK2/F3).
+    ///
+    /// Empty when nothing can answer (`session_list` unsupported, a transport
+    /// error, or an in-process backend): the caller then falls back to the
+    /// id-only ownership SERVELEAK established.
+    fn current_launch_tokens(&self, ctx: &CallContext) -> HashMap<String, String> {
+        let mut out: HashMap<String, String> = HashMap::new();
+        let args = json!({"base": {"request_id": "req_shutdown_list"}});
+        let Some(envelope) = SessionBackend::session_call(self, "session_list", &args, ctx) else {
+            return out;
+        };
+        if !envelope.ok() {
+            return out;
+        }
+        let Some(sessions) = envelope
+            .result()
+            .and_then(|result| result.get("sessions"))
+            .and_then(Value::as_array)
+        else {
+            return out;
+        };
+        for session in sessions {
+            let (Some(id), token) = (
+                session.get("session_id").and_then(Value::as_str),
+                session.get("session_token").and_then(Value::as_str),
+            ) else {
+                continue;
+            };
+            out.insert(id.to_string(), token.unwrap_or_default().to_string());
+        }
+        out
+    }
 }
 
 impl Backend for SessionBackend {
@@ -1600,7 +1644,8 @@ impl Backend for SessionBackend {
     fn session_call(&self, name: &str, args: &Value, ctx: &CallContext) -> Option<Envelope> {
         let envelope = SessionBackend::session_call(self, name, args, ctx);
         if name == "acos_launch" && envelope.as_ref().is_some_and(Envelope::ok) {
-            self.remember_owned(&session_id(args));
+            let token = envelope.as_ref().map(launch_token).unwrap_or_default();
+            self.remember_owned(&session_id(args), &token);
         }
         envelope
     }
@@ -1612,10 +1657,17 @@ impl Backend for SessionBackend {
     /// proves the ART guest tree) or the in-process one — so a client that
     /// closes stdin never leaves a live guest behind. Failures are logged, not
     /// ignored silently; the process is exiting either way.
+    ///
+    /// SERVELEAK2/F3: a session **id** is not a guest. Two servers against one
+    /// daemon that used the same id (the old shared `DEFAULT_SESSION`) meant the
+    /// second launch replaced the first, and the first server's EOF then
+    /// destroyed the second's live guest. Ownership is therefore checked against
+    /// the launch token the daemon reports *now*: a session whose token changed
+    /// belongs to a different launch and is left alone.
     fn shutdown(&self) {
-        let ids: Vec<String> = {
+        let ids: Vec<(String, String)> = {
             let mut owned = self.owned.lock().unwrap_or_else(|e| e.into_inner());
-            let ids: Vec<String> = owned.drain().collect();
+            let ids: Vec<(String, String)> = owned.drain().collect();
             ids
         };
         if ids.is_empty() {
@@ -1630,7 +1682,26 @@ impl Backend for SessionBackend {
             max_arg_chars: 8 * 1024,
             max_output_bytes: 1024 * 1024,
         };
-        for id in ids {
+        let current = self.current_launch_tokens(&ctx);
+        for (id, token) in ids {
+            // A daemon that lists its sessions is authoritative: destroy only a
+            // session that still carries the token this server launched.
+            if self.daemon.is_some() && !current.is_empty() {
+                match current.get(&id) {
+                    Some(current_token) if token.is_empty() || *current_token == token => {}
+                    Some(_) => {
+                        eprintln!(
+                            "acos-mcp: session {id} was launched again by another client; \
+                             not destroying it on exit"
+                        );
+                        continue;
+                    }
+                    None => {
+                        eprintln!("acos-mcp: session {id} is already gone; nothing to destroy");
+                        continue;
+                    }
+                }
+            }
             let args = json!({"base": {"request_id": "req_shutdown", "session_id": id}});
             let envelope = SessionBackend::session_call(self, "acos_destroy", &args, &ctx);
             match envelope {
@@ -1646,12 +1717,55 @@ impl Backend for SessionBackend {
             }
         }
     }
+
 }
 
 fn session_id(args: &Value) -> String {
     args.pointer("/base/session_id")
         .and_then(Value::as_str)
-        .unwrap_or(DEFAULT_SESSION)
+        .map(str::to_string)
+        .unwrap_or_else(|| default_session_id().to_string())
+}
+
+/// SERVELEAK2/F3: this **server instance's** default session id.
+///
+/// The old default was the shared constant `s_mcp`. Many agents run an
+/// `acos-mcp` at the same time, and against one daemon two servers with the same
+/// default id address the *same* held session: the second launch replaces the
+/// first, and either server's stdin EOF then destroys the other's live guest
+/// (F3). A per-instance id (`mcp-<pid>-<random>`) makes the default id private to
+/// this process, exactly as an explicitly chosen id always was. An explicit
+/// `base.session_id` still wins, so a client that wants to share a session
+/// across processes still can.
+pub fn default_session_id() -> &'static str {
+    static ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    ID.get_or_init(|| {
+        let mut bytes = [0u8; 8];
+        let read = std::fs::File::open("/dev/urandom")
+            .and_then(|mut file| std::io::Read::read_exact(&mut file, &mut bytes))
+            .is_ok();
+        if !read {
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u64)
+                .unwrap_or(0);
+            bytes.copy_from_slice(&nanos.to_le_bytes());
+        }
+        let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+        format!("mcp-{}-{hex}", std::process::id())
+    })
+}
+
+/// SERVELEAK2/F3: the launch token a daemon returned for an `acos_launch`.
+///
+/// Empty for a backend that does not report one (an in-process session, or a
+/// daemon older than the field).
+fn launch_token(envelope: &Envelope) -> String {
+    envelope
+        .result()
+        .and_then(|result| result.get("session_token"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
         .to_string()
 }
 
