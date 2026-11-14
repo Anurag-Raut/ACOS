@@ -2434,3 +2434,166 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | G4a | **The tree reports `visible=false` for a node whose pixels the app painted** (GR4). `tree/18.json`: the bottom bar's active label `[512,2214][642,2251]` is `visible: false` because it lies below the root's `visible_bounds` bottom (`2209`) in a `insets: carve` session, while the bound frame `frames/18.png` paints its glyphs at png `y 2088–2122`, `x 513–640` (bounds − `display_origin.y` 128). AOSP's `View.getGlobalVisibleRect` intersects with the display and ancestor clips, not with the nav-bar band, so a real a11y tree reports it visible (a tap there would still land on the system bar, so fail-closed is defensible — the *classification* is what is inconsistent). Lowest layer: per-node `visible`/`visible_bounds` vs the carved visible frame, surfaced as `ELEMENT_OFFSCREEN` (`crates/acos-verify/src/native.rs`). Verification false-negative only, **never a false pass**. Worked around in scenarios: target the tab pressable's `content_desc`, never the label (`results/gaten/GR4.md` §2.2, §5) | node visibility vs frame | classification matches the pixels | high (tree + frame, same bound frame) | low (decide the policy, then align) | low | **open, found by GR4 (E13.9)** |
 | G4b | **Tree frame metadata reports `density: 420` for a `density_dpi: 400` run** (GR4): every `tree/*.json` frame record says 420 while `repro.json`/`verdict.json` echo the scenario's 400. Either the guest boots at the reference 420 on this path or the tree's `FrameMeta` is stamped from the reference default; not root-caused. Consequence: density-dependent geometry cannot be audited from tree metadata, which is exactly the density-fix area. Pixels are correct either way (116 px wordmark glyphs, GR4 §4) | tree/frame metadata integrity | metadata agrees with the launch spec | high (36 runs, all 420) | low (thread the launch density into the tree record) | low | **open, found by GR4 (E13.9)** |
 | G4c | **A scenario can pass 3/3 while proving nothing, and nothing in the harness notices** (GR4). A `tap` on a control that is already in the asserted state writes nothing — Gaten's Kanji reference `select()` returns early when `next === source`, and the guest's default was already the asserted value — so the post-tap assertions hold on state that never changed. The only evidence was pixel-level: the before/after bound captures were byte-identical (0 changed px) where the claim needs a change. Candidate: an explicit step (`expect_change` / `assert_frame_differs`) or a writer-side rule that a `capture` pair around a mutating tap must differ, so a vacuous flow fails instead of passing. Worked around in GR4 by asserting the hub label's *other* value is absent at each hop and by diffing the captures by hand (`results/gaten/GR4.md` §2.3) | verify semantics / false-pass class | no vacuous pass | high (reproduced + rewritten) | medium (new step + schema + provenance rule) | medium (a legitimate no-op must stay expressible) | **open, found by GR4 (E13.9)** |
+
+## E5.10 — NET1: `IConnectivityManager` callbacks (the RN NetInfo wall) — MEASURED (Joplin 3/3, gates pending)
+
+**Question.** `main` (`3e11d9c`) aborts every React Native app at launch:
+`RNCNetInfo` → `IConnectivityManager` code 42 `requestNetwork` →
+`UnsupportedOperationException` → `JniException` → SIGABRT on the JS thread
+(3/3, identical logd, `results/compat/K5.md`). The connectivity state machine
+that `a98e839` (T-38/T-39) added answered queries only. Can ACOS serve the
+`NetworkCallback` protocol AOSP serves, without inventing a network it cannot
+back?
+
+**Setup.** Real ART, API-34 image, stock `android.net.ConnectivityManager` and
+`NetworkRequest`/`NetworkCapabilities`/`LinkProperties` marshalling. The guest
+runs `--unshare-net` (no interface, no sockets). One launch per acquisition
+through `run-exclusive.sh --task NET1` + `guarded.sh --mem 8G`.
+
+**What was tried.**
+1. *Echo the caller's `NetworkCapabilities` in the reply.* Wrong: RN's
+   `registerDefaultNetworkCallback` sends `null` capabilities with
+   `TRACK_DEFAULT`, and AOSP replaces them
+   (`ConnectivityService.requestNetwork`: "the passed networkCapabilities is
+   unused and will be replaced"). The first real launch panicked in the callback
+   bundle writer (`bad reply for parcelable::null`), which the harness classified
+   as `HOST_PANIC` — a useful failure, and the reason the null-capabilities rule
+   is now explicit and tested.
+2. *Answer a legacy `NetworkInfo` for the emulated network.* After the
+   registration and the four callbacks worked, Joplin's
+   `NetworkCallbackConnectivityReceiver.updateAndSend` called
+   `getNetworkInfoForUid` (code 6) and the app died on the refusal. Implementing
+   it is what moved `application_on_create` from false to true.
+3. *`VALIDATED`.* Kept unset: AOSP sets it after a captive-portal probe reached
+   the internet; ACOS cannot probe, so claiming it would be a false success.
+   Apps see `isConnected` true, `isInternetReachable` false.
+
+**Measurement** (`results/compat/NET1/run{1,2,3}`, `.cache/net1/runs-r{1,2,3}`).
+
+| run | process_start | on_create | first_frame | tree | screenshot | unsupported.jsonl |
+|---|---|---|---|---|---|---|
+| 1 | ✓ | ✓ | 1633.5 ms | ✓ | ✓ | empty |
+| 2 | ✓ | ✓ | 1630.9 ms | ✓ | ✓ | empty |
+| 3 | ✓ | ✓ | 1821.2 ms | ✓ | ✓ | empty |
+
+All three: `activity_resumed: true`, `guest_crash: null`, no SIGABRT.
+`cargo test -p acos-services --test net1_connectivity`: 10/10, including a scan of the image's own `writeToParcel` for all four classes (`NetworkRequest` and `NetworkInfo` full-match).
+
+**Interpretation.** The wall was ACOS policy, not RN: the framework's
+`NetworkCallback` machinery works unchanged against a declared network. The
+callback path provably ran in the app (the pre-fix run's `session-exit.json`
+carries `NetworkCallbackConnectivityReceiver.updateAndSend` in its stack), and
+the parcel shapes are asserted against the framework's own readers in the unit
+tests.
+
+**Not proven.** The JS-level NetInfo state (no guest logd is persisted by
+`tools/compat/k1-run.py`), the gate battery, the crate suites and the 2×42-app
+corpus. A non-null `getActiveNetwork` is the one plausible regression vector
+(an app that now believes it is online can block on a socket it cannot open),
+so the corpus diff is required before this is called accepted.
+
+**Found in passing.** `parcelable::write_dynamic`/`read_dynamic` put a length
+word after `VAL_PARCELABLE`; API 34's `Parcel.writeValue` does not. ACOS is
+self-consistent but not framework-compatible for a `Bundle` containing a
+parcelable. The callback messages avoid the shared path
+(`write_parcelable_bundle`), and the defect is reported rather than silently
+changed inside this track.
+
+**Files.** `crates/acos-services/src/{connectivity.rs,parcelable.rs,declared.rs,
+registry.rs,lib.rs}`, `crates/acos-services/tests/net1_connectivity.rs`,
+`results/compat/NET1.md`, `results/handoff/NET1.md`.
+
+## E5.10b — NET1 verification (crate suites, gates, Gaten, guest logd) — MEASURED
+
+**Question.** `E5.10` left three gaps: the crate suites, the gate battery and the
+app-side NetInfo state had not been run on the connectivity tree. Do they hold,
+and does answering `getActiveNetwork`/`getNetworkCapabilities` non-null move any
+gate?
+
+**Setup.** Branch `compat-net1-connectivity` at `e5eeba3`, binaries built from it
+in `.cache/s3ab-target/release`, every ART run under
+`run-exclusive.sh --task NET1B` + `guarded.sh --mem 8–10G`. Gate/Gaten runner
+copied from the int reference (`run_suite.sh`) with paths retargeted. Host was
+shared the whole window (queue waits of 30–170 s per acquisition).
+
+**Measured.**
+
+| check | result |
+|---|---|
+| `acos-services` (41 binaries) | 312 passed, 0 failed |
+| `acos-verify` (3) | 66 passed, 0 failed |
+| `acos-art` (14 + 1 alone) | 150 passed, 0 failed |
+| `acos-cli` (15) | 60 passed, 0 failed, 5 pre-existing ignored |
+| gates, 8 positive | pass 8/8 |
+| gates, 3 negative | `ASSERTION_FAILED` (T03-render-wrong), `ELEMENT_OFFSCREEN` (offscreen-pager-visible), `TIMEOUT` (p11-progress-timeout) — 3/3 as designed |
+| Gaten flows | 5/5 pass (`home`, `tabs`, `settings`, `search`, `lesson`), ~67 s each; `gaten-home` is the K4-era red and is green here |
+| Gaten negatives | 5/5 fail `ASSERTION_FAILED` |
+| Joplin + guest logd | 266 records, `ReactNativeJS` ×105, JS reached `go: initial route`, no connectivity refusal |
+
+**Interpretation.** A declared network that answers the framework's own
+`NetworkCallback` protocol changes no measured behaviour: every positive gate
+and flow passes, every negative one still fails with its designed code (0 false
+passes), and the crate suites are unaffected. The one class the gates cannot
+rule out — an app that now believes it is online and blocks on a socket — is the
+corpus's job (§E5.10c).
+
+**Found in passing (harness).** `tools/compat/k1-run.py` threw the guest logd
+away with the guest, so no app-side evidence survived a run. It now calls
+`acos_logs` before destroy and writes `06-logs.json` (bounded by
+`--logs-limit`, default 3000, `--no-logs` to skip). Joplin's release bundle
+does not log NetInfo, so the JS `isConnected` value is still not quoted; the logd
+proves instead that the JS bundle evaluated past the module init that aborted on
+`main`, and that no connectivity call was refused.
+
+**Found in passing (flake recipe).** The documented `acos-art` recipe (skip
+`sandbox_s5::refuses_to_run_when_no_cgroup_can_be_created` in the batch, then run
+it alone `--exact`) fails on a warm host: `RunCgroup::prepare` reads a per-boot
+capability stamp under `ACOS_ART_DATA` (H15), so the fake-`systemd-run` probe the
+test installs is never consulted and `prepare` returns `Ok(cg:"")`. Running it
+with a cold `ACOS_ART_DATA` exercises the intended path and passes. The recipe
+should say so.
+
+## E5.10c — NET1 2×42-app corpus, round 1 — MEASURED (round 2 in flight)
+
+**Question.** A non-null `getActiveNetwork`/`getNetworkCapabilities` is the one
+plausible regression vector for the connectivity work: an app that now believes
+it is online can block on a socket it cannot open. Does any app move *down* a
+rung?
+
+**Setup.** K1 corpus (42 real apps) through `tools/compat/k1-run.py`, both arms
+in the same acquisition per app, branch (`compat-net1-connectivity` @
+`e5eeba3`, `.cache/s3ab-target/release`) then main (`3e11d9c`, read-only
+`.cache/wt-abmain/.cache/ab-target/release`), one `serve --engine art` per app
+per arm. Runs `.cache/net1b/corpus/r1/<arm>/<pkg>`, driver
+`.cache/net1b/corpus.sh`, table `.cache/net1b/rung.py`.
+
+**Measured (42/42 apps, both arms).**
+
+| rung | main | branch |
+|---|---:|---:|
+| inspect | 42 | 42 |
+| process_start | 41 | **42** |
+| onCreate | 41 | **42** |
+| first frame | 15 | **16** |
+| tree | 15 | **16** |
+| tap | 9 | 9 |
+
+**Two apps differ, both upward, none explained away:**
+
+* `net.cozic.joplin`: `first_frame`/`tree` `.`→`Y` (1650 ms). Main dies at
+  `RNCNetInfo` → `IConnectivityManager code 42`.
+* `com.nextcloud.client`: `process_start`/`oncreate` `.`→`Y`, still no frame on
+  either arm. Main's wall is the *same* code 42 (`Unable to instantiate
+  application com.owncloud.android.MainApp … unsupported Android API
+  android.net.IConnectivityManager code 42`); the branch gets past it and dies in
+  its own database code (`NullPointerException … Cursor.moveToFirst() on a null
+  object reference`). A new wall, reached only because the old one is gone.
+
+**Interpretation.** Zero unexplained regressions, zero downward moves: the
+declared network changes nothing for the 40 apps that were unaffected and
+unblocks the two that registered a default-network callback during startup. No
+app blocks on a socket because it now sees a network.
+
+**Not proven.** Round 2 (determinism; started 10:05 UTC, 6 of 42 apps done, then
+stopped at the window close to release the shared ART queue) — see
+`results/compat/NET1.md` §7.5.

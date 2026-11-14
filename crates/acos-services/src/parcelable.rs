@@ -1484,6 +1484,107 @@ pub static SPECS: &[ParcelableSpec] = &[
         fields: &[FieldOp::Binder],
         verification: Verification::Full,
     },
+    // ---- NET1: connectivity (API-34 `ConnectivityManager` wire) ------------
+    //
+    // `NetworkCapabilities.writeToParcel` (packages/modules/Connectivity
+    // framework, android-14.0.0_r75) writes: the two capability bitfields and
+    // the transport bitfield as longs, four ints (up/down bandwidth, signal
+    // strength), the nullable `NetworkSpecifier`/`TransportInfo` parcelables,
+    // the nullable uid `ArraySet` (an int count; `-1` is null), the
+    // `mAllowedUids`/`mAdministratorUids`/`mSubIds` int arrays (never null on
+    // the wire: the reader dereferences them), the SSID, the private-DNS flag,
+    // owner/requestor ids and package, the underlying-network typed list (an
+    // int count) and the enterprise-id mask. `Str16` with a null value is
+    // byte-identical to `writeParcelable(null)`, which is how the two nullable
+    // parcelables and every null count are modelled.
+    ParcelableSpec {
+        class: "android.net.NetworkCapabilities",
+        fields: &[
+            FieldOp::Long,     // mNetworkCapabilities & ALL_VALID_CAPABILITIES
+            FieldOp::Long,     // mForbiddenNetworkCapabilities
+            FieldOp::Long,     // mTransportTypes & ALL_VALID_TRANSPORTS
+            FieldOp::Int,      // mLinkUpBandwidthKbps
+            FieldOp::Int,      // mLinkDownBandwidthKbps
+            FieldOp::Str16,    // mNetworkSpecifier (writeParcelable)
+            FieldOp::Str16,    // mTransportInfo (writeParcelable)
+            FieldOp::Int,      // mSignalStrength
+            FieldOp::Int,      // mUids ArraySet count (-1 = null)
+            FieldOp::IntArray, // mAllowedUids
+            FieldOp::Str16,    // mSSID
+            FieldOp::Bool,     // mPrivateDnsBroken
+            FieldOp::IntArray, // administrator uids
+            FieldOp::Int,      // mOwnerUid
+            FieldOp::Int,      // mRequestorUid
+            FieldOp::Str16,    // mRequestorPackageName
+            FieldOp::IntArray, // mSubIds
+            FieldOp::Int,      // mUnderlyingNetworks typed-list count (-1 = null)
+            FieldOp::Int,      // mEnterpriseId & ALL_VALID_ENTERPRISE_IDS
+        ],
+        verification: Verification::Full,
+    },
+    // `NetworkRequest.writeToParcel`: the capabilities (a bare payload, no
+    // class-name prefix), the legacy type, the request id and the `Type` name
+    // (`Type.valueOf(readString())` in the creator).
+    ParcelableSpec {
+        class: "android.net.NetworkRequest",
+        fields: &[
+            FieldOp::Nested("android.net.NetworkCapabilities"),
+            FieldOp::Int,   // legacyType
+            FieldOp::Int,   // requestId
+            FieldOp::Str16, // type.name()
+        ],
+        verification: Verification::Full,
+    },
+    // `LinkProperties.writeToParcel`: interface name, three address lists
+    // (LinkAddress parcelables / `InetAddress` byte arrays), the private-DNS
+    // facts, domains, the dhcp server address byte array, MTU, TCP buffer
+    // sizes, route parcelables, the nullable HTTP proxy (a byte marker), the
+    // nullable NAT64 prefix, the stacked links (`writeList`), wake-on-LAN and
+    // the two captive-portal parcelables. ACOS's network carries no address
+    // list (the sandbox has no interface to describe), so every list is an
+    // explicit `0` count, never a fabricated address.
+    ParcelableSpec {
+        class: "android.net.LinkProperties",
+        fields: &[
+            FieldOp::Str16,    // interface name
+            FieldOp::Int,      // link address count
+            FieldOp::Int,      // DNS address count
+            FieldOp::Int,      // validated private DNS count
+            FieldOp::Bool,     // usePrivateDns
+            FieldOp::Str16,    // privateDnsServerName
+            FieldOp::Int,      // PCSCF count
+            FieldOp::Str16,    // domains
+            FieldOp::ByteArray, // dhcp server address (null)
+            FieldOp::Int,      // mtu
+            FieldOp::Str16,    // tcpBufferSizes
+            FieldOp::Int,      // route count
+            FieldOp::Byte,     // httpProxy presence marker
+            FieldOp::Str16,    // nat64Prefix (writeParcelable)
+            FieldOp::Int,      // stacked links (`writeList` count)
+            FieldOp::Bool,     // wakeOnLanSupported
+            FieldOp::Str16,    // captivePortalApiUrl (writeParcelable)
+            FieldOp::Str16,    // captivePortalData (writeParcelable)
+        ],
+        verification: Verification::Full,
+    },
+    // `NetworkInfo.writeToParcel` (the deprecated query replies).
+    ParcelableSpec {
+        class: "android.net.NetworkInfo",
+        fields: &[
+            FieldOp::Int,   // mNetworkType
+            FieldOp::Int,   // mSubtype
+            FieldOp::Str16, // mTypeName
+            FieldOp::Str16, // mSubtypeName
+            FieldOp::Str16, // mState.name()
+            FieldOp::Str16, // mDetailedState.name()
+            FieldOp::Int,   // mIsFailover
+            FieldOp::Int,   // mIsAvailable
+            FieldOp::Int,   // mIsRoaming
+            FieldOp::Str16, // mReason
+            FieldOp::Str16, // mExtraInfo
+        ],
+        verification: Verification::Full,
+    },
     // ---- K2/R2: notification channel + group (API-34 image layout) ----------
     //
     // Transcribed from the image's `NotificationChannel(Parcel)` constructor
@@ -2732,6 +2833,59 @@ fn java_string_hash(s: &str) -> i32 {
         .fold(0i32, |h, c| h.wrapping_mul(31).wrapping_add(c as i32))
 }
 
+/// Write an `android.os.Bundle` whose entries are **parcelables**, in the
+/// exact wire form API 34's `Parcel.writeValue` produces for
+/// `VAL_PARCELABLE`.
+///
+/// `write_bundle` goes through [`write_dynamic`], which writes a length word
+/// after the `VAL_PARCELABLE` tag. The framework's reader
+/// (`Parcel.readValue` → `readParcelableInternal`) does **not** expect that
+/// word: `Parcel.writeValue`'s `VAL_PARCELABLE` case is
+/// `writeParcelable(v, 0)`, i.e. a class-name string followed by the payload.
+/// A `Bundle` whose values are parcelables (the `Messenger` callback messages
+/// `ConnectivityService` sends) must therefore be written here.
+///
+/// Entries are emitted in `ArrayMap` order (ascending Java string hash), the
+/// same order [`write_bundle`] uses.
+pub fn write_parcelable_bundle(
+    parcel: &mut Parcel,
+    entries: &[(&str, &Parcelable)],
+) -> Result<()> {
+    if entries.is_empty() {
+        parcel.write_int32(0);
+        return Ok(());
+    }
+    let start = parcel.data_size();
+    parcel.write_int32(0);
+    parcel.write_int32(BUNDLE_MAGIC as i32);
+    let payload_start = parcel.data_size();
+    parcel.write_int32(i32::try_from(entries.len()).map_err(|_| bad("bundle too large"))?);
+    let mut ordered: Vec<&(&str, &Parcelable)> = entries.iter().collect();
+    ordered.sort_by_key(|(key, _)| java_string_hash(key));
+    for (key, value) in ordered {
+        parcel.write_string16(key)?;
+        match value {
+            Parcelable::Null => parcel.write_int32(val::NULL),
+            Parcelable::Ordered { class, .. } => {
+                parcel.write_int32(val::PARCELABLE);
+                parcel.write_string16(class)?;
+                write_payload(parcel, value)?;
+            }
+            Parcelable::Fd(_) => {
+                return Err(bad("a bundle value cannot be a bare file descriptor"));
+            }
+        }
+    }
+    let payload_end = parcel.data_size();
+    let len = payload_end - payload_start;
+    parcel.set_data_position(start);
+    parcel.write_int32(i32::try_from(len).map_err(|_| bad("bundle too large"))?);
+    parcel.set_data_position(payload_end);
+    Ok(())
+}
+
+/// Write an `android.os.Bundle` (the `writeValue`-based form used by
+/// `Settings` and framework metadata).
 pub fn write_bundle(parcel: &mut Parcel, bundle: Option<&Bundle>) -> Result<()> {
     match bundle {
         None => {

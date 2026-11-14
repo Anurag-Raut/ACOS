@@ -44,6 +44,7 @@ pub mod animation;
 pub mod atms;
 pub mod clipboard;
 pub mod codec;
+pub mod connectivity; // NET1: IConnectivityManager default network + callbacks
 pub mod compositor_client;
 pub mod cursor;
 pub mod declared;
