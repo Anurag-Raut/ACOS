@@ -150,7 +150,10 @@ impl Logd {
         let path = dir.join("logdw");
         let _ = std::fs::remove_file(&path);
         let sock = UnixDatagram::bind(&path)?;
-        sock.set_read_timeout(Some(Duration::from_millis(100)))?;
+        // H4: `finish_capped` sends the zero-length wake datagram, so this
+        // timeout is only a safety bound, not the stop path. 1 s removes a
+        // 10/s idle timer per session without delaying teardown.
+        sock.set_read_timeout(Some(Duration::from_secs(1)))?;
         let entries: Arc<Mutex<Vec<LogEntry>>> = Arc::new(Mutex::new(Vec::new()));
         let stats = Arc::new(Mutex::new(LogStats { cap, ..LogStats::default() }));
         let first_dropped: Arc<Mutex<Option<LogEntry>>> = Arc::new(Mutex::new(None));

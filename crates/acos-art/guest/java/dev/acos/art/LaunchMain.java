@@ -1095,9 +1095,12 @@ public final class LaunchMain {
      * <p>P10: the walk is event-driven. A view callback marks the tree dirty;
      * the probe thread emits one sample per debounce window (one frame) and
      * coalesces bursts, so a burst of draws never becomes a burst of walks.
-     * The slow poll (`P10_PROBE_FALLBACK_MS`, default 250 ms) is the fallback:
-     * a missed event can delay a sample but can never stop it. A host `PROBE`
-     * line on stdin schedules one sample immediately (cause {@code wake}).
+     * The slow poll (`P10_PROBE_FALLBACK_MS`, default 5000 ms; H4) is the
+     * liveness fallback: a missed event can delay a sample but can never stop
+     * it. A host `PROBE` line on stdin schedules one sample immediately (cause
+     * {@code wake}), so every host settle/tree request still gets a fresh
+     * sample without waiting for this timer. H4 raised the default from 250 ms:
+     * an idle screen was doing four full tree walks/s for no observer.
      * Every sample names its {@code cause}: {@code dirty|wake|poll}.
      */
     /**
@@ -1284,7 +1287,7 @@ public final class LaunchMain {
                         envLong("P10_PROBE_DEBOUNCE_MS", 8);
                 final long minGapMs = envLong("P10_PROBE_MIN_GAP_MS", 25);
                 final long fallbackMs =
-                        envLong("P10_PROBE_FALLBACK_MS", 250);
+                        envLong("P10_PROBE_FALLBACK_MS", 5000);
                 long seq = 0;
                 long pendingSince = 0;
                 long lastEmitMs = 0;

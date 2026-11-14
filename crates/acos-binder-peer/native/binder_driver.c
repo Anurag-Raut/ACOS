@@ -1315,18 +1315,15 @@ static int e3g_write_read(struct binder_write_read* bwr) {
         bwr->read_consumed = 0;
         return 0;
     }
-    int waited = 0;
-    while (g.in_head == NULL && waited < 1000) {
-        struct timespec ts;
-        clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_nsec += 20 * 1000 * 1000;
-        if (ts.tv_nsec >= 1000000000) {
-            ts.tv_sec++;
-            ts.tv_nsec -= 1000000000;
-        }
-        if (!T.is_looper && waited >= 50) break;
-        pthread_cond_timedwait(&g.cv_txn, &g.mu, &ts);
-        waited += 20;
+    // H4: block until an incoming transaction is queued. The old 20 ms timed
+    // wait woke every looper thread 50 times/s while the guest was idle (two
+    // such threads per guest) and re-checked a condition that cannot change
+    // without the broadcast below. `cv_txn` is broadcast under `g.mu` whenever
+    // an F_TXN frame is queued, so an untimed wait cannot miss it and adds no
+    // latency; process teardown ends the thread. Non-loopers already returned
+    // above and never park here.
+    while (g.in_head == NULL) {
+        pthread_cond_wait(&g.cv_txn, &g.mu);
     }
     // Peer-initiated transactions are delivered only to a thread that has
     // entered the binder looper.  A thread that is merely transacting must

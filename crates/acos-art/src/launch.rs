@@ -699,11 +699,13 @@ pub(crate) fn launch_session(
             };
             unsafe {
                 libc::close(listener);
-                // A 100 ms receive timeout lets `serve` notice `stop` without
-                // changing the frame protocol; a live guest simply continues.
+                // H4: the receive timeout only exists to notice `stop` after a
+                // guest death. Process exit closes this socket, which is the
+                // real wake; a 1 s bound keeps a wedged peer from parking the
+                // launcher forever without a 10/s idle timer.
                 let tv = libc::timeval {
-                    tv_sec: 0,
-                    tv_usec: 100_000,
+                    tv_sec: 1,
+                    tv_usec: 0,
                 };
                 libc::setsockopt(
                     client,
@@ -3402,10 +3404,19 @@ fn wait_for_event_settled(
         }
         // An idle screen emits nothing, so a bounded wake keeps it observable;
         // a drawing screen's own dirty events are the request. Never re-ask for
-        // a sample that already arrived since the last request.
+        // a sample that already arrived since the last request — but *do*
+        // record that it arrived: otherwise `last_requested_seq` stays stuck at
+        // the pre-request sample and the host stops asking forever. The 250 ms
+        // guest fallback used to hide that bug; H4's 5 s fallback exposes it
+        // (a type/tap leaves the main queue pending and strict settle needs a
+        // fresh sample after the queue drains).
         let current_probe_seq = latest_probe(probe_state)
             .map(|sample| sample.seq)
             .unwrap_or(last_requested_seq);
+        if current_probe_seq > last_requested_seq {
+            last_requested_seq = current_probe_seq;
+            last_wake = Instant::now();
+        }
         if last_wake.elapsed() >= Duration::from_millis(wake_ms)
             && current_probe_seq == last_requested_seq
         {
@@ -3764,6 +3775,21 @@ fn wait_for_fast_tree(
     }
 }
 
+/// H4: the interactive session's idle wake sources.
+///
+/// The old loop woke every 100 ms to call `try_wait`, the watchdog and the
+/// session deadline. That was 10 wakeups/s per idle session for events that are
+/// all observable without polling: stdin has a reader thread, child exit has a
+/// `waitid(WNOWAIT)` watcher, and the watchdog kills the guest (which is the
+/// child-exit event). The only genuine deadline is the 900 s session cap.
+#[derive(Debug)]
+enum ServeEvent {
+    /// One command line from stdin (`None` = EOF).
+    Line(Option<String>),
+    /// The guest process has exited (it is still waitable: `WNOWAIT`).
+    ChildExited,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn interactive_serve(
     density_dpi: u32,
@@ -3886,8 +3912,9 @@ fn interactive_serve(
     protocol_write(&ready);
     evidence.push(ready);
 
-    // stdin -> channel, so the loop can also poll the guest and its deadlines.
-    let (ctx, crx) = mpsc::channel::<Option<String>>();
+    // stdin -> channel, so the loop is event-driven (H4: no 100 ms idle poll).
+    let (ctx, crx) = mpsc::channel::<ServeEvent>();
+    let stdin_ctx = ctx.clone();
     std::thread::spawn(move || {
         use std::io::BufRead;
         let stdin = std::io::stdin();
@@ -3897,20 +3924,45 @@ fn interactive_serve(
             line.clear();
             match lock.read_line(&mut line) {
                 Ok(0) => {
-                    let _ = ctx.send(None);
+                    let _ = stdin_ctx.send(ServeEvent::Line(None));
                     return;
                 }
                 Ok(_) => {
-                    if ctx.send(Some(line.clone())).is_err() {
+                    if stdin_ctx.send(ServeEvent::Line(Some(line.clone()))).is_err() {
                         return;
                     }
                 }
                 Err(_) => {
-                    let _ = ctx.send(None);
+                    let _ = stdin_ctx.send(ServeEvent::Line(None));
                     return;
                 }
             }
         }
+    });
+    // H4: child exit is a blocking kernel event, not a 100 ms poll. `WNOWAIT`
+    // leaves the child reapable, so the existing `child.try_wait()`/`wait()`
+    // paths still own the status and no error is retried twice.
+    let exit_ctx = ctx.clone();
+    let exit_pid = child.id() as libc::id_t;
+    std::thread::spawn(move || {
+        loop {
+            let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+            let rc = unsafe {
+                libc::waitid(
+                    libc::P_PID,
+                    exit_pid,
+                    &mut info,
+                    libc::WEXITED | libc::WNOWAIT,
+                )
+            };
+            if rc == 0 {
+                break;
+            }
+            if std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
+                break;
+            }
+        }
+        let _ = exit_ctx.send(ServeEvent::ChildExited);
     });
 
     let session_deadline =
@@ -3920,24 +3972,10 @@ fn interactive_serve(
     let clean: bool;
     let mut last_capture_fnv: Option<u64> = None;
     loop {
-        let line = match crx.recv_timeout(Duration::from_millis(100)) {
-            Ok(Some(line)) => Some(line),
-            Ok(None) | Err(mpsc::RecvTimeoutError::Disconnected) => None,
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                // No command: keep polling the guest and the session deadline.
-                if let Some(status) = child.try_wait()? {
-                    let reply = serde_json::json!({
-                        "ok": false, "cmd": "session", "code": "GUEST_EXITED",
-                        "error": format!("the guest ended while the session was idle (status {status})"),
-                    });
-                    protocol_write(&reply);
-                    evidence.push(reply);
-                    write_session_evidence(out, &evidence);
-                    return Ok(SessionEnd {
-                        status: Some(status),
-                        clean: false,
-                    });
-                }
+        let deadline_left = session_deadline.saturating_duration_since(Instant::now());
+        let line = match crx.recv_timeout(deadline_left) {
+            Ok(ServeEvent::Line(line)) => line,
+            Ok(ServeEvent::ChildExited) => {
                 if let Some(d) = dog {
                     if d.trip().is_some() {
                         kill_guest(child, cgroup);
@@ -3954,22 +3992,37 @@ fn interactive_serve(
                         });
                     }
                 }
-                if Instant::now() >= session_deadline {
-                    kill_guest(child, cgroup);
-                    let reply = serde_json::json!({
-                        "ok": false, "cmd": "session", "code": "TIMEOUT",
-                        "error": "the live session exceeded ACOSLAUNCH_SESSION_SECS",
-                    });
-                    protocol_write(&reply);
-                    evidence.push(reply);
-                    write_session_evidence(out, &evidence);
-                    return Ok(SessionEnd {
-                        status: None,
-                        clean: false,
-                    });
-                }
-                cgroup.sample();
-                continue;
+                let status = child.try_wait()?;
+                let reply = serde_json::json!({
+                    "ok": false, "cmd": "session", "code": "GUEST_EXITED",
+                    "error": match &status {
+                        Some(status) => format!("the guest ended while the session was idle (status {status})"),
+                        None => "the guest ended while the session was idle".to_string(),
+                    },
+                });
+                protocol_write(&reply);
+                evidence.push(reply);
+                write_session_evidence(out, &evidence);
+                return Ok(SessionEnd {
+                    status,
+                    clean: false,
+                });
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => None,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                // The only periodic bound left is the 900 s session cap.
+                kill_guest(child, cgroup);
+                let reply = serde_json::json!({
+                    "ok": false, "cmd": "session", "code": "TIMEOUT",
+                    "error": "the live session exceeded ACOSLAUNCH_SESSION_SECS",
+                });
+                protocol_write(&reply);
+                evidence.push(reply);
+                write_session_evidence(out, &evidence);
+                return Ok(SessionEnd {
+                    status: None,
+                    clean: false,
+                });
             }
         };
         let Some(line) = line else {
