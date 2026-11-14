@@ -179,6 +179,20 @@ impl FakeDaemon {
         false
     }
 
+    /// Wait until `tool` is seen for any session (FB5b/H1: a listing is about the
+    /// daemon, so it no longer carries the default session id).
+    fn expect_tool(&self, tool: &str, within: Duration) -> bool {
+        let deadline = std::time::Instant::now() + within;
+        while std::time::Instant::now() < deadline {
+            if let Ok(value) = self.calls.recv_timeout(Duration::from_millis(50)) {
+                if value.get("tool").and_then(Value::as_str) == Some(tool) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// Every `acos_destroy` seen for `session` within `within`.
     fn count_destroy(&self, session: &str, within: Duration) -> usize {
         let deadline = std::time::Instant::now() + within;
@@ -327,7 +341,7 @@ fn a_default_id_does_not_let_one_server_destroy_another_servers_session() {
     // A asks the daemon which launch owns the id (the token check) — and that
     // check is what keeps it from destroying B's guest.
     assert!(
-        daemon.expect_call("session_list", &default_id, Duration::from_secs(10)),
+        daemon.expect_tool("session_list", Duration::from_secs(10)),
         "A checks the daemon's current launch token before destroying"
     );
     assert_eq!(
