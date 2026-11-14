@@ -156,14 +156,77 @@ impl SystemBars {
 
     /// The bars visible to an application window (status + nav), as an
     /// `InsetsI` relative to the display frame.
+    ///
+    /// Which edge a bar occupies is read off the bar rect itself (a bar either
+    /// spans the frame's width and sits on a horizontal edge, or spans the
+    /// frame's height and sits on a vertical edge), so the answer follows the
+    /// rotation instead of assuming the portrait layout. [`Self::app_insets_for`]
+    /// is the display-aware form; this one uses [`RectI::DISPLAY_1080X2400`].
     #[must_use]
-    pub const fn app_insets(&self) -> InsetsI {
+    pub fn app_insets(&self) -> InsetsI {
+        self.app_insets_for(RectI::DISPLAY_1080X2400)
+    }
+
+    /// [`Self::app_insets`] against an explicit display frame.
+    #[must_use]
+    pub fn app_insets_for(&self, frame: RectI) -> InsetsI {
+        let status = edge_inset(self.status_bar, frame);
+        let nav = edge_inset(self.nav_bar, frame);
         InsetsI::new(
-            0,
-            self.status_bar.height(),
-            0,
-            self.nav_bar.height(),
+            status.left + nav.left,
+            status.top + nav.top,
+            status.right + nav.right,
+            status.bottom + nav.bottom,
         )
+    }
+
+    /// One quarter turn into the `src_h x src_w` frame.
+    #[must_use]
+    pub fn rotate_quarters(&self, src_w: i32, src_h: i32) -> Self {
+        let r = |rect: RectI| rect.rotate_quarters(src_w, src_h);
+        Self {
+            status_bar: r(self.status_bar),
+            status_bar_tappable: r(self.status_bar_tappable),
+            nav_bar: r(self.nav_bar),
+            nav_bar_tappable: r(self.nav_bar_tappable),
+            ime_visible: r(self.ime_visible),
+            display_cutout: r(self.display_cutout),
+            mandatory_system_gestures_top: r(self.mandatory_system_gestures_top),
+            mandatory_system_gestures_bottom: r(self.mandatory_system_gestures_bottom),
+            system_gestures_left: r(self.system_gestures_left),
+            system_gestures_right: r(self.system_gestures_right),
+        }
+    }
+}
+
+/// The thickness `rect` takes away from `frame`, on the edge it hugs.
+///
+/// A bar that spans the frame's width is on a horizontal edge; one that spans
+/// its height is on a vertical edge. Anything else (an empty bar, the
+/// `[0,0][0,0]` tappable placeholders) contributes no inset.
+fn edge_inset(rect: RectI, frame: RectI) -> InsetsI {
+    if rect.is_empty() {
+        return InsetsI::new(0, 0, 0, 0);
+    }
+    let spans_width = rect.width() >= frame.width();
+    let spans_height = rect.height() >= frame.height();
+    match (spans_width, spans_height) {
+        (true, false) => {
+            if rect.top <= frame.top {
+                InsetsI::new(0, rect.height(), 0, 0)
+            } else {
+                InsetsI::new(0, 0, 0, rect.height())
+            }
+        }
+        (false, true) => {
+            if rect.left <= frame.left {
+                InsetsI::new(rect.width(), 0, 0, 0)
+            } else {
+                InsetsI::new(0, 0, rect.width(), 0)
+            }
+        }
+        // A corner-hugging or degenerate rect is not a bar edge.
+        _ => InsetsI::new(0, 0, 0, 0),
     }
 }
 
@@ -302,8 +365,61 @@ impl DisplaySpec {
 
     /// The insets the window manager subtracts from the full frame for an app.
     #[must_use]
-    pub const fn app_insets(&self) -> InsetsI {
-        self.bars.app_insets()
+    pub fn app_insets(&self) -> InsetsI {
+        self.bars.app_insets_for(self.frame)
+    }
+
+    /// The display rotated to `rotation` (`0..3`, AOSP `Surface.ROTATION_*`),
+    /// one quarter turn per step.
+    ///
+    /// The display frame, every system-bar rect and the app window frame move
+    /// with it; the density and refresh rate do not (a rotation changes the
+    /// frame the window is laid out in, not the panel). Rotating to the current
+    /// rotation is a no-op, and `rotation + 4` wraps.
+    ///
+    /// This is the geometry half of AOSP's `DisplayContent.updateRotationUnchecked`:
+    /// the new frame is what `IWindowSession.relayout` answers with and what the
+    /// new `Configuration`'s `screenWidthDp`/`screenHeightDp` and
+    /// `windowConfiguration` bounds are computed from.
+    #[must_use]
+    pub fn rotated(&self, rotation: u8) -> Self {
+        let target = rotation % 4;
+        let mut out = *self;
+        // Step one quarter turn at a time: the frame dimensions swap on every
+        // step, so the rect transform always has the right source size.
+        let mut guard = 0;
+        while out.rotation % 4 != target && guard < 4 {
+            let w = out.frame.width();
+            let h = out.frame.height();
+            out.frame = RectI::new(0, 0, h, w);
+            out.bars = out.bars.rotate_quarters(w, h);
+            out.rotation = (out.rotation + 1) % 4;
+            guard += 1;
+        }
+        out.app_bounds = RectI::new(
+            out.frame.left + out.bars.app_insets_for(out.frame).left,
+            out.frame.top + out.bars.app_insets_for(out.frame).top,
+            out.frame.right - out.bars.app_insets_for(out.frame).right,
+            out.frame.bottom - out.bars.app_insets_for(out.frame).bottom,
+        );
+        out
+    }
+
+    /// `true` when the display is taller than it is wide (`ORIENTATION_PORTRAIT`
+    /// otherwise, `ORIENTATION_LANDSCAPE`).
+    #[must_use]
+    pub const fn is_landscape(&self) -> bool {
+        self.frame.width() > self.frame.height()
+    }
+
+    /// `Configuration.orientation` for this display.
+    #[must_use]
+    pub const fn orientation(&self) -> crate::Orientation {
+        if self.is_landscape() {
+            crate::Orientation::Landscape
+        } else {
+            crate::Orientation::Portrait
+        }
     }
 
     /// `addToDisplayAsUser`'s `outFrame` for a normal app window: the app bounds
@@ -349,6 +465,62 @@ impl DisplaySpec {
     }
 }
 
+/// `ActivityInfo.CONFIG_ORIENTATION` (`android:configChanges="orientation"`).
+pub const CONFIG_ORIENTATION: i32 = 0x0000_0080;
+/// `ActivityInfo.CONFIG_SCREEN_SIZE` (`screenSize`).
+pub const CONFIG_SCREEN_SIZE: i32 = 0x0000_0400;
+/// `ActivityInfo.CONFIG_SCREEN_LAYOUT` (`screenLayout`).
+pub const CONFIG_SCREEN_LAYOUT: i32 = 0x0000_0100;
+/// `ActivityInfo.CONFIG_SMALLEST_SCREEN_SIZE` (`smallestScreenSize`).
+pub const CONFIG_SMALLEST_SCREEN_SIZE: i32 = 0x0000_0800;
+
+/// What one display rotation changes in the `Configuration`, and whether the
+/// Activity handles all of it itself.
+///
+/// AOSP decides the same question in `ActivityRecord.updateConfigurationLocked`
+/// → `getRealConfigChanged()` — the bitmask an Activity declares in its
+/// manifest (`android:configChanges`) is compared against what the rotation
+/// delta touches; anything the Activity did not declare recreates it through
+/// `ActivityRelaunchItem`. A rotation always changes these four bits:
+///
+/// * `orientation` (portrait ↔ landscape),
+/// * `screenSize` (`screenWidthDp`/`screenHeightDp`),
+/// * `screenLayout` (the long/size bucket of the new aspect),
+/// * `smallestScreenSize` (the short edge in dp).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RotationRelaunch {
+    /// The `android:configChanges` bitmask declared by the Activity.
+    pub declared: i32,
+}
+
+impl RotationRelaunch {
+    /// The bits a rotation of this display changes.
+    #[must_use]
+    pub const fn rotation_changes() -> i32 {
+        CONFIG_ORIENTATION | CONFIG_SCREEN_SIZE | CONFIG_SCREEN_LAYOUT | CONFIG_SMALLEST_SCREEN_SIZE
+    }
+
+    /// The decision for one Activity's declared `configChanges`.
+    #[must_use]
+    pub const fn for_rotation(declared: i32) -> Self {
+        Self { declared }
+    }
+
+    /// The bits the rotation changes that the Activity did **not** declare.
+    #[must_use]
+    pub const fn missing(self) -> i32 {
+        Self::rotation_changes() & !self.declared
+    }
+
+    /// `true` when AOSP recreates the Activity (delivers
+    /// `ActivityRelaunchItem`), `false` when it delivers
+    /// `ActivityConfigurationChangeItem` and the Activity keeps its instance.
+    #[must_use]
+    pub const fn relaunches(self) -> bool {
+        self.missing() != 0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -383,5 +555,82 @@ mod tests {
         assert_eq!(c[0].2, PointI::new(0, 128));
         assert_eq!(c[2].2, PointI::new(0, 2274));
         assert_eq!(c[2].3.bottom, 63);
+    }
+
+    #[test]
+    fn rotate_to_landscape_swaps_the_frame_and_moves_the_bars() {
+        let portrait = DisplaySpec::reference_1080x2400();
+        let land = portrait.rotated(1);
+        assert_eq!(land.frame, RectI::new(0, 0, 2400, 1080));
+        assert_eq!(land.rotation, 1);
+        assert!(land.is_landscape());
+        assert_eq!(land.orientation(), crate::Orientation::Landscape);
+        // Density and refresh rate are panel properties: a rotation keeps them.
+        assert_eq!(land.density_dpi, portrait.density_dpi);
+        assert_eq!(land.refresh_hz, portrait.refresh_hz);
+        // The portrait status bar [0,0][1080,128] becomes the right-edge bar
+        // [2400-128,0][2400,1080]: on a display rotated a quarter turn the
+        // short edge is the vertical one.
+        assert_eq!(land.bars.status_bar, RectI::new(2272, 0, 2400, 1080));
+        assert_eq!(land.bars.nav_bar, RectI::new(0, 0, 63, 1080));
+        assert_eq!(land.app_insets(), InsetsI::new(63, 0, 128, 0));
+        assert_eq!(land.app_bounds, RectI::new(63, 0, 2272, 1080));
+        // ... and the dp screen size follows the frame, not the rotation.
+        assert_eq!(land.screen_width_dp(), 914);
+        assert_eq!(land.screen_height_dp(), 411);
+    }
+
+    #[test]
+    fn rotate_back_restores_the_portrait_geometry() {
+        let portrait = DisplaySpec::reference_1080x2400();
+        for target in [0u8, 1, 2, 3, 0, 4] {
+            let there = portrait.rotated(target);
+            let back = there.rotated(0);
+            assert_eq!(back.frame, portrait.frame, "rotation {target} frame");
+            assert_eq!(back.bars, portrait.bars, "rotation {target} bars");
+            assert_eq!(back.app_bounds, portrait.app_bounds, "rotation {target} app bounds");
+            assert_eq!(back.rotation, 0);
+        }
+        // Half turn keeps the portrait frame and mirrors both bars.
+        let half = portrait.rotated(2);
+        assert_eq!(half.frame, portrait.frame);
+        assert!(!half.is_landscape());
+        assert_eq!(half.bars.status_bar, RectI::new(0, 2272, 1080, 2400));
+        assert_eq!(half.bars.nav_bar, RectI::new(0, 0, 1080, 63));
+        assert_eq!(half.app_insets(), InsetsI::new(0, 63, 0, 128));
+    }
+
+    #[test]
+    fn rotated_twice_is_a_half_turn_and_the_other_quarter_is_its_mirror() {
+        let d = DisplaySpec::reference_1080x2400();
+        // `rotated` names the target rotation, so asking twice is the same as
+        // asking once; a step from either side lands on the same geometry.
+        assert_eq!(d.rotated(1).rotated(1), d.rotated(1));
+        assert_eq!(d.rotated(1).rotated(2), d.rotated(2));
+        // Rotation 3 is the other landscape: same frame, the bars on the
+        // opposite edges.
+        let other = d.rotated(3);
+        assert_eq!(other.frame, RectI::new(0, 0, 2400, 1080));
+        assert_eq!(other.bars.status_bar, RectI::new(0, 0, 128, 1080));
+        assert_eq!(other.bars.nav_bar, RectI::new(2337, 0, 2400, 1080));
+        assert_eq!(other.app_insets(), InsetsI::new(128, 0, 63, 0));
+        assert_ne!(other.bars, d.rotated(1).bars);
+        assert_eq!(d.rotated(1).rotated(0), d);
+    }
+
+    #[test]
+    fn config_change_bits_follow_the_manifest_that_declares_them() {
+        // `android:configChanges="orientation|screenSize"` handles a rotation.
+        let handled = CONFIG_ORIENTATION | CONFIG_SCREEN_SIZE | CONFIG_SCREEN_LAYOUT
+            | CONFIG_SMALLEST_SCREEN_SIZE;
+        assert!(!RotationRelaunch::for_rotation(handled).relaunches());
+        // The framework default (no `configChanges`) recreates the Activity.
+        assert!(RotationRelaunch::for_rotation(0).relaunches());
+        // Declaring only `orientation` is not enough: `screenSize` changed too.
+        assert!(RotationRelaunch::for_rotation(CONFIG_ORIENTATION).relaunches());
+        assert_eq!(
+            RotationRelaunch::for_rotation(CONFIG_ORIENTATION).missing(),
+            CONFIG_SCREEN_SIZE | CONFIG_SCREEN_LAYOUT | CONFIG_SMALLEST_SCREEN_SIZE
+        );
     }
 }

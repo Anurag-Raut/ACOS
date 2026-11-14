@@ -89,6 +89,29 @@ impl RectI {
     pub fn to_bounds(self) -> Bounds {
         Bounds::new(self.left, self.top, self.right, self.bottom)
     }
+
+    /// Rotate this rect by one quarter turn into the display frame it belongs
+    /// to after the rotation.
+    ///
+    /// `src_w`/`src_h` are the dimensions of the display frame **before** the
+    /// turn; the returned rect lives in the `src_h x src_w` frame. The point
+    /// map is the one `SurfaceFlinger`/`DisplayFrames` use for a one-step
+    /// rotation: `(x, y) -> (src_h - y, x)`, applied to both corners and
+    /// normalised afterwards (so a rect keeps its extent, not its sign).
+    ///
+    /// A rect is rotated as a *region*: the raster does not move, the frame
+    /// it is expressed in does. `[0,0][1080,128]` (a portrait status bar)
+    /// therefore becomes `[2400-128,0][2400,1080]` on a 1080x2400 display.
+    #[must_use]
+    pub fn rotate_quarters(self, src_w: i32, src_h: i32) -> RectI {
+        debug_assert!(
+            src_w > 0 && src_h > 0,
+            "a rotated rect needs the source frame's size"
+        );
+        let (x0, y0) = (src_h - self.top, self.left);
+        let (x1, y1) = (src_h - self.bottom, self.right);
+        RectI::new(x0.min(x1), y0.min(y1), x0.max(x1), y0.max(y1))
+    }
 }
 
 /// `android.graphics.Insets`: per-edge thicknesses.
