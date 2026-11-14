@@ -112,6 +112,8 @@ pub struct SessionCapabilities {
     pub type_text: bool,
     /// `key(name)`.
     pub key: bool,
+    /// `rotate(orientation)` — a real display rotation.
+    pub rotate: bool,
     /// `reset()`.
     pub reset: bool,
     /// `close()`.
@@ -155,6 +157,7 @@ impl SessionCapabilities {
             ("tap_text", self.tap_text),
             ("type_text", self.type_text),
             ("key", self.key),
+            ("rotate", self.rotate),
             ("reset", self.reset),
             ("close", self.close),
             ("logs", self.logs),
@@ -459,6 +462,20 @@ pub trait SessionBackend {
 
     /// Press a symbolic key (`back`, `enter`, ...).
     fn key(&mut self, key: &str) -> Result<(), BackendError>;
+
+    /// Rotate the display to a target rotation (0 = portrait, 1 = landscape,
+    /// 2 = reverse portrait, 3 = reverse landscape; a quarter-turn value, not a
+    /// delta).
+    ///
+    /// The default has no rotation command and says so, naming `input.rotate`
+    /// so a scenario `rotate` step on such an engine is a structured
+    /// `UNSUPPORTED_*`, never a silent no-op.
+    fn rotate(&mut self, _rotation: u8) -> Result<(), BackendError> {
+        Err(BackendError::unsupported(
+            "input.rotate",
+            "this session engine has no display-rotation command",
+        ))
+    }
 
     /// Reset app state (fresh Activity).
     fn reset(&mut self) -> Result<(), BackendError>;
@@ -976,10 +993,27 @@ impl Backend for EngineBackend {
                         }
                         self.action_result(previous, action.kind())
                     }
-                    InputAction::Rotate(_) => Err(BackendError::unsupported(
-                        "input.rotate",
-                        "the ART session protocol has no rotate command yet",
-                    )),
+                    InputAction::Rotate(orientation) => {
+                        if !caps.rotate {
+                            return Err(BackendError::unsupported(
+                                "input.rotate",
+                                "this session engine has no display-rotation command",
+                            ));
+                        }
+                        // Portrait -> rotation 0, landscape -> 1. A Reverse
+                        // variant would be 2/3; the scenario schema has only
+                        // the two named orientations (the same pair the Rust VM
+                        // maps to its own relaunch codes).
+                        let rotation = match orientation {
+                            acos_protocol::commands::Orientation::Portrait => 0u8,
+                            acos_protocol::commands::Orientation::Landscape => 1u8,
+                        };
+                        let previous = self.current_frame_seq();
+                        if let EngineBackend::Session { session, .. } = self {
+                            session.rotate(rotation)?;
+                        }
+                        self.action_result(previous, action.kind())
+                    }
                 }
             }
         }
@@ -1365,6 +1399,7 @@ mod tests {
                 "tap_text",
                 "type_text",
                 "key",
+                "rotate",
                 "logs",
                 "environment",
                 "crash_reports"
@@ -1791,6 +1826,34 @@ mod engine_tests {
             "input.type_text"
         );
         assert_eq!(unsupported["error"]["code"], "UNSUPPORTED_BACKEND");
+    }
+
+    /// ROT4: a backend without a rotation command must answer the `rotate`
+    /// step with a structured `UNSUPPORTED_BACKEND` naming `input.rotate`, never
+    /// a silent no-op and never a pass (the frozen Rust VM and the test fake are
+    /// both in this class).
+    #[test]
+    fn rotate_on_a_session_without_the_command_is_a_structured_unsupported() {
+        let mut backend = EngineBackend::session(Box::new(FakeSession::live()));
+        assert!(
+            !backend.session_capabilities().unwrap().rotate,
+            "the fake session must not claim a rotation command"
+        );
+        let error = backend
+            .input(&InputAction::Rotate(
+                acos_protocol::commands::Orientation::Landscape,
+            ))
+            .expect_err("a rotate step without a command must not succeed");
+        match error {
+            BackendError::Unsupported { capability, detail } => {
+                assert_eq!(capability, "input.rotate");
+                assert!(
+                    detail.contains("rotation"),
+                    "the detail must name the missing rotation command: {detail}"
+                );
+            }
+            other => panic!("expected a structured unsupported, got {other:?}"),
+        }
     }
 
     #[test]

@@ -103,6 +103,10 @@ impl SessionBackend for RustVmSession {
             tap_text: caps.input,
             type_text: caps.input,
             key: caps.input,
+            // The frozen Rust VM keeps its own relaunch path
+            // (`SessionBackend::relaunch` on the VM adapter); this session
+            // seam has no rotation command, so it must not claim one.
+            rotate: false,
             reset: caps.reset,
             close: true,
             logs: caps.logs,

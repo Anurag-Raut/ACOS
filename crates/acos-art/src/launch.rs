@@ -2023,6 +2023,9 @@ struct ProbeState {
     trace: Option<TraceSink>,
     /// P9: event-driven wake for the startup loop (see [`ProbeWake`]).
     wake: Arc<ProbeWake>,
+    /// ROT4: the guest's own diagnostic lines (`ACOSLAUNCH MARK …`), oldest
+    /// first, so an interactive reply can carry the rungs that ran for it.
+    marks: std::collections::VecDeque<String>,
 }
 
 /// W59 latency trace: `elapsed_us tag text` per line, written under one lock
@@ -2574,8 +2577,19 @@ fn drain_tee_lines<R: std::io::Read>(
         // W59: keep the guest's own timing evidence (its `ACOSLAUNCH TRACE`
         // looper lines and stall dumps) next to the host's input markers. Only
         // small, human-readable lines go in; probe JSON is already in the tree.
+        // ROT4: the guest's diagnostic lines (`ACOSLAUNCH MARK …`, one per
+        // lifecycle/config rung, and its stall dumps) are forwarded to the
+        // launcher's stderr unconditionally, so the interactive session trace
+        // names a failing rung instead of swallowing it (ROT3 could not tell
+        // why the Activity-level rotate sequence did not run). Not env-gated:
+        // a swallowed diagnostic is a correctness cost, not a debug nicety.
         if trimmed.starts_with("ACOSLAUNCH ") || trimmed.starts_with("ACOSPROBE-STALL") {
+            eprintln!("acos-art: guest: {trimmed}");
             let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+            state.marks.push_back(trimmed.to_string());
+            while state.marks.len() > 64 {
+                state.marks.pop_front();
+            }
             if let Some(trace) = state.trace.as_mut() {
                 trace.line("GUEST", trimmed);
             }
@@ -5970,6 +5984,7 @@ mod probe_line_tests {
                 oversized_lines: self.oversized_lines,
                 bad_probe_lines: self.bad_probe_lines,
                 trace: None,
+                marks: self.marks.clone(),
                 wake: Arc::clone(&self.wake),
                 anim_traced: self.anim_traced.clone(),
                 touch_traced: self.touch_traced,
@@ -6274,16 +6289,34 @@ mod skipped_traversal_tests {
     #[test]
     fn the_guest_ready_path_has_no_forced_traversal_and_publishes_the_evidence() {
         let src = include_str!("../guest/java/dev/acos/art/LaunchMain.java");
+        // App-visibility replay is wrong on *every* guest path.
         for forbidden in [
             "redeliverAppVisibility",
             "requesting one redraw",
             ".dispatchAppVisibility(",
             "\"dispatchAppVisibility\"",
-            "requestLayout()",
-            "invalidate()",
         ] {
             assert!(
                 !src.contains(forbidden),
+                "the guest must not contain `{forbidden}` (S3PERF E2.16)"
+            );
+        }
+        // Forced traversals are the measured one-frame regression *on the ready
+        // path*, so the guard is scoped to that path: ROT4's rotation path must
+        // force a relayout (`mForceNextWindowRelayout` + `requestLayout()`) to
+        // pick up the rotated frame, and that is a different path from the
+        // launch/ready one this test protects.
+        let ready_start = src
+            .find("static boolean awaitFirstTraversal")
+            .expect("the ready path function must exist");
+        let ready_end = src[ready_start + 1..]
+            .find("\n    static ")
+            .map(|offset| ready_start + 1 + offset)
+            .expect("the ready path function must end before the next static method");
+        let ready = &src[ready_start..ready_end];
+        for forbidden in ["requestLayout()", "invalidate()"] {
+            assert!(
+                !ready.contains(forbidden),
                 "the guest ready path must not contain `{forbidden}` (S3PERF E2.16)"
             );
         }

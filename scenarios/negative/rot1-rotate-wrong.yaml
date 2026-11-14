@@ -1,0 +1,41 @@
+# NEGATIVE: rotate really happens, so a portrait assertion after it must fail.
+#
+# Same flow as scenarios/rot1-rotate.yaml, but the structural assertion after
+# `rotate: landscape` demands the *portrait* bounds of the Increment button
+# (`[42,368][273,494]`). The rotated frame lays it out at `[42,240][273,366]`,
+# so no honest engine can satisfy this: the expected verdict is
+# ASSERTION_FAILED (`status: fail`), never a pass.
+version: 1
+name: negative-rot1-rotate-wrong
+description: >-
+  Rotate counter.apk to landscape and assert the portrait geometry it no longer
+  has; the run must fail with ASSERTION_FAILED.
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+steps:
+  - launch:
+      activity: dev.acos.fixtures.counter/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: count}
+      timeout_ms: 10000
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "0"}
+      bounds: [42, 317, 63, 368]
+
+  - rotate:
+      orientation: landscape
+
+  # WRONG ON PURPOSE: these are the portrait bounds of the same control.
+  - assert_text:
+      selector: {id: inc}
+      text: {exact: Increment}
+      bounds: [42, 368, 273, 494]

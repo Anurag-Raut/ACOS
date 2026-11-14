@@ -3063,3 +3063,92 @@ line visible to the host (echo it into the session trace / stderr) and re-run th
 commands: that names whether `mActivities` lookup, `PendingTransactionActions`, or
 `handleRelaunchActivity` is the failing rung. Only after the content tree survives the rotate
 may `input.rotate` be flipped.
+
+### E13.13 / ROT4 — rotate works end to end on ART: the relaunch rung is named and fixed, `input.rotate` is supported, gate + negative are 3/3 (COMPLETE)
+
+Branch `art-rotate-1`, `main` merged at `9225a01`. This pass answers ROT3's open question, fixes
+the rung it could not name, and flips `input.rotate` only after the end-to-end proof below.
+
+**1. The guest diagnostics are forwarded (ROT3's smallest next action).** In the interactive
+session every guest line starting `ACOSLAUNCH ` or `ACOSPROBE-STALL` is now echoed to the
+launcher's stderr unconditionally (`acos-art: guest: …`) and kept in a 64-line ring on
+`ProbeState`, in addition to the env-gated `ACOS_ART_INPUT_TRACE` sink it already reached. A
+swallowed diagnostic was the reason the failing rung went unnamed; nothing about it is
+debug-only, so it is not gated.
+
+**2. The "1-node skeleton tree" in ROT3 was a misreading, not a defect.** The probe's `tree`
+JSON is a *forest*: `tree.nodes` is one entry per **window** root, each root carrying its
+full `children` chain. The counter session's reply has one root and **14 views** with the real
+texts (`0`, `Increment`, `Reset`, `Counter`) in both orientations
+(`.cache/rot4/live1/stdout.jsonl`). Nothing about the tree had to be fixed; the counter value
+proved the same thing in the gate.
+
+**3. The failing rung, named and fixed: relaunch *scheduling*, not the record lookup.**
+The one-line answer to ROT3's list (`mActivities` record lookup / `PendingTransactionActions` /
+`handleRelaunchActivity`): **none of those; the *scheduling* guard.** AOSP
+`ActivityThread.scheduleRelaunchActivity(token)` →
+`scheduleRelaunchActivityIfPossible(r, …)` returns immediately for
+`r.token instanceof Binder` — and this Activity is attached with a local `Binder` token. So
+nothing was ever put on `mRelaunchingActivities`, and `handleRelaunchActivity` then aborted at
+its own guard (`tmp == null` → "Abort, activity not relaunching") **without any lifecycle
+callback and without an exception**: the old instance stayed, which is exactly why the count
+"survived" a relaunch that never happened and why ROT3 saw one `onCreate` only. The fix is the
+AMS-shaped delivery: build one stock `ClientTransaction` whose item is
+`ActivityRelaunchItem.obtain(token, null, null, configChanges, MergedConfiguration,
+preserveWindow=false)` with a `ResumeActivityItem` lifecycle request, and `scheduleLocal(tx)`.
+The framework's own `TransactionExecutor` then runs `preExecute`
+(`prepareRelaunchActivity` → record on `mRelaunchingActivities`) and `execute`
+(`handleRelaunchActivity` → `handleRelaunchActivityInner`: pause → stop(saveState) → destroy →
+launch(state restored) → resume). Two further image facts: `ActivityWindowInfo` is not in the
+boot image, so the window-info slot is discovered by name and passed null; and the forced
+relayout/probe must be *posted after* the transaction (it runs on the same main looper), or it
+forces the **old** decor and the new window's first traversal — a transient layout — becomes
+the rotation's frame.
+
+**4. The lifecycle is now real, not recorded-only.** `counter.apk` (no `android:configChanges`)
+on one rotate: `onPause → onStop → onSaveInstanceState count=2 → onDestroy → onCreate →
+restored count=2 → onStart → onResume` (`out/counter/logs/logcat.txt`, and
+`scenarios/counter.yaml`'s ordered `assert_log` block passes). Guest MARK:
+`ACOSLAUNCH MARK rotate rotation=1 relaunch=true via=ActivityRelaunchItem(ClientTransaction)
+handled=0x3 activity=dev.acos.fixtures.counter.MainActivity panel=2400x1080`.
+
+| item | state |
+|---|---|
+| MARK forwarding (`launch.rs`) | **done** (unconditional stderr + 64-line ring); a hand-driven session now names every rung |
+| relaunch rung | **done**: `ActivityRelaunchItem` ClientTransaction; the guard that blocked ROT3 is named above |
+| `ArtSession::rotate` / `SessionCapabilities.rotate` / `InputAction::Rotate` | **done.** Capability `"rotate"` appears in the engine's supported list; the rotate reply's own probe must be newer than the request, then one strict traversal becomes the action's frame (so a stale sample can never back the step). A backend without the command (`rust_vm`, `fake`) answers a `rotate` step with `UNSUPPORTED_BACKEND` naming `input.rotate` (unit test `rotate_on_a_session_without_the_command_is_a_structured_unsupported`) |
+| `acos-wm` rotated input mapping | **no code change was needed**: ROT3's `WmsState::rotate` already moves the display the dispatcher maps into, and the rotate step's own traversal refreshes `window_offsets`. Proven empirically by the gate: after `rotate: landscape`, a tap on `{id: inc}` at its **landscape** bounds [105,219][336,345] increments 1 → 2 |
+| `scenarios/rot1-rotate.yaml` | **done, 3/3 pass.** inc → rotate landscape → landscape bounds of `inc`/`reset`/`count` on the 2400x1080 frame (window inset by the rotated nav bar: x +63) + count preserved → tap `inc` → 2 → rotate portrait → the exact portrait bounds + 2. Evidence `.cache/rot4/suite/rot-{1,2,3}.json`, `out/rot1-rotate/{tree,steps}` (`tree/5.json` frame 2400x1080, `tree/10.json` 1080x2400) |
+| `scenarios/negative/rot1-rotate-wrong.yaml` | **done, 3/3 `ASSERTION_FAILED`.** It demands the *portrait* bounds of `inc` after rotating to landscape: every run reports `expected bounds [42,368][273,494], got [105,219][336,345]` on the rotated frame (`.cache/rot4/suite/negrot-{1,2,3}.json`) |
+| the previously unsupported rotate scenarios | they **run** now. `v1-recreate`: rotate steps + both lifecycle `assert_log` blocks + restored text pass; it fails later at an unrelated `back` settle `TIMEOUT` (`no-draw-after-action`). `counter`: the rotate step, the lifecycle `assert_log` and the portrait assertions pass; its landscape `count` baseline was re-blessed to the measured `[105,168][126,219]` (rotated-bar geometry). `hello-views`: same class of stale landscape baseline (`input` expected `[170,282][2358,400]`, measured `[105,219][2230,337]`) — recorded, not re-blessed |
+| host-side `out/` scratch | deleted after the runs (4.9 GB of PNG frames); the small verdict/tree/step evidence is kept |
+
+Verification of this pass (all on `art-rotate-1`, `CARGO_TARGET_DIR=.cache/g3f1-target`):
+
+* **15 gates, outcomes exactly as specified**: `v2-art-counter`, `w22-counter-reset`,
+  `w54-dialog-pixels`, `w42-back-frame`, `w15-dialog-menu`, `form-validation`,
+  `suite/T03-render-good`, `v1-offscreen-pager`, `w7-insets-report`, `se1-expect-change-tap`
+  pass; `suite/T03-render-wrong`, `w7-insets-carve-negative`, `negative/se1-expect-change-noop`
+  `ASSERTION_FAILED`; `negative/offscreen-pager-visible` `ELEMENT_OFFSCREEN`;
+  `p11-progress-timeout` `TIMEOUT`. `.cache/rot4/suite/gate-*.json`, runner
+  `.cache/rot4/run_suite.sh` (gitignored).
+* **5 Gaten flows pass** (`gaten-home/tabs/settings/search/lesson`) and **5 Gaten negatives**
+  `ASSERTION_FAILED` (`.cache/rot4/suite/{scenarios,neg}-*.json`).
+* **Crate tests**: `cargo test --release --offline -j 8 -p acos-wm -p acos-services -p acos-cli
+  -p acos-verify` green except the known environmental
+  `w50_serve_art::an_unknown_session_is_not_routed_to_the_frozen_rust_vm` (this worktree's
+  AF_UNIX path exceeds 108 bytes; unmodified test). `acos-art`: `--test-threads=1 --skip
+  refuses_to_run_when_no_cgroup_can_be_created` → 163 passed, 0 failed; that test alone in a
+  **fresh** lock acquisition (`--test sandbox_s5`, fresh `ACOS_ART_DATA`) → 7 passed.
+* **Regression**: the source guard `the_guest_ready_path_has_no_forced_traversal…` was scoped
+  to the ready path (`awaitFirstTraversal`) instead of the whole file. ROT3's rotate path
+  already contained `requestLayout()`, so the whole-file guard was latently red; forcing a
+  relayout is *required* on the rotate path and is not the launch regression the guard
+  protects.
+* **A/B**: not run (integration runs it). The only non-rotate-path change is the guest-line
+  echo and the capability bit; the rotate command is reachable only from a `rotate` step.
+
+Not fixed / out of scope: `hello-views.yaml`'s landscape pixel baseline (one number, needs a
+measured re-bless); `v1-recreate`'s Back settle `TIMEOUT`; D2 (bars follow `DisplayPolicy`)
+remains the open geometry item — the landscape window is currently inset by the rotated bars
+that `DisplaySpec::rotated` models, which is what the gate pins.

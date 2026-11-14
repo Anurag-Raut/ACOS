@@ -1,0 +1,137 @@
+# ROT4: display rotation on the ART engine, end to end.
+#
+# What is asserted (structure + preserved state, per AOSP):
+#  * the rotated frame is *landscape*: the counter's controls are re-laid out at
+#    the landscape geometry (the display is 1080x2400 portrait, so an Increment
+#    button at [105,219][336,345] can only be the 2400x1080 frame with the
+#    rotated system bars — nav bar 63 px on the left; in portrait the same
+#    button is [42,368][273,494]);
+#  * state survives the rotation: the count set before the rotate is still there
+#    after it, and a tap on `inc` still lands on the button at its *new* bounds
+#    (rotated input mapping), incrementing 1 -> 2;
+#  * rotating back restores the exact portrait geometry and keeps the state.
+#
+# The lifecycle choice the framework made for the rotation (relaunch through
+# `ActivityThread.handleRelaunchActivity` vs `onConfigurationChanged`) is
+# recorded as evidence, not asserted here: counter.apk declares no
+# `android:configChanges`, so `ActivityInfo.getRealConfigChanged()` misses the
+# four rotation bits and AOSP relaunches it. The guest prints
+# `ACOSLAUNCH MARK rotate rotation=1 relaunch=true handled=0x3` and the app's
+# own log carries `onPause/onStop/onSaveInstanceState/onDestroy/onCreate/onStart/
+# onResume` (scenarios/counter.yaml asserts that order).
+version: 1
+name: rot1-rotate
+description: >-
+  Launch counter, increment to 1, rotate to landscape and assert the landscape
+  geometry and the preserved count, tap Increment again at its new bounds, then
+  rotate back to portrait and assert the portrait geometry and state.
+app: fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.counter/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: count}
+      timeout_ms: 10000
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "0"}
+      bounds: [42, 317, 63, 368]
+
+  # ---- the state the rotation has to preserve ---------------------------
+  - tap:
+      selector: {id: inc}
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "1"}
+      bounds: [42, 317, 63, 368]
+
+  # ---- rotate to landscape ---------------------------------------------
+  - rotate:
+      orientation: landscape
+
+  - capture:
+      name: after-rotate-landscape
+      format: png
+      fresh: true
+
+  # Landscape structure: every content control moved to the landscape geometry
+  # (2400x1080, status band 147 px). A portrait frame cannot report these
+  # bounds. The root DecorView bounds of the same reply are `[0,0][2400,1080]`
+  # (2400 wide x 1080 high), recorded in the rotate step's evidence.
+  # The landscape window is inset by the rotated system bars (nav bar 63 px on
+  # the left, status bar on the right), exactly as `DisplaySpec::rotated` puts
+  # them; portrait has neither inset horizontally. Measured on this image with
+  # the relaunch path: `.cache/rot4/live1` (2400x1080, ids below).
+  - assert_text:
+      selector: {id: inc}
+      text: {exact: Increment}
+      bounds: [105, 219, 336, 345]
+
+  - assert_text:
+      selector: {id: reset}
+      text: {exact: Reset}
+      bounds: [105, 345, 336, 471]
+
+  # Preserved state: the count set before the rotation is still 1.
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "1"}
+      bounds: [105, 168, 126, 219]
+
+  # ---- rotated input mapping: the same control, its new bounds ----------
+  - tap:
+      selector: {id: inc}
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "2"}
+      bounds: [105, 168, 126, 219]
+
+  # ---- rotate back to portrait -----------------------------------------
+  - rotate:
+      orientation: portrait
+
+  - capture:
+      name: after-rotate-portrait
+      format: png
+      fresh: true
+
+  - assert_text:
+      selector: {id: inc}
+      text: {exact: Increment}
+      bounds: [42, 368, 273, 494]
+
+  - assert_text:
+      selector: {id: reset}
+      text: {exact: Reset}
+      bounds: [42, 494, 273, 620]
+
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "2"}
+      bounds: [42, 317, 63, 368]
+
+  - assert_no_crash:
+      allow_anr: false

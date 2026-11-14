@@ -2930,6 +2930,11 @@ impl SessionBackend for ArtSession {
             // key stroke per character (ASCII / US layout).
             type_text: true,
             key: true,
+            // ROT4: a real display rotation through the guest's
+            // `ActivityThread` configuration path (WMS DisplaySpec + the
+            // manifest's `configChanges` decide relaunch vs
+            // `onConfigurationChanged`). Proven end to end before the flag.
+            rotate: true,
             // Host-side: stop the guest, relaunch the same APK in a fresh
             // process with an empty app-data directory (a real reset).
             reset: true,
@@ -3163,6 +3168,58 @@ impl SessionBackend for ArtSession {
             serde_json::json!({"cmd":"type_text","text":text}),
             "input.type_text",
         )
+    }
+
+    fn rotate(&mut self, rotation: u8) -> Result<(), BackendError> {
+        // ROT4: one display rotation. The host rotates the live WMS display
+        // (so the next `relayout` reply carries the rotated frame and
+        // `MergedConfiguration`), the guest builds the new `Configuration` and
+        // lets the real `ActivityThread` decide relaunch vs
+        // `onConfigurationChanged` from the manifest's `ActivityInfo.configChanges`.
+        // The reply is bound to a probe sample *newer* than the request, but it
+        // carries no pixels, and this action owes the caller a completed frame:
+        // one traversal follows and is the action's frame (which also refreshes
+        // the input mapping for the new geometry).
+        if rotation > 3 {
+            return Err(BackendError::unsupported(
+                "input.rotate",
+                format!("rotation {rotation} is not a quarter-turn value (0..3)"),
+            ));
+        }
+        let reply = self.command(serde_json::json!({
+            "cmd": "rotate",
+            "rotation": rotation,
+        }))?;
+        if reply.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
+            let detail = reply
+                .get("error")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("the session did not confirm the rotation");
+            return Err(BackendError::unsupported(
+                "input.rotate",
+                format!("the ART session did not apply the rotation: {detail}"),
+            ));
+        }
+        if let Some(applied) = reply.get("rotation").and_then(serde_json::Value::as_u64) {
+            if applied != u64::from(rotation) {
+                return Err(BackendError::unsupported(
+                    "input.rotate",
+                    format!(
+                        "asked for rotation {rotation}, the session applied {applied}"
+                    ),
+                ));
+            }
+        }
+        // The frame's own size is the rotated one; frame artifacts are stamped
+        // with it, so a later capture is bound to the geometry it really has.
+        if let Some(width) = reply.get("width").and_then(serde_json::Value::as_u64) {
+            self.width = width as u32;
+        }
+        if let Some(height) = reply.get("height").and_then(serde_json::Value::as_u64) {
+            self.height = height as u32;
+        }
+        let settle = if self.settle_mode == "fast" { "fast" } else { "strict" };
+        self.request_tree_with(settle, true)
     }
 
     fn key(&mut self, key: &str) -> Result<(), BackendError> {
@@ -3762,6 +3819,7 @@ mod tests {
             tap_text: true,
             type_text: true,
             key: true,
+            rotate: true,
             reset: true,
             close: true,
             logs: true,
