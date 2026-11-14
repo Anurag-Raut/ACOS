@@ -120,14 +120,14 @@ impl LauncherError {
 }
 
 /// Resolve the launcher component of an APK from its binary manifest.
+///
+/// Served from [`crate::apk_facts`]: one launch asks for this several times, and
+/// the APK is opened and parsed once per (path, length, mtime).
 pub fn launcher_activity(apk: impl AsRef<Path>) -> Result<LauncherActivity, LauncherError> {
     let path = apk.as_ref();
-    let apk = acos_apk::Apk::open(path)
+    let facts = crate::apk_facts::launch_facts(path)
         .map_err(|e| LauncherError::Manifest(format!("{}: {e}", path.display())))?;
-    let doc = apk
-        .manifest_dom()
-        .map_err(|e| LauncherError::Manifest(format!("{}: {e}", path.display())))?;
-    resolve_from_dom(&doc)
+    facts.launcher.clone()
 }
 
 // ---------------------------------------------------------------- the model
@@ -319,10 +319,17 @@ pub const LARGE_DEX_COUNT: usize = 8;
 pub const LARGE_NATIVE_BYTES: u64 = 64 * 1024 * 1024;
 
 /// Read the APK shape and pick the documented default resume budget.
+///
+/// Served from [`crate::apk_facts`] (see [`launcher_activity`]).
 pub fn launch_budget(apk: impl AsRef<Path>) -> Result<LaunchBudget, LauncherError> {
     let path = apk.as_ref();
-    let apk = acos_apk::Apk::open(path)
+    let facts = crate::apk_facts::launch_facts(path)
         .map_err(|e| LauncherError::Manifest(format!("{}: {e}", path.display())))?;
+    Ok(facts.budget)
+}
+
+/// The budget of an already-opened APK (dex count and native closure size).
+pub fn budget_of(apk: &acos_apk::Apk) -> LaunchBudget {
     let dex_count = apk.dex_files.len();
     let native_bytes: u64 = apk
         .native_libs
@@ -331,7 +338,7 @@ pub fn launch_budget(apk: impl AsRef<Path>) -> Result<LaunchBudget, LauncherErro
         .map(|lib| lib.size)
         .sum();
     let large = dex_count >= LARGE_DEX_COUNT || native_bytes >= LARGE_NATIVE_BYTES;
-    Ok(LaunchBudget {
+    LaunchBudget {
         dex_count,
         native_bytes,
         resume_ms: if large {
@@ -339,7 +346,7 @@ pub fn launch_budget(apk: impl AsRef<Path>) -> Result<LaunchBudget, LauncherErro
         } else {
             RESUME_MS_BASE
         },
-    })
+    }
 }
 
 // ------------------------------------------------------------------ helpers

@@ -996,13 +996,18 @@ impl ManifestLabels {
 
 /// Read the label specs `PackageParser` would write into `ApplicationInfo` and
 /// `ActivityInfo` for an APK. The manifest is the same one [`PmsState`] installs.
+///
+/// Served from [`crate::apk_facts`], so a launch that also resolves the launcher
+/// does not open the APK again.
 pub fn manifest_labels(apk: impl AsRef<Path>) -> Result<ManifestLabels> {
     let path = apk.as_ref();
-    let apk = acos_apk::Apk::open(path)
+    let facts = crate::apk_facts::launch_facts(path)
         .map_err(|e| ServiceError::Internal(format!("open {}: {e}", path.display())))?;
-    let manifest = apk
-        .manifest()
-        .map_err(|e| ServiceError::Internal(format!("manifest: {e}")))?;
+    facts.labels.clone().map_err(ServiceError::Internal)
+}
+
+/// The label values of an already-parsed manifest (see [`manifest_labels`]).
+pub(crate) fn labels_from_manifest(manifest: &acos_apk::manifest::Manifest) -> ManifestLabels {
     let application = LabelSpec::from_parts(
         manifest.application.label.as_ref(),
         manifest.application.label_ref,
@@ -1017,10 +1022,10 @@ pub fn manifest_labels(apk: impl AsRef<Path>) -> Result<ManifestLabels> {
             )
         })
         .collect();
-    Ok(ManifestLabels {
+    ManifestLabels {
         application,
         activities,
-    })
+    }
 }
 
 /// The mini-PMS state.
