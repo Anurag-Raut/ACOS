@@ -334,6 +334,8 @@ class Phone:
         path = os.path.join(out_dir, f"screenshot-{base}.png")
         self.ag("screenshot", path, timeout=120)
         if os.path.exists(path) and os.path.getsize(path) > 0:
+            # evidence budget: the device captures at 1080x2400, keep <=540 px
+            _downscale(path, path)
             return os.path.basename(path)
         return None
 
@@ -359,6 +361,15 @@ def replay_phone(args, doc, steps, out_dir):
     if not pkg:
         raise SystemExit("scenario has no resolvable launch component; cannot resolve package")
     os.makedirs(out_dir, exist_ok=True)
+
+    # The accessibility tree only marks nodes visible while the app's window is
+    # the one the user is looking at; a dozing display or the keyguard makes a
+    # whole replay read an empty/invisible tree (0 texts, every selector
+    # ELEMENT_NOT_FOUND). Wake the device first, and keep it awake for the run.
+    dev.shell("input", "keyevent", "KEYCODE_WAKEUP")
+    dev.shell("wm", "dismiss-keyguard")
+    rc, before_stayon, _ = dev.shell("settings", "get", "global", "stay_on_while_plugged_in")
+    dev.shell("svc", "power", "stayon", "true")
 
     facts = {}
     for key in (
@@ -614,6 +625,11 @@ def replay_phone(args, doc, steps, out_dir):
 
     observations["finished"] = NOW()
     observations["commands"] = dev.commands
+    # restore the display setting this run changed
+    keep = (before_stayon or "0").strip()
+    dev.shell("svc", "power", "stayon", "false")
+    if keep not in ("", "0", "null"):
+        dev.shell("settings", "put", "global", "stay_on_while_plugged_in", keep)
     # leave the device tidy: close the session and go home
     dev.ag("close", timeout=120)
     dev.ag("home", timeout=120)

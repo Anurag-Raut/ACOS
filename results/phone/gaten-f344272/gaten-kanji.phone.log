@@ -1,0 +1,12 @@
+[replay] phone step 00 launch -> pass
+[replay] phone step 01 tap -> pass
+[replay] phone step 02 tap -> pass
+[replay] phone step 03 tap -> pass
+[replay] phone step 04 tap -> pass
+[replay] phone step 05 wait_for -> pass
+[replay] phone step 06 capture -> pass
+[replay] phone step 07 tap -> pass
+[replay] phone step 08 wait_for -> pass
+[replay] phone step 09 capture -> pass
+[replay] phone step 10 assert_visible -> unsupported_step
+[replay] phone step 11 assert_not_visible -> pass
