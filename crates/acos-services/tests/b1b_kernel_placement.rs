@@ -304,6 +304,7 @@ fn setup() -> (Rig, BinderId, i32) {
                 z: 1,
                 alpha: 1.0,
                 dim_amount: 0.0,
+                secure: false,
             },
         );
         (win_handle, child_handle, child_id)

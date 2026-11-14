@@ -310,6 +310,9 @@ impl WmsState {
             z: i32::try_from(record.z).unwrap_or(i32::MAX),
             alpha: record.params.alpha.clamp(0.0, 1.0),
             dim_amount,
+            // `FLAG_SECURE` is the window's, so the compositor can blank a
+            // captured frame instead of publishing the app's pixels.
+            secure: record.params.flags & crate::surface_client::FLAG_SECURE != 0,
         };
         let mut state = compositor
             .lock()

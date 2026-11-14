@@ -418,6 +418,20 @@ impl<B: Backend> Server<B> {
     fn handle_request(&self, method: &str, params: &Value, id: &Value) -> Value {
         match method {
             "initialize" => {
+                // VIEW1a: remember who is driving, so the live-view registry
+                // entry for this agent's sessions names the real client (T3
+                // Code, Claude Code, …) instead of the server.
+                if let Some(client) = params.get("clientInfo") {
+                    let name = client
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or(crate::SERVER_NAME);
+                    let version = client
+                        .get("version")
+                        .and_then(Value::as_str)
+                        .unwrap_or("");
+                    crate::private_daemon::set_view_client(name, version);
+                }
                 let requested = params
                     .get("protocolVersion")
                     .and_then(Value::as_str)

@@ -660,6 +660,11 @@ pub(crate) fn launch_session(
         Some(d) => ShortSocketDir::at(&d.join("sock"))?,
         None => ShortSocketDir::new().map_err(Error::Io)?,
     };
+    // VIEW1c: the live-view stream socket lives in a **separate, host-only**
+    // directory that is never bind-mounted into the guest (`sockets` itself is
+    // mounted at `/dev/socket`, so a `view.sock` there would be reachable from
+    // the APK under test). Both are 0700 and owned by this uid.
+    let view_dir = ShortSocketDir::new_named("view").map_err(Error::Io)?;
     let logd = Logd::start(&sockets.0).map_err(Error::Io)?;
     crate::stage("props-logd");
 
@@ -1562,6 +1567,9 @@ pub(crate) fn launch_session(
             // W22: a live snapshot of the logd sink, so `assert_log` can read
             // the guest's own log while the session is running.
             &logd,
+            // VIEW1a: where the live-view stream socket is bound (VIEW1c: its
+            // own host-only directory, never mounted into the guest).
+            &view_dir.0,
         );
         match dead {
             Ok(end) => {
@@ -1933,21 +1941,19 @@ pub(crate) fn launch_session(
     // and never keeps anything, and a crash loop must not fill the disk
     // (`ACOS_ART_KEEP_CRASH_MAX`, default 8; 0 = keep none). Every other outcome
     // is still removed by `RunDir::drop` (S4).
-    let kept_run_dir = if crate::keeps_run_tree_for_crash(
-        result.guest_signal,
-        native_crash.is_some(),
-    ) {
-        let detail = serde_json::json!({
-            "utc_ms": host_ms(),
-            "route": "launch",
-            "code": result.code,
-            "guest_signal": result.guest_signal,
-            "native_crash": native_crash.as_ref().map(crate::crash::NativeCrash::summary),
-        });
-        crate::keep_run_for_guest_crash(run, detail)
-    } else {
-        None
-    };
+    let kept_run_dir =
+        if crate::keeps_run_tree_for_crash(result.guest_signal, native_crash.is_some()) {
+            let detail = serde_json::json!({
+                "utc_ms": host_ms(),
+                "route": "launch",
+                "code": result.code,
+                "guest_signal": result.guest_signal,
+                "native_crash": native_crash.as_ref().map(crate::crash::NativeCrash::summary),
+            });
+            crate::keep_run_for_guest_crash(run, detail)
+        } else {
+            None
+        };
     write_session_exit(
         &out,
         &result,
@@ -2389,6 +2395,20 @@ struct ShortSocketDir(PathBuf);
 
 impl ShortSocketDir {
     fn new() -> std::io::Result<Self> {
+        Self::new_named("art")
+    }
+
+    /// A fresh short socket directory named `acos-<kind>-<pid>-<seq>`.
+    ///
+    /// `kind = "art"` is the session's socket directory (bind-mounted into the
+    /// guest at `/dev/socket`), `kind = "view"` is the live-view directory, which
+    /// is **never** mounted anywhere and must stay host-only.
+    ///
+    /// Every candidate is created 0700 and then verified (a directory, owned by
+    /// this uid, mode 0700); a candidate that cannot be made private is skipped
+    /// rather than used, and `/dev/shm` — which is world-visible by default — is
+    /// only ever used through the same 0700 + owner check.
+    fn new_named(kind: &str) -> std::io::Result<Self> {
         use std::sync::atomic::{AtomicU64, Ordering};
         static SEQ: AtomicU64 = AtomicU64::new(0);
         let id = format!(
@@ -2400,15 +2420,19 @@ impl ShortSocketDir {
         let runtime = PathBuf::from(format!("/run/user/{uid}"));
         let mut candidates = Vec::new();
         if runtime.is_dir() {
-            candidates.push(runtime.join(format!("acos-art-{id}")));
+            candidates.push(runtime.join(format!("acos-{kind}-{id}")));
         }
         if let Ok(root) = crate::repo_root() {
-            candidates.push(root.join(".cache/art-sock").join(&id));
+            candidates.push(
+                root.join(".cache")
+                    .join(format!("acos-{kind}-sock"))
+                    .join(&id),
+            );
         }
-        candidates.push(PathBuf::from(format!("/dev/shm/acos-art-{id}")));
+        candidates.push(PathBuf::from(format!("/dev/shm/acos-{kind}-{id}")));
         let mut last = None;
         for dir in candidates {
-            match fs::create_dir_all(&dir) {
+            match private_dir(&dir) {
                 Ok(()) => return Ok(Self(dir)),
                 Err(e) => last = Some(e),
             }
@@ -2424,9 +2448,58 @@ impl ShortSocketDir {
     /// Z4 (research seam): use an explicit directory, and leave it in place on
     /// drop (the session directory is the shared plan's, not this process's).
     fn at(dir: &Path) -> std::io::Result<Self> {
-        fs::create_dir_all(dir)?;
+        private_dir(dir)?;
         Ok(Self(dir.to_path_buf()))
     }
+}
+
+/// Create (or verify) a directory that only this uid may use: 0700 and ours.
+///
+/// Refuses — never silently ignores — an existing path that is not a directory,
+/// is owned by another uid, or cannot be tightened to 0700. The live-view socket
+/// directory must be **host-only**: it is never bind-mounted into a guest, and
+/// the guest runs as this same uid, so file modes alone are not a boundary (the
+/// mount namespace is).
+fn private_dir(dir: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+    match fs::DirBuilder::new().mode(0o700).create(dir) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(e) => return Err(e),
+    }
+    let metadata = fs::symlink_metadata(dir)?;
+    if !metadata.is_dir() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("{} is not a directory", dir.display()),
+        ));
+    }
+    if metadata.uid() != unsafe { libc::getuid() } {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!(
+                "{} is owned by uid {} (expected {})",
+                dir.display(),
+                metadata.uid(),
+                unsafe { libc::getuid() }
+            ),
+        ));
+    }
+    let mode = metadata.permissions().mode() & 0o777;
+    if mode != 0o700 {
+        fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
+        let after = fs::symlink_metadata(dir)?.permissions().mode() & 0o777;
+        if after != 0o700 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!(
+                    "{} has mode {after:o}, could not make it 0700",
+                    dir.display()
+                ),
+            ));
+        }
+    }
+    Ok(())
 }
 
 impl Drop for ShortSocketDir {
@@ -3119,10 +3192,7 @@ fn latest_generation(live: &acos_services::registry::LiveHandles) -> u64 {
 /// "a layer was created and destroyed again". The layer list is capped; the
 /// counters are exact.
 fn c1_state_summary(live: &acos_services::registry::LiveHandles) -> String {
-    let state = live
-        .compositor
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
+    let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
     let mut layers: Vec<String> = state
         .layers()
         .take(8)
@@ -3272,10 +3342,21 @@ fn protocol_write(value: &serde_json::Value) {
     if let (Some(state), Some(object)) = (animations_state(), value.as_object_mut()) {
         object.insert("animations".into(), serde_json::json!(state));
     }
+    // VIEW1a: one place turns every reply this session writes into a live-view
+    // event (action/lifecycle/activity/settle), so no command path can miss the
+    // feed. `observe_reply` is a no-op with no viewer attached.
+    if let Some(view) = LIVE_VIEW.get() {
+        view.observe_reply(&value);
+    }
     let mut out = std::io::stdout().lock();
     let _ = writeln!(out, "{value}");
     let _ = out.flush();
 }
+
+/// VIEW1a: the live-view producer of this process, set once by an interactive
+/// session. `None` in a one-shot launch (no viewer can attach to a session that
+/// has already ended), so nothing changes there.
+static LIVE_VIEW: std::sync::OnceLock<Arc<crate::live_view::LiveView>> = std::sync::OnceLock::new();
 
 struct SessionEnd {
     status: Option<std::process::ExitStatus>,
@@ -4223,6 +4304,82 @@ enum ServeEvent {
     ChildExited,
 }
 
+/// VIEW1a: the live-view frame source.
+///
+/// One composite of the C1 state per call, and only when the compositor's store
+/// counter advanced since the last capture: an unchanged screen costs one lock
+/// and one integer compare. The capture is a **copy**, never a present —
+/// `frame_seq`, `generation`, damage and the settle state are untouched
+/// (ADR-0027). `LiveView` calls this only while a subscriber is attached.
+/// The live-view frame source: the newest composited C1 frame, or a blank
+/// placeholder while a `FLAG_SECURE` window is on screen.
+///
+/// VIEW1c: `FLAG_SECURE` is the window manager's flag (the guest sets
+/// `LayoutParams.flags`, the host's `WmsState` publishes it on `relayout`), so the
+/// compositor knows it and the stream must honour it: a secure window's pixels
+/// never leave the process. The frame is still published (the viewer sees the
+/// screen change and that it is secure) with **all-zero pixels** and a smaller
+/// placeholder size, and the `F` header carries `"secure": true`.
+fn live_view_source(
+    compositor: Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>,
+) -> Arc<dyn Fn() -> Option<crate::live_view::SourceFrame> + Send + Sync> {
+    let last_seq = std::sync::atomic::AtomicU64::new(0);
+    Arc::new(move || {
+        let state = compositor.lock().unwrap_or_else(|e| e.into_inner());
+        let seq = state.latest_generation();
+        let previous = last_seq.load(std::sync::atomic::Ordering::Relaxed);
+        if seq == 0 || seq <= previous {
+            return None;
+        }
+        if state.has_secure_window() {
+            // A blank frame, not the app's pixels. 1/8 of the display keeps the
+            // placeholder cheap; the encoded size is what the header reports.
+            let (width, height) = state
+                .newest_frame_layer()
+                .map(|(_, buffer)| (buffer.width / 8, buffer.height / 8))
+                .unwrap_or((135, 300));
+            let (width, height) = (width.max(1), height.max(1));
+            last_seq.store(seq, std::sync::atomic::Ordering::Relaxed);
+            return Some(crate::live_view::SourceFrame {
+                seq,
+                generation: seq,
+                width,
+                height,
+                stride: width,
+                rgba: vec![0u8; width as usize * height as usize * 4],
+                secure: true,
+            });
+        }
+        let capture = state.capture_latest()?;
+        last_seq.store(seq, std::sync::atomic::Ordering::Relaxed);
+        Some(crate::live_view::SourceFrame {
+            seq,
+            generation: capture.generation,
+            width: capture.width,
+            height: capture.height,
+            stride: capture.stride,
+            rgba: capture.rgba,
+            secure: false,
+        })
+    })
+}
+
+/// VIEW1a: the tap thread's wake, on the condvar the guest's probe samples
+/// already signal. No timer of its own: an unviewed session has no tap thread at
+/// all (`LiveView` starts it with the first subscriber and stops it with the
+/// last), so the viewer costs the session nothing when nobody watches.
+struct ProbeTapWake {
+    wake: Arc<ProbeWake>,
+    seen: std::sync::Mutex<u64>,
+}
+
+impl crate::live_view::FrameWake for ProbeTapWake {
+    fn wait(&self, timeout: std::time::Duration) {
+        let mut seen = self.seen.lock().unwrap_or_else(|e| e.into_inner());
+        self.wake.wait(&mut seen, timeout);
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn interactive_serve(
     density_dpi: u32,
@@ -4242,6 +4399,10 @@ fn interactive_serve(
     activity: Option<&str>,
     dog: Option<&MemoryWatchdog>,
     logd: &Logd,
+    // VIEW1a/VIEW1c: the **host-only** live-view directory (0700, never
+    // bind-mounted into the guest, unlike the session's `/dev/socket`
+    // directory); the live-view stream socket `view.sock` is bound there.
+    sockets: &Path,
 ) -> std::io::Result<SessionEnd> {
     let mut evidence: Vec<serde_json::Value> = Vec::new();
     let mut captures = 0u64;
@@ -4401,11 +4562,43 @@ fn interactive_serve(
             .map(|(_, buffer)| (buffer.width, buffer.height))
             .unwrap_or((1080, 2400))
     };
+    // VIEW1a: bind the per-session live-view stream socket (protocol v1) and
+    // start the frame tap. A viewer is optional: a bind failure is a log line,
+    // never a failed session, and `stream_socket` is then absent from the ready
+    // line. With no subscriber the tap does one atomic load per probe wake and
+    // nothing else — no capture, no copy, no encode.
+    let view = match crate::live_view::LiveView::bind(
+        &sockets.join("view.sock"),
+        crate::live_view::LiveViewConfig::from_env(),
+        (width, height),
+        std::process::id(),
+        live_view_source(Arc::clone(&live.compositor)),
+        Arc::new(ProbeTapWake {
+            wake: Arc::clone(&wake),
+            seen: std::sync::Mutex::new(0),
+        }),
+    ) {
+        Ok(view) => {
+            let _ = LIVE_VIEW.set(Arc::clone(&view));
+            Some(view)
+        }
+        Err(error) => {
+            eprintln!("acos-art: live view: cannot bind the stream socket: {error}");
+            None
+        }
+    };
+    let stream_socket = match &view {
+        Some(view) => serde_json::json!(view.socket_path().display().to_string()),
+        None => serde_json::Value::Null,
+    };
     let ready = serde_json::json!({
         "ok": true,
         "cmd": "ready",
         "package": package,
         "activity": activity.unwrap_or(""),
+        // VIEW1a: the live-view stream socket (`docs/LIVE_VIEW.md`), null when
+        // it could not be bound.
+        "stream_socket": stream_socket,
         "width": width,
         "height": height,
         // The density the guest actually booted at (`--density`, or the
@@ -4444,7 +4637,10 @@ fn interactive_serve(
                     return;
                 }
                 Ok(_) => {
-                    if stdin_ctx.send(ServeEvent::Line(Some(line.clone()))).is_err() {
+                    if stdin_ctx
+                        .send(ServeEvent::Line(Some(line.clone())))
+                        .is_err()
+                    {
                         return;
                     }
                 }
@@ -4563,6 +4759,11 @@ fn interactive_serve(
             }
         };
         let cmd = request.get("cmd").and_then(|v| v.as_str()).unwrap_or("");
+        // VIEW1a: the event feed reports the *request*'s coordinates/key/text
+        // (a reply need not echo them); no-op with no viewer attached.
+        if let Some(view) = LIVE_VIEW.get() {
+            view.observe_request(&request);
+        }
         match cmd {
             "tree" => {
                 // P3: absolute phase marks across processes (epoch microseconds).
@@ -4780,23 +4981,23 @@ fn interactive_serve(
                                         evidence",
                         }),
                         None => serde_json::json!({
-                            "mode": mode.as_str(),
-                            "settled": true,
-                            "probe_seq": probe.seq,
-                            "tree_age_ms": tree_age_ms,
-                            "bound": if mode == SettleMode::Fast {
-                                "probe-fresh"
-                            } else {
-                                "strict-event"
-                            },
-                            "meaning": if strict_event {
-                                "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply"
-                            } else {
-                                "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; tree_age_ms is host receipt -> reply"
-                            },
-                            }),
-                        }
-                    };
+                        "mode": mode.as_str(),
+                        "settled": true,
+                        "probe_seq": probe.seq,
+                        "tree_age_ms": tree_age_ms,
+                        "bound": if mode == SettleMode::Fast {
+                            "probe-fresh"
+                        } else {
+                            "strict-event"
+                        },
+                        "meaning": if strict_event {
+                            "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply"
+                        } else {
+                            "mode=fast returns the newest probe sample bound to a frame at least as new as the C1 store current at request entry; tree_age_ms is host receipt -> reply"
+                        },
+                        }),
+                    }
+                };
                 if strict_event && tree_timeout.is_none() {
                     if let Some(map) = settle_json.as_object_mut() {
                         map.insert("strict_rule".into(), serde_json::json!("event"));
@@ -6412,11 +6613,9 @@ fn apk_launcher_activity(apk: &Path) -> Result<acos_services::manifest_resolve::
 /// Read one `key=value` field from a marker file's lines. The guest writes one
 /// field per line, so the value is the rest of that line.
 fn marker_field<'a>(marker: &'a str, key: &str) -> Option<&'a str> {
-    marker.lines().find_map(|line| {
-        line.strip_prefix(key)?
-            .strip_prefix('=')
-            .map(str::trim)
-    })
+    marker
+        .lines()
+        .find_map(|line| line.strip_prefix(key)?.strip_prefix('=').map(str::trim))
 }
 
 /// Read a numeric `key=value` from a marker file's lines.
@@ -6637,9 +6836,10 @@ mod crash_evidence_tests {
         assert_eq!(detail["causes"][0]["stack"][0], "x.y.Z.<init>(Z.java:1)");
         // ... and a line without the new fields, or no line at all, is not an error.
         assert_eq!(
-            guest_crash_detail(Some(r#"ACOSLAUNCH {"outcome":"crash","code":"NO_APPLICATION"}"#))
-                .expect("old shape")
-                ["code"],
+            guest_crash_detail(Some(
+                r#"ACOSLAUNCH {"outcome":"crash","code":"NO_APPLICATION"}"#
+            ))
+            .expect("old shape")["code"],
             "NO_APPLICATION"
         );
         assert!(guest_crash_detail(None).is_none());
@@ -6652,6 +6852,67 @@ mod crash_evidence_tests {
         let text = "a\n\n b\nc\nd\n";
         assert_eq!(stdout_tail(text, 2), vec!["c".to_string(), "d".to_string()]);
         assert!(stdout_tail("", 4).is_empty());
+    }
+}
+
+/// VIEW1c M1/L6: the live-view directory is host-only and private.
+#[cfg(test)]
+mod view_socket_dir_tests {
+    use super::*;
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    #[test]
+    fn the_view_directory_is_not_the_guest_mounted_socket_directory() {
+        let guest = ShortSocketDir::new().expect("guest socket dir");
+        let view = ShortSocketDir::new_named("view").expect("view dir");
+        // Separate directories: the guest mounts `guest.0` at /dev/socket, so a
+        // `view.sock` there would be reachable by the app under test.
+        assert_ne!(guest.0, view.0);
+        assert!(!view.0.starts_with(&guest.0), "view dir is inside the guest dir");
+        assert!(!guest.0.starts_with(&view.0), "guest dir is inside the view dir");
+        assert!(view.0.to_string_lossy().contains("acos-view-"));
+        assert!(guest.0.to_string_lossy().contains("acos-art-"));
+        for dir in [&guest.0, &view.0] {
+            let metadata = fs::symlink_metadata(dir).expect("stat");
+            assert!(metadata.is_dir());
+            assert_eq!(metadata.uid(), unsafe { libc::getuid() });
+            assert_eq!(metadata.permissions().mode() & 0o777, 0o700);
+        }
+        // The one bind mount of the guest socket dir is the only place a path is
+        // exposed to the guest: nothing in the launcher passes the view dir to
+        // the sandbox (`sb.rw_bind(&sockets.0, "/dev/socket")` is the only socket
+        // dir mount).
+        let source = include_str!("launch.rs");
+        let source = source.split("mod view_socket_dir_tests").next().expect("source");
+        assert_eq!(
+            source.matches("rw_bind(&sockets.0").count(),
+            1,
+            "exactly one socket directory is bind-mounted into the guest"
+        );
+        assert!(
+            !source.contains("rw_bind(&view_dir") && !source.contains("ro_bind(&view_dir"),
+            "the view directory is never mounted"
+        );
+    }
+
+    #[test]
+    fn private_dir_tightens_ours_and_refuses_a_file_or_a_symlink() {
+        use std::os::unix::fs::symlink;
+        let base = ShortSocketDir::new_named("view").expect("scratch");
+        let loose = base.0.join("loose");
+        fs::create_dir_all(&loose).expect("mkdir");
+        fs::set_permissions(&loose, fs::Permissions::from_mode(0o777)).expect("chmod");
+        private_dir(&loose).expect("an owned loose directory is tightened");
+        assert_eq!(
+            fs::symlink_metadata(&loose).expect("stat").permissions().mode() & 0o777,
+            0o700
+        );
+        let file = base.0.join("file");
+        fs::write(&file, b"x").expect("file");
+        assert!(private_dir(&file).is_err(), "a file is refused");
+        let link = base.0.join("link");
+        symlink(&loose, &link).expect("symlink");
+        assert!(private_dir(&link).is_err(), "a symlink is refused, not followed");
     }
 }
 
@@ -6769,14 +7030,20 @@ mod skipped_traversal_tests {
         );
         assert_eq!(reply["ok"], serde_json::json!(false));
         assert_eq!(reply["code"], serde_json::json!("POST_RESUME_NOT_READY"));
-        assert_eq!(reply["draw_skip"], serde_json::json!("traversal:view_not_visible"));
+        assert_eq!(
+            reply["draw_skip"],
+            serde_json::json!("traversal:view_not_visible")
+        );
         assert_eq!(reply["retryable"], serde_json::json!(false));
         assert!(reply["first_traversal"]
             .as_str()
             .unwrap_or_default()
             .contains("app_visible=false"));
         let error = reply["error"].as_str().unwrap_or_default();
-        assert!(error.contains("draw_skip=traversal:view_not_visible"), "{error}");
+        assert!(
+            error.contains("draw_skip=traversal:view_not_visible"),
+            "{error}"
+        );
         assert!(error.contains("c1_generation=0"), "{error}");
         assert!(error.contains("c1_layers=1"), "{error}");
     }

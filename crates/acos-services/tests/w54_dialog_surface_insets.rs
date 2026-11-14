@@ -83,6 +83,7 @@ fn window_surface_grows_by_surface_insets_and_the_layer_moves_by_them() {
         z: 2,
         alpha: 1.0,
         dim_amount: 0.6,
+        secure: false,
     };
     assert_eq!(
         (placement.x + SURFACE_INSETS, placement.y + SURFACE_INSETS),
@@ -109,6 +110,7 @@ fn composite_clips_a_layer_to_the_display_viewport() {
         z: 2,
         alpha: 1.0,
         dim_amount: 0.0,
+        secure: false,
     };
     // Entirely inside: unchanged (the pre-W54 behaviour, and the pass-through
     // case for a normal window).
