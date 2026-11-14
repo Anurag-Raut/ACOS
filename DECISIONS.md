@@ -963,3 +963,46 @@ It is also usable in-process by the renderer tests. Rules:
 substrate; ADR-0023 is the typed-IR trampoline and ADR-0024 is the IR fusion
 work, so those references mean ADR-0025. The renderer is validated against
 ART reference captures (`results/render/`), not against a device GPU.
+
+## ADR-0026 — Owner decisions 2026-11-14 (zygote, settle semantics, boot image, insets, compositor)
+
+**Context.** Seven open owner decisions from `docs/MORNING-2026-11-13.md` §3 and
+`docs/TRACKS-2026-11-12.md`, re-explained to the owner on 2026-11-14.
+
+**Decisions.**
+
+1. **Zygote shared ART: build the production version (opt-in first).** Persistent
+   zygote; reset forks one fresh child (not the whole cohort); per-session run
+   root and per-session memory limit (ZS F1–F3, needed for verification
+   correctness, not only security). It becomes the default when it wins on the
+   real agent loop at N=10 (Z7 gate: ≥25 % whole-system vs the optimised current
+   path, incl. the shared boot image) with 0 false passes. Owner view: ACOS is a
+   test/verification environment with no real users, so hostile-APK hardening is
+   not a blocker beyond protecting the host. Host-protecting kernel layers
+   (bwrap, seccomp, Landlock) stay on every child.
+2. **Strict settle needs no pixel change (P12 rule kept), plus an opt-in per-step
+   `expect_change: true`** that fails the step if the settled frame's pixels did
+   not change. Replies keep reporting `pixels_changed`.
+3. **Forever-animating screens: add a content-stable settle.** Settled when the UI
+   tree content signature (text, nodes, bounds) is unchanged for a bounded window
+   (~300 ms) even if pixels keep animating. Pixel assertions on such screens stay
+   strict (honest TIMEOUT). Existing navigation-only `settle: fast` stays but is
+   no longer the documented answer for these screens.
+4. **Boot image default = `shared-fixed`, built once and cached on disk** (reused
+   across serves; rebuilt only when the system image changes). Image ASLR is
+   given up (owner accepted). `lz4` stays selectable.
+5. **ACOS `settle: fast` stays an opt-in agent navigation mode; it never backs a
+   pass and benchmark headline rows are strict.** The bench loop's reset step
+   stays strict (M6 341 ms vs the 300 ms target is accepted; the zygote is the
+   route to a faster reset). Separate rule: orchestration never uses the Claude
+   or DeepSeek provider "fast mode" (it drains the owner's limits).
+6. **Window insets default = `report` (phone-like edge-to-edge).** Re-bless the
+   `w42-back-frame` expected frame for the one anti-aliased row that changes;
+   no pixel tolerance is added.
+7. **Compositor Spike A (stock SurfaceFlinger): dropped for now.** C1 with the
+   AOSP geometry code stays; revisit only if compositor placement bugs return.
+
+**Consequences.** New work items: Z-prod (1), SE1 `expect_change` (2), SE2
+content-stable settle (3), H13b cached `shared-fixed` default (4), W7b `report`
+default + w42 re-bless (6). Each is gated as usual (tests + gates green, 0 false
+passes) before merge.

@@ -1184,6 +1184,17 @@ pub(crate) fn launch_session(
     if let Ok(v) = std::env::var("ACOSART_CRASH_DUMP") {
         sb.env("ACOSART_CRASH_DUMP", &v);
     }
+    // G3d: libc's GWP-ASan sampling allocator is off for guests by default. Its
+    // sampled backtrace goes through bionic's `android_unsafe_frame_pointer_chase`,
+    // which reads past the top stack page on a frame-pointer-free guest stack
+    // (SIGSEGV SEGV_ACCERR inside libc, R3/G3d). Off unless asked; see
+    // `gwp_asan_guest_env`.
+    for (key, value) in crate::gwp_asan_guest_env(
+        |k| std::env::var(k).ok(),
+        std::env::var("ACOS_ART_GWP_ASAN").ok().as_deref(),
+    ) {
+        sb.env(&key, &value);
+    }
     // H2: the guest-side post-first-frame release hook (ON by default; the
     // guest treats `ACOS_ART_EARLY_GC=0` as off). Forward only the host value
     // so an unset variable means "default".
