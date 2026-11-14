@@ -1403,8 +1403,9 @@ an agent must never ship, so:
 * An **empty** directory (for example one a runner just `mkdir`-ed) is claimed
   without complaint. A partially written directory from a crashed run is not
   fresh either: it is refused as "an incomplete earlier run" (no run id to name).
-* Replaying `repro.sh` into the directory it came from is therefore refused too:
-  copy the directory, or pass `--overwrite` when you mean to replace it.
+* `repro.sh` therefore takes the replay's artifacts directory as its required
+  first argument (`sh repro.sh /path/to/new-dir`) and never writes back into the
+  directory it came from.
 
 The check is in the CLI entry point, so every front door shares it: the CLI,
 `acos serve`'s delegated `verify`, and MCP `acos_verify` (which runs

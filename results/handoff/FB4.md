@@ -166,9 +166,10 @@ keep only declared evidence, non-pass runs keep everything (by design).
   possible, so a capture costs no extra bytes on this filesystem.
 * `status` is a required field going forward; a document without it reads as
   `fail` and fails validation rather than being silently upgraded.
-* `repro.sh` keeps `--artifacts .` without `--overwrite`: replaying into the
-  directory a run already filled is refused (copy the dir or pass the flag).
-  Recorded in `docs/AGENT_API.md` §10.4.
+* `repro.sh` (orchestrator follow-up): the replay's artifacts directory is the
+  script's required first argument (`sh repro.sh <new-artifacts-dir>`), so a
+  replay never targets the run's own (refused) directory. Test
+  `repro_sh_requires_a_fresh_artifacts_dir`. Recorded in `docs/AGENT_API.md` §10.4.
 
 ## 7. Not done
 
