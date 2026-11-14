@@ -211,11 +211,72 @@ impl LiveRegistry {
     }
 
     fn prepare_dir(&self) -> io::Result<()> {
-        std::fs::create_dir_all(&self.dir)?;
-        // 0700: a session's metadata is readable by its owner only.
-        let _ = std::fs::set_permissions(&self.dir, std::fs::Permissions::from_mode(0o700));
-        Ok(())
+        if let Some(parent) = self.dir.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        verify_private_dir(&self.dir, true)
     }
+}
+
+/// Create (when `create`) and verify a registry directory: a real directory (not
+/// a symlink), owned by this uid, mode 0700 (VIEW1c L6).
+///
+/// A directory owned by someone else, or not a directory, is **refused** rather
+/// than used (the registry carries the stream socket path and the project
+/// metadata; another uid must neither read nor plant entries). A directory we
+/// own with looser modes is tightened and re-checked; a failure is an error.
+/// With `create == false` (the reader) nothing is created or changed: the
+/// directory must be ours and not writable by others.
+pub fn verify_private_dir(dir: &Path, create: bool) -> io::Result<()> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+    if create {
+        match std::fs::DirBuilder::new().mode(0o700).create(dir) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error),
+        }
+    }
+    let metadata = std::fs::symlink_metadata(dir)?;
+    if !metadata.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{} is not a directory", dir.display()),
+        ));
+    }
+    let uid = unsafe { libc::getuid() };
+    if metadata.uid() != uid {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!(
+                "{} is owned by uid {} (expected {uid}): refusing to use it",
+                dir.display(),
+                metadata.uid()
+            ),
+        ));
+    }
+    let mode = metadata.permissions().mode() & 0o777;
+    if !create {
+        // A reader does not chmod anything; it only refuses a directory another
+        // uid could have planted entries in (group/world writable).
+        if mode & 0o022 != 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("{} is writable by others (mode {mode:o})", dir.display()),
+            ));
+        }
+        return Ok(());
+    }
+    if mode != 0o700 {
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+        let mode = std::fs::symlink_metadata(dir)?.permissions().mode() & 0o777;
+        if mode != 0o700 {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("{} has mode {mode:o}, could not make it 0700", dir.display()),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Write `text` to `path` atomically: a fresh tmp file with mode 0600, then a
@@ -303,6 +364,11 @@ pub struct ReadEntry {
 #[must_use]
 #[allow(dead_code)]
 pub fn read_entries(dir: &Path) -> Vec<ReadEntry> {
+    // L6: a directory another uid owns (or one that is not 0700) is not ours:
+    // its entries could point the hub at a socket that is not a session's.
+    if verify_private_dir(dir, false).is_err() {
+        return Vec::new();
+    }
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
     };
@@ -486,6 +552,39 @@ mod tests {
         registry.remove_all();
         assert_eq!(read_entries(&dir).len(), 0);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_registry_directory_is_private_owned_and_never_a_symlink() {
+        use std::os::unix::fs::symlink;
+        let root = scratch("l6");
+        // A too-open directory we own is tightened to 0700.
+        let open = root.join("open");
+        std::fs::create_dir_all(&open).expect("mkdir");
+        std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o777)).expect("chmod");
+        LiveRegistry::at(open.clone()).write(&entry("s_l6")).expect("write");
+        assert_eq!(
+            std::fs::metadata(&open).expect("stat").permissions().mode() & 0o777,
+            0o700
+        );
+        // A symlink in place of the directory is refused (not followed).
+        let target = root.join("target");
+        std::fs::create_dir_all(&target).expect("mkdir");
+        let link = root.join("link");
+        symlink(&target, &link).expect("symlink");
+        assert!(LiveRegistry::at(link.clone()).write(&entry("s_l6")).is_err());
+        assert!(read_entries(&link).is_empty());
+        // A regular file is refused.
+        let file = root.join("file");
+        std::fs::write(&file, b"x").expect("file");
+        assert!(LiveRegistry::at(file).write(&entry("s_l6")).is_err());
+        // A world-writable directory is not read from.
+        let wide = root.join("wide");
+        std::fs::create_dir_all(&wide).expect("mkdir");
+        std::fs::set_permissions(&wide, std::fs::Permissions::from_mode(0o777)).expect("chmod");
+        assert!(verify_private_dir(&wide, false).is_err());
+        assert!(read_entries(&wide).is_empty());
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

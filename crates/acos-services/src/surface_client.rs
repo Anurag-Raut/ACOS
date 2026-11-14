@@ -161,6 +161,12 @@ pub const MAX_COMPOSITE_INPUT_BYTES: u64 = 256 * 1024 * 1024;
 /// time; see [`SurfaceState::capture_composite`].
 pub const FLAG_DIM_BEHIND: i32 = 0x0000_0002;
 
+/// `WindowManager.LayoutParams.FLAG_SECURE`: the window's pixels may not be
+/// captured or shown on a non-secure display. ACOS's live view is a separate
+/// stream, so it blanks any frame while a secure window is visible
+/// ([`SurfaceState::has_secure_window`]).
+pub const FLAG_SECURE: i32 = 0x0000_2000;
+
 /// `layer_state_t` change flags used by this task.
 pub mod what {
     /// `ePositionChanged`.
@@ -359,6 +365,8 @@ pub struct LayerPlacement {
     pub alpha: f32,
     /// Dim amount drawn *below* this layer (`0.0` = no dim layer).
     pub dim_amount: f32,
+    /// The window carries `FLAG_SECURE`: its pixels must not be published.
+    pub secure: bool,
 }
 
 /// The layer geometry a client can set on its own surface
@@ -1309,6 +1317,21 @@ impl SurfaceState {
     #[must_use]
     pub fn layer(&self, handle: BinderId) -> Option<&LayerRecord> {
         self.layers.get(&handle.0)
+    }
+
+    /// `true` when a **visible** window with `FLAG_SECURE` is on screen.
+    ///
+    /// `FLAG_SECURE` is the window manager's (`LayoutParams.flags`), so the
+    /// compositor learns it from [`Self::set_layer_placement`] on every
+    /// `relayout`; a layer the guest positions itself has no placement and can
+    /// never be marked secure (so it cannot hide a secure window either). The
+    /// live view publishes a blank frame while this is true instead of the app's
+    /// pixels ([`FLAG_SECURE`]).
+    #[must_use]
+    pub fn has_secure_window(&self) -> bool {
+        self.layers.values().any(|layer| {
+            layer.placement.is_some_and(|placement| placement.secure) && !layer.hidden
+        })
     }
 
     /// Every layer (callers should key by handle; the map order is not a

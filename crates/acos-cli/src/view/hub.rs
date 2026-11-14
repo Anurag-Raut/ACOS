@@ -436,6 +436,46 @@ impl Drop for Watcher {
     }
 }
 
+/// The uid at the server end of a connected Unix socket must be this process's.
+///
+/// Public so the unit tests (and the producer's own check) share one reading of
+/// `SO_PEERCRED`.
+pub fn peer_uid(stream: &UnixStream) -> io::Result<u32> {
+    use std::os::unix::io::AsRawFd;
+    let mut credentials = libc::ucred {
+        pid: 0,
+        uid: 0,
+        gid: 0,
+    };
+    let mut length = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+    let code = unsafe {
+        libc::getsockopt(
+            stream.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            (&raw mut credentials).cast(),
+            &mut length,
+        )
+    };
+    if code != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(credentials.uid)
+}
+
+fn verify_peer_uid(stream: &UnixStream) -> io::Result<()> {
+    let uid = unsafe { libc::getuid() };
+    let peer = peer_uid(stream)?;
+    if peer == uid {
+        Ok(())
+    } else {
+        Err(io::Error::new(
+            ErrorKind::PermissionDenied,
+            format!("the socket's server runs as uid {peer}, not {uid}"),
+        ))
+    }
+}
+
 fn collect_events(state: &SlotState, after: u64) -> EventBatch {
     let mut batch = EventBatch::default();
     let oldest = state.events.front().map(|event| event.index);
@@ -465,6 +505,9 @@ struct SlotState {
     running: bool,
     stopping: bool,
     handle: Option<std::thread::JoinHandle<()>>,
+    /// The stream socket the upstream thread connects to (kept so a watcher
+    /// that arrives while the last one is detaching can restart the upstream).
+    socket: Option<String>,
     connected: bool,
     error: Option<String>,
     hello: Option<Value>,
@@ -485,6 +528,7 @@ impl Slot {
                 running: false,
                 stopping: false,
                 handle: None,
+                socket: None,
                 connected: false,
                 error: None,
                 hello: None,
@@ -527,6 +571,7 @@ impl Slot {
     fn attach(self: &Arc<Self>, socket: String) {
         let mut state = self.state.lock().expect("slot");
         state.watchers += 1;
+        state.socket = Some(socket.clone());
         if state.watchers == 1 && !state.running {
             state.running = true;
             state.stopping = false;
@@ -556,6 +601,16 @@ impl Slot {
         state.stopping = false;
         state.connected = false;
         state.hello = None;
+        // VIEW1c L4: a browser that attached while this detach was joining saw
+        // `running == true` and started nothing. Restart the upstream for it,
+        // or its stream would stay silently dead.
+        if state.watchers > 0 {
+            if let Some(socket) = state.socket.clone() {
+                state.running = true;
+                let slot = Arc::clone(self);
+                state.handle = Some(std::thread::spawn(move || slot.upstream_loop(socket)));
+            }
+        }
         self.cv.notify_all();
     }
 
@@ -581,6 +636,20 @@ impl Slot {
         while !self.stopping() {
             match UnixStream::connect(&socket) {
                 Ok(mut stream) => {
+                    // VIEW1c M1: only trust a socket whose server runs as our own
+                    // uid (`SO_PEERCRED`); a socket planted by another user
+                    // would feed the browser spoofed frames and events.
+                    if let Err(error) = verify_peer_uid(&stream) {
+                        let mut state = self.state.lock().expect("slot");
+                        state.error = Some(format!("refused {socket}: {error}"));
+                        state.upstream_errors += 1;
+                        drop(state);
+                        self.cv.notify_all();
+                        drop(stream);
+                        self.sleep_interruptible(backoff);
+                        backoff = (backoff * 2).min(Duration::from_secs(2));
+                        continue;
+                    }
                     let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
                     let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
                     {
@@ -991,6 +1060,57 @@ mod tests {
 
         let _ = std::fs::remove_file(entry_path);
         let _ = std::fs::remove_dir_all(&registry);
+    }
+
+    #[test]
+    fn a_browser_that_attaches_while_the_last_one_detaches_still_gets_a_stream() {
+        let producer = FakeProducer::start("race");
+        let registry = scratch("race-reg");
+        let entry_path = publish(&registry, "s_race", &producer.socket);
+        let hub = Hub::new(registry.clone());
+
+        let first = hub.watch("s_race").expect("watch");
+        wait_until(
+            || producer.serving.load(Ordering::SeqCst) == 1,
+            "the producer to see the first subscriber",
+        );
+        // The last detach joins the upstream thread (it notices `stopping` on its
+        // next read timeout, up to READ_TIMEOUT later). A browser that attaches
+        // during that join used to see `running == true`, start nothing, and then
+        // have the detach mark the slot not running: a silently dead stream.
+        let detaching = std::thread::spawn(move || drop(first));
+        std::thread::sleep(Duration::from_millis(40));
+        let second = hub.watch("s_race").expect("watch during the detach");
+        detaching.join().expect("detach thread");
+        let frame = second
+            .wait_frame(0, Duration::from_secs(8))
+            .expect("the browser that attached during the detach gets frames");
+        assert!(!frame.bytes.is_empty());
+        assert_eq!(hub.stats()[0].watchers, 1);
+        wait_until(
+            || producer.accepts.load(Ordering::SeqCst) == 2,
+            "the restarted upstream connection",
+        );
+        drop(second);
+        wait_until(
+            || producer.serving.load(Ordering::SeqCst) == 0,
+            "the producer to see zero subscribers again",
+        );
+        let _ = std::fs::remove_file(entry_path);
+        let _ = std::fs::remove_dir_all(&registry);
+    }
+
+    #[test]
+    fn the_hub_reads_the_peer_uid_of_its_upstream_socket() {
+        let root = scratch("cred");
+        let path = root.join("p.sock");
+        let listener = UnixListener::bind(&path).expect("bind");
+        let client = UnixStream::connect(&path).expect("connect");
+        let (_server, _) = listener.accept().expect("accept");
+        let uid = unsafe { libc::getuid() };
+        assert_eq!(peer_uid(&client).expect("peer uid"), uid);
+        assert!(verify_peer_uid(&client).is_ok());
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

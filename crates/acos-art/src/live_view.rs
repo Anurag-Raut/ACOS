@@ -37,7 +37,7 @@
 
 use std::collections::VecDeque;
 use std::io::{self, Read, Write};
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
@@ -57,6 +57,19 @@ pub const TYPE_EVENT: u8 = b'E';
 pub const MAX_SUBSCRIBERS: usize = 4;
 /// Largest subscribe line accepted from a client.
 pub const MAX_SUBSCRIBE_LINE: usize = 4096;
+/// Subscribe lines served at once. A connection beyond this cap is closed
+/// immediately instead of getting a thread, so a hostile local peer cannot
+/// exhaust the host's threads by holding the socket without a newline.
+pub const MAX_SUBSCRIBE_THREADS: usize = 8;
+/// Total time to send the subscribe line — **one** deadline for the whole line,
+/// not a per-read timeout, so a byte-at-a-time peer cannot hold a slot forever.
+pub const SUBSCRIBE_DEADLINE: Duration = Duration::from_secs(5);
+/// Bytes queued for a subscriber that is not reading right now. Beyond this the
+/// subscriber is dropped (the producer never blocks on a viewer).
+pub const MAX_QUEUED_BYTES: usize = 8 * 1024 * 1024;
+/// The mode the view socket file is given right after `bind` (see
+/// [`bind_private`]): owner read/write only.
+pub const SOCKET_MODE: libc::mode_t = 0o600;
 /// Largest message this producer will ever emit (a guard for consumers).
 pub const MAX_MESSAGE_BYTES: usize = 64 * 1024 * 1024;
 /// Default frame rate cap.
@@ -211,6 +224,9 @@ pub struct SourceFrame {
     pub stride: u32,
     /// Premultiplied RGBA8 pixels, `stride * height * 4` bytes.
     pub rgba: Vec<u8>,
+    /// `true` when a `FLAG_SECURE` window is on screen: the pixels are a blank
+    /// placeholder, never the app's content (the `F` header repeats it).
+    pub secure: bool,
 }
 
 /// Counters for the cost rules and the acceptance measurements.
@@ -289,6 +305,8 @@ struct Slot {
     height: u32,
     ts_ms: u64,
     rgba: Vec<u8>,
+    /// The source frame was a blank `FLAG_SECURE` placeholder.
+    secure: bool,
 }
 
 /// One connected viewer.
@@ -296,28 +314,67 @@ struct Subscriber {
     stream: UnixStream,
     wants_frames: bool,
     wants_events: bool,
+    /// Message bytes queued for this viewer and not yet written.
+    pending: Vec<u8>,
+    /// How much of [`Self::pending`] has been written already.
+    offset: usize,
 }
 
 impl Subscriber {
+    fn new(stream: UnixStream, wants_frames: bool, wants_events: bool) -> Self {
+        Self {
+            stream,
+            wants_frames,
+            wants_events,
+            pending: Vec::new(),
+            offset: 0,
+        }
+    }
+
+    /// Queue one message and try to write what the socket takes.
+    ///
+    /// The socket is non-blocking, so a partial write is **not** a dead viewer:
+    /// the unwritten tail stays queued at `offset` and the next flush continues
+    /// it (a frame larger than `SO_SNDBUF`, ~208 KB, would otherwise never be
+    /// delivered). Only a real write error, a `WriteZero`, or crossing
+    /// [`MAX_QUEUED_BYTES`] drops the subscriber, and the producer never blocks.
     fn send(&mut self, message: &[u8]) -> io::Result<()> {
-        // Non-blocking by construction: the socket is in non-blocking mode, and
-        // a partial write or `WouldBlock` means the viewer is not keeping up.
-        // The subscriber is dropped instead of back-pressuring the encoder.
-        let mut written = 0;
-        while written < message.len() {
-            match self.stream.write(&message[written..]) {
+        self.pending.extend_from_slice(message);
+        if self.pending.len() - self.offset > MAX_QUEUED_BYTES {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "the subscriber is too far behind",
+            ));
+        }
+        self.flush()
+    }
+
+    /// Write as much of the queue as the socket accepts right now.
+    fn flush(&mut self) -> io::Result<()> {
+        while self.offset < self.pending.len() {
+            match self.stream.write(&self.pending[self.offset..]) {
                 Ok(0) => {
                     return Err(io::Error::new(
                         io::ErrorKind::WriteZero,
                         "the subscriber closed the connection",
                     ))
                 }
-                Ok(n) => written += n,
+                Ok(n) => self.offset += n,
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => return Ok(()),
                 Err(e) => return Err(e),
             }
         }
+        if self.offset == self.pending.len() {
+            self.pending.clear();
+            self.offset = 0;
+        }
         Ok(())
+    }
+
+    /// Bytes queued but not yet written.
+    fn queued(&self) -> usize {
+        self.pending.len() - self.offset
     }
 }
 
@@ -358,9 +415,12 @@ struct Inner {
     started: Instant,
     last_encode_us: AtomicU64,
     last_encode_bytes: AtomicU64,
-    /// The last tree any reply carried said a *focused* node is a password
-    /// field; used to mask typed text in the event feed.
-    focused_password: AtomicBool,
+    /// The focus state that decides whether typed input is masked.
+    ///
+    /// `None` means "not proven safe", which **masks**: masking is the default
+    /// and only a tree from the reply of the command being described may
+    /// unmask it (see [`LiveView::observe_request`] / [`LiveView::observe_reply`]).
+    password_state: Mutex<Option<bool>>,
     /// The focused activity the feed last reported (a change emits an
     /// `activity` event).
     last_activity: Mutex<Option<String>>,
@@ -375,6 +435,10 @@ struct Inner {
     /// `true` while a tap thread is running (it exists only between the first
     /// subscriber and the last).
     tap_running: AtomicBool,
+    /// Subscribe threads currently alive (capped at [`MAX_SUBSCRIBE_THREADS`]).
+    subscribe_threads: AtomicUsize,
+    /// Connections refused because that cap was reached.
+    subscribe_rejected: AtomicU64,
 }
 
 impl Inner {
@@ -479,16 +543,13 @@ impl Inner {
             .unwrap_or(true);
         stream.set_nonblocking(true)?;
         let hello = frame_message(TYPE_HELLO, self.hello().to_string().as_bytes());
-        let mut subscriber = Subscriber {
-            stream,
-            wants_frames,
-            wants_events,
-        };
+        let mut subscriber = Subscriber::new(stream, wants_frames, wants_events);
         subscriber.send(&hello)?;
         let mut subscribers = self.subscribers.lock().unwrap_or_else(|e| e.into_inner());
-        while subscribers.len() >= self.config_max_subscribers() {
+        while subscribers.len() + 1 > self.config_max_subscribers() {
             // Cap: drop the oldest so a reconnecting viewer is never locked out.
-            subscribers.remove(0);
+            let mut oldest = subscribers.remove(0);
+            let _ = oldest.flush();
             self.subscribers_dropped.fetch_add(1, Ordering::Relaxed);
             self.subscriber_count.fetch_sub(1, Ordering::AcqRel);
         }
@@ -542,6 +603,7 @@ impl Inner {
                 "frames_dropped_latest": stats.frames_dropped_latest,
                 "captures_rate_limited": stats.captures_rate_limited,
                 "subscribers": stats.subscribers,
+                "subscribe_rejected": self.subscribe_rejected.load(Ordering::Relaxed),
             },
         })
     }
@@ -605,9 +667,14 @@ impl Inner {
         self.last_capture_ms.store(tick_ms, Ordering::Relaxed);
         self.source_calls.fetch_add(1, Ordering::Relaxed);
         let source = Arc::clone(&self.source);
-        let Some(frame) = source() else {
+        let Some(mut frame) = source() else {
             return;
         };
+        if frame.secure {
+            // Defence in depth (VIEW1c L1): whatever the source handed over, a
+            // `FLAG_SECURE` frame's pixels never reach the encoder.
+            frame.rgba.fill(0);
+        }
         let scale = self.scale();
         let (width, height, rgba) =
             downscale_box(&frame.rgba, frame.width, frame.height, frame.stride, scale);
@@ -628,6 +695,7 @@ impl Inner {
                 height,
                 ts_ms: now_ms(),
                 rgba,
+                secure: frame.secure,
             });
         }
         self.frames_captured.fetch_add(1, Ordering::Relaxed);
@@ -656,6 +724,31 @@ impl Inner {
             self.subscriber_count.fetch_sub(1, Ordering::AcqRel);
             self.subscribers_dropped.fetch_add(1, Ordering::Relaxed);
         }
+    }
+
+    /// Retry the queued tail of every subscriber that was not ready to take a
+    /// whole message. Called from the writer loop while a viewer is behind, so a
+    /// slow-but-alive reader still receives a message larger than `SO_SNDBUF`.
+    fn flush_pending(&self) -> bool {
+        let mut subscribers = self.subscribers.lock().unwrap_or_else(|e| e.into_inner());
+        if subscribers
+            .iter()
+            .all(|subscriber| subscriber.queued() == 0)
+        {
+            return false;
+        }
+        let mut dead: Vec<usize> = Vec::new();
+        for (index, subscriber) in subscribers.iter_mut().enumerate() {
+            if subscriber.queued() > 0 && subscriber.flush().is_err() {
+                dead.push(index);
+            }
+        }
+        for index in dead.into_iter().rev() {
+            subscribers.remove(index);
+            self.subscriber_count.fetch_sub(1, Ordering::AcqRel);
+            self.subscribers_dropped.fetch_add(1, Ordering::Relaxed);
+        }
+        subscribers.iter().any(|subscriber| subscriber.queued() > 0)
     }
 
     /// Enqueue one event, dropping the oldest when the queue is full.
@@ -694,9 +787,13 @@ pub struct LiveView {
 impl LiveView {
     /// Bind the stream socket and start the writer thread.
     ///
-    /// The socket lives in the session's short runtime directory (the caller
-    /// passes a path whose `sun_path` fits, exactly like the session's peer
-    /// socket); its file mode is 0600.
+    /// The socket must be bound in a **host-only** directory: 0700, owned by
+    /// this uid, and never bind-mounted into a guest (see [`secure_dir`]). Its
+    /// mode is 0600, set with `fchmodat(dirfd, name, AT_SYMLINK_NOFOLLOW)` on the
+    /// verified directory's file descriptor: never a path `chmod` (which follows
+    /// a symlink swapped in after the bind) and never the process-wide `umask`
+    /// (which would turn concurrently created files and directories of other
+    /// threads unusable).
     pub fn bind(
         socket_path: &Path,
         config: LiveViewConfig,
@@ -714,13 +811,28 @@ impl LiveView {
                 ),
             ));
         }
-        if let Some(parent) = socket_path.parent() {
-            std::fs::create_dir_all(parent)?;
+        let parent = socket_path.parent().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "the stream socket needs a parent directory",
+            )
+        })?;
+        secure_dir(parent)?;
+        // Only a socket we created may be unlinked here; a non-socket (or a
+        // symlink) at the path is refused rather than followed.
+        match std::fs::symlink_metadata(socket_path) {
+            Ok(metadata) if metadata.file_type().is_socket() => {
+                let _ = std::fs::remove_file(socket_path);
+            }
+            Ok(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    format!("{} exists and is not a socket", socket_path.display()),
+                ))
+            }
+            Err(_) => {}
         }
-        let _ = std::fs::remove_file(socket_path);
-        let listener = UnixListener::bind(socket_path)?;
-        // 0600: a session's screen is readable by its owner only.
-        let _ = std::fs::set_permissions(socket_path, std::fs::Permissions::from_mode(0o600));
+        let listener = bind_private(socket_path)?;
         let inner = Arc::new(Inner {
             config,
             display,
@@ -752,12 +864,14 @@ impl LiveView {
             started: Instant::now(),
             last_encode_us: AtomicU64::new(0),
             last_encode_bytes: AtomicU64::new(0),
-            focused_password: AtomicBool::new(false),
+            password_state: Mutex::new(None),
             last_activity: Mutex::new(None),
             pending_request: Mutex::new(None),
             source,
             frame_wake,
             tap_running: AtomicBool::new(false),
+            subscribe_threads: AtomicUsize::new(0),
+            subscribe_rejected: AtomicU64::new(0),
         });
         let view = Arc::new(Self {
             inner: Arc::clone(&inner),
@@ -809,9 +923,25 @@ impl LiveView {
 
     /// Record the command the launcher is about to execute, so its reply's
     /// event carries the request's own coordinates/key/text.
+    ///
+    /// A command that carries **input** (`type_text`, `key`) drops the remembered
+    /// focus state: from then on the typed value is masked unless *this* command's
+    /// own reply carries a fresh tree that proves the focused field is not a
+    /// password. Masking is the default; a stale tree must never unmask a secret.
     pub fn observe_request(&self, request: &serde_json::Value) {
         if self.inner.subscriber_count.load(Ordering::Acquire) == 0 {
             return;
+        }
+        let carries_input = matches!(
+            request.get("cmd").and_then(serde_json::Value::as_str),
+            Some("type_text" | "key")
+        );
+        if carries_input {
+            *self
+                .inner
+                .password_state
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = None;
         }
         let mut slot = self
             .inner
@@ -831,11 +961,25 @@ impl LiveView {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .take();
-        if let Some(tree) = reply.get("tree") {
-            self.inner
-                .focused_password
-                .store(tree_has_focused_password(tree), Ordering::Relaxed);
-        }
+        // **Masking is the default.** Only a tree in *this* reply can prove that
+        // the focused field is not a password field; with no tree (or with a
+        // state left over from an earlier command that was not consumed here) the
+        // input stays masked.
+        let masked = {
+            let mut state = self
+                .inner
+                .password_state
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            match reply.get("tree") {
+                Some(tree) => {
+                    let masked = !tree_proves_non_password_focus(tree);
+                    *state = Some(masked);
+                    masked
+                }
+                None => state.take().unwrap_or(true),
+            }
+        };
         // A focused-activity change is its own event (the feed's `activity`
         // kind), emitted once per distinct value.
         if let Some(activity) = reply
@@ -861,15 +1005,9 @@ impl LiveView {
                 self.inner.push_event(activity_event(activity, frame_seq));
             }
         }
-        if let Some(mut event) =
-            event_from_reply(reply, self.inner.focused_password.load(Ordering::Relaxed))
-        {
+        if let Some(mut event) = event_from_reply(reply, masked) {
             if let Some(request) = request.as_ref() {
-                merge_request(
-                    &mut event,
-                    request,
-                    self.inner.focused_password.load(Ordering::Relaxed),
-                );
+                merge_request(&mut event, request, masked);
             }
             self.inner.push_event(event);
         }
@@ -960,6 +1098,136 @@ impl Drop for LiveView {
     }
 }
 
+/// Create (or verify) a **host-only** directory: 0700, owned by this uid.
+///
+/// Used for the directory the view socket lives in. That directory must never be
+/// bind-mounted into a guest (the guest is the same uid, so file modes are not a
+/// boundary between the two: the mount namespace is). A directory that already
+/// exists is verified *and* tightened; a directory owned by someone else, or not
+/// a directory, is refused — never silently ignored.
+pub fn secure_dir(path: &Path) -> io::Result<()> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt};
+    match std::fs::DirBuilder::new().mode(0o700).create(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(error),
+    }
+    let metadata = std::fs::symlink_metadata(path)?;
+    if !metadata.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{} is not a directory", path.display()),
+        ));
+    }
+    let uid = unsafe { libc::getuid() };
+    if metadata.uid() != uid {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!(
+                "{} is owned by uid {} (expected {uid}): refusing to use it",
+                path.display(),
+                metadata.uid()
+            ),
+        ));
+    }
+    let mode = metadata.permissions().mode() & 0o777;
+    if mode != 0o700 {
+        // We own it: tighten it, then verify. A failure is an error, not a
+        // silent ignore (a too-open socket directory leaks the screen).
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
+        let mode = std::fs::symlink_metadata(path)?.permissions().mode() & 0o777;
+        if mode != 0o700 {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "{} has mode {mode:o}, could not make it 0700",
+                    path.display()
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// `bind(2)` a Unix listener and give the socket file mode 0600.
+///
+/// The directory is private (0700, ours, host-only), so the socket is never
+/// reachable by another uid even in the instant between `bind` and the mode
+/// change. The mode is then set **relative to a directory file descriptor** with
+/// `AT_SYMLINK_NOFOLLOW`: if the path were swapped for a symlink the call fails
+/// rather than changing the mode of whatever the link points at. (`fchmod` on a
+/// socket fd does not touch the inode on Linux, and the process-wide `umask`
+/// would race with every other thread creating files, so neither is used.)
+fn bind_private(path: &Path) -> io::Result<UnixListener> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    let listener = UnixListener::bind(path)?;
+    let parent = path.parent().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidInput, "the socket needs a parent directory")
+    })?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "the socket needs a name"))?;
+    let parent_c = CString::new(parent.as_os_str().as_bytes())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "NUL in the socket path"))?;
+    let name_c = CString::new(name.as_bytes())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "NUL in the socket name"))?;
+    let dirfd = unsafe {
+        libc::open(
+            parent_c.as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+        )
+    };
+    if dirfd < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let code = unsafe {
+        libc::fchmodat(dirfd, name_c.as_ptr(), SOCKET_MODE, libc::AT_SYMLINK_NOFOLLOW)
+    };
+    let error = (code != 0).then(io::Error::last_os_error);
+    unsafe { libc::close(dirfd) };
+    if let Some(error) = error {
+        return Err(error);
+    }
+    let metadata = std::fs::symlink_metadata(path)?;
+    let mode = metadata.permissions().mode() & 0o777;
+    if !metadata.file_type().is_socket() || mode & 0o077 != 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("{} was bound with mode {mode:o} (expected 0600)", path.display()),
+        ));
+    }
+    Ok(listener)
+}
+
+/// The uid at the other end of a connected Unix socket (`SO_PEERCRED`).
+///
+/// A producer only trusts a subscribe stream from its own uid: a shared zygote,
+/// another session or any other local peer must not be able to read a session's
+/// screen even if it reaches the path.
+fn peer_uid(stream: &UnixStream) -> io::Result<u32> {
+    use std::os::unix::io::AsRawFd;
+    let mut credentials = libc::ucred {
+        pid: 0,
+        uid: 0,
+        gid: 0,
+    };
+    let mut length = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+    let code = unsafe {
+        libc::getsockopt(
+            stream.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            (&raw mut credentials).cast(),
+            &mut length,
+        )
+    };
+    if code != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(credentials.uid)
+}
+
 /// The accept loop: a blocking `accept()` so an unviewed session has no idle
 /// poll cost at all.
 fn accept_loop(listener: UnixListener, inner: Arc<Inner>, path: PathBuf) {
@@ -972,11 +1240,24 @@ fn accept_loop(listener: UnixListener, inner: Arc<Inner>, path: PathBuf) {
                 if inner.shutdown.load(Ordering::Acquire) {
                     break;
                 }
+                // Thread cap: a peer that holds a connection without sending
+                // its subscribe line must not be able to spawn threads without
+                // bound (each slot is released when its thread ends).
+                if inner.subscribe_threads.fetch_add(1, Ordering::AcqRel) >= MAX_SUBSCRIBE_THREADS {
+                    inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
+                    inner.subscribe_rejected.fetch_add(1, Ordering::Relaxed);
+                    drop(stream);
+                    continue;
+                }
                 let subscriber_inner = Arc::clone(&inner);
-                std::thread::Builder::new()
+                let spawned = std::thread::Builder::new()
                     .name("acos-live-view-subscribe".to_string())
-                    .spawn(move || subscribe(stream, subscriber_inner))
-                    .ok();
+                    .spawn(move || {
+                        subscribe(stream, subscriber_inner);
+                    });
+                if spawned.is_err() {
+                    inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
+                }
             }
             Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
             Err(_) => {
@@ -992,28 +1273,70 @@ fn accept_loop(listener: UnixListener, inner: Arc<Inner>, path: PathBuf) {
 }
 
 /// Read one subscribe line, answer with the hello, attach the subscriber.
+///
+/// **One total deadline** for the whole line (`SUBSCRIBE_DEADLINE`), not a
+/// per-read timeout: a peer sending a byte every four seconds would otherwise
+/// keep the slot forever. The peer's uid must be ours (`SO_PEERCRED`) before
+/// the stream is trusted with a session's screen.
 fn subscribe(mut stream: UnixStream, inner: Arc<Inner>) {
+    let uid = unsafe { libc::getuid() };
+    match peer_uid(&stream) {
+        Ok(peer) if peer == uid => {}
+        Ok(peer) => {
+            eprintln!("acos-art: live view: refused a subscriber from uid {peer} (own uid {uid})");
+            inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
+            return;
+        }
+        Err(error) => {
+            eprintln!(
+                "acos-art: live view: refused a subscriber with no peer credentials: {error}"
+            );
+            inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
+            return;
+        }
+    }
+    let deadline = Instant::now() + SUBSCRIBE_DEADLINE;
     let _ = stream.set_nonblocking(false);
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
     let mut line = Vec::new();
-    let mut byte = [0u8; 1];
+    let mut buffer = [0u8; 512];
     loop {
-        match stream.read(&mut byte) {
-            Ok(0) => return,
-            Ok(_) => {
-                if byte[0] == b'\n' {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
+            return;
+        }
+        if stream.set_read_timeout(Some(remaining)).is_err() {
+            inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
+            return;
+        }
+        match stream.read(&mut buffer) {
+            Ok(0) => {
+                inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
+                return;
+            }
+            Ok(read) => {
+                line.extend_from_slice(&buffer[..read]);
+                if let Some(newline) = line.iter().position(|byte| *byte == b'\n') {
+                    line.truncate(newline);
                     break;
                 }
-                line.push(byte[0]);
                 if line.len() > MAX_SUBSCRIBE_LINE {
+                    inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
                     return;
                 }
             }
             Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-            Err(_) => return,
+            Err(_) => {
+                inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
+                return;
+            }
         }
     }
+    // The slot is released once the subscribe line has been read: the attached
+    // subscriber no longer needs a thread of its own (the writer thread serves
+    // it).
     let Ok(request) = serde_json::from_slice::<serde_json::Value>(&line) else {
+        inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
         return;
     };
     if let Some(version) = request.get("v").and_then(serde_json::Value::as_u64) {
@@ -1025,10 +1348,12 @@ fn subscribe(mut stream: UnixStream, inner: Arc<Inner>) {
             });
             let _ = stream.set_nonblocking(true);
             let _ = stream.write_all(&frame_message(TYPE_EVENT, message.to_string().as_bytes()));
+            inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
             return;
         }
     }
     let _ = inner.attach(stream, &request);
+    inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
 }
 
 /// The writer thread: rate-limited, latest-wins, one encode per frame.
@@ -1074,8 +1399,13 @@ fn writer_loop(inner: Arc<Inner>) {
         }
         let now = Instant::now();
         if now < next_at {
-            // Keep the newest slot (latest wins) while the rate limiter runs.
-            inner.wait(next_at - now);
+            // Keep the newest slot (latest wins) while the rate limiter runs,
+            // but wake up early while a subscriber still has bytes queued.
+            let mut wait = next_at - now;
+            if inner.flush_pending() {
+                wait = wait.min(Duration::from_millis(1));
+            }
+            inner.wait(wait);
             continue;
         }
         let pending = {
@@ -1106,9 +1436,7 @@ fn writer_loop(inner: Arc<Inner>) {
         inner
             .encode_bytes_total
             .fetch_add(bytes.len() as u64, Ordering::Relaxed);
-        inner
-            .last_encode_us
-            .store(encode_us, Ordering::Relaxed);
+        inner.last_encode_us.store(encode_us, Ordering::Relaxed);
         inner
             .last_encode_bytes
             .store(bytes.len() as u64, Ordering::Relaxed);
@@ -1119,6 +1447,9 @@ fn writer_loop(inner: Arc<Inner>) {
             "h": frame.height,
             "format": inner.format().as_str(),
             "ts_ms": frame.ts_ms,
+            // A blank placeholder published while a `FLAG_SECURE` window is on
+            // screen. The bytes are not the app's content.
+            "secure": frame.secure,
         });
         let mut message = Vec::with_capacity(128 + bytes.len());
         message.extend_from_slice(&header.to_string().into_bytes());
@@ -1127,6 +1458,10 @@ fn writer_loop(inner: Arc<Inner>) {
         let message = frame_message(TYPE_FRAME, &message);
         inner.broadcast(&message, true);
         inner.frames_sent.fetch_add(1, Ordering::Relaxed);
+        // Keep draining a viewer that could not take the whole message right
+        // away: a frame larger than `SO_SNDBUF` is delivered across a few
+        // writes, and the loop below retries while anything is still queued.
+        inner.flush_pending();
     }
 }
 
@@ -1259,12 +1594,12 @@ fn encode(frame: &Slot, format: FrameFormat, jpeg_quality: u8) -> io::Result<Vec
             );
             image::ImageEncoder::write_image(
                 encoder,
-                    &rgb,
-                    frame.width,
-                    frame.height,
-                    image::ExtendedColorType::Rgb8,
-                )
-                .map_err(io::Error::other)?;
+                &rgb,
+                frame.width,
+                frame.height,
+                image::ExtendedColorType::Rgb8,
+            )
+            .map_err(io::Error::other)?;
         }
     }
     Ok(out)
@@ -1296,6 +1631,42 @@ pub fn tree_has_focused_password(tree: &serde_json::Value) -> bool {
     walk(tree)
 }
 
+/// `true` only when a **fresh** probe tree proves that input goes to a focused,
+/// non-password field: some node is focused and no focused node is a password
+/// field. A tree with no focused node proves nothing (focus is unknown), so the
+/// answer is `false` and the input stays masked.
+#[must_use]
+pub fn tree_proves_non_password_focus(tree: &serde_json::Value) -> bool {
+    fn walk(node: &serde_json::Value, saw_focused: &mut bool, password: &mut bool) {
+        match node {
+            serde_json::Value::Array(items) => {
+                items.iter().for_each(|item| walk(item, saw_focused, password));
+            }
+            serde_json::Value::Object(map) => {
+                if map
+                    .get("focused")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false)
+                {
+                    *saw_focused = true;
+                    if map
+                        .get("password")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false)
+                    {
+                        *password = true;
+                    }
+                }
+                map.values().for_each(|value| walk(value, saw_focused, password));
+            }
+            _ => {}
+        }
+    }
+    let (mut saw_focused, mut password) = (false, false);
+    walk(tree, &mut saw_focused, &mut password);
+    saw_focused && !password
+}
+
 /// Truncate event text to [`EVENT_TEXT_CHARS`] characters (never mid-codepoint).
 #[must_use]
 pub fn truncate_text(text: &str) -> String {
@@ -1310,13 +1681,10 @@ pub fn truncate_text(text: &str) -> String {
 /// Map one launcher reply to a protocol event, or `None` when it is not
 /// interesting (a reply the feed does not describe).
 ///
-/// `focused_password` masks typed text: the launcher's own probe tree marks
-/// password fields, and a masked text never leaves the process in the feed.
-#[must_use]
-pub fn event_from_reply(
-    reply: &serde_json::Value,
-    focused_password: bool,
-) -> Option<serde_json::Value> {
+/// `masked` masks typed text **and key codes**: the launcher's own probe tree
+/// marks password fields, and nothing that could be a secret leaves the process
+/// in the feed. Masking is the default (see [`LiveView::observe_reply`]).
+pub fn event_from_reply(reply: &serde_json::Value, masked: bool) -> Option<serde_json::Value> {
     let cmd = reply.get("cmd").and_then(|v| v.as_str()).unwrap_or("");
     let ok = reply
         .get("ok")
@@ -1360,14 +1728,14 @@ pub fn event_from_reply(
         }
     }
     if let Some(key) = reply.get("key") {
-        map.insert("key".into(), key.clone());
+        map.insert("key".into(), masked_key(key, masked));
     } else if cmd == "key" {
         if let Some(code) = reply.get("code").and_then(serde_json::Value::as_i64) {
-            map.insert("key".into(), serde_json::json!(code));
+            map.insert("key".into(), masked_key(&serde_json::json!(code), masked));
         }
     }
     if let Some(text) = reply.get("text").and_then(|v| v.as_str()) {
-        let text = if focused_password {
+        let text = if masked {
             MASKED_TEXT.to_string()
         } else {
             truncate_text(text)
@@ -1397,13 +1765,10 @@ pub fn event_from_reply(
 /// Fill an event's input fields from the command request that produced it.
 ///
 /// A reply does not echo `x`/`y`/`key`/`text`; the request is the record of what
-/// the agent asked for. Text is masked for a password field and truncated, and
-/// the reply's own value (when it has one) always wins.
-pub fn merge_request(
-    event: &mut serde_json::Value,
-    request: &serde_json::Value,
-    focused_password: bool,
-) {
+/// the agent asked for. When `masked` (the default, see
+/// [`LiveView::observe_reply`]) the typed text **and** the key code are replaced
+/// with [`MASKED_TEXT`], and the reply's own value (when it has one) always wins.
+pub fn merge_request(event: &mut serde_json::Value, request: &serde_json::Value, masked: bool) {
     let Some(map) = event.as_object_mut() else {
         return;
     };
@@ -1417,19 +1782,28 @@ pub fn merge_request(
     if !map.contains_key("key") {
         if let Some(value) = request.get("key").or_else(|| request.get("code")) {
             if value.is_i64() {
-                map.insert("key".to_string(), value.clone());
+                map.insert("key".to_string(), masked_key(value, masked));
             }
         }
     }
     if !map.contains_key("text") {
         if let Some(text) = request.get("text").and_then(|value| value.as_str()) {
-            let text = if focused_password {
+            let text = if masked {
                 MASKED_TEXT.to_string()
             } else {
                 truncate_text(text)
             };
             map.insert("text".to_string(), serde_json::json!(text));
         }
+    }
+}
+
+/// A key code in an event: the code itself, or [`MASKED_TEXT`] when masking.
+fn masked_key(value: &serde_json::Value, masked: bool) -> serde_json::Value {
+    if masked {
+        serde_json::json!(MASKED_TEXT)
+    } else {
+        value.clone()
     }
 }
 
@@ -1525,6 +1899,7 @@ mod tests {
         height: u32,
         noise: bool,
         fill: AtomicU64,
+        secure: AtomicBool,
     }
 
     impl HandSource {
@@ -1535,6 +1910,7 @@ mod tests {
                 height,
                 noise,
                 fill: AtomicU64::new(0),
+                secure: AtomicBool::new(false),
             })
         }
 
@@ -1556,6 +1932,7 @@ mod tests {
                     height: this.height,
                     stride: this.width,
                     rgba,
+                    secure: this.secure.load(Ordering::Relaxed),
                 })
             })
         }
@@ -1722,7 +2099,9 @@ mod tests {
             .set_read_timeout(Some(Duration::from_secs(5)))
             .expect("timeout");
         client
-            .write_all(b"{\"v\":1,\"subscribe\":{\"frames\":true,\"events\":true,\"max_fps\":30}}\n")
+            .write_all(
+                b"{\"v\":1,\"subscribe\":{\"frames\":true,\"events\":true,\"max_fps\":30}}\n",
+            )
             .expect("subscribe");
         let _ = read_message(&mut client).expect("hello");
         assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
@@ -1731,7 +2110,7 @@ mod tests {
         // incompressible noise so the frames are big enough to fill the socket
         // buffer quickly.
         let started = Instant::now();
-        for _ in 0..400 {
+        for _ in 0..4000 {
             view.tick();
             std::thread::sleep(Duration::from_millis(1));
             if view.stats().subscribers_dropped > 0 {
@@ -1861,6 +2240,323 @@ mod tests {
         assert_eq!(view.stats().events_dropped, 5);
         assert_eq!(queued[0]["ts_ms"], 5);
         assert_eq!(queued[EVENT_QUEUE - 1]["ts_ms"], EVENT_QUEUE + 4);
+        view.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn subscribe_line(client: &mut UnixStream, extra: &str) {
+        client
+            .write_all(
+                format!("{{\"v\":1,\"subscribe\":{{{extra}\"events\":true}}}}\n").as_bytes(),
+            )
+            .expect("subscribe");
+    }
+
+    fn bound(dir: &Path, tag: &str, source: &Arc<HandSource>) -> Arc<LiveView> {
+        LiveView::bind(
+            &dir.join(tag),
+            LiveViewConfig::default(),
+            (source.width, source.height),
+            1,
+            source.as_source(),
+            Arc::new(TestWake::new()),
+        )
+        .expect("bind")
+    }
+
+    /// Read events until `n` arrived (skipping the hello and any frame).
+    fn read_events(client: &mut UnixStream, n: usize) -> Vec<serde_json::Value> {
+        client
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .expect("timeout");
+        let mut out = Vec::new();
+        while out.len() < n {
+            match read_message(client).expect("message") {
+                (TYPE_EVENT, payload) => out.push(serde_json::from_slice(&payload).expect("event")),
+                _ => {}
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn the_view_socket_is_private_in_a_private_directory_never_chmodded_by_path() {
+        let dir = scratch_dir("private");
+        // A too-open parent we own is tightened to 0700 before the bind.
+        let parent = dir.join("open");
+        std::fs::create_dir_all(&parent).expect("mkdir");
+        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o777)).expect("chmod");
+        let source = HandSource::new(8, 8, false);
+        let view = bound(&parent, "view.sock", &source);
+        let dir_mode = std::fs::metadata(&parent).expect("stat").permissions().mode() & 0o777;
+        assert_eq!(dir_mode, 0o700, "socket directory is 0700");
+        let socket_mode = std::fs::symlink_metadata(&parent.join("view.sock"))
+            .expect("stat")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(socket_mode & 0o077, 0, "socket has no group/other access: {socket_mode:o}");
+        view.shutdown();
+        // A symlink at the socket path is refused, not followed (the old path
+        // `chmod` would have changed the mode of whatever it pointed at).
+        let target = dir.join("victim");
+        std::fs::write(&target, b"x").expect("victim");
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o644)).expect("chmod");
+        std::os::unix::fs::symlink(&target, parent.join("trap.sock")).expect("symlink");
+        assert!(LiveView::bind(
+            &parent.join("trap.sock"),
+            LiveViewConfig::default(),
+            (8, 8),
+            1,
+            source.as_source(),
+            Arc::new(TestWake::new()),
+        )
+        .is_err());
+        assert_eq!(
+            std::fs::metadata(&target).expect("stat").permissions().mode() & 0o777,
+            0o644,
+            "the symlink target's mode is untouched"
+        );
+        // A directory that is not ours / not a directory is refused.
+        assert!(secure_dir(&target).is_err(), "a file is not a socket directory");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn peer_credentials_report_our_own_uid() {
+        let dir = scratch_dir("cred");
+        let path = dir.join("p.sock");
+        let listener = UnixListener::bind(&path).expect("bind");
+        let client = UnixStream::connect(&path).expect("connect");
+        let (server, _) = listener.accept().expect("accept");
+        let uid = unsafe { libc::getuid() };
+        assert_eq!(peer_uid(&server).expect("server side"), uid);
+        assert_eq!(peer_uid(&client).expect("client side"), uid);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn subscribe_threads_are_capped_and_a_trickling_peer_is_cut_off_by_one_deadline() {
+        let dir = scratch_dir("cap");
+        let source = HandSource::new(8, 8, false);
+        let view = bound(&dir, "v.sock", &source);
+        let path = view.socket_path().to_path_buf();
+        // MAX_SUBSCRIBE_THREADS silent peers hold every slot...
+        let mut silent: Vec<UnixStream> = (0..MAX_SUBSCRIBE_THREADS)
+            .map(|_| UnixStream::connect(&path).expect("connect"))
+            .collect();
+        assert!(wait_for(
+            || view.inner.subscribe_threads.load(Ordering::Acquire) == MAX_SUBSCRIBE_THREADS,
+            Duration::from_secs(3)
+        ));
+        // ...so more are closed at accept, with no thread of their own.
+        let mut extra = Vec::new();
+        for _ in 0..6 {
+            extra.push(UnixStream::connect(&path).expect("connect"));
+        }
+        assert!(
+            wait_for(
+                || view.inner.subscribe_rejected.load(Ordering::Relaxed) >= 6,
+                Duration::from_secs(3)
+            ),
+            "connections beyond the thread cap are rejected"
+        );
+        assert!(view.inner.subscribe_threads.load(Ordering::Acquire) <= MAX_SUBSCRIBE_THREADS);
+        // One total deadline: the silent peers are released together at about
+        // SUBSCRIBE_DEADLINE, not one per read timeout.
+        let started = Instant::now();
+        for peer in &mut silent {
+            peer.set_read_timeout(Some(SUBSCRIBE_DEADLINE + Duration::from_secs(4)))
+                .expect("timeout");
+            let mut byte = [0u8; 1];
+            assert_eq!(peer.read(&mut byte).unwrap_or(0), 0, "closed by the producer");
+        }
+        assert!(
+            started.elapsed() < SUBSCRIBE_DEADLINE + Duration::from_secs(3),
+            "all silent peers were cut off by the total deadline: {:?}",
+            started.elapsed()
+        );
+        // A byte-at-a-time peer does not outlive the deadline either.
+        let mut trickle = UnixStream::connect(&path).expect("connect");
+        let begun = Instant::now();
+        let mut closed_at = None;
+        for _ in 0..40 {
+            if trickle.write_all(b" ").is_err() {
+                closed_at = Some(begun.elapsed());
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(500));
+            if begun.elapsed() > SUBSCRIBE_DEADLINE + Duration::from_secs(3) {
+                break;
+            }
+        }
+        let closed_at = closed_at.expect("the trickling peer was cut off");
+        assert!(
+            closed_at < SUBSCRIBE_DEADLINE + Duration::from_secs(3),
+            "trickle outlived the total deadline: {closed_at:?}"
+        );
+        // A real subscriber still gets in afterwards (slots were released).
+        assert!(wait_for(
+            || view.inner.subscribe_threads.load(Ordering::Acquire) == 0,
+            Duration::from_secs(3)
+        ));
+        let mut client = UnixStream::connect(&path).expect("connect");
+        subscribe_line(&mut client, "\"frames\":false,");
+        client
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .expect("timeout");
+        assert_eq!(read_message(&mut client).expect("hello").0, TYPE_HELLO);
+        drop(extra);
+        view.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn typed_input_is_masked_unless_a_fresh_tree_proves_a_non_password_focus() {
+        let dir = scratch_dir("mask");
+        let source = HandSource::new(8, 8, false);
+        let view = bound(&dir, "v.sock", &source);
+        let mut client = UnixStream::connect(view.socket_path()).expect("connect");
+        subscribe_line(&mut client, "\"frames\":false,");
+        client
+            .set_read_timeout(Some(Duration::from_secs(5)))
+            .expect("timeout");
+        assert_eq!(read_message(&mut client).expect("hello").0, TYPE_HELLO);
+        assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
+
+        let plain = serde_json::json!({"nodes": [
+            {"class": "android.widget.EditText", "password": false, "focused": true}]});
+        let password = serde_json::json!({"nodes": [
+            {"class": "android.widget.EditText", "password": true, "focused": true}]});
+        let nothing_focused = serde_json::json!({"nodes": [
+            {"class": "android.widget.EditText", "password": false, "focused": false}]});
+
+        let mut run = |request: serde_json::Value, reply: serde_json::Value| {
+            view.observe_request(&request);
+            view.observe_reply(&reply);
+            read_events(&mut client, 1).remove(0)
+        };
+        // Default: no tree at all -> text and key code are masked.
+        let event = run(
+            serde_json::json!({"cmd": "type_text", "text": "hunter2"}),
+            serde_json::json!({"ok": true, "cmd": "type_text"}),
+        );
+        assert_eq!(event["text"], MASKED_TEXT);
+        assert!(!event.to_string().contains("hunter2"));
+        let event = run(
+            serde_json::json!({"cmd": "key", "key": 66}),
+            serde_json::json!({"ok": true, "cmd": "key", "code": 66}),
+        );
+        assert_eq!(event["key"], MASKED_TEXT, "key codes are masked too");
+        // A tree that proves a focused non-password field unmasks *that* input.
+        let event = run(
+            serde_json::json!({"cmd": "type_text", "text": "visible"}),
+            serde_json::json!({"ok": true, "cmd": "type_text", "tree": plain}),
+        );
+        assert_eq!(event["text"], "visible");
+        // ...and only that input: the next one has no fresh tree -> masked again.
+        let event = run(
+            serde_json::json!({"cmd": "type_text", "text": "stale"}),
+            serde_json::json!({"ok": true, "cmd": "type_text"}),
+        );
+        assert_eq!(event["text"], MASKED_TEXT, "a stale tree never unmasks");
+        // A focused password field, and a tree with no focus at all: masked.
+        for tree in [password, nothing_focused] {
+            let event = run(
+                serde_json::json!({"cmd": "type_text", "text": "secret"}),
+                serde_json::json!({"ok": true, "cmd": "type_text", "tree": tree}),
+            );
+            assert_eq!(event["text"], MASKED_TEXT);
+        }
+        assert!(tree_proves_non_password_focus(&plain));
+        assert!(!tree_proves_non_password_focus(&serde_json::json!({})));
+        view.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_secure_frame_is_published_blank_and_flagged() {
+        let dir = scratch_dir("secure");
+        // A noisy (non-blank) source that says the screen is secure: the pixels
+        // must still be all zero by the time they are encoded.
+        let source = HandSource::new(64, 64, true);
+        source.secure.store(true, Ordering::Relaxed);
+        let view = bound(&dir, "v.sock", &source);
+        let mut client = UnixStream::connect(view.socket_path()).expect("connect");
+        subscribe_line(&mut client, "\"frames\":true,\"format\":\"png\",\"scale\":1.0,\"max_fps\":30,");
+        client
+            .set_read_timeout(Some(Duration::from_millis(300)))
+            .expect("timeout");
+        assert_eq!(read_message(&mut client).expect("hello").0, TYPE_HELLO);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let mut seen = false;
+        while !seen && Instant::now() < deadline {
+            view.tick();
+            if let Ok((TYPE_FRAME, payload)) = read_message(&mut client) {
+                let newline = payload.iter().position(|b| *b == b'\n').expect("header");
+                let header: serde_json::Value =
+                    serde_json::from_slice(&payload[..newline]).expect("header json");
+                assert_eq!(header["secure"], true);
+                let image = image::load_from_memory(&payload[newline + 1..]).expect("png").to_rgb8();
+                assert!(image.as_raw().iter().all(|byte| *byte == 0), "secure frame is blank");
+                seen = true;
+            }
+        }
+        assert!(seen, "a frame arrived");
+        // Turning it off publishes real pixels again.
+        source.secure.store(false, Ordering::Relaxed);
+        let mut real = false;
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !real && Instant::now() < deadline {
+            view.tick();
+            if let Ok((TYPE_FRAME, payload)) = read_message(&mut client) {
+                let newline = payload.iter().position(|b| *b == b'\n').expect("header");
+                let header: serde_json::Value =
+                    serde_json::from_slice(&payload[..newline]).expect("header json");
+                if header["secure"] == false {
+                    let image =
+                        image::load_from_memory(&payload[newline + 1..]).expect("png").to_rgb8();
+                    assert!(image.as_raw().iter().any(|byte| *byte != 0));
+                    real = true;
+                }
+            }
+        }
+        assert!(real, "an unsecured screen streams again");
+        view.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_frame_larger_than_the_socket_buffer_is_delivered_to_a_slow_reader() {
+        let dir = scratch_dir("large");
+        // 800x1200 noise at scale 1.0 PNG is ~2.9 MB: far beyond SO_SNDBUF
+        // (~208 KB), so it cannot be written in one non-blocking send.
+        let source = HandSource::new(800, 1200, true);
+        let view = bound(&dir, "v.sock", &source);
+        let mut client = UnixStream::connect(view.socket_path()).expect("connect");
+        subscribe_line(&mut client, "\"frames\":true,\"format\":\"png\",\"scale\":1.0,\"max_fps\":2,");
+        client
+            .set_read_timeout(Some(Duration::from_secs(10)))
+            .expect("timeout");
+        assert_eq!(read_message(&mut client).expect("hello").0, TYPE_HELLO);
+        assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
+        view.tick();
+        // The reader is slow: it does not read for a while.
+        std::thread::sleep(Duration::from_millis(900));
+        let (kind, payload) = loop {
+            let message = read_message(&mut client)
+                .unwrap_or_else(|error| panic!("a large frame arrives intact: {error} {:?}", view.stats()));
+            if message.0 == TYPE_FRAME {
+                break message;
+            }
+        };
+        assert_eq!(kind, TYPE_FRAME);
+        let newline = payload.iter().position(|b| *b == b'\n').expect("header");
+        assert!(payload.len() > 1_000_000, "frame was {} bytes", payload.len());
+        let image = image::load_from_memory(&payload[newline + 1..]).expect("a whole, decodable PNG");
+        assert_eq!((image.width(), image.height()), (800, 1200));
+        assert_eq!(view.stats().subscribers_dropped, 0, "the viewer was not dropped");
+        assert!(view.has_subscribers());
         view.shutdown();
         let _ = std::fs::remove_dir_all(&dir);
     }

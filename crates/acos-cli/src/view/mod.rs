@@ -26,8 +26,9 @@ use std::io::{self, ErrorKind, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde_json::json;
 
@@ -192,23 +193,83 @@ pub fn token_matches(expected: &str, given: &[u8]) -> bool {
     difference == 0 && given.len() == expected.len()
 }
 
-/// Accept loop: one thread per browser connection.
-pub fn serve(listener: TcpListener, token: String, hub: Arc<Hub>) {
-    let token = Arc::new(token);
-    for connection in listener.incoming() {
-        let Ok(connection) = connection else { continue };
-        let hub = Arc::clone(&hub);
-        let token = Arc::clone(&token);
-        std::thread::spawn(move || handle(connection, &token, &hub));
+/// Browser connections served at once (VIEW1c L3). A connection beyond the cap
+/// is closed immediately instead of getting a thread, so a local peer cannot
+/// exhaust the host's threads by opening sockets and never finishing a request.
+pub const MAX_CONNECTIONS: usize = 64;
+/// One **total** deadline for a request head (VIEW1c L3): a peer sending a byte
+/// at a time cannot keep a connection slot past it.
+pub const HEAD_DEADLINE: Duration = Duration::from_secs(5);
+
+/// Releases one connection slot when its thread ends.
+struct ConnectionSlot(Arc<AtomicUsize>);
+
+impl Drop for ConnectionSlot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
     }
 }
 
-fn handle(mut connection: TcpStream, token: &str, hub: &Arc<Hub>) {
-    let _ = connection.set_read_timeout(Some(Duration::from_secs(15)));
+/// Accept loop: one thread per browser connection, at most [`MAX_CONNECTIONS`].
+pub fn serve(listener: TcpListener, token: String, hub: Arc<Hub>) {
+    serve_capped(listener, token, hub, MAX_CONNECTIONS);
+}
+
+/// [`serve`] with an explicit connection cap (the unit tests use a small one).
+pub fn serve_capped(listener: TcpListener, token: String, hub: Arc<Hub>, max_connections: usize) {
+    let token = Arc::new(token);
+    let port = listener.local_addr().map_or(0, |addr| addr.port());
+    let live = Arc::new(AtomicUsize::new(0));
+    for connection in listener.incoming() {
+        let Ok(connection) = connection else { continue };
+        if live.fetch_add(1, Ordering::AcqRel) >= max_connections {
+            live.fetch_sub(1, Ordering::AcqRel);
+            drop(connection);
+            continue;
+        }
+        let slot = ConnectionSlot(Arc::clone(&live));
+        let hub = Arc::clone(&hub);
+        let token = Arc::clone(&token);
+        let spawned = std::thread::Builder::new()
+            .name("acos-view-conn".to_string())
+            .spawn(move || {
+                let _slot = slot;
+                handle(connection, &token, &hub, port);
+            });
+        // A failed spawn drops the closure (and with it the slot).
+        let _ = spawned;
+    }
+}
+
+/// `true` when `host` is exactly `127.0.0.1:<port>` (VIEW1c L2).
+///
+/// A browser sends the name it resolved: a DNS-rebinding page loads from
+/// `evil.example:<port>`, so a Host header that is not the loopback literal and
+/// this hub's own port is refused before any route (the token is also required,
+/// but a rebound page could be handed the URL by a confused user or leak it).
+#[must_use]
+pub fn host_allowed(host: Option<&str>, port: u16) -> bool {
+    host.is_some_and(|host| host.trim() == format!("127.0.0.1:{port}"))
+}
+
+fn handle(mut connection: TcpStream, token: &str, hub: &Arc<Hub>, port: u16) {
+    let _ = connection.set_read_timeout(Some(HEAD_DEADLINE));
     let _ = connection.set_write_timeout(Some(WRITE_TIMEOUT));
     let Some(request) = read_request(&mut connection) else {
         return;
     };
+    // A request the page itself never makes: a streamed response needs a stable
+    // read timeout, so restore the generous one once the head is in.
+    let _ = connection.set_read_timeout(Some(Duration::from_secs(15)));
+    if !host_allowed(request.host.as_deref(), port) {
+        let _ = respond(
+            &mut connection,
+            403,
+            "text/plain; charset=utf-8",
+            b"403 forbidden: Host must be 127.0.0.1:<port>\n",
+        );
+        return;
+    }
     if request.method != "GET" {
         let _ = respond(&mut connection, 405, "text/plain; charset=utf-8", b"405 method not allowed\n");
         return;
@@ -459,6 +520,7 @@ struct Request {
     method: String,
     path: String,
     query: String,
+    host: Option<String>,
 }
 
 impl Request {
@@ -476,7 +538,13 @@ impl Request {
 fn read_request(connection: &mut TcpStream) -> Option<Request> {
     let mut head = Vec::with_capacity(512);
     let mut buffer = [0u8; 1024];
+    let deadline = Instant::now() + HEAD_DEADLINE;
     loop {
+        // One total deadline for the whole head, not a per-read timeout.
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() || connection.set_read_timeout(Some(remaining)).is_err() {
+            return None;
+        }
         if head.windows(4).any(|window| window == b"\r\n\r\n") {
             break;
         }
@@ -499,10 +567,21 @@ fn read_request(connection: &mut TcpStream) -> Option<Request> {
         Some((path, query)) => (path.to_string(), query.to_string()),
         None => (target, String::new()),
     };
+    let host = text
+        .lines()
+        .skip(1)
+        .take_while(|line| !line.is_empty())
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.trim()
+                .eq_ignore_ascii_case("host")
+                .then(|| value.trim().to_string())
+        });
     Some(Request {
         method,
         path,
         query,
+        host,
     })
 }
 
@@ -629,7 +708,7 @@ mod tests {
         let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
         write!(
             stream,
-            "GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
+            "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
         )
         .expect("write request");
         let mut response = Vec::new();
@@ -703,13 +782,97 @@ mod tests {
         let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).expect("connect");
         write!(
             stream,
-            "POST /?t={} HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n",
-            server.token
+            "POST /?t={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\nContent-Length: 0\r\n\r\n",
+            server.token,
+            server.port
         )
         .expect("write");
         let mut response = Vec::new();
         let _ = stream.read_to_end(&mut response);
         assert_eq!(status_of(&response), 405);
+    }
+
+    #[test]
+    fn a_host_other_than_the_loopback_literal_and_port_is_refused() {
+        let server = Server::start("host");
+        let port = server.port;
+        let ask = |host: &str| -> u16 {
+            let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).expect("connect");
+            let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+            write!(
+                stream,
+                "GET /api/sessions?t={} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n",
+                server.token
+            )
+            .expect("write");
+            let mut response = Vec::new();
+            let _ = stream.read_to_end(&mut response);
+            status_of(&response)
+        };
+        assert_eq!(ask(&format!("127.0.0.1:{port}")), 200);
+        // DNS rebinding: a name that resolves to 127.0.0.1, wrong port, no port.
+        assert_eq!(ask(&format!("evil.example:{port}")), 403);
+        assert_eq!(ask(&format!("localhost:{port}")), 403);
+        assert_eq!(ask("127.0.0.1"), 403);
+        assert_eq!(ask(&format!("127.0.0.1:{}", port.wrapping_add(1))), 403);
+        // No Host header at all.
+        let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).expect("connect");
+        write!(stream, "GET /api/sessions?t={} HTTP/1.0\r\n\r\n", server.token).expect("write");
+        let mut response = Vec::new();
+        let _ = stream.read_to_end(&mut response);
+        assert_eq!(status_of(&response), 403);
+        assert!(host_allowed(Some("127.0.0.1:9"), 9));
+        assert!(!host_allowed(None, 9));
+    }
+
+    #[test]
+    fn connections_are_capped_and_a_stalled_head_is_cut_off_by_one_deadline() {
+        let registry = scratch("cap-registry");
+        let token = random_token().expect("token");
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+        let hub = Arc::new(Hub::new(registry.clone()));
+        let served_token = token.clone();
+        std::thread::spawn(move || serve_capped(listener, served_token, hub, 2));
+        // Two stalled peers (no request) hold the two slots...
+        let mut holders = Vec::new();
+        for _ in 0..2 {
+            holders.push(TcpStream::connect((Ipv4Addr::LOCALHOST, port)).expect("connect"));
+        }
+        std::thread::sleep(Duration::from_millis(200));
+        // ...so a third is closed without a response (EOF or reset), not served.
+        let mut third = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).expect("connect");
+        let _ = third.set_read_timeout(Some(Duration::from_secs(3)));
+        let _ = write!(third, "GET /api/sessions?t={token} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n\r\n");
+        let mut response = Vec::new();
+        let _ = third.read_to_end(&mut response);
+        assert!(response.is_empty(), "over-cap connection was served");
+        // One total deadline: a byte-at-a-time peer is dropped at HEAD_DEADLINE
+        // even though every single read is well inside any per-read timeout.
+        let started = Instant::now();
+        let mut slow = holders.remove(0);
+        let _ = slow.set_read_timeout(Some(Duration::from_secs(HEAD_DEADLINE.as_secs() + 3)));
+        for _ in 0..40 {
+            if slow.write_all(b"G").is_err() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(400));
+            if started.elapsed() > HEAD_DEADLINE + Duration::from_secs(2) {
+                break;
+            }
+        }
+        let mut sink = Vec::new();
+        let _ = slow.read_to_end(&mut sink);
+        assert!(
+            started.elapsed() < HEAD_DEADLINE + Duration::from_secs(4),
+            "the stalled head outlived the total deadline: {:?}",
+            started.elapsed()
+        );
+        // The slot was released: a well-formed request is served again.
+        std::thread::sleep(Duration::from_millis(200));
+        let response = get(port, &format!("/api/sessions?t={token}"));
+        assert_eq!(status_of(&response), 200);
+        let _ = std::fs::remove_dir_all(&registry);
     }
 
     #[test]
@@ -904,8 +1067,9 @@ mod tests {
         let mut first = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).expect("connect");
         write!(
             first,
-            "GET /api/frames/s_stream?t={} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n",
-            server.token
+            "GET /api/frames/s_stream?t={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\r\n",
+            server.token,
+            server.port
         )
         .expect("write");
         let head = read_response_head(&mut first);
@@ -914,8 +1078,9 @@ mod tests {
         let mut second = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).expect("connect");
         write!(
             second,
-            "GET /api/frames/s_stream?t={} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n",
-            server.token
+            "GET /api/frames/s_stream?t={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\r\n",
+            server.token,
+            server.port
         )
         .expect("write");
         let head = read_response_head(&mut second);
@@ -946,8 +1111,9 @@ mod tests {
         let mut events = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).expect("connect");
         write!(
             events,
-            "GET /api/events/s_stream?t={} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n",
-            server.token
+            "GET /api/events/s_stream?t={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\r\n",
+            server.token,
+            server.port
         )
         .expect("write");
         let head = read_response_head(&mut events);
