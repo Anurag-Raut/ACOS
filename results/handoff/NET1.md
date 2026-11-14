@@ -5,9 +5,16 @@
 
 **One line:** the connectivity implementation from NET1 is now *verified*: four
 crate suites green, 8/8 positive gates and 5/5 Gaten flows pass with 3/3 + 5/5
-negatives failing as designed, and `k1-run.py` persists the guest logd. The
-2×42-app corpus is the only acceptance item not finished (round 1 in flight when
-the window closed — see `results/compat/NET1.md` §7.5).
+negatives failing as designed, `k1-run.py` persists the guest logd, and corpus
+round 1 (42 apps × 2 arms) shows **two apps changed, both upward, none down** —
+Joplin gains `first_frame`+`tree`, Nextcloud gains `process_start`+`oncreate`
+(both were blocked by `IConnectivityManager code 42` on main) and then dies in
+its own SQLite cursor wall. Corpus round 2 was in flight at the window close.
+
+**Resume here:** `ROUND=2 BATCH=6 TIME=800 bash .cache/net1b/corpus.sh` (the
+script is resumable — it skips nothing but overwrites per-app dirs), then
+`python3 .cache/net1b/rung.py --rounds 1,2 --markdown`. Expect only joplin and
+nextcloud to differ; anything else is a finding.
 
 ## State of the tree
 

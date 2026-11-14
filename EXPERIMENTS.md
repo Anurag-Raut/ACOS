@@ -2322,3 +2322,47 @@ capability stamp under `ACOS_ART_DATA` (H15), so the fake-`systemd-run` probe th
 test installs is never consulted and `prepare` returns `Ok(cg:"")`. Running it
 with a cold `ACOS_ART_DATA` exercises the intended path and passes. The recipe
 should say so.
+
+## E5.10c — NET1 2×42-app corpus, round 1 — MEASURED (round 2 in flight)
+
+**Question.** A non-null `getActiveNetwork`/`getNetworkCapabilities` is the one
+plausible regression vector for the connectivity work: an app that now believes
+it is online can block on a socket it cannot open. Does any app move *down* a
+rung?
+
+**Setup.** K1 corpus (42 real apps) through `tools/compat/k1-run.py`, both arms
+in the same acquisition per app, branch (`compat-net1-connectivity` @
+`e5eeba3`, `.cache/s3ab-target/release`) then main (`3e11d9c`, read-only
+`.cache/wt-abmain/.cache/ab-target/release`), one `serve --engine art` per app
+per arm. Runs `.cache/net1b/corpus/r1/<arm>/<pkg>`, driver
+`.cache/net1b/corpus.sh`, table `.cache/net1b/rung.py`.
+
+**Measured (42/42 apps, both arms).**
+
+| rung | main | branch |
+|---|---:|---:|
+| inspect | 42 | 42 |
+| process_start | 41 | **42** |
+| onCreate | 41 | **42** |
+| first frame | 15 | **16** |
+| tree | 15 | **16** |
+| tap | 9 | 9 |
+
+**Two apps differ, both upward, none explained away:**
+
+* `net.cozic.joplin`: `first_frame`/`tree` `.`→`Y` (1650 ms). Main dies at
+  `RNCNetInfo` → `IConnectivityManager code 42`.
+* `com.nextcloud.client`: `process_start`/`oncreate` `.`→`Y`, still no frame on
+  either arm. Main's wall is the *same* code 42 (`Unable to instantiate
+  application com.owncloud.android.MainApp … unsupported Android API
+  android.net.IConnectivityManager code 42`); the branch gets past it and dies in
+  its own database code (`NullPointerException … Cursor.moveToFirst() on a null
+  object reference`). A new wall, reached only because the old one is gone.
+
+**Interpretation.** Zero unexplained regressions, zero downward moves: the
+declared network changes nothing for the 40 apps that were unaffected and
+unblocks the two that registered a default-network callback during startup. No
+app blocks on a socket because it now sees a network.
+
+**Not proven.** Round 2 (determinism; started 10:05 UTC, in flight at the window
+close) — see `results/compat/NET1.md` §7.5.

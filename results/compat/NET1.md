@@ -282,6 +282,24 @@ int reference runner, paths retargeted):
 with its own designed code, so no assertion was satisfied by accident. The
 known main-side red `w7-insets-report` (track W7B) is outside this battery.
 
+The runner's `verdict()` reads `result.verdict.steps`; per scenario it shows the
+scenario really executed (steps / assertions actually evaluated / the failing
+step):
+
+| scenario | steps | assertions | first failing step |
+|---|---:|---:|---|
+| `v2-art-counter` | 11 | 8 | — |
+| `w22-counter-reset` | 9 | 5 | — |
+| `w54-dialog-pixels` | 14 | 9 | — |
+| `w42-back-frame` | 17 | 12 | — |
+| `w15-dialog-menu` | 3 | 2 | — |
+| `form-validation` | 28 | 21 | — |
+| `suite/T03-render-good` | 5 | 3 | — |
+| `v1-offscreen-pager` | 9 | 5 | — |
+| `suite/T03-render-wrong` | 3 | 1 | `assert_region` → `ASSERTION_FAILED` |
+| `negative/offscreen-pager-visible` | 3 | 1 | `assert_visible` → `ELEMENT_OFFSCREEN` |
+| `p11-progress-timeout` | 3 | 0 | `tap` → `TIMEOUT` |
+
 ### 7.3 Gaten flows and negatives (acceptance 2b) — 5/5 and 5/5
 
 `acos verify scenarios/gaten-*.yaml --apk <gaten apk> --engine art --json`
@@ -301,7 +319,11 @@ known main-side red `w7-insets-report` (track W7B) is outside this battery.
 
 `gaten-home` timing out was the pre-existing red in K4 (`results/compat/K4.md`
 §5.1); it passes here, 5/5 flows in one acquisition (09:40:04→09:45:50 UTC,
-~67 s per flow).
+~67 s per flow). Each flow evaluated its assertions (`home` 14 steps/9
+assertions, `tabs` 22/13, `settings` 33/17, `search` 22/11, `lesson` 28/13) and
+each negative failed on `assert_text` with `ASSERTION_FAILED` (`home` 8 steps,
+`tabs` 8, `settings` 13, `search` 17, `lesson` 11 — i.e. they failed at the
+first, deliberately wrong assertion rather than not running).
 
 ### 7.4 NetInfo state evidence (acceptance 3) — logd persisted, JS state not logged by Joplin
 
@@ -346,3 +368,116 @@ proof is that the receiver ran and the app continued — with
 outcome (§3). Quoting the JS value itself needs either a NetInfo probe app that
 logs it, or an ACOS-side trace of the `IConnectivityManager` transactions the
 module receives; both are small, neither fit in this window.
+
+One limitation of the snapshot: `acos_logs` needs a live session, so it answers
+`SESSION_NOT_FOUND` after a guest that died during launch (e.g.
+`com.nextcloud.client` in §7.5, where the guest exits with status 1 before any
+frame). The logd of a failed launch is therefore still lost; capturing it needs
+the snapshot taken inside the engine's failure path (or the session artifacts
+to keep the logd sink).
+
+### 7.5 42-app corpus (acceptance 4) — round 1 complete, round 2 in flight
+
+The K1 corpus (42 real apps, `.cache/corpus/k1`) through the same harness the
+K-tracks use (`tools/compat/run-k1.sh`'s `k1-run.py`), **both arms in the same
+acquisition per app** (order: branch then main), one `acos serve --engine art`
+daemon per app per arm, run dirs `.cache/net1b/corpus/r{1,2}/<arm>/<pkg>`
+(`.cache/net1b/corpus.sh`). Main arm = the read-only detached checkout
+`.cache/wt-abmain` (`3e11d9c`, binary `release/acos` built 14:09), run but never
+built from here.
+
+Rung key: `inspect, process_start, oncreate, first_frame, tree, tap` —
+`Y` reached, `.` not; `@xms` is the launch reply wall time (first frame).
+
+Totals (r1, 42 apps):
+
+| rung | main | **branch** | Δ |
+|---|---:|---:|---:|
+| inspect | 42 | 42 | 0 |
+| process_start | 41 | **42** | **+1** |
+| onCreate | 41 | **42** | **+1** |
+| first frame | 15 | **16** | **+1** |
+| tree | 15 | **16** | **+1** |
+| tap | 9 | 9 | 0 |
+
+| app | r1-branch | r1-main |
+|---|---|---|
+| `chat.fluffy.fluffychat` | YYY... | YYY... |
+| `com.aurora.store` | YYY... | YYY... |
+| `com.beemdevelopment.aegis` | YYYYYY@499ms | YYYYYY@497ms |
+| `com.dot.gallery` | YYY... | YYY... |
+| `com.fsck.k9` | YYY... | YYY... |
+| `com.github.gotify` | YYY... | YYY... |
+| `com.github.muellerma.coffee` | YYYYYY@420ms | YYYYYY@398ms |
+| `com.ichi2.anki` | YYY... | YYY... |
+| `com.ismartcoding.plain` | YYY... | YYY... |
+| `com.keylesspalace.tusky` | YYY... | YYY... |
+| `com.libreweatherrn` | YYY... | YYY... |
+| `com.money.manager.ex` | YYYYYY@469ms | YYYYYY@513ms |
+| `com.nextcloud.client` | YYY... | Y..... |
+| `com.nononsenseapps.feeder` | YYYYY.@1256ms | YYYYY.@1244ms |
+| `com.perflyst.twire` | YYYYYY@1998ms | YYYYYY@1991ms |
+| `com.sadellie.unitto` | YYYYY.@937ms | YYYYY.@962ms |
+| `com.shatteredpixel.shatteredpixeldungeon` | YYY... | YYY... |
+| `com.tailscale.ipn` | YYY... | YYY... |
+| `com.termux` | YYY... | YYY... |
+| `com.unciv.app` | YYY... | YYY... |
+| `de.danoeh.antennapod` | YYYYYY@1260ms | YYYYYY@1261ms |
+| `de.tutao.calendar` | YYY... | YYY... |
+| `de.westnordost.streetcomplete` | YYYYY.@1430ms | YYYYY.@1461ms |
+| `io.anuke.mindustry` | YYY... | YYY... |
+| `io.element.android.x` | YYY... | YYY... |
+| `io.github.muntashirakon.AppManager` | YYYYY.@1523ms | YYYYY.@1516ms |
+| `it.niedermann.owncloud.notes` | YYY... | YYY... |
+| `me.zhanghai.android.files` | YYY... | YYY... |
+| `net.cozic.joplin` | YYYYY.@1650ms | YYY... |
+| `net.gsantner.markor` | YYYYYY@684ms | YYYYYY@688ms |
+| `net.mullvad.mullvadvpn` | YYYYY.@1126ms | YYYYY.@1072ms |
+| `org.billthefarmer.editor` | YYYYYY@389ms | YYYYYY@313ms |
+| `org.breezyweather` | YYY... | YYY... |
+| `org.fdroid.basic` | YYY... | YYY... |
+| `org.fdroid.fdroid` | YYY... | YYY... |
+| `org.jellyfin.mobile` | YYYYYY@551ms | YYYYYY@571ms |
+| `org.kde.kdeconnect_tp` | YYYYYY@629ms | YYYYYY@627ms |
+| `org.quantumbadger.redreader` | YYY... | YYY... |
+| `org.secuso.privacyfriendlynotes` | YYYYY.@590ms | YYYYY.@586ms |
+| `org.supertuxkart.stk` | YYY... | YYY... |
+| `org.videolan.vlc` | YYY... | YYY... |
+| `org.wikipedia` | YYY... | YYY... |
+
+**Every changed app, explained (2 of 42; nothing moved down a rung):**
+
+1. **`net.cozic.joplin`** — `first_frame`+`tree`: main `.` → branch `Y`
+   (1650 ms). On `main` the launch dies with `JniException … RNCNetInfo` →
+   `IConnectivityManager code 42`; on this branch the JS bundle evaluates, the
+   framework callback path runs and the app publishes a frame. This is the wall
+   the track exists to remove (`§1`).
+2. **`com.nextcloud.client`** — `process_start`+`oncreate`: main `.` → branch
+   `Y`. Not a false pass and not a regression: **both arms still exit 1 without a
+   frame**, at different walls.
+   * main: `Unable to instantiate application com.owncloud.android.MainApp …:
+     java.lang.UnsupportedOperationException: unsupported Android API:
+     android.net.IConnectivityManager code 42 (requestNetwork)` — the *same*
+     code the Joplin wall used; nextcloud's `MainApp` registers a default network
+     callback while it is being instantiated.
+   * branch: `Unable to create application com.owncloud.android.MainApp:
+     java.lang.NullPointerException: Attempt to invoke interface method
+     'boolean android.database.Cursor.moveToFirst()' on a null object reference`
+     — a SQLite/cursor wall of its own, reached only because the connectivity
+     wall is gone. Next smallest action: track that `Cursor` wall (it is a
+     `android.database` surface, not connectivity).
+
+No app that reached a rung on `main` lost it on this branch, and no app's launch
+time moved outside noise (the largest shift among green apps is
+`net.mullvad.mullvadvpn` 1072→1126 ms, +5 %; the rest are within ±3 %). In
+particular no app that now sees a non-null `getActiveNetwork` blocks on a socket:
+the 26 apps that still stop at `onCreate` stop for the same non-connectivity
+reasons as on `main`.
+
+**Round 2** (`ROUND=2 BATCH=6 TIME=800 bash .cache/net1b/corpus.sh`) was started
+at 10:05 UTC and was still in flight when this window closed; its per-app data
+lands in `.cache/net1b/corpus/r2/` and `python3 .cache/net1b/rung.py --rounds 1,2
+--markdown` reproduces the table with the second round. Round 1 already shows the
+whole diff, so round 2 is the determinism check, not new information — and the
+nextcloud delta is the one that most needs it (a marker race in a crashing guest,
+not a rung change).
