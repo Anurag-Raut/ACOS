@@ -2013,6 +2013,20 @@ public final class LaunchMain {
     }
 
     static volatile boolean sActivityResumed;
+    /**
+     * S3a: why the last completed first traversal did not draw (null = it drew).
+     * Recorded in the `POST_RESUME_NOT_READY` failure so a no-frame relaunch
+     * names the skipped draw instead of only "timeout".
+     */
+    static volatile String sTraversalSkipReason;
+    /**
+     * S3a/S3PERF: what the readiness check actually saw, e.g.
+     * {@code traversed=true app_visible=false skip=traversal:view_not_visible}
+     * or {@code traversed=true source=onDraw skip=none}. Published in the
+     * `activity-resumed.marker` and the `ACOSLAUNCH MARK activity-resumed`
+     * line as evidence; it never gates readiness (main parity).
+     */
+    static volatile String sFirstTraversalEvidence;
     /** The framework printed `<<<<< Finished` for the BIND_APPLICATION message. */
     static volatile boolean sBindFinished;
     /** W38: the app's `IApplicationThread` interface object and its ActivityThread. */
@@ -2267,11 +2281,15 @@ public final class LaunchMain {
                         System.currentTimeMillis() + sResumeReadyMs, adeadline);
                 if (!awaitFirstTraversal(activity, readyDeadline)) {
                     System.out.println("ACOSLAUNCH MARK activity-not-ready"
-                            + " reason=first-traversal-timeout deadline_ms=" + sResumeReadyMs);
+                            + " reason=first-traversal-timeout deadline_ms=" + sResumeReadyMs
+                            + " draw_skip=" + (sTraversalSkipReason == null
+                                    ? "none" : sTraversalSkipReason));
                     System.out.println("ACOSLAUNCH {\"outcome\":\"crash\","
                             + "\"code\":\"POST_RESUME_NOT_READY\",\"activity_resumed\":true,"
                             + "\"reason\":\"first-traversal-timeout\",\"deadline_ms\":"
-                            + sResumeReadyMs + "}");
+                            + sResumeReadyMs + ",\"draw_skip\":\""
+                            + esc(sTraversalSkipReason == null ? "none" : sTraversalSkipReason)
+                            + "\"}");
                     System.out.flush();
                     write(new File(sOut, "activity-not-resumed.marker"),
                             "package=" + sPkg + "\nactivity=" + sActivity
@@ -2291,7 +2309,10 @@ public final class LaunchMain {
                 crashTestIfRequested(thread, activity);
                 System.out.println("ACOSLAUNCH MARK activity-resumed activity="
                         + activity.getClass().getName() + " window=" + get(activity, "mWindow")
-                        + " resume_ready=first-traversal");
+                        + " resume_ready=first-traversal"
+                        + " draw_skip=" + (sTraversalSkipReason == null
+                                ? "none" : sTraversalSkipReason)
+                        + " first_traversal=\"" + sFirstTraversalEvidence + "\"");
                 // W10 interactive session: instead of a one-shot hold + quit,
                 // keep the real main looper alive and publish a read-only view
                 // tree sample every ~50 ms. The host's line-JSON session reads
@@ -2355,13 +2376,21 @@ public final class LaunchMain {
      * {@code ActivityThread.handleResumeActivity}
      * ({@code base/core/java/android/app/ActivityThread.java:5268}), which is
      * where {@code performResumeActivity} (onResume), {@code addView} and
-     * {@code makeVisible} complete. The posted check then installs an
-     * {@code OnDrawListener} on the decor view; {@code ViewRootImpl.performDraw}
-     * dispatches it ({@code base/core/java/android/view/ViewRootImpl.java:5227})
-     * during the first {@code performTraversals} ({@code ...:3159}), which the
-     * {@code Choreographer} runs as its own main-thread callback. The listener
-     * signals through one more post, so readiness is announced only after that
-     * traversal callback (layout + draw + commit) has returned.
+     * {@code makeVisible} complete. The posted check reports ready as soon as
+     * a traversal exists, exactly as main does (S3PERF: waiting for the draw
+     * here costs one frame on every launch). When the traversal has not run
+     * yet, the check installs an {@code OnDrawListener} and
+     * {@code ViewRootImpl.performDraw} dispatches it
+     * ({@code base/core/java/android/view/ViewRootImpl.java:5227}) during the
+     * first {@code performTraversals} ({@code ...:3159}), which the
+     * {@code Choreographer} runs as its own main-thread callback.
+     *
+     * <p>A first traversal that skipped its draw is recorded as evidence
+     * ({@code draw_skip=}, {@code first_traversal=} in the marker and the
+     * {@code ACOSLAUNCH MARK activity-resumed} line), not treated as a failure:
+     * it is the normal pre-visibility traversal, and the host's oneway
+     * {@code dispatchAppVisibility(true)} makes the next frame draw. The
+     * launcher's no-frame loop bounds the genuinely-stuck case.
      *
      * <p>No timer stands in for the condition: the only time value is the hard
      * deadline. If it expires the caller publishes a structured
@@ -2388,7 +2417,26 @@ public final class LaunchMain {
                         // A window path that already traversed synchronously
                         // (not the normal Choreographer path) has no pending
                         // draw to observe; report the state we actually see.
+                        // This is main's readiness rule unchanged (S3PERF):
+                        // waiting for the draw here costs one frame on *every*
+                        // launch, because the normal first traversal runs
+                        // before the host's oneway `dispatchAppVisibility(true)`
+                        // and therefore skips its draw (AOSP sets `mFirst=false`
+                        // before the draw decision, ViewRootImpl:4015 vs
+                        // performDraw:4093). So a skipped traversal is
+                        // *evidence*, never a gate: its reason and the state
+                        // the check saw go into the marker / `ACOSLAUNCH` line,
+                        // and the launcher's no-frame loop turns "skipped and
+                        // still no C1 frame" into `POST_RESUME_NOT_READY`.
                         if (firstTraversalDone(decor)) {
+                            String skip = drawSkipReason(decor);
+                            sTraversalSkipReason = skip;
+                            sFirstTraversalEvidence = firstTraversalEvidence(decor, skip);
+                            System.out.println("ACOSLAUNCH MARK "
+                                    + (skip == null ? "first-traversal-drew"
+                                                    : "first-traversal-skipped " + skip)
+                                    + " " + sFirstTraversalEvidence);
+                            System.out.flush();
                             ready.set(true);
                             latch.countDown();
                             return;
@@ -2411,6 +2459,14 @@ public final class LaunchMain {
                                                     observer.removeOnDrawListener(self[0]);
                                                 } catch (Throwable ignored) {
                                                 }
+                                                // The first traversal ran after
+                                                // this check was posted and drew:
+                                                // record the evidence the marker
+                                                // publishes (no gate, no wait
+                                                // beyond main's own rule).
+                                                sTraversalSkipReason = null;
+                                                sFirstTraversalEvidence =
+                                                        "traversed=true source=onDraw skip=none";
                                                 ready.set(true);
                                                 latch.countDown();
                                             }
@@ -2431,6 +2487,51 @@ public final class LaunchMain {
             System.out.println("ACOSLAUNCH MARK first-traversal-error " + x);
             return false;
         }
+    }
+
+    /**
+     * S3a: why the last completed traversal did not draw, or {@code null} when
+     * it did. Reads only framework state that `performTraversals` itself
+     * maintains (`mLastPerformTraversalsSkipDrawReason`,
+     * `mLastPerformDrawSkippedReason`, `mLastDrawScreenOff`,
+     * `mLastTraversalWasVisible`); no timer and no fabricated result.
+     */
+    static String drawSkipReason(View decor) {
+        try {
+            Object root = Class.forName("android.view.View")
+                    .getMethod("getViewRootImpl").invoke(decor);
+            if (root == null) return "no_view_root";
+            Object traversalSkip = get(root, "mLastPerformTraversalsSkipDrawReason");
+            if (traversalSkip != null) return "traversal:" + traversalSkip;
+            Object drawSkip = get(root, "mLastPerformDrawSkippedReason");
+            if (drawSkip != null) return "draw:" + drawSkip;
+            if (Boolean.TRUE.equals(get(root, "mLastDrawScreenOff"))) return "draw:screen_off";
+            if (Boolean.FALSE.equals(get(root, "mLastTraversalWasVisible"))) {
+                return "traversal:not_visible";
+            }
+            return null;
+        } catch (Throwable x) {
+            return "probe_error:" + x;
+        }
+    }
+
+    /**
+     * S3a evidence: the framework state the readiness check saw. Read-only
+     * reflection over `ViewRootImpl`; never changes the traversal or waits.
+     */
+    static String firstTraversalEvidence(View decor, String skip) {
+        String appVisible = "?";
+        try {
+            Object root = Class.forName("android.view.View")
+                    .getMethod("getViewRootImpl").invoke(decor);
+            if (root != null) {
+                Object v = get(root, "mAppVisible");
+                if (v != null) appVisible = String.valueOf(v);
+            }
+        } catch (Throwable ignored) {
+        }
+        return "traversed=true app_visible=" + appVisible
+                + " skip=" + (skip == null ? "none" : skip);
     }
 
     /** Whether the decor's `ViewRootImpl` has already completed a traversal. */
@@ -2464,6 +2565,14 @@ public final class LaunchMain {
                 + "\nstopped=" + get(activity, "mStopped")
                 + "\nwindow=" + get(activity, "mWindow")
                 + "\ntimeout_ms=" + sResumeMs
+                // S3PERF: the skipped-draw evidence is published here (and in
+                // the `activity-resumed` MARK line). It is diagnostic only: the
+                // ready path is main's, and the launcher's no-frame loop reads
+                // `draw_skip=` to bound a skip that never draws.
+                + "\nfirst_traversal=" + (sFirstTraversalEvidence == null
+                        ? "unknown" : sFirstTraversalEvidence)
+                + "\ndraw_skip=" + (sTraversalSkipReason == null
+                        ? "none" : sTraversalSkipReason)
                 + (note == null ? "" : "\n" + note) + "\n";
         write(new File(sOut, "activity-resumed.marker"), am);
         return am;

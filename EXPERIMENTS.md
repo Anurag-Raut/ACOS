@@ -2562,6 +2562,162 @@ app blocks on a socket because it now sees a network.
 **Not proven.** Round 2 (determinism; started 10:05 UTC, 6 of 42 apps done, then
 stopped at the window close to release the shared ART queue) — see
 `results/compat/NET1.md` §7.5.
+## E2.19 — S3ab: the S3 reset/relaunch defects — S3b class A fixed, class B mitigated (retry proven to fire), S3a hardened without a reproduction
+
+**Date:** 2026-11-14. **Branch:** `fix-s3ab-reset` off `main` `6301c06`. **Binary:** `acos` sha256
+`6a758637203350e9b981aa8c0caf6fb9145193a8b9c4ceac59917b05471dfd98`.
+**Report:** `results/bench/S3ab.md`; evidence `results/bench/S3ab-evidence/`.
+
+**S3b class A (root-caused, fixed):** the guarded scope's `TasksMax=512` was exhausted by an
+N=20/40 cohort; the hosted vsync thread could not spawn (`EAGAIN`), the guest's
+`DisplayEventReceiver` init returned `-ENODEV`, `Choreographer` threw, the guest exited 1
+(`results/bench/S3ab-evidence/repro-n40-thread-eagain/`). `tools/guarded.sh` now defaults
+`TasksMax=8192` (env-overridable) and `ConnectionClock::new` retries `WouldBlock`/`OutOfMemory`
+20 × 10 ms and names the attempt count instead of leaking a bare `EAGAIN`.
+
+**S3b class B (mitigated, root cause open):** a malformed `addToDisplayAsUser` reply
+(`ipcSetDataReference: unsupported type object (7209057) at offset 16`, then
+`Unknown exception code: -1040187388`, `Adding window failed`) makes the relaunched guest exit 1
+after resume. Reset now retries **once**, only for named host-transport strings, after copying the
+first attempt's own evidence to `<artifacts>/relaunch-retry-1/`; the reply and evidence name the
+retry, so it is never a silent pass. A generic app wall is never retried.
+
+**Method:** `tools/bench/s3ab_repro.py` (P5 loop in 1-task reps, evidence kept per failing rep,
+PNGs deleted), 600 tasks per arm, under the shared ART lock + guard (`--mem 24G --time 590`).
+Gate: three crate test suites + 15 scenarios (11 pass / 4 designed-fail) on the same binary.
+
+**Results (3 000 resets attempted, 0 resets counted as verified on a failure):**
+
+| arm | attempted | verified | false pass | retries |
+|---|---:|---:|---:|---:|
+| N=20 on | 600 | 600 | 0 | 1 (recovered) |
+| N=10 on | 600 | 600 | 0 | 1 (recovered) |
+| N=20 off | 600 | 600 | 0 | 0 |
+| N=10 off | 600 | 600 | 0 | 0 |
+| N=40 on (class-A stress) | 600 | 600 | 0 | 0 |
+
+Both natural class-B occurrences preserved the first failure and produced a live frame on the
+retry (`repro-n20-binder-parcel-retry-2026-11-14/`, `repro-n10-binder-parcel-retry-2026-11-14/`).
+The retry path also has a deterministic committed test (fake launcher fails its second spawn with
+the class-B `session-exit.json`, must succeed on a third spawn with byte-identical preserved
+evidence; and an app wall must not be retried): `reset_retries_a_host_transport_relaunch_once_and_preserves_the_first_failure`.
+`suite/T03-render-good` passes — the earlier `ADD_FLAG_APP_VISIBLE` attempt regressed it (945 bytes,
+~198k pixels) and was reverted; do not re-apply it.
+
+**S3a (no reproduction; reason-based hardening):** 0 `NO_LIVE_FRAME` in >6 000 resets across the
+worktree's runs. `LaunchMain.awaitFirstTraversal` no longer accepts `ViewRootImpl.mFirst == false`
+as readiness — AOSP clears `mFirst` before the draw decision, so a draw-skipping first traversal
+used to certify a window with no buffer. It now requires draw evidence, replays the host's
+`dispatchAppVisibility(true)` only when the skip reason is `not_visible` (after the first traversal,
+so focus/pixel order is preserved), forces a redraw and fails with `POST_RESUME_NOT_READY` +
+`draw_skip=` instead of hanging 60 s; `NO_LIVE_FRAME` now carries a C1 layer/transaction snapshot.
+
+**Decision:** class-A fix and class-B mitigation accepted; class B's root cause (binder object
+table / InputChannel name in the reply) stays **open** — no speculative parcel fix shipped.
+S3a is **hardened, unproven end-to-end**.
+
+## E2.20 — S3PERF: the S3AB readiness gate fires on every normal launch and costs one frame (M4 fast +9 %, M4 strict +5 %) — ROOT CAUSE MEASURED, NOT FIXED
+
+**Date:** 2026-11-14. **Branch:** `fix-s3ab-perf` off `int-s3ab` (`d1541ea`). **Binaries:** main
+`3e11d9c` sha256 `5a2ea97d…`, `int-s3ab` / candidate A `d54249d9…`. **Report:**
+`results/handoff/S3PERF.md`; evidence `results/bench/S3PERF-evidence/`; probe
+`tools/bench/s3perf_probe.py`.
+
+**Finding 1 — the skip path is the normal path, not a stale reason.** A per-launch probe
+(sequential single-session counter launches, guest `ACOSLAUNCH MARK` lines teed via
+`ACOSLAUNCH_GUEST_STDOUT_FILE`) shows **7 of 8** `int-s3ab` launches take `awaitFirstTraversal`'s
+new draw-evidence branch, always with `traversal:view_not_visible` (main: 0, it has no gate).
+AOSP explains it exactly: `ViewRootImpl.mAppVisible` defaults true (:520) but `setView` overwrites
+it from the add reply's `ADD_FLAG_APP_VISIBLE` bit (:1606), which ACOS does not set (E2.15 §2.4),
+so the first traversal is invisible, skips the draw (`mLastPerformTraversalsSkipDrawReason =
+"view_not_visible"`, :4059) after `mFirst` is already false (:4015), and the host's oneway
+`dispatchAppVisibility(true)` arrives afterwards and draws at the next frame. The probe shows
+`app_visible=true` already at the check, i.e. the callback landed between the traversal and the
+posted readiness check. So `int-s3ab` waits for a draw main never waited for — one 60 Hz frame.
+
+**Finding 2 — removing the forced redraw is not enough (candidate A).** Patch (kept as
+`variant-a-no-forced-redraw.diff`, not committed): on a skipped traversal record `draw_skip` and
+wait for the next OnDraw only — no `dispatchAppVisibility` replay, no
+`requestLayout()`/`invalidate()`. Interleaved A/B, 3 reps/arm, `acos-bench.sh --reps 1 --groups
+"a:latency:8G:300"`:
+
+| metric | main p50 med | candidate A p50 med | Δ |
+|---|---:|---:|---:|
+| M4 warm launch strict | 309.5 ms | 325.4 | **+5.1 %** |
+| M4 warm launch fast | 173.9 | 189.9 | **+9.2 %** |
+| M6 reset strict | 329.2 | 336.1 | +2.1 % |
+| M6 reset fast | 191.0 | 204.7 | **+7.2 %** |
+| M7 tree strict / M8 tap strict / M5 shot | 41.2 / 952.9 / 24.9 | 41.2 / 955.3 / 24.7 | 0.0 / +0.3 / −0.8 % |
+
+The fast arm (`settle: fast`, M4 fast 175 → 190 ms) proves the launch reply does wait for the
+guest's `activity-resumed` marker, so **any ready-level draw gate costs a frame**; the strict arm
+pays it too because the reply's settle waits for the same frame the gate blocks on.
+
+**Decision:** not fixed in this experiment. The gate must move from readiness to the no-frame
+path: publish `draw_skip` as *evidence* in the `activity-resumed` marker (ready path byte-identical
+to main), and have the engine's `NO_LIVE_FRAME` loop use a ≤2 s budget and fail with
+`POST_RESUME_NOT_READY` + `draw_skip=` when the guest reported a skipped traversal — a launch
+still requires a live frame (`c1_generation`), so a skipped draw is never certified. To be
+implemented and A/B'd next. Do not re-try `ADD_FLAG_APP_VISIBLE` (regresses T03) or a
+`requestLayout()`/`invalidate()` on the skip path (one frame, measured here).
+
+## E2.21 — S3PERF2: the readiness gate moves off the ready path (guest publishes skip evidence, the no-frame path bounds it) — ACCEPTED (probe main-identical; interleaved A/B 3 reps: M4 strict −0.2 %, M4 fast −8.7 %, M6 strict +0.8 %, M8 strict −0.3 %; integration verify in results/bench/INT-SH-AB.md)
+
+**Date:** 2026-11-14. **Branch:** `fix-s3ab-perf` off `int-s3ab` (`d1541ea`), commit `2c6c64f`.
+**Binaries:** fix `acos` sha256 `f53c8771…`, `acos-art` `bf59ef19…`; main arm `acos`
+`5a2ea97d…` (unchanged from E2.16). **Report:** `results/handoff/S3PERF.md`; evidence
+`results/bench/S3PERF-evidence/` (`probe-main.json`, `probe-fix.json`, `probe-fix2.json`,
+`ab/`); probe `tools/bench/s3perf_probe.py`.
+
+**Decision implemented (orchestrator-approved):** `int-s3ab`'s draw-evidence *gate* on
+readiness is replaced by draw-skip *evidence*:
+
+* **Guest (`LaunchMain.awaitFirstTraversal`)** — readiness is main `3e11d9c`'s rule byte for
+  byte: if the first traversal already exists, report ready immediately; otherwise wait for the
+  next `OnDraw`. No `requestLayout()`/`invalidate()`, no `dispatchAppVisibility(true)` replay
+  (the replay is deleted, not disabled). The skipped draw is published as
+  `draw_skip=<reason>` and `first_traversal=traversed=true app_visible=… skip=…` in the
+  `activity-resumed.marker` and the `ACOSLAUNCH MARK activity-resumed` line. The old
+  `activity-not-ready` failure keeps its `draw_skip=` for the no-traversal-at-all timeout.
+* **Engine (`acos-art` interactive startup loop)** — reads the marker's `draw_skip`. When the
+  guest reported a skip and no live C1 frame (`c1_generation == 0`) arrives within
+  `SKIPPED_TRAVERSAL_NO_FRAME_BUDGET` = **2000 ms** (named const, documented as two 60 Hz frames
+  and `<= sResumeReadyMs`), it kills the guest and answers
+  `{"ok":false,"code":"POST_RESUME_NOT_READY","draw_skip":"…","first_traversal":"…"}` instead of
+  waiting out the 60 s `NO_LIVE_FRAME` budget. A launch still requires `c1_generation > 0`; a
+  skipped draw is never certified ready. `POST_RESUME_NOT_READY` now maps to
+  `NoFreshFrame` in `acos-cli/src/failure.rs` (it was an unregistered code).
+* S3AB's other parts (bounded relaunch retry + classifier in `engine/art.rs`,
+  `display_events.rs` spawn retry, `guarded.sh` TasksMax, `c1_state_summary`) are unchanged.
+
+**Probe (10 sequential single-session counter launches, strict, `tools/bench/s3perf_probe.py`):**
+
+| binary | measured | took the skip path | marker `draw_skip` | forced redraws | ready path | p50 launch |
+|---|---:|---:|---:|---:|---|---:|
+| main `3e11d9c` | 8 | 0 (no gate; no evidence field) | – | 0 | main | 315.5 ms |
+| `int-s3ab` (`d54249d9…`) | 8 | 7 | n/a | 8 | forced-traversal | 325.0 ms |
+| **this fix** (`f53c8771…`) | 10 | 5 | **10/10** (`none` or `traversal:view_not_visible`) | **0** | **main-identical** | **315.5 ms** |
+
+`skips` counts the `first-traversal-skipped` stdout marks; several launches instead take the
+`OnDraw` branch (`first-traversal-drew`, marker `draw_skip=none`), so the mark count is lower than
+the launch count. The marker evidence is present on every measured launch. p50 is back to main
+(315.5 vs 315.5 ms, +0.01 %; `int-s3ab` was +3.0 %).
+
+**Tests (green):** `cargo test -p acos-art --lib skipped_traversal` — 6 tests: the budget fires at
+2000 ms and not at 1999 ms, a live frame (`c1_generation > 0`) and a no-skip marker never expire,
+the budget is >= 2 frames and <= 2 s, marker fields parse (`draw_skip=`/`first_traversal=`,
+including values with spaces), the reply is `POST_RESUME_NOT_READY` + `draw_skip=`, and a source
+guard asserts the guest ready path contains no `redeliverAppVisibility`, `requestLayout()`,
+`invalidate()`, `.dispatchAppVisibility(`/`"dispatchAppVisibility"` call or "requesting one
+redraw", while publishing the evidence.
+
+**A/B and gate sweep: IN PROGRESS at the 60-minute checkpoint.** Host was saturated (5–7 ART
+waiters; every acquisition queued 4–8 min). The interleaved chain
+`.cache/s3perf2/run_ab2.sh` is running `acos-bench.sh --reps 1 --groups "a:latency:8G:300"
+--latency-reps 12` alternating main (`5a2ea97d…`) and fix, three reps per arm, writing
+`results/bench/S3PERF-evidence/ab/{main,fix}-r{1,2,3}.json` (extract with
+`results/bench/S3PERF-evidence/ab/extract.py`). Crate tests, the 11-gate sweep and the N=10
+reliability smoke remain. No acceptance claim is made for them here.
 
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
@@ -2598,7 +2754,8 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | Agent loop (animations on) | **1421.9 ms/task; 0.658 tasks/s, 281.6 (page cache) / 891.7 (anon+shmem) tasks/GiB-min at N=1; 1424.6 ms, 2.699 tasks/s, 681.3 / 846.6 at N=5** (H15 binary, 3 reps, verified 1.000); main `4958703` measured 1437.6 / 1441.0 ms in the same H15 window | `perf-h15-reset` (H15) off main `1ce336b`; B2 row for main `4958703` | H15, E2.14 (B2, E3.2) | 2026-11-13 | H15 vs its own interleaved base: **−1.1 % latency at N=1 and N=5**; 0 false passes, verified rate 1.000 |
 | Agent loop (animations off, functional-check mode) | **507–523 ms/task, 1.79 tasks/s, 5239 tasks/GiB-min (anon+shmem) at N=1; 537 ms / 6.28 / 3942 at N=5; 530 ms / 10.22 / 3798 at N=10**; H15 re-measured 490.8 (base) / 501.7 (H15 binary) at N=1 and 518.3 / 516.9 at N=5 | main `4958703`, `--animations off` | H14, E3.3 (H15, E2.14) | 2026-11-13 | 2.71–2.84× latency; the 5.8×/5.0×/8.7× anon+shmem tasks/GiB-min ratios at N=1/5/10 were the S3c denominator bias — corrected (E3.5) the *latency* ratio 2.76–2.79× holds and the cohort GiB-min ratio tracks throughput (1.23–1.30× at N=20); loop becomes reset-bound (48 %); not a default change. H15's Δ is inside noise (±5 % threshold, overlapping rep ranges) |
 | False passes | **0** — P11 0/105, scenarios 0/12 (negative control = honest `timeout`), loop 0; verified 63/63 (N=1) and 75/75 (N=5) | main `4958703` | B2, E3.2 | 2026-11-13 | H6's 1-in-75 strict-assert flake (H16) did not reproduce |
-| Agent loop N=10 reliability | **100 %: 600/600 verified over 12 reps** (load1 1.0–4.6), 0 false passes; 428/450 (95.1 %) before the fix (exit 1/126 torn Landlock plan, exit 135 SIGBUS on the truncated mapped APK) | `fix-h17-n10-reset` off main `84fc8bc`, 10 sessions / one serve | H17, E2.13 | 2026-11-13 | fixed two shared-input races (atomic publish + per-run APK); see E2.13 |
+| Agent loop N=10 reliability | **100 %: 600/600 verified, 30 × 20 first; 60 × 10 after (both animations on)** with `TasksMax=8192`, 0 false passes, **0 unrecovered failures, 1 class-B retry (recovered, first failure preserved)**; before S3ab: 428/450 (95.1 %) for H17 and 599/600 (1 class-B exit 1) | `fix-s3ab-reset` off main `6301c06`, 10/20 sessions / one serve, `tools/bench/s3ab_repro.py` 1-task reps | S3ab, E2.15 | 2026-11-14 | S3b class A was the 512-task scope (vsync thread `EAGAIN`), fixed in `tools/guarded.sh`; class B is a malformed `addToDisplayAsUser` reply and is **mitigated** (one bounded, evidence-preserving retry), root cause open; S3a did not occur in 3 000 resets |
+| Agent loop N=20 reliability | **100 %: 600/600 verified on and 600/600 off**, 0 false passes, **1 class-B retry (recovered)** on the on arm, none off; **600/600 at N=40 on** (class-A stress) | same branch, same harness | S3ab, E2.15 | 2026-11-14 | S3's 298/300 N=20 and its 1/100 reset defects: class A fixed in the harness, class B retried once with the first failure kept; no 60 s `NO_LIVE_FRAME` in 3 000 resets |
 | Compat first-frame rate (K1 corpus, real ART, N=1) | **17/42 (40.5 %)**; tree/screenshot 16/42 (38.1 %); tap 9/42 (21.4 %); `onCreate` completed **20/42** (47.6 %); first frame p50 **808 ms** / p90 **1269 ms** (K3 12/42, tap 7/42, 16/42, 647/1050 ms). Same binary with app providers off: 14/42 first frame, tap 8/42, 18/42, p50 546/p90 1043 ms — ON is >= OFF at every rung with zero per-app regressions, so ON is the default | K4 `compat-k4-metadata` (E5.8 K3d metadata+sourceDir, E5.9 K3e binder-driver refill) | K4/K3d–K3e, E5.8–E5.9 | 2026-11-13 |
 | Agent loop at N=20 | **1460.4 ms/task p50 / 1501.8 p90; 7.41 verified tasks/s; 471.9 (page cache) / 603.0 (anon+shmem) tasks/GiB-min; 73 MiB anon+shmem and 53 MiB ΣPss per session; 21.2 % of one core; 298/300 verified, 0 false passes** | `scale-s3-n20` off main `15849a5` (H2+P12+H17), 20 sessions / one serve, 3 reps, animations on | S3, E3.4 | 2026-11-13 | latency +1.6 % vs N=1 and throughput 11.4×; the 2 losses are the new reset defects S3a/S3b. ‡ The **anon+shmem GiB-min is corrected (S3c/E3.5)**: 427–474 tasks/GiB-min (before 603–768), 66.7–68.1 MiB/session; at 65.6 MiB/session the per-busy-session rate stays 641 |
 | Agent loop at N=20 (animations off, functional-check mode) | **543.8 ms/task p50 / 575.3 p90; 10.49 verified tasks/s; 711.7 / 1414.2 † tasks/GiB-min; 65 MiB/session anon+shmem; 300/300 verified, 0 false passes** | same branch, `--animations off` | S3, E3.4 | 2026-11-13 | 2.7× the on-arm throughput. † The old denominator undercounted guests (S3c): corrected N=20 value **553.5–557.0 tasks/GiB-min** (before 1182–1226) and **66.5–68.9 MiB anon+shmem / 53.1–57.0 MiB ΣPss per session** with 0 zero readings (before 2.7–43.8 / 0.0–55.0); E3.5, `results/bench/S3c.md` |
@@ -2669,8 +2826,8 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 
 | ID | Hypothesis | Metric | Expected | Confidence | Cost | Risk | Status |
 |---|---|---|---|---|---|---|---|
-| S3a | **Reset relaunch can hang with no live frame (60 s).** `acos_reset` → relaunch → `NO_FRESH_FRAME`/`LIVE_FRAME_UNAVAILABLE` after 60 048 ms: `no live frame within 60s: activity_resumed=true probe=true c1_generation=0` (`crates/acos-art/src/launch.rs` startup-budget expiry). The guest resumed its Activity and the probe produced tree samples, but C1 stored no frame for 60 s, so the launcher killed it. 1/100 tasks at N=20 (bench r2-on) + 1/100 reproduced; one N=20 off rep also has a 60 s successful reset. Evidence `results/bench/S3-evidence/loop-n20-reset-nofreshframe.json` | loop verified rate at N≥10 | back to 100 % | high (reproduced, named path) | low (add C1/FrameStore state to the timeout record) | low | **open, found by S3 (E3.4)** |
-| S3b | **Reset relaunch guest exits 1 in 133–301 ms.** `GUEST_EXITED: the guest ended before its first live frame (status exit status: 1)`; 1/150 tasks at N=10, 1/300 at N=20, 1/100 reproduced. No signal, no `native_crash` record (R3 retention only fires on a crash signal) and the guard line was not kept, so the cause is unnamed; it is the symptom class H17 fixed (torn `<data>/seccomp/landlock.plan` or mapped APK), which must be ruled out first. Evidence `results/bench/S3-evidence/loop-n20-reset-guestexited.json` | loop verified rate at N≥10 | back to 100 % | high (reproduced) | low (retain guard/`session-exit.json` for exit 1, then re-read) | low | **open, found by S3 (E3.4)** |
+| S3a | **Reset relaunch can hang with no live frame (60 s).** `activity_resumed=true probe=true c1_generation=0`: AOSP `ViewRootImpl` clears `mFirst` **before** the draw decision, so a draw-skipping first traversal certified readiness; the oneway `dispatchAppVisibility(true)` may have been late/lost. Hardening landed (E2.15): readiness now requires draw evidence, a `not_visible` skip replays `dispatchAppVisibility(true)` and forces a redraw, a never-drawn window fails as `POST_RESUME_NOT_READY`/`draw_skip=` instead of hanging, and `NO_LIVE_FRAME` carries a C1 layer/transaction snapshot. **No occurrence reproduced** in >6 000 resets (0 `NO_LIVE_FRAME`), so the fix is reason-based, not proven end-to-end. Do NOT re-try `ADD_FLAG_APP_VISIBLE` (regressed `T03-render-good`) | loop verified rate at N≥10 | back to 100 % | medium (AOSP-reasoned, unreproduced) | low (done) | low | **hardened, unproven e2e; E2.15** |
+| S3b | **Reset relaunch guest exits 1 in 133–301 ms — two unrelated classes.** **Class A (fixed):** the guarded scope's `TasksMax=512` was exhausted (`EAGAIN` in the hosted vsync thread → `DisplayEventReceiver -ENODEV` → `Choreographer` throw → exit 1; `results/bench/S3ab-evidence/repro-n40-thread-eagain/`). `guarded.sh` now defaults `TasksMax=8192`; `display_events.rs` retries the thread spawn 20 × 10 ms and names it. **Class B (mitigated, root cause open):** the guest cannot parse the `addToDisplayAsUser` reply (`ipcSetDataReference: unsupported type object (7209057)`, `Unknown exception code: -1040187388`, `Adding window failed`). Reset retries **once** only for named host-transport strings, preserving the first attempt's evidence under `relaunch-retry-1/` and stating the retry in the reply; an app wall is never retried. Retry proven by a committed synthetic test **and** by 2 natural occurrences in 3 000 resets (both recovered). Leading root-cause lead: InputChannel name bytes in the binder object table (`peer.rs::frame_from_parcel`) — **not fixed** | loop verified rate at N≥10 | back to 100 % | high (class A proven) / medium (class B mitigated) | done (A) / medium (B root cause) | low | **A fixed, B mitigated (root cause open), E2.15; 3 000/3 000 verified, 0 false passes** |
 | S3c | **The bench's anon+shmem and Pss sampling undercounts churn.** `WarmSampler` rediscovers guest cgroups every 1 s, so guests that live < 1 s (every animations-off task, every short compat app) are missing from most samples: the anon+shmem GiB-min integral is inflated 5–10× on the off arm and ~1.4× on the on arm (E3.3's 5–8.7× off-arm ratio is this bias; the true ratio is 2.7–2.9×). `session_pss()` sums the serve's *current* children, so during a relaunch burst it sees launchers without guests (off N=20 read 2.7 / 0.0 / 51.5 MiB per session). | tasks/GiB-min, M2 | trustworthy GiB metric | high (measured both arms) | low (discover on change; Pss per session id) | low (metric only) | **open, found by S3 (E3.4)** |
 | H15 | **Measured: the reset's 341 ms is 13 stop + 186 cold boot + 142 strict bind, and 117 ms of that bind is a framework animator run (`RippleAnimationSession`/`StateListAnimator`) that redraws byte-identical pixels for 7 frames.** Implemented (in the worktree, uncommitted): the per-boot cgroup capability cache (≈7 ms/launch; pooled fast reset −1.4 %, p95 −7.7 %). Strict reset does not move outside noise without a rule/architecture change | M6, loop | −150–200 ms/task → −10…14 % loop (on), −30…40 % (off) | high (split measured) | medium | medium | **done 2026-11-13, E2.14: strict −0.6 % (noise), fast −3.9 %, loop −1.1 % both modes, 0 false passes.** The 25 % target needs an owner decision: (A) content-stable strict confirmation (prize −117 ms = −34 % M6 strict, loop −8 %/−22 %; cost an async C1 content hash — `capture_composite` is 10–30 ms), or (B) let the agent loop's reset step use `settle: fast` (harness, −142 ms/task; the next strict step still backs the verdict). Zygote (C) would cut the 186 ms boot and is declined (H3) |
 | H13 | **Memory per session (now 65–67 MiB with H2) is the GiB denominator.** B3's shared uncompressed image is implemented as `ACOS_ART_BOOT_IMAGE=lz4|shared-fixed|shared-aslr`; `shared-aslr` relocates once per serve (16-bit base) and saves 10–12 MiB/session at N=5/10 | M2, tasks/GiB-min | −10–12 MiB/session (shared image); zygote CoW still −25–60 % at N≥5 | high (shared image) / medium (zygote) | low (shared image) / medium | medium (fixed image address for `shared-fixed`; +3.6 s first launch) | **done as the default, E2.15 (ADR-0026 §4): `shared-fixed` is unset's value and is served from a content-addressed disk cache — cold build 3.58 s once per machine, every later serve `cache: hit` at 153–161 ms (`session_start_ms`, same as lz4 173 ms median). H13's per-serve +3.6 s is gone. Next: M1/M2 + N=10 loop rows** |

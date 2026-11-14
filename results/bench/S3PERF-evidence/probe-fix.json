@@ -1,0 +1,136 @@
+{
+  "acos": "/home/Qui/.paseo/worktrees/3oxa6xao/gr4/.cache/gr4-target/release/acos",
+  "mode": "strict",
+  "n": 8,
+  "rows": [
+    {
+      "i": 0,
+      "ok": true,
+      "wall_ms": 1814.164981000431,
+      "code": null,
+      "settle_ms": null,
+      "marks": [
+        "first-traversal-skipped traversal:view_not_visible; requesting one redraw",
+        "visibility-redelivered"
+      ],
+      "skip": [
+        "first-traversal-skipped traversal:view_not_visible; requesting one redraw"
+      ]
+    },
+    {
+      "i": 1,
+      "ok": true,
+      "wall_ms": 315.3381669999362,
+      "code": null,
+      "settle_ms": null,
+      "marks": [
+        "first-traversal-skipped traversal:view_not_visible; requesting one redraw",
+        "visibility-redelivered"
+      ],
+      "skip": [
+        "first-traversal-skipped traversal:view_not_visible; requesting one redraw"
+      ]
+    },
+    {
+      "i": 2,
+      "ok": true,
+      "wall_ms": 317.4379369993403,
+      "code": null,
+      "settle_ms": null,
+      "marks": [],
+      "skip": []
+    },
+    {
+      "i": 3,
+      "ok": true,
+      "wall_ms": 332.7469079995353,
+      "code": null,
+      "settle_ms": null,
+      "marks": [
+        "first-traversal-skipped traversal:view_not_visible; requesting one redraw",
+        "visibility-redelivered"
+      ],
+      "skip": [
+        "first-traversal-skipped traversal:view_not_visible; requesting one redraw"
+      ]
+    },
+    {
+      "i": 4,
+      "ok": true,
+      "wall_ms": 317.48267999864765,
+      "code": null,
+      "settle_ms": null,
+      "marks": [
+        "first-traversal-skipped traversal:view_not_visible; requesting one redraw",
+        "visibility-redelivered"
+      ],
+      "skip": [
+        "first-traversal-skipped traversal:view_not_visible; requesting one redraw"
+      ]
+    },
+    {
+      "i": 5,
+      "ok": true,
+      "wall_ms": 316.12746200153197,
+      "code": null,
+      "settle_ms": null,
+      "marks": [
+        "first-traversal-skipped traversal:view_not_visible; requesting one redraw",
+        "visibility-redelivered"
+      ],
+      "skip": [
+        "first-traversal-skipped traversal:view_not_visible; requesting one redraw"
+      ]
+    },
+    {
+      "i": 6,
+      "ok": true,
+      "wall_ms": 334.0440749998379,
+      "code": null,
+      "settle_ms": null,
+      "marks": [
+        "first-traversal-skipped traversal:view_not_visible; requesting one redraw",
+        "visibility-redelivered"
+      ],
+      "skip": [
+        "first-traversal-skipped traversal:view_not_visible; requesting one redraw"
+      ]
+    },
+    {
+      "i": 7,
+      "ok": true,
+      "wall_ms": 332.4708210002427,
+      "code": null,
+      "settle_ms": null,
+      "marks": [
+        "first-traversal-skipped traversal:view_not_visible; requesting one redraw",
+        "visibility-redelivered"
+      ],
+      "skip": [
+        "first-traversal-skipped traversal:view_not_visible; requesting one redraw"
+      ]
+    },
+    {
+      "i": 8,
+      "ok": true,
+      "wall_ms": 333.987336998689,
+      "code": null,
+      "settle_ms": null,
+      "marks": [
+        "first-traversal-skipped traversal:view_not_visible; requesting one redraw",
+        "visibility-redelivered"
+      ],
+      "skip": [
+        "first-traversal-skipped traversal:view_not_visible; requesting one redraw"
+      ]
+    }
+  ],
+  "measured": 8,
+  "skips": 7,
+  "skip_reasons": [
+    "first-traversal-skipped traversal:view_not_visible; requesting one redraw"
+  ],
+  "p50_ms": 324.9767504994452,
+  "min_ms": 315.3381669999362,
+  "max_ms": 334.0440749998379
+}
