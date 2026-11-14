@@ -143,20 +143,25 @@ public final class KeystoreProbe {
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .build());
         SecretKey key = kg.generateKey();
-        check("create.key", key != null && ks.containsAlias("k_a"),
-                "alias=k_a size=" + key.getEncoded().length * 8);
+        // The key is opaque (AOSP AndroidKeyStoreKey): no bytes leave the store.
+        check("create.key", key != null && ks.containsAlias("k_a")
+                        && key.getEncoded() == null && key.getFormat() == null,
+                "alias=k_a opaque=" + (key.getEncoded() == null));
 
         File files = dataDir;
         File dir = new File(files, "keystore-probe");
         mkdirs(dir);
         File priv = new File(dir, "private-a.txt");
-        writePrivate(priv, "A-SECRET-" + Base64.encodeToString(key.getEncoded(), Base64.NO_WRAP));
+        writePrivate(priv, "A-SECRET-k_a-" + key.getAlgorithm());
         check("create.private_file", priv.isFile() && priv.length() > 0, priv.getPath());
         // The paths a peer session could plausibly name.
         check("create.paths",
                 true,
                 priv.getPath() + "|" + new File(new File(dataDir.getParentFile(),
                         "acos-keystore"), "entries.properties").getPath());
+        // Stay alive so the driver can snapshot this session's app-data and run
+        // session B *concurrently* (the cross-session test needs a live A).
+        Thread.sleep(30_000L);
     }
 
     /** Session B: every reach for A's material must fail; controls must work. */
@@ -361,42 +366,94 @@ public final class KeystoreProbe {
             Cipher enc = Cipher.getInstance("AES/CBC/PKCS7Padding");
             enc.init(Cipher.ENCRYPT_MODE, encryptOnly);
             encryptOk = enc.doFinal("acos".getBytes("UTF-8")).length > 0;
-            encryptWhy = "encrypt ok iv=" + enc.getIV().length;
+            encryptWhy = "encrypt ok iv=" + enc.getIV().length
+                    + " provider=" + providerName(enc);
         } catch (Throwable t) {
             encryptOk = false;
             encryptWhy = "encrypt refused: " + t;
         }
         check("fidelity.purpose.encrypt_only_allows_encrypt", encryptOk, encryptWhy);
+        // AOSP shape (KeyStoreCryptoOperationUtils.getInvalidKeyException):
+        // InvalidKeyException("Keystore operation failed", KeyStoreException
+        // (KM_ERROR_INCOMPATIBLE_PURPOSE=-3)). The key is opaque, so no other
+        // provider can init with it: the refusal is not retried away.
+        Cipher dec = null;
         boolean decryptRefused;
         String decryptWhy;
         try {
-            Cipher dec = Cipher.getInstance("AES/CBC/PKCS7Padding");
+            dec = Cipher.getInstance("AES/CBC/PKCS7Padding");
             dec.init(Cipher.DECRYPT_MODE, encryptOnly, new IvParameterSpec(new byte[16]));
             decryptRefused = false;
-            decryptWhy = "DECRYPT succeeded for an encrypt-only key";
+            decryptWhy = "DECRYPT succeeded for an encrypt-only key, provider="
+                    + providerName(dec);
         } catch (Throwable e) {
-            String message = String.valueOf(e.getMessage());
-            decryptRefused = message.startsWith("INCOMPATIBLE_PURPOSE:")
-                    && message.contains("PURPOSE_DECRYPT");
-            decryptWhy = message;
+            decryptRefused = isRefusal(e, -3);
+            decryptWhy = describe(e);
         }
         check("fidelity.purpose.encrypt_only_refuses_decrypt", decryptRefused, decryptWhy);
+        String decProvider = providerName(dec);
+        check("fidelity.refusal.no_foreign_provider",
+                decProvider.equals("none") || decProvider.contains("AndroidKeyStore"),
+                "Cipher.getProvider()=" + decProvider + " (" + decryptWhy + ")");
+        // Control: this measurement DOES see a provider when one performs the
+        // operation, so "none" above is a real absence, not a blind spot.
+        boolean controlForeign;
+        String controlWhy;
+        try {
+            Cipher plain = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            plain.init(Cipher.ENCRYPT_MODE, new javax.crypto.spec.SecretKeySpec(
+                    new byte[16], "AES"));
+            controlForeign = plain.getProvider() != null
+                    && !plain.getProvider().getName().contains("AndroidKeyStore");
+            controlWhy = "plain SecretKeySpec performed by " + providerName(plain);
+        } catch (Throwable t) {
+            controlForeign = false;
+            controlWhy = "control failed: " + t;
+        }
+        check("fidelity.refusal.control_foreign_provider_visible", controlForeign, controlWhy);
+        // The same refusal must be stable: nothing cached a working provider.
+        boolean decryptRefusedAgain;
+        String againWhy;
+        try {
+            Cipher again = Cipher.getInstance("AES/CBC/PKCS7Padding");
+            again.init(Cipher.DECRYPT_MODE, encryptOnly, new IvParameterSpec(new byte[16]));
+            decryptRefusedAgain = false;
+            againWhy = "second attempt DECRYPTED";
+        } catch (Throwable e) {
+            decryptRefusedAgain = isRefusal(e, -3);
+            againWhy = describe(e);
+        }
+        check("fidelity.refusal.stable", decryptRefusedAgain, againWhy);
+        // The key interface carries no material (AOSP's AndroidKeyStoreKey).
+        check("fidelity.opaque.secret",
+                encryptOnly.getEncoded() == null && encryptOnly.getFormat() == null,
+                "class=" + encryptOnly.getClass().getName()
+                        + " encoded=" + (encryptOnly.getEncoded() == null ? "null" : "BYTES")
+                        + " format=" + encryptOnly.getFormat());
 
         // Randomized-encryption-required: a caller IV on ENCRYPT is refused.
+        // AOSP: KM_ERROR_CALLER_NONCE_PROHIBITED -> InvalidAlgorithmParameterException
+        // ("Caller-provided IV not permitted").
         boolean ivRefused;
         String ivWhy;
+        Cipher gcm = null;
         try {
-            Cipher gcm = Cipher.getInstance("AES/GCM/NoPadding");
+            gcm = Cipher.getInstance("AES/GCM/NoPadding");
             gcm.init(Cipher.ENCRYPT_MODE, aes, new javax.crypto.spec.GCMParameterSpec(
                     128, new byte[12]));
             ivRefused = false;
             ivWhy = "caller IV accepted on a randomised-encryption key";
         } catch (Throwable e) {
             String message = String.valueOf(e.getMessage());
-            ivRefused = message.startsWith("INCOMPATIBLE_RANDOMIZED_ENCRYPTION_REQUIRED:");
-            ivWhy = message;
+            ivRefused = (e instanceof java.security.InvalidAlgorithmParameterException)
+                    && "Caller-provided IV not permitted".equals(message);
+            ivWhy = describe(e);
         }
         check("fidelity.randomized_iv_refused", ivRefused, ivWhy);
+        String ivProvider = providerName(gcm);
+        check("fidelity.randomized_iv_no_foreign_provider",
+                ivProvider.equals("none") || ivProvider.contains("AndroidKeyStore"),
+                "Cipher.getProvider()=" + ivProvider);
 
         // An RSA sign-only key must sign and must refuse encryption.
         KeyPairGenerator signRsa = KeyPairGenerator.getInstance("RSA", "AndroidKeyStore");
@@ -413,20 +470,36 @@ public final class KeystoreProbe {
         boolean signOk = signer.sign().length > 0;
         check("fidelity.purpose.rsa_sign_only_allows_sign", signOk,
                 "signature bytes=" + (signOk ? ">0" : "0"));
+        check("fidelity.opaque.private",
+                signPair.getPrivate().getEncoded() == null
+                        && signPair.getPrivate().getFormat() == null,
+                "class=" + signPair.getPrivate().getClass().getName()
+                        + " encoded=" + (signPair.getPrivate().getEncoded() == null
+                                ? "null" : "BYTES")
+                        + " format=" + signPair.getPrivate().getFormat());
+        check("fidelity.opaque.public_x509",
+                signPair.getPublic().getEncoded() != null
+                        && "X.509".equals(signPair.getPublic().getFormat()),
+                "class=" + signPair.getPublic().getClass().getName()
+                        + " format=" + signPair.getPublic().getFormat());
         boolean rsaEncryptRefused;
         String rsaWhy;
+        Cipher rsaEnc = null;
         try {
-            Cipher rsaEnc = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+            rsaEnc = Cipher.getInstance("RSA/ECB/PKCS1Padding");
             rsaEnc.init(Cipher.ENCRYPT_MODE, signPair.getPrivate());
             rsaEncryptRefused = false;
-            rsaWhy = "ENCRYPT succeeded for a sign-only RSA key";
+            rsaWhy = "ENCRYPT succeeded for a sign-only RSA key, provider="
+                    + providerName(rsaEnc);
         } catch (Throwable e) {
-            String message = String.valueOf(e.getMessage());
-            rsaEncryptRefused = message.startsWith("INCOMPATIBLE_PURPOSE:")
-                    && message.contains("PURPOSE_ENCRYPT");
-            rsaWhy = message;
+            rsaEncryptRefused = isRefusal(e, -3);
+            rsaWhy = describe(e);
         }
         check("fidelity.purpose.rsa_sign_only_refuses_encrypt", rsaEncryptRefused, rsaWhy);
+        String rsaProvider = providerName(rsaEnc);
+        check("fidelity.refusal.rsa_no_foreign_provider",
+                rsaProvider.equals("none") || rsaProvider.contains("AndroidKeyStore"),
+                "Cipher.getProvider()=" + rsaProvider);
 
         // ... and signing purposes are honest about what they allow.
         KeyGenerator hg = KeyGenerator.getInstance("HmacSHA256", "AndroidKeyStore");
@@ -453,9 +526,8 @@ public final class KeystoreProbe {
             Cipher.getInstance("AES/GCM/NoPadding").init(Cipher.ENCRYPT_MODE, notYet);
             check("fidelity.validity.not_yet_valid", false, "used a not-yet-valid key");
         } catch (Throwable e) {
-            String message = String.valueOf(e.getMessage());
-            check("fidelity.validity.not_yet_valid", message.startsWith("KEY_NOT_YET_VALID:"),
-                    message);
+            check("fidelity.validity.not_yet_valid",
+                    e instanceof KeyNotYetValidException, describe(e));
         }
 
         KeyGenerator expired = KeyGenerator.getInstance("AES", "AndroidKeyStore");
@@ -471,8 +543,8 @@ public final class KeystoreProbe {
             Cipher.getInstance("AES/GCM/NoPadding").init(Cipher.ENCRYPT_MODE, dead);
             check("fidelity.validity.expired", false, "used an expired key");
         } catch (Throwable e) {
-            String message = String.valueOf(e.getMessage());
-            check("fidelity.validity.expired", message.startsWith("KEY_EXPIRED:"), message);
+            check("fidelity.validity.expired",
+                    e instanceof KeyExpiredException, describe(e));
         }
 
         // --- import honours ProtectionParameter --------------------------
@@ -488,13 +560,17 @@ public final class KeystoreProbe {
                     e.getMessage());
         }
         ks.setEntry("k_import", new KeyStore.SecretKeyEntry(raw), null);
+        SecretKey importedKey = (SecretKey) ks.getKey("k_import", null);
         KeyInfo imported = (KeyInfo) SecretKeyFactory.getInstance("AES", "AndroidKeyStore")
-                .getKeySpec((SecretKey) ks.getKey("k_import", null), KeyInfo.class);
+                .getKeySpec(importedKey, KeyInfo.class);
         check("fidelity.import.secret",
                 imported.getOrigin() == KeyProperties.ORIGIN_IMPORTED
                         && imported.getKeySize() == 256
-                        && Arrays.equals(ks.getKey("k_import", null).getEncoded(), raw.getEncoded()),
-                "origin=" + imported.getOrigin() + " size=" + imported.getKeySize());
+                        && Arrays.equals(raw.getEncoded(), new byte[32])
+                        && importedKey.getEncoded() == null
+                        && importedKey.getFormat() == null,
+                "origin=" + imported.getOrigin() + " size=" + imported.getKeySize()
+                        + " encoded=" + (importedKey.getEncoded() == null ? "null" : "BYTES"));
 
         // --- generated asymmetric keys get a chain ------------------------
         KeyPairGenerator rsa = KeyPairGenerator.getInstance("RSA", "AndroidKeyStore");
@@ -626,6 +702,10 @@ public final class KeystoreProbe {
         }
         check("fidelity.unsupported_algorithm", unknownAlg,
                 "DESede refused with NoSuchAlgorithmException");
+        // The run root (and with it the on-disk keystore file) is removed at
+        // teardown, so the driver needs a window to measure it from the host
+        // while this session is alive. The guest's own checks are complete.
+        Thread.sleep(15_000L);
     }
 
     // --------------------------------------------------------------- helpers
@@ -707,8 +787,56 @@ public final class KeystoreProbe {
         }
     }
 
-    private void check(String name, boolean ok, String detail) {
-        if (ok) {
+    /**
+     * AOSP's generic operation refusal shape
+     * ({@code KeyStoreCryptoOperationUtils.getInvalidKeyException}):
+     * {@code InvalidKeyException("Keystore operation failed", KeyStoreException
+     * (keymasterCode, detail))}. The code is read reflectively because
+     * {@code KeyStoreException.getErrorCode()} is hidden from {@code android.jar}.
+     */
+    private static boolean isRefusal(Throwable t, int keymasterCode) {
+        if (!(t instanceof java.security.InvalidKeyException)) return false;
+        if (!"Keystore operation failed".equals(t.getMessage())) return false;
+        Throwable cause = t.getCause();
+        if (cause == null
+                || !"android.security.KeyStoreException".equals(cause.getClass().getName())) {
+            return false;
+        }
+        return keymasterCodeOf(cause) == keymasterCode;
+    }
+
+    private static int keymasterCodeOf(Throwable cause) {
+        if (cause == null) return 0;
+        try {
+            Object v = cause.getClass().getMethod("getErrorCode").invoke(cause);
+            return v instanceof Integer ? ((Integer) v).intValue() : 0;
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
+    private static String describe(Throwable t) {
+        StringBuilder sb = new StringBuilder(t.getClass().getSimpleName());
+        sb.append('(').append(t.getMessage()).append(')');
+        if (t.getCause() != null) {
+            sb.append(" cause=").append(t.getCause().getClass().getSimpleName())
+                    .append("/code=").append(keymasterCodeOf(t.getCause()))
+                    .append('/').append(t.getCause().getMessage());
+        }
+        return sb.toString();
+    }
+
+    private static String providerName(javax.crypto.Cipher cipher) {
+        if (cipher == null) return "none";
+        try {
+            java.security.Provider p = cipher.getProvider();
+            return p == null ? "none" : p.getName();
+        } catch (Throwable t) {
+            return "none";
+        }
+    }
+
+    private void check(String name, boolean ok, String detail) {        if (ok) {
             pass++;
         } else {
             fail++;

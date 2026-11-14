@@ -74,12 +74,13 @@ import javax.crypto.spec.SecretKeySpec;
  * security level by construction:
  *
  * <ul>
- *   <li>keys are ordinary JCA {@link SecretKeySpec}/{@link PrivateKey}
- *       objects behind a {@link SoftwareKey} handle — software, and therefore
- *       <b>exportable inside the process</b> ({@code getEncoded()} returns the
- *       bytes). A device's TEE/StrongBox keys return {@code null} there; that
- *       difference is reported by {@link #describeLimits()} and in
- *       {@code results/compat/K5.md}, never hidden;</li>
+ *   <li>private/secret keys are {@link SoftwareKey} handles that are
+ *       <b>opaque</b>, exactly like AOSP's {@code AndroidKeyStoreKey}:
+ *       {@code getEncoded()} and {@code getFormat()} return {@code null}, so
+ *       no other JCA provider can obtain the bytes and perform an operation
+ *       this store refused. The material is reachable only inside this class,
+ *       by alias, from the entry map. Public keys stay ordinary X.509 public
+ *       keys (AOSP does the same);</li>
  *   <li>{@code KeyInfo} is answered with {@code securityLevel =
  *       SECURITY_LEVEL_SOFTWARE}, {@code origin}, key size, purposes,
  *       digests/paddings/block modes, validity window and alias, and
@@ -427,71 +428,108 @@ public final class SoftwareKeyStore extends Provider {
 
     // ------------------------------------------------------------- key views
 
-    /** A key handed out by this store: carries the alias back to its entry. */
+    /** A key handed out by this store: only its alias, never its material. */
     public static class SoftwareKey {
         final String alias;
-        final Key delegate;
         final boolean secret;
 
-        SoftwareKey(String alias, Key delegate, boolean secret) {
+        SoftwareKey(String alias, boolean secret) {
             this.alias = alias;
-            this.delegate = delegate;
             this.secret = secret;
         }
     }
 
+    /**
+     * A secret key of this store. <b>Opaque</b> like AOSP's
+     * {@code AndroidKeyStoreSecretKey}: {@code getEncoded()}/{@code getFormat()}
+     * are {@code null}, so `javax.crypto.Cipher`'s delayed provider selection
+     * cannot hand the key to Conscrypt/BouncyCastle and have them perform an
+     * operation this store refused (the K5b finding). Our own SPI resolves the
+     * material by alias ({@link #materialSecret}).
+     */
     static final class StoreSecretKey extends SoftwareKey implements SecretKey {
-        StoreSecretKey(String alias, SecretKey delegate) {
-            super(alias, delegate, true);
+        private final String algorithm;
+
+        StoreSecretKey(String alias, String algorithm) {
+            super(alias, true);
+            this.algorithm = algorithm == null || algorithm.isEmpty() ? "AES" : algorithm;
         }
 
         @Override
         public String getAlgorithm() {
-            return delegate.getAlgorithm();
+            return algorithm;
         }
 
         @Override
         public String getFormat() {
-            return delegate.getFormat();
+            return null;
         }
 
         @Override
         public byte[] getEncoded() {
-            return delegate.getEncoded();
+            return null;
         }
     }
 
+    /** A private key of this store: opaque, see {@link StoreSecretKey}. */
     static final class StorePrivateKey extends SoftwareKey implements PrivateKey {
-        StorePrivateKey(String alias, PrivateKey delegate) {
-            super(alias, delegate, false);
+        private final String algorithm;
+
+        StorePrivateKey(String alias, String algorithm) {
+            super(alias, false);
+            this.algorithm = algorithm == null || algorithm.isEmpty() ? "RSA" : algorithm;
         }
 
         @Override
         public String getAlgorithm() {
-            return delegate.getAlgorithm();
+            return algorithm;
         }
 
         @Override
         public String getFormat() {
-            return delegate.getFormat();
+            return null;
         }
 
         @Override
         public byte[] getEncoded() {
-            return delegate.getEncoded();
+            return null;
         }
     }
 
     private static SecretKey asSecret(String alias, Entry e) {
         if (e == null || !"secret".equals(e.type)) return null;
-        String alg = e.alg.length() > 0 ? e.alg : "AES";
-        return new StoreSecretKey(alias, new SecretKeySpec(e.material, alg));
+        return new StoreSecretKey(alias, e.alg);
     }
 
-    private static PrivateKey asPrivate(String alias, Entry e) throws Exception {
+    private static PrivateKey asPrivate(String alias, Entry e) {
         if (e == null || !"private".equals(e.type)) return null;
-        KeyFactory kf = KeyFactory.getInstance(e.alg.length() > 0 ? e.alg : "RSA");
-        return new StorePrivateKey(alias, kf.generatePrivate(new PKCS8EncodedKeySpec(e.material)));
+        return new StorePrivateKey(alias, e.alg);
+    }
+
+    // ------------------------------------------------------ key material (ours)
+
+    /**
+     * The real JCA secret key behind a store key. <b>Only</b> for the SPIs of
+     * this provider ({@code GuardCipher}/{@code GuardMac}/{@code
+     * GuardSignature}): the material never leaves the process through the
+     * {@link Key} interface, which is what keeps a refused operation refused.
+     */
+    static SecretKey materialSecret(Key key) {
+        Entry e = entryOf(key);
+        if (e == null || !"secret".equals(e.type)) return null;
+        return new SecretKeySpec(e.material, e.alg.length() > 0 ? e.alg : "AES");
+    }
+
+    /** The real JCA private key behind a store key; see {@link #materialSecret}. */
+    static PrivateKey materialPrivate(Key key) throws InvalidKeyException {
+        Entry e = entryOf(key);
+        if (e == null || !"private".equals(e.type)) return null;
+        try {
+            KeyFactory kf = KeyFactory.getInstance(e.alg.length() > 0 ? e.alg : "RSA");
+            return kf.generatePrivate(new PKCS8EncodedKeySpec(e.material));
+        } catch (Exception ex) {
+            throw new InvalidKeyException("Keystore operation failed", ex);
+        }
     }
 
     private static PublicKey asPublic(Entry e) throws Exception {
@@ -742,7 +780,18 @@ public final class SoftwareKeyStore extends Provider {
             synchronized (SoftwareKeyStore.class) {
                 ensureLoaded();
                 if (key == null) throw new KeyStoreException("null key");
-                Entry e = newEntry("", key.getAlgorithm(), key.getEncoded());
+                if (key instanceof SoftwareKey) {
+                    // Our own keys are opaque: they have no encoded form to
+                    // store, and AOSP refuses the same way.
+                    throw new KeyStoreException("Cannot store a key that belongs to "
+                            + "AndroidKeyStore: " + key.getClass().getName());
+                }
+                byte[] encoded = key.getEncoded();
+                if (encoded == null) {
+                    throw new KeyStoreException("Key has no encoded form: "
+                            + key.getClass().getName());
+                }
+                Entry e = newEntry("", key.getAlgorithm(), encoded);
                 e.origin = KeyPropertiesConstants.ORIGIN_IMPORTED;
                 e.purposes = allowedPurposes(key.getAlgorithm());
                 if (key instanceof SecretKey) {
@@ -1043,7 +1092,7 @@ public final class SoftwareKeyStore extends Provider {
                             KeyPropertiesConstants.PADDING_PKCS7};
                 }
                 store(alias, e);
-                return new StoreSecretKey(alias, delegate);
+                return new StoreSecretKey(alias, e.alg);
             }
             return delegate;
         }
@@ -1159,7 +1208,7 @@ public final class SoftwareKeyStore extends Provider {
                 e.chain = new byte[][] {selfSigned(alias, kp)};
                 store(alias, e);
                 return new KeyPair(new StorePublicKey(e.publicMaterial, kp.getPublic()),
-                        new StorePrivateKey(alias, kp.getPrivate()));
+                        new StorePrivateKey(alias, e.alg));
             } catch (ProviderException ex) {
                 throw ex;
             } catch (Throwable t) {
@@ -1394,9 +1443,24 @@ public final class SoftwareKeyStore extends Provider {
                             GuardCipher.class.getName(), null, null));
                 }
             }
-            put("Mac.HmacSHA256", GuardHmacSHA256.class.getName());
-            put("Mac.HmacSHA1", GuardHmacSHA1.class.getName());
+            putService(new GuardService(this, "Mac", "HmacSHA256",
+                    GuardHmacSHA256.class.getName(), null, null));
+            putService(new GuardService(this, "Mac", "HmacSHA1",
+                    GuardHmacSHA1.class.getName(), null, null));
+            // Signature is guarded too: our private keys are opaque (AOSP
+            // behaviour), so the platform provider needs the material rebuilt
+            // from the store's entry to be able to sign.
+            for (String s : SIGNATURES) {
+                putService(new GuardService(this, "Signature", s,
+                        GuardSignature.class.getName(), null, null));
+            }
         }
+
+        private static final String[] SIGNATURES = {
+            "SHA256withRSA", "SHA1withRSA", "SHA384withRSA", "SHA512withRSA",
+            "SHA256withECDSA", "SHA1withECDSA", "SHA384withECDSA", "SHA512withECDSA",
+            "NONEwithRSA", "NONEwithECDSA",
+        };
     }
 
     /**
@@ -1414,6 +1478,20 @@ public final class SoftwareKeyStore extends Provider {
             super(provider, type, algorithm, className, aliases, attributes);
         }
 
+        /**
+         * AOSP's `AndroidKeyStore*Provider` registers its services with
+         * `SupportedKeyClasses`, so the platform provider is only offered keys
+         * that came from the keystore. Reproduced here: a plain
+         * `SecretKeySpec`/Conscrypt key is never routed through the guard (the
+         * JCA skips a service whose `supportsParameter` says no), which keeps
+         * `Cipher.getProvider()` honest for both paths.
+         */
+        @Override
+        public boolean supportsParameter(Object parameter) {
+            if (parameter instanceof Key) return parameter instanceof SoftwareKey;
+            return true;
+        }
+
         @Override
         public Object newInstance(Object parameter) throws java.security.NoSuchAlgorithmException {
             PENDING_TRANSFORMATION.set(getAlgorithm());
@@ -1425,66 +1503,79 @@ public final class SoftwareKeyStore extends Provider {
         }
     }
 
-    /**
-     * Validate one keystore key for an operation. Mirrors keystore2's
-     * `ErrorCode::INCOMPATIBLE_PURPOSE`, `KEY_EXPIRED`, `KEY_NOT_YET_VALID`
-     * and `INCOMPATIBLE_RANDOMIZED_ENCRYPTION_REQUIRED`.
-     */
-    /**
-     * A refusal the JCA cannot retry away.
-     *
-     * <p>`javax.crypto.Cipher` performs delayed provider selection: when the
-     * first provider's `engineInit` throws an {@link Exception}, it retries the
-     * next provider that offers the transformation. Measured on this image
-     * (`Experiments: K5b`), an `InvalidKeyException` — what AOSP's keystore
-     * raises — made Conscrypt perform the very operation the key forbade, and a
-     * `ProviderException` was swallowed the same way. An `Error` is not caught
-     * by that retry, so the refusal reaches the caller. The class name and the
-     * `CODE: detail` message keep it explicit and machine-readable; the
-     * deviation from AOSP's exception type is recorded in
-     * `results/compat/K5.md`.
-     */
-    static final class KeystoreRefusal extends Error {
-        private static final long serialVersionUID = 1L;
-        final String code;
+    // ------------------------------------------------ refusals (AOSP shapes)
 
-        KeystoreRefusal(String code, String detail) {
-            super(code + ": " + detail);
-            this.code = code;
-        }
-    }
-
-    /**
-     * Refuse an operation on a key whose stored characteristics do not allow
-     * it. Codes are keystore2's (`system/security/keystore2`):
-     * `INCOMPATIBLE_PURPOSE`, `KEY_EXPIRED`, `KEY_NOT_YET_VALID`.
+    /*
+     * Refusals use AOSP's own exception types and messages, so an app that
+     * catches `InvalidKeyException`/`KeyExpiredException`/
+     * `KeyNotYetValidException`/`UserNotAuthenticatedException` behaves as it
+     * would on a device. The mapping is `android.security.keystore2.
+     * KeyStoreCryptoOperationUtils` (API 34; class read out of this image's
+     * `framework/classes3.dex` with `dexdump`):
      *
-     * <p>The refusal is an unchecked {@link ProviderException}, not AOSP's
-     * checked `InvalidKeyException`: `javax.crypto.Cipher` performs delayed
-     * provider selection and, on an `InvalidKeyException` from the first
-     * provider's `engineInit`, retries the next provider — measured on this
-     * image, where Conscrypt then performed the operation the key forbade. An
-     * unchecked refusal cannot be retried away. The code prefix keeps the
-     * reason machine-readable; the deviation is recorded in
-     * `results/compat/K5.md`.
+     *   KM_ERROR_KEY_EXPIRED            -> KeyExpiredException()
+     *   KM_ERROR_KEY_NOT_YET_VALID      -> KeyNotYetValidException()
+     *   KM_ERROR_CALLER_NONCE_PROHIBITED-> InvalidAlgorithmParameterException(
+     *                                       "Caller-provided IV not permitted")
+     *   KM_ERROR_INVALID_NONCE          -> InvalidAlgorithmParameterException(
+     *                                       "Invalid IV")
+     *   otherwise                       -> InvalidKeyException(
+     *                                       "Keystore operation failed",
+     *                                       KeyStoreException(code, detail))
+     *
+     * The refusal is *not* swallowed by `javax.crypto.Cipher`'s delayed
+     * provider selection any more: the key objects are opaque (above), so a
+     * second provider cannot init with them, and `Cipher.tryCombinations`
+     * rethrows the FIRST provider's exception (this image's `core-oj`
+     * bytecode: the first failure is remembered and rethrown). Measured in
+     * `results/compat/K5.md` (K5c).
      */
-    private static void checkUse(Key key, int requiredPurpose) {
+    private static final int KM_ERROR_INCOMPATIBLE_BLOCK_MODE = -8;
+    private static final int KM_ERROR_INCOMPATIBLE_PURPOSE = -3;
+
+    /** Refuse an operation on a key whose characteristics do not allow it. */
+    private static void checkUse(Key key, int requiredPurpose) throws InvalidKeyException {
         Entry e = entryOf(key);
         if (e == null) return; // not ours: delegate as before
         String alias = ((SoftwareKey) key).alias;
         long now = System.currentTimeMillis();
         if (e.validStart > 0 && now < e.validStart) {
-            throw new KeystoreRefusal("KEY_NOT_YET_VALID", "key \"" + alias
-                    + "\" becomes valid at " + new Date(e.validStart));
+            throw new android.security.keystore.KeyNotYetValidException();
         }
         if (e.validEnd > 0 && now > e.validEnd) {
-            throw new KeystoreRefusal("KEY_EXPIRED", "key \"" + alias
-                    + "\" expired at " + new Date(e.validEnd));
+            throw new android.security.keystore.KeyExpiredException();
         }
         if ((e.purposes & requiredPurpose) == 0) {
-            throw new KeystoreRefusal("INCOMPATIBLE_PURPOSE", "key \"" + alias
+            throw invalidKeyException(KM_ERROR_INCOMPATIBLE_PURPOSE, "key \"" + alias
                     + "\" does not have " + purposeName(requiredPurpose)
                     + " (purposes=0x" + Integer.toHexString(e.purposes) + ")");
+        }
+    }
+
+    /**
+     * AOSP's generic operation refusal: `InvalidKeyException("Keystore
+     * operation failed", KeyStoreException(keymasterCode, detail))`.
+     */
+    private static InvalidKeyException invalidKeyException(int keymasterCode, String detail) {
+        return new InvalidKeyException("Keystore operation failed",
+                keyStoreException(keymasterCode, detail));
+    }
+
+    /**
+     * `android.security.KeyStoreException(int, String)` is hidden from the
+     * public `android.jar` (its `(int, String)` constructor is flagged BLOCKED),
+     * so it is constructed reflectively; the guest has no hidden-API
+     * enforcement (verified in `Experiments: K5b`). If the constructor is ever
+     * unavailable the cause still identifies the refusal — never silently no
+     * exception thrown.
+     */
+    private static Exception keyStoreException(int code, String detail) {
+        try {
+            Class<?> cls = Class.forName("android.security.KeyStoreException");
+            return (Exception) cls.getConstructor(int.class, String.class)
+                    .newInstance(code, detail);
+        } catch (Throwable t) {
+            return new IllegalStateException("keymaster code " + code + ": " + detail, t);
         }
     }
 
@@ -1564,23 +1655,28 @@ public final class SoftwareKeyStore extends Provider {
                     && e.randomizedEncryptionRequired
                     && (params instanceof IvParameterSpec
                             || params instanceof javax.crypto.spec.GCMParameterSpec)) {
-                throw new KeystoreRefusal("INCOMPATIBLE_RANDOMIZED_ENCRYPTION_REQUIRED", "key \""
-                                + ((SoftwareKey) key).alias
-                                + "\" requires a random IV");
+                // AOSP: KM_ERROR_CALLER_NONCE_PROHIBITED -> this exact message.
+                throw new InvalidAlgorithmParameterException(
+                        "Caller-provided IV not permitted");
             }
             if (e != null) {
                 String mode = modeOf(t);
                 if (mode != null && e.blockModes.length > 0 && !contains(e.blockModes, mode)) {
-                    throw new KeystoreRefusal("INCOMPATIBLE_BLOCK_MODE", mode
+                    throw invalidKeyException(KM_ERROR_INCOMPATIBLE_BLOCK_MODE, mode
                             + " is not permitted for key \"" + ((SoftwareKey) key).alias + "\"");
                 }
             }
+            // The key handed to the delegate is built from THIS store's entry,
+            // never from the (opaque) key object the caller passed in.
+            Key material = e == null ? key
+                    : ("secret".equals(e.type) ? materialSecret(key) : materialPrivate(key));
+            if (material == null) material = key;
             try {
                 target = delegate(t);
                 if (params == null) {
-                    target.init(opmode, key, random);
+                    target.init(opmode, material, random);
                 } else {
-                    target.init(opmode, key, params, random);
+                    target.init(opmode, material, params, random);
                 }
             } catch (InvalidKeyException | InvalidAlgorithmParameterException ex) {
                 throw ex;
@@ -1688,6 +1784,120 @@ public final class SoftwareKeyStore extends Provider {
         }
     }
 
+    /**
+     * {@code Signature} SPI: enforce SIGN purpose/validity, then delegate with
+     * the material rebuilt from the store (the caller's key is opaque).
+     */
+    public static final class GuardSignature extends java.security.SignatureSpi {
+        private final String algorithm;
+        private Signature target;
+
+        /** JCA instantiates an SPI through its public no-arg constructor. */
+        public GuardSignature() {
+            this.algorithm = PENDING_TRANSFORMATION.get();
+        }
+
+        private Signature target() throws java.security.NoSuchAlgorithmException {
+            if (target == null) {
+                String alg = algorithm;
+                if (alg == null) {
+                    throw new java.security.NoSuchAlgorithmException("AndroidKeyStoreGuard");
+                }
+                for (Provider p : Security.getProviders()) {
+                    if (p instanceof GuardProvider) continue;
+                    try {
+                        target = Signature.getInstance(alg, p);
+                        return target;
+                    } catch (Throwable ignoredEx) {
+                        // next provider
+                    }
+                }
+                throw new java.security.NoSuchAlgorithmException(alg);
+            }
+            return target;
+        }
+
+        @Override
+        protected void engineInitVerify(PublicKey publicKey) throws InvalidKeyException {
+            try {
+                target().initVerify(publicKey);
+            } catch (java.security.NoSuchAlgorithmException e) {
+                throw new InvalidKeyException("Keystore operation failed", e);
+            }
+        }
+
+        @Override
+        protected void engineInitSign(PrivateKey privateKey) throws InvalidKeyException {
+            engineInitSign(privateKey, null);
+        }
+
+        @Override
+        protected void engineInitSign(PrivateKey privateKey, SecureRandom random)
+                throws InvalidKeyException {
+            checkUse(privateKey, KeyPropertiesConstants.PURPOSE_SIGN);
+            PrivateKey material = entryOf(privateKey) == null
+                    ? privateKey : materialPrivate(privateKey);
+            try {
+                if (random == null) {
+                    target().initSign(material == null ? privateKey : material);
+                } else {
+                    target().initSign(material == null ? privateKey : material, random);
+                }
+            } catch (java.security.NoSuchAlgorithmException e) {
+                throw new InvalidKeyException("Keystore operation failed", e);
+            }
+        }
+
+        @Override
+        protected void engineUpdate(byte b) throws java.security.SignatureException {
+            try {
+                target().update(b);
+            } catch (java.security.NoSuchAlgorithmException e) {
+                throw new java.security.SignatureException(e.toString());
+            }
+        }
+
+        @Override
+        protected void engineUpdate(byte[] b, int off, int len)
+                throws java.security.SignatureException {
+            try {
+                target().update(b, off, len);
+            } catch (java.security.NoSuchAlgorithmException e) {
+                throw new java.security.SignatureException(e.toString());
+            }
+        }
+
+        @Override
+        protected byte[] engineSign() throws java.security.SignatureException {
+            try {
+                return target().sign();
+            } catch (java.security.NoSuchAlgorithmException e) {
+                throw new java.security.SignatureException(e.toString());
+            }
+        }
+
+        @Override
+        protected boolean engineVerify(byte[] sigBytes) throws java.security.SignatureException {
+            try {
+                return target().verify(sigBytes);
+            } catch (java.security.NoSuchAlgorithmException e) {
+                throw new java.security.SignatureException(e.toString());
+            }
+        }
+
+        @Override
+        protected void engineSetParameter(String param, Object value)
+                throws java.security.InvalidParameterException {
+            throw new java.security.InvalidParameterException(param);
+        }
+
+        @Override
+        protected Object engineGetParameter(String param)
+                throws java.security.InvalidParameterException {
+            throw new java.security.InvalidParameterException(param);
+        }
+    }
+
     /** {@code Mac} SPI: same purpose/validity checks for HMAC signing keys. */
     public abstract static class GuardMac extends MacSpi {
         private final Mac target;
@@ -1705,7 +1915,8 @@ public final class SoftwareKeyStore extends Provider {
         protected void engineInit(Key key, AlgorithmParameterSpec params)
                 throws InvalidKeyException, InvalidAlgorithmParameterException {
             checkUse(key, KeyPropertiesConstants.PURPOSE_SIGN);
-            target.init(key, params);
+            Key material = entryOf(key) == null ? key : materialSecret(key);
+            target.init(material == null ? key : material, params);
         }
 
         @Override
