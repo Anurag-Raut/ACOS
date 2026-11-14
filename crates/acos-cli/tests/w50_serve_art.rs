@@ -50,10 +50,26 @@ struct Daemon {
     dir: PathBuf,
 }
 
+/// A Unix socket path must fit `sun_path` (108 bytes **including** the NUL), so
+/// at most 107 characters are usable. `scratch()` already canonicalizes, but a
+/// worktree root can be long enough that `.cache/w50-test-<tag>-<pid>/serve.sock`
+/// still lands on the limit (measured: exactly 108 in a `t3/worktrees/acos/...`
+/// checkout, which the kernel refuses with `path must be shorter than SUN_LEN`).
+/// Only the socket is limited - the runtime/cache dirs are ordinary paths - so
+/// keep the name short instead of weakening the test.
+fn socket_path(dir: &Path) -> PathBuf {
+    let candidate = dir.join("serve.sock");
+    if candidate.as_os_str().len() < 108 {
+        candidate
+    } else {
+        dir.join("s")
+    }
+}
+
 impl Daemon {
     fn start(tag: &str, extra: &[&str]) -> Daemon {
         let dir = scratch(tag);
-        let socket = dir.join("serve.sock");
+        let socket = socket_path(&dir);
         let mut command = Command::new(acos());
         command
             .arg("serve")

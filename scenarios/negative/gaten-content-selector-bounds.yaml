@@ -1,0 +1,51 @@
+# gaten-content-selector-bounds: NEGATIVE CONTROL for SE2c — geometry inside a
+# *selector*.
+#
+# `settle: content` proves the UI tree content (text, class, state, ...) stable,
+# never the geometry: on this very screen a Reanimated timeline translates views
+# and their reported rects differ by 1 px from one fresh traversal to the next
+# (`.cache/se2b/probe-trees.json`). SE2b therefore refuses a bounds claim on a
+# content-settled frame (`ASSERTION_FAILED` / `content_settle_geometry`) — but it
+# only looked at the assertion's own `bounds`. `Selector::matches_node` compares
+# `selector.bounds` exactly too, and that position is the dangerous one:
+#
+#   a still-drifting banner reports [0,101,200,141] instead of [0,100,200,140],
+#   so `assert_not_visible {selector: {text: "Error", bounds: [...]}}` matches
+#   nothing, concludes "the node is absent" and PASSES while the banner is on
+#   screen.
+#
+# This control pins the fix: the "Error" banner is not on the welcome screen at
+# all, so before the fix this scenario would have *passed* (the false pass the
+# review described). It must now fail closed with ASSERTION_FAILED and the
+# reason `content_settle_geometry`, never an ordinary "node absent" diff. The
+# `expect_error` pin means any other failure (a timeout, an unapplied settle
+# rule, a NO_FRESH_TREE) becomes a harness error, so this control cannot go
+# green for the wrong reason.
+version: 1
+name: gaten-content-selector-bounds
+description: >-
+  SE2c negative: a selector that carries `bounds` is a geometry claim, so on a
+  content-settled frame it is refused (ASSERTION_FAILED/content_settle_geometry)
+  instead of passing as "node absent".
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: fail
+expect_error: {code: ASSERTION_FAILED, reason: content_settle_geometry}
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  # The forever-animating screen, bound by the content-stable rule.
+  - launch:
+      activity: com.gaten.app.MainActivity
+      clear_state: true
+      settle: content
+      settle_timeout_ms: 20000
+  # The review's scenario: an absent banner + an exact rectangle in the selector.
+  # Un-hashed geometry in the selector must be refused, not evaluated.
+  - assert_not_visible:
+      selector: {text: {contains: "Error"}, bounds: [0, 100, 200, 140]}
+      timeout_ms: 2000

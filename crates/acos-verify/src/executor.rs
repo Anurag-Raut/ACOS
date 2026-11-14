@@ -1909,7 +1909,7 @@ fn content_settle_pixel_failure(
     Some(exec)
 }
 
-/// SE2b: a **geometry** claim bound only to a content-settled frame.
+/// SE2b/SE2c: a **geometry** claim bound only to a content-settled frame.
 ///
 /// The content signature cannot hash `bounds`/`visible_bounds`: on the very
 /// screen ADR-0026 decision 3 names, a Reanimated timeline translates four views
@@ -1917,8 +1917,25 @@ fn content_settle_pixel_failure(
 /// while every content field is identical
 /// (`.cache/se2b/probe-trees.json`). Geometry therefore animates with the
 /// pixels, so an assertion that reads it needs a strict (geometry-settled)
-/// frame. `assert_text`/`assert_visible`/`assert_not_visible` with an expected
-/// `bounds` are the steps that make that claim.
+/// frame.
+///
+/// **Both** places a step can name a rectangle are geometry claims, and both are
+/// refused (SE2c): an assertion's own `bounds` (`assert_text`/`assert_visible`/
+/// `assert_not_visible`) **and** `selector.bounds`, which
+/// [`acos_protocol::ui::Selector::matches_node`] compares exactly. The selector
+/// position is the dangerous one: on a still-drifting node the reported rect is
+/// `0,101,…` instead of `0,100,…`, so the selector does not match, and
+/// `assert_not_visible {selector: {text: "Error", bounds: [0,100,200,140]}}`
+/// would report "node absent" — a pass — while the banner is on screen. The
+/// same drift makes a *matching* selector-backed pass a single-frame
+/// coincidence. `assert_state` has no `bounds` of its own but takes a selector,
+/// so it is enumerated too.
+///
+/// Steps that *resolve* a target (`wait_for`, `tap`, `type`) are deliberately
+/// NOT refused here: they compare their selector against a fresh traversal they
+/// take themselves, not against the bound frame this guard is about (a content
+/// input's own resolution is proven fresh by SE2c's fresh-resolution rule in the
+/// engine).
 fn content_settle_geometry_failure(
     step: &Step,
     bound_settle: Option<&serde_json::Value>,
@@ -1927,14 +1944,19 @@ fn content_settle_geometry_failure(
     if settle.get("mode").and_then(serde_json::Value::as_str) != Some("content") {
         return None;
     }
-    let claims_bounds = match step.as_step() {
-        Some(StepRef::AssertText(assertion)) => assertion.bounds.is_some(),
-        Some(StepRef::AssertVisible(assertion) | StepRef::AssertNotVisible(assertion)) => {
-            assertion.bounds.is_some()
+    // Every assertion that takes a selector is enumerated; a new one must be
+    // added here or its bounds claim would ride an un-hashed frame.
+    let (claims_assertion_bounds, claims_selector_bounds) = match step.as_step() {
+        Some(StepRef::AssertText(assertion)) => {
+            (assertion.bounds.is_some(), assertion.selector.bounds.is_some())
         }
-        _ => false,
+        Some(StepRef::AssertVisible(assertion) | StepRef::AssertNotVisible(assertion)) => {
+            (assertion.bounds.is_some(), assertion.selector.bounds.is_some())
+        }
+        Some(StepRef::AssertState(assertion)) => (false, assertion.selector.bounds.is_some()),
+        _ => (false, false),
     };
-    if !claims_bounds {
+    if !(claims_assertion_bounds || claims_selector_bounds) {
         return None;
     }
     let detail = format!(
@@ -1965,7 +1987,8 @@ fn content_settle_geometry_failure(
             hint: Some(
                 "A bounds claim needs a geometry-settled frame: use `settle: strict` (the \
                  default) and wait for the animation to stop. Assert text/state instead, which \
-                 content settle may back."
+                 content settle may back. A `bounds` inside the selector is a geometry claim \
+                 too - drop it (the text/id/class match is enough) or settle strictly."
                     .to_string(),
             ),
             details: Some(serde_json::json!({
@@ -1974,6 +1997,11 @@ fn content_settle_geometry_failure(
                 "settle": settle,
                 "signature_geometry_fields": crate::settle::SIGNATURE_GEOMETRY_FIELDS,
                 "geometry_evidence": false,
+                // Which of the two rectangle positions made the claim.
+                "bounds_claim": {
+                    "assertion": claims_assertion_bounds,
+                    "selector": claims_selector_bounds,
+                },
             })),
         }),
     });
@@ -3075,6 +3103,77 @@ mod content_settle_tests {
             "a strict settle may back a bounds claim"
         );
         assert!(content_settle_geometry_failure(&parsed.steps[1], Some(&content_record())).is_some());
+    }
+
+    /// SE2c: `selector.bounds` is a geometry claim on every assertion kind.
+    ///
+    /// `Selector::matches_node` compares `selector.bounds` exactly, so a
+    /// selector carrying a rectangle reads the same un-hashed geometry an
+    /// assertion's own `bounds` does. The false-pass this closes: on a
+    /// still-drifting node the reported rect is `0,101,...` instead of
+    /// `0,100,...`, so
+    /// `assert_not_visible {selector: {text: "Error", bounds: [...]}}` sees "no
+    /// match" and passes while the banner is on screen.
+    #[test]
+    fn selector_bounds_is_a_geometry_claim_on_every_assertion_kind() {
+        // One case per assertion kind that takes a selector.
+        for yaml in [
+            "  - assert_text: {selector: {text: {contains: Welcome}, bounds: [0, 100, 200, 140]}, \
+             text: {contains: Welcome}}\n",
+            "  - assert_visible: {selector: {text: {contains: Welcome}, bounds: [0, 100, 200, 140]}}\n",
+            "  - assert_not_visible: {selector: {text: {contains: Error}, bounds: [0, 100, 200, 140]}}\n",
+            "  - assert_state: {selector: {id: title, bounds: [0, 100, 200, 140]}, visible: true}\n",
+        ] {
+            let parsed = scenario(&format!("{HEADER}{yaml}"));
+            let step = &parsed.steps[1];
+            let failure = content_settle_geometry_failure(step, Some(&content_record()))
+                .unwrap_or_else(|| {
+                    panic!("selector.bounds must be refused on {}: {yaml}", step.kind())
+                });
+            assert_eq!(failure.status, Status::Fail);
+            let error = failure.error.as_ref().expect("structured error");
+            assert_eq!(error.code, ErrorCode::AssertionFailed);
+            let details = error.details.as_ref().expect("details");
+            assert_eq!(details["reason"], "content_settle_geometry");
+            assert_eq!(details["geometry_evidence"], false);
+            assert_eq!(details["bounds_claim"]["assertion"], false);
+            assert_eq!(details["bounds_claim"]["selector"], true);
+            // A strict-settled frame may back the same claim.
+            assert!(
+                content_settle_geometry_failure(step, Some(&strict_record())).is_none(),
+                "a strict settle may back a selector bounds claim on {}",
+                step.kind()
+            );
+            // No settle record at all changes nothing.
+            assert!(content_settle_geometry_failure(step, None).is_none());
+        }
+        // The *absence* of a rectangle in either position is still allowed: the
+        // guard must not refuse ordinary content-settled assertions.
+        for yaml in [
+            "  - assert_text: {selector: {text: {contains: Welcome}}, text: {contains: Welcome}}\n",
+            "  - assert_visible: {selector: {text: {contains: Welcome}}}\n",
+            "  - assert_not_visible: {selector: {text: {contains: Error}}}\n",
+            "  - assert_state: {selector: {id: title}, visible: true}\n",
+        ] {
+            let parsed = scenario(&format!("{HEADER}{yaml}"));
+            assert!(
+                content_settle_geometry_failure(&parsed.steps[1], Some(&content_record())).is_none(),
+                "an assertion without a rectangle must stay evaluable: {yaml}"
+            );
+        }
+        // The assertion's own `bounds` still reports itself as the claim.
+        let parsed = scenario(&format!(
+            "{HEADER}  - assert_text: {{selector: {{id: title, bounds: [0, 0, 10, 10]}}, text: {{contains: Welcome}}, bounds: [0, 0, 10, 10]}}\n"
+        ));
+        let failure = content_settle_geometry_failure(&parsed.steps[1], Some(&content_record()))
+            .expect("both rectangle positions are refused");
+        let details = failure
+            .error
+            .as_ref()
+            .and_then(|error| error.details.as_ref())
+            .expect("details");
+        assert_eq!(details["bounds_claim"]["assertion"], true);
+        assert_eq!(details["bounds_claim"]["selector"], true);
     }
 
     /// SE2: a UI/text assertion may be backed by content settle.

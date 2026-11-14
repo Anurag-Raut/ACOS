@@ -880,6 +880,20 @@ pub(crate) struct FirstFrameReport {
 }
 
 impl FirstFrameReport {
+    /// SE2c: point the report at the tree the reply actually publishes.
+    ///
+    /// A content-settled launch binds its frame with the guest's `fast` rule and
+    /// only then proves the tree content stable, so this report was built for the
+    /// pre-settle probe. Publishing it unchanged alongside the *content-settled*
+    /// tree described a tree the reply no longer carries (its `nodes` count and
+    /// `placeholder` flag). Re-describing it keeps `first_frame` evidence and
+    /// `frame.meaningful`/`frame.placeholder` about the same tree.
+    fn describes_tree(mut self, tree: &UiTree) -> Self {
+        self.nodes = ui_tree_node_count(&tree.nodes);
+        self.placeholder = first_frame_is_bare_skeleton(tree);
+        self
+    }
+
     /// The report for a launch whose first traversal is the frame (no wait,
     /// no claim about content).
     fn one_traversal(tree: &UiTree, settled: bool, bound: Option<String>) -> Self {
@@ -1652,6 +1666,50 @@ impl ArtSession {
     /// Ensure a bound tree exists: reuse the last completed traversal, or take
     /// one now if the session has not completed any. Never invents a frame.
     pub(crate) fn ensure_bound_tree(&mut self) -> Result<UiTree, BackendError> {
+        self.require_cached_tree()
+    }
+
+    /// SE2c: one **fresh** tree-only traversal for target resolution under
+    /// `settle: content`.
+    ///
+    /// The bound tree of the previous step is not position evidence for the next
+    /// input: the content signature never hashes `bounds` (a view translated by an
+    /// animation reports a rect that drifts ~1 px per fresh traversal), so a
+    /// layout shift between steps would compute the tap point from a stale rect
+    /// and land on a neighbour.
+    ///
+    /// This takes exactly one `fast` traversal (`pixels:false`, no quiet window -
+    /// a forever-animating screen would never satisfy one) with the one-shot
+    /// `min_probe_seq` floor set above every sample this session has consumed, so
+    /// the guest either answers with a provably newer sample or refuses with
+    /// `NO_FRESH_TREE`. No cached tree is used, and no sample is silently reused.
+    /// The input itself still binds its own content-settled frame afterwards.
+    pub(crate) fn fresh_input_tree(&mut self) -> Result<UiTree, BackendError> {
+        let floor = self.last_probe_seq.unwrap_or(0);
+        self.next_min_probe_seq = Some(floor);
+        let result = self.request_tree_with("fast", false);
+        // The floor is one-shot; never leave it armed for the next request.
+        self.next_min_probe_seq = None;
+        result?;
+        if self.last_reply_probe_seq.is_none() {
+            return Err(BackendError::Protocol {
+                code: ErrorCode::NoFreshFrame,
+                detail: format!(
+                    "settle content: the target-resolution traversal returned no `probe_seq`, so \
+                     it cannot be proven newer than the sample at or below {floor}; the target is \
+                     not resolved on an unproven tree"
+                ),
+                hint: Some(
+                    "A content-mode input resolves its selector on a provably fresh traversal. \
+                     Re-run on a guest that reports `probe_seq`."
+                        .to_string(),
+                ),
+                details: Some(serde_json::json!({
+                    "reason": "content_resolution_unproven",
+                    "min_probe_seq": floor,
+                })),
+            });
+        }
         self.require_cached_tree()
     }
 
@@ -3246,9 +3304,16 @@ pub(crate) fn ensure_launch_tree(
             // SE2: bind the app's content frame with the guest's fast rule, then
             // prove the tree content stable on the host. No PNG is claimed for a
             // content-bound launch (the pixels may still be animating).
-            let (tree, report) = self.bind_first_frame("fast", false, false)?;
-            self.first_frame_report = Some(report);
+            //
+            // SE2c: the reply must carry the **content-settled** tree. The fast
+            // bind above only proves the app mounted; its skeleton-or-not state is
+            // not what this launch publishes. `content_settle` binds the settled
+            // content to its own frame, so that is the tree both the reply and the
+            // `first_frame` evidence have to describe.
+            let (_pre_settle, report) = self.bind_first_frame("fast", false, false)?;
             self.content_settle()?;
+            let tree = self.require_cached_tree()?;
+            self.first_frame_report = Some(report.describes_tree(&tree));
             return Ok(tree);
         }
         let (tree, report) = self.bind_first_frame(settle, pixels, true)?;
@@ -3612,6 +3677,15 @@ impl SessionBackend for ArtSession {
             None
         };
         let frame = self.require_cached_frame()?.observed(previous)?;
+        // SE2c: the published frame is the content-settled traversal, so the
+        // `first_frame` report must describe *it*, not the fast pre-settle probe
+        // `bind_first_frame` returned (whose node count and placeholder flag
+        // describe a tree this reply no longer carries).
+        let report = if content {
+            report.describes_tree(&frame.tree)
+        } else {
+            report
+        };
         let mut meta = frame.tree.frame.clone();
         // SE2: a content-settled launch binds the content-stable traversal, not
         // the fast skeleton probe; its meaning is the content tree's own.
@@ -3679,8 +3753,8 @@ impl SessionBackend for ArtSession {
         self.settle_mode
     }
 
-    fn bound_tree(&mut self) -> Result<UiTree, BackendError> {
-        self.ensure_bound_tree()
+    fn fresh_input_tree(&mut self) -> Result<UiTree, BackendError> {
+        ArtSession::fresh_input_tree(self)
     }
 
     fn set_input_content_settle(&mut self, content: bool) {
@@ -4450,6 +4524,49 @@ mod tests {
         assert!(!first_frame_is_bare_skeleton(&tree(wide)));
         // An empty tree (no windows yet) is a skeleton, not content.
         assert!(first_frame_is_unmounted(&tree(vec![])));
+    }
+
+    /// SE2c: a content-settled launch publishes the **content-settled** tree, so
+    /// its `first_frame` evidence must describe that tree, not the fast
+    /// pre-settle probe it was built from.
+    ///
+    /// Before the fix `ensure_launch_tree` handed the pre-settle skeleton tree
+    /// back in the launch reply (and the report stayed a skeleton report), so the
+    /// reply's tree and its `first_frame.nodes`/`placeholder` described two
+    /// different traversals.
+    #[test]
+    fn a_content_launch_report_describes_the_tree_the_reply_publishes() {
+        use acos_protocol::ui::Bounds;
+        let node = |class: &str, children: Vec<UiNode>| {
+            let mut node = UiNode::new("n", class, Bounds::new(0, 0, 1080, 2209));
+            node.children = children;
+            node
+        };
+        let tree = |nodes: Vec<UiNode>| {
+            UiTree::new(
+                FrameMeta::new(1, "t", "c", 1080, 2400, 420, "h", true),
+                "com.gaten",
+                nodes,
+            )
+        };
+        // The window skeleton the fast launch bind sees before the app mounts.
+        let skeleton = tree(vec![node("com.android.internal.policy.DecorView", vec![])]);
+        let report = FirstFrameReport::one_traversal(&skeleton, true, Some("probe-fresh".into()));
+        assert!(report.placeholder, "the pre-settle probe is a placeholder");
+        assert_eq!(report.nodes, 1);
+
+        // The content-settled tree the reply actually carries.
+        let mut painted = node("com.android.internal.policy.DecorView", vec![]);
+        painted.text = "Set up Gaten".to_string();
+        painted.children = vec![node("android.widget.FrameLayout", vec![])];
+        let settled = tree(vec![painted]);
+        let report = report.describes_tree(&settled);
+        assert!(
+            !report.placeholder,
+            "the published content tree is not a placeholder"
+        );
+        assert_eq!(report.nodes, ui_tree_node_count(&settled.nodes));
+        assert_eq!(report.nodes, 2);
     }
 
     #[test]

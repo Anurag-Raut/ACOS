@@ -330,12 +330,17 @@ pub trait SessionBackend {
     /// Traverse now and return the live tree bound to the new frame.
     fn tree(&mut self) -> Result<UiTree, BackendError>;
 
-    /// SE2b: the tree of the **last completed traversal**, without issuing a new
-    /// command when the engine has one cached (a traversal only when it has
-    /// none). A content-settled input resolves its target here: the frame the
-    /// rule bound, never a fresh strict wait that cannot succeed on a screen
-    /// that never goes quiet.
-    fn bound_tree(&mut self) -> Result<UiTree, BackendError> {
+    /// SE2c: the tree a **content-settled input** resolves its target on: ONE
+    /// fresh traversal, never the cached tree of the previous step.
+    ///
+    /// The content signature deliberately does not hash `bounds` (they drift
+    /// ~1 px per traversal on an animated screen), so the cached tree is not
+    /// proof of position for the *next* action: a layout shift between two steps
+    /// would land the tap on a neighbour. The engine therefore takes one new
+    /// tree-only traversal whose sample is provably newer than everything it has
+    /// consumed so far, with no quiet window. A backend without a stale-cache
+    /// hazard keeps the plain traversal.
+    fn fresh_input_tree(&mut self) -> Result<UiTree, BackendError> {
         self.tree()
     }
 
@@ -721,15 +726,18 @@ impl EngineBackend {
     }
 
     fn point_for(&mut self, selector: &Selector) -> Result<(String, i32, i32), BackendError> {
-        // SE2b: a `settle: content` input resolves its target on the
-        // **content-settled bound tree**, never on a new strict traversal.
+        // SE2b: a `settle: content` input never resolves its target with a new
+        // **strict** traversal: on a screen that never goes quiet that waits the
+        // step's whole `settle_timeout_ms` (20 s on the reference screen) before
+        // the input is even injected - a strict wait that can never succeed.
         //
-        // Two reasons. Correctness: the rule the caller asked for is the one that
-        // binds this frame, and the executor resolves the same node against
-        // exactly this observation, so the two can never disagree. Cost: a strict
-        // resolution on a forever-animating screen waits the step's whole
-        // `settle_timeout_ms` (20 s on the reference screen) before the input is
-        // even injected - a strict wait that can never succeed.
+        // SE2c: it must not read the cached tree either. The content signature
+        // does not hash `bounds` (a translated view's rect drifts ~1 px per
+        // traversal), so the previous step's tree is not position evidence for
+        // this action: a layout shift between the two steps would aim at a
+        // neighbour. One fresh fast traversal, floored above every sample
+        // already consumed and with no quiet window, is the cheapest honest
+        // answer.
         let content = match self {
             EngineBackend::Session { .. } => self.input_settle_is_content(),
             EngineBackend::Native(_) => false,
@@ -737,7 +745,7 @@ impl EngineBackend {
         let tree = match self {
             EngineBackend::Session { session, .. } => {
                 if content {
-                    session.bound_tree()?
+                    session.fresh_input_tree()?
                 } else {
                     session.tree()?
                 }
@@ -1650,7 +1658,7 @@ mod engine_tests {
 
     use acos_protocol::commands::VerifyRequest;
     use acos_protocol::{RequestBase, ResetScope, Status};
-    use acos_verify::backend::{Capability, LaunchRequest};
+    use acos_verify::backend::{Capability, InputAction, LaunchRequest};
     use acos_verify::{Backend, ManifestInfo};
 
     use crate::engine::fake::FakeSession;
@@ -1898,6 +1906,255 @@ mod engine_tests {
         assert_eq!(tap["settle"]["settled"], true);
         assert_eq!(tap["settle"]["bound"], "strict-event");
         assert_eq!(tap["status"], "pass");
+    }
+
+    /// SE2c: a session whose cached (previous step's) tree carries a different
+    /// layout from a fresh traversal, so a content-mode input can be caught
+    /// aiming at the stale rect — the review's "layout shift between steps lands
+    /// the tap on a neighbour" scenario.
+    ///
+    /// The content signature never hashes `bounds`, so nothing in the settle
+    /// record can tell these two trees apart: only taking a new traversal can.
+    struct ContentResolutionSession {
+        /// Top edge of the Increment button in the **cached** tree (centre y 431).
+        cached_top: i32,
+        /// Top edge in every **fresh** traversal (centre y 631: the button moved
+        /// down 200 px since the previous step).
+        fresh_top: i32,
+        seq: u64,
+        settle_mode: &'static str,
+        cached: Option<ObservedFrame>,
+        calls: Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    fn resolution_tree(seq: u64, top: i32) -> UiTree {
+        let inc = UiNode::new(
+            "n1",
+            "android.widget.Button",
+            Bounds::new(42, top, 273, top + 126),
+        )
+        .with_resource_id("dev.acos.fixtures.counter:id/inc")
+        .with_text("Increment")
+        .clickable(true);
+        let root = UiNode::new(
+            "n0",
+            "android.widget.LinearLayout",
+            Bounds::new(0, 0, 1080, 2400),
+        )
+        .with_children(vec![inc]);
+        UiTree::new(
+            FrameMeta::new(
+                seq,
+                "2026-11-01T00:00:00Z",
+                "fake",
+                1080,
+                2400,
+                420,
+                format!("resolution-{seq}"),
+                true,
+            ),
+            "dev.acos.fixtures.counter",
+            vec![root],
+        )
+    }
+
+    impl ContentResolutionSession {
+        fn new(settle_mode: &'static str) -> Self {
+            let mut session = ContentResolutionSession {
+                cached_top: 368,
+                fresh_top: 568,
+                seq: 0,
+                settle_mode,
+                cached: None,
+                calls: Arc::new(std::sync::Mutex::new(Vec::new())),
+            };
+            session.publish(session.cached_top);
+            session
+        }
+
+        fn calls(&self) -> Arc<std::sync::Mutex<Vec<String>>> {
+            Arc::clone(&self.calls)
+        }
+
+        fn record(&self, call: impl Into<String>) {
+            self.calls.lock().unwrap().push(call.into());
+        }
+
+        fn publish(&mut self, top: i32) -> UiTree {
+            self.seq += 1;
+            let tree = resolution_tree(self.seq, top);
+            let captured_at_ms = 0;
+            self.cached = Some(ObservedFrame {
+                tree: tree.clone(),
+                frame: FrameEvidence {
+                    frame_seq: tree.frame.frame_seq,
+                    previous_seq: tree.frame.frame_seq.saturating_sub(1),
+                    captured_at_ms,
+                    captured_at: "2026-11-01T00:00:00Z".to_string(),
+                    md5: format!("fake-{}-{}", top, tree.frame.frame_seq),
+                    png: crate::engine::fake::TINY_PNG.to_vec(),
+                },
+            });
+            tree
+        }
+    }
+
+    impl SessionBackend for ContentResolutionSession {
+        fn engine(&self) -> Engine {
+            Engine::Art
+        }
+
+        fn mode(&self) -> Mode {
+            Mode::Live
+        }
+
+        fn capabilities(&self) -> SessionCapabilities {
+            SessionCapabilities {
+                launch: true,
+                tree: true,
+                screenshot: true,
+                tap: true,
+                tap_text: true,
+                key: true,
+                reset: true,
+                close: true,
+                ..SessionCapabilities::default()
+            }
+        }
+
+        fn launch(&mut self, _apk: &Path) -> Result<LaunchOutcome, BackendError> {
+            self.record("launch");
+            let tree = self.publish(self.cached_top);
+            Ok(LaunchOutcome {
+                session_id: "s_resolution".to_string(),
+                package: "dev.acos.fixtures.counter".to_string(),
+                frame: Some(tree.frame.clone()),
+                screenshot_png: Some(crate::engine::fake::TINY_PNG.to_vec()),
+                crashed: None,
+                detail: serde_json::json!({"engine": "fake"}),
+            })
+        }
+
+        fn tree(&mut self) -> Result<UiTree, BackendError> {
+            self.record("tree");
+            Ok(self.publish(self.fresh_top))
+        }
+
+        fn fresh_input_tree(&mut self) -> Result<UiTree, BackendError> {
+            self.record("fresh_input_tree");
+            Ok(self.publish(self.fresh_top))
+        }
+
+        fn input_settle_mode(&self) -> &'static str {
+            self.settle_mode
+        }
+
+        fn frame(&mut self) -> Result<ObservedFrame, BackendError> {
+            self.record("frame");
+            self.publish(self.fresh_top);
+            Ok(self.cached.clone().expect("just published"))
+        }
+
+        fn last_frame(&self) -> Option<ObservedFrame> {
+            self.cached.clone()
+        }
+
+        fn last_frame_seq(&self) -> u64 {
+            self.seq
+        }
+
+        fn tap_in_window(
+            &mut self,
+            window: &str,
+            x: i32,
+            y: i32,
+        ) -> Result<(), BackendError> {
+            self.record(format!("tap_in_window({window},{x},{y})"));
+            self.publish(self.fresh_top);
+            Ok(())
+        }
+
+        fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {
+            self.tap_in_window("", x, y)
+        }
+
+        fn tap_text(&mut self, _text: &str) -> Result<(), BackendError> {
+            self.record("tap_text");
+            Ok(())
+        }
+
+        fn type_text(&mut self, _text: &str) -> Result<(), BackendError> {
+            Err(BackendError::unsupported("input.type_text", "the fake has no text"))
+        }
+
+        fn key(&mut self, _key: &str) -> Result<(), BackendError> {
+            self.record("key");
+            self.publish(self.fresh_top);
+            Ok(())
+        }
+
+        fn reset(&mut self) -> Result<(), BackendError> {
+            self.record("reset");
+            self.publish(self.cached_top);
+            Ok(())
+        }
+
+        fn close(&mut self) -> Result<(), BackendError> {
+            self.record("close");
+            Ok(())
+        }
+    }
+
+    /// SE2c: a `settle: content` input resolves its target on ONE fresh
+    /// traversal, never on the previous step's cached tree.
+    ///
+    /// The content signature does not hash `bounds` (a translated view's rect
+    /// drifts ~1 px per traversal), so the cached tree is not position evidence
+    /// for the next action: here it says the Increment button is at y 368-494
+    /// while every fresh traversal says 568-694. Before the fix the content path
+    /// read the cached tree and tapped (157, 431), a neighbour 200 px up.
+    #[test]
+    fn a_content_input_resolves_its_target_on_a_fresh_traversal() {
+        let session = ContentResolutionSession::new("content");
+        let calls = session.calls();
+        let mut backend = EngineBackend::session(Box::new(session));
+        let tap = InputAction::Tap {
+            selector: Some(Selector::by_id("inc")),
+            x: None,
+            y: None,
+        };
+        backend.input(&tap).expect("content tap");
+        let log = calls.lock().unwrap().clone();
+        assert!(
+            log.contains(&"fresh_input_tree".to_string()),
+            "a content input must resolve on a fresh traversal: {log:?}"
+        );
+        assert!(
+            log.iter()
+                .filter(|call| *call == "fresh_input_tree" || *call == "tree")
+                .count()
+                == 1,
+            "a content input resolves on exactly one fresh traversal: {log:?}"
+        );
+        assert!(
+            log.iter().any(|call| call == "tap_in_window(,157,631)"),
+            "the tap must land on the fresh bounds (157,631), not the cached (157,431): {log:?}"
+        );
+
+        // A strict input is unchanged: it keeps its own strict traversal.
+        let session = ContentResolutionSession::new("strict");
+        let calls = session.calls();
+        let mut backend = EngineBackend::session(Box::new(session));
+        backend.input(&tap).expect("strict tap");
+        let log = calls.lock().unwrap().clone();
+        assert!(
+            !log.iter().any(|call| call == "fresh_input_tree"),
+            "a strict input has no fresh-resolution path: {log:?}"
+        );
+        assert!(
+            log.iter().any(|call| call == "tree"),
+            "a strict input resolves on a strict traversal: {log:?}"
+        );
     }
 
     #[test]

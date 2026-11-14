@@ -3350,6 +3350,74 @@ that same staleness.
   state (plus the facts that make a read meaningful), geometry is animation and
   is refused. `settle: content` still never backs a pixel or bounds claim, never
   backs a pass on an unproven sample, and now cannot hang or read the cache.
+
+### E13.16c — SE2c: a fresh re-check said MERGE-WITH-FIXES — every finding fixed (same number, second review pass)
+
+**Date / commit:** 2026-11-14, branch `settle-se2-content-stable` on top of the
+`main` `c517a76` merge (HEAD before this pass `04292df`); worktree
+`t3-d41b3b08-5ea0b20149a5a9a9`; scratch `.cache/se2c`. A *fresh* read-only
+review of the landed SE2b tree (Opus, no memory of the first review) returned
+**MERGE-WITH-FIXES** with one HIGH, one MEDIUM and one LOW.
+
+| # | Finding | Fix | Test (fails before, passes after) |
+|---|---|---|---|
+| 1 | **HIGH** the geometry refusal only looked at the assertion's own `bounds`; `Selector::matches_node` compares `selector.bounds` exactly too, so `assert_not_visible {selector: {text: "Error", bounds: [0,100,200,140]}}` read a 1 px-drifting banner as "node absent" and **passed** | `content_settle_geometry_failure` enumerates every assertion that takes a selector (`AssertText`, `AssertVisible`, `AssertNotVisible`, `AssertState`) and refuses `assertion.bounds` **or** `selector.bounds`; the details name which position claimed (`bounds_claim.{assertion,selector}`) | `executor::content_settle_tests::selector_bounds_is_a_geometry_claim_on_every_assertion_kind` (one case per kind + the no-rectangle cases stay allowed); ART `negative/gaten-content-selector-bounds.yaml` `ASSERTION_FAILED`/`content_settle_geometry` **3/3** |
+| 2 | **MEDIUM** a content-mode tap aimed at the previous step's cached tree (`bound_tree()`), whose `bounds` the signature deliberately does not hash — a layout shift between steps would land the tap on a neighbour | content inputs resolve on **one fresh `fast` traversal** with the one-shot `min_probe_seq` floor and no quiet window (`SessionBackend::fresh_input_tree` → `ArtSession::fresh_input_tree`, `engine::point_for`); a reply without `probe_seq` fails closed (`NO_FRESH_FRAME`, `content_resolution_unproven`) | `engine::engine_tests::a_content_input_resolves_its_target_on_a_fresh_traversal` (fake whose cached rect is 200 px from every fresh traversal: before the fix the tap lands at (157,431), after at (157,631)) |
+| 3 | **LOW** a content launch reply carried the *pre-settle* skeleton tree from `ensure_launch_tree` | the content path returns the **content-settled** tree and re-describes its `first_frame` evidence with it (`FirstFrameReport::describes_tree`), in both `ensure_launch_tree` and the session `launch` reply, so `nodes`/`placeholder`/`frame.meaningful` all describe the tree that is published | `engine::art::tests::a_content_launch_report_describes_the_tree_the_reply_publishes` |
+
+- **How the HIGH false pass was proven on ART, not just reasoned:** with the
+  guard reverted the new control's `assert_not_visible` step **passes** on the
+  content-settled Gaten frame (`step assert_not_visible pass`; only the
+  scenario's `expect_error` pin turns the run into `INTERNAL`, i.e. the harness
+  reporting a false pass) — `.cache/se2c/suite-prefix/prefix-selector-bounds.json`.
+  With the fix it is `ASSERTION_FAILED`/`content_settle_geometry` **3/3**
+  (`.cache/se2c/suite/content-neg-gaten-content-selector-bounds-{1,2,3}.json`).
+- **Steps that resolve a target (`wait_for`, `tap`, `type`) are deliberately not
+  refused** by the geometry guard: they match their selector against a
+  traversal they take themselves, not against the bound frame the guard is
+  about. The content input's own resolution is proven fresh by fix 2.
+- **Strict timing change (carried over from SE2b, recorded here as asked):**
+  `SessionBackend::set_settle_timeout` now forwards `settle_timeout_ms` on the
+  **strict** path too (the trait default used to swallow it, so every scenario's
+  declared settle budget was silently ignored). Strict steps therefore honour a
+  declared `settle_timeout_ms` where they previously used the engine default —
+  a behaviour change on the strict path, not only on the content path.
+- **Seam change:** `SessionBackend::bound_tree` is **removed**. It existed only
+  so a content input could resolve on the cached tree; keeping a callable
+  "resolve on the cache" seam next to a fix that forbids exactly that would be a
+  standing invitation to regress. `ArtSession::bound_tree` (the pure accessor
+  used by serve's assert path via `ensure_bound_tree`) is unchanged.
+- **Test-infra fix (environmental, not a product change):** in this worktree
+  (`.../t3/worktrees/acos/<long-id>`) the W50 serve test's socket path lands on
+  exactly 108 characters, one over `sun_path`'s limit, so `acos serve` exits
+  with `path must be shorter than SUN_LEN` and
+  `an_unknown_session_is_not_routed_to_the_frozen_rust_vm` could not start a
+  daemon. `tests/w50_serve_art.rs` now falls back to a shorter socket name
+  inside the same scratch dir (only the socket is length-limited); no assertion
+  changed. Proven: the binary refuses the 108-char path and binds the fallback.
+- **Measured (final binary, `.cache/se2c/suite/`):** the SE2b content set again —
+  `gaten-content-welcome` **3/3 pass** (launch content settle 446/456/505 ms,
+  post-tap 703/666/670 ms, 20–25 and 61–65 proven fresh traversals,
+  `window_ms:300`); its negatives **3/3 each** with pinned codes/reasons
+  (`selector-bounds` `ASSERTION_FAILED`/`content_settle_geometry`, `pixel` and
+  `assert-screenshot` `ASSERTION_FAILED`/`content_settle_pixel`, `wrong-text`
+  `ASSERTION_FAILED`, `window-impossible` `TIMEOUT`/`content-not-stable`). The
+  post-tap wall rose 674 → ~680–785 ms: the extra cost is exactly one fresh
+  resolution traversal, and it buys a target that is provably not stale.
+- **No regression:** 15 gates exactly as expected (10 pass; `T03-render-wrong`,
+  `w7-insets-carve-negative`, `negative/se1-expect-change-noop`
+  `ASSERTION_FAILED`; `negative/offscreen-pager-visible` `ELEMENT_OFFSCREEN`;
+  `p11-progress-timeout` `TIMEOUT`), 5 Gaten flows **pass 5/5**, their 5
+  negatives **`ASSERTION_FAILED` 5/5**; `cargo test --release --offline -p
+  acos-verify -p acos-cli -p acos-protocol` green (77 + 118 unit, every
+  integration suite 0 failed, schemas unchanged so no `UPDATE_SCHEMA`).
+- **Conclusion / next:** with the selector position guarded, the rule can no
+  longer be turned into a pass by 1 px of drift in either direction; with the
+  fresh resolution the tap's target is as fresh as the frame it acts on. What
+  remains is by design: no bounds claim (in either position) is ever backed by
+  content settle, and the extra resolution traversal is the price of acting on a
+  screen whose geometry is not hashed.
+
 ## E9.2 — HYG1: an order-dependent S5 refusal test, and the `writeValue` length word that `VAL_MAP` was missing — PASS (all suites, gates and Gaten flows as expected)
 
 - **Date / commit:** 2026-11-14; branch `hyg1-tests-parcel` off `main` `863def1`
