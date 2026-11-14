@@ -13,6 +13,20 @@
 //! janitor view (`<data>/runs` empty) and `/proc` (no process still names the
 //! run's data tree). One mutex serialises ART guests, as everywhere in this
 //! crate's tests.
+//!
+//! **Cold caches are setup, not the property** (LHFLAKE). The S6 property is
+//! "once the guest is dead, the launch returns promptly", and the promptness
+//! bound (`PROMPT_RETURN_BOUND`) is measured on a *warm* launch. On a cold
+//! checkout the first launch in a run also pays for the launch-guest javac/d8
+//! build (`build-cache STORE`, ~1.6 s), the guest seccomp/artshim clang builds
+//! (~0.2 s) and the shared boot image (`dex2oat`, `prep_ms=3784`). Measured on
+//! main 2026-11-14: the first run after a build took 4.3-11 s (which failed
+//! this bound), every later run 0.25-0.29 s. Those costs are announced on
+//! stderr (`build-cache MISS/STORE`, `prep_ms=`) and say nothing about how
+//! long the launcher takes to notice a dead guest, so `warm_fixture` drives
+//! the same fixture once, untimed, and the timed run that follows measures the
+//! return only. The hard per-run deadline and the bound both still fail a real
+//! S6 hang: `promptness_bound_still_bites` proves a >5 s return is rejected.
 
 use std::io::Read;
 use std::os::unix::fs::PermissionsExt;
@@ -243,7 +257,102 @@ fn run_roots(data: &Path) -> Vec<String> {
     v
 }
 
+/// The S6 property: after the guest has already ended, the launch must report
+/// that outcome promptly instead of sitting on the peer thread. Applied to a
+/// warm launch (see the module docs); `WARM_DEADLINE` still catches a hang
+/// during cold prep, it just does not charge prep time to this bound.
+const PROMPT_RETURN_BOUND: Duration = Duration::from_secs(5);
+
+/// Warm-up runs only have to return; they are not timed. A genuinely hung
+/// launcher still fails here, just against a deadline that leaves room for the
+/// cold-cache work above.
+const WARM_DEADLINE: Duration = Duration::from_secs(180);
+
+/// `None` when the return was prompt enough, else the failure message.
+///
+/// Kept pure so `promptness_bound_still_bites` can prove that a slow return
+/// still fails without the suite having to wait five seconds to find out.
+fn prompt_bound_violation(elapsed: Duration) -> Option<String> {
+    (elapsed > PROMPT_RETURN_BOUND).then(|| {
+        format!(
+            "launch took {elapsed:?} to report a guest that had already ended \
+             (bound: {PROMPT_RETURN_BOUND:?})"
+        )
+    })
+}
+
+/// The cold-cache work a launch announces on stderr, quoted in a bound failure
+/// so the next reader can tell "this was cold prep" from "the launcher waited"
+/// without re-deriving it.
+fn cold_cache_evidence(stderr: &str) -> String {
+    let hits: Vec<&str> = stderr
+        .lines()
+        .filter(|l| {
+            l.contains("build-cache MISS")
+                || l.contains("build-cache STORE")
+                || l.contains("prep_ms=")
+                || l.contains("dex2oat")
+        })
+        .collect();
+    if hits.is_empty() {
+        "(no build-cache/prep lines on stderr: the launch was warm)".to_string()
+    } else {
+        hits.join("\n")
+    }
+}
+
+/// Drive the same launch once as setup. Its whole job is to populate the
+/// on-disk caches (build cache, shared boot image, page cache for the sysroot)
+/// so the run that follows times the return and not the first launch on a cold
+/// checkout. No timing assertion: only that the launcher returned at all.
+///
+/// The warm-up runs in its **own** seeded `/data` copy. That matters for the
+/// `CC` fixture: the guest seccomp build's cache key covers the `CC` path and
+/// the Landlock plan's contents, so warming in the timed run's own directory
+/// would let the timed run reuse a guard `CC` never compiled — the fixture would
+/// silently disarm itself instead of warming. A separate directory (with a
+/// wrapper of its own) keeps the timed run's guard a genuine `CC` build while
+/// the shared javac/d8, clang and boot-image caches still get warmed.
+fn warm_fixture(tag: &str, timeout_secs: u64, envs: &[(&str, &str)], cc_deletes_plan: bool) {
+    let data = seed_data(&format!("warm-{tag}"));
+    let scratch = data.parent().expect("warm scratch root").to_path_buf();
+    let out = scratch.join("out");
+    let mut owned: Vec<(&str, String)> = envs.iter().map(|(k, v)| (*k, (*v).to_string())).collect();
+    if cc_deletes_plan {
+        let wrapper = scratch.join("cc-warm.sh");
+        std::fs::write(
+            &wrapper,
+            format!(
+                "#!/bin/sh\nclang \"$@\" || exit $?\nrm -f '{}'\n",
+                data.join("seccomp/landlock.plan").display()
+            ),
+        )
+        .expect("write warm CC wrapper");
+        std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod warm CC wrapper");
+        owned.retain(|(k, _)| *k != "CC");
+        owned.push(("CC", wrapper.to_string_lossy().to_string()));
+    }
+    // Mirror the timed run's re-arm: build the guard rather than reuse the
+    // blob that came in with the seeded `/data`.
+    let _ = std::fs::remove_file(data.join("seccomp/libacos_seccomp_guest.so"));
+    let refs: Vec<(&str, &str)> = owned.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    let run = run_launch(&data, &out, timeout_secs, &refs, WARM_DEADLINE);
+    assert!(
+        !run.timed_out,
+        "the untimed warm-up launch did not return within {WARM_DEADLINE:?} — a launcher \
+         that never returns is a hang even before the bound is applied.\nstdout:\n{}\nstderr:\n{}",
+        run.stdout,
+        run.stderr
+    );
+    // Diagnostic only (`--nocapture`): the cold-cache cost this setup absorbs.
+    eprintln!("LHFLAKE warm-up {tag}: {:?} (untimed, cold caches land here)", run.elapsed);
+    let _ = std::fs::remove_dir_all(&scratch);
+}
+
 fn assert_clean_after(run: &Run, data: &Path) {
+    // Diagnostic only (`--nocapture`): what the bound actually measured.
+    eprintln!("LHFLAKE measured return: {:?} (bound {PROMPT_RETURN_BOUND:?})", run.elapsed);
     assert!(
         !run.timed_out,
         "launch did not return within its test deadline ({:?}) — the S6 hang is back.\n\
@@ -252,11 +361,18 @@ fn assert_clean_after(run: &Run, data: &Path) {
         run.stdout,
         run.stderr
     );
-    assert!(
-        run.elapsed <= Duration::from_secs(5),
-        "launch took {:?} to report a guest that had already ended (bound: 5 s)",
-        run.elapsed
-    );
+    if let Some(why) = prompt_bound_violation(run.elapsed) {
+        panic!(
+            "{why}\n\
+             the run was warmed first, so this is not cold-cache prep; the launcher itself \
+             was slow to report a dead guest.\n\
+             cold-cache lines (expected: none on a warmed run):\n{}\n\
+             stdout:\n{}\nstderr:\n{}",
+            cold_cache_evidence(&run.stderr),
+            run.stdout,
+            run.stderr
+        );
+    }
     let roots = run_roots(data);
     assert!(roots.is_empty(), "launch left per-run root(s): {roots:?}");
     let survivors = wait_until_no_processes(data, Duration::from_secs(3));
@@ -295,7 +411,13 @@ fn guest_exits_before_milestone_returns_exit_code_and_cleans_up() {
     std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755))
         .expect("chmod CC wrapper");
     // Force build_guest to invoke CC instead of reusing the warm blob.
+    //
+    // LHFLAKE: the first launch in a cold run also builds the launch guest
+    // (javac/d8) and the shared boot image, which took 4.3-11 s and is not what
+    // this test is about. Warm those caches first (untimed, in a throwaway
+    // scratch copy), then time this run.
     let _ = std::fs::remove_file(data.join("seccomp/libacos_seccomp_guest.so"));
+    warm_fixture("early-exit", 10, &[], true);
 
     let run = run_launch(
         &data,
@@ -329,6 +451,7 @@ fn guest_killed_by_signal_returns_signal_and_cleans_up() {
     let Some(()) = require_art() else { return };
     let data = seed_data("signal");
     let out = data.parent().unwrap().join("out");
+    warm_fixture("signal", 10, &[("ACOS_ART_SECCOMP_AUDIT", "kill")], false);
     let run = run_launch(
         &data,
         &out,
@@ -370,6 +493,7 @@ fn milestone_timeout_returns_timeout_and_cleans_up() {
     let out = data.parent().unwrap().join("out");
     // Zero budget: the guest is killed in the wait loop before it can reach
     // `application-created`. That is exactly the "milestone timeout" branch.
+    warm_fixture("timeout", 0, &[], false);
     let run = run_launch(&data, &out, 0, &[], Duration::from_secs(20));
     assert_clean_after(&run, &data);
     assert_eq!(run.status.and_then(|s| s.code()), Some(1));
@@ -391,6 +515,7 @@ fn ordinary_launch_to_application_created_stays_fast() {
     let Some(()) = require_art() else { return };
     let data = seed_data("normal");
     let out = data.parent().unwrap().join("out");
+    warm_fixture("normal", 30, &[], false);
     let run = run_launch(&data, &out, 30, &[], Duration::from_secs(30));
     assert!(!run.timed_out, "ordinary launch hung:\n{}\n{}", run.stdout, run.stderr);
     assert_eq!(run.status.and_then(|s| s.code()), Some(0), "{}", run.stderr);
@@ -402,4 +527,39 @@ fn ordinary_launch_to_application_created_stays_fast() {
     let wall = j["wall_ms"].as_u64().expect("wall_ms");
     assert!(wall > 0 && wall <= 2000, "ordinary launch wall was {wall} ms (142 ms class)");
     assert_clean_after(&run, &data);
+}
+
+// ---------------------------------------------------------------------------
+// 5. The bound itself still bites (sanity check on the timing helper)
+// ---------------------------------------------------------------------------
+
+/// LHFLAKE guard: the cold/warm split above must not have turned the 5 s bound
+/// into a no-op. A return past the bound — including the 11 s a *cold* first run
+/// measured before this change — is still a failure, so a real S6 hang (return
+/// only after the outer deadline) cannot pass silently.
+#[test]
+fn promptness_bound_still_bites() {
+    for ok in [Duration::ZERO, Duration::from_millis(229), Duration::from_millis(4290)] {
+        assert!(
+            prompt_bound_violation(ok).is_none(),
+            "a {ok:?} return is inside the {PROMPT_RETURN_BOUND:?} bound"
+        );
+    }
+    let just_over = PROMPT_RETURN_BOUND + Duration::from_millis(1);
+    assert!(
+        prompt_bound_violation(just_over).is_some(),
+        "a return just past the bound must fail"
+    );
+    for late in [just_over, Duration::from_secs(11), Duration::from_secs(20)] {
+        let why = prompt_bound_violation(late).expect("a late return must fail");
+        assert!(why.contains("already ended"), "the failure must name the property: {why}");
+    }
+    // The failure message quotes cold-cache evidence when there is any, so a
+    // regressed bound is not mistaken for a slow host.
+    assert!(cold_cache_evidence("acos-art: build-cache MISS abc built in 84 ms")
+        .contains("build-cache MISS"));
+    assert!(cold_cache_evidence("acos-art: launch: boot_image: prep_ms=3784")
+        .contains("prep_ms=3784"));
+    assert!(cold_cache_evidence("acos-art: launch wall=24ms")
+        .contains("warm"));
 }
