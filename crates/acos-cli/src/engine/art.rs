@@ -2899,6 +2899,14 @@ impl ArtSession {
     /// G3f1: the settle verdict of the frame the last launch bound
     /// (`(settled, bound)`), so serve publishes `result.settle` for that frame
     /// rather than for the pre-launch traversal.
+    /// FB2: the producer frame number of the bound frame, when the reply
+    /// carried one. A placeholder launch is reported with it, because a number
+    /// that never advances is what "the app never mounted" looks like from the
+    /// frame store.
+    pub(crate) fn last_frame_number(&self) -> Option<u64> {
+        self.cached.as_ref().and_then(|frame| frame.frame_number)
+    }
+
     pub(crate) fn first_frame_bound(&self) -> Option<(bool, Option<String>)> {
         self.first_frame_bound.clone()
     }
@@ -3270,6 +3278,21 @@ impl SessionBackend for ArtSession {
         let settle_before = self.last_tree_settle.clone();
         let (_tree, report) = self.bind_first_frame("strict", true)?;
         self.last_tree_settle = settle_before;
+        if report.placeholder {
+            // FB2: the false green reported by agents. `reached_stage:
+            // first_frame` with `placeholder: true` is *not* a launch pass: the
+            // window exists, the app's own content never mounted (measured:
+            // 9-node empty RN surface, `frame_number` stuck at 1 for 40+ s while
+            // SoLoader looped on a missing `libworklets.so`). A launch step that
+            // reached only the skeleton is `blocked` / `placeholder-content`.
+            return Err(BackendError::Error {
+                code: ErrorCode::PlaceholderContent,
+                detail: format!(
+                    "launch reached the window skeleton but the app's content never mounted                      ({} node(s), no app text) after {} traversal(s)/{} ms ({} event wait(s));                      reason: placeholder-content. Read the guest log for the first                      UnsatisfiedLinkError / SoLoader / fatal JS line.",
+                    report.nodes, report.traversals, report.waited_ms, report.event_waits
+                ),
+            });
+        }
         let frame = self.require_cached_frame()?.observed(previous)?;
         let mut meta = frame.tree.frame.clone();
         if report.placeholder {

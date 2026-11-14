@@ -70,6 +70,11 @@ pub enum ErrorCode {
     // ---- evidence / freshness --------------------------------------------
     /// No frame satisfying the request (freshness / sequencing) exists.
     NoFreshFrame,
+    /// The window exists but the app's own content never mounted: after the
+    /// content budget the launch frame is still the bare window skeleton (no
+    /// app text, no mounted view of the app's own). Reason
+    /// `placeholder-content`; always a `blocked`, never a pass (FB2).
+    PlaceholderContent,
     /// Evidence cannot be tied to the required fidelity level.
     UnverifiedFidelity,
 
@@ -357,6 +362,7 @@ impl ErrorCode {
             ErrorCode::UnsupportedRnText => "UNSUPPORTED_RN_TEXT",
             ErrorCode::UnsupportedRnNoTarget => "UNSUPPORTED_RN_NO_TARGET",
             ErrorCode::NoFreshFrame => "NO_FRESH_FRAME",
+            ErrorCode::PlaceholderContent => "PLACEHOLDER_CONTENT",
             ErrorCode::UnverifiedFidelity => "UNVERIFIED_FIDELITY",
             ErrorCode::ApkNotZip => "APK_NOT_ZIP",
             ErrorCode::ApkNoManifest => "APK_NO_MANIFEST",
@@ -501,6 +507,9 @@ impl ErrorCode {
             }
             ErrorCode::NoFreshFrame => {
                 "Do not reuse an older capture. Wait for a new frame after the action, or request capture with the correct after_seq/cause_id, then retry."
+            }
+            ErrorCode::PlaceholderContent => {
+                "The window and its decor exist but the app's own content never mounted (still the bare window skeleton, `frame_number` stuck). Do not read this as the app's first frame. Read `acos_logs` (or the artifact log) for the first UnsatisfiedLinkError / SoLoader / fatal JS line: a missing native library for the host ABI is the usual cause; `acos_inspect` cross-checks the APK's referenced libraries against `lib/<abi>/`."
             }
             ErrorCode::UnverifiedFidelity => {
                 "Evidence is not tied to the required fidelity (for example a JVM result for an ART requirement). Re-run on a qualifying backend or report unsupported."
@@ -789,6 +798,7 @@ impl ErrorCode {
             | ErrorCode::HostDiskFull
             | ErrorCode::HostMemoryLimit
             | ErrorCode::HostMemoryLow
+            | ErrorCode::PlaceholderContent
             | ErrorCode::UntrustedApkNotCertified => Status::Blocked,
             ErrorCode::UnsupportedAndroidApi
             | ErrorCode::UnsupportedJavaApi
@@ -947,6 +957,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::UnsupportedRnText,
     ErrorCode::UnsupportedRnNoTarget,
     ErrorCode::NoFreshFrame,
+    ErrorCode::PlaceholderContent,
     ErrorCode::UnverifiedFidelity,
     ErrorCode::ApkNotZip,
     ErrorCode::ApkNoManifest,

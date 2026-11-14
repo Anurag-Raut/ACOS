@@ -179,6 +179,13 @@
           "type": "string"
         },
         {
+          "description": "The window exists but the app's own content never mounted: after the content budget the launch frame is still the bare window skeleton (no app text, no mounted view of the app's own). Reason `placeholder-content`; always a `blocked`, never a pass (FB2).",
+          "enum": [
+            "PLACEHOLDER_CONTENT"
+          ],
+          "type": "string"
+        },
+        {
           "description": "Evidence cannot be tied to the required fidelity level.",
           "enum": [
             "UNVERIFIED_FIDELITY"

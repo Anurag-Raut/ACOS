@@ -554,7 +554,7 @@ impl ServeEngine {
                             request_id,
                             id,
                             &held,
-                            &session,
+                            &mut session,
                             &tree,
                             false,
                             None,
@@ -623,12 +623,12 @@ impl ServeEngine {
                     .unwrap_or_else(|e| e.into_inner())
                     .insert(id.to_string(), Arc::clone(&held));
                 self.set_route(id, Route::Art);
-                let guard = held.session.lock().unwrap_or_else(|e| e.into_inner());
+                let mut guard = held.session.lock().unwrap_or_else(|e| e.into_inner());
                 launch_reply(
                     request_id,
                     id,
                     &held,
-                    &guard,
+                    &mut guard,
                     &started,
                     true,
                     replaced_guest,
@@ -1180,7 +1180,7 @@ fn launch_reply(
     request_id: &str,
     id: &str,
     held: &HeldArtSession,
-    session: &ArtSession,
+    session: &mut ArtSession,
     tree: &UiTree,
     fresh_guest: bool,
     replaced_guest: Option<Value>,
@@ -1233,6 +1233,59 @@ fn launch_reply(
         }
     }
     label_timing(&mut result, session, "acos_launch", started);
+    // FB2: a window whose content never mounted is **not** a launch pass. The
+    // placeholder label above was the evidence `acos_launch` used to publish as
+    // `pass` / `first_frame` (feedback: launch `pass`, `first_frame`, 9 nodes,
+    // `pixels: false`, stuck for 40+ s while SoLoader looped on a missing
+    // `libworklets.so`). Report it as `blocked` with `reason:
+    // placeholder-content` and the first log line that explains it.
+    let placeholder_failure = session
+        .first_frame_report()
+        .filter(|report| report.placeholder)
+        .map(|report| {
+            let lines = log_lines_for_hint(session);
+            placeholder_launch_error(
+                id,
+                &report,
+                session.last_frame_number(),
+                placeholder_hint_line(&lines),
+            )
+        });
+    if let Some(error) = placeholder_failure {
+        // The ladder is published with the reply, so a caller sees *where* the
+        // launch stopped even though the envelope is a failure.
+        result["stage_reached"] = json!("window");
+        result["content"] = json!({
+            "mounted": false,
+            "reason": "placeholder-content",
+            "note": "the window and its decor exist; the app's own content never mounted",
+        });
+        if let Some(stages) = result.get_mut("stages").and_then(Value::as_array_mut) {
+            for stage in stages.iter_mut() {
+                if stage.get("stage").and_then(Value::as_str) == Some("first_frame") {
+                    *stage = json!({
+                        "stage": "first_frame",
+                        "ok": false,
+                        "status": "blocked",
+                        "blocker": {
+                            "code": ErrorCode::PlaceholderContent.as_str(),
+                            "message": error.message,
+                        },
+                    });
+                }
+            }
+        }
+        return Envelope::failure(
+            request_id,
+            ProtocolBackend::AcosNative,
+            Fidelity::ArtReference,
+            error,
+            Metrics::wall_ms(0),
+        )
+        .with_session_id(id.to_string())
+        .with_value_result(result)
+        .with_capabilities(["apk.inspect", "lifecycle", "ui.frame", "ui.tree"]);
+    }
     Envelope::pass(
         request_id,
         ProtocolBackend::AcosNative,
@@ -1242,6 +1295,114 @@ fn launch_reply(
     .with_session_id(id.to_string())
     .with_value_result(result)
     .with_capabilities(["apk.inspect", "lifecycle", "ui.frame", "ui.tree"])
+}
+
+/// FB2: the guest log lines a launch reply may quote.
+///
+/// The sink drops oldest first and a React Native launch opens with hundreds of
+/// SoLoader lines, so the launch reply carries at most one *chosen* line rather
+/// than a wall of them; `acos_logs` remains the whole record.
+fn log_lines_for_hint(session: &mut ArtSession) -> Vec<String> {
+    let priority = |level: LogLevel| match level {
+        LogLevel::Verbose => "V",
+        LogLevel::Debug => "D",
+        LogLevel::Info => "I",
+        LogLevel::Warn => "W",
+        LogLevel::Error => "E",
+    };
+    match session.logs_since(0) {
+        Ok(records) => records
+            .iter()
+            .map(|record| {
+                format!(
+                    "{} {:<8} {}",
+                    priority(record.level),
+                    record.tag,
+                    record.message
+                )
+            })
+            .collect(),
+        // A launch whose guest is wedged cannot promise a log snapshot; the
+        // error still says `placeholder-content` and points at `acos_logs`.
+        Err(_) => Vec::new(),
+    }
+}
+
+/// FB2: the first line that *explains* a launch whose content never mounted.
+///
+/// Ordered by how much it tells an agent: a missing native symbol names the
+/// library, SoLoader's "couldn't find" line names it too, then a fatal JS/
+/// runtime line, then any error-level line. Never a guess: when no line matches,
+/// the reply says so instead of quoting noise.
+fn placeholder_hint_line(lines: &[String]) -> Option<String> {
+    const MARKERS: [&str; 5] = [
+        "UnsatisfiedLinkError",
+        "couldn't find",
+        "SoLoader",
+        "FATAL EXCEPTION",
+        "FATAL",
+    ];
+    for marker in MARKERS {
+        if let Some(line) = lines.iter().find(|line| line.contains(marker)) {
+            return Some(line.trim().to_string());
+        }
+    }
+    lines
+        .iter()
+        .find(|line| line.starts_with('E'))
+        .map(|line| line.trim().to_string())
+}
+
+/// FB2: the structured failure for a launch that reached only the window.
+///
+/// `blocked` / `PLACEHOLDER_CONTENT` (reason `placeholder-content`), with the
+/// bound-skeleton facts and one log line. Never a pass: the whole point is that
+/// `pass` + `first_frame` on a splash that never mounts is a false green.
+fn placeholder_launch_error(
+    id: &str,
+    report: &crate::engine::art::FirstFrameReport,
+    frame_number: Option<u64>,
+    log_hint: Option<String>,
+) -> ProtocolError {
+    let number = frame_number
+        .map(|n| n.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    let detail = format!(
+        "launch reached the window skeleton but the app's content never mounted \
+         ({} node(s), no app text) after {} traversal(s)/{} ms ({} event wait(s)); \
+         frame_number {number} did not advance past the placeholder; reason: placeholder-content",
+        report.nodes, report.traversals, report.waited_ms, report.event_waits
+    );
+    let mut details = json!({
+        "reason": "placeholder-content",
+        "session_id": id,
+        "nodes": report.nodes,
+        "traversals": report.traversals,
+        "event_waits": report.event_waits,
+        "waited_ms": report.waited_ms,
+        "settled": report.settled,
+        "bound": report.bound,
+        "frame_number": frame_number,
+    });
+    let hint = match &log_hint {
+        Some(line) => {
+            details["log_hint"] = json!(line);
+            format!(
+                "The window exists; the app's own content never mounted. The guest log names the \
+                 cause in this line: `{line}`. A native library the app references but the APK \
+                 does not ship for the host ABI is the usual cause: run `acos_inspect` and read \
+                 its `warnings`, then `acos_logs` around that line."
+            )
+        }
+        None => "The window exists; the app's own content never mounted and the guest log carried \
+                 no explaining line. Read `acos_logs` for the first UnsatisfiedLinkError / \
+                 SoLoader / fatal JS line; `acos_inspect` cross-checks the APK's referenced native \
+                 libraries against lib/<abi>/."
+            .to_string(),
+    };
+    ProtocolError::new(ErrorCode::PlaceholderContent, detail)
+        .with_hint(hint)
+        .with_details(details)
 }
 
 fn observe_tree(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
@@ -2578,6 +2739,120 @@ mod tests {
     /// P9: launch/reset bind with P1's vocabulary, are pixel-free by default,
     /// and refuse the one combination that would let a mid-animation frame back
     /// a pixel claim.
+    /// FB2: a launch that reached only the window skeleton is `blocked` with
+    /// reason `placeholder-content` — never `pass` / `first_frame`.
+    fn placeholder_report(nodes: usize, placeholder: bool) -> crate::engine::art::FirstFrameReport {
+        crate::engine::art::FirstFrameReport {
+            traversals: 2,
+            waited_ms: 5003,
+            event_waits: 1,
+            settled: true,
+            bound: Some("strict-event".to_string()),
+            nodes,
+            placeholder,
+        }
+    }
+
+    #[test]
+    fn a_placeholder_launch_is_blocked_not_a_pass() {
+        let error = placeholder_launch_error(
+            "s_gaten",
+            &placeholder_report(9, true),
+            Some(1),
+            Some("E SoLoader: couldn't find libworklets.so".to_string()),
+        );
+        let envelope = Envelope::failure(
+            "req_fb2",
+            ProtocolBackend::AcosNative,
+            Fidelity::ArtReference,
+            error.clone(),
+            Metrics::wall_ms(0),
+        );
+        assert!(!envelope.status().is_pass(), "a placeholder is never a pass");
+        assert_eq!(envelope.status(), acos_protocol::Status::Blocked);
+        assert_eq!(error.code, ErrorCode::PlaceholderContent);
+        assert_eq!(error.code.as_str(), "PLACEHOLDER_CONTENT");
+        assert_eq!(error.details.as_ref().unwrap()["reason"], json!("placeholder-content"));
+        assert_eq!(error.details.as_ref().unwrap()["nodes"], json!(9));
+        assert_eq!(error.details.as_ref().unwrap()["frame_number"], json!(1));
+        assert_eq!(error.details.as_ref().unwrap()["session_id"], json!("s_gaten"));
+        // The hint carries the log line that names the cause, so an agent does
+        // not have to guess why the content never mounted.
+        let hint = error.hint.clone();
+        assert!(
+            hint.contains("libworklets.so"),
+            "the hint quotes the explaining log line: {hint}"
+        );
+        assert!(hint.contains("acos_inspect"), "{hint}");
+        assert!(
+            error.message.contains("placeholder-content"),
+            "the message names the reason: {}",
+            error.message
+        );
+
+        // The same facts with no explaining log line still name the reason and
+        // point at the log, never at a guessed cause.
+        let bare = placeholder_launch_error("s_x", &placeholder_report(9, true), None, None);
+        assert_eq!(bare.code, ErrorCode::PlaceholderContent);
+        assert!(bare.hint.contains("acos_logs"), "{}", bare.hint);
+        assert_eq!(
+            bare.details.as_ref().unwrap().get("log_hint"),
+            None,
+            "no guessed cause"
+        );
+    }
+
+    #[test]
+    fn the_placeholder_hint_line_prefers_the_missing_native_library() {
+        let lines = vec![
+            "I SoLoader: libappmodules.so not found on /data/app/lib/x86_64".to_string(),
+            "E SoLoader: couldn't find libworklets.so".to_string(),
+            r#"E SoLoader: java.lang.UnsatisfiedLinkError: dlopen failed: library "libworklets.so" not found"#
+                .to_string(),
+            "E unknown: FATAL EXCEPTION: mqt_native_modules".to_string(),
+        ];
+        assert_eq!(
+            placeholder_hint_line(&lines).as_deref(),
+            Some(
+                r#"E SoLoader: java.lang.UnsatisfiedLinkError: dlopen failed: library "libworklets.so" not found"#
+            )
+        );
+        // A SoLoader "couldn't find" line is next, then a fatal runtime line,
+        // then any error-level line, then nothing.
+        let without_symbol = [lines[1].clone(), lines[3].clone()];
+        assert_eq!(
+            placeholder_hint_line(&without_symbol).as_deref(),
+            Some("E SoLoader: couldn't find libworklets.so")
+        );
+        assert_eq!(
+            placeholder_hint_line(&lines[3..]).as_deref(),
+            Some("E unknown: FATAL EXCEPTION: mqt_native_modules")
+        );
+        assert_eq!(
+            placeholder_hint_line(&["W Choreographer: skipped 32 frames".to_string()]).as_deref(),
+            None
+        );
+        assert_eq!(placeholder_hint_line(&[]), None);
+    }
+
+    /// The normal path is untouched: a content report is not turned into a
+    /// failure by any of the placeholder machinery.
+    #[test]
+    fn a_content_launch_stays_the_normal_pass_path() {
+        let report = placeholder_report(243, false);
+        let envelope = Envelope::pass(
+            "req_fb2_ok",
+            ProtocolBackend::AcosNative,
+            Fidelity::ArtReference,
+            Metrics::wall_ms(0),
+        );
+        assert!(envelope.status().is_pass());
+        assert!(
+            !report.placeholder,
+            "content must never be labelled a placeholder"
+        );
+    }
+
     #[test]
     fn launch_bind_defaults_to_strict_pixel_free_and_refuses_fast_pixels() {
         assert_eq!(launch_bind(&json!({})).unwrap(), ("strict", false));
