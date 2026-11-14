@@ -187,6 +187,30 @@ public final class ZygoteApp {
         System.exit(0);
     }
 
+    /**
+     * ZPROD3b: hand this child the session's demand-probe channel on fd 0.
+     *
+     * <p>The keeper's own stdin is `/dev/null` ({@code PersistentZygote::start} spawns
+     * it with {@code Stdio::null()}), so a {@code PROBE} wake the session launcher wrote to
+     * its stub's stdin could never reach the forked app: on real ART the post-tap capture
+     * timed out with {@code probe-floor} because the last event-driven sample stayed the
+     * newest. The session launcher publishes {@code <sessions>/<tag>/probe.fifo} before
+     * {@code <tag>/argv} (i.e. before any {@code spawn} can arrive) and holds it open
+     * read-write, so this open never blocks and the reader never sees a spurious EOF.
+     * It runs before {@code spawnSession}: no Landlock/seccomp is active yet, and fd 0 is
+     * inherited by the namespace-init and app processes that follow.
+     */
+    private static void z4ProbeStdin(String sessions, int tag) {
+        try {
+            java.io.FileInputStream in =
+                    new java.io.FileInputStream(sessions + "/" + tag + "/probe.fifo");
+            System.setIn(in);
+            say("ZP1 child tag=" + tag + " probe_stdin=on");
+        } catch (Throwable x) {
+            say("ZP1 child tag=" + tag + " probe_stdin=<err " + x + ">");
+        }
+    }
+
     /** Fork exactly one session (Z4's child body) and publish its pid. */
     private static int z4ForkOne(String sessions, int tag, long t0) throws Throwable {
         String[] argv = readArgv(sessions + "/" + tag + "/argv");
@@ -194,6 +218,10 @@ public final class ZygoteApp {
         long tFork = now();
         int pid = dev.acos.z1.Nat.fork();
         if (pid == 0) {
+            // ZPROD3b: this child's demand-probe channel, before the namespace
+            // and fork chain (no Landlock/seccomp is active yet) and before
+            // LaunchMain starts its stdin reader.
+            z4ProbeStdin(sessions, tag);
             // One session = one process group: this is what lets the zygote end
             // exactly this session later (`kill` uses the negated warden pid).
             int pgrp = dev.acos.z1.Nat.setpgid0();
@@ -277,6 +305,8 @@ public final class ZygoteApp {
             int pid = dev.acos.z1.Nat.fork();
             if (pid == 0) {
                 long f1 = now();
+                // ZPROD3b: the per-session demand-probe channel on fd 0.
+                z4ProbeStdin(sessions, k);
                 // AOSP order: namespaces/mounts first, while this process is
                 // still single-threaded (`unshare(CLONE_NEWUSER)` is EINVAL for
                 // a multithreaded caller; postForkChild restarts ART's threads).
