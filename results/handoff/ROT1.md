@@ -391,3 +391,110 @@ display the dispatcher maps into; the rotate step's traversal refreshes `window_
    `DisplaySpec::rotated` models (nav 63 px left); align the guest's own `STATUS_INSET`/
    `NAV_INSET` derivation with it so the transient first-traversal layout matches the settled
    one instead of being papered over by the post-transaction forced relayout.
+
+---
+
+# ROT5 section (branch `art-rotate-1`, `main` `cb5bd04` merged in)
+
+Status: **landscape geometry is now the reference device's** (not a re-bless), `rot1-rotate`
+3/3 + its negative 3/3, all 15 gates exactly as expected. Three of the four ROT4 leftovers are
+blocked by **one named inset** (63 px), the fourth by **one named key-delivery rung**. Neither
+is a timeout without a cause.
+
+## 1. The decision ROT4 left open: which landscape baseline is right
+
+The oracle exists and wins: `fixtures/reference/hello-views/art-api34-x86_64/` is a real
+API-34 x86_64 emulator capture (`device-config.json`: `serial emulator-5554`, 1080x2400 @
+420 dpi) whose `commands.txt` performs exactly the scenario's rotate (`settings put system
+user_rotation 1`) and whose `ui_after_recreate.xml` (`<hierarchy rotation="1">`) carries the
+node bounds the scenario asserts — `android:id/input [170,282][2358,400]`,
+`android:id/result [170,526][303,577]`, root `[128,0][2400,1080]`. The scenario's header already
+named that directory, so the numbers were never hand-written; **the engine was wrong**, and
+ROT4's measured `[105,219][2230,337]` was the wrong model, not a stale baseline.
+
+`display.txt` (`dumpsys window displays`) gives the rule table directly:
+
+```text
+mNavigationBarCanMove=false  mNavigationBarPosition=4
+mDecorInsetsInfo:
+  ROTATION_0  ={nonDecorInsets=[0,128][0,63], configInsets=[0,128][0,63], nonDecorFrame=[0,128][1080,2337]}
+  ROTATION_90 ={nonDecorInsets=[128,0][0,63], configInsets=[128,63][0,63], nonDecorFrame=[128,0][2400,1017]}
+  ROTATION_180={nonDecorInsets=[0,0][0,191],  configInsets=[0,63][0,191],  nonDecorFrame=[0,0][1080,2209]}
+  ROTATION_270={nonDecorInsets=[0,0][128,63], configInsets=[0,63][128,63], nonDecorFrame=[0,0][2272,1017]}
+```
+
+* the status bar keeps its 128 px and lands on the edge the panel turns to: **left** at
+  `ROTATION_90`, bottom at 180, right at 270. ACOS's `RectI::rotate_quarters` used
+  `(x,y) -> (h-y, x)`, the mirror of that (status bar right at rotation 1);
+* the navigation bar cannot move (`mNavigationBarCanMove=false`), so it **stays on the bottom
+  edge** in every rotation; ACOS carried it to the left edge as a 63 px band (and to the top at
+  180);
+* `nonDecorFrame` is exactly `frame - app_insets()` under the corrected rule (new unit test
+  `every_rotation_matches_the_reference_decor_insets` pins all four rows).
+
+Result: `hello-views` landscape `input` is now `[170,219][2358,337]` — **x matches the oracle
+to the pixel**. Nothing was re-blessed from a measurement: `rot1-rotate.yaml`/`counter.yaml`'s
+landscape x are re-derived as `128 + 42` (the 16dp padding the portrait bounds already show).
+
+## 2. Remaining gap 1 — the landscape `configInsets` top strip (63 px)
+
+The oracle's `configInsets` is `nonDecorInsets` **plus a top strip of 63 px** for every
+rotation except 0 (`[128,63][0,63]` at 90; `[0,63][0,191]` at 180; `[0,63][128,63]` at 270).
+That strip is `status_bar_height` in the landscape config (24dp × 2.625 = 63 px) and it is what
+the app's own decor reserves: the oracle tree has `statusBarBackground [128,0][2400,63]`,
+`action_bar_container [128,63][2400,189]`, `content [128,189][2400,1017]`. ACOS delivers the
+`nonDecorInsets` sources only, so the guest's action bar sits at y=0 and every landscape node is
+63 px high:
+
+| scenario | expected (oracle) | measured | delta |
+|---|---|---|---|
+| `hello-views` `input` | `[170,282][2358,400]` | `[170,219][2358,337]` | y −63 |
+| `todo-list` `input` | `[170,475][2358,601]` | `[170,412][2358,538]` | y −63 |
+| `multi-activity` | `[170,231][2358,349]` | `[170,168][2358,286]` | y −63 |
+
+So all three scenarios are one inset away, with x already exact. Next action: give the guest's
+window the `configInsets` (i.e. `nonDecorInsets` + the status-bar-height strip at the top when
+`rotation != 0`) as the content insets its decor applies — DisplayPolicy's own table — then
+re-run the three. `todo-list`/`multi-activity` also have later steps behind the same first
+assertion, so they cannot be read further until this lands.
+
+## 3. Remaining gap 2 — `back` after a relaunch is delivered but dropped
+
+`v1-recreate`'s rotate steps, both lifecycle `assert_log`s and the restored text pass; its final
+`back: {}` reports `TIMEOUT` `no-draw-after-action`. The evidence names the rung:
+
+* the key **is** delivered: `steps/14-back.json` → `settle.ack_ms = 5` (the guest's own
+  `FINISHED` ack), `frame_seq` unchanged, `pixels_changed=false`, `state_changed=null`;
+* the guest does **nothing**: no `onPause`/`onStop`/`onSaveInstanceState`/`onDestroy` after the
+  last `onResume` in `logs/logcat.txt` (only the two rotate relaunch cycles appear);
+* the *same* step **works without the relaunch**: `.cache/rot5/back-probe.yaml` (v1-recreate
+  minus its two `rotate:` steps) → `08-back` **pass**, the activity finishes and logs the destroy
+  (`out/back-probe/`). So the key path, the scenario and the fixture are fine; the relaunch is
+  the difference.
+
+Mechanism (one line, not yet proven — the budget ran out): the relaunch replaces the window
+(new `ViewRootImpl`, new token) but the **WMS/dispatcher focus is still the pre-relaunch
+window**, so the new `ViewRootImpl` never receives `windowFocusChanged(true)` and drops key
+events. Touch is unaffected because it is hit-test routed to the new window's bounds (ROT4's
+post-rotate tap increments the counter, which is why rotate looked complete). AOSP's missing
+half is `DisplayContent.updateFocusedWindowLocked` on window add/remove; in ACOS that is
+`addToDisplay` assigning focus + a `WmCallback` window-focus change to the new client. Next
+action: do that, then re-run `v1-recreate` and `counter.yaml`'s tail (`assert_no_crash` today).
+
+## 4. Measured this pass
+
+* `cargo test --release --offline -p acos-wm` → 55 lib tests green (2 new geometry tests).
+* `scenarios/rot1-rotate.yaml` **3/3 pass**, `scenarios/negative/rot1-rotate-wrong.yaml`
+  **3/3 `ASSERTION_FAILED`** (`.cache/rot5/suite/rot-{1,2,3}.json` / `negrot-{1,2,3}.json`).
+* 15 gates: 10 pass, `suite/T03-render-wrong` + `w7-insets-carve-negative` +
+  `negative/se1-expect-change-noop` `ASSERTION_FAILED`, `negative/offscreen-pager-visible`
+  `ELEMENT_OFFSCREEN`, `p11-progress-timeout` `TIMEOUT` — `.cache/rot5/suite/gate-*.json`.
+* 5 Gaten flows + 5 negatives: **not re-run** in this window (60-minute rule; rotation 0 only,
+  and ROT4's 5/5 + 5/5 evidence is unaffected by a `rotation != 0` rule). Stated as a gap.
+
+## 5. Next smallest actions, in order
+
+1. Landscape `configInsets` top strip (63 px) into the guest's content insets → expect
+   `hello-views`, `todo-list`, `multi-activity` green at their oracle bounds.
+2. Window focus on `addToDisplay` after a relaunch → `v1-recreate` `back`.
+3. Re-run the 5 Gaten flows + 5 negatives and the interleaved A/B on the finished branch.

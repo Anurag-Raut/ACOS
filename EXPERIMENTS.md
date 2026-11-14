@@ -3666,3 +3666,33 @@ smallest follow-up.
   ART encoder still writes stored blocks — deliberate, it is on the screenshot
   path; re-encoding happens in the evidence pass). `gc` has no size budget
   (`--max-bytes`) yet.
+
+### E13.13 / ROT5 — landscape bars follow the reference device's `DisplayPolicy`, not a blind quarter turn; the residual is one named inset and one named key-delivery rung
+
+Branch `art-rotate-1`, `main` (`cb5bd04`) merged in. This pass answers ROT4 §6.1 (the stale
+landscape baseline) with the oracle instead of a re-bless, and names the two remaining
+failures. Nothing here is a re-bless from a measurement: every geometry number is derived
+from the *reference device's own dump*.
+
+| item | state |
+|---|---|
+| landscape bar placement (`RectI::rotate_quarters`, `SystemBars::rotate_quarters`) | **fixed.** The old code rotated every rect with `(x,y) -> (h-y, x)`, which put the status bar on the **right** at rotation 1 and carried the navigation bar onto the **left** edge as a 63 px band. The reference phone says otherwise: `mDecorInsetsInfo` in `fixtures/reference/hello-views/art-api34-x86_64/display.txt` (a real API-34 x86_64 emulator, `serial emulator-5554`, 1080x2400 @ 420 dpi, `dumpsys window displays`) is `ROTATION_0 [0,128][0,63]`, `ROTATION_90 [128,0][0,63]`, `ROTATION_180 [0,0][0,191]`, `ROTATION_270 [0,0][128,63]` — the status bar goes to the **left** on a quarter turn and the navigation bar **stays on the bottom** in every rotation (`mNavigationBarCanMove=false`), its 63 px and the status bar's 128 px adding up at 180°. New test `every_rotation_matches_the_reference_decor_insets` pins all four rows against `frame - app_insets()` (the oracle's `nonDecorFrame`), plus the bar-in-frame invariant |
+| which baseline is right (`hello-views` `input`) | **the scenario's.** The expected `[170,282][2358,400]` is the oracle's own node bound (`ui_after_recreate.xml`, `<hierarchy rotation="1">`, `android:id/input` — the file whose capture the scenario header names, `commands.txt`: `settings put system user_rotation 1`). It is consistent with the oracle's `configInsets=[128,63][0,63]` and the 16dp/42 px fixture padding (`128+42=170`, `2400-42=2358`). No hand-written number needed replacing; the *engine* was wrong. The measured `[105,219][2230,337]` was the old `(h-y,x)` + moving-nav-bar model (`63+42=105`, `2272-42=2230`) |
+| measured after the fix | `hello-views` landscape `input` = `[170,219][2358,337]`: the x range is the oracle's to the pixel, the residual **63 px in y** is AOSP's landscape `configInsets` top (`[128,63][0,63]` vs `nonDecorInsets [128,0][0,63]`), i.e. the status bar's 24dp/63 px strip that the **app's own decor** reserves at the top of the window in landscape (`ui_after_recreate.xml`: `statusBarBackground [128,0][2400,63]`, `action_bar_container [128,63][2400,189]`, `content [128,189][2400,1017]`). The guest's decor currently gets `nonDecorInsets` only, so its action bar sits at y=0 and every landscape node is 63 px high. Same single number in all three scenarios: `hello-views` −63, `todo-list` (`input` `[170,475][2358,601]` expected vs `[170,412][2230,538]` measured → y −63), `multi-activity` (y −63) |
+| `rot1-rotate.yaml` / `counter.yaml` landscape baselines | **re-derived, not copied.** x = 128 + the same 42 px (16dp) padding the portrait bounds show (`inc [170,219][401,345]`, `reset [170,345][401,471]`, `count [170,168][191,219]`), which is what the fixed engine measures. Both files now carry the derivation and the oracle line in the comment |
+| `scenarios/rot1-rotate.yaml` + negative | **3/3 pass** and **3/3 `ASSERTION_FAILED`** after the change (`.cache/rot5/suite/rot-{1,2,3}.json`, `negrot-{1,2,3}.json`) |
+| 15 gates | **exactly the expected 15**: 10 pass (`v2-art-counter`, `w22-counter-reset`, `w54-dialog-pixels`, `w42-back-frame`, `w15-dialog-menu`, `form-validation`, `suite/T03-render-good`, `v1-offscreen-pager`, `w7-insets-report`, `se1-expect-change-tap`); `suite/T03-render-wrong`, `w7-insets-carve-negative`, `negative/se1-expect-change-noop` `ASSERTION_FAILED`; `negative/offscreen-pager-visible` `ELEMENT_OFFSCREEN`; `p11-progress-timeout` `TIMEOUT`. `v2-art-counter` proves the re-derived landscape baseline on the gate path (`.cache/rot5/suite/gate-*.json`) |
+| 5 Gaten flows / 5 Gaten negatives | **not re-run in this window** (60-minute rule; the change is inert at rotation 0, and every Gaten flow asserts portrait geometry only — ROT4's 5/5 + 5/5 evidence stands). This is a gap in this pass's evidence, not a known failure |
+| `v1-recreate` `back` after a relaunch | **named, not yet fixed.** The key is *delivered* — `ack_ms: 5`, `pixels_changed: false`, `state_changed: null`, `frame_seq` unchanged (`steps/14-back.json`) — and nothing happens: no `onPause`/`onStop`/`onDestroy` line after the last `onResume`. A control run of the *same* step without the two rotations (`08-back` in `.cache/rot5/back-probe.yaml`) **passes**: it draws, the activity finishes and logs the destroy. So the rung is the relaunch, not the key path. Mechanism (one line, unproven because the budget ran out): the relaunch replaces the window (new `ViewRootImpl`, new token) but the **WMS/dispatcher focus is still the pre-relaunch window**, so the new `ViewRootImpl` never receives `windowFocusChanged(true)` and drops key events, while touch still works because it is hit-test routed to the new window's bounds (ROT4's post-rotate tap increments the counter). AOSP's `DisplayContent.updateFocusedWindowLocked` is the missing half |
+
+Verification (this pass): `cargo test --release --offline -p acos-wm` → 55 lib tests green
+(2 new). Runs: `.cache/rot5/{base,rebless,suite,backprobe}`. The three other rotate scenarios
+end at their first landscape assertion with the 63 px number above, so they are blocked by the
+same inset, not by rotation.
+
+Smallest next actions, in order: (1) carry the landscape `configInsets` top (`status_bar_height`,
+24dp = 63 px in the landscape config) into what the guest's decor consumes — the reference
+`DisplayPolicy` computes it as `nonDecorInsets` + that strip for `rotation != 0` — then re-run
+`hello-views`/`todo-list`/`multi-activity` (expect their oracle bounds exactly); (2) after
+`ActivityRelaunchItem`, hand focus to the new window (`addToDisplay` → focus + `windowFocusChanged`
+callback) and re-run `v1-recreate`; (3) then the Gaten flows.
