@@ -1548,15 +1548,18 @@ fn ambiguous_selector(describe: &Value, candidates: &[&UiNode]) -> BackendError 
     }
 }
 
-/// A focused password field, when the tree says the typing will land in one.
+/// The password field the typing lands in, when the tree can say so.
 ///
 /// AOSP reports a password field's text like any other (the node carries
 /// `AccessibilityNodeInfo.isPassword()` instead of redacting), so the input verb
 /// must know it is typing into one in order to keep the **typed text** out of
-/// its reply, logs and events. Three cases count as "the typing goes here":
-/// the focused password node; a password node when nothing in the tree has focus
-/// (the guest commits to whatever field holds the connection); and a password
-/// node that is the tree's only editable candidate. Anything else is unmasked.
+/// its reply, logs and events. Two cases count as "the typing goes here":
+/// the focused password node, and -- when nothing in the tree reports focus
+/// (React Native trees often do not) -- the single visible password node, since
+/// the guest commits to whatever field holds the connection. Several password
+/// nodes with no focus are ambiguous and are not picked. The bias is deliberate:
+/// over-masking only hides an echo, under-masking leaks a secret. The caller can
+/// always force masking with `acos_text {"mask": true}`.
 fn password_target(tree: &UiTree) -> Option<&UiNode> {
     let nodes = tree.all_nodes();
     let focused_password = nodes
@@ -1573,9 +1576,21 @@ fn password_target(tree: &UiTree) -> Option<&UiNode> {
         .filter(|node| node.visible && node.password)
         .collect();
     match passwords.len() {
-        0 => None,
         1 if !any_focus => passwords.first().copied(),
         _ => None,
+    }
+}
+
+/// `mask: true` on `acos_text`: the caller knows the field is a secret even when
+/// the tree reports no focus (some React Native trees do not expose it).
+fn mask_requested(args: &Value) -> Result<bool, BackendError> {
+    match args.get("mask") {
+        None => Ok(false),
+        Some(Value::Bool(value)) => Ok(*value),
+        Some(other) => Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: format!("`mask` must be a boolean (got {other})"),
+        }),
     }
 }
 
@@ -1611,7 +1626,7 @@ fn type_text(session: &mut ArtSession, args: &Value) -> Result<Value, BackendErr
     // The tree still matters for one thing: a password field must not echo the
     // typed characters anywhere.
     let tree = session.ensure_bound_tree()?;
-    let masked = password_target(&tree).is_some();
+    let masked = password_target(&tree).is_some() || mask_requested(args)?;
     session.set_settle_mode(settle);
     session.begin_input();
     session.type_text(text)?;
@@ -2733,19 +2748,33 @@ mod tests {
             .with_focused(true);
         assert!(password_target(&tree(vec![focused_text])).is_none());
 
-        // No focus plus exactly one password field: the typing goes there.
+        // No focus at all and exactly one password field: the typing goes
+        // there (the guest commits to the one field), so it is masked.
         let unfocused_password =
             UiNode::new("n1", "android.widget.EditText", Bounds::new(0, 0, 10, 10))
                 .with_password(true);
         assert!(password_target(&tree(vec![unfocused_password])).is_some());
 
         // No focus and two password fields: we cannot say which one, so the
-        // reply is not masked on a guess.
+        // reply is not masked on a guess (the caller can force it with `mask`).
         let first = UiNode::new("n1", "android.widget.EditText", Bounds::new(0, 0, 10, 10))
             .with_password(true);
         let second = UiNode::new("n2", "android.widget.EditText", Bounds::new(0, 10, 10, 20))
             .with_password(true);
         assert!(password_target(&tree(vec![first, second])).is_none());
+
+        // A focus elsewhere (an ordinary field has focus) with a password field
+        // present: the typing is not in the password field, so no masking.
+        let focused_search = UiNode::new("n1", "android.widget.EditText", Bounds::new(0, 0, 10, 10))
+            .with_focused(true);
+        let token = UiNode::new("n2", "android.widget.EditText", Bounds::new(0, 10, 10, 20))
+            .with_password(true);
+        assert!(password_target(&tree(vec![focused_search, token])).is_none());
+        // ... and `mask: true` is the caller's explicit escape hatch.
+        assert!(mask_requested(&json!({"mask": true})).unwrap());
+        assert!(!mask_requested(&json!({"text": "x"})).unwrap());
+        assert!(mask_requested(&json!({"mask": "yes"})).is_err());
+
     }
 
     #[test]
