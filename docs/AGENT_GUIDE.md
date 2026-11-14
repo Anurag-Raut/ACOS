@@ -4,7 +4,10 @@ ACOS runs real Android apps on Google's real ART (API 34, x86_64) inside an
 unprivileged `bwrap` sandbox and reports what actually happened: a launch ladder,
 a live UI tree, frames, logs, and an evidence-backed verdict. Agents are the
 only users. This file is the complete operating guide; the MCP tool
-`acos_help` returns it (and `acos_help {"topic": ...}` returns one section).
+`acos_help` returns a short skeleton of it, `acos_help {"topic": ...}` one
+section and `acos_help {"topic": "all"}` the whole thing.
+
+<!-- topic:overview -->
 
 Three rules decide everything:
 
@@ -19,6 +22,42 @@ Three rules decide everything:
 `status`, `backend`, `fidelity`, `capabilities_used`, `metrics`; a non-pass
 status always carries `error.code`, `error.hint`, `error.retryable` and optional
 `error.details`.
+
+## The loop, in ten lines
+
+```
+doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> verify -> reset -> destroy
+```
+
+1. `acos_doctor` — host preflight; fix every failing check's `fix:` first.
+2. `acos_inspect {"apk": ...}` — static: package, launcher, SDK, DEX/native.
+3. `acos_launch {"apk": ...}` — boot it, read `reached_stage`; the first
+   non-ok rung carries the blocker.
+4. `acos_observe_tree` — nodes with `id`/`text`/`bounds`; act on those.
+5. `acos_tap` / `acos_text` / `acos_key` / `acos_swipe` — then re-observe.
+6. `acos_logs` — the app's own words; `launched`/`stage_reached` included.
+7. `acos_verify {"apk","scenario"}` — the verdict and its artifacts are the
+   product; `"engine": "art"` for anything with `animations: off`.
+8. Read `verdict.json` + `steps/NN-*.json` on a non-pass; never guess.
+9. `acos_reset {"scope": "app"}` — fresh guest, empty app data.
+10. `acos_destroy` — idempotent; sessions also die with the server.
+
+## Topics
+
+`acos_help {"topic": "<name>"}` returns one section; `"all"` returns everything.
+
+* `overview` — this page: the three rules, the loop in ten lines, the topic list.
+* `workflow` — the loop step by step, with what each reply tells you.
+* `cli` — every `acos` command with a runnable example.
+* `scenarios` — writing a YAML scenario: steps, selectors, settle rules.
+* `errors` — error code → what to do next.
+* `limits` — what this build cannot do (ABI, rotation, RN/Flutter, paths).
+* `all` — the complete guide in one reply (largest; ask for a section when you
+  can).
+
+Call `acos_help {"topic": "workflow"}` next if you are about to run an app.
+
+<!-- /topic:overview -->
 
 <!-- topic:workflow -->
 ## The loop
@@ -171,6 +210,16 @@ A step is a **one-key map**. Valid keys:
 
 There is no `sleep` step and no polling: `wait_for` and the assertions are
 event-driven.
+
+`launch.activity` takes the same component spellings Android does, expanded
+before the launch gate runs: `com.example.app/.MainActivity` (a real
+`adb shell am start` component, `ComponentName.unflattenFromString`),
+`com.example.app/MainActivity`, `.MainActivity` and a bare `MainActivity`
+(`PackageParser.buildClassName`). A component prefix may differ from the
+manifest package (`com.gaten` + `com.gaten.app/.MainActivity`). A target the APK
+does not declare is `INVALID_SCENARIO` (status `error`, the app never ran) with
+`details.requested`, `details.resolved` and `details.declared_activities` — not
+`ASSERTION_FAILED`.
 
 **Selectors.** All given fields are ANDed; matching is case-sensitive.
 

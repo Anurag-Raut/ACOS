@@ -161,6 +161,10 @@ pub struct ApplicationInfo {
     pub supports_screens: SupportsScreens,
     pub theme: Option<u32>,
     pub process: Option<String>,
+    /// `android:enabled` on `<application>`: `false` disables every component
+    /// (``PackageParser.parseBaseApplication`` -> `ApplicationInfo.enabled`;
+    /// `false` means none of them can be the launcher entry).
+    pub enabled: Option<bool>,
     /// `<meta-data>` children of `<application>`, in declaration order
     /// (`PackageParser.mAppMetaData`).
     pub meta_data: Vec<MetaDataEntry>,
@@ -168,9 +172,14 @@ pub struct ApplicationInfo {
 
 /// The kind of a manifest component.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 pub enum ComponentKind {
     Activity,
+    /// `<activity-alias>`: a launcher entry that points at an `<activity>`
+    /// through `android:targetActivity`. `PackageParser.parseActivityAlias`
+    /// stores it in the same activity list as a plain `<activity>`, which is
+    /// why it lives in [`Manifest::activities`] here.
+    ActivityAlias,
     Service,
     Receiver,
     Provider,
@@ -228,6 +237,12 @@ pub struct Component {
     pub label: Option<String>,
     pub label_ref: Option<u32>,
     pub intent_filters: Vec<IntentFilter>,
+    /// `<activity-alias android:targetActivity>` as a fully qualified class
+    /// name (`ActivityInfo.targetActivity`, which `ActivityThread` loads);
+    /// `None` for a plain `<activity>` and for a `service`/`receiver`/`provider`.
+    pub target_activity: Option<String>,
+    /// `android:enabled` on the component; `None` when absent (default `true`).
+    pub enabled: Option<bool>,
     /// `<meta-data>` children of this component (`PackageParser`'s
     /// `Component.metaData`, which `generateProviderInfo`/`generateActivityInfo`
     /// copy into the parcelable `metaData` field only under `GET_META_DATA`).
@@ -307,7 +322,7 @@ impl Manifest {
         let (activities, services, receivers, providers) =
             match root.children_named("application").next() {
                 Some(app) => (
-                    parse_components(app, ComponentKind::Activity, &package),
+                    parse_activities(app, &package),
                     parse_components(app, ComponentKind::Service, &package),
                     parse_components(app, ComponentKind::Receiver, &package),
                     parse_components(app, ComponentKind::Provider, &package),
@@ -338,11 +353,42 @@ impl Manifest {
         })
     }
 
-    /// The `MAIN`/`LAUNCHER` activity, if declared.
+    /// The `MAIN`/`LAUNCHER` component, if declared.
+    ///
+    /// Candidates are `<activity>` **and** `<activity-alias>` declarations whose
+    /// `<intent-filter>` names both `android.intent.action.MAIN` and
+    /// `android.intent.category.LAUNCHER` — the same set
+    /// `PackageParser.parseBaseApplication` puts in `mActivities`. Gaten is the
+    /// reason this exists: its launcher entries are `<activity-alias>` elements
+    /// (`LauncherIconLight`/`LauncherIconSystem`/`LauncherIconDark`) targeting
+    /// `LauncherActivity`, so a scan of `<activity>` alone finds no launcher and
+    /// `acos inspect` reported `launcher_activity: null`.
+    ///
+    /// Resolution is deterministic and matches `PackageParser` +
+    /// `LauncherApps` semantics:
+    ///
+    /// 1. a component with `android:enabled="false"` (or an application with
+    ///    `android:enabled="false"`) is never the entry;
+    /// 2. enabled aliases come first, then enabled activities — an alias exists
+    ///    specifically to be the launcher entry (themed icons), and the target
+    ///    activity usually carries no launcher filter at all;
+    /// 3. within a group, manifest declaration order wins.
+    ///
+    /// The returned component is the one a launcher `Intent` names: for an
+    /// alias that is the **alias**, and `target_activity` holds the class the
+    /// framework actually instantiates.
     pub fn launcher_activity(&self) -> Option<&Component> {
-        self.activities
-            .iter()
-            .find(|c| c.intent_filters.iter().any(IntentFilter::is_launcher))
+        let app_enabled = self.application.enabled.unwrap_or(true);
+        let enabled = |c: &&Component| app_enabled && c.enabled.unwrap_or(true);
+        let launchers = || {
+            self.activities
+                .iter()
+                .filter(|c| c.intent_filters.iter().any(IntentFilter::is_launcher))
+        };
+        launchers()
+            .filter(|c| c.kind == ComponentKind::ActivityAlias && enabled(&c))
+            .chain(launchers().filter(|c| c.kind == ComponentKind::Activity && enabled(&c)))
+            .next()
     }
 
     /// The resolved application label (literal first, then resource lookup).
@@ -468,7 +514,7 @@ impl Manifest {
     pub fn all_components(&self) -> Vec<(ComponentKind, &Component)> {
         let mut out = Vec::new();
         for c in &self.activities {
-            out.push((ComponentKind::Activity, c));
+            out.push((c.kind, c));
         }
         for c in &self.services {
             out.push((ComponentKind::Service, c));
@@ -493,6 +539,7 @@ fn parse_application(app: &XmlNode, package: &str) -> ApplicationInfo {
         allow_backup: attr_bool(app, "allowBackup"),
         extract_native_libs: attr_bool(app, "extractNativeLibs"),
         hardware_accelerated: attr_bool(app, "hardwareAccelerated"),
+        enabled: attr_bool(app, "enabled"),
         has_code: attr_bool(app, "hasCode"),
         uses_cleartext_traffic: attr_bool(app, "usesCleartextTraffic"),
         large_heap: attr_bool(app, "largeHeap"),
@@ -562,50 +609,78 @@ fn parse_screen_value(node: &XmlNode, name: &str) -> Option<SupportsScreensValue
     }
 }
 
+/// `<activity>` and `<activity-alias>` declarations, in manifest order.
+///
+/// An alias is kept in the activity list (§`PackageParser.parseActivityAlias`
+/// adds it to `owner.activities`) and carries its `targetActivity`, so the
+/// launcher filter on an alias is visible to [`Manifest::launcher_activity`].
+fn parse_activities(parent: &XmlNode, package: &str) -> Vec<Component> {
+    let mut out = Vec::new();
+    for node in &parent.children {
+        let kind = match node.name.as_str() {
+            "activity" => ComponentKind::Activity,
+            "activity-alias" => ComponentKind::ActivityAlias,
+            _ => continue,
+        };
+        if let Some(component) = parse_component(node, kind, package) {
+            out.push(component);
+        }
+    }
+    out
+}
+
 fn parse_components(parent: &XmlNode, kind: ComponentKind, package: &str) -> Vec<Component> {
     let tag = match kind {
-        ComponentKind::Activity => "activity",
+        ComponentKind::Activity | ComponentKind::ActivityAlias => "activity",
         ComponentKind::Service => "service",
         ComponentKind::Receiver => "receiver",
         ComponentKind::Provider => "provider",
     };
     let mut out = Vec::new();
     for node in parent.children_named(tag) {
-        let raw_name = attr_string(node, "name").unwrap_or_default();
-        if raw_name.is_empty() {
-            continue;
+        if let Some(component) = parse_component(node, kind, package) {
+            out.push(component);
         }
-        let (label, label_ref) = label_of(node);
-        let mut intent_filters = Vec::new();
-        for f in node.children_named("intent-filter") {
-            intent_filters.push(parse_intent_filter(f));
-        }
-        let authorities = attr_string(node, "authorities")
-            .map(|value| {
-                value
-                    .split(';')
-                    .map(str::trim)
-                    .filter(|part| !part.is_empty())
-                    .map(str::to_string)
-                    .collect()
-            })
-            .unwrap_or_default();
-        out.push(Component {
-            kind,
-            name: fq_name(package, &raw_name),
-            authorities,
-            exported: attr_bool(node, "exported"),
-            launch_mode: attr_string(node, "launchMode"),
-            process: attr_string(node, "process"),
-            permission: attr_string(node, "permission"),
-            grant_uri_permissions: attr_bool(node, "grantUriPermissions"),
-            label,
-            label_ref,
-            intent_filters,
-            meta_data: parse_meta_data(node),
-        });
     }
     out
+}
+
+fn parse_component(node: &XmlNode, kind: ComponentKind, package: &str) -> Option<Component> {
+    let raw_name = attr_string(node, "name").unwrap_or_default();
+    if raw_name.is_empty() {
+        return None;
+    }
+    let (label, label_ref) = label_of(node);
+    let mut intent_filters = Vec::new();
+    for f in node.children_named("intent-filter") {
+        intent_filters.push(parse_intent_filter(f));
+    }
+    let authorities = attr_string(node, "authorities")
+        .map(|value| {
+            value
+                .split(';')
+                .map(str::trim)
+                .filter(|part| !part.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    Some(Component {
+        kind,
+        name: fq_name(package, &raw_name),
+        authorities,
+        exported: attr_bool(node, "exported"),
+        launch_mode: attr_string(node, "launchMode"),
+        process: attr_string(node, "process"),
+        permission: attr_string(node, "permission"),
+        grant_uri_permissions: attr_bool(node, "grantUriPermissions"),
+        label,
+        label_ref,
+        intent_filters,
+        target_activity: attr_string(node, "targetActivity").map(|t| fq_name(package, &t)),
+        enabled: attr_bool(node, "enabled"),
+        meta_data: parse_meta_data(node),
+    })
 }
 
 /// `<meta-data>` children of a node, as `PackageParser.parseMetaData` stores
@@ -766,7 +841,7 @@ mod tests {
 
     const ANDROID_NS: &str = "http://schemas.android.com/apk/res/android";
 
-    fn attr(name: &str, value: TypedValue) -> XmlAttribute {
+    pub(crate) fn attr(name: &str, value: TypedValue) -> XmlAttribute {
         XmlAttribute {
             namespace: Some(ANDROID_NS.to_string()),
             name: name.to_string(),
@@ -777,7 +852,7 @@ mod tests {
         }
     }
 
-    fn node(name: &str, attributes: Vec<XmlAttribute>, children: Vec<XmlNode>) -> XmlNode {
+    pub(crate) fn node(name: &str, attributes: Vec<XmlAttribute>, children: Vec<XmlNode>) -> XmlNode {
         XmlNode {
             namespace: None,
             name: name.to_string(),
@@ -799,7 +874,7 @@ mod tests {
         meta("k", attr("value", v))
     }
 
-    fn document(application_children: Vec<XmlNode>) -> XmlDocument {
+    pub(crate) fn document(application_children: Vec<XmlNode>) -> XmlDocument {
         XmlDocument {
             strings: Vec::new(),
             resource_ids: Vec::new(),
@@ -852,6 +927,50 @@ mod tests {
 
     fn document_with(target_sdk: Option<i32>, manifest_children: Vec<XmlNode>) -> XmlDocument {
         document_with_sdk(None, target_sdk, manifest_children)
+    }
+
+    /// One `<activity>`/`<activity-alias>` with an optional MAIN/LAUNCHER
+    /// `<intent-filter>` and an optional `android:enabled`.
+    pub(crate) fn component_node(
+        tag: &str,
+        name: &str,
+        target: Option<&str>,
+        enabled: Option<bool>,
+        launcher: bool,
+    ) -> XmlNode {
+        let mut attrs = vec![attr("name", TypedValue::String(name.to_string()))];
+        if let Some(target) = target {
+            attrs.push(attr("targetActivity", TypedValue::String(target.to_string())));
+        }
+        if let Some(enabled) = enabled {
+            attrs.push(attr("enabled", TypedValue::Boolean(enabled)));
+        }
+        let mut children = Vec::new();
+        if launcher {
+            children.push(node(
+                "intent-filter",
+                Vec::new(),
+                vec![
+                    node(
+                        "action",
+                        vec![attr(
+                            "name",
+                            TypedValue::String("android.intent.action.MAIN".to_string()),
+                        )],
+                        Vec::new(),
+                    ),
+                    node(
+                        "category",
+                        vec![attr(
+                            "name",
+                            TypedValue::String("android.intent.category.LAUNCHER".to_string()),
+                        )],
+                        Vec::new(),
+                    ),
+                ],
+            ));
+        }
+        node(tag, attrs, children)
     }
 
     fn supports_screens(attributes: Vec<XmlAttribute>) -> XmlNode {
@@ -1179,5 +1298,129 @@ mod tests {
             MetaDataValue::Reference(id) => assert_ne!(id, 0, "a resolved @xml resource id"),
             ref other => panic!("expected a resource reference, got {other:?}"),
         }
+    }
+}
+
+/// F6: intent filters on `<activity-alias>` (Gaten's launcher entries) must be
+/// parsed, reported, and used to resolve `launcher_activity`.
+#[cfg(test)]
+mod launcher_tests {
+    use super::tests::*;
+    use super::*;
+
+    /// Gaten's real shape: three themed aliases target one `LauncherActivity`,
+    /// only the light one is enabled, and no `<activity>` carries a launcher
+    /// filter at all. The alias is the component a launcher Intent names.
+    #[test]
+    fn enabled_alias_is_the_launcher_and_filters_are_reported() {
+        let dom = document(vec![
+            component_node("activity", ".MainActivity", None, None, false),
+            component_node("activity", ".LauncherActivity", None, None, false),
+            component_node(
+                "activity-alias",
+                ".LauncherIconSystem",
+                Some(".LauncherActivity"),
+                Some(false),
+                true,
+            ),
+            component_node(
+                "activity-alias",
+                ".LauncherIconLight",
+                Some(".LauncherActivity"),
+                Some(true),
+                true,
+            ),
+            component_node(
+                "activity-alias",
+                ".LauncherIconDark",
+                Some(".LauncherActivity"),
+                Some(false),
+                true,
+            ),
+        ]);
+        let manifest = Manifest::parse(&dom).expect("manifest");
+        // Aliases live in the activity list, in declaration order (AOSP
+        // `parseActivityAlias` adds them to `owner.activities`).
+        assert_eq!(manifest.activities.len(), 5);
+        let launcher = manifest.launcher_activity().expect("a launcher");
+        assert_eq!(launcher.name, "pkg.LauncherIconLight");
+        assert_eq!(launcher.kind, ComponentKind::ActivityAlias);
+        assert_eq!(
+            launcher.target_activity.as_deref(),
+            Some("pkg.LauncherActivity")
+        );
+        // The filter that made it a launcher is reported, not dropped.
+        assert_eq!(launcher.intent_filters.len(), 1);
+        assert!(launcher.intent_filters[0].is_launcher());
+        // The disabled aliases still carry their filters (an agent must be able
+        // to see them), they just are not the entry.
+        for alias in ["LauncherIconSystem", "LauncherIconDark"] {
+            let component = manifest
+                .activities
+                .iter()
+                .find(|c| c.name == format!("pkg.{alias}"))
+                .expect("alias");
+            assert_eq!(component.enabled, Some(false));
+            assert!(component.intent_filters[0].is_launcher());
+        }
+        // The plain activities have no filter and are still declared.
+        let main = manifest
+            .activities
+            .iter()
+            .find(|c| c.name == "pkg.MainActivity")
+            .expect("MainActivity");
+        assert!(main.intent_filters.is_empty());
+        assert_eq!(main.target_activity, None);
+    }
+
+    /// With no alias in play, a plain launcher `<activity>` still resolves.
+    #[test]
+    fn plain_launcher_activity_still_resolves() {
+        let dom = document(vec![
+            component_node("activity", ".OtherActivity", None, None, false),
+            component_node("activity", ".MainActivity", None, None, true),
+        ]);
+        let manifest = Manifest::parse(&dom).expect("manifest");
+        let launcher = manifest.launcher_activity().expect("launcher");
+        assert_eq!(launcher.name, "pkg.MainActivity");
+        assert_eq!(launcher.kind, ComponentKind::Activity);
+    }
+
+    /// A disabled activity is not the entry; a disabled `<application>` makes
+    /// every component ineligible.
+    #[test]
+    fn disabled_components_are_never_the_launcher() {
+        let dom = document(vec![component_node(
+            "activity",
+            ".MainActivity",
+            None,
+            Some(false),
+            true,
+        )]);
+        let manifest = Manifest::parse(&dom).expect("manifest");
+        assert!(manifest.launcher_activity().is_none());
+
+        let dom = document(vec![
+            component_node("activity", ".MainActivity", None, None, true),
+            component_node(
+                "activity-alias",
+                ".Alias",
+                Some(".MainActivity"),
+                None,
+                true,
+            ),
+        ]);
+        let mut manifest = Manifest::parse(&dom).expect("manifest");
+        // Enabled alias wins over the enabled activity (declaration order is
+        // within a group, not across the alias/activity groups).
+        assert_eq!(
+            manifest.launcher_activity().map(|c| c.name.clone()),
+            Some("pkg.Alias".to_string())
+        );
+        manifest.application.enabled = Some(false);
+        assert!(
+            manifest.launcher_activity().is_none(),
+            "<application android:enabled=\"false\"> disables every component"
+        );
     }
 }

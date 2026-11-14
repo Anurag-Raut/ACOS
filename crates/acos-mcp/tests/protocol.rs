@@ -27,33 +27,56 @@ fn unknown_protocol_version_falls_back_to_latest() {
     assert_eq!(response["result"]["protocolVersion"], "2025-03-26");
 }
 
+/// F12: `tools/list` advertises only what this build can run. A stub command
+/// (`acos_capture`, `acos_assert`, `acos_events`, `acos_profile`,
+/// `acos_capability_report`, and the protocol `acos_run`/`acos_reset`/
+/// `acos_destroy` names the session tools cover) is not listed — an agent that
+/// sees it tries it, pays a round trip and gets `unsupported`. Its **name stays
+/// reserved**: calling it still returns the structured `unsupported` envelope,
+/// and the protocol descriptors are unchanged (so a future build that
+/// implements one only has to stop hiding it).
 #[test]
-fn tools_list_contains_every_protocol_command_plus_meta_tools() {
+fn tools_list_advertises_only_what_this_build_can_run() {
     let mut client = McpClient::with_real_acos();
     client.initialize("2025-03-26");
     let list = client.request("tools/list", json!({}));
     let names = tool_names(&list);
 
-    for descriptor in mcp_tools().tools {
-        assert!(
-            names.contains(&descriptor.name),
-            "tools/list is missing {}",
-            descriptor.name
-        );
+    // What the current `acos` binary really implements, plus the server tools.
+    for expected in [
+        "acos_inspect",
+        "acos_run_dex",
+        "acos_observe",
+        "acos_verify",
+        "acos_capabilities",
+        "acos_help",
+    ] {
+        assert!(names.contains(&expected.to_string()), "missing {expected}");
     }
-    assert!(names.contains(&"acos_capabilities".to_string()));
-    assert!(names.contains(&"acos_help".to_string()));
-    assert_eq!(
-        names.len(),
-        mcp_tools().tools.len() + 2 + acos_mcp::descriptors::SESSION_TOOL_NAMES.len()
-    );
+    for session in acos_mcp::descriptors::SESSION_TOOL_NAMES {
+        assert!(names.contains(&session.to_string()), "missing {session}");
+    }
 
-    // Every protocol command is represented.
+    // Nothing advertised is a stub: every listed protocol tool is available.
+    for tool in list
+        .pointer("/result/tools")
+        .and_then(Value::as_array)
+        .expect("tools array")
+    {
+        assert_eq!(
+            tool.pointer("/annotations/available"),
+            Some(&json!(true)),
+            "an unavailable tool was advertised: {tool}"
+        );
+        assert!(tool["description"]
+            .as_str()
+            .unwrap()
+            .contains("available=true"));
+    }
+
+    // The stubs are hidden from the list ...
     for command in [
-        CommandName::Inspect,
-        CommandName::RunDex,
         CommandName::Run,
-        CommandName::Observe,
         CommandName::Capture,
         CommandName::Action,
         CommandName::Assert,
@@ -61,25 +84,40 @@ fn tools_list_contains_every_protocol_command_plus_meta_tools() {
         CommandName::Reset,
         CommandName::Profile,
         CommandName::Destroy,
-        CommandName::Verify,
         CommandName::CapabilityReport,
     ] {
-        assert!(names.contains(&command.tool_name().to_string()), "{}", command.as_str());
+        assert!(
+            !names.contains(&command.tool_name().to_string()),
+            "{} is a stub and must not be advertised",
+            command.as_str()
+        );
     }
 
-    // Availability and fidelity are annotated on each tool.
+    // ... but every protocol name is still reserved and answers honestly.
+    for descriptor in mcp_tools().tools {
+        assert!(
+            acos_mcp::descriptors::command_from_tool(&descriptor.name).is_some(),
+            "the protocol descriptor {} must stay reserved",
+            descriptor.name
+        );
+    }
+    let response = client.call_tool(
+        "acos_assert",
+        json!({"base": {"request_id": "t_stub"}, "assertion": {"kind": "exists"}}),
+    );
+    assert!(is_error(&response));
+    let envelope = envelope_of(&response);
+    assert_eq!(envelope["status"], "unsupported");
+    assert_eq!(envelope["error"]["code"], "UNSUPPORTED_BACKEND");
+    assert_eq!(envelope["error"]["details"]["available"], false);
+
+    // An available protocol tool keeps its live annotations.
     let inspect = tool(&list, "acos_inspect").unwrap();
     assert_eq!(inspect["annotations"]["available"], true);
     assert_eq!(inspect["annotations"]["fidelity"], "static-analysis");
     assert_eq!(inspect["_meta"]["acos"]["command"], "inspect");
-    // `verify` is implemented by the current `acos` binary, so it is available.
     let verify = tool(&list, "acos_verify").unwrap();
-    assert_eq!(verify["annotations"]["available"], true);
     assert_eq!(verify["annotations"]["fidelity"], "native-runtime");
-    assert!(verify["description"]
-        .as_str()
-        .unwrap()
-        .contains("available=true"));
 }
 
 #[test]

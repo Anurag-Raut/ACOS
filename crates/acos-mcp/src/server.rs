@@ -22,7 +22,7 @@ use serde_json::{json, Value};
 
 use crate::backend::{Backend, CallContext, Capabilities};
 use crate::descriptors::{
-    command_from_tool, negotiate, supports_structured_content, tool_infos, CAPABILITIES_TOOL,
+    command_from_tool, negotiate, supports_structured_content, CAPABILITIES_TOOL,
     HELP_TOOL, INSTRUCTIONS, LATEST_PROTOCOL_VERSION, SERVER_NAME, SERVER_VERSION,
     SESSION_TOOL_NAMES,
 };
@@ -59,6 +59,10 @@ pub struct ServerConfig {
     pub max_output_bytes: usize,
     /// Maximum image size to inline as MCP image content.
     pub max_image_bytes: usize,
+    /// Maximum bytes for one string inside a tool reply (`ACOS_MCP_MAX_TEXT`,
+    /// default 4000). A longer string is head/tail-capped and its full text is
+    /// kept once on disk in the run's artifacts; see [`crate::bound`].
+    pub max_text_bytes: usize,
 }
 
 impl Default for ServerConfig {
@@ -77,6 +81,7 @@ impl Default for ServerConfig {
             shutdown_grace: Duration::from_secs(2),
             max_output_bytes: crate::backend::DEFAULT_MAX_OUTPUT_BYTES,
             max_image_bytes: 512 * 1024,
+            max_text_bytes: crate::bound::DEFAULT_MAX_TEXT_BYTES,
         }
     }
 }
@@ -104,6 +109,11 @@ impl ServerConfig {
         }
         if let Some(value) = env_usize("ACOS_MCP_MAX_IMAGE_BYTES") {
             config.max_image_bytes = value;
+        }
+        // F11: `ACOS_MCP_MAX_TEXT` bounds every string in a reply. `0` disables
+        // the bound (the CLI behaviour, unbounded).
+        if let Some(value) = env_usize("ACOS_MCP_MAX_TEXT") {
+            config.max_text_bytes = value;
         }
         if let Some(value) = env_u64("ACOS_MCP_SESSION_TTL_MS") {
             config.session_ttl = Duration::from_millis(value);
@@ -423,7 +433,10 @@ impl<B: Backend> Server<B> {
             "tools/list" => {
                 let caps = self.backend.capabilities();
                 let version = self.negotiated_version();
-                let tools: Vec<Value> = tool_infos(&caps)
+                // F12: only the tools this build can run. Unavailable protocol
+                // commands stay reserved (a call still returns a structured
+                // `unsupported`), they are just not advertised.
+                let tools: Vec<Value> = crate::descriptors::available_tool_infos(&caps)
                     .iter()
                     .map(|tool| tool.to_json(&version))
                     .collect();
@@ -588,6 +601,11 @@ fn tool_result(
     config: &ServerConfig,
 ) -> Value {
     let envelope_json = serde_json::to_value(envelope).unwrap_or(Value::Null);
+    // F11: an agent pays for every byte of a reply and reads only the head and
+    // the tail of a stack. Cap long strings here, once, for every tool, so the
+    // CLI's own `--json` output and the artifacts on disk stay complete while
+    // the MCP reply stays small.
+    let (envelope_json, bounds) = crate::bound::bound_value(&envelope_json, config.max_text_bytes);
     let text = serde_json::to_string(&envelope_json).unwrap_or_default();
     let mut content = vec![json!({"type": "text", "text": text})];
     append_evidence_content(&mut content, envelope, config, protocol_version);
@@ -595,6 +613,11 @@ fn tool_result(
         "content": content,
         "isError": !envelope.status().is_pass(),
     });
+    if !bounds.is_empty() {
+        // Say that the reply was bounded, and how: a silent truncation would
+        // read as the real text.
+        result["_meta"] = json!({"acos_mcp": {"reply_bounded": bounds.to_json()}});
+    }
     if supports_structured_content(protocol_version) {
         result["structuredContent"] = envelope_json;
     }
@@ -702,6 +725,7 @@ pub fn resource_uris() -> Vec<&'static str> {
             .iter()
             .filter(|topic| **topic != "errors")
             .map(|topic| match *topic {
+                "overview" => "acos://guide/overview",
                 "workflow" => "acos://guide/workflow",
                 "cli" => "acos://guide/cli",
                 "scenarios" => "acos://guide/scenarios",
@@ -737,6 +761,7 @@ pub fn resources() -> Vec<Value> {
             "name": format!("agent-guide-{topic}"),
             "title": format!("ACOS agent guide: {topic}"),
             "description": match *topic {
+                "overview" => "The three status rules, the loop in ten lines and the topic list (the `acos_help` default).",
                 "workflow" => "The doctor -> inspect -> launch -> observe -> act -> verify loop.",
                 "cli" => "Every `acos` command with a runnable example.",
                 "scenarios" => "How to write a scenario YAML for `acos verify` (steps, selectors, settle, assertions).",
@@ -763,19 +788,30 @@ pub fn resource_templates() -> Vec<Value> {
 
 /// `resources/read`: the contents for a URI, or `None` when it is not ours.
 pub fn read_resource(uri: &str) -> Option<Vec<Value>> {
+    // `acos://guide` is the **complete** guide (a resource read is a deliberate,
+    // unlimited fetch); the `acos_help` tool defaults to the skeleton instead.
     let topic = match uri {
-        "acos://guide" => None,
+        "acos://guide" => Some(help::ALL_TOPIC),
         // `acos://errors` is the error section under its own name.
         "acos://errors" => Some("errors"),
         other => {
             let name = other.strip_prefix("acos://guide/")?;
-            Some(help::TOPICS.iter().copied().find(|t| *t == name)?)
+            Some(
+                help::TOPICS
+                    .iter()
+                    .copied()
+                    .find(|t| *t == name)?,
+            )
         }
     };
     Some(vec![json!({
         "uri": uri,
         "name": topic.map_or("agent-guide".to_string(), |t| format!("agent-guide-{t}")),
-        "title": topic.map_or("ACOS agent guide (complete)".to_string(), |t| format!("ACOS agent guide: {t}")),
+        "title": if topic == Some(help::ALL_TOPIC) {
+            "ACOS agent guide (complete)".to_string()
+        } else {
+            topic.map_or("ACOS agent guide".to_string(), |t| format!("ACOS agent guide: {t}"))
+        },
         "mimeType": "text/markdown",
         "text": help::guide(topic),
     })])
