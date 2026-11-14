@@ -941,6 +941,18 @@ impl ServiceHost {
         host
     }
 
+    /// W7b: the standard service set with an explicit app-window inset model.
+    ///
+    /// The process environment stays authoritative for [`Self::standard`];
+    /// this constructor lets a test or replay driver pin the model without
+    /// mutating process-global state.
+    #[must_use]
+    pub fn standard_with_insets(insets: crate::wms::InsetsMode) -> Self {
+        let mut host = Self::new();
+        crate::registry::install_with_handles_and_insets(&mut host, Some(insets));
+        host
+    }
+
     /// Run a request and return the reply values (used by the replay harness).
     pub fn invoke(
         &mut self,

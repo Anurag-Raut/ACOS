@@ -211,24 +211,26 @@ mod tests {
     }
 
     #[test]
-    fn an_unsigned_app_area_frame_is_signed_and_a_signed_one_is_kept() {
-        let unsigned = FrameMeta::new(1, "t", "c", 1080, 2209, 420, "h", true);
-        let signed = signed_frame(&unsigned);
-        assert_eq!(signed.display_origin, Some([0, 128]));
+    fn an_unsigned_full_display_frame_is_signed_and_a_declared_one_is_kept() {
+        // W7b: the build default is `report`, so an unsigned display-sized
+        // frame is the observable app frame (origin [0,0]) and a carved-size
+        // frame no longer matches the runtime's app area.
+        let full = FrameMeta::new(3, "t", "c", 1080, 2400, 420, "h", true);
+        assert_eq!(signed_frame(&full).display_origin, Some([0, 0]));
+        let carved = FrameMeta::new(1, "t", "c", 1080, 2209, 420, "h", true);
+        assert_eq!(signed_frame(&carved).display_origin, None);
         // Already-signed geometry is authoritative, not overwritten.
         let declared = FrameMeta::new(2, "t", "c", 1080, 2209, 420, "h", true)
             .with_display_geometry([0, 200], [1080, 2600]);
         assert_eq!(signed_frame(&declared).display_origin, Some([0, 200]));
-        // A display-sized frame stays identity-signed (None).
-        let full = FrameMeta::new(3, "t", "c", 1080, 2400, 420, "h", true);
-        assert_eq!(signed_frame(&full).display_origin, None);
     }
 
     #[test]
     fn a_frame_of_an_unexpected_size_gets_no_origin() {
-        // A backend that synthesizes a display-sized frame (the reference
-        // replay does: 1080x2400) must not inherit the app-area origin.
-        assert!(frame_display_geometry(1080, 2400).is_none());
+        // Under the report default the full display is the app area; anything
+        // else (including the pre-W7 carved height) must not inherit an origin.
+        assert!(frame_display_geometry(1080, 2400).is_some());
+        assert!(frame_display_geometry(1080, 2209).is_none());
         assert!(frame_display_geometry(1080, 700).is_none());
     }
 }

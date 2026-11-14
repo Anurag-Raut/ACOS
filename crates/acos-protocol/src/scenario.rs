@@ -742,6 +742,15 @@ pub struct Scenario {
     /// it is never for animation/transition testing. Launch-time only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub animations: Option<String>,
+    /// W7b: per-session app-window inset model (`carve`/`report`).
+    ///
+    /// Selects the model for this scenario exactly as `ACOS_WM_INSETS` does,
+    /// and takes precedence over the environment. A scenario that pins the
+    /// model is self-contained: it cannot silently change meaning when the
+    /// build default or the caller's environment changes. Launch-time only;
+    /// the Rust VM has no window insets and ignores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub insets: Option<String>,
 }
 
 impl Scenario {
@@ -989,6 +998,11 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
     if let Some(animations) = &scenario.animations {
         if !animations.eq_ignore_ascii_case("on") && !animations.eq_ignore_ascii_case("off") {
             v.push("$.animations", "animations must be `on` or `off`");
+        }
+    }
+    if let Some(insets) = &scenario.insets {
+        if !insets.eq_ignore_ascii_case("carve") && !insets.eq_ignore_ascii_case("report") {
+            v.push("$.insets", "insets must be `carve` or `report`");
         }
     }
     match scenario.display {

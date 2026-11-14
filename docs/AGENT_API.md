@@ -735,18 +735,21 @@ first traversal:
   anything testing animation, transition, ripple or timing behaviour; those
   need `animations:"on"`.
 
-### 8.6.6 `insets:"carve"|"report"` (W7)
+### 8.6.6 `insets:"carve"|"report"` (W7, default `report` since W7b)
 
-The app-window inset model is a launch-time choice, default **`carve`** (the
-pre-W7 shim). It is selected by `ACOS_WM_INSETS=carve|report` or by
-`acos launch --insets carve|report`; `acos-art launch` also has
-`--insets carve|report` for direct runs.
+The app-window inset model is a launch-time choice, default **`report`**
+(AOSP's phone-like edge-to-edge model; ADR-0026 decision 6). It is selected by
+`ACOS_WM_INSETS=carve|report`, by `acos launch --insets carve|report`, by
+`acos verify --insets carve|report`, by a scenario's top-level
+`insets: carve|report`, or by `acos-art launch --insets carve|report` for
+direct runs. A scenario's value is part of its evidence: the verdict states
+`insets` so a pass cannot be attributed to the wrong model.
 
-* `carve` — the WMS gives the app the display's application area
-  (`[0,128][1080,2337]` on the API-34 profile) and the reported `InsetsState`
-  therefore calculates to zero. This is the frozen behaviour every existing
-  screenshot, `assert_region` coordinate and frame-size baseline was captured
-  against.
+* `carve` — the pre-W7 shim: the WMS gives the app the display's application
+  area (`[0,128][1080,2337]` on the API-34 profile) and the reported
+  `InsetsState` therefore calculates to zero. Frozen baselines captured against
+  the carved frame stay reproducible by pinning `insets: carve`; nothing is
+  carved by ambient default any more.
 * `report` — AOSP's window model: the app window is the full display
   (`[0,0][1080,2400]`) and the WMS reports the status-bar, navigation-bar and
   system-gesture sources. `PhoneWindow.generateLayout` sends
@@ -765,8 +768,11 @@ pre-W7 shim). It is selected by `ACOS_WM_INSETS=carve|report` or by
 * Every ART reply states the model the guest was launched with, and a `reset`
   relaunch reuses it. `verify`/`serve` read `ACOS_WM_INSETS`; the MCP
   `acos_launch` field is `"insets": "carve"|"report"`.
-* The W7 regression is `scenarios/w7-insets-report.yaml` (run under `report`)
-  and `scenarios/w7-insets-carve-negative.yaml` (must fail under `carve`).
+* The W7 regressions pin their model: `scenarios/w7-insets-report.yaml`
+  (`insets: report`, must pass) and `scenarios/w7-insets-carve-negative.yaml`
+  (`insets: carve`, must fail at `status=128` after proving the carved frame).
+  This matters because the build default is now `report`: a negative that
+  relied on the default would become a false pass.
 
 ### 8.7 `assert`
 

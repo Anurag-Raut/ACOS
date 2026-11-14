@@ -29,19 +29,20 @@ pub const INSETS_ENV: &str = "ACOS_WM_INSETS";
 
 /// The default model when `ACOS_WM_INSETS` is unset.
 ///
-/// W7 keeps the pre-W7 behaviour as the default: every frozen screenshot,
-/// `assert_region` coordinate and frame-size baseline in the gate list was
-/// captured against the carved frame. `report` is opt-in (see EXPERIMENTS
-/// E13.5); the code path is exercised by the `w7-insets-report` scenario.
-pub const DEFAULT_INSETS_MODE: InsetsMode = InsetsMode::Carve;
+/// ADR-0026 decision 6 makes AOSP's phone-like edge-to-edge model the default
+/// (W7b): an Activity owns the full display and is told the system-bar insets,
+/// exactly as on a real phone. `carve` stays selectable for the pre-W7 shim
+/// (`ACOS_WM_INSETS=carve`, `acos launch --insets carve`, a scenario's
+/// `insets: carve`); the frozen carve baselines are then opt-in, not ambient.
+pub const DEFAULT_INSETS_MODE: InsetsMode = InsetsMode::Report;
 
 /// App-window inset model selected by [`INSETS_ENV`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InsetsMode {
     /// Pre-W7: the window manager subtracts the system bars from the frame.
-    #[default]
     Carve,
     /// AOSP: full-display window plus a reported `InsetsState`.
+    #[default]
     Report,
 }
 
