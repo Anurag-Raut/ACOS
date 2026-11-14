@@ -65,6 +65,19 @@ const STAGES: &[&str] = &[
     "first_frame",
 ];
 
+/// FB5: the launch ladder with the measured `ms` removed, for "the cache must
+/// not change what the launch can do" comparisons — timing is expected to
+/// differ between a cold and a warm launch, the stages are not.
+fn timing_free_ladder(stages: &Value) -> Value {
+    let mut stages = stages.clone();
+    for rung in stages.as_array_mut().into_iter().flatten() {
+        if let Some(map) = rung.as_object_mut() {
+            map.remove("ms");
+        }
+    }
+    stages
+}
+
 #[test]
 fn launch_counter_reports_the_honest_stage_ladder() {
     let apk = workspace_path("../../fixtures/build/apps/counter.apk");
@@ -320,10 +333,20 @@ fn warm_boot_cache_reaches_first_frame_on_every_launch() {
         );
         // Stage-for-stage equality (status, per-stage ok flags and the blocked
         // rung's blocker): the cache must not change what the launch can do.
+        // FB5 added a measured `ms` to every rung, and a warm launch is faster
+        // by construction, so timing is compared for presence only — an omitted
+        // `ms` fails here just as a changed stage would.
         assert_eq!(
-            &v["result"]["stages"], &cold["result"]["stages"],
+            timing_free_ladder(&v["result"]["stages"]),
+            timing_free_ladder(&cold["result"]["stages"]),
             "warm launch {i} must reproduce the cold ladder exactly (W154-A restore): {v}"
         );
+        for rung in v["result"]["stages"].as_array().into_iter().flatten() {
+            assert!(
+                rung.get("ms").is_some(),
+                "warm launch {i} must report per-rung `ms` (FB5): {rung}"
+            );
+        }
         let events = v["result"]["events"]
             .as_array()
             .cloned()

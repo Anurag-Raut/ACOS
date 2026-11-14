@@ -443,6 +443,14 @@ impl SessionBackend {
         if tool == "acos_launch" && envelope.ok() {
             self.remember_owned(&id, args, &launch_token(&envelope));
             annotate_launch(&mut envelope, args, self.idle_ttl_for(args));
+        } else if tool == "acos_destroy" && envelope.ok() {
+            // Gone by request: it must not be listed as a live session (FB5),
+            // and it is not "expired" either.
+            self.remove_owned(&id);
+            self.expired
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&id);
         } else if tool != "acos_launch" {
             self.touch(&id);
         }
@@ -1890,7 +1898,7 @@ impl SessionBackend {
             ProtocolError::new(
                 ErrorCode::SessionNotFound,
                 format!(
-                    "session `{id}` was destroyed after {:?} of idleness (idle TTL {} s); its \
+                    "session `{id}` was destroyed after {} of idleness (idle TTL {} s); its \
                      guest is gone",
                     format_secs(expired.idle_ttl_s),
                     expired.idle_ttl_s
@@ -2079,6 +2087,10 @@ impl SessionBackend {
         let now = Instant::now();
         owned
             .into_iter()
+            // When the daemon answered, an id it does not hold has no guest and
+            // is not a live session any more: listing it would be a false live
+            // status (FB5; `acos_destroy` + `acos_status` must be an error).
+            .filter(|(id, _)| listed.is_none() || by_id.contains_key(id))
             .map(|(id, session)| {
                 let entry = by_id.get(&id);
                 let guest_pid = entry
@@ -2288,6 +2300,30 @@ impl SessionBackend {
             .with_session_id(id)
             .with_value_result(session);
         }
+        // This server launched it, but the daemon no longer holds it (it was
+        // destroyed, or the guest died): never a pass on a session with no
+        // guest. The idle-TTL case is answered above, with its reason.
+        let owned_here = self
+            .owned
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(&id);
+        if owned_here {
+            let envelope = Envelope::failure(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                ProtocolError::new(
+                    ErrorCode::SessionNotFound,
+                    format!("no live ART session `{id}`: it was destroyed or its guest exited"),
+                )
+                .with_details(json!({"session_id": id, "reason": "no_live_guest"}))
+                .with_hint("launch the APK again with `acos_launch`"),
+                Metrics::wall_ms(0),
+            )
+            .with_session_id(id);
+            return envelope;
+        }
         if self.rn.contains(&id) {
             return self.status_rn(request_id, &id);
         }
@@ -2400,6 +2436,10 @@ impl Backend for SessionBackend {
 fn session_id(args: &Value) -> String {
     args.pointer("/base/session_id")
         .and_then(Value::as_str)
+        // Older clients (and `mcp_smoke.py`'s first form) send `session_id` at
+        // the top level; accept it here too, so `acos_status` addresses the
+        // session the client named.
+        .or_else(|| args.get("session_id").and_then(Value::as_str))
         .map(str::to_string)
         .unwrap_or_else(|| default_session_id().to_string())
 }
