@@ -17,7 +17,7 @@ code instead of a second implementation:
                   native_crash.
 
 Every guest runs inside the caller's one
-`tools/art-runtime/run-exclusive.sh --task S3 -- tools/guarded.sh --mem 24G`
+`tools/art-runtime/run-exclusive.sh --task S3 --exclusive -- tools/guarded.sh --mem 24G`
 acquisition.  Scratch is the caller's `.cache/s3/**`; nothing is written to
 /tmp and the corpus (read-only) is never modified.
 
