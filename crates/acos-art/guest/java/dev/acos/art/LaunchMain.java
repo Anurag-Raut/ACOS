@@ -1794,9 +1794,19 @@ public final class LaunchMain {
                                         // destroyed the framework drops its
                                         // record, and `taskFinished` needs it.
                                         if (live != null) sLastLiveActivity = live;
-                                        emitProbe(live != null ? live
-                                                : (sLastLiveActivity != null ? sLastLiveActivity
-                                                        : activity), n, why);
+                                        // ROT8b: prefer any live (non-destroyed)
+                                        // record of the process over the stale
+                                        // remembered one; the remembered
+                                        // Activity is only the fallback once
+                                        // nothing is alive (and a new resume
+                                        // above already replaced it).
+                                        Object sample = live;
+                                        if (sample == null) sample = liveRecordActivity();
+                                        if (sample == null) {
+                                            sample = sLastLiveActivity != null
+                                                    ? sLastLiveActivity : activity;
+                                        }
+                                        emitProbe(sample, n, why);
                                         // H2: the first emitted sample is the
                                         // host's `ready` (first frame). Request
                                         // ART's own background collection now
@@ -2117,6 +2127,25 @@ public final class LaunchMain {
      * Activity, and (c) no window root in WindowManagerGlobal is still attached.
      * All three are the framework's own state, read on the UI thread.
      */
+    /** ROT8b: a non-destroyed Activity from `mActivities`, or null. */
+    static Object liveRecordActivity() {
+        try {
+            Object activities = get(sThread, "mActivities");
+            if (activities instanceof java.util.Map) {
+                for (Object rec : ((java.util.Map<?, ?>) activities).values()) {
+                    Object a = get(rec, "activity");
+                    if (a == null) continue;
+                    if (!Boolean.TRUE.equals(a.getClass().getMethod("isDestroyed").invoke(a))) {
+                        return a;
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            // fall through
+        }
+        return null;
+    }
+
     static boolean taskFinished(Object activity, java.util.List<View> roots) {
         try {
             if (!Boolean.TRUE.equals(get(activity, "mFinished"))) return false;
@@ -2127,7 +2156,9 @@ public final class LaunchMain {
             if (activities instanceof java.util.Map) {
                 for (Object rec : ((java.util.Map<?, ?>) activities).values()) {
                     Object a = get(rec, "activity");
-                    if (a == null) continue;
+                    // ROT8b: a record whose Activity is not (yet) set may be a
+                    // launch in flight; it cannot prove the task is finished.
+                    if (a == null) return false;
                     if (!Boolean.TRUE.equals(a.getClass().getMethod("isDestroyed").invoke(a))) {
                         return false;
                     }

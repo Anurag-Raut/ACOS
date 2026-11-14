@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Finish Start</string>
+    <string name="splash">Splash</string>
+    <string name="go">Go</string>
+    <string name="home">Home</string>
+</resources>

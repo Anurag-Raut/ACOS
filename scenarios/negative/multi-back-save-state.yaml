@@ -1,0 +1,28 @@
+# ROT8b negative: a finishing Activity never runs onSaveInstanceState
+# (ActivityThread.performStopActivityInner: shouldSaveState requires
+# !r.activity.mFinished). Asserting that line after the final Back must fail,
+# so a regression that re-introduces it into the back steps is the thing the
+# POSITIVE scenarios would otherwise tolerate under `ordered: true`.
+version: 1
+name: negative-multi-back-save-state
+description: Back from the last Activity, then assert it saved instance state.
+app: fixtures/build/apps/multi-activity.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: fail
+steps:
+  - launch:
+      activity: dev.acos.fixtures.multiactivity/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: message}
+      timeout_ms: 5000
+  - back: {}
+  - assert_log:
+      tag: AcosMulti
+      since_previous_step: true
+      patterns:
+        - '^Main.onSaveInstanceState'

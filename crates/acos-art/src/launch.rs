@@ -3543,6 +3543,17 @@ fn wait_for_event_settled(
     let mut last_requested_seq = latest_probe(probe_state)
         .map(|sample| sample.seq)
         .unwrap_or(0);
+    // ROT8b: was the window forest already empty when the request began?
+    let entry_tree_empty = latest_probe(probe_state)
+        .map(|sample| {
+            sample
+                .tree
+                .get("nodes")
+                .and_then(|nodes| nodes.as_array())
+                .map(|nodes| nodes.is_empty())
+                .unwrap_or(false)
+        })
+        .unwrap_or(false);
     let mut candidate: Option<ProbeSample> = None;
     let mut candidate_since = Instant::now();
     let mut first_change_ms: Option<u64> = None;
@@ -3573,17 +3584,27 @@ fn wait_for_event_settled(
             Some(sample) => {
                 if sample.seq <= entry_floor {
                     last_reason = "probe-floor".to_string();
-                } else if window_gone_binds(sample) {
+                } else if window_gone_shape(sample) && !host_confirms_task_finished(live) {
+                    // ROT8b: the guest reports an empty settled forest, but the
+                    // host ATMS still has a live record or a pending start (a
+                    // `finish()` + `startActivity(Home)` leaves exactly this gap
+                    // before Home's launch transaction runs). That is not a
+                    // finished task: keep waiting (bounded by the deadline) and
+                    // settle on the next Activity's draw.
+                    last_reason = "window-gone-unconfirmed".to_string();
+                } else if window_gone_shape(sample) {
                     // ROT8: the app's task is finished (last Activity
-                    // destroyed, no window root). Nothing draws, so this binds
-                    // on the guest's STATE proof, not on a draw: the tree is an
-                    // empty window forest and the frame stays the last
-                    // committed one (no launcher exists to draw).
+                    // destroyed, no window root) and the HOST ATMS agrees (no
+                    // live record, no pending start). Nothing draws, so this
+                    // binds on the state proof, not on a draw.
                     let timing = SettleTiming {
                         mode: SettleMode::Strict,
                         first_change_ms: Some(sample.at_ms.saturating_sub(publish_epoch_ms)),
                         frame_ms: None,
-                        state_changed: Some(true),
+                        state_changed: Some(window_gone_state_changed(
+                            await_tree,
+                            entry_tree_empty,
+                        )),
                         bound: "window-gone",
                         rule: Some("event"),
                         reason: None,
@@ -4053,7 +4074,7 @@ fn wait_for_settled_observation(
 /// involved: that is the strict rule, unchanged.
 /// ROT8: a sample proves the task finished only when the guest says so AND it
 /// is internally consistent: settled, with an empty window forest.
-fn window_gone_binds(sample: &ProbeSample) -> bool {
+fn window_gone_shape(sample: &ProbeSample) -> bool {
     sample.window_gone
         && sample.settled
         && sample
@@ -4062,6 +4083,30 @@ fn window_gone_binds(sample: &ProbeSample) -> bool {
             .and_then(|nodes| nodes.as_array())
             .map(|nodes| nodes.is_empty())
             .unwrap_or(false)
+}
+
+/// ROT8b: the host ATMS confirms the task is finished (no live record, no
+/// pending start). The guest's own flag is only a claim until this holds.
+fn host_confirms_task_finished(live: &acos_services::registry::LiveHandles) -> bool {
+    live.atms
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .task_finished_proof()
+}
+
+/// ROT8b: did the step change state? The tree the caller held before the
+/// action is the baseline: an already-empty forest (`await_tree` with no
+/// nodes, or no tree at all and an empty screen before the action) is NOT a
+/// change; a non-empty previous tree is.
+fn window_gone_state_changed(await_tree: Option<&serde_json::Value>, entry_empty: bool) -> bool {
+    match await_tree {
+        Some(tree) => tree
+            .get("nodes")
+            .and_then(|nodes| nodes.as_array())
+            .map(|nodes| !nodes.is_empty())
+            .unwrap_or(true),
+        None => !entry_empty,
+    }
 }
 
 fn probe_usable_for_fast_tree(
@@ -5465,8 +5510,11 @@ fn interactive_serve(
                     continue;
                 }
                 let capture = match capture_c1(live, frames_dir, &mut captures) {
-                    Ok(Some(capture)) => capture,
-                    Ok(None) if settle_timing.task_finished => {
+                    // ROT8b: a finished task never publishes a capture, even if
+                    // the compositor still holds a stale buffer of the
+                    // destroyed window (it would be the dead window's pixels
+                    // under a new frame id).
+                    Ok(_) if settle_timing.task_finished => {
                         // ROT8: the app's last window is gone, so the
                         // compositor holds no layer and there is no frame to
                         // bind. The step is proven by the guest's STATE (task
@@ -5509,6 +5557,7 @@ fn interactive_serve(
                         }));
                         continue;
                     }
+                    Ok(Some(capture)) => capture,
                     Ok(None) => {
                         let reply = serde_json::json!({
                             "ok": false, "cmd": cmd, "code": "NO_FRESH_FRAME",
@@ -6647,6 +6696,18 @@ mod probe_line_tests {
         }
     }
 
+    /// ROT8b: `state_changed` is computed from the pre-action tree, never
+    /// hard-coded.
+    #[test]
+    fn window_gone_state_changed_is_computed() {
+        let full = serde_json::json!({"nodes": [{"id": "x"}]});
+        let empty = serde_json::json!({"nodes": []});
+        assert!(window_gone_state_changed(Some(&full), false));
+        assert!(!window_gone_state_changed(Some(&empty), true));
+        assert!(window_gone_state_changed(None, false));
+        assert!(!window_gone_state_changed(None, true), "already empty before the action");
+    }
+
     /// ROT8: a probe line carrying `settle.window_gone` parses into the sample,
     /// and only a settled sample with an EMPTY window forest binds a step as
     /// `window-gone`. A stale-looking `window_gone` over a non-empty tree, or an
@@ -6657,16 +6718,16 @@ mod probe_line_tests {
         let state = drain(line);
         let sample = state.latest.expect("window-gone sample published");
         assert!(sample.window_gone && sample.settled);
-        assert!(window_gone_binds(&sample));
+        assert!(window_gone_shape(&sample));
         let mut not_empty = sample.clone();
         not_empty.tree = serde_json::json!({"nodes": [{"id": "x"}]});
-        assert!(!window_gone_binds(&not_empty), "a window forest that is not empty is not gone");
+        assert!(!window_gone_shape(&not_empty), "a window forest that is not empty is not gone");
         let mut unsettled = sample.clone();
         unsettled.settled = false;
-        assert!(!window_gone_binds(&unsettled));
+        assert!(!window_gone_shape(&unsettled));
         let mut plain = sample;
         plain.window_gone = false;
-        assert!(!window_gone_binds(&plain), "an ordinary settled empty tree is not a finished task");
+        assert!(!window_gone_shape(&plain), "an ordinary settled empty tree is not a finished task");
         // The step evidence names the proof.
         let timing = SettleTiming {
             mode: SettleMode::Strict,

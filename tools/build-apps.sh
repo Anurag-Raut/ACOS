@@ -87,6 +87,9 @@ fi
 #   Compiles resources + java + dex, appends extra payload, aligns and signs.
 build_apk() {
     local name="$1"; shift
+    # ROT8b: ACOS_BUILD_ONLY=<app> rebuilds a single fixture (other APKs keep
+    # their bytes).
+    if [ -n "${ACOS_BUILD_ONLY:-}" ] && [ "$name" != "$ACOS_BUILD_ONLY" ]; then return 0; fi
     local app_dir="$APPS_DIR/$name"
     local work="$BUILD_DIR/$name"
     local out="$BUILD_DIR/$name.apk"
@@ -213,7 +216,7 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # offscreen-pager is the tree-visibility fixture (GR2 W4): a two-page
 # HorizontalScrollView whose second page is warm-mounted one display width off
 # screen, with text that must be reported `visible:false` until you scroll.
-for app in counter todo-list multi-activity form-validation settle-lab thread-heavy svg-viewbox offscreen-pager; do
+for app in counter todo-list multi-activity finish-start form-validation settle-lab thread-heavy svg-viewbox offscreen-pager; do
     build_apk "$app"
 done
 

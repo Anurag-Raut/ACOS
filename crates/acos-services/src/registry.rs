@@ -189,6 +189,9 @@ pub struct LiveHandles {
     /// is a WMS operation, so the interactive session drives the same state the
     /// `IWindowSession` relayout replies are computed from.
     pub wms: std::sync::Arc<std::sync::Mutex<crate::wms::WmsState>>,
+    /// ROT8b: the host ATMS state (activity records + pending starts). The
+    /// strict settle cross-checks the guest's `task_finished` claim against it.
+    pub atms: std::sync::Arc<std::sync::Mutex<crate::atms::AtmsState>>,
 }
 
 /// Install the standard ACOS service set on `host`.
@@ -244,10 +247,12 @@ pub fn install_with_handles_and_insets(
     let window_id = host.register_aux("android.view.IWindowId");
     let session_state = Arc::clone(&wms_state);
     let input_host = crate::window_session::input_dispatch::InputHost::from_env();
+    let atms = Arc::new(Mutex::new(crate::atms::AtmsState::new()));
     let live = LiveHandles {
         input: input_host.clone(),
         compositor: Arc::clone(&compositor),
         wms: Arc::clone(&wms_state),
+        atms: Arc::clone(&atms),
     };
     let session_binder = host.register_dynamic(
         "android.view.IWindowSession",
@@ -268,7 +273,6 @@ pub fn install_with_handles_and_insets(
 
     // Shared state. The PMS parses the APK lazily inside its factory so
     // installing the host touches no package data.
-    let atms = Arc::new(Mutex::new(crate::atms::AtmsState::new()));
     let settings = Arc::new(Mutex::new(crate::provider::SettingsState::new()));
     let display = Arc::new(Mutex::new(crate::display::DisplayState::new(
         crate::display::DisplayInfo::hello_views_with(insets.unwrap_or_else(|| {

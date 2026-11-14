@@ -909,6 +909,25 @@ impl AtmsState {
         }
     }
 
+    /// ROT8b: does the host ATMS prove the task is finished?
+    ///
+    /// True only when no activity record is live (every record is
+    /// `Destroyed`/`Uncreated`), no `startActivity` is pending (AMS
+    /// `pending_launches` is empty: a `finish()` + `startActivity(Home)` leaves
+    /// Home's launch queued here until the guest materialises it), and no
+    /// record is unnamed (a record with no class cannot be judged, so the
+    /// answer fails closed). The guest's own process state alone is never
+    /// enough: it cannot see a launch the host has accepted but not yet run.
+    #[must_use]
+    pub fn task_finished_proof(&self) -> bool {
+        if !self.ams.pending_launches.is_empty() {
+            return false;
+        }
+        self.activities
+            .iter()
+            .all(|a| !a.activity.is_empty() && !a.lifecycle.is_alive())
+    }
+
     /// The lifecycle state of an activity.
     #[must_use]
     pub fn lifecycle_of(&self, token: u64) -> Option<ActivityLifecycle> {

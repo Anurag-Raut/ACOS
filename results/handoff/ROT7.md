@@ -235,3 +235,48 @@ after `99a65f1`.
 ## Open rows
 * A second B cycle + relaunch aborts the guest (layer-handle pool suspected) — EXPERIMENTS E9.6.
 * `reportSizeConfigurations` `SizeConfigurationBuckets` underflow — EXPERIMENTS E9.6.
+
+---
+
+# ROT8-Review — Opus review of ROT8 ("MERGE AFTER FIXES")
+
+1. **MED-HIGH, false-pass channel.** `task_finished:true` (LaunchMain.java `taskFinished`,
+   launch.rs `window_gone_binds` in `wait_for_event_settled`) is derived only from guest-process
+   state (`mFinished`+`isDestroyed`, `mActivities`, window roots `mAdded`), never the host
+   `AtmsState`, and ANY action can reach it. A tap that runs `finish()` + `startActivity(Home)`
+   (logout / splash handoff): `startTopFinishWatcher` runs Pause/Stop/Destroy at once; before
+   Home's launch transaction runs the guest emits window-gone, the tap PASSES with
+   `task_finished` and an empty tree, and a following `assert_not_visible` passes against
+   nothing. Fix: window-gone binds only when the HOST ATMS confirms no live record AND no
+   pending start (else wait, bounded, and bind the next Activity's draw); records with a null
+   `activity` fail closed; `state_changed` computed, not hard-coded; add a finish+start
+   fixture/scenario and a negative.
+2. **MED.** Dropping `onSaveInstanceState` from finishing back steps is AOSP-correct
+   (ActivityThread.java:5642 `shouldSaveState` requires `!mFinished`) but `ordered: true`
+   tolerates extra lines: add a negative (expectation fail) asserting `^Main.onSaveInstanceState`
+   since_previous_step after `back` on a finishing Activity.
+3. **MED-LOW.** `engine/art.rs::absorb` rebinds the destroyed window's PNG under a new
+   `frame_seq` after window-gone (and updates `last_pixel`): bind `png: None`, leave
+   `last_pixel` unchanged; launch.rs `Ok(Some(capture))` must not publish a capture when
+   `task_finished`.
+4. **LOW.** `sLastLiveActivity` fallback is never cleared and now beats the launch's own
+   activity: prefer a non-destroyed `mActivities` record, fall back only after; clear on a new
+   resume.
+5. **ROT9 (if time).** A second SecondActivity cycle + relaunch aborts the guest; suspected
+   16-handle layer pool in `crates/acos-services/src/surface_client.rs` never recycled.
+
+# ROT8b — fixes (in progress notes; final table below when filled)
+
+* (1) `AtmsState::task_finished_proof()` (no live record, no `ams.pending_launches`, no
+  unnamed record) exposed through the new `LiveHandles.atms`; the strict settle holds
+  `window-gone-unconfirmed` (bounded by the settle deadline) until the host agrees. Guest
+  `taskFinished` returns false on a null `activity` record. `state_changed` is
+  `window_gone_state_changed(await_tree, entry_tree_empty)`. Fixture `fixtures/apps/finish-start`
+  (`tools/build-apps.sh`, `ACOS_BUILD_ONLY=finish-start`), scenario `scenarios/finish-start.yaml`
+  (binds Home), negative `scenarios/negative/finish-start-wrong-home.yaml`.
+* (2) `scenarios/negative/multi-back-save-state.yaml`.
+* (3) `absorb` binds no PNG for window-gone and leaves `last_pixel`; tap path refuses a capture
+  when `task_finished`.
+* (4) `liveRecordActivity()` preferred over the remembered Activity.
+* Unit tests: `window_gone_state_changed_is_computed` (launch.rs),
+  `crates/acos-services/tests/rot8b_task_finished.rs`.
