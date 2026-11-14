@@ -233,7 +233,8 @@ new encoder across the 15 gates + 5 Gaten flows + 5 negatives):
 | any file at the old 10 371 258 B | **none** |
 
 **Tests:** `cargo test --release --offline -p acos-art -p acos-cli -p acos-mcp
--p acos-verify` (see §7 for the exact tail): acos-art 121 lib tests + 8
+-p acos-verify` → rc=0, **46 suites, 0 failures** (log
+`.cache/shotz-tests-final.log`): acos-art 121 lib tests + 8
 integration (`cleanup`), acos-mcp 59 lib, acos-verify retention 12, plus the
 acos-cli suites — green. Two ART-spawning integration tests
 (`launch_hang::guest_exits_before_milestone…`,
