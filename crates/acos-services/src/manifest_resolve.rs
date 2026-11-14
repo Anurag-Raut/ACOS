@@ -686,33 +686,56 @@ mod tests {
 
     #[test]
     fn real_apks_resolve_like_aapt2_could_not() {
-        // Built fixture: plain `<activity>`.
-        let counter = Path::new("fixtures/build/apps/counter.apk");
-        if counter.is_file() {
-            let got = launcher_activity(counter).unwrap();
-            assert_eq!(got.component, "dev.acos.fixtures.counter.MainActivity");
-            assert_eq!(got.target, None);
-            assert!(!got.alias);
-            let budget = launch_budget(counter).unwrap();
-            assert_eq!(budget.resume_ms, RESUME_MS_BASE);
+        // Paths are relative to the workspace root (`CARGO_MANIFEST_DIR/../..`),
+        // not the crate directory: `cargo test` runs with the crate as cwd.
+        fn repo_path(rel: &str) -> std::path::PathBuf {
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(rel)
         }
-        // The real Gaten debug APK (`.cache/gaten`, read-only copy): the
+
+        // Built fixture: plain `<activity>`. REQUIRED: `fixtures/build` is
+        // gitignored, so a checkout without it must fail loudly, never skip.
+        let counter = repo_path("fixtures/build/apps/counter.apk");
+        assert!(
+            counter.is_file(),
+            "required fixture missing: {} (fixtures/build is not in git; build the fixtures)",
+            counter.display()
+        );
+        let got = launcher_activity(&counter).unwrap();
+        assert_eq!(got.component, "dev.acos.fixtures.counter.MainActivity");
+        assert_eq!(got.target, None);
+        assert!(!got.alias);
+        let budget = launch_budget(&counter).unwrap();
+        assert_eq!(budget.resume_ms, RESUME_MS_BASE);
+
+        // The real Gaten release APK (`.cache/gaten`, read-only copy): the
         // launcher is `LauncherIconLight`, an alias to `LauncherActivity`, and
-        // aapt2 badging says "no launchable activity".
-        let gaten = Path::new(".cache/gaten/gaten-x86_64-debug.apk");
-        if gaten.is_file() {
-            let got = launcher_activity(gaten).unwrap();
-            assert_eq!(got.component, "com.gaten.app.LauncherIconLight");
-            assert_eq!(
-                got.target.as_deref(),
-                Some("com.gaten.app.LauncherActivity")
+        // aapt2 badging says "no launchable activity". OPTIONAL: the APK is
+        // not in git, so its absence is a documented environment gap. The skip
+        // is printed with its reason (run with --nocapture to see it).
+        let gaten = repo_path(".cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk");
+        if !gaten.is_file() {
+            eprintln!(
+                "SKIP real_apks_resolve_like_aapt2_could_not (Gaten half): {} is absent; \
+                 documented environment gap (the APK is not in git)",
+                gaten.display()
             );
-            assert!(got.alias);
-            let budget = launch_budget(gaten).unwrap();
-            assert!(budget.dex_count >= LARGE_DEX_COUNT, "31-dex APK");
-            assert!(budget.native_bytes >= LARGE_NATIVE_BYTES, "~108 MiB of .so");
-            assert_eq!(budget.resume_ms, RESUME_MS_LARGE);
+            return;
         }
+        let got = launcher_activity(&gaten).unwrap();
+        assert_eq!(got.component, "com.gaten.app.LauncherIconLight");
+        assert_eq!(
+            got.target.as_deref(),
+            Some("com.gaten.app.LauncherActivity")
+        );
+        assert!(got.alias);
+        // The release build has one classes.dex (the 31-dex shape belongs to the
+        // debug build, gaten-dev-9feffd2), so it is large by its native closure
+        // alone: 23 .so files, ~70 MB >= LARGE_NATIVE_BYTES (64 MiB).
+        let budget = launch_budget(&gaten).unwrap();
+        assert_eq!(budget.dex_count, 1, "release APK: one classes.dex");
+        assert!(budget.dex_count < LARGE_DEX_COUNT);
+        assert!(budget.native_bytes >= LARGE_NATIVE_BYTES, "~70 MB of .so");
+        assert_eq!(budget.resume_ms, RESUME_MS_LARGE);
     }
 
     #[test]
