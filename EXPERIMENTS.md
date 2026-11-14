@@ -2364,5 +2364,6 @@ declared network changes nothing for the 40 apps that were unaffected and
 unblocks the two that registered a default-network callback during startup. No
 app blocks on a socket because it now sees a network.
 
-**Not proven.** Round 2 (determinism; started 10:05 UTC, in flight at the window
-close) — see `results/compat/NET1.md` §7.5.
+**Not proven.** Round 2 (determinism; started 10:05 UTC, 6 of 42 apps done, then
+stopped at the window close to release the shared ART queue) — see
+`results/compat/NET1.md` §7.5.

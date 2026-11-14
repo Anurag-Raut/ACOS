@@ -9,7 +9,7 @@ negatives failing as designed, `k1-run.py` persists the guest logd, and corpus
 round 1 (42 apps × 2 arms) shows **two apps changed, both upward, none down** —
 Joplin gains `first_frame`+`tree`, Nextcloud gains `process_start`+`oncreate`
 (both were blocked by `IConnectivityManager code 42` on main) and then dies in
-its own SQLite cursor wall. Corpus round 2 was in flight at the window close.
+its own SQLite cursor wall. Corpus round 2 reached 6/42 apps and was stopped at the window close.
 
 **Resume here:** `ROUND=2 BATCH=6 TIME=800 bash .cache/net1b/corpus.sh` (the
 script is resumable — it skips nothing but overwrites per-app dirs), then

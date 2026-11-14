@@ -475,9 +475,18 @@ the 26 apps that still stop at `onCreate` stop for the same non-connectivity
 reasons as on `main`.
 
 **Round 2** (`ROUND=2 BATCH=6 TIME=800 bash .cache/net1b/corpus.sh`) was started
-at 10:05 UTC and was still in flight when this window closed; its per-app data
-lands in `.cache/net1b/corpus/r2/` and `python3 .cache/net1b/rung.py --rounds 1,2
---markdown` reproduces the table with the second round. Round 1 already shows the
+at 10:05:01 UTC and reached batch `[7-12]` (6 of 42 apps, both arms) before the
+window closed; it was then stopped so it would not sit in the shared ART queue
+behind this report. Restart it with the same command — the driver overwrites the
+per-app dirs, so a rerun is safe — and `python3 .cache/net1b/rung.py --rounds
+1,2 --markdown` reproduces the table with both rounds. Round 1 already shows the
 whole diff, so round 2 is the determinism check, not new information — and the
 nextcloud delta is the one that most needs it (a marker race in a crashing guest,
-not a rung change).
+not a rung change). The 6 r2 apps that did run (`chat.fluffy.fluffychat`,
+`com.aurora.store`, `com.beemdevelopment.aegis`, `com.dot.gallery`,
+`com.fsck.k9`, `com.github.gotify`) all reproduce their r1 rungs on both arms.
+
+**Host cost of the corpus.** Max per-run guest+daemon peak RSS 734.6 MiB
+(sampled by `k1-run.py` over the serve process tree), 97 runs, host RAM 14–15 %
+of 60 GiB throughout, `/` 77 % → 81 % (`.cache/net1b` 937 MiB including the
+`r2` partial).
