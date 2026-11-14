@@ -779,7 +779,7 @@ impl EngineBackend {
                     return Err(BackendError::Failed {
                         code: ErrorCode::ElementOffscreen,
                         detail: format!(
-                            "selector {selector:?} matched only a node that is not visible to the user (text {:?}, bounds {}, visible_bounds {}); scroll it into view first",
+                            "selector {selector} matched only a node that is not visible to the user (text {:?}, bounds {}, visible_bounds {}); scroll it into view first",
                             offscreen.text,
                             offscreen.bounds,
                             offscreen.visible_bounds
@@ -795,10 +795,10 @@ impl EngineBackend {
                     },
                     detail: if tree.truncated {
                         format!(
-                            "no node matches selector {selector:?}, but the tree was truncated at the node budget"
+                            "no node matches selector {selector}, but the tree was truncated at the node budget"
                         )
                     } else {
-                        format!("no node matches selector {selector:?}")
+                        format!("no node matches selector {selector}")
                     },
                 });
             }
@@ -1903,6 +1903,7 @@ mod engine_tests {
             ),
             scenario: repo().join(scenario).display().to_string(),
             artifacts: artifacts.display().to_string(),
+            overwrite: false,
             reference: None,
             required_fidelity: None,
             engine: acos_protocol::VerifyEngine::Art,
@@ -1929,6 +1930,7 @@ mod engine_tests {
             animations: None,
             insets: None,
             untrusted: false,
+            overwrite: true,
             keep_artifacts: Some("all".to_string()),
             json,
         }
@@ -2562,7 +2564,7 @@ mod engine_tests {
             assert_eq!(error.code(), ErrorCode::NoFreshFrame);
             assert!(
                 error.to_string().contains(STALE_FRAME),
-                "the error must name the stale frame ({selector:?}): {error}"
+                "the error must name the stale frame ({selector}): {error}"
             );
             assert!(!error.status().is_pass());
         }

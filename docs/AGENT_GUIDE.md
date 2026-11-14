@@ -141,6 +141,7 @@ acos session status --json
 acos session reset --json
 acos session destroy --json
 acos verify scenarios/counter.yaml --artifacts out/counter --json
+acos verify scenarios/counter.yaml --artifacts out/counter --overwrite --json  # replace a prior run's evidence
 acos verify scenarios/form-validation.yaml --engine art --json
 acos serve                                       # unix-socket session daemon; stop it when done
 acos frame-diff reference.png candidate.png --json
@@ -164,7 +165,14 @@ Notes that save a run:
 * `acos run-dex <path> --main Main` executes a DEX `main` on the Rust
   interpreter: console-tier checks only, not UI evidence.
 * Every command takes `--json` and prints the same envelope the MCP tools
-  return.
+  return. With `--json`, **stdout carries only the JSON document**; progress,
+  warnings and the one-line failure summary go to **stderr**. So
+  `acos verify … --json > out.json 2>&1` is *not* JSON — send stderr elsewhere
+  (`2>err.txt`). Text mode prints the human summary on stdout.
+* `acos verify --artifacts <dir>` gives one run ownership of that directory. A
+  non-empty dir written by another run is refused (`INVALID_ARGUMENT` naming the
+  previous run id); use a fresh dir, or `--overwrite` to replace that evidence
+  deliberately.
 
 <!-- /topic:cli -->
 
@@ -306,8 +314,14 @@ it. `expectation: non_pass` accepts any non-pass. If a negative scenario
 "passes", the runner is broken; report a harness bug.
 
 **Read the evidence.** `--artifacts out/<name>` writes `verdict.json`,
-`steps/NN-*.json`, frames and events. On a non-pass, read the step file for the
-first failing step, its `error.code`, the diff and the linked frame.
+`steps/NN-*.json`, frames and events. `verdict.json` carries both `verdict` and
+`status` (the envelope's field name), and every assertion echoes `expected` and
+`actual` on a pass as well as a failure, so the artifacts say *what* was checked.
+A `capture: {name: x}` step writes `frames/<seq>-x.png` and adds
+`captures: {"x": "frames/<seq>-x.png"}` to the verdict. On a non-pass, read the
+step file for the first failing step, its `error.code`, the diff and the linked
+frame. Reusing another run's `--artifacts` directory is `INVALID_ARGUMENT`
+(`--overwrite` replaces it).
 
 **Screenshots are compressed, losslessly.** A capture is a PNG with real deflate
 and adaptive row filtering: the same pixels as the compositor's buffer (region

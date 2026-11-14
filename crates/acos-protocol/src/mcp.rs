@@ -147,10 +147,11 @@ pub fn mcp_tools() -> McpToolsList {
             McpToolDescriptor::new::<VerifyRequest>(
                 CommandName::Verify,
                 concat!(
-                    "Run an APK + YAML scenario and write a complete artifacts directory (verdict.json, steps/, frames/, tree/, events.jsonl, resources.json, repro.*). ",
+                    "Run an APK + YAML scenario and write a complete artifacts directory (run.json, verdict.json, steps/, frames/, tree/, events.jsonl, resources.json, repro.*). ",
                     "This is the primary verification loop: inspect -> verify -> read verdict.json -> fix -> rerun. ",
                     "A pass is valid only if its evidence exists; `unsupported` is never a pass. Set required_fidelity when the task needs ART/device evidence. ",
-                    "Common errors: INVALID_SCENARIO, ARTIFACTS_INVALID, ASSERTION_FAILED, APP_CRASHED, UNSUPPORTED_*, UNVERIFIED_FIDELITY."
+                    "A run owns its artifacts directory: a non-empty `artifacts` directory written by another run is refused with INVALID_ARGUMENT naming that run (details.previous_run_id) unless `overwrite: true`. ",
+                    "Common errors: INVALID_ARGUMENT, INVALID_SCENARIO, ARTIFACTS_INVALID, ASSERTION_FAILED, APP_CRASHED, UNSUPPORTED_*, UNVERIFIED_FIDELITY."
                 ),
             ),
             McpToolDescriptor::new::<CapabilityReportRequest>(

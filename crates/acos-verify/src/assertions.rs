@@ -25,11 +25,22 @@ pub struct Evaluated {
 }
 
 impl Evaluated {
-    pub(crate) fn pass(kind: &str, matched: Vec<String>, message: Option<String>) -> Self {
+    /// A passing assertion. `expected`/`actual` are always recorded: an agent
+    /// reading the artifacts can tell *what* was asserted and what was seen,
+    /// not only that the check held.
+    pub(crate) fn pass(
+        kind: &str,
+        matched: Vec<String>,
+        message: Option<String>,
+        expected: Value,
+        actual: Value,
+    ) -> Self {
         Evaluated {
             result: AssertionResult {
                 kind: kind.to_string(),
                 passed: true,
+                expected: Some(expected),
+                actual: Some(actual),
                 diff: None,
                 matched_node_ids: matched,
                 message,
@@ -48,6 +59,11 @@ impl Evaluated {
             result: AssertionResult {
                 kind: kind.to_string(),
                 passed: false,
+                // The failure diff carries the same information plus a path and
+                // a human detail; `expected`/`actual` are populated on both
+                // paths so one shape reads every assertion result.
+                expected: Some(diff.expected.clone()),
+                actual: Some(diff.actual.clone()),
                 diff: Some(diff),
                 matched_node_ids: matched,
                 message: None,
@@ -135,7 +151,7 @@ pub fn offscreen_error(
         BackendError::Failed {
             code: ErrorCode::ElementOffscreen,
             detail: format!(
-                "selector {selector:?} matched no visible node, but it matches a node that is not visible to the user ({described}); this is the GR2 W4 false-pass class — scroll it into view or target a visible node, never treat it as a pass"
+                "selector {selector} matched no visible node, but it matches a node that is not visible to the user ({described}); this is the GR2 W4 false-pass class — scroll it into view or target a visible node, never treat it as a pass"
             ),
         },
     )
@@ -159,13 +175,13 @@ pub fn missing_error(
         BackendError::Failed {
             code: ErrorCode::TreeTruncated,
             detail: format!(
-                "selector {selector:?} matched no node, but the tree was truncated at the node budget; the node may exist beyond the sampled prefix"
+                "selector {selector} matched no node, but the tree was truncated at the node budget; the node may exist beyond the sampled prefix"
             ),
         }
     } else {
         BackendError::Failed {
             code: ErrorCode::ElementNotFound,
-            detail: format!("selector {selector:?} matched no node"),
+            detail: format!("selector {selector} matched no node"),
         }
     }
 }
@@ -262,7 +278,23 @@ pub fn eval_text(assertion: &TextAssertion, observation: &SessionObservation) ->
             );
         }
     }
-    Evaluated::pass("text", matched, None)
+    Evaluated::pass(
+        "text",
+        matched,
+        None,
+        json!({
+            "selector": assertion.selector,
+            "text": assertion.text,
+            "bounds": assertion.bounds,
+        }),
+        json!({
+            "node": node.id,
+            "text": node.text,
+            "hint": node.hint,
+            "bounds": node.bounds,
+            "visible": node.visible,
+        }),
+    )
 }
 
 /// Evaluate a `visible` assertion (optional exact bounds).
@@ -318,7 +350,22 @@ pub fn eval_visible(assertion: &VisibilityAssertion, observation: &SessionObserv
             );
         }
     }
-    Evaluated::pass("visible", matched, None)
+    Evaluated::pass(
+        "visible",
+        matched,
+        None,
+        json!({
+            "selector": assertion.selector,
+            "visible": true,
+            "bounds": assertion.bounds,
+        }),
+        json!({
+            "node": node.id,
+            "visible": node.visible,
+            "bounds": node.bounds,
+            "visible_bounds": node.visible_bounds,
+        }),
+    )
 }
 
 /// Evaluate a `not_visible` assertion.
@@ -331,7 +378,13 @@ pub fn eval_not_visible(
     // would trivially "pass" as "absent", which is the same lie in reverse).
     let Some((index, node)) = locate_including_invisible(observation, &assertion.selector) else {
         // Absent is the expected state.
-        return Evaluated::pass("not_visible", Vec::new(), Some("node absent".to_string()));
+        return Evaluated::pass(
+            "not_visible",
+            Vec::new(),
+            Some("node absent".to_string()),
+            json!({"selector": assertion.selector, "visible": false}),
+            json!({"present": false, "visible": Value::Null}),
+        );
     };
     let matched = vec![node.id.clone()];
     if node.visible {
@@ -359,6 +412,14 @@ pub fn eval_not_visible(
             node.visible_bounds
                 .map_or_else(|| "<none>".to_string(), |b| b.to_string())
         )),
+        json!({"selector": assertion.selector, "visible": false, "bounds": assertion.bounds}),
+        json!({
+            "node": node.id,
+            "present": true,
+            "visible": node.visible,
+            "bounds": node.bounds,
+            "visible_bounds": node.visible_bounds,
+        }),
     )
 }
 
@@ -414,7 +475,31 @@ pub fn eval_state(assertion: &StateAssertion, observation: &SessionObservation) 
             }
         }
     }
-    Evaluated::pass("state", matched, None)
+    Evaluated::pass(
+        "state",
+        matched,
+        None,
+        json!({
+            "selector": assertion.selector,
+            "visible": assertion.visible,
+            "enabled": assertion.enabled,
+            "focused": assertion.focused,
+            "clickable": assertion.clickable,
+            "scrollable": assertion.scrollable,
+            "checked": assertion.checked,
+            "selected": assertion.selected,
+        }),
+        json!({
+            "node": node.id,
+            "visible": node.visible,
+            "enabled": node.enabled,
+            "focused": node.focused,
+            "clickable": node.clickable,
+            "scrollable": node.scrollable,
+            "checked": node.checked,
+            "selected": node.selected,
+        }),
+    )
 }
 
 /// Evaluate a `log` assertion against a log slice.
@@ -468,7 +553,31 @@ pub fn eval_log(assertion: &LogAssertion, logs: &[LogRecord]) -> Evaluated {
     };
 
     if passed {
-        return Evaluated::pass("log", Vec::new(), None);
+        let samples: Vec<String> = filtered
+            .iter()
+            .filter(|record| regexes.iter().any(|regex| regex.is_match(&record.message)))
+            .take(5)
+            .map(|record| format!("{}: {}", record.tag, record.message))
+            .collect();
+        return Evaluated::pass(
+            "log",
+            Vec::new(),
+            None,
+            json!({
+                "tag": assertion.tag,
+                "patterns": assertion.patterns,
+                "ordered": assertion.ordered,
+                "min_matches": min_matches,
+                "since_previous_step": assertion.since_previous_step,
+            }),
+            json!({
+                "matched_lines": filtered
+                    .iter()
+                    .filter(|record| regexes.iter().any(|regex| regex.is_match(&record.message)))
+                    .count(),
+                "sample": samples,
+            }),
+        );
     }
     Evaluated::fail(
         "log",
@@ -516,7 +625,13 @@ fn ordered_log_match(regexes: &[Regex], logs: &[&LogRecord], min_matches: usize)
 /// Evaluate an `assert_no_crash` step.
 pub fn eval_no_crash(crashed: Option<&CrashRecord>) -> Evaluated {
     match crashed {
-        None => Evaluated::pass("no_crash", Vec::new(), Some("no crash recorded".to_string())),
+        None => Evaluated::pass(
+            "no_crash",
+            Vec::new(),
+            Some("no crash recorded".to_string()),
+            json!("no crash"),
+            json!({"crashes": 0}),
+        ),
         Some(record) => Evaluated::fail(
             "no_crash",
             Vec::new(),
@@ -593,6 +708,100 @@ mod tests {
             evaluated.error.as_ref().unwrap().code(),
             ErrorCode::AssertionFailed
         );
+    }
+
+    #[test]
+    fn a_passing_text_assertion_echoes_expected_and_actual_geometry() {
+        let evaluated = eval_text(
+            &TextAssertion {
+                selector: Selector::by_id("result"),
+                text: TextMatch::exact("clicks: 0"),
+                bounds: Some(Bounds::new(42, 612, 175, 663)),
+                timeout_ms: None,
+            },
+            &observation(),
+        );
+        assert!(evaluated.result.passed);
+        let expected = evaluated.result.expected.as_ref().expect("expected is echoed");
+        let actual = evaluated.result.actual.as_ref().expect("actual is echoed");
+        // What was asserted, from the artifacts alone.
+        assert_eq!(expected["text"]["exact"], "clicks: 0");
+        assert_eq!(expected["bounds"], serde_json::json!([42, 612, 175, 663]));
+        assert_eq!(expected["selector"]["id"], "result");
+        // What the run actually saw.
+        assert_eq!(actual["text"], "clicks: 0");
+        assert_eq!(actual["bounds"], serde_json::json!([42, 612, 175, 663]));
+        assert_eq!(actual["node"], "n1");
+        // A pass carries no failure diff.
+        assert!(evaluated.result.diff.is_none());
+    }
+
+    #[test]
+    fn a_passing_state_assertion_echoes_every_requested_flag() {
+        let evaluated = eval_state(
+            &StateAssertion {
+                selector: Selector::by_id("result"),
+                visible: Some(true),
+                enabled: Some(true),
+                focused: None,
+                clickable: None,
+                scrollable: None,
+                checked: None,
+                selected: None,
+                timeout_ms: None,
+            },
+            &observation(),
+        );
+        assert!(evaluated.result.passed);
+        let expected = evaluated.result.expected.as_ref().unwrap();
+        let actual = evaluated.result.actual.as_ref().unwrap();
+        assert_eq!(expected["visible"], true);
+        assert_eq!(expected["enabled"], true);
+        assert!(expected["focused"].is_null(), "only requested flags");
+        assert_eq!(actual["visible"], true);
+        assert_eq!(actual["enabled"], true);
+        assert_eq!(actual["node"], "n1");
+    }
+
+    #[test]
+    fn a_passing_not_visible_assertion_echoes_the_expectation() {
+        let evaluated = eval_not_visible(
+            &VisibilityAssertion {
+                selector: Selector::by_text("Hidden"),
+                bounds: None,
+                timeout_ms: None,
+            },
+            &offscreen_observation(),
+        );
+        assert!(evaluated.result.passed);
+        assert_eq!(
+            evaluated.result.expected.as_ref().unwrap()["visible"],
+            false
+        );
+        let actual = evaluated.result.actual.as_ref().unwrap();
+        assert_eq!(actual["present"], true);
+        assert_eq!(actual["visible"], false);
+        assert_eq!(actual["node"], "n2");
+    }
+
+    #[test]
+    fn selector_miss_messages_use_the_human_selector_form() {
+        let selector = Selector::by_text("Nonexistent");
+        let error = missing_error(Some(&observation()), &selector);
+        let message = error.to_protocol_error().message;
+        assert!(message.contains("text==\"Nonexistent\""), "{message}");
+        assert!(!message.contains("Selector {"), "{message}");
+        assert!(!message.contains("TextMatch {"), "{message}");
+
+        // The same in the offscreen (ELEMENT_OFFSCREEN) message every agent
+        // reads when triaging a stale selector.
+        let mut selector = Selector::by_text("Hidden");
+        selector.content_desc = Some(TextMatch::exact("X"));
+        let error = offscreen_error("text", &selector, &offscreen_observation());
+        let message = error.error.unwrap().to_protocol_error().message;
+        assert!(message.contains("text==\"Hidden\""), "{message}");
+        assert!(message.contains("content_desc==\"X\""), "{message}");
+        assert!(!message.contains("Selector {"), "{message}");
     }
 
     #[test]

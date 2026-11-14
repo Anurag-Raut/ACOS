@@ -1155,7 +1155,17 @@ pub struct VerifyRequest {
     /// Scenario path.
     pub scenario: String,
     /// Artifacts output directory.
+    ///
+    /// A run owns its directory: a non-empty directory written by another run is
+    /// refused with `INVALID_ARGUMENT` naming the previous run id, unless
+    /// [`VerifyRequest::overwrite`] is set.
     pub artifacts: String,
+    /// Replace artifacts left by another run in `artifacts` (`--overwrite`).
+    ///
+    /// Off by default: two runs never interleave evidence in one directory, so a
+    /// stale frame can never be mistaken for this run's.
+    #[serde(default)]
+    pub overwrite: bool,
     /// Optional art-reference directory to compare against.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference: Option<String>,

@@ -259,6 +259,11 @@ Regenerate the block with `cargo run -p acos-mcp --example gen-tools-docs`.
 Without it `acos verify` uses its default engine, which cannot honour an
 ART-only scenario (`animations: off`); pass `engine: "art"` for real ART.
 
+A run owns its `artifacts` directory: a non-empty directory written by another
+run is refused with `INVALID_ARGUMENT` naming the previous run id
+(`error.details.previous_run_id`). Pass `overwrite: true` to discard that
+evidence deliberately (`--overwrite` on the CLI). See `docs/AGENT_API.md` §10.4.
+
 ### `resources` and `prompts`
 
 The same guide is served as MCP resources, for clients that read resources

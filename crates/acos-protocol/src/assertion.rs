@@ -234,6 +234,16 @@ pub struct AssertionResult {
     pub kind: String,
     /// Whether the assertion held.
     pub passed: bool,
+    /// What the assertion expected, echoed on pass **and** failure.
+    ///
+    /// For `text`/`visible`/`state` this names the selector, the matcher and
+    /// every expected bound/flag; for `log` the patterns. From the artifacts
+    /// alone a reviewer can then tell *what* was asserted, not only that it held.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected: Option<Value>,
+    /// What the runtime actually observed, echoed on pass and failure.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual: Option<Value>,
     /// Present when the assertion failed or produced an explainable result.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub diff: Option<AssertionDiff>,
