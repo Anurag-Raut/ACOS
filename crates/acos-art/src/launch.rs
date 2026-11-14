@@ -4021,58 +4021,51 @@ enum ServeEvent {
     ChildExited,
 }
 
-/// VIEW1a: the live-view frame tap.
+/// VIEW1a: the live-view frame source.
 ///
-/// Waits on the same condvar the guest's probe samples already signal (with a
-/// 200 ms fallback so a frame that arrives without a probe sample is still
-/// picked up), and asks [`crate::live_view::LiveView::tick`] to consider a frame.
-/// `tick` short-circuits on one atomic load when no viewer is attached, so the
-/// compositor is not even locked. When a viewer *is* attached, only a frame
-/// whose C1 store counter advanced is captured — and the capture is a copy, not
-/// a present: `frame_seq`, `generation` and damage are untouched (ADR-0027).
-fn spawn_live_view_tap(
-    view: Arc<crate::live_view::LiveView>,
+/// One composite of the C1 state per call, and only when the compositor's store
+/// counter advanced since the last capture: an unchanged screen costs one lock
+/// and one integer compare. The capture is a **copy**, never a present —
+/// `frame_seq`, `generation`, damage and the settle state are untouched
+/// (ADR-0027). `LiveView` calls this only while a subscriber is attached.
+fn live_view_source(
     compositor: Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>,
+) -> Arc<dyn Fn() -> Option<crate::live_view::SourceFrame> + Send + Sync> {
+    let last_seq = std::sync::atomic::AtomicU64::new(0);
+    Arc::new(move || {
+        let state = compositor.lock().unwrap_or_else(|e| e.into_inner());
+        let seq = state.latest_generation();
+        let previous = last_seq.load(std::sync::atomic::Ordering::Relaxed);
+        if seq == 0 || seq <= previous {
+            return None;
+        }
+        let capture = state.capture_latest()?;
+        last_seq.store(seq, std::sync::atomic::Ordering::Relaxed);
+        Some(crate::live_view::SourceFrame {
+            seq,
+            generation: capture.generation,
+            width: capture.width,
+            height: capture.height,
+            stride: capture.stride,
+            rgba: capture.rgba,
+        })
+    })
+}
+
+/// VIEW1a: the tap thread's wake, on the condvar the guest's probe samples
+/// already signal. No timer of its own: an unviewed session has no tap thread at
+/// all (`LiveView` starts it with the first subscriber and stops it with the
+/// last), so the viewer costs the session nothing when nobody watches.
+struct ProbeTapWake {
     wake: Arc<ProbeWake>,
-) {
-    let _ = std::thread::Builder::new()
-        .name("acos-live-view-tap".to_string())
-        .spawn(move || {
-            let mut seen = 0u64;
-            let mut last_seq = 0u64;
-            // Dev-only measurement seam: refresh the stats file every 2 s while a
-            // viewer is attached, so the numbers survive a session that is
-            // killed by teardown instead of exiting cleanly.
-            let stats_path = std::env::var_os("ACOS_VIEW_STATS_FILE");
-            let mut stats_at = Instant::now();
-            let mut source = || -> Option<crate::live_view::SourceFrame> {
-                let state = compositor.lock().unwrap_or_else(|e| e.into_inner());
-                let seq = state.latest_generation();
-                if seq == 0 || seq <= last_seq {
-                    return None;
-                }
-                let capture = state.capture_latest()?;
-                last_seq = seq;
-                Some(crate::live_view::SourceFrame {
-                    seq,
-                    generation: capture.generation,
-                    width: capture.width,
-                    height: capture.height,
-                    stride: capture.stride,
-                    rgba: capture.rgba,
-                })
-            };
-            while !view.is_shutdown() {
-                view.tick(&mut source);
-                if let Some(path) = stats_path.as_ref() {
-                    if stats_at.elapsed() >= Duration::from_secs(2) && view.has_subscribers() {
-                        let _ = std::fs::write(path, view.stats_json().to_string());
-                        stats_at = Instant::now();
-                    }
-                }
-                wake.wait(&mut seen, Duration::from_millis(200));
-            }
-        });
+    seen: std::sync::Mutex<u64>,
+}
+
+impl crate::live_view::FrameWake for ProbeTapWake {
+    fn wait(&self, timeout: std::time::Duration) {
+        let mut seen = self.seen.lock().unwrap_or_else(|e| e.into_inner());
+        self.wake.wait(&mut seen, timeout);
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -4259,14 +4252,14 @@ fn interactive_serve(
         crate::live_view::LiveViewConfig::from_env(),
         (width, height),
         std::process::id(),
+        live_view_source(Arc::clone(&live.compositor)),
+        Arc::new(ProbeTapWake {
+            wake: Arc::clone(&wake),
+            seen: std::sync::Mutex::new(0),
+        }),
     ) {
         Ok(view) => {
             let _ = LIVE_VIEW.set(Arc::clone(&view));
-            spawn_live_view_tap(
-                Arc::clone(&view),
-                Arc::clone(&live.compositor),
-                Arc::clone(&wake),
-            );
             Some(view)
         }
         Err(error) => {

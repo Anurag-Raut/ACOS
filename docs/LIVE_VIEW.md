@@ -139,17 +139,23 @@ stats, never a block.
 
 ## 3. Producer cost model (hard rules)
 
-1. **No subscriber** → the frame path is one atomic load (`subscriber_count`).
-   No compositor lock, no capture, no copy, no encode, no allocation. Events are
-   discarded before the queue. The tap thread blocks on the condvar the guest's
-   own probe samples already signal (200 ms fallback), so an idle unviewed
-   session has no extra wakeups beyond that.
+1. **No subscriber** → the tap thread does not exist. `LiveView` starts it with
+   the first subscriber and stops it with the last, so an unviewed session runs
+   exactly the threads it ran before the viewer existed (no extra condvar waiter,
+   no timer, no atomic load on the command path). Events are discarded before the
+   queue, and the writer thread blocks on a condvar until someone attaches.
+   The one cheap check that remains is inside the tap step itself: one atomic
+   load of `subscriber_count` and a return (test seam: `source_calls == 0`,
+   `encodes == 0`).
 2. **With a subscriber** → on a frame whose `seq` advanced, the launcher
    composites once (`capture_composite`, the same pixels a screenshot would use),
    box-filters it to `scale` (area average; 2×2 per output pixel at 0.5) and
    stores it in a single "latest" slot under a short lock. The compositor is
    never asked to `present`/`present_forced`; `frame_seq`, `generation`, damage
    and the settle state are untouched.
+   The capture is itself rate-limited to `max_fps`: a frame captured more often
+   than the stream can send it would only be dropped by the encoder, and a
+   capture is the expensive step (a full 1080×2400 composite).
 3. One encoder thread per session: latest wins, `max_fps` rate limit, one encode
    shared by every subscriber, non-blocking sends. A subscriber whose socket
    would block (or that closed) is dropped; the encoder never waits for it.
@@ -247,6 +253,26 @@ below the 15 fps budget (66 ms): a frame costs ≤ 12 ms of a separate thread.
 
 Readability at 0.5 is checked by eye on the saved frames (`counter`: "Counter",
 "1", "Increment", "Reset" all legible in both formats).
+
+Viewer-on cost, measured the same way (3 interleaved bench reps each, a
+`stream_probe` subscribed to every session the run published — 13-18 sessions,
+301-313 frames received per rep):
+
+| metric | viewer off | viewer on | delta |
+|---|---|---|---|
+| `cpu_active_tap_strict_pct` | 46.5 % | 58.1 % | **+11.7 pp of one core** |
+| M4 warm launch (fast) | 163.5 ms | 169.8 ms | +3.9 % |
+| M4 warm launch (strict) | 306.3 ms | 306.2 ms | −0.0 % |
+| M5 screenshot | 24.20 ms | 24.20 ms | +0.0 % |
+| M6 reset (fast / strict) | 198.2 / 339.5 ms | 199.1 / 347.3 ms | +0.4 % / +2.3 % |
+| M7 tree (fast / strict) | 0.59 / 41.33 ms | 0.53 / 41.25 ms | −10 % (−0.06 ms) / −0.2 % |
+| M8 tap counter (fast / strict) | 48.1 / 955.0 ms | 47.6 / 954.3 ms | −1.0 % / −0.1 % |
+| M8 tap form (fast / strict) | 44.2 / 948.1 ms | 44.6 / 948.6 ms | +0.8 % / +0.1 % |
+
+So a watching viewer costs ~12 % of one core on this host (capture ≈ 4-6 ms +
+downscale ≈ 2 ms + encode ≈ 1.2 ms per frame at up to 15 fps) and leaves every
+tracked latency metric inside noise. **Viewer-off is at parity** (see
+`results/handoff/VIEW1a.md` for the interleaved A/B table).
 
 A subscriber only receives events that happen **while it is connected**; the
 current activity is in the registry entry and the `H` hello names the display

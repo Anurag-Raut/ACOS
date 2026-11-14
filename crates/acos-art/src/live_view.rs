@@ -239,6 +239,8 @@ pub struct LiveViewStats {
     pub subscribers_dropped: u64,
     /// Frames superseded in the slot before they were encoded (latest wins).
     pub frames_dropped_latest: u64,
+    /// Taps skipped by the capture rate gate.
+    pub captures_rate_limited: u64,
     /// Microseconds spent in the last encode.
     pub last_encode_us: u64,
     /// Bytes of the last encoded image.
@@ -267,6 +269,16 @@ impl LiveViewStats {
             self.encode_bytes_total as f64 / self.encodes as f64
         }
     }
+}
+
+/// The condvar the tap thread waits on between frames.
+///
+/// The launcher implements it on top of the condvar the guest's own probe
+/// samples already signal, so the tap adds no polling of its own: an unviewed
+/// session has no tap thread at all, and a viewed one wakes on real frames.
+pub trait FrameWake: Send + Sync {
+    /// Wait until the next wake or `timeout`.
+    fn wait(&self, timeout: Duration);
 }
 
 /// A frame downscaled and waiting for the encoder ("latest wins").
@@ -337,6 +349,13 @@ struct Inner {
     events_dropped: AtomicU64,
     subscribers_dropped: AtomicU64,
     frames_dropped_latest: AtomicU64,
+    /// Taps skipped by the capture rate gate (the encoder would have dropped the
+    /// frame anyway: it only sends `max_fps` frames per second).
+    captures_rate_limited: AtomicU64,
+    /// Millis since `started` at the last capture (the rate gate's clock).
+    last_capture_ms: AtomicU64,
+    /// Process-local monotonic origin for `last_capture_ms`.
+    started: Instant,
     last_encode_us: AtomicU64,
     last_encode_bytes: AtomicU64,
     /// The last tree any reply carried said a *focused* node is a password
@@ -348,6 +367,14 @@ struct Inner {
     /// The command the launcher is currently executing. The event feed reports
     /// the *request*'s coordinates/key/text (a reply need not echo them).
     pending_request: Mutex<Option<serde_json::Value>>,
+    /// The launcher's frame source (one composite of the C1 state, or `None`
+    /// when nothing new landed). Only called while a subscriber exists.
+    source: Arc<dyn Fn() -> Option<SourceFrame> + Send + Sync>,
+    /// The wake the tap thread blocks on.
+    frame_wake: Arc<dyn FrameWake>,
+    /// `true` while a tap thread is running (it exists only between the first
+    /// subscriber and the last).
+    tap_running: AtomicBool,
 }
 
 impl Inner {
@@ -439,7 +466,7 @@ impl Inner {
         })
     }
 
-    fn attach(&self, stream: UnixStream, request: &serde_json::Value) -> io::Result<()> {
+    fn attach(self: &Arc<Self>, stream: UnixStream, request: &serde_json::Value) -> io::Result<()> {
         self.configure_from_request(request);
         let subscribe = request.get("subscribe").unwrap_or(request);
         let wants_frames = subscribe
@@ -469,11 +496,142 @@ impl Inner {
         self.subscriber_count.fetch_add(1, Ordering::AcqRel);
         drop(subscribers);
         self.notify();
+        // The tap thread exists only while someone watches: with no subscriber
+        // the session runs exactly as it did before the viewer existed.
+        self.ensure_tap();
         Ok(())
+    }
+
+    fn stats_json(&self) -> serde_json::Value {
+        let stats = LiveViewStats {
+            ticks: self.ticks.load(Ordering::Relaxed),
+            source_calls: self.source_calls.load(Ordering::Relaxed),
+            frames_captured: self.frames_captured.load(Ordering::Relaxed),
+            encodes: self.encodes.load(Ordering::Relaxed),
+            encode_us_total: self.encode_us_total.load(Ordering::Relaxed),
+            encode_bytes_total: self.encode_bytes_total.load(Ordering::Relaxed),
+            frames_sent: self.frames_sent.load(Ordering::Relaxed),
+            events_sent: self.events_sent.load(Ordering::Relaxed),
+            events_dropped: self.events_dropped.load(Ordering::Relaxed),
+            subscribers_dropped: self.subscribers_dropped.load(Ordering::Relaxed),
+            frames_dropped_latest: self.frames_dropped_latest.load(Ordering::Relaxed),
+            captures_rate_limited: self.captures_rate_limited.load(Ordering::Relaxed),
+            last_encode_us: self.last_encode_us.load(Ordering::Relaxed),
+            last_encode_bytes: self.last_encode_bytes.load(Ordering::Relaxed),
+            subscribers: self.subscriber_count.load(Ordering::Acquire) as u64,
+        };
+        serde_json::json!({
+            "format": self.format().as_str(),
+            "scale": self.scale(),
+            "max_fps": self.max_fps(),
+            "jpeg_quality": self.config.jpeg_quality,
+            "display": {"w": self.display.0, "h": self.display.1},
+            "stats": {
+                "ticks": stats.ticks,
+                "source_calls": stats.source_calls,
+                "frames_captured": stats.frames_captured,
+                "encodes": stats.encodes,
+                "mean_encode_ms": stats.mean_encode_ms(),
+                "mean_bytes": stats.mean_bytes(),
+                "last_encode_us": stats.last_encode_us,
+                "last_encode_bytes": stats.last_encode_bytes,
+                "frames_sent": stats.frames_sent,
+                "events_sent": stats.events_sent,
+                "events_dropped": stats.events_dropped,
+                "subscribers_dropped": stats.subscribers_dropped,
+                "frames_dropped_latest": stats.frames_dropped_latest,
+                "captures_rate_limited": stats.captures_rate_limited,
+                "subscribers": stats.subscribers,
+            },
+        })
     }
 
     fn config_max_subscribers(&self) -> usize {
         MAX_SUBSCRIBERS
+    }
+
+    /// Start the frame-tap thread if it is not running (first subscriber).
+    fn ensure_tap(self: &Arc<Self>) {
+        if self.tap_running.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let inner = Arc::clone(self);
+        let spawned = std::thread::Builder::new()
+            .name("acos-live-view-tap".to_string())
+            .spawn(move || {
+                loop {
+                    if inner.shutdown.load(Ordering::Acquire)
+                        || inner.subscriber_count.load(Ordering::Acquire) == 0
+                    {
+                        break;
+                    }
+                    inner.tap_once();
+                    inner.frame_wake.wait(Duration::from_millis(200));
+                }
+                inner.tap_running.store(false, Ordering::Release);
+                // A subscriber may have attached while this thread was exiting;
+                // it saw `tap_running == true` and did not spawn. Re-check so the
+                // stream can never go silently dead.
+                if !inner.shutdown.load(Ordering::Acquire)
+                    && inner.subscriber_count.load(Ordering::Acquire) > 0
+                {
+                    inner.ensure_tap();
+                }
+            });
+        if spawned.is_err() {
+            self.tap_running.store(false, Ordering::Release);
+        }
+    }
+
+    /// One tap step: the cost rule and the capture path.
+    fn tap_once(&self) {
+        self.ticks.fetch_add(1, Ordering::Relaxed);
+        // **The cost rule**: with no subscriber this is one atomic load and a
+        // return — no lock, no capture, no copy, no encode.
+        if self.subscriber_count.load(Ordering::Acquire) == 0 {
+            return;
+        }
+        // A capture is a full composite of the display (1080x2400 RGBA), so it
+        // is rate-limited to the stream's own frame rate: a frame captured more
+        // often than `max_fps` could never be sent (the encoder drops it as
+        // "latest wins" anyway). This keeps a viewer cheap for the guest.
+        let tick_ms = self.started.elapsed().as_millis() as u64;
+        let interval_ms = (1000 / u64::from(self.max_fps().max(1))).max(1);
+        let last_ms = self.last_capture_ms.load(Ordering::Relaxed);
+        if last_ms != 0 && tick_ms.saturating_sub(last_ms) < interval_ms {
+            self.captures_rate_limited.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+        self.last_capture_ms.store(tick_ms, Ordering::Relaxed);
+        self.source_calls.fetch_add(1, Ordering::Relaxed);
+        let source = Arc::clone(&self.source);
+        let Some(frame) = source() else {
+            return;
+        };
+        let scale = self.scale();
+        let (width, height, rgba) =
+            downscale_box(&frame.rgba, frame.width, frame.height, frame.stride, scale);
+        {
+            let mut slot = self.slot.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(previous) = slot.as_ref() {
+                if previous.seq != frame.seq
+                    && previous.seq > self.last_encoded_seq.load(Ordering::Relaxed)
+                {
+                    // Superseded before the encoder got to it: latest wins.
+                    self.frames_dropped_latest.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+            *slot = Some(Slot {
+                seq: frame.seq,
+                generation: frame.generation,
+                width,
+                height,
+                ts_ms: now_ms(),
+                rgba,
+            });
+        }
+        self.frames_captured.fetch_add(1, Ordering::Relaxed);
+        self.notify();
     }
 
     fn broadcast(&self, message: &[u8], frames: bool) {
@@ -544,6 +702,8 @@ impl LiveView {
         config: LiveViewConfig,
         display: (u32, u32),
         session_pid: u32,
+        source: Arc<dyn Fn() -> Option<SourceFrame> + Send + Sync>,
+        frame_wake: Arc<dyn FrameWake>,
     ) -> io::Result<Arc<Self>> {
         if socket_path.as_os_str().len() > 100 {
             return Err(io::Error::new(
@@ -587,11 +747,17 @@ impl LiveView {
             events_dropped: AtomicU64::new(0),
             subscribers_dropped: AtomicU64::new(0),
             frames_dropped_latest: AtomicU64::new(0),
+            captures_rate_limited: AtomicU64::new(0),
+            last_capture_ms: AtomicU64::new(0),
+            started: Instant::now(),
             last_encode_us: AtomicU64::new(0),
             last_encode_bytes: AtomicU64::new(0),
             focused_password: AtomicBool::new(false),
             last_activity: Mutex::new(None),
             pending_request: Mutex::new(None),
+            source,
+            frame_wake,
+            tap_running: AtomicBool::new(false),
         });
         let view = Arc::new(Self {
             inner: Arc::clone(&inner),
@@ -630,56 +796,17 @@ impl LiveView {
         self.inner.subscriber_count.load(Ordering::Acquire) > 0
     }
 
-    /// One frame-tap step.
+    /// One frame-tap step, driven by the caller instead of the tap thread.
     ///
     /// **The cost rule lives here**: with no subscriber this is one atomic load
     /// and a return — the source is never called, so no pixels are copied and
-    /// nothing is encoded.
-    pub fn tick<F>(&self, source: &mut F)
-    where
-        F: FnMut() -> Option<SourceFrame>,
-    {
-        let inner = &*self.inner;
-        inner.ticks.fetch_add(1, Ordering::Relaxed);
-        if inner.subscriber_count.load(Ordering::Acquire) == 0 {
-            return;
-        }
-        inner.source_calls.fetch_add(1, Ordering::Relaxed);
-        let Some(frame) = source() else {
-            return;
-        };
-        let scale = inner.scale();
-        let (width, height, rgba) =
-            downscale_box(&frame.rgba, frame.width, frame.height, frame.stride, scale);
-        {
-            let mut slot = inner.slot.lock().unwrap_or_else(|e| e.into_inner());
-            if let Some(previous) = slot.as_ref() {
-                if previous.seq != frame.seq
-                    && previous.seq > inner.last_encoded_seq.load(Ordering::Relaxed)
-                {
-                    // Superseded before the encoder got to it: latest wins.
-                    inner.frames_dropped_latest.fetch_add(1, Ordering::Relaxed);
-                }
-            }
-            *slot = Some(Slot {
-                seq: frame.seq,
-                generation: frame.generation,
-                width,
-                height,
-                ts_ms: now_ms(),
-                rgba,
-            });
-        }
-        inner.frames_captured.fetch_add(1, Ordering::Relaxed);
-        inner.notify();
+    /// nothing is encoded. Tests drive the tap with this; the launcher lets
+    /// [`LiveView::bind`]'s own tap thread do it (it exists only while a
+    /// subscriber is attached).
+    pub fn tick(&self) {
+        self.inner.tap_once();
     }
 
-    /// Feed one launcher reply into the event stream.
-    ///
-    /// Every command the launcher executes becomes an `action` event with its
-    /// result status; a focused-activity change becomes an `activity` event;
-    /// launch/reset/close become `lifecycle` events; a reply that carries an
-    /// unsettled observation becomes a `settle` event.
     /// Record the command the launcher is about to execute, so its reply's
     /// event carries the request's own coordinates/key/text.
     pub fn observe_request(&self, request: &serde_json::Value) {
@@ -791,6 +918,7 @@ impl LiveView {
             events_dropped: inner.events_dropped.load(Ordering::Relaxed),
             subscribers_dropped: inner.subscribers_dropped.load(Ordering::Relaxed),
             frames_dropped_latest: inner.frames_dropped_latest.load(Ordering::Relaxed),
+            captures_rate_limited: inner.captures_rate_limited.load(Ordering::Relaxed),
             last_encode_us: inner.last_encode_us.load(Ordering::Relaxed),
             last_encode_bytes: inner.last_encode_bytes.load(Ordering::Relaxed),
             subscribers: inner.subscriber_count.load(Ordering::Acquire) as u64,
@@ -804,30 +932,7 @@ impl LiveView {
     /// per-frame cost and bytes without adding a protocol message.
     #[must_use]
     pub fn stats_json(&self) -> serde_json::Value {
-        let stats = self.stats();
-        serde_json::json!({
-            "format": self.inner.format().as_str(),
-            "scale": self.inner.scale(),
-            "max_fps": self.inner.max_fps(),
-            "jpeg_quality": self.inner.config.jpeg_quality,
-            "display": {"w": self.inner.display.0, "h": self.inner.display.1},
-            "stats": {
-                "ticks": stats.ticks,
-                "source_calls": stats.source_calls,
-                "frames_captured": stats.frames_captured,
-                "encodes": stats.encodes,
-                "mean_encode_ms": stats.mean_encode_ms(),
-                "mean_bytes": stats.mean_bytes(),
-                "last_encode_us": stats.last_encode_us,
-                "last_encode_bytes": stats.last_encode_bytes,
-                "frames_sent": stats.frames_sent,
-                "events_sent": stats.events_sent,
-                "events_dropped": stats.events_dropped,
-                "subscribers_dropped": stats.subscribers_dropped,
-                "frames_dropped_latest": stats.frames_dropped_latest,
-                "subscribers": stats.subscribers,
-            },
-        })
+        self.inner.stats_json()
     }
 
     /// Stop the threads and remove the socket. Idempotent.
@@ -929,12 +1034,30 @@ fn subscribe(mut stream: UnixStream, inner: Arc<Inner>) {
 /// The writer thread: rate-limited, latest-wins, one encode per frame.
 fn writer_loop(inner: Arc<Inner>) {
     let mut next_at = Instant::now();
+    // Dev-only measurement seam (never in user docs): while a viewer is
+    // attached, refresh the stats file every 2 s, so an A/B can report the
+    // encoder's own per-frame ms/bytes even when teardown kills the session
+    // before it can exit cleanly.
+    let stats_path = std::env::var_os("ACOS_VIEW_STATS_FILE");
+    let mut stats_at = Instant::now();
     loop {
         if inner.shutdown.load(Ordering::Acquire) {
             return;
         }
+        if let Some(path) = stats_path.as_ref() {
+            if stats_at.elapsed() >= Duration::from_secs(2)
+                && inner.subscriber_count.load(Ordering::Acquire) > 0
+            {
+                if let Ok(text) = serde_json::to_string(&inner.stats_json()) {
+                    let _ = std::fs::write(path, text);
+                }
+                stats_at = Instant::now();
+            }
+        }
         if inner.subscriber_count.load(Ordering::Acquire) == 0 {
-            inner.wait(Duration::from_millis(500));
+            // No viewer: block until one attaches (or the session ends). No
+            // periodic wakeup, no work.
+            inner.wait(Duration::from_secs(60));
             continue;
         }
         // Events first: an action feed is never delayed behind a frame.
@@ -1357,6 +1480,81 @@ mod tests {
         dir
     }
 
+    /// A wake the tests can nudge (the launcher uses the guest's probe condvar).
+    struct TestWake {
+        tick: Mutex<u64>,
+        signal: Condvar,
+    }
+
+    impl TestWake {
+        fn new() -> Self {
+            Self {
+                tick: Mutex::new(0),
+                signal: Condvar::new(),
+            }
+        }
+
+        fn nudge(&self) {
+            let mut tick = self.tick.lock().unwrap_or_else(|e| e.into_inner());
+            *tick = tick.wrapping_add(1);
+            self.signal.notify_all();
+        }
+    }
+
+    impl FrameWake for TestWake {
+        fn wait(&self, timeout: Duration) {
+            let tick = self.tick.lock().unwrap_or_else(|e| e.into_inner());
+            let _ = self
+                .signal
+                .wait_timeout(tick, timeout)
+                .unwrap_or_else(|e| e.into_inner());
+        }
+    }
+
+    /// A source the test drives by hand: `next` produces frames with a rising
+    /// store counter, and every call is counted.
+    struct HandSource {
+        calls: AtomicU64,
+        width: u32,
+        height: u32,
+        noise: bool,
+        fill: AtomicU64,
+    }
+
+    impl HandSource {
+        fn new(width: u32, height: u32, noise: bool) -> Arc<Self> {
+            Arc::new(Self {
+                calls: AtomicU64::new(0),
+                width,
+                height,
+                noise,
+                fill: AtomicU64::new(0),
+            })
+        }
+
+        fn as_source(self: &Arc<Self>) -> Arc<dyn Fn() -> Option<SourceFrame> + Send + Sync> {
+            let this = Arc::clone(self);
+            Arc::new(move || {
+                let seq = this.calls.fetch_add(1, Ordering::Relaxed) + 1;
+                let value = this.fill.load(Ordering::Relaxed) as u8;
+                let pixels = this.width as usize * this.height as usize * 4;
+                let rgba = if this.noise {
+                    (0..pixels).map(|i| (i as u8).wrapping_mul(37)).collect()
+                } else {
+                    vec![value; pixels]
+                };
+                Some(SourceFrame {
+                    seq,
+                    generation: seq,
+                    width: this.width,
+                    height: this.height,
+                    stride: this.width,
+                    rgba,
+                })
+            })
+        }
+    }
+
     fn wait_for<F: FnMut() -> bool>(mut predicate: F, timeout: Duration) -> bool {
         let deadline = Instant::now() + timeout;
         while Instant::now() < deadline {
@@ -1391,30 +1589,25 @@ mod tests {
     #[test]
     fn no_subscriber_means_no_source_call_and_no_encode() {
         let dir = scratch_dir("cost");
+        let source = HandSource::new(1080, 2400, false);
         let view = LiveView::bind(
             &dir.join("stream.sock"),
             LiveViewConfig::default(),
             (1080, 2400),
             4242,
+            source.as_source(),
+            Arc::new(TestWake::new()),
         )
         .expect("bind");
-        let mut calls = 0u64;
-        let mut source = || {
-            calls += 1;
-            Some(SourceFrame {
-                seq: calls,
-                generation: calls,
-                width: 1080,
-                height: 2400,
-                stride: 1080,
-                rgba: solid(1080, 2400, [0, 0, 0, 255]),
-            })
-        };
         for _ in 0..10 {
-            view.tick(&mut source);
+            view.tick();
         }
         let stats = view.stats();
-        assert_eq!(calls, 0, "the source must not be called with no subscriber");
+        assert_eq!(
+            source.calls.load(Ordering::Relaxed),
+            0,
+            "the source must not be called with no subscriber"
+        );
         assert_eq!(stats.ticks, 10);
         assert_eq!(stats.source_calls, 0);
         assert_eq!(stats.encodes, 0);
@@ -1428,7 +1621,16 @@ mod tests {
     fn a_subscriber_receives_hello_frames_and_events() {
         let dir = scratch_dir("stream");
         let path = dir.join("stream.sock");
-        let view = LiveView::bind(&path, LiveViewConfig::default(), (1080, 2400), 77).expect("bind");
+        let source = HandSource::new(1080, 2400, false);
+        let view = LiveView::bind(
+            &path,
+            LiveViewConfig::default(),
+            (1080, 2400),
+            77,
+            source.as_source(),
+            Arc::new(TestWake::new()),
+        )
+        .expect("bind");
         let mut client = UnixStream::connect(&path).expect("connect");
         client
             .set_read_timeout(Some(Duration::from_secs(10)))
@@ -1447,18 +1649,6 @@ mod tests {
         assert_eq!(hello["scale"], 0.5);
         assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
 
-        let mut seq = 0u64;
-        let mut source = || {
-            seq += 1;
-            Some(SourceFrame {
-                seq,
-                generation: seq,
-                width: 1080,
-                height: 2400,
-                stride: 1080,
-                rgba: solid(1080, 2400, [(seq * 40) as u8, 10, 20, 255]),
-            })
-        };
         view.observe_reply(&serde_json::json!({
             "ok": true, "cmd": "tap", "x": 540, "y": 1200, "status": "ok",
             "frame_seq": 3,
@@ -1467,7 +1657,8 @@ mod tests {
         let mut events = 0;
         let deadline = Instant::now() + Duration::from_secs(10);
         while frames < 2 && Instant::now() < deadline {
-            view.tick(&mut source);
+            source.fill.fetch_add(40, Ordering::Relaxed);
+            view.tick();
             // Drain whatever arrived without blocking the tick loop.
             client
                 .set_read_timeout(Some(Duration::from_millis(200)))
@@ -1510,7 +1701,16 @@ mod tests {
     fn a_slow_subscriber_is_dropped_without_blocking_the_encoder() {
         let dir = scratch_dir("slow");
         let path = dir.join("stream.sock");
-        let view = LiveView::bind(&path, LiveViewConfig::default(), (1080, 2400), 9).expect("bind");
+        let source = HandSource::new(540, 1200, true);
+        let view = LiveView::bind(
+            &path,
+            LiveViewConfig::default(),
+            (1080, 2400),
+            9,
+            source.as_source(),
+            Arc::new(TestWake::new()),
+        )
+        .expect("bind");
         let mut client = UnixStream::connect(&path).expect("connect");
         client
             .set_read_timeout(Some(Duration::from_secs(5)))
@@ -1521,24 +1721,12 @@ mod tests {
         let _ = read_message(&mut client).expect("hello");
         assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
         // Never read: the socket buffer fills and the subscriber must be dropped
-        // instead of stalling the writer or the tap.
-        let mut seq = 0u64;
-        let mut source = || {
-            seq += 1;
-            Some(SourceFrame {
-                seq,
-                generation: seq,
-                width: 540,
-                height: 1200,
-                stride: 540,
-                // Incompressible noise so the frames are big enough to fill the
-                // socket buffer quickly.
-                rgba: (0..540 * 1200 * 4).map(|i| (i as u8).wrapping_mul(37)).collect(),
-            })
-        };
+        // instead of stalling the writer or the tap. The source produces
+        // incompressible noise so the frames are big enough to fill the socket
+        // buffer quickly.
         let started = Instant::now();
         for _ in 0..400 {
-            view.tick(&mut source);
+            view.tick();
             std::thread::sleep(Duration::from_millis(1));
             if view.stats().subscribers_dropped > 0 {
                 break;
@@ -1641,7 +1829,16 @@ mod tests {
     fn event_queue_drops_the_oldest_when_full() {
         let dir = scratch_dir("queue");
         let path = dir.join("stream.sock");
-        let view = LiveView::bind(&path, LiveViewConfig::default(), (10, 10), 1).expect("bind");
+        let source = HandSource::new(10, 10, false);
+        let view = LiveView::bind(
+            &path,
+            LiveViewConfig::default(),
+            (10, 10),
+            1,
+            source.as_source(),
+            Arc::new(TestWake::new()),
+        )
+        .expect("bind");
         // No subscriber: events are discarded before the queue (zero cost).
         for index in 0..(EVENT_QUEUE * 2) {
             view.push_event(serde_json::json!({"ts_ms": index, "kind": "action"}));
