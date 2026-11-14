@@ -169,8 +169,8 @@ impl BackendConfig {
         }
     }
 
-    /// Discover the binary from the environment: `ACOS_BIN`, then `acos` on
-    /// `PATH`, then `target/release/acos` walking up from the cwd/executable.
+    /// Discover the binary: `ACOS_BIN`, then the `acos` next to this
+    /// executable, then `acos` on `PATH`, then `target/release/acos` walking up from the cwd/executable.
     pub fn discover() -> Self {
         BackendConfig {
             binary: discover_binary(),
@@ -186,10 +186,24 @@ pub fn discover_binary() -> Option<PathBuf> {
             return Some(PathBuf::from(value));
         }
     }
+    // The `acos` installed next to this server (same prefix, same version)
+    // wins over whatever `acos` happens to be first on PATH: an install that is
+    // not first on PATH (a scratch prefix, a newer version beside an older one)
+    // must never silently drive another version's daemon.
+    if let Some(path) = sibling_binary() {
+        return Some(path);
+    }
     if let Some(path) = find_on_path("acos") {
         return Some(path);
     }
     find_repo_binary()
+}
+
+/// `acos` in the same directory as the running `acos-mcp` executable.
+fn sibling_binary() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let candidate = exe.parent()?.join("acos");
+    (candidate.is_file() && candidate != exe).then_some(candidate)
 }
 
 fn find_on_path(name: &str) -> Option<PathBuf> {
