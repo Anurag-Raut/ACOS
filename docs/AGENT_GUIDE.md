@@ -283,6 +283,19 @@ it. `expectation: non_pass` accepts any non-pass. If a negative scenario
 `steps/NN-*.json`, frames and events. On a non-pass, read the step file for the
 first failing step, its `error.code`, the diff and the linked frame.
 
+**Screenshots are compressed, losslessly.** A capture is a PNG with real deflate
+and adaptive row filtering: the same pixels as the compositor's buffer (region
+and frame assertions decode it, so nothing about them changed) in roughly
+**60-100 KB** instead of the old 10.4 MB stored-block file. `png_bytes` in the
+reply says which. Read the file for exact pixels:
+`acos observe --screenshot out/counter.png`.
+
+**In an MCP reply the image is a bounded preview.** `acos_observe` (and any tool
+that returns a screenshot) inlines at most 1280 px on the long side and 512 KiB
+(`ACOS_MCP_PREVIEW_MAX_SIDE`, `ACOS_MCP_MAX_IMAGE_BYTES`); a 1080x2400 capture
+arrives as a 576x1280 PNG plus the path of the lossless file. Use the file when
+you need to compare pixels, and the inline preview for "is it the right screen".
+
 <!-- /topic:scenarios -->
 
 <!-- topic:errors -->

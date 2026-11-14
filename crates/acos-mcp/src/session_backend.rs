@@ -697,7 +697,24 @@ impl SessionBackend {
         });
         let mut capabilities = vec!["ui.frame"];
         if let Some(png) = &observed.png {
-            result["png_base64"] = json!(crate::base64::encode(png));
+            // SHOTZ: the reply carries a bounded preview (`<= 1280 px` long
+            // edge, `<= ACOS_MCP_MAX_IMAGE_BYTES`), never a multi-MB base64
+            // blob. `png_bytes` stays the real size and `png_preview` says
+            // whether the inline copy is downscaled.
+            let (max_side, max_bytes) = crate::preview::inline_caps();
+            let preview = crate::preview::preview_of_png(png, max_side, max_bytes);
+            match preview {
+                Some(preview) => {
+                    result["png_base64"] = json!(crate::base64::encode(&preview.data));
+                    result["png_preview"] = preview.meta()["preview"].clone();
+                }
+                None => {
+                    result["png_preview"] = json!({
+                        "scaled": null, "inline": false,
+                        "reason": "image exceeds ACOS_MCP_MAX_IMAGE_BYTES after downscaling",
+                    });
+                }
+            }
             result["png_bytes"] = json!(png.len());
             capabilities.push("ui.screenshot");
             if let Some(path) = args.get("screenshot").and_then(Value::as_str) {

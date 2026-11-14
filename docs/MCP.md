@@ -151,7 +151,8 @@ Server limits (all optional):
 | `ACOS_MCP_QUEUE_TIMEOUT_MS` | `5000` | how long a tool call waits for a slot |
 | `ACOS_MCP_CALL_TIMEOUT_MS` | `120000` | default call budget when the request declares none |
 | `ACOS_MCP_MAX_OUTPUT_BYTES` | `16777216` | maximum captured bytes per child stream |
-| `ACOS_MCP_MAX_IMAGE_BYTES` | `524288` | maximum image inlined as MCP image content |
+| `ACOS_MCP_MAX_IMAGE_BYTES` | `524288` | maximum bytes of the image inlined as MCP image content (a preview that would exceed it is downscaled further, then dropped to a link) |
+| `ACOS_MCP_PREVIEW_MAX_SIDE` | `1280` | long edge in pixels of an inlined image preview |
 | `ACOS_MCP_MAX_TEXT` | `4000` | maximum bytes for one string in a tool reply. A longer string (an error message carrying a 200-frame java tail and a 400-line native tail) is head/tail-capped with a marker naming its original size and the artifact path, and an identical repeat is replaced by a back-reference, so the full text appears once. `0` disables the bound (the raw CLI behaviour). The guide text (`acos_help`) is exempt |
 | `ACOS_MCP_SESSION_TTL_MS` | `600000` | idle session TTL |
 | `ACOS_MCP_SHUTDOWN_GRACE_MS` | `2000` | how long in-flight calls may finish after stdin closes |
@@ -364,8 +365,16 @@ always carries an `error` with a stable `code`, an actionable `hint`,
 `retryable` and optional `details`. **Branch on `error.code`, not on `message`.**
 
 Evidence paths under the artifacts directory are returned as MCP
-`resource_link` items (2025-06-18) or text lines; small PNG/JPEG/WebP images are
-inlined as MCP `image` content.
+`resource_link` items (2025-06-18) or text lines. A PNG image (a screenshot, a
+capture) is additionally inlined as an MCP `image` content item — but only as a
+**bounded preview**: at most `ACOS_MCP_PREVIEW_MAX_SIDE` px on the long edge
+(default 1280) and at most `ACOS_MCP_MAX_IMAGE_BYTES` bytes (default 512 KiB).
+A full 1080x2400 capture is downscaled to 576x1280 before it is inlined; the
+reply also carries a text line naming both sizes and the path of the **lossless**
+file (which is still linked), so an agent reads the exact pixels from disk when
+it needs them instead of paying for a multi-megabyte base64 blob in its context.
+A file that does not decode as a PNG is only linked, never inlined. JPEG/WebP
+evidence is linked, not inlined (no JPEG/WebP encoder is available offline).
 
 ### Artifacts and retention
 

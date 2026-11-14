@@ -59,16 +59,24 @@ fn streamed_encoder_is_byte_identical_to_the_buffered_encoder() {
     assert!(streamed == buffered, "the PNG bytes changed");
 }
 
-/// `content_hash` for a real 9.5 MB frame is what `md5sum` prints for the same
-/// file, character for character.
+/// `content_hash` for a real frame is what `md5sum` prints for the same file,
+/// character for character — and since SHOTZ (ADR-0027 #6) that file is ~130x
+/// smaller, so the hash is over ~80 KB instead of 10 371 258 B.
 #[test]
 fn content_hash_matches_md5sum_on_a_real_frame() {
     let (width, height, rgba) = counter_frame();
     let png = encode_png_rgba(width, height, width * 4, &rgba);
-    // The real frame is ~9.5 MB: the test is only meaningful at that size.
+    // The frame is the real 1080x2209 canvas: 10.4 MB of pixels. The PNG must
+    // be a compressed file, not a stored-block wrapper (was 10 371 258 B).
     assert!(
-        png.len() > 9_000_000,
-        "expected a ~9.5 MB PNG, got {} bytes",
+        png.len() * 4 < rgba.len(),
+        "expected real compression, got {} B for {} B of pixels",
+        png.len(),
+        rgba.len()
+    );
+    assert!(
+        png.len() > 4_000,
+        "unexpectedly small PNG: {} bytes",
         png.len()
     );
     let dir = scratch_dir("md5sum");

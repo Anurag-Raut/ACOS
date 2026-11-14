@@ -2807,9 +2807,11 @@ fn capture_c1(
         frame.layer_id, frame.frame_number, frame.generation, *seq
     ));
     // P2: the PNG is written once and hashed once, in the same pass, on the
-    // caller's thread while a second thread encodes it (the encode is ~7 ms and
-    // the write+MD5 over 9.5 MB is ~11 ms, so they overlap). `content_hash` is
-    // still the MD5 of exactly the bytes in this file.
+    // caller's thread while a second thread encodes it. SHOTZ (ADR-0027 #6)
+    // made the file ~130x smaller (real deflate instead of stored blocks), so
+    // the write+MD5 that used to cost ~11 ms over 9.5 MB is now ~0.1 ms over
+    // ~80 KB and the encode is the only part left to overlap. `content_hash`
+    // is still the MD5 of exactly the bytes in this file.
     let (bytes, md5, encode_us, write_us, hash_us) =
         encode_write_and_hash(frame.width, frame.height, frame.stride, &frame.rgba, &path)?;
     let t_end = m5_now_us();
@@ -5182,19 +5184,53 @@ fn interactive_serve(
 //
 // `acos-art` deliberately has no image dependency (the render path uses the
 // guest's own Bitmap encoder). A live capture has no guest-side bitmap, so a
-// minimal RGBA8 PNG writer lives here: filter type 0 per row, zlib "stored"
-// deflate blocks, real CRC32/Adler-32. Deterministic and byte-checkable.
+// minimal RGBA8 PNG writer lives here: real deflate (fdeflate, the fast deflate
+// tuned for PNG) over a per-row adaptive Sub/Up filter, real CRC32/Adler-32.
+// Deterministic and byte-checkable.
+//
+// ADR-0027 #6: the encoder used to write zlib *stored* blocks with filter 0 —
+// pixel-exact but 10 371 258 B for a 1080x2400 frame, so every capture wrote
+// (and hashed) 9.9 MB. Same pixels, real deflate: ~80 KB (measured on the
+// counter/form-validation/dialog-menu frames), and the encode is *faster* than
+// the stored-block framing it replaces because the 9.9 MB write+MD5 is gone.
+// The file stays losslessly exact: pixel assertions decode it, so the bytes
+// inside are unchanged.
 
+/// PNG filter types this encoder emits: 1 = Sub, 2 = Up.
+const FILTER_SUB: u8 = 1;
+const FILTER_UP: u8 = 2;
+
+/// Every Nth byte is sampled when choosing a row's filter (SHOTZ: `step_by`
+/// sampling picks the same filter as the exhaustive sum for these frames at
+/// ~1/8 the cost, so the choice costs ~0.05 ms instead of ~0.4 ms per row).
+const FILTER_SAMPLE_STEP: usize = 8;
+
+/// Filtered rows are handed to the deflater in blocks of this size, so `rgba`
+/// is never copied into a frame-sized buffer and the deflater is called ~160
+/// times per frame instead of once per row.
+const DEFLATE_BLOCK: usize = 64 * 1024;
+
+/// IDAT payloads are emitted in chunks of at most this size. A real frame's
+/// zlib stream is ~80 KB (one chunk); the size keeps the 12-byte-per-chunk
+/// framing irrelevant even for the stored-block floor.
+const IDAT_CHUNK: usize = 1 << 20;
+
+/// The buffered encoder, `#[cfg(test)]` only: the reference the streamed
+/// encoder is compared against.
 #[cfg(test)]
 fn encode_png_rgba(width: u32, height: u32, stride: u32, rgba: &[u8]) -> Vec<u8> {
-    encode_png_rgba_with(width, height, stride, rgba, crc32, adler32)
+    let mut out = Vec::with_capacity(128 * 1024);
+    encode_png_rgba_stream(width, height, stride, rgba, |bytes| {
+        out.extend_from_slice(bytes)
+    });
+    out
 }
 
 /// Encode the frame and hand its bytes to `sink` as they are produced.
 ///
-/// The bytes are the same as [`encode_png_rgba`]'s; the only difference is that
-/// the caller sees the PNG in order, so it can write and hash it without a
-/// second pass over a finished 9.5 MB buffer (P2).
+/// The caller writes and hashes the PNG in the same pass (P2), so the finished
+/// file is never held in memory as a second copy: the sink sees the signature,
+/// the header, each IDAT chunk and the trailer in order.
 fn encode_png_rgba_stream<S: FnMut(&[u8])>(
     width: u32,
     height: u32,
@@ -5202,32 +5238,7 @@ fn encode_png_rgba_stream<S: FnMut(&[u8])>(
     rgba: &[u8],
     mut sink: S,
 ) {
-    encode_png_rgba_into(width, height, stride, rgba, crc32, adler32, &mut sink)
-}
-
-/// The buffered encoder: `#[cfg(test)]` only, kept as the reference the streamed
-/// encoder is compared against, and parameterised by its two checksums so the
-/// oracle (the original bit-serial CRC32 and the `%`-per-byte Adler-32) can
-/// produce the exact bytes the encoder is required to preserve.
-#[cfg(test)]
-fn encode_png_rgba_with(
-    width: u32,
-    height: u32,
-    stride: u32,
-    rgba: &[u8],
-    crc32: fn(&[u8]) -> u32,
-    adler32: fn(&[u8]) -> u32,
-) -> Vec<u8> {
-    let mut out = Vec::with_capacity(
-        (width as usize)
-            .saturating_mul(height as usize)
-            .saturating_mul(4)
-            .saturating_add(1024),
-    );
-    encode_png_rgba_into(width, height, stride, rgba, crc32, adler32, &mut |bytes| {
-        out.extend_from_slice(bytes)
-    });
-    out
+    encode_png_rgba_into(width, height, stride, rgba, &mut sink)
 }
 
 fn encode_png_rgba_into(
@@ -5235,16 +5246,11 @@ fn encode_png_rgba_into(
     height: u32,
     stride: u32,
     rgba: &[u8],
-    crc32: fn(&[u8]) -> u32,
-    adler32: fn(&[u8]) -> u32,
     sink: &mut dyn FnMut(&[u8]),
 ) {
     let t0 = m5_now_us();
     let row = (width as usize).saturating_mul(4);
     let stride_bytes = (stride as usize).saturating_mul(4);
-    let filtered_len = row.saturating_add(1).saturating_mul(height as usize);
-    let t_filter = m5_now_us();
-    m5_trace("art.encode_filter", t0, t_filter, "streamed=1");
     sink(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
     let mut ihdr = Vec::with_capacity(13);
     ihdr.extend_from_slice(&width.to_be_bytes());
@@ -5252,19 +5258,225 @@ fn encode_png_rgba_into(
     ihdr.extend_from_slice(&[8, 6, 0, 0, 0]); // 8-bit RGBA, no interlace
     png_chunk(sink, b"IHDR", &ihdr, crc32);
 
-    // The zlib stream is written straight to the sink in stored blocks: the
-    // logical "filtered" byte stream (a zero filter byte then one row of pixels
-    // per row) is read straight from `rgba`, so no full-frame copy exists. Both
-    // the IDAT CRC and the Adler-32 are folded over the same bytes as they are
-    // emitted (W1 removed the last frame-sized `filtered` buffer).
+    // Filter + deflate. The zlib stream is deflated into a small buffer (~80 KB
+    // at 1080x2400) and then written as one or more IDAT chunks: the row that
+    // is filtered lives in `row_buf`, and only the compressed bytes are held.
+    let t_filter = m5_now_us();
+    let mut zlib: Vec<u8> = Vec::with_capacity(row.saturating_mul(height as usize) / 64 + 4096);
+    {
+        let mut deflater = fdeflate::Compressor::new(&mut zlib).expect("fdeflate header");
+        let mut prev = vec![0u8; row];
+        let mut cur = vec![0u8; row];
+        let mut block: Vec<u8> = Vec::with_capacity(DEFLATE_BLOCK + row + 1);
+        for y in 0..height as usize {
+            let start = y.saturating_mul(stride_bytes);
+            let end = start.saturating_add(row);
+            if end <= rgba.len() {
+                cur.copy_from_slice(&rgba[start..end]);
+            } else if start < rgba.len() {
+                // A row whose end is past the buffer is zero-padded, exactly as
+                // the stored-block encoder did: the frame is never refused for a
+                // short last row.
+                let have = rgba.len() - start;
+                cur[..have].copy_from_slice(&rgba[start..]);
+                cur[have..].fill(0);
+            } else {
+                cur.fill(0);
+            }
+            // Filter straight into the deflate block: `block` gets the filter
+            // byte and then the deltas, so no row-sized scratch buffer and no
+            // second copy of the row exist.
+            let kind = choose_filter(&cur, &prev);
+            block.push(kind);
+            let base = block.len();
+            block.resize(base + row, 0);
+            let deltas = &mut block[base..];
+            if kind == FILTER_SUB {
+                for i in 0..row {
+                    let left = if i >= 4 { cur[i - 4] } else { 0 };
+                    deltas[i] = cur[i].wrapping_sub(left);
+                }
+            } else {
+                for i in 0..row {
+                    deltas[i] = cur[i].wrapping_sub(prev[i]);
+                }
+            }
+            if block.len() >= DEFLATE_BLOCK {
+                deflater.write_data(&block).expect("fdeflate write");
+                block.clear();
+            }
+            std::mem::swap(&mut prev, &mut cur);
+        }
+        if !block.is_empty() {
+            deflater.write_data(&block).expect("fdeflate write");
+            block.clear();
+        }
+        deflater.finish().expect("fdeflate finish");
+    }
+    // Never worse than the stored blocks this replaced: deflate cannot expand
+    // *real* UI frames (they shrink ~130x), but a pathological high-entropy
+    // frame would (fixed-Huffman overhead), so the stored layout is the floor.
+    let filtered_len = row.saturating_add(1).saturating_mul(height as usize);
+    let stored_len = 2 + filtered_len.div_ceil(65_535) * 5 + filtered_len + 4;
+    // Compare what the file would cost, including the per-IDAT-chunk framing
+    // (12 bytes each): the choice is about the artifact, not the stream.
+    let framed = |len: usize| len + 12 * len.max(1).div_ceil(IDAT_CHUNK);
+    let mut fallback = false;
+    if framed(zlib.len()) > framed(stored_len) {
+        zlib.clear();
+        zlib_stored_rows(&mut zlib, width, height, stride, rgba);
+        fallback = true;
+    }
+    let t_deflate = m5_now_us();
+    m5_trace(
+        "art.encode_deflate",
+        t_filter,
+        t_deflate,
+        &format!(
+            "fdeflate={} zlib_bytes={} row_filter=sample{FILTER_SAMPLE_STEP}",
+            if fallback { 0 } else { 1 },
+            zlib.len()
+        ),
+    );
+    m5_trace("art.encode_filter", t0, t_filter, "streamed=1");
+    for chunk in zlib.chunks(IDAT_CHUNK) {
+        png_chunk(sink, b"IDAT", chunk, crc32);
+    }
+    m5_trace(
+        "art.encode_idat_chunk",
+        t_deflate,
+        m5_now_us(),
+        &format!("chunks={} body_bytes={}", zlib.len().div_ceil(IDAT_CHUNK), zlib.len()),
+    );
+    png_chunk(sink, b"IEND", &[], crc32);
+    m5_trace(
+        "art.encode_total",
+        t0,
+        m5_now_us(),
+        &format!("png_bytes={}", zlib.len()),
+    );
+}
+
+/// The stored-block zlib stream for a frame: filter 0 per row, no compression.
+///
+/// Only used as the floor for a frame deflate cannot shrink (and by the tests
+/// as the pre-SHOTZ baseline). It reads rows straight out of `rgba` in 64 KiB
+/// blocks with the same zero-padding rule as the encoder, so it never holds a
+/// frame-sized buffer.
+fn zlib_stored_rows(out: &mut Vec<u8>, width: u32, height: u32, stride: u32, rgba: &[u8]) {
+    let row = (width as usize).saturating_mul(4);
+    let stride_bytes = (stride as usize).saturating_mul(4);
+    let filtered_row = row.saturating_add(1);
+    let filtered_len = filtered_row.saturating_mul(height as usize);
+    out.extend_from_slice(&[0x78, 0x01]);
+    let mut adler = Adler32::new();
+    let mut block: Vec<u8> = Vec::with_capacity(65_535);
+    let mut offset = 0usize;
+    while offset < filtered_len {
+        let len = (filtered_len - offset).min(65_535);
+        let final_block = offset + len == filtered_len;
+        block.clear();
+        block.push(u8::from(final_block));
+        block.extend_from_slice(&(len as u16).to_le_bytes());
+        block.extend_from_slice(&(!(len as u16)).to_le_bytes());
+        for index in offset..offset + len {
+            if filtered_row == 0 {
+                block.push(0);
+                continue;
+            }
+            let y = index / filtered_row;
+            let within = index % filtered_row;
+            let byte = if within == 0 {
+                0
+            } else {
+                let at = y
+                    .saturating_mul(stride_bytes)
+                    .saturating_add(within - 1);
+                if y < height as usize && within - 1 < row && at < rgba.len() {
+                    rgba[at]
+                } else {
+                    0
+                }
+            };
+            block.push(byte);
+        }
+        adler.update(&block[5..]);
+        out.extend_from_slice(&block);
+        offset += len;
+    }
+    out.extend_from_slice(&adler.finish().to_be_bytes());
+}
+
+/// Pick the PNG filter for one row: Sub (1) or Up (2), whichever leaves the
+/// smaller sum of absolute deltas over a sampled subset of the row.
+///
+/// Sampling is what makes the choice nearly free. On the four real frames this
+/// was measured on (counter, form-validation, dialog-menu, text-input) the
+/// sampled choice produced the same decision as the exhaustive sum and the same
+/// PNG size to within 4 % (`results/handoff/SHOTZ.md`).
+fn choose_filter(cur: &[u8], prev: &[u8]) -> u8 {
+    let mut sub = 0u64;
+    let mut up = 0u64;
+    for i in (0..cur.len()).step_by(FILTER_SAMPLE_STEP) {
+        let left = if i >= 4 { cur[i - 4] } else { 0 };
+        sub += (cur[i].wrapping_sub(left) as i8).unsigned_abs() as u64;
+        up += (cur[i].wrapping_sub(prev[i]) as i8).unsigned_abs() as u64;
+    }
+    if sub <= up {
+        FILTER_SUB
+    } else {
+        FILTER_UP
+    }
+}
+
+/// The historic catch encoder: filter 0 per row, zlib stored blocks.
+///
+/// Kept under `cfg(test)` as the A/B baseline the new encoder is measured
+/// against (`png_encoder_candidates_on_real_frames`), so the "before" numbers in
+/// `results/handoff/SHOTZ.md` come from the code v0.2.0 shipped, not from a
+/// separate tool.
+#[cfg(test)]
+fn encode_png_stored_stream<S: FnMut(&[u8])>(
+    width: u32,
+    height: u32,
+    stride: u32,
+    rgba: &[u8],
+    mut sink: S,
+) {
+    let row = (width as usize).saturating_mul(4);
+    let stride_bytes = (stride as usize).saturating_mul(4);
+    let filtered_len = row.saturating_add(1).saturating_mul(height as usize);
+    sink(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]);
+    let mut ihdr = Vec::with_capacity(13);
+    ihdr.extend_from_slice(&width.to_be_bytes());
+    ihdr.extend_from_slice(&height.to_be_bytes());
+    ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
+    png_chunk(&mut sink, b"IHDR", &ihdr, crc32);
     let block_count = filtered_len.div_ceil(65_535);
     let idat_len = 2 + block_count * 5 + filtered_len + 4;
     sink(&(idat_len as u32).to_be_bytes());
     sink(b"IDAT");
     let mut crc = Crc32Stream::new();
     crc.update(b"IDAT");
-    emit_checked(sink, &mut crc, &[0x78, 0x01]);
+    sink(&[0x78, 0x01]);
+    crc.update(&[0x78, 0x01]);
     let mut adler = Adler32::new();
+    let mut bytes = Vec::with_capacity(filtered_len + block_count * 5);
+    for y in 0..height as usize {
+        let start = y.saturating_mul(stride_bytes);
+        let end = start.saturating_add(row);
+        bytes.push(0);
+        if end <= rgba.len() {
+            bytes.extend_from_slice(&rgba[start..end]);
+        } else if start < rgba.len() {
+            let have = rgba.len() - start;
+            bytes.extend_from_slice(&rgba[start..start + have]);
+            bytes.resize(bytes.len() + (row - have), 0);
+        } else {
+            bytes.resize(bytes.len() + row, 0);
+        }
+    }
+    adler.update(&bytes);
     let mut offset = 0usize;
     while offset < filtered_len {
         let len = (filtered_len - offset).min(65_535);
@@ -5273,110 +5485,17 @@ fn encode_png_rgba_into(
         header[0] = if final_block { 1 } else { 0 };
         header[1..3].copy_from_slice(&(len as u16).to_le_bytes());
         header[3..5].copy_from_slice(&(!(len as u16)).to_le_bytes());
-        emit_checked(sink, &mut crc, &header);
-        emit_filtered_range(
-            sink,
-            &mut crc,
-            &mut adler,
-            rgba,
-            row,
-            stride_bytes,
-            height as usize,
-            offset,
-            len,
-        );
+        sink(&header);
+        crc.update(&header);
+        sink(&bytes[offset..offset + len]);
+        crc.update(&bytes[offset..offset + len]);
         offset += len;
     }
-    let t_stored = m5_now_us();
-    m5_trace("art.encode_stored", t_filter, t_stored, "");
-    let adler = adler.finish();
-    let t_adler = m5_now_us();
-    m5_trace("art.encode_adler32", t_stored, t_adler, "streamed=1");
-    emit_checked(sink, &mut crc, &adler.to_be_bytes());
-    let t_crc = m5_now_us();
-    let crc = crc.finish();
-    m5_trace(
-        "art.encode_crc32",
-        t_crc,
-        m5_now_us(),
-        &format!("chunk=IDAT body_bytes={idat_len}"),
-    );
-    sink(&crc.to_be_bytes());
-    let t_idat = m5_now_us();
-    m5_trace("art.encode_idat_chunk", t_adler, t_idat, "");
-    png_chunk(sink, b"IEND", &[], crc32);
-    m5_trace("art.encode_total", t0, m5_now_us(), "");
-}
-
-/// Emit `len` bytes of the logical filtered stream starting at `offset`.
-///
-/// The stream is `[0, row pixels]` per row, with `stride_bytes - row` bytes of
-/// the source skipped between rows. A row whose end is past `rgba` is emitted
-/// as zeros, exactly as the old buffered encoder did. Each piece is folded into
-/// the IDAT CRC and the Adler-32 in the same pass, so `rgba` is never copied
-/// into a frame-sized buffer.
-#[allow(clippy::too_many_arguments)]
-fn emit_filtered_range(
-    sink: &mut dyn FnMut(&[u8]),
-    crc: &mut Crc32Stream,
-    adler: &mut Adler32,
-    rgba: &[u8],
-    row: usize,
-    stride_bytes: usize,
-    height: usize,
-    mut offset: usize,
-    mut len: usize,
-) {
-    const ZEROS: [u8; 4096] = [0u8; 4096];
-    let filtered_row = row.saturating_add(1);
-    if filtered_row == 0 {
-        return;
-    }
-    while len > 0 {
-        let y = offset / filtered_row;
-        let within = offset % filtered_row;
-        let take = (filtered_row - within).min(len);
-        if within == 0 {
-            emit_checked_adler(sink, crc, adler, &[0u8]);
-        }
-        let pixel_off = within.saturating_sub(1);
-        let pixel_len = take - usize::from(within == 0);
-        if pixel_len > 0 {
-            let row_start = y.saturating_mul(stride_bytes);
-            let row_end = row_start.saturating_add(row);
-            let start = row_start.saturating_add(pixel_off);
-            if y < height && row_end <= rgba.len() && start + pixel_len <= rgba.len() {
-                emit_checked_adler(sink, crc, adler, &rgba[start..start + pixel_len]);
-            } else {
-                let mut left = pixel_len;
-                while left > 0 {
-                    let n = left.min(ZEROS.len());
-                    emit_checked_adler(sink, crc, adler, &ZEROS[..n]);
-                    left -= n;
-                }
-            }
-        }
-        offset += take;
-        len -= take;
-    }
-}
-
-/// Emit `bytes`, folding them into both the chunk CRC and the zlib Adler-32.
-fn emit_checked_adler(
-    sink: &mut dyn FnMut(&[u8]),
-    crc: &mut Crc32Stream,
-    adler: &mut Adler32,
-    bytes: &[u8],
-) {
-    sink(bytes);
-    crc.update(bytes);
-    adler.update(bytes);
-}
-
-/// Emit `bytes` and fold them into the chunk CRC in the same call.
-fn emit_checked(sink: &mut dyn FnMut(&[u8]), crc: &mut Crc32Stream, bytes: &[u8]) {
-    sink(bytes);
-    crc.update(bytes);
+    let adler = adler.finish().to_be_bytes();
+    sink(&adler);
+    crc.update(&adler);
+    sink(&crc.finish().to_be_bytes());
+    png_chunk(&mut sink, b"IEND", &[], crc32);
 }
 
 fn png_chunk(sink: &mut dyn FnMut(&[u8]), kind: &[u8; 4], body: &[u8], crc32: fn(&[u8]) -> u32) {
@@ -6190,6 +6309,9 @@ mod crash_evidence_tests {
 #[cfg(test)]
 #[path = "png_checksum_tests.rs"]
 mod png_checksum_tests;
+#[cfg(test)]
+#[path = "shotz_png_tests.rs"]
+mod shotz_png_tests;
 
 #[cfg(test)]
 #[path = "md5_frame_tests.rs"]
