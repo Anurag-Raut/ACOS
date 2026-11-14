@@ -41,6 +41,10 @@ from pathlib import Path
 
 PROTOCOL_VERSION = "2025-03-26"
 
+# Seconds a bottom-tab press may take to mount its screen (the Analytics screen
+# fetches and then draws), polled one `acos_observe_tree` per second.
+TAB_WAIT_SECONDS = 20
+
 
 class SmokeError(Exception):
     pass
@@ -172,6 +176,35 @@ def tree_texts(env: dict) -> list[str]:
     return out
 
 
+def named_texts(env: dict) -> list[str]:
+    """Every **name** the tree reports: node `text`, else its `content_desc`.
+
+    This is the platform's accessible-name composition, i.e. what an agent reads
+    off a node and what `acos_tap {"text": ...}` resolves (see
+    docs/AGENT_GUIDE.md). React Native pressables are text-less `ViewGroup`s whose
+    whole name is the content description, so a tab bar is only visible here.
+    """
+    out: list[str] = []
+
+    def walk(value):
+        if isinstance(value, dict):
+            if "text" in value or "content_desc" in value:
+                name = value.get("text") or value.get("content_desc") or ""
+                if name:
+                    out.append(name)
+                for key in ("children",):
+                    walk(value.get(key))
+                return
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    walk(env.get("result", {}))
+    return out
+
+
 def clickable_texts(env: dict) -> list[str]:
     """Texts of nodes the user can actually tap (visible and clickable)."""
     nodes: list[dict] = []
@@ -240,8 +273,7 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=600.0, help="per tool call, seconds")
     ap.add_argument(
         "--mode",
-        choices=["counter", "gaten"],
-        default="counter",
+        choices=["counter", "gaten"],        default="counter",
         help="counter: 0 -> tap Increment -> 1 -> reset -> 0; gaten: launch, read the "
         "real RN tree, tap a bottom tab and require the tree to change",
     )
@@ -334,6 +366,15 @@ def main() -> int:
             and len(guide) > 5000,
             {"overview_chars": len(overview), "full_chars": len(guide)},
         )
+        full_env = envelope(client.call_tool("acos_help", {"topic": "all"}))
+        full_guide = full_env.get("result", {}).get("guide") or ""
+        check(
+            "acos_help all",
+            full_env.get("status") == "pass"
+            and len(full_guide) > 20000
+            and "acos_tap" in full_guide,
+            {"chars": len(full_guide)},
+        )
 
         launched = envelope(
             client.call_tool("acos_launch", {"apk": str(apk)}, timeout=args.timeout)
@@ -396,32 +437,63 @@ def main() -> int:
                 tree0.get("status") == "pass" and len(real) >= 5,
                 {"texts": texts0, "non_empty": len(real)},
             )
-            # A fresh Gaten install boots into onboarding, so the bottom tabs
-            # may not exist yet; pick a node the tree says is visible and
-            # clickable (a bottom tab when present, else the onboarding action).
-            # React Native's tree reports `clickable`/`visible` as false on this
-            # channel, so a text tap is refused as off-screen even for a node
-            # the user sees. Read the label from the tree and tap its bounds.
-            tabs = ["Home", "Recognition", "Lessons", "Kanji", "Search", "Settings"]
-            ctas = ["Skip", "Open Gaten", "Continue", "Turn on lookup mode", "Set up Gaten"]
-            present = [c for c in tabs + ctas if c in texts0]
-            tap_text = args.tap_text or (present[0] if present else None)
+            # A fresh Gaten install boots into onboarding; the bottom tab bar only
+            # exists once the three Skip pages are done. Walk there by tapping the
+            # onboarding controls **by their text** -- exactly what the tap rule
+            # under test has to resolve -- then tap a bottom tab by the label the
+            # tree reports (RN pressables carry their whole name in
+            # `content_desc`, see docs/AGENT_GUIDE.md "what a `tap` selector
+            # resolves to").
+            ctas = ["Set up Gaten", "Skip", "Continue", "Open Gaten", "Turn on lookup mode"]
+            tab_expect = {
+                "Analytics": "Study activity",
+                "Settings": "Screen lookup",
+                "Home": "Recently looked up",
+            }
+            for _ in range(6):
+                names = named_texts(tree0)
+                if any(tab in names for tab in tab_expect) and any(
+                    hint in names for hint in tab_expect.values()
+                ):
+                    break
+                cta = next((c for c in ctas if c in names), None)
+                check("gaten_onboarding_control_present", cta is not None, {"names": names[:40]})
+                stepped = envelope(
+                    client.call_tool(
+                        "acos_tap", {"session_id": sid, "text": cta}, timeout=args.timeout
+                    )
+                )
+                check(
+                    "gaten_onboarding_tap_by_text",
+                    stepped.get("status") == "pass"
+                    and stepped.get("result", {}).get("accepted") is True,
+                    {"text": cta, "status": stepped.get("status"), "error": stepped.get("error")},
+                )
+                tree0 = envelope(
+                    client.call_tool(
+                        "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
+                    )
+                )
+                texts0 = tree_texts(tree0)
+            names = named_texts(tree0)
+            present = [tab for tab in tab_expect if tab in names]
             check(
-                "gaten_tab_or_cta_present",
-                tap_text is not None,
-                {"present": present, "texts": texts0[:40]},
+                "gaten_bottom_tab_present",
+                bool(present),
+                {"present": present, "names": names[:40]},
+            )
+            # A tab that is not the current one, so the tap has to navigate.
+            tap_text = args.tap_text or next(
+                (tab for tab in ("Analytics", "Settings", "Home") if tab in present),
+                present[0],
             )
 
         if tap_text is None:
             raise SmokeError("no node text to tap")
         if args.mode == "gaten":
-            center = node_center(tree0, tap_text)
-            check(
-                "gaten_tap_target_bounds",
-                center is not None,
-                {"text": tap_text, "center": center},
-            )
-            tap_args = {"session_id": sid, "x": center[0], "y": center[1]}
+            # Tap by the label read off the tree, never by bounds: this is the
+            # claim (an RN tab is reachable by the name an agent reads).
+            tap_args = {"session_id": sid, "text": tap_text}
         else:
             tap_args = {"session_id": sid, "text": tap_text}
         tapped = envelope(
@@ -440,6 +512,12 @@ def main() -> int:
                 "error": tapped.get("error"),
             },
         )
+        if args.mode == "gaten":
+            check(
+                "gaten_tab_tap_state_changed",
+                tapped.get("result", {}).get("state_changed") is True,
+                {"text": tap_text, "result": tapped.get("result", {}).get("settle")},
+            )
 
         tree1 = envelope(
             client.call_tool(
@@ -454,6 +532,36 @@ def main() -> int:
                 {"texts": texts1},
             )
         else:
+            if tap_text in tab_expect:
+                # A tab press navigates and the new screen mounts on its own
+                # frame: poll the tree (bounded, never forever) for the tab's own
+                # content. A screen that never arrives still fails.
+                expected = tab_expect[tap_text]
+                names1 = named_texts(tree1)
+                for _ in range(TAB_WAIT_SECONDS):
+                    if expected in names1 and tap_text in names1:
+                        break
+                    time.sleep(1)
+                    tree1 = envelope(
+                        client.call_tool(
+                            "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
+                        )
+                    )
+                    texts1 = tree_texts(tree1)
+                    names1 = named_texts(tree1)
+                check(
+                    "gaten_tab_screen_text",
+                    tree1.get("status") == "pass"
+                    and tap_text in names1
+                    and expected in names1
+                    and texts1 != texts0,
+                    {
+                        "tab": tap_text,
+                        "expected_text": expected,
+                        "before": texts0[:40],
+                        "after": texts1[:40],
+                    },
+                )
             check(
                 "gaten_tree_changed_after_tab",
                 tree1.get("status") == "pass" and texts1 != texts0,

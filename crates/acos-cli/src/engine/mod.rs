@@ -1680,12 +1680,181 @@ mod tests {
 
     #[test]
     fn key_names_map_to_android_keycodes() {
-        assert_eq!(key_code(key_name(KeyName::Back)), 4);
         assert_eq!(key_code(key_name(KeyName::Enter)), 66);
+        assert_eq!(key_code(key_name(KeyName::Back)), 4);
         assert_eq!(key_code("nope"), -1);
     }
-}
 
+    /// RNTAP: the Gaten bottom tab bar as the API-34 guest reports it
+    /// (`.cache/rntap/tabs-home.json`, 1080x2400). The real device shows a
+    /// label only for the *active* tab (moto g35 screenshot of the same screen),
+    /// and React Native implements each tab as a text-less pressable whose whole
+    /// name is its `accessibilityLabel` -> `contentDescription`:
+    ///
+    /// ```text
+    /// pressable  text="" cd="Settings"  bounds [689,2151][862,2316] visible clickable
+    /// label Text text="Settings" cd=""   bounds [251,2214][367,2251] NOT visible
+    /// ```
+    fn gaten_tab_bar() -> serde_json::Value {
+        serde_json::json!({
+            "nodes": [{
+                "class": "android.view.ViewGroup",
+                "text": "",
+                "bounds": "[0,2151][1080,2400]",
+                "visibility": 0,
+                "visible": true,
+                "visible_bounds": "[0,2151][1080,2400]",
+                "children": [
+                    {
+                        // The inactive labels the tab bar lays out but does not
+                        // draw: on screen, but not visible to the user.
+                        "class": "b5.g",
+                        "text": "",
+                        "bounds": "[203,2151][532,2188]",
+                        "visibility": 0,
+                        "visible": false,
+                        "visible_bounds": "[203,2151][532,2188]",
+                        "children": [
+                            {
+                                "class": "X4.e",
+                                "text": "Settings",
+                                "bounds": "[416,2151][532,2188]",
+                                "visibility": 0,
+                                "visible": false,
+                                "visible_bounds": "[416,2151][532,2188]"
+                            }
+                        ]
+                    },
+                    {
+                        "class": "b5.g",
+                        "text": "",
+                        "bounds": "[689,2151][862,2316]",
+                        "visibility": 0,
+                        "visible": true,
+                        "visible_bounds": "[689,2151][862,2316]",
+                        "clickable": true,
+                        "content_description": "Settings",
+                        "children": [
+                            {
+                                "class": "X4.e",
+                                "text": "Home",
+                                "bounds": "[362,2214][445,2251]",
+                                "visibility": 0,
+                                "visible": true,
+                                "visible_bounds": "[362,2214][445,2251]"
+                            }
+                        ]
+                    }
+                ]
+            }]
+        })
+    }
+
+    fn frame() -> FrameMeta {
+        FrameMeta::new(1, "2026-11-11T00:00:00Z", "req", 1080, 2400, 400, "h", true)
+    }
+
+    #[test]
+    fn rn_tab_labels_keep_the_frameworks_visibility_answer() {
+        // The `visible` flag is the guest's `View.isVisibleToUser()` answer and is
+        // copied verbatim: the labels the bar lays out but does not draw stay
+        // invisible even though they have on-screen geometry, and the pressable
+        // stays visible. Nothing here invents visibility for a prettier tree.
+        let tree = ui_tree_from_json("com.gaten", frame(), &gaten_tab_bar()).unwrap();
+        let label = tree
+            .find_one(&Selector {
+                content_desc: Some(acos_protocol::TextMatch::exact("Settings")),
+                ..Selector::default()
+            })
+            .expect("the tab pressable is visible and carries the name");
+        assert!(label.visible);
+        assert!(label.clickable);
+        assert_eq!(label.text, "");
+
+        let invisible: Vec<&UiNode> = tree
+            .all_nodes()
+            .into_iter()
+            .filter(|node| node.text == "Settings")
+            .collect();
+        assert_eq!(invisible.len(), 1);
+        assert!(
+            !invisible[0].visible,
+            "a label the bar does not draw is not visible to the user"
+        );
+        assert!(
+            invisible[0].visible_bounds.is_some(),
+            "...and its geometry is still reported, so the reason is not clipping"
+        );
+    }
+
+    #[test]
+    fn tap_by_text_resolves_the_accessible_name_not_a_decorative_label() {
+        // What an agent does on the device: tap the tab by the name it reads.
+        // `find_one` (evidence) still resolves only real text, so the selector
+        // resolution for *input* uses the platform's accessible name.
+        let tree = ui_tree_from_json("com.gaten", frame(), &gaten_tab_bar()).unwrap();
+        let selector = Selector::by_text("Settings");
+        assert!(
+            tree.find_one(&selector).is_none(),
+            "no visible node carries this text: the drawn label is another tab's"
+        );
+        let target = tree
+            .find_input_target(&selector)
+            .expect("the pressable's accessible name is the tab's name");
+        assert_eq!(target.content_desc, "Settings");
+        assert!(target.visible && target.clickable);
+        assert_eq!(target.bounds, Bounds::new(689, 2151, 862, 2316));
+        assert_eq!(target.tap_point(), (775, 2233), "the centre of the tab");
+    }
+
+    #[test]
+    fn a_real_text_match_still_wins_over_a_content_description() {
+        // On the active tab the drawn label *is* visible: the text match must win
+        // (its centre lies inside the tab's pressable, so the touch lands there).
+        let tree = ui_tree_from_json("com.gaten", frame(), &gaten_tab_bar()).unwrap();
+        let target = tree
+            .find_input_target(&Selector::by_text("Home"))
+            .expect("the drawn label");
+        assert_eq!(target.class, "X4.e");
+        assert_eq!(target.bounds, Bounds::new(362, 2214, 445, 2251));
+        assert_eq!(target.tap_point(), (403, 2232));
+    }
+
+    #[test]
+    fn an_off_screen_node_is_never_a_tap_target() {
+        // The GR2 W4 / `negative/offscreen-pager-visible` shape: a warm-mounted
+        // page at x=+displayWidth. It is in the tree (with a name, and with a
+        // content description), it is NOT visible to the user, and it must stay
+        // untappable -- `tap_text` reports ELEMENT_OFFSCREEN for it.
+        let value = serde_json::json!({
+            "nodes": [{
+                "class": "android.widget.TextView",
+                "text": "Hidden",
+                "content_description": "Hidden page action",
+                "bounds": "[1138,800][1318,853]",
+                "visibility": 0,
+                "visible": false,
+                "visible_bounds": ""
+            }, {
+                "class": "android.widget.Button",
+                "text": "",
+                "content_description": "Hidden page action",
+                "bounds": "[1138,900][1318,953]",
+                "visibility": 0,
+                "visible": false,
+                "visible_bounds": ""
+            }]
+        });
+        let tree = ui_tree_from_json("dev.acos.fixtures.offscreenpager", frame(), &value).unwrap();
+        assert!(tree.find_input_target(&Selector::by_text("Hidden")).is_none());
+        assert!(tree
+            .find_input_target(&Selector::by_text("Hidden page action"))
+            .is_none());
+        // ...and the off-screen probe that produces ELEMENT_OFFSCREEN still sees
+        // both nodes, so the refusal names the node instead of "not found".
+        assert!(tree.find_invisible(&Selector::by_text("Hidden")).is_some());
+    }
+}
 #[cfg(test)]
 mod engine_tests {
     use super::*;

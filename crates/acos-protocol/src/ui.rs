@@ -637,6 +637,48 @@ impl UiTree {
             .find(|node| !node.visible && probe.matches_node(node))
     }
 
+    /// Find the node a pointer action should target for `selector`.
+    ///
+    /// This is the *input* resolution rule, and it differs from [`UiTree::find_one`]
+    /// (evidence resolution) in exactly one way, the one the platform makes: what
+    /// a pointer reaches is decided by the node's **accessible name**, and the
+    /// platform composes that name as the node's text, else its content
+    /// description (`AccessibilityNodeInfo.getText()`, else
+    /// `getContentDescription()` — the same name UiAutomator's `By.desc` and an
+    /// `agent-device` `label` resolve to).
+    ///
+    /// 1. the ordinary field match among user-visible nodes ([`UiTree::find_one`]);
+    /// 2. for a `text` selector, a user-visible node whose own text is empty and
+    ///    whose content description matches — a React Native `Pressable` is a
+    ///    text-less `ViewGroup` whose whole name is its accessibility label, so
+    ///    `tap {"text": "Settings"}` must reach the pressable the way the device
+    ///    does instead of stopping at a decorative `TextView` underneath it.
+    ///
+    /// Only user-visible nodes are ever returned: this never makes an off-screen
+    /// node tappable, and a node that is not visible to the user resolves to
+    /// nothing here (callers report `ELEMENT_OFFSCREEN`).
+    pub fn find_input_target(&self, selector: &Selector) -> Option<&UiNode> {
+        if let Some(node) = self.find_one(selector) {
+            return Some(node);
+        }
+        let text = selector.text.as_ref()?;
+        // The other selector fields (id/content_desc/class/bounds) still have to
+        // match; only the text field is answered by the content description.
+        let mut probe = selector.clone();
+        probe.text = None;
+        probe.index = None;
+        let mut hits = self.all_nodes().into_iter().filter(|node| {
+            node.visible
+                && node.text.is_empty()
+                && probe.matches_node(node)
+                && text.matches(&node.content_desc)
+        });
+        match selector.index {
+            Some(index) => hits.nth(index),
+            None => hits.next(),
+        }
+    }
+
     /// The canonical `observe --text` rendering, one line per node with text or
     /// a content description, in document order.
     pub fn text_lines(&self) -> Vec<String> {

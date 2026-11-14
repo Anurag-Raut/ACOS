@@ -92,7 +92,12 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
 5. **Act.** `acos_tap {"text": "Increment"}` (preferred), `acos_tap {"x":..,
    "y":..}`, `acos_key {"code": "back"}`, `acos_text {"text": "hello"}` (types
    into the focused editor through the real `InputConnection`),
-   `acos_swipe {"from":[x1,y1], "to":[x2,y2]}`. Re-observe after every action;
+   `acos_swipe {"from":[x1,y1], "to":[x2,y2]}`. `text` names a node the way the
+   platform does — its text, else its content description — so a React Native
+   pressable (`accessibilityLabel`, e.g. a bottom tab) is reachable by the label
+   you read on screen; `content_desc`/`id` select exactly one field when you want
+   that. A node that is not visible to the user is never tapped: `ELEMENT_OFFSCREEN`
+   names its bounds. Re-observe after every action;
    `state_changed: false` with `accepted: true` means the event was delivered
    but the screen did not change — read the in-band `note`.
 6. **Read the app's own words.** `acos_logs` returns the guest log buffer and
@@ -244,6 +249,27 @@ selector:
   bounds: [42, 368, 273, 494]               # display pixels [left, top, right, bottom]
   index: 0                                  # 0-based, pre-order document order
 ```
+
+**Visited vs. named: what a `tap` selector resolves to.** `visible` in a tree is
+Android's own `View.isVisibleToUser()` answer — attached, the view and every
+ancestor `VISIBLE`, alpha > 0, and an on-screen clipped rect — copied verbatim,
+never recomputed by ACOS. `assert_visible`/`assert_text`/`wait_for` match only
+the nodes that answer yes to it. A **tap** additionally resolves the selector
+against the platform's *accessible name*, which is the node's text, else its
+content description (`AccessibilityNodeInfo.getText()`, else
+`getContentDescription()`), because that is the name an agent (and UiAutomator's
+`By.desc`, and an `agent-device` `label`) targets. Concretely, `acos_tap
+{"text": "Settings"}` finds a visible node whose own text is `Settings`, or — when
+no visible node has that text — a visible node with no text of its own whose
+`content_desc` is `Settings`. React Native renders every pressable as a
+text-less `ViewGroup` carrying its `accessibilityLabel` in the content
+description, so this is what makes tap-by-label work on RN apps (`text` is empty
+on the tab pressable, and the tab's decorative label `TextView` is not visible
+to the user at all). The tap lands at the centre of the target's *visible* rect
+(or `x`/`y`), and a node that is not visible to the user is never a tap target:
+if only such a node matches, the reply is `ELEMENT_OFFSCREEN` with its bounds,
+never a tap. When several nodes match, the first in document order wins;
+`index` picks another.
 
 **Settle modes (the part that decides whether a pass is real).**
 
