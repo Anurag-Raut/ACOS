@@ -2899,6 +2899,57 @@ impl ArtSession {
     /// G3f1: the settle verdict of the frame the last launch bound
     /// (`(settled, bound)`), so serve publishes `result.settle` for that frame
     /// rather than for the pre-launch traversal.
+    /// FB2: is the bound launch frame still the bare window skeleton?
+    ///
+    /// True only when the launch waited its whole content budget and the frame
+    /// never grew past the skeleton (see [`FirstFrameReport::placeholder`]).
+    /// A screenshot of such a frame is not a screenshot of the app, so the
+    /// session verbs refuse it instead of returning splash pixels.
+    pub(crate) fn placeholder_frame(&self) -> bool {
+        self.first_frame_report
+            .as_ref()
+            .is_some_and(|report| report.placeholder)
+    }
+
+    /// FB2: the PNG artifact the session's current frame is bound to.
+    ///
+    /// The bound traversal's own PNG when it carried pixels (the normal case:
+    /// a strict tree traversal captures), otherwise one fresh host capture. The
+    /// returned path is the launcher's artifact — the SHOTZ encoder already wrote
+    /// it, so a caller copies the compressed bytes and never re-encodes.
+    pub(crate) fn screenshot_source(&mut self) -> Result<(PathBuf, u64, String, u64), BackendError> {
+        if let Some(cached) = self.cached.as_ref() {
+            if let Some(artifact) = cached.png.as_ref() {
+                if artifact.frame_seq == cached.seq {
+                    return Ok((
+                        artifact.path.clone(),
+                        cached.seq,
+                        cached.md5.clone(),
+                        artifact.size,
+                    ));
+                }
+            }
+        }
+        let captured = self.capture_frame()?;
+        Ok((
+            captured.path,
+            captured.frame_seq,
+            captured.md5,
+            captured.bytes,
+        ))
+    }
+
+    /// W58/FB2: the bound frame's display-space origin, in pixels.
+    ///
+    /// Measured from the probe tree (`bounds_on_screen` minus window-local
+    /// `bounds`), the same offset the input channel already applies. A PNG
+    /// covers `[display_origin, display_origin + png size)` of the display, so
+    /// `png_y = display_y - display_origin.y`; publishing it is what stops an
+    /// agent from mis-tapping a screenshot by the status-bar inset.
+    pub(crate) fn display_origin(&self) -> (i32, i32) {
+        self.input_offset
+    }
+
     /// FB2: the producer frame number of the bound frame, when the reply
     /// carried one. A placeholder launch is reported with it, because a number
     /// that never advances is what "the app never mounted" looks like from the

@@ -381,6 +381,17 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                     "type": "integer", "minimum": 1, "maximum": 600000,
                     "description": "P12: bound the strict settle wait. On timeout the tree is still \
                                     returned with `settled:false` and `bound:timeout`."
+                },
+                "screenshot": {
+                    "type": ["boolean", "string"],
+                    "description": "FB2: `true` writes this frame's lossless PNG under the session's \
+                                    artifacts and returns `screenshot.path` (absolute), `width`, \
+                                    `height`, `display_size`, `display_origin` and `frame_seq`, plus \
+                                    a bounded inline preview in this reply. A string writes to that \
+                                    path instead. A placeholder/no-pixel frame answers \
+                                    NO_FRESH_FRAME, never an empty success. `display_origin` is the \
+                                    offset between PNG pixels and tree bounds: png_y = display_y - \
+                                    display_origin.y."
                 }
             })),
         ),

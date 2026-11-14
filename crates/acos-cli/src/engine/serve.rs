@@ -30,7 +30,7 @@
 //! serialise instead of racing two input streams into one app.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use acos_mcp::{CallContext, SessionBackend as LegacyBackend};
@@ -797,8 +797,8 @@ impl ServeEngine {
         // the guest still answers a timeout with the latest tree/frame identity.
         session.set_settle_timeout(settle_timeout_arg(args));
         let outcome = match tool {
-            "acos_observe_tree" => observe_tree(&mut session, args),
-            "acos_observe" => observe(&mut session, args),
+            "acos_observe_tree" => observe_tree(&mut session, &held.artifacts, args),
+            "acos_observe" => observe(&mut session, &held.artifacts, args),
             "acos_tap" => tap(&mut session, args),
             "acos_text" => type_text(&mut session, args),
             "acos_key" => key(&mut session, args),
@@ -1405,7 +1405,171 @@ fn placeholder_launch_error(
         .with_details(details)
 }
 
-fn observe_tree(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+/// FB2: what a caller asked for with `screenshot`.
+///
+/// `true` means "write it where this session keeps its frames and tell me the
+/// path" (the agent-facing form: no path to invent); a string keeps the CLI's
+/// `--screenshot <path>` contract. Anything else is an argument error, never a
+/// silent no-op.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ScreenshotRequest {
+    None,
+    Default,
+    Path(PathBuf),
+}
+
+fn screenshot_request(args: &Value) -> Result<ScreenshotRequest, BackendError> {
+    match args.get("screenshot") {
+        None | Some(Value::Null) | Some(Value::Bool(false)) => Ok(ScreenshotRequest::None),
+        Some(Value::Bool(true)) => Ok(ScreenshotRequest::Default),
+        Some(Value::String(path)) if !path.trim().is_empty() => {
+            Ok(ScreenshotRequest::Path(PathBuf::from(path)))
+        }
+        Some(other) => Err(BackendError::Error {
+            code: ErrorCode::InvalidArgument,
+            detail: format!(
+                "`screenshot` must be true (write under the session's artifacts and return the \
+                 path) or a file path (got {other})"
+            ),
+        }),
+    }
+}
+
+/// The pixel size in a PNG's IHDR chunk (16-byte signature + 8-byte length/type
+/// header, then width and height). Header-only: an 80 KB frame is never decoded
+/// just to say how big it is.
+fn png_pixel_size(path: &Path) -> Option<(u32, u32)> {
+    use std::io::Read as _;
+    let mut header = [0u8; 24];
+    let mut file = std::fs::File::open(path).ok()?;
+    file.read_exact(&mut header).ok()?;
+    if &header[..8] != b"\x89PNG\r\n\x1a\n" || &header[12..16] != b"IHDR" {
+        return None;
+    }
+    let width = u32::from_be_bytes([header[16], header[17], header[18], header[19]]);
+    let height = u32::from_be_bytes([header[20], header[21], header[22], header[23]]);
+    Some((width, height))
+}
+
+/// FB2: write the session's current frame as a PNG and describe it.
+///
+/// The bytes are the launcher's own artifact — already a compressed lossless
+/// PNG (SHOTZ), so this is one kernel-side copy and never a re-encode. The reply
+/// carries the absolute path, the pixel size, the display size and
+/// `display_origin` (so a screenshot coordinate converts to a tree coordinate),
+/// and the frame identity it is bound to.
+///
+/// A frame with no app pixels (the launch placeholder, or a guest that published
+/// nothing) is a structured `NO_FRESH_FRAME`, never an empty success and never
+/// a file the caller mistakes for the app.
+fn attach_screenshot(
+    session: &mut ArtSession,
+    artifacts: &Path,
+    request: ScreenshotRequest,
+    verb: &str,
+    result: &mut Value,
+) -> Result<(), BackendError> {
+    let request_dest = match request {
+        ScreenshotRequest::None => return Ok(()),
+        ScreenshotRequest::Default => None,
+        ScreenshotRequest::Path(path) => Some(path),
+    };
+    if session.placeholder_frame() {
+        return Err(placeholder_screenshot_error(verb));
+    }
+    let (source, frame_seq, md5, bytes) = session.screenshot_source()?;
+    write_screenshot(
+        artifacts,
+        request_dest,
+        verb,
+        (&source, frame_seq, &md5, bytes),
+        (session.width(), session.height()),
+        session.display_origin(),
+        result,
+    )
+}
+
+/// FB2: a screenshot requested on the launch placeholder.
+///
+/// Structured `NO_FRESH_FRAME` — not an empty success, not a silent no-op, and
+/// not splash pixels presented as the app: the window skeleton has no app
+/// content to photograph.
+fn placeholder_screenshot_error(verb: &str) -> BackendError {
+    super::live_frame_unavailable(format!(
+        "the current frame is the launch placeholder (the window skeleton: the app's content \
+         never mounted), so it has no screenshot to give; this is a placeholder/no-pixel frame, \
+         not a fresh app frame (reason: placeholder-content). Read `first_frame`/`acos_logs` for \
+         why the content did not mount ({verb})"
+    ))
+}
+
+/// The write/report half of [`attach_screenshot`], for a caller that already
+/// holds the frame's artifact (a verb that just captured one).
+fn write_screenshot(
+    artifacts: &Path,
+    request_dest: Option<PathBuf>,
+    verb: &str,
+    (source, frame_seq, md5, bytes): (&Path, u64, &str, u64),
+    (display_width, display_height): (u32, u32),
+    (origin_x, origin_y): (i32, i32),
+    result: &mut Value,
+) -> Result<(), BackendError> {
+    if bytes == 0 {
+        return Err(super::live_frame_unavailable(
+            "the frame artifact for this screenshot is empty",
+        ));
+    }
+    let dest = request_dest.unwrap_or_else(|| {
+        artifacts
+            .join("screenshots")
+            .join(format!("{}-{frame_seq}.png", verb.replace("acos_", "")))
+    });
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| BackendError::Error {
+            code: ErrorCode::RenderIo,
+            detail: format!("cannot create {}: {error}", parent.display()),
+        })?;
+    }
+    if dest != source {
+        std::fs::copy(source, &dest).map_err(|error| BackendError::Error {
+            code: ErrorCode::RenderIo,
+            detail: format!(
+                "cannot write the screenshot {} from {}: {error}",
+                dest.display(),
+                source.display()
+            ),
+        })?;
+    }
+    let absolute = std::fs::canonicalize(&dest).unwrap_or_else(|_| dest.clone());
+    let (width, height) = png_pixel_size(&absolute).ok_or_else(|| BackendError::Error {
+        code: ErrorCode::RenderIo,
+        detail: format!(
+            "the screenshot {} is not a readable PNG; refusing to describe it",
+            absolute.display()
+        ),
+    })?;
+    result["screenshot"] = json!({
+        "path": absolute.display().to_string(),
+        "bytes": bytes,
+        "format": "png",
+        "frame_seq": frame_seq,
+        "md5": md5,
+        "width": width,
+        "height": height,
+        "display_size": [display_width, display_height],
+        "display_origin": [origin_x, origin_y],
+        "note": "lossless PNG of the frame above; png_x = display_x - display_origin.x, png_y = display_y - display_origin.y (tree bounds are display space)",
+    });
+    Ok(())
+}
+
+fn observe_tree(
+    session: &mut ArtSession,
+    artifacts: &Path,
+    args: &Value,
+) -> Result<Value, BackendError> {
+    // FB2: `screenshot: true` is an argument error before any work is done.
+    let screenshot = screenshot_request(args)?;
     let max_nodes = args
         .get("max_nodes")
         .and_then(Value::as_u64)
@@ -1436,7 +1600,7 @@ fn observe_tree(session: &mut ArtSession, args: &Value) -> Result<Value, Backend
             ),
         );
     }
-    Ok(json!({
+    let mut result = json!({
         "package": session.package(),
         "stage_reached": "first_frame",
         "windows": distinct_windows(&tree),
@@ -1445,17 +1609,26 @@ fn observe_tree(session: &mut ArtSession, args: &Value) -> Result<Value, Backend
         "node_count": node_count,
         "tree": tree_value,
         "settle": session.last_tree_settle().cloned(),
-    }))
+    });
+    // FB2: the screenshot is of *this* bound frame, and its `display_origin`
+    // says how a PNG pixel maps to a tree bound.
+    attach_screenshot(session, artifacts, screenshot, "acos_observe_tree", &mut result)?;
+    Ok(result)
 }
 
-fn observe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+fn observe(
+    session: &mut ArtSession,
+    artifacts: &Path,
+    args: &Value,
+) -> Result<Value, BackendError> {
     let want_tree = args.get("tree").and_then(Value::as_bool).unwrap_or(false);
     let want_text = args.get("text").and_then(Value::as_bool).unwrap_or(false);
     let settle = requested_settle(args)?;
-    let path = args
-        .get("screenshot")
-        .and_then(Value::as_str)
-        .map(PathBuf::from);
+    let screenshot = screenshot_request(args)?;
+    let path = match &screenshot {
+        ScreenshotRequest::Path(path) => Some(path.clone()),
+        _ => None,
+    };
     if want_tree || want_text {
         let tree = session.tree_with_settle(settle)?;
         let mut result = json!({
@@ -1479,6 +1652,10 @@ fn observe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError
             result["text"] = json!(flat_text(&tree));
         }
         result["settle"] = session.last_tree_settle().cloned().unwrap_or(Value::Null);
+        // FB2: `screenshot` used to be silently ignored on the tree path (the
+        // agent got a tree, no file, no error). It is honoured here on the same
+        // bound frame.
+        attach_screenshot(session, artifacts, screenshot, "acos_observe", &mut result)?;
         return Ok(result);
     }
     // A frame-only observe is a real, fresh host capture.
@@ -1500,35 +1677,29 @@ fn observe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError
             "bytes": frame.bytes,
         },
     });
-    if let Some(path) = path {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|error| BackendError::Error {
-                code: ErrorCode::RenderIo,
-                detail: format!("cannot create {}: {error}", parent.display()),
-            })?;
-        }
-        let t_write = m5_now_us();
-        std::fs::copy(&frame.path, &path).map_err(|error| BackendError::Error {
-            code: ErrorCode::RenderIo,
-            detail: format!(
-                "cannot write {} from the frame artifact {}: {error}",
-                path.display(),
-                frame.path.display()
-            ),
-        })?;
-        let t_done = m5_now_us();
-        m5_trace(
-            "cli.serve_shot_write",
-            t_write,
-            t_done,
-            &format!("png_bytes={}", frame.bytes),
-        );
-        result["screenshot"] = json!({
-            "path": path.display().to_string(),
-            "bytes": frame.bytes,
-            "frame_seq": frame.frame_seq,
-        });
+    // FB2: the capture above *is* the frame this verb answers with, so the
+    // screenshot is written from it (never a second capture) and reported with
+    // its `display_origin`. No `screenshot` argument keeps the previous shape:
+    // the capture is reported, no copy is made.
+    if screenshot == ScreenshotRequest::None {
+        return Ok(result);
     }
+    let t_write = m5_now_us();
+    write_screenshot(
+        artifacts,
+        path,
+        "acos_observe",
+        (&frame.path, frame.frame_seq, &frame.md5, frame.bytes),
+        (session.width(), session.height()),
+        session.display_origin(),
+        &mut result,
+    )?;
+    m5_trace(
+        "cli.serve_shot_write",
+        t_write,
+        m5_now_us(),
+        &format!("png_bytes={}", frame.bytes),
+    );
     Ok(result)
 }
 
@@ -2739,6 +2910,154 @@ mod tests {
     /// P9: launch/reset bind with P1's vocabulary, are pixel-free by default,
     /// and refuse the one combination that would let a mid-animation frame back
     /// a pixel claim.
+    fn fb2_scratch(name: &str) -> PathBuf {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../.cache/fb2-tests");
+        let dir = root.join(format!(
+            "{}-{}-{name}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        // `CARGO_MANIFEST_DIR/../..` keeps `..` components, which compare
+        // component-wise against a canonicalized reply path; resolve it once.
+        std::fs::canonicalize(&dir).unwrap_or(dir)
+    }
+
+    /// FB2: `screenshot: true` writes the frame's (already compressed) PNG under
+    /// the session's artifacts and reports an absolute path, the pixel geometry
+    /// and `display_origin`.
+    #[test]
+    fn a_screenshot_request_writes_a_png_and_reports_its_geometry() {
+        let dir = fb2_scratch("shotz");
+        let source = dir.join("frame.png");
+        std::fs::write(&source, crate::engine::fake::TINY_PNG).unwrap();
+        let artifacts = dir.join("artifacts");
+        let mut result = json!({"node_count": 9});
+        write_screenshot(
+            &artifacts,
+            None,
+            "acos_observe_tree",
+            (&source, 7, "m7", crate::engine::fake::TINY_PNG.len() as u64),
+            (1080, 2400),
+            (0, 128),
+            &mut result,
+        )
+        .expect("the screenshot is written");
+        let shot = &result["screenshot"];
+        let path = std::path::Path::new(shot["path"].as_str().unwrap());
+        assert!(path.is_absolute(), "the reply names an absolute path: {shot}");
+        assert_eq!(
+            path.file_name().unwrap(),
+            "observe_tree-7.png",
+            "the default name carries the verb and the frame sequence: {shot}"
+        );
+        assert!(
+            path.starts_with(&artifacts),
+            "the default destination is the session's own artifacts dir: {shot}"
+        );
+        assert_eq!(
+            std::fs::read(path).unwrap(),
+            crate::engine::fake::TINY_PNG,
+            "the PNG is copied byte for byte (never re-encoded)"
+        );
+        assert_eq!(shot["format"], json!("png"));
+        assert_eq!(shot["frame_seq"], json!(7));
+        assert_eq!(shot["md5"], json!("m7"));
+        assert_eq!(shot["bytes"], json!(crate::engine::fake::TINY_PNG.len()));
+        assert_eq!(shot["display_size"], json!([1080, 2400]));
+        assert_eq!(
+            shot["display_origin"],
+            json!([0, 128]),
+            "the reply carries the offset between PNG pixels and tree bounds"
+        );
+        // The pixel size comes from the PNG's own IHDR, not from the display.
+        let (w, h) = png_pixel_size(path).expect("a real PNG header");
+        assert_eq!(shot["width"], json!(w));
+        assert_eq!(shot["height"], json!(h));
+        assert!(
+            shot["note"].as_str().unwrap().contains("display_origin"),
+            "{shot}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// FB2: an explicit path is honoured (the CLI's `--screenshot <path>` form).
+    #[test]
+    fn a_screenshot_path_argument_is_honoured_and_made_absolute() {
+        let dir = fb2_scratch("path");
+        let source = dir.join("frame.png");
+        std::fs::write(&source, crate::engine::fake::TINY_PNG).unwrap();
+        let dest = dir.join("out/agent.png");
+        let mut result = json!({});
+        write_screenshot(
+            &dir.join("artifacts"),
+            Some(dest.clone()),
+            "acos_observe",
+            (&source, 3, "m3", crate::engine::fake::TINY_PNG.len() as u64),
+            (1080, 2400),
+            (0, 0),
+            &mut result,
+        )
+        .unwrap();
+        assert_eq!(
+            result["screenshot"]["path"],
+            json!(std::fs::canonicalize(&dest).unwrap().display().to_string())
+        );
+        assert!(dest.is_file());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_screenshot_argument_is_true_or_a_path_and_nothing_else() {
+        assert_eq!(
+            screenshot_request(&json!({})).unwrap(),
+            ScreenshotRequest::None
+        );
+        assert_eq!(
+            screenshot_request(&json!({"screenshot": false})).unwrap(),
+            ScreenshotRequest::None
+        );
+        assert_eq!(
+            screenshot_request(&json!({"screenshot": true})).unwrap(),
+            ScreenshotRequest::Default
+        );
+        assert_eq!(
+            screenshot_request(&json!({"screenshot": "out/x.png"})).unwrap(),
+            ScreenshotRequest::Path(PathBuf::from("out/x.png"))
+        );
+        // A value the verb cannot honour is an argument error, never a silent
+        // no-op (the reported bug: no file, no error, no screenshot field).
+        let err = screenshot_request(&json!({"screenshot": 7})).unwrap_err();
+        match err {
+            BackendError::Error { code, detail } => {
+                assert_eq!(code, ErrorCode::InvalidArgument);
+                assert!(detail.contains("`screenshot` must be"), "{detail}");
+            }
+            other => panic!("expected an argument error, got {other:?}"),
+        }
+        let err = screenshot_request(&json!({"screenshot": ""})).unwrap_err();
+        assert!(matches!(err, BackendError::Error { .. }));
+    }
+
+    /// FB2: a placeholder/no-pixel frame is a structured `NO_FRESH_FRAME`, not an
+    /// empty success.
+    #[test]
+    fn a_placeholder_frame_has_no_screenshot_to_give() {
+        let err = placeholder_screenshot_error("acos_observe_tree");
+        match err {
+            BackendError::Error { code, detail } => {
+                assert_eq!(code, ErrorCode::NoFreshFrame);
+                assert_eq!(code.as_str(), "NO_FRESH_FRAME");
+                assert!(detail.contains("placeholder"), "{detail}");
+                assert!(detail.contains("acos_observe_tree"), "{detail}");
+            }
+            other => panic!("expected NO_FRESH_FRAME, got {other:?}"),
+        }
+    }
+
     /// FB2: a launch that reached only the window skeleton is `blocked` with
     /// reason `placeholder-content` — never `pass` / `first_frame`.
     fn placeholder_report(nodes: usize, placeholder: bool) -> crate::engine::art::FirstFrameReport {
