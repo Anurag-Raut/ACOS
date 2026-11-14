@@ -1633,6 +1633,7 @@ mod engine_tests {
             None,
             None,
             None,
+            None,
         );
         let verdict = envelope.result().unwrap().get("verdict").unwrap();
         assert_eq!(verdict["engine"], "art");
@@ -1737,6 +1738,7 @@ mod engine_tests {
             backend.session_capabilities().as_ref(),
             crate::trust::Trust::Trusted,
             &dir,
+            None,
             None,
             None,
             None,

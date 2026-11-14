@@ -1,0 +1,179 @@
+{
+ "app": "net.cozic.joplin",
+ "apk": "/home/Qui/Projects/acos/.cache/corpus/k1/apks/net.cozic.joplin_2097817_3.7.8.apk",
+ "apk_sha256": "79acd24866ef5c3f8779fcdf926dd6e0d6e242ccffda8581c556f2a80f4b2782",
+ "started_at": "2026-11-14T09:53:15Z",
+ "engine": "art",
+ "stages": {
+  "inspect": {
+   "ok": true,
+   "wall_ms": 162.9,
+   "error": null
+  },
+  "launch": {
+   "ok": true,
+   "wall_ms": 1844.4,
+   "reached_stage": "first_frame",
+   "activity": "net.cozic.joplin.MainActivity",
+   "package": "net.cozic.joplin",
+   "tree_node_count": 8,
+   "frame": {
+    "buffer_generation": 1,
+    "captured_at": "2026-11-14T09:53:18.026Z",
+    "frame_number": 1,
+    "frame_seq": 4,
+    "identity": "C1 buffer metadata (no pixel copy)",
+    "md5": "",
+    "meaningful": false,
+    "pixels": false,
+    "placeholder": true
+   },
+   "session_start_ms": null
+  },
+  "process_start": {
+   "ok": true,
+   "evidence": "launch pass"
+  },
+  "application_on_create": {
+   "ok": true,
+   "evidence": "launch pass"
+  },
+  "first_frame": {
+   "ok": true,
+   "wall_ms": 1844.4
+  },
+  "tree": {
+   "ok": true,
+   "node_count": 8
+  },
+  "screenshot": {
+   "ok": true
+  },
+  "tap": {
+   "ok": false,
+   "clickable": false,
+   "reason": "no clickable node in the tree"
+  }
+ },
+ "steps": [
+  {
+   "step": "launch",
+   "request_id": "req_k1_1",
+   "wall_ms": 1844.4,
+   "ok": true,
+   "status": "pass",
+   "error": null
+  },
+  {
+   "step": "tree",
+   "request_id": "req_k1_2",
+   "wall_ms": 41.0,
+   "ok": true,
+   "status": "pass",
+   "error": null
+  },
+  {
+   "step": "screenshot",
+   "request_id": "req_k1_3",
+   "wall_ms": 24.9,
+   "ok": true,
+   "status": "pass",
+   "error": null
+  },
+  {
+   "step": "logs",
+   "request_id": "req_k1_4",
+   "wall_ms": 1.1,
+   "ok": true,
+   "status": "pass",
+   "error": null
+  },
+  {
+   "step": "destroy",
+   "request_id": "req_k1_5",
+   "wall_ms": 26.3,
+   "ok": true,
+   "status": "pass",
+   "error": null
+  }
+ ],
+ "first_frame": null,
+ "time_to_first_frame_ms": 1844.4,
+ "peak_rss_mib": 725.1,
+ "crash_class": null,
+ "errors": [],
+ "markers": {},
+ "texts": [],
+ "tap": null,
+ "screenshot": {
+  "file": "screen.png",
+  "bytes": 9545882,
+  "sha256": "6a341d5c0c34a5e5c9c60b49afdd7873b5a288726b4ee0edd979a6a8d2543ef6",
+  "frame": {
+   "bytes": 9545882,
+   "captured_at": "2026-11-14T09:53:18.092Z",
+   "frame_seq": 6,
+   "height": 2209,
+   "md5": "cd69e02c2aab7a463fc9c39906d79fe0",
+   "meaningful": true,
+   "previous_seq": 5,
+   "width": 1080
+  }
+ },
+ "ok": false,
+ "inspect": {
+  "ok": true,
+  "wall_ms": 162.9,
+  "code": null,
+  "message": null,
+  "package": "net.cozic.joplin",
+  "launcher_activity": "net.cozic.joplin.MainActivity",
+  "min_sdk": 24,
+  "target_sdk": 36,
+  "native_abis": [
+   "arm64-v8a",
+   "armeabi-v7a",
+   "x86",
+   "x86_64"
+  ],
+  "dex_files": 4,
+  "activity_count": 1
+ },
+ "art_frames_dir": "/home/Qui/.paseo/worktrees/3oxa6xao/s3ab/.cache/net1b/joplin/run-095315/art-sessions/s_mcp/art-frames",
+ "lifecycle": {
+  "application_created": null,
+  "activity_resumed": null
+ },
+ "logs": {
+  "ok": true,
+  "wall_ms": 1.1,
+  "total": 266,
+  "kept": 266,
+  "tags": {
+   "ReactNativeJS": 105,
+   "unknown:ViewManagerPropertyUpdater": 61,
+   "jni_lib_merge": 20,
+   "unknown:BridgelessReact": 14,
+   "nativeloader": 8,
+   "SoLoader": 8,
+   "CompatibilityChangeReporter": 6,
+   "GraphicsEnvironment": 6,
+   "logdw": 6,
+   "ziparchive": 4,
+   "?": 3,
+   "ExpoModulesCore": 3,
+   "unknown:SQLitePlugin": 3,
+   "Typeface": 2,
+   "SystemServiceRegistry": 2,
+   "QuickCrypto": 2,
+   "NitroModules": 2,
+   "ashmem": 2,
+   "cutils-trace": 1,
+   "ProcessState": 1
+  },
+  "note": "",
+  "file": "06-logs.json"
+ },
+ "stages_log": [],
+ "finished_at": "2026-11-14T09:53:18Z"
+}

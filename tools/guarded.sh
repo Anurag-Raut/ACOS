@@ -20,7 +20,8 @@
 #   --vmem KB     `ulimit -v` fallback in KiB (default 8000000 = ~8 GiB)
 #   --time SECS   wall-clock timeout (default 60)
 #
-# Env overrides: ACOS_GUARD_MEM, ACOS_GUARD_VMEM_KB, ACOS_GUARD_TIME.
+# Env overrides: ACOS_GUARD_MEM, ACOS_GUARD_VMEM_KB, ACOS_GUARD_TIME,
+# ACOS_GUARD_TASKS_MAX (default 8192; the S3b limit was 512).
 #
 # Examples:
 #   tools/guarded.sh --time 600 -- cargo test -p acos-vm
@@ -31,6 +32,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MEM="${ACOS_GUARD_MEM:-4G}"
 VMEM_KB="${ACOS_GUARD_VMEM_KB:-8000000}"
 TIME="${ACOS_GUARD_TIME:-60}"
+# S3b: 512 was too small for a 20-session cohort. Each session needs a
+# launcher plus an ART guest (main, GC, JIT, binder, probe and one hosted vsync
+# thread), i.e. ~25 tasks; 512 leaves no headroom and a `pthread_create`
+# EAGAIN inside the cohort reaches the guest as a Chrooted Choreographer
+# failure (exit 1). The pids controller still bounds a fork bomb here.
+TASKS_MAX="${ACOS_GUARD_TASKS_MAX:-8192}"
 LOG="${ACOS_GUARD_LOG:-$ROOT/results/tmp/guarded.log}"
 
 usage() {
@@ -84,7 +91,7 @@ echo "$(date -Is) guarded start mem=$MEM vmem=${VMEM_KB}K time=${TIME}s cmd=$*" 
 if command -v systemd-run >/dev/null 2>&1 \
     && systemd-run --user --scope -q true >/dev/null 2>&1; then
     setsid systemd-run --user --scope -q \
-        -p MemoryMax="$MEM" -p MemorySwapMax=0 -p TasksMax=512 \
+        -p MemoryMax="$MEM" -p MemorySwapMax=0 -p TasksMax="$TASKS_MAX" \
         -- timeout -k 5 "$TIME" "$@" &
 else
     setsid bash -c 'ulimit -v "$1" 2>/dev/null; exec timeout -k 5 "$2" "${@:3}"' \

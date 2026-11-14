@@ -45,7 +45,7 @@ pub fn map_art_code(code: &str) -> ErrorCode {
         | "NONZERO_EXIT" => ErrorCode::GuestExited,
         // Deadlines and missing fresh evidence.
         "TIMEOUT" | "NO_ACTIVITY_RESUMED" => ErrorCode::Timeout,
-        "NO_LIVE_FRAME" | "NO_FRESH_FRAME" => ErrorCode::NoFreshFrame,
+        "NO_LIVE_FRAME" | "NO_FRESH_FRAME" | "POST_RESUME_NOT_READY" => ErrorCode::NoFreshFrame,
         // Guest-visible crashes (ART's own fatal reports).
         "ART_CRASH" | "ART_FATAL_CHECK" | "ART_FATAL_LOG" => ErrorCode::AppCrashed,
         "UNSUPPORTED_SYSCALL" => ErrorCode::SeccompUnavailable,
@@ -205,7 +205,7 @@ pub fn classify_child_exit(status: std::process::ExitStatus) -> Option<(ErrorCod
 pub fn art_error(code: &str, message: &str, artifacts: &Path) -> ProtocolError {
     let known = is_known_art_code(code);
     let mapped = map_art_code(code);
-    let text = if code == "NO_LIVE_FRAME" {
+    let text = if matches!(code, "NO_LIVE_FRAME" | "POST_RESUME_NOT_READY") {
         // Keep the engine's established marker so an agent still sees that no
         // live frame existed, while the code is the honest NO_FRESH_FRAME.
         format!("LIVE_FRAME_UNAVAILABLE: acos-art: {code}: {message}")
@@ -353,6 +353,7 @@ mod tests {
             ("GUEST_EXITED", ErrorCode::GuestExited),
             ("GUEST_KILLED_BY_SIGNAL", ErrorCode::GuestExited),
             ("NO_LIVE_FRAME", ErrorCode::NoFreshFrame),
+            ("POST_RESUME_NOT_READY", ErrorCode::NoFreshFrame),
             ("TIMEOUT", ErrorCode::Timeout),
             ("NO_FRESH_FRAME", ErrorCode::NoFreshFrame),
             ("ART_FATAL_CHECK", ErrorCode::AppCrashed),

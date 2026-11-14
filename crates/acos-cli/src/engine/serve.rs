@@ -164,6 +164,7 @@ impl ServeEngine {
                     session.frame_info().map(|f| f.0).unwrap_or(0)
                 },
                 "engine": ENGINE_ART,
+                "boot_image": session.boot_image().cloned().unwrap_or(Value::Null),
                 "mode": if exit.is_some() { "dead" } else { "live" },
                 "live": exit.is_none(),
                 "guest_exit": exit.as_ref().map(GuestExit::to_json),
@@ -1197,6 +1198,11 @@ fn launch_reply(
     label_meta(&mut result, ENGINE_ART, held.trust, EVIDENCE_HOST_PIXEL);
     result["animations"] = json!(session.animations());
     result["insets"] = json!(session.insets());
+    // H13b: which boot image this session booted and whether its cache hit.
+    result["boot_image"] = session
+        .boot_image()
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
     label_frame(&mut result, session);
     // P9: the same `settle` object the tree verbs return, so a launch says how
     // its tree was bound (`strict-event` on the P12 event rule, or
@@ -1716,7 +1722,7 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
     // first correct screen" is one round trip (the tree was already bound by
     // reset; serializing it costs ~1 ms). Same shape as the launch reply.
     let (max_nodes, node_count, truncated, tree_value) = tree_json(&tree, 2000);
-    Ok(json!({
+    let mut reply = json!({
         "state_reset": true,
         "data_cleared": true,
         "scope": "all",
@@ -1731,7 +1737,13 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
         "tree_truncated": truncated,
         "settle": session.last_tree_settle().cloned().unwrap_or(Value::Null),
         "note": "the guest process was stopped and the same APK relaunched with empty app-data",
-    }))
+    });
+    // S3b: never a silent retry. The first host-transport failure and the path
+    // to its preserved evidence travel with the successful reset reply.
+    if let Some(retry) = session.relaunch_retry() {
+        reply["relaunch_retry"] = retry.clone();
+    }
+    Ok(reply)
 }
 
 /// P1 part 3: `observe: {tree:true, png:false}` on an input verb.

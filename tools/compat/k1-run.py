@@ -17,9 +17,16 @@ Steps (each one recorded with its own wall time and structured error):
     screenshot    acos_observe {screenshot: <path>}
     tap           acos_tap at the centre of the first clickable node
     tree_after    acos_observe_tree again
+    logs          acos_logs — the guest's own logd snapshot (see below)
 
 Nothing from the APK is executed outside the ACOS guest. The output directory
 gets the envelopes, the serve log, the ART stage markers, and one PNG.
+
+The guest logd snapshot is persisted as `06-logs.json` (last `--logs-limit`
+records, default 3000; `--no-logs` turns it off). It is taken on every rung,
+including a failed launch, because the app-side evidence for a wall (e.g. RN
+NetInfo's `RNCNetInfo` state) lives there and used to be thrown away with the
+guest. `report["logs"]` carries only the counts and the interesting tags.
 
 Usage:
   tools/compat/k1-run.py --apk X.apk --name X --out DIR [--json report.json]
@@ -241,6 +248,10 @@ def main():
     ap.add_argument("--first-frame-timeout", type=float, default=20.0)
     ap.add_argument("--step-timeout", type=float, default=30.0)
     ap.add_argument("--keep-apk-basename", action="store_true", default=True)
+    ap.add_argument("--logs-limit", type=int, default=3000,
+                    help="keep at most N guest logd records in 06-logs.json")
+    ap.add_argument("--no-logs", action="store_true",
+                    help="do not read/persist the guest logd snapshot")
     args = ap.parse_args()
 
     out = args.out
@@ -554,6 +565,42 @@ def main():
                 )
             except (TimeoutError, RuntimeError, OSError):
                 pass
+
+        # ---- guest logd snapshot -----------------------------------------
+        # The app's own log lines are the only evidence for JS-level state
+        # (RN NetInfo's isConnected/isInternetReachable, for one), and the
+        # guest is destroyed below. Persist them whether or not we got a frame.
+        if not args.no_logs:
+            try:
+                env_logs, wall_l, rid = client.call("acos_logs", {}, args.step_timeout)
+                write_json(os.path.join(out, "06-logs.json"), env_logs)
+                lres = env_logs.get("result") or {}
+                records = lres.get("logs") or []
+                kept = records[-args.logs_limit:] if args.logs_limit > 0 else records
+                if len(kept) != len(records):
+                    write_json(os.path.join(out, "06-logs.json"),
+                               {"truncated_to": len(kept), "total": len(records),
+                                "logs": kept})
+                tags = {}
+                for rec in kept:
+                    tag = rec.get("tag") or "?"
+                    tags[tag] = tags.get(tag, 0) + 1
+                report["logs"] = {
+                    "ok": bool(env_logs.get("ok")),
+                    "wall_ms": wall_l,
+                    "total": lres.get("total"),
+                    "kept": len(kept),
+                    "tags": dict(sorted(tags.items(), key=lambda kv: -kv[1])[:20]),
+                    "note": lres.get("note"),
+                    "file": "06-logs.json",
+                }
+                report["steps"].append(
+                    {"step": "logs", "request_id": rid, "wall_ms": wall_l,
+                     "ok": bool(env_logs.get("ok")), "status": env_logs.get("status"),
+                     "error": error_of(env_logs)}
+                )
+            except (TimeoutError, RuntimeError, OSError) as e:
+                report["logs"] = {"ok": False, "error": str(e)[:400]}
 
         # ---- destroy (best effort) ---------------------------------------
         try:
