@@ -44,16 +44,65 @@ pub const TOOL_LIST: &str = "session_list";
 /// Resolve the daemon runtime directory (not necessarily existing).
 ///
 /// `ACOS_RUNTIME_DIR` wins; otherwise `$XDG_RUNTIME_DIR/acos`, then
-/// `$TMPDIR/acos`, then `/tmp/acos`.
+/// `$TMPDIR/acos`, then the **per-uid** fallback [`fallback_runtime_dir`].
 pub fn runtime_dir() -> PathBuf {
     if let Some(dir) = std::env::var_os(RUNTIME_DIR_ENV) {
         return PathBuf::from(dir);
     }
-    let base = std::env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("TMPDIR").map(PathBuf::from))
-        .unwrap_or_else(|| PathBuf::from("/tmp"));
-    base.join("acos")
+    match std::env::var_os("XDG_RUNTIME_DIR").or_else(|| std::env::var_os("TMPDIR")) {
+        Some(base) => PathBuf::from(base).join("acos"),
+        // FB5 (SERVELEAK3 review finding 6): never a shared `/tmp/acos`. Two
+        // users on one host would share sockets and session directories, and a
+        // hostile user could pre-create the path. The per-uid name plus
+        // [`ensure_private_dir`] makes that impossible.
+        None => fallback_runtime_dir(),
+    }
+}
+
+/// The no-`XDG_RUNTIME_DIR`/no-`TMPDIR` fallback: `/tmp/acos-<uid>`.
+#[must_use]
+pub fn fallback_runtime_dir() -> PathBuf {
+    // SAFETY: `geteuid` has no preconditions and cannot fail.
+    let uid = unsafe { libc::geteuid() };
+    PathBuf::from(format!("/tmp/acos-{uid}"))
+}
+
+/// Create (or verify) a runtime directory that only this user can use.
+///
+/// Existing directories are **not** repaired blindly: one owned by another uid,
+/// or one that is group/world accessible, is refused with an error naming both
+/// facts. That is the FB5 rule for the `/tmp` fallback (SERVELEAK3 review
+/// finding 6) and the same check the private daemon's own directory gets.
+pub fn ensure_private_dir(dir: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    if !dir.exists() {
+        std::fs::create_dir_all(dir)?;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    let meta = std::fs::metadata(dir)?;
+    // SAFETY: `geteuid` has no preconditions and cannot fail.
+    let uid = unsafe { libc::geteuid() };
+    if meta.uid() != uid {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!(
+                "{} is owned by uid {}, not {uid}; refusing to use another user's runtime directory",
+                dir.display(),
+                meta.uid()
+            ),
+        ));
+    }
+    let mode = meta.permissions().mode() & 0o777;
+    if mode & 0o077 != 0 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!(
+                "{} has mode 0{mode:o}, expected 0700 (group/other access refused)",
+                dir.display()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// The daemon socket path (`ACOS_SESSION_SOCKET` wins).

@@ -20,9 +20,9 @@ use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, Weak};
+use std::time::{Duration, Instant};
 
 use acos_protocol::{
     Backend as ProtocolBackend, CommandName, Envelope, ErrorCode, Fidelity, Metrics, ProtocolError,
@@ -74,6 +74,57 @@ impl ArtDaemonHandle {
     }
 }
 
+/// FB5: how long a session may sit **untouched** before this server destroys it.
+///
+/// Every MCP session call on an owned session renews the idle clock; an idle
+/// session holds up to 2 GiB of cgroup and a forgotten guest makes the next
+/// launch hit `HOST_MEMORY_LOW`, so the server reclaims its own.
+pub const DEFAULT_IDLE_TTL_S: u64 = 600;
+
+/// Environment override for [`DEFAULT_IDLE_TTL_S`] (seconds; `0` disables).
+pub const IDLE_TTL_ENV: &str = "ACOS_SESSION_IDLE_TTL_S";
+
+/// One session **this** MCP server launched, with the bookkeeping the hygiene
+/// rules need (FB5): the launch token (SERVELEAK2/F3 ownership proof), the
+/// agent's `label`, when it was launched, when it was last used, and the idle
+/// TTL that applies to it.
+#[derive(Debug, Clone)]
+struct OwnedSession {
+    /// Launch token the daemon returned for this launch (empty if it reports
+    /// none); the proof that the id still names the guest *this* server started.
+    token: String,
+    /// Optional agent-supplied label (`acos_launch {label}`), empty when unset.
+    label: String,
+    launched_at: Instant,
+    last_used: Instant,
+    /// Seconds of idleness before auto-destroy; `0` means never.
+    idle_ttl_s: u64,
+}
+
+/// A session this server destroyed because it idled past its TTL (FB5).
+///
+/// A later call on that id must say **why** it is gone (an agent that parked a
+/// session for 12 minutes needs to know it expired, not that its id is unknown).
+#[derive(Debug, Clone)]
+struct ExpiredSession {
+    idle_ttl_s: u64,
+    expired_at: Instant,
+    label: String,
+}
+
+/// Whether a forwarded call may replace a dead private daemon (FB5).
+///
+/// Teardown must not: a fresh daemon has no session to destroy, so restarting
+/// one during shutdown only leaves a new process behind — the exact leak
+/// SERVELEAK removed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Restart {
+    /// Replace a dead private daemon once and retry (normal tool calls).
+    OnFailure,
+    /// Never respawn (teardown, idle expiry: the guest is gone either way).
+    Never,
+}
+
 /// A [`Backend`] that holds in-process sessions and delegates the rest to a
 /// [`CliBackend`].
 pub struct SessionBackend {
@@ -107,7 +158,13 @@ pub struct SessionBackend {
     /// first, and the first server's stdin EOF then destroyed the second's live
     /// guest. `shutdown` re-reads the token from the daemon and destroys only a
     /// session whose current token is still the one this server launched.
-    owned: Mutex<HashMap<String, String>>,
+    owned: Mutex<HashMap<String, OwnedSession>>,
+    /// Sessions this server reclaimed after their idle TTL (FB5). Bounded and
+    /// cleared by the next launch of the same id.
+    expired: Mutex<HashMap<String, ExpiredSession>>,
+    /// Set once `shutdown` began: the idle reaper stops, and a session call may
+    /// no longer spawn a daemon or start a fresh in-process session.
+    stopping: AtomicBool,
 }
 
 impl std::fmt::Debug for SessionBackend {
@@ -137,6 +194,8 @@ impl SessionBackend {
             flutter: FlutterSessions::default(),
             rn: RnSessions::default(),
             owned: Mutex::new(HashMap::new()),
+            expired: Mutex::new(HashMap::new()),
+            stopping: AtomicBool::new(false),
         }
     }
 
@@ -155,6 +214,8 @@ impl SessionBackend {
             flutter: FlutterSessions::default(),
             rn: RnSessions::default(),
             owned: Mutex::new(HashMap::new()),
+            expired: Mutex::new(HashMap::new()),
+            stopping: AtomicBool::new(false),
         }
     }
 
@@ -220,6 +281,9 @@ impl SessionBackend {
     /// the ART guest (a daemon that was SIGTERMed first can no longer answer
     /// `acos_destroy`).
     pub fn shutdown(&self) {
+        // FB5: no new daemon, no new in-process session, and no idle reaper
+        // racing the teardown.
+        self.stopping.store(true, Ordering::SeqCst);
         self.destroy_owned_sessions();
         let stopped = self
             .private
@@ -251,25 +315,38 @@ impl SessionBackend {
     fn destroy_owned_sessions(&self) {
         let ids: Vec<(String, String)> = {
             let mut owned = self.owned.lock().unwrap_or_else(|e| e.into_inner());
-            owned.drain().collect()
+            owned
+                .drain()
+                .map(|(id, session)| (id, session.token))
+                .collect()
         };
         if ids.is_empty() {
             return;
         }
-        let ctx = CallContext {
-            cancel: crate::process::CancelToken::new(),
-            deadline: std::time::Instant::now() + std::time::Duration::from_secs(30),
-            budget: acos_protocol::ResourceBudget::default(),
-            allowed_roots: Vec::new(),
-            artifacts_dir: std::path::PathBuf::from("."),
-            max_arg_chars: 8 * 1024,
-            max_output_bytes: 1024 * 1024,
+        let ctx = teardown_context();
+        // FB5 (SERVELEAK3 review finding 3): a **listing failure** is not the
+        // same as an empty list. On the external daemon the id-only fallback is
+        // exactly the unsafe guess SERVELEAK2/F3 removed (another client's
+        // launch may hold the id now), so refuse it and log the leak instead.
+        // The private daemon is different: its ids can only be ours.
+        let current = match self.daemon_sessions(&ctx, Restart::Never) {
+            Some(sessions) => Some(launch_tokens(&sessions)),
+            None if self.daemon.is_some() => {
+                let leaked: Vec<&str> = ids.iter().map(|(id, _)| id.as_str()).collect();
+                eprintln!(
+                    "acos-mcp: session_list failed on the external daemon; cannot prove \
+                     ownership of {} session(s), leaving them (leak): {}",
+                    leaked.len(),
+                    leaked.join(", ")
+                );
+                return;
+            }
+            None => None,
         };
-        let current = self.current_launch_tokens(&ctx);
         for (id, token) in ids {
             // A daemon that lists its sessions is authoritative: destroy only a
             // session that still carries the token this server launched.
-            if !current.is_empty() {
+            if let Some(current) = current.as_ref() {
                 match current.get(&id) {
                     Some(current_token) if token.is_empty() || *current_token == token => {}
                     Some(_) => {
@@ -286,7 +363,8 @@ impl SessionBackend {
                 }
             }
             let args = json!({"base": {"request_id": "req_shutdown", "session_id": id}});
-            let envelope = SessionBackend::session_call(self, "acos_destroy", &args, &ctx);
+            let envelope =
+                self.destroy_on_daemon(&args, &ctx, Restart::Never);
             match envelope {
                 Some(envelope) if envelope.ok() => {
                     eprintln!("acos-mcp: destroyed session {id} on exit")
@@ -320,6 +398,17 @@ impl SessionBackend {
     /// recorded as owned (with the daemon's launch token) no matter which daemon
     /// served it.
     fn forward_session_tool(&self, tool: &str, args: &Value) -> Option<Envelope> {
+        self.forward_session_tool_opts(tool, args, Restart::OnFailure)
+    }
+
+    /// [`Self::forward_session_tool`] with the restart policy explicit (FB5:
+    /// teardown and idle expiry never respawn a dead daemon).
+    fn forward_session_tool_opts(
+        &self,
+        tool: &str,
+        args: &Value,
+        restart: Restart,
+    ) -> Option<Envelope> {
         // Fill the default identity here, not in the daemon: the default session
         // id is unique per MCP server process (`mcp-<pid>-<rand>`), and a shared
         // external daemon must never invent one for us.
@@ -338,20 +427,51 @@ impl SessionBackend {
             object.insert("base".to_string(), base);
         }
         let args = &normalized;
-        let envelope = self.forward_to_daemon(tool, args)?;
+        let id = session_id(args);
+        // FB5: a session this server reclaimed for idleness answers with the
+        // reason, on the very tool the agent reaches for next.
+        if tool != "acos_launch" {
+            if let Some(envelope) = self.expired_envelope(&id, &request_id(args)) {
+                return Some(envelope);
+            }
+        }
+        let mut envelope = self.forward_to_daemon_opts(tool, args, restart)?;
         // SERVELEAK: remember what this process launched *in a daemon*, so stdin
         // EOF can destroy exactly those sessions (a daemon outlives this process
         // by design; its guests must not outlive their purpose). SERVELEAK2/F3:
         // the launch token makes ownership provable, not just a name.
         if tool == "acos_launch" && envelope.ok() {
-            self.remember_owned(&session_id(args), &launch_token(&envelope));
+            self.remember_owned(&id, args, &launch_token(&envelope));
+            annotate_launch(&mut envelope, args, self.idle_ttl_for(args));
+        } else if tool != "acos_launch" {
+            self.touch(&id);
         }
         Some(envelope)
     }
 
+    /// Destroy one session through whichever daemon owns it, honouring the
+    /// restart policy (FB5).
+    fn destroy_on_daemon(&self, args: &Value, ctx: &CallContext, restart: Restart) -> Option<Envelope> {
+        let _ = ctx;
+        self.forward_session_tool_opts("acos_destroy", args, restart)
+    }
+
     /// Forward one call to the external daemon when one is configured, else to
     /// this server's private ART daemon (spawned lazily).
-    fn forward_to_daemon(&self, tool: &str, args: &Value) -> Option<Envelope> {
+    /// [`Self::forward_to_daemon`] with the restart policy explicit.
+    ///
+    /// `Restart::Never` is the teardown/expiry rule (FB5, SERVELEAK3 review
+    /// finding 2): a daemon that died took every guest with it, so respawning
+    /// one to destroy a session only leaves a *new* daemon behind — the leak
+    /// teardown exists to prevent. It also never spawns a daemon that is not
+    /// already running, and it never falls through to the in-process backend
+    /// (which would create a fresh session to "destroy").
+    fn forward_to_daemon_opts(
+        &self,
+        tool: &str,
+        args: &Value,
+        restart: Restart,
+    ) -> Option<Envelope> {
         if let Some(daemon) = &self.daemon {
             let mut client = daemon.lock().unwrap_or_else(|e| e.into_inner());
             return Some(match client.call(tool, args) {
@@ -361,6 +481,16 @@ impl SessionBackend {
         }
         let acos = self.private_acos.clone()?;
         let mut slot = self.private.lock().unwrap_or_else(|e| e.into_inner());
+        if slot.is_none() && restart == Restart::Never {
+            // Nothing is running and teardown may not start anything: the
+            // sessions it held died with the daemon, and answering here keeps
+            // the caller from falling through to the in-process backend.
+            return Some(private_daemon_error(
+                &request_id(args),
+                args,
+                "the private ART daemon is not running; nothing to restart during teardown",
+            ));
+        }
         if slot.is_none() {
             match PrivateDaemon::spawn(&acos, crate::private_daemon::ENGINE_ART) {
                 Ok(daemon) => {
@@ -388,6 +518,23 @@ impl SessionBackend {
         match daemon.call(tool, args) {
             Ok(envelope) => Some(envelope),
             Err(first) => {
+                if restart == Restart::Never {
+                    // FB5: teardown never respawns a dead private daemon. The
+                    // session it held is gone with it, so there is nothing left
+                    // to destroy and a new daemon would be a new leak.
+                    eprintln!(
+                        "acos-mcp: private ART daemon call failed during teardown ({first}); \
+                         not restarting it"
+                    );
+                    daemon.shutdown();
+                    *slot = None;
+                    return Some(private_daemon_error(
+                        &request_id(args),
+                        args,
+                        "the private ART daemon died during teardown; its sessions are gone \
+                         with it and it is not restarted",
+                    ));
+                }
                 // A private daemon that died (idle exit, guest OOM) is replaced
                 // once: the session is gone either way, and the retry keeps a
                 // long-lived agent server usable without a restart.
@@ -1665,15 +1812,329 @@ impl SessionBackend {
 
     /// Server-local session tools (`acos_launch`, `acos_tap`, ...).
     /// Record a session this process launched, with the launch token the
-    /// daemon returned for it (SERVELEAK2/F3).
-    fn remember_owned(&self, id: &str, token: &str) {
+    /// daemon returned for it (SERVELEAK2/F3) and the FB5 hygiene fields
+    /// (`label`, launch/use clocks, the idle TTL that applies to it).
+    fn remember_owned(&self, id: &str, args: &Value, token: &str) {
+        let now = Instant::now();
+        let label = args
+            .get("label")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
+        let idle_ttl_s = self.idle_ttl_for(args);
         self.owned
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .insert(id.to_string(), token.to_string());
+            .insert(
+                id.to_string(),
+                OwnedSession {
+                    token: token.to_string(),
+                    label,
+                    launched_at: now,
+                    last_used: now,
+                    idle_ttl_s,
+                },
+            );
+        // A fresh launch gives the id a live guest again: it is no longer
+        // "the session that expired".
+        self.expired
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(id);
+    }
+
+    /// The idle TTL that applies to one launch: the `idle_ttl_s` argument, else
+    /// `ACOS_SESSION_IDLE_TTL_S`, else [`DEFAULT_IDLE_TTL_S`]. `0` disables it.
+    fn idle_ttl_for(&self, args: &Value) -> u64 {
+        if let Some(ttl) = args.get("idle_ttl_s").and_then(Value::as_u64) {
+            return ttl;
+        }
+        default_idle_ttl_s()
+    }
+
+    /// Renew the idle clock of an owned session (any session call counts).
+    fn touch(&self, id: &str) {
+        if let Some(session) = self
+            .owned
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_mut(id)
+        {
+            session.last_used = Instant::now();
+        }
+    }
+
+    fn remove_owned(&self, id: &str) -> Option<OwnedSession> {
+        self.owned
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(id)
+    }
+
+    /// The structured answer for a call on a session this server reclaimed
+    /// because it idled past its TTL (FB5): `SESSION_NOT_FOUND` (the closest
+    /// existing code — the session really is gone) with the TTL named in the
+    /// message, the details and the hint.
+    fn expired_envelope(&self, id: &str, request_id: &str) -> Option<Envelope> {
+        let expired = self
+            .expired
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(id)
+            .cloned()?;
+        let idle_s = expired.expired_at.elapsed().as_secs();
+        let mut envelope = Envelope::failure(
+            request_id,
+            ProtocolBackend::AcosNative,
+            Fidelity::NativeRuntime,
+            ProtocolError::new(
+                ErrorCode::SessionNotFound,
+                format!(
+                    "session `{id}` was destroyed after {:?} of idleness (idle TTL {} s); its \
+                     guest is gone",
+                    format_secs(expired.idle_ttl_s),
+                    expired.idle_ttl_s
+                ),
+            )
+            .with_details(json!({
+                "session_id": id,
+                "reason": "idle_ttl_expired",
+                "idle_ttl_s": expired.idle_ttl_s,
+                "gone_for_s": idle_s,
+                "label": expired.label,
+            }))
+            .with_hint(
+                "launch the APK again with `acos_launch`; pass `idle_ttl_s` (or set \
+                 ACOS_SESSION_IDLE_TTL_S) for a session you intend to park longer",
+            ),
+            Metrics::wall_ms(0),
+        );
+        envelope = envelope.with_session_id(id);
+        Some(envelope)
+    }
+
+    /// Remember that `id` was reclaimed by the idle TTL, newest last, bounded so
+    /// a long-lived server cannot accumulate tombstones.
+    fn note_expired(&self, id: &str, label: &str, idle_ttl_s: u64) {
+        const KEEP: usize = 32;
+        let mut expired = self.expired.lock().unwrap_or_else(|e| e.into_inner());
+        if expired.len() >= KEEP {
+            if let Some(oldest) = expired
+                .iter()
+                .min_by_key(|(_, e)| e.expired_at)
+                .map(|(id, _)| id.clone())
+            {
+                expired.remove(&oldest);
+            }
+        }
+        expired.insert(
+            id.to_string(),
+            ExpiredSession {
+                idle_ttl_s,
+                expired_at: Instant::now(),
+                label: label.to_string(),
+            },
+        );
+    }
+
+    /// Start the background idle reaper (FB5).
+    ///
+    /// One thread per server process, started by `main` once the backend is in
+    /// an `Arc`. It holds only a `Weak`, so a dropped backend ends it, and it
+    /// stops at `shutdown`. Every tick sweeps sessions whose idle clock passed
+    /// their TTL: destroy through the daemon, one log line, and a tombstone that
+    /// answers later calls with the reason.
+    pub fn start_idle_reaper(self: &Arc<Self>) {
+        let weak: Weak<SessionBackend> = Arc::downgrade(self);
+        let _ = std::thread::Builder::new()
+            .name("acos-mcp-idle-reaper".to_string())
+            .spawn(move || loop {
+                std::thread::sleep(Duration::from_millis(250));
+                let Some(backend) = weak.upgrade() else { return };
+                if backend.stopping.load(Ordering::SeqCst) {
+                    return;
+                }
+                backend.sweep_idle();
+            });
+    }
+
+    /// Destroy every owned session that idled past its TTL (FB5). Public so a
+    /// test can drive one sweep deterministically instead of sleeping.
+    pub fn sweep_idle(&self) {
+        if self.stopping.load(Ordering::SeqCst) {
+            return;
+        }
+        let now = Instant::now();
+        let due: Vec<(String, OwnedSession)> = {
+            let owned = self.owned.lock().unwrap_or_else(|e| e.into_inner());
+            owned
+                .iter()
+                .filter(|(_, session)| {
+                    session.idle_ttl_s > 0
+                        && now.saturating_duration_since(session.last_used).as_secs()
+                            >= session.idle_ttl_s
+                })
+                .map(|(id, session)| (id.clone(), session.clone()))
+                .collect()
+        };
+        if due.is_empty() {
+            return;
+        }
+        let ctx = teardown_context();
+        let current = self
+            .daemon_sessions(&ctx, Restart::Never)
+            .map(|sessions| launch_tokens(&sessions));
+        for (id, session) in due {
+            if let Some(current) = current.as_ref() {
+                match current.get(&id) {
+                    Some(current_token)
+                        if session.token.is_empty() || *current_token == session.token => {}
+                    Some(_) => {
+                        // Another client re-launched the id: that launch owns the
+                        // guest now and this server must not destroy it.
+                        eprintln!(
+                            "acos-mcp: session {id} was launched again by another client; \
+                             not expiring it"
+                        );
+                        self.remove_owned(&id);
+                        continue;
+                    }
+                    None => {
+                        // Already gone (the guest died, or a reset dropped it):
+                        // record the tombstone so the agent still learns why.
+                        eprintln!(
+                            "acos-mcp: idle session {id} is already gone; noting it expired"
+                        );
+                        self.remove_owned(&id);
+                        self.note_expired(&id, &session.label, session.idle_ttl_s);
+                        continue;
+                    }
+                }
+            }
+            let args = json!({"base": {"request_id": "req_idle_ttl", "session_id": id}});
+            let envelope = self.destroy_on_daemon(&args, &ctx, Restart::Never);
+            match envelope {
+                Some(envelope) if envelope.ok() => {
+                    eprintln!(
+                        "acos-mcp: session {id}{} was idle for {} s (idle TTL {} s); destroyed it",
+                        if session.label.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" ({})", session.label)
+                        },
+                        now.saturating_duration_since(session.last_used).as_secs(),
+                        session.idle_ttl_s
+                    );
+                    self.remove_owned(&id);
+                    self.note_expired(&id, &session.label, session.idle_ttl_s);
+                }
+                other => {
+                    let code = other
+                        .as_ref()
+                        .and_then(|envelope| envelope.error())
+                        .map(|error| error.code)
+                        .unwrap_or(ErrorCode::Internal);
+                    eprintln!(
+                        "acos-mcp: session {id} idled past its TTL but could not be destroyed \
+                         ({code:?}); will retry after another TTL"
+                    );
+                    if code == ErrorCode::SessionNotFound {
+                        self.remove_owned(&id);
+                        self.note_expired(&id, &session.label, session.idle_ttl_s);
+                    } else {
+                        // Do not hammer a wedged daemon: give it a whole new TTL.
+                        self.touch(&id);
+                    }
+                }
+            }
+        }
+    }
+
+    /// The sessions this server owns, as `acos_status` reports them (FB5):
+    /// id, label, package, activity, age, idle time, TTL and the guest's RSS.
+    fn owned_status(&self, ctx: &CallContext) -> Vec<Value> {
+        let owned: Vec<(String, OwnedSession)> = self
+            .owned
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .map(|(id, session)| (id.clone(), session.clone()))
+            .collect();
+        if owned.is_empty() {
+            return Vec::new();
+        }
+        let listed = self.daemon_sessions(ctx, Restart::OnFailure);
+        let by_id: HashMap<String, Value> = listed
+            .as_ref()
+            .map(|sessions| {
+                sessions
+                    .iter()
+                    .filter_map(|session| {
+                        let id = session.get("session_id").and_then(Value::as_str)?;
+                        Some((id.to_string(), session.clone()))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let now = Instant::now();
+        owned
+            .into_iter()
+            .map(|(id, session)| {
+                let entry = by_id.get(&id);
+                let guest_pid = entry
+                    .and_then(|entry| entry.get("guest_pid"))
+                    .and_then(Value::as_u64)
+                    .and_then(|pid| u32::try_from(pid).ok())
+                    .filter(|pid| *pid > 1);
+                json!({
+                    "session_id": id,
+                    "label": session.label,
+                    "package": entry.and_then(|entry| entry.get("package")).cloned()
+                        .unwrap_or(Value::Null),
+                    "activity": entry.and_then(|entry| entry.get("activity")).cloned()
+                        .unwrap_or(Value::Null),
+                    "stage_reached": entry.and_then(|entry| entry.get("stage_reached")).cloned()
+                        .unwrap_or(Value::Null),
+                    "live": entry.and_then(|entry| entry.get("live")).cloned()
+                        .unwrap_or(Value::Null),
+                    "age_s": now.saturating_duration_since(session.launched_at).as_secs(),
+                    "idle_s": now.saturating_duration_since(session.last_used).as_secs(),
+                    "idle_ttl_s": session.idle_ttl_s,
+                    "guest_pid": guest_pid,
+                    "guest_rss_kb": guest_pid.and_then(guest_rss_kb),
+                })
+            })
+            .collect()
+    }
+
+    /// The daemon's `session_list` sessions, or `None` when nothing could answer
+    /// (no daemon, an unsupported verb, or a failed/absent reply). `None` is
+    /// never treated as "the daemon has no sessions".
+    fn daemon_sessions(&self, _ctx: &CallContext, restart: Restart) -> Option<Vec<Value>> {
+        let args = json!({"base": {"request_id": "req_hygiene_list"}});
+        let envelope = self.forward_session_tool_opts("session_list", &args, restart)?;
+        if !envelope.ok() {
+            return None;
+        }
+        envelope
+            .result()
+            .and_then(|result| result.get("sessions"))
+            .and_then(Value::as_array)
+            .cloned()
     }
 
     pub fn session_call(&self, name: &str, args: &Value, ctx: &CallContext) -> Option<Envelope> {
+        // FB5: a relative path argument is refused here, with the server's
+        // resolution, before a daemon or a child could resolve it against the
+        // *server's* cwd (which is never the agent's).
+        if let Some(envelope) = relative_path_envelope(&request_id(args), args) {
+            return Some(envelope);
+        }
+        if name == "acos_status" {
+            // FB5: `acos_status` lists this server's sessions, so it cannot be a
+            // bare forward. Every other tool keeps the one forwarding path.
+            return Some(self.call_status(&request_id(args), args, ctx));
+        }
         if name != "acos_doctor" && !name.is_empty() {
             // **One** forwarding path for both daemons (merge of SERVELEAK and
             // REL3a): [`Self::forward_session_tool`] forwards to the external
@@ -1708,7 +2169,7 @@ impl SessionBackend {
                 ctx,
             )),
             "acos_logs" => Some(self.call_logs(&request_id, args)),
-            "acos_status" => Some(self.call_status(&request_id, args)),
+            "acos_status" => Some(self.call_status(&request_id, args, ctx)),
             "acos_reset" => Some(self.call_reset(&request_id, args, ctx)),
             "acos_destroy" => Some(self.call_destroy(&request_id, args, ctx)),
             "acos_text" => Some(self.call_text(&request_id, args, ctx)),
@@ -1795,8 +2256,38 @@ impl SessionBackend {
         })
     }
 
-    fn call_status(&self, request_id: &str, args: &Value) -> Envelope {
+    /// `acos_status` (FB5).
+    ///
+    /// Two jobs, in this order:
+    /// 1. list **this server's** sessions (`owned`) with `label`, `package`,
+    ///    `activity`, `age_s`, `idle_s`, the applicable TTL and the guest RSS;
+    /// 2. answer the historical single-session status for the addressed id.
+    ///
+    /// An owned id is answered from the local bookkeeping (so `label`/`idle_s`
+    /// exist even when the daemon cannot report them); anything else — a session
+    /// an external daemon or a CLI launched, a native/Flutter/RN child — keeps
+    /// its old path and gains the `sessions` array.
+    fn call_status(&self, request_id: &str, args: &Value, ctx: &CallContext) -> Envelope {
         let id = session_id(args);
+        if let Some(envelope) = self.expired_envelope(&id, request_id) {
+            return envelope;
+        }
+        let sessions = self.owned_status(ctx);
+        let mine = sessions
+            .iter()
+            .find(|session| session.get("session_id").and_then(Value::as_str) == Some(id.as_str()))
+            .cloned();
+        if let Some(mut session) = mine {
+            session["sessions"] = Value::Array(sessions);
+            return Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(0),
+            )
+            .with_session_id(id)
+            .with_value_result(session);
+        }
         if self.rn.contains(&id) {
             return self.status_rn(request_id, &id);
         }
@@ -1804,11 +2295,18 @@ impl SessionBackend {
             return self.status_flutter(request_id, &id);
         }
         if self.has_native_child(&id) {
-            if let Some(env) = self.forward_native(&id, "acos_status", args) {
-                return env;
+            if let Some(mut envelope) = self.forward_native(&id, "acos_status", args) {
+                attach_sessions(&mut envelope, sessions);
+                return envelope;
             }
         }
-        self.with_session(&id, |session| match session.status() {
+        // Not ours: the daemon's own status for that id (a CLI-launched session
+        // on a shared daemon), or the in-process session of the legacy engine.
+        if let Some(mut envelope) = self.forward_session_tool("acos_status", args) {
+            attach_sessions(&mut envelope, sessions);
+            return envelope;
+        }
+        let mut envelope = self.with_session(&id, |session| match session.status() {
             Ok(state) => Envelope::pass(
                 request_id,
                 ProtocolBackend::AcosNative,
@@ -1826,46 +2324,20 @@ impl SessionBackend {
                 "live": true,
             })),
             Err(err) => session_error_envelope(request_id, Some(&id), &err),
-        })
-    }
-
-    /// The launch token the daemon currently reports per session id
-    /// (SERVELEAK2/F3).
-    ///
-    /// Empty when nothing can answer (`session_list` unsupported, a transport
-    /// error, or an in-process backend): the caller then falls back to the
-    /// id-only ownership SERVELEAK established.
-    fn current_launch_tokens(&self, ctx: &CallContext) -> HashMap<String, String> {
-        let mut out: HashMap<String, String> = HashMap::new();
-        let args = json!({"base": {"request_id": "req_shutdown_list"}});
-        let Some(envelope) = SessionBackend::session_call(self, "session_list", &args, ctx) else {
-            return out;
-        };
-        if !envelope.ok() {
-            return out;
-        }
-        let Some(sessions) = envelope
-            .result()
-            .and_then(|result| result.get("sessions"))
-            .and_then(Value::as_array)
-        else {
-            return out;
-        };
-        for session in sessions {
-            let (Some(id), token) = (
-                session.get("session_id").and_then(Value::as_str),
-                session.get("session_token").and_then(Value::as_str),
-            ) else {
-                continue;
-            };
-            out.insert(id.to_string(), token.unwrap_or_default().to_string());
-        }
-        out
+        });
+        attach_sessions(&mut envelope, sessions);
+        envelope
     }
 }
 
 impl Backend for SessionBackend {
     fn call(&self, command: CommandName, args: &Value, ctx: &CallContext) -> Envelope {
+        let request_id = request_id(args);
+        // FB5: a relative `apk`/`scenario`/`artifacts` is refused before the CLI
+        // (whose cwd is this server's) can resolve it.
+        if let Some(envelope) = relative_path_envelope(&request_id, args) {
+            return envelope;
+        }
         let forwarded = match command {
             CommandName::Run => Some("acos_launch"),
             CommandName::Observe => Some("acos_observe"),
@@ -1879,7 +2351,6 @@ impl Backend for SessionBackend {
                 return envelope;
             }
         }
-        let request_id = request_id(args);
         match command {
             CommandName::Run => self.call_run(&request_id, args, ctx),
             CommandName::Observe => self.call_observe(&request_id, args, ctx),
@@ -1981,6 +2452,97 @@ fn launch_token(envelope: &Envelope) -> String {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string()
+}
+
+/// The default idle TTL for this process (FB5): `ACOS_SESSION_IDLE_TTL_S`, else
+/// [`DEFAULT_IDLE_TTL_S`]. A malformed value is ignored (the default applies)
+/// rather than silently disabling the reaper; `0` is the explicit opt-out.
+fn default_idle_ttl_s() -> u64 {
+    std::env::var(IDLE_TTL_ENV)
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .unwrap_or(DEFAULT_IDLE_TTL_S)
+}
+
+/// "20 s" / "10 min": a TTL as an agent reads it, in the expired error.
+fn format_secs(seconds: u64) -> String {
+    if seconds >= 60 && seconds % 60 == 0 {
+        format!("{} min", seconds / 60)
+    } else {
+        format!("{seconds} s")
+    }
+}
+
+/// `/proc/<pid>/status` `VmRSS`, in KiB, for a live guest (`None` when the pid
+/// is gone). FB5: `acos_status` reports it so an agent can see what a parked
+/// session costs; it is the guest's own RSS, not the whole tree's.
+fn guest_rss_kb(pid: u32) -> Option<u64> {
+    let status = std::fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
+    for line in status.lines() {
+        let Some(rest) = line.strip_prefix("VmRSS:") else {
+            continue;
+        };
+        let value = rest.split_whitespace().next()?;
+        return value.parse().ok();
+    }
+    None
+}
+
+/// `session_id -> launch token` for a daemon `session_list` result.
+fn launch_tokens(sessions: &[Value]) -> HashMap<String, String> {
+    sessions
+        .iter()
+        .filter_map(|session| {
+            let id = session.get("session_id").and_then(Value::as_str)?;
+            let token = session
+                .get("session_token")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            Some((id.to_string(), token.to_string()))
+        })
+        .collect()
+}
+
+/// The context teardown/expiry use: no cancellation, a bounded deadline, and no
+/// allowed roots (nothing here validates a path).
+fn teardown_context() -> CallContext {
+    CallContext {
+        cancel: crate::process::CancelToken::new(),
+        deadline: Instant::now() + Duration::from_secs(30),
+        budget: acos_protocol::ResourceBudget::default(),
+        allowed_roots: Vec::new(),
+        artifacts_dir: PathBuf::from("."),
+        max_arg_chars: 8 * 1024,
+        max_output_bytes: 1024 * 1024,
+    }
+}
+
+/// Annotate a forwarded launch reply with the hygiene fields this server owns
+/// (FB5): the agent's `label` and the idle TTL that will reclaim the session.
+fn annotate_launch(envelope: &mut Envelope, args: &Value, idle_ttl_s: u64) {
+    let Some(result) = envelope.result_mut().and_then(Value::as_object_mut) else {
+        return;
+    };
+    result.insert(
+        "label".to_string(),
+        json!(args.get("label").and_then(Value::as_str).unwrap_or_default()),
+    );
+    result.insert("idle_ttl_s".to_string(), json!(idle_ttl_s));
+    result.insert("idle_reap".to_string(), json!(idle_ttl_s > 0));
+}
+
+/// Attach this server's session list to a status reply without displacing any
+/// field the reply already carries.
+fn attach_sessions(envelope: &mut Envelope, sessions: Vec<Value>) {
+    let Some(result) = envelope.result_mut().and_then(Value::as_object_mut) else {
+        return;
+    };
+    result.insert("sessions".to_string(), Value::Array(sessions));
+}
+
+/// FB5's relative-path rule as an envelope (`None` when every path is absolute).
+fn relative_path_envelope(request_id: &str, args: &Value) -> Option<Envelope> {
+    crate::safety::relative_path_envelope(request_id, args, Fidelity::NativeRuntime)
 }
 
 /// Where a confined Flutter session stages its snapshot/assets. The confined
@@ -2212,6 +2774,11 @@ fn ladder_json(report: &LaunchReport) -> Value {
                 "stage": stage.name,
                 "ok": stage.status == StageStatus::Ok,
                 "status": status,
+                // FB5: `ms` is present on every rung. This ladder evaluates its
+                // rungs from one lifecycle report at the end of the launch, so
+                // `ok` rungs carry the launch wall time as their observation
+                // time and unproven rungs carry `null` — `ms_basis` says so.
+                "ms": if stage.status == StageStatus::Ok { Some(report.wall_ms) } else { None },
                 "blocker": stage.blocker.as_ref().map(|b| json!({
                     "code": b.code,
                     "message": b.message,
@@ -2228,6 +2795,8 @@ fn ladder_json(report: &LaunchReport) -> Value {
         "classes_loaded": report.classes_loaded,
         "events": report.events,
         "wall_ms": report.wall_ms,
+        "total_ms": report.wall_ms,
+        "ms_basis": "observed_at_end",
         "peak_rss_bytes": report.peak_rss_bytes,
     })
 }
@@ -2792,4 +3361,245 @@ mod tests {
         let _ = confined.child.kill();
         let _ = confined.child.wait();
     }
+    // -- FB5: session hygiene ---------------------------------------------- //
+
+    fn scratch_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "acos-fb5-{}-{}-{name}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        dir
+    }
+
+    fn session_backend() -> SessionBackend {
+        SessionBackend::with_cli(
+            CliBackend::new(BackendConfig::for_binary("/nonexistent/acos-fb5-test")),
+            SessionOptions::default(),
+        )
+    }
+
+    fn ctx() -> CallContext {
+        teardown_context()
+    }
+
+    #[test]
+    fn idle_ttl_defaults_and_overrides() {
+        let backend = session_backend();
+        // The launch argument always wins.
+        assert_eq!(backend.idle_ttl_for(&json!({"idle_ttl_s": 20})), 20);
+        // `0` is the explicit "never" and must not fall through to the default.
+        assert_eq!(backend.idle_ttl_for(&json!({"idle_ttl_s": 0})), 0);
+        // No argument: the environment, else 10 minutes.
+        if std::env::var_os(IDLE_TTL_ENV).is_none() {
+            assert_eq!(DEFAULT_IDLE_TTL_S, 600, "10 minutes by default");
+            assert_eq!(backend.idle_ttl_for(&json!({})), DEFAULT_IDLE_TTL_S);
+            assert_eq!(default_idle_ttl_s(), DEFAULT_IDLE_TTL_S);
+        }
+    }
+
+    #[test]
+    fn an_expired_session_names_the_ttl_it_missed() {
+        let backend = session_backend();
+        backend
+            .owned
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(
+                "s_parked".to_string(),
+                OwnedSession {
+                    token: "tok".to_string(),
+                    label: "counter".to_string(),
+                    launched_at: Instant::now(),
+                    last_used: Instant::now(),
+                    idle_ttl_s: 20,
+                },
+            );
+        backend.remove_owned("s_parked");
+        backend.note_expired("s_parked", "counter", 20);
+
+        let args = json!({"base": {"request_id": "req_tap", "session_id": "s_parked"}});
+        let envelope = backend
+            .session_call("acos_tap", &args, &ctx())
+            .expect("an expired session is answered, never forwarded");
+        assert!(!envelope.ok());
+        let error = envelope.error().expect("error");
+        assert_eq!(error.code, ErrorCode::SessionNotFound);
+        assert!(
+            error.message.contains("20 s"),
+            "the message names the TTL: {}",
+            error.message
+        );
+        let details = error.details.clone().unwrap_or(Value::Null);
+        assert_eq!(details["reason"], json!("idle_ttl_expired"));
+        assert_eq!(details["idle_ttl_s"], json!(20));
+        assert_eq!(details["label"], json!("counter"));
+        assert!(
+            error.hint.as_str().contains("acos_launch"),
+            "the hint says what to do next: {:?}",
+            error.hint
+        );
+        // A launch clears the tombstone: the id can be used again.
+        backend
+            .expired
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove("s_parked");
+        assert!(backend.expired_envelope("s_parked", "req_tap").is_none());
+    }
+
+    #[test]
+    fn teardown_never_respawns_a_dead_private_daemon() {
+        let dir = scratch_dir("no-restart");
+        let marker = dir.join("spawned");
+        let fake = dir.join("acos");
+        std::fs::write(
+            &fake,
+            format!(
+                "#!/bin/sh\necho \"$@\" >> {}\nexit 2\n",
+                marker.display()
+            ),
+        )
+        .expect("write fake acos");
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+
+        let backend = SessionBackend::with_cli(
+            CliBackend::new(BackendConfig::for_binary(&fake)),
+            SessionOptions::default(),
+        )
+        .with_art_daemon(fake.clone());
+        // The state "the private daemon died before shutdown": a reaped child.
+        *backend.private.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(crate::private_daemon::dead_for_test(dir.join("dead")));
+        backend.remember_owned("s_dead", &json!({}), "tok");
+        backend.sweep_idle();
+        // Not due yet: the default TTL is 10 minutes.
+        assert!(backend.owned.lock().unwrap().contains_key("s_dead"));
+
+        backend.shutdown();
+        let ran = std::fs::read_to_string(&marker).unwrap_or_default();
+        assert!(
+            !ran.lines().any(|line| line.starts_with("serve")),
+            "teardown must not spawn a replacement daemon; the fake `acos` was run with: {ran:?}"
+        );
+        assert!(backend.private.lock().unwrap().is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn idle_expiry_tries_to_destroy_and_never_marks_a_live_guest_expired() {
+        let backend = session_backend();
+        // A dead private daemon: the destroy cannot be performed, so the record
+        // must survive for a retry instead of claiming the guest is gone.
+        let dir = scratch_dir("expiry-retry");
+        *backend.private.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(crate::private_daemon::dead_for_test(dir.join("dead")));
+        backend.owned.lock().unwrap_or_else(|e| e.into_inner()).insert(
+            "s_idle".to_string(),
+            OwnedSession {
+                token: "tok".to_string(),
+                label: String::new(),
+                launched_at: Instant::now() - Duration::from_secs(30),
+                last_used: Instant::now() - Duration::from_secs(30),
+                idle_ttl_s: 20,
+            },
+        );
+        backend.sweep_idle();
+        assert!(
+            backend.owned.lock().unwrap().contains_key("s_idle"),
+            "a destroy that could not run must keep the session tracked"
+        );
+        assert!(
+            backend.expired.lock().unwrap().is_empty(),
+            "an unproven destroy is never reported as expired"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn guest_rss_reads_the_guest_not_the_tree() {
+        let own = guest_rss_kb(std::process::id()).expect("this process has VmRSS");
+        assert!(own > 0);
+        assert_eq!(guest_rss_kb(0), None, "pid 0 is never a guest");
+        assert_eq!(guest_rss_kb(4_000_000), None, "an unused pid has no status");
+    }
+
+    #[test]
+    fn ladder_reports_ms_on_every_rung() {
+        let report = LaunchReport {
+            stages: vec![
+                acos_runtime::session::StageEntry {
+                    name: "apk_parsed",
+                    status: StageStatus::Ok,
+                    blocker: None,
+                },
+                acos_runtime::session::StageEntry {
+                    name: "process_booted",
+                    status: StageStatus::NotReached,
+                    blocker: None,
+                },
+            ],
+            root_blocker: None,
+            reached_stage: "apk_parsed",
+            package: Some("dev.test".to_string()),
+            activity: None,
+            classes_loaded: 0,
+            events: Vec::new(),
+            wall_ms: 42,
+            peak_rss_bytes: 0,
+        };
+        let ladder = ladder_json(&report);
+        let stages = ladder["stages"].as_array().expect("stages");
+        assert_eq!(stages.len(), 2);
+        for stage in stages {
+            assert!(stage.get("ms").is_some(), "every rung carries `ms`: {stage}");
+        }
+        assert_eq!(stages[0]["ms"], json!(42));
+        assert_eq!(stages[1]["ms"], Value::Null);
+        assert_eq!(ladder["total_ms"], json!(42));
+        assert_eq!(ladder["ms_basis"], json!("observed_at_end"));
+    }
+
+    #[test]
+    fn relative_path_args_are_refused_with_the_resolved_path() {
+        let backend = session_backend();
+        let args = json!({
+            "apk": "out/counter.apk",
+            "base": {"request_id": "req_rel", "session_id": "s_rel"},
+        });
+        let envelope = backend
+            .session_call("acos_launch", &args, &ctx())
+            .expect("a relative path is refused before any launch");
+        assert!(!envelope.ok());
+        let error = envelope.error().expect("error");
+        assert_eq!(error.code, ErrorCode::InvalidArgument);
+        let details = error.details.clone().unwrap_or(Value::Null);
+        assert_eq!(details["reason"], json!("relative_path"));
+        let resolved = details["resolved_path"].as_str().expect("resolved path");
+        assert!(
+            std::path::Path::new(resolved).is_absolute(),
+            "the details carry an absolute path: {resolved}"
+        );
+        assert!(resolved.ends_with("out/counter.apk"));
+        assert!(error.hint.as_str().contains("absolute"));
+    }
+
+    #[test]
+    fn absolute_paths_are_left_alone() {
+        let backend = session_backend();
+        assert!(crate::safety::relative_path_arg(&json!({
+            "apk": "/abs/counter.apk",
+            "scenario": "/abs/s.yaml",
+            "artifacts": "/abs/out",
+        }))
+        .is_none());
+        assert!(crate::safety::relative_path_arg(&json!({"artifacts": "out/run"})).is_some());
+        let _ = backend;
+    }
+
 }

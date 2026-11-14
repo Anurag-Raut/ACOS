@@ -207,6 +207,11 @@ impl ServeEngine {
                 "session_id": id,
                 "launched": true,
                 "package": session.package(),
+                // FB5: the launcher activity and the guest's own pid, so the
+                // owning MCP server can list its sessions with `activity` and a
+                // guest RSS read from `/proc/<pid>/status`.
+                "activity": session.activity(),
+                "guest_pid": session.guest_pid(),
                 "apk": held.apk.display().to_string(),
                 "stage_reached": "first_frame",
                 "frame_seq": if exit.is_some() {
@@ -1285,10 +1290,17 @@ fn launch_reply(
         "tree_node_count": node_count,
         "tree_truncated": truncated,
         "events": [],
+        // FB5: `ms` is the time from launch start to when this rung's evidence
+        // was **observed** — not a guess. `acos-art`'s ready line proves
+        // `process`, `activity_resumed` and `first_frame` in one observation,
+        // so the three carry the measured boot time; rungs a future launcher
+        // reports earlier would carry their own. `ms_basis` says which.
+        "boot_ms": session.session_start_ms(),
+        "ms_basis": "observed_at_ready",
         "stages": [
-            {"stage": "process", "ok": true, "status": "ok"},
-            {"stage": "activity_resumed", "ok": true, "status": "ok"},
-            {"stage": "first_frame", "ok": true, "status": "ok"}
+            {"stage": "process", "ok": true, "status": "ok", "ms": session.session_start_ms()},
+            {"stage": "activity_resumed", "ok": true, "status": "ok", "ms": session.session_start_ms()},
+            {"stage": "first_frame", "ok": true, "status": "ok", "ms": session.session_start_ms()}
         ],
     });
     label_meta(&mut result, ENGINE_ART, held.trust, EVIDENCE_HOST_PIXEL);
@@ -1832,6 +1844,7 @@ fn status_value(session: &ArtSession) -> Value {
         "launched": true,
         "package": session.package(),
         "activity": session.activity(),
+        "guest_pid": session.guest_pid(),
         "apk": session.apk_path().display().to_string(),
         "stage_reached": "first_frame",
         "published_frames": session.frame_info().map(|f| f.0).unwrap_or(0),

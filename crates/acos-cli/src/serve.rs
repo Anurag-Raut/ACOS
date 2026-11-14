@@ -471,7 +471,16 @@ fn context_for(args: &Value) -> acos_mcp::CallContext {
 }
 
 /// Create `dir` (and parents) and force it to `0700`.
+///
+/// FB5: the **default** runtime directory is verified rather than repaired — the
+/// `/tmp/acos-<uid>` fallback (no `XDG_RUNTIME_DIR`, no `TMPDIR`) must not be a
+/// directory another user owns or can read, so `ensure_private_dir` refuses
+/// instead of chmod-ing someone else's path. An explicit `--socket` parent is
+/// still created 0700 as before (the caller chose it).
 fn prepare_runtime_dir(dir: &std::path::Path) -> std::io::Result<()> {
+    if dir == daemon::runtime_dir() {
+        return daemon::ensure_private_dir(dir);
+    }
     std::fs::create_dir_all(dir)?;
     std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
 }

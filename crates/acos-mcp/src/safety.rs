@@ -7,8 +7,84 @@
 
 use std::path::{Component, Path, PathBuf};
 
+use acos_protocol::{
+    Backend as ProtocolBackend, Envelope, ErrorCode, Fidelity, Metrics, ProtocolError,
+};
+use serde_json::{json, Value};
+
 /// Maximum accepted length of a single string argument.
 pub const DEFAULT_MAX_ARG_CHARS: usize = 8 * 1024;
+
+/// MCP tool arguments that name a filesystem path (FB5).
+///
+/// The MCP server's cwd is the **client's** cwd only by accident: an agent that
+/// writes `out/counter` means *its own* directory, and the server resolves it
+/// against wherever it was started. A relative path is therefore refused with
+/// the absolute path the server would have used, so the agent can decide.
+pub const PATH_ARG_FIELDS: &[&str] = &["apk", "scenario", "artifacts"];
+
+/// The first relative path argument in `args`: `(field, raw, resolved)`.
+#[must_use]
+pub fn relative_path_arg(args: &Value) -> Option<(String, String, PathBuf)> {
+    for field in PATH_ARG_FIELDS {
+        let Some(raw) = args.get(*field).and_then(Value::as_str) else {
+            continue;
+        };
+        if raw.trim().is_empty() || Path::new(raw).is_absolute() {
+            continue;
+        }
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let resolved = cwd.join(raw);
+        return Some(((*field).to_string(), raw.to_string(), resolved));
+    }
+    None
+}
+
+/// `INVALID_ARGUMENT` for a relative path argument, with the resolved absolute
+/// path in `details` and a hint that names the real cause (FB5).
+#[must_use]
+pub fn relative_path_envelope(
+    request_id: &str,
+    args: &Value,
+    fidelity: Fidelity,
+) -> Option<Envelope> {
+    let (field, raw, resolved) = relative_path_arg(args)?;
+    let cwd = std::env::current_dir()
+        .map(|dir| dir.display().to_string())
+        .unwrap_or_else(|_| "?".to_string());
+    Some(
+        Envelope::failure(
+            request_id,
+            ProtocolBackend::AcosNative,
+            fidelity,
+            ProtocolError::new(
+                ErrorCode::InvalidArgument,
+                format!(
+                    "invalid argument `{field}`: `{raw}` is relative; it would resolve to \
+                     `{}` (the MCP server's cwd is `{cwd}`), not to a path in your shell",
+                    resolved.display()
+                ),
+            )
+            .with_details(json!({
+                "field": field,
+                "reason": "relative_path",
+                "argument": raw,
+                "resolved_path": resolved.display().to_string(),
+                "server_cwd": cwd,
+            }))
+            .with_hint(
+                "pass an absolute path (`std::env::current_dir().join(..)` on your side); the \
+                 MCP server's working directory is not your shell's",
+            ),
+            Metrics::wall_ms(0),
+        )
+        .with_session_id(
+            args.pointer("/base/session_id")
+                .and_then(Value::as_str)
+                .unwrap_or_default(),
+        ),
+    )
+}
 
 /// Validate one path argument against `roots` and return its canonical form.
 ///

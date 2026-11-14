@@ -132,6 +132,15 @@ impl PrivateDaemon {
                 if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM as libc::c_ulong) != 0 {
                     return Err(io::Error::last_os_error());
                 }
+                // FB5: the server blocks SIGTERM/SIGINT so its `sigwait` thread
+                // can run the same teardown as stdin EOF. A child inherits that
+                // mask across exec, and the daemon's own SIGTERM handler would
+                // never fire — so the daemon gets an unblocked mask back.
+                let mut set: libc::sigset_t = std::mem::zeroed();
+                libc::sigemptyset(&mut set);
+                libc::sigaddset(&mut set, libc::SIGTERM);
+                libc::sigaddset(&mut set, libc::SIGINT);
+                libc::pthread_sigmask(libc::SIG_UNBLOCK, &set, std::ptr::null_mut());
                 Ok(())
             });
         }
@@ -303,10 +312,35 @@ fn private_runtime_dir() -> io::Result<PathBuf> {
     )))
 }
 
+/// Create the per-process directory 0700 and make sure the **base** it sits in
+/// is ours (FB5: the `/tmp/acos-<uid>` fallback is verified, never assumed).
 fn prepare_dir(dir: &Path) -> io::Result<()> {
-    std::fs::create_dir_all(dir)?;
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
+    if let Some(base) = dir.parent() {
+        daemon::ensure_private_dir(base)?;
+    }
+    daemon::ensure_private_dir(dir)
+}
+
+/// A private daemon whose child is already reaped and whose socket is gone.
+///
+/// A test seam for the FB5 no-restart rule: teardown must not respawn a dead
+/// private daemon, and this is the state "the daemon died before shutdown".
+#[cfg(test)]
+pub(crate) fn dead_for_test(dir: PathBuf) -> PrivateDaemon {
+    let child = Command::new("/bin/true")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn /bin/true");
+    PrivateDaemon {
+        socket: dir.join(daemon::SOCKET_FILE),
+        dir,
+        child,
+        client: None,
+        engine: ENGINE_ART.to_string(),
+        stopped: false,
+    }
 }
 
 #[cfg(test)]

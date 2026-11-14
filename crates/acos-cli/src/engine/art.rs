@@ -1834,6 +1834,17 @@ impl ArtSession {
         self.session_start_ms
     }
 
+    /// The guest's own pid: the process group `acos-art` started for it
+    /// (`guest_process_group` on the ready line; the guest is its own group
+    /// leader, so the group id is the pid). `None` before a ready line or for a
+    /// launcher that does not report one. FB5: `session_list` reports it so the
+    /// owning MCP server can say how much memory a session's guest holds.
+    pub fn guest_pid(&self) -> Option<u32> {
+        self.guest_group
+            .and_then(|group| u32::try_from(group).ok())
+            .filter(|pid| *pid > 1)
+    }
+
     /// ZPROD3: the zygote child facts this session really runs on, or `None`
     /// with `ACOS_ART_ZYGOTE` off. Facts are the keeper's observed acks, never
     /// host guesses, so a reply built from them cannot claim a zygote it did not

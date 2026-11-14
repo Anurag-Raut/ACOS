@@ -536,6 +536,11 @@ pub fn ladder_json(report: &LaunchReport) -> Value {
                 "stage": stage.name,
                 "ok": stage.status == StageStatus::Ok,
                 "status": status,
+                // FB5: `ms` is present on every rung. This ladder evaluates its
+                // rungs from one lifecycle report at the end of the launch, so
+                // `ok` rungs carry the launch wall time as their observation
+                // time and unproven rungs carry `null` — `ms_basis` says so.
+                "ms": if stage.status == StageStatus::Ok { Some(report.wall_ms) } else { None },
                 "blocker": stage.blocker.as_ref().map(|b| json!({
                     "code": b.code,
                     "message": b.message,
@@ -552,6 +557,8 @@ pub fn ladder_json(report: &LaunchReport) -> Value {
         "classes_loaded": report.classes_loaded,
         "events": report.events,
         "wall_ms": report.wall_ms,
+        "total_ms": report.wall_ms,
+        "ms_basis": "observed_at_end",
         "peak_rss_bytes": report.peak_rss_bytes,
     })
 }
