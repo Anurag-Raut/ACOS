@@ -803,7 +803,7 @@ impl ServeEngine {
             "acos_text" => type_text(&mut session, args),
             "acos_key" => key(&mut session, args),
             "acos_assert" => assert(&mut session, args, trust),
-            "acos_logs" => logs(&mut session),
+            "acos_logs" => logs(&mut session, args),
             "acos_status" => Ok(status_value(&session)),
             "acos_reset" => reset(&mut session, args),
             "acos_swipe" => Err(BackendError::unsupported(
@@ -1656,9 +1656,89 @@ fn regex_lite_matches(pattern: &str, text: &str) -> Result<bool, String> {
     Ok(tree.find_one(&selector).is_some())
 }
 
-fn logs(session: &mut ArtSession) -> Result<Value, BackendError> {
+/// The **default** log view: `min_priority` `W` plus the app's own package.
+///
+/// Why: an agent that calls `acos_logs` to learn what the app said got ~235
+/// lines of SoLoader/ViewManagerPropertyUpdater noise before the first
+/// app-specific record, and paid for all of it in context. The default now
+/// keeps records at warning or above **and** anything whose tag or message
+/// names the launched package — a two-line view of the same run.
+///
+/// Nothing is lost: the guest buffer is untouched (and `logs/logcat.txt` in a
+/// verify run is still the full log), `"all": true` or `min_priority: "V"`
+/// returns every record, and an explicit `tag` narrows further.
+fn logs(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let records = session.logs_since(0)?;
     let crash = session.last_crash();
+    let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
+    let requested = args.get("min_priority");
+    let explicit_priority = match requested {
+        None | Some(Value::Null) => None,
+        Some(value) => {
+            let text = match value {
+                Value::String(text) => text.clone(),
+                Value::Number(number) => number.to_string(),
+                other => other.to_string(),
+            };
+            match acos_runtime::session::parse_log_priority(&text) {
+                Some(priority) => Some(priority),
+                None => {
+                    return Err(BackendError::Error {
+                        code: ErrorCode::InvalidArgument,
+                        detail: format!(
+                            "min_priority `{text}` is not a logcat priority; use V/D/I/W/E/F or 2..7"
+                        ),
+                    })
+                }
+            }
+        }
+    };
+    let tag = args
+        .get("tag")
+        .and_then(Value::as_str)
+        .map(str::to_ascii_lowercase);
+    let package = session.package().to_string();
+    // An explicit request disables the default package union: the caller asked
+    // for one filter and must get exactly that.
+    let default_view = !all && explicit_priority.is_none() && tag.is_none();
+    let floor = if all {
+        2
+    } else {
+        explicit_priority.unwrap_or(5)
+    };
+    let package_filter = default_view && !package.is_empty();
+    let total = records.len();
+    let records: Vec<_> = records
+        .into_iter()
+        .filter(|record| {
+            if let Some(tag) = &tag {
+                if !record.tag.to_ascii_lowercase().contains(tag.as_str()) {
+                    return false;
+                }
+            }
+            let rank = match record.level {
+                LogLevel::Verbose => 2,
+                LogLevel::Debug => 3,
+                LogLevel::Info => 4,
+                LogLevel::Warn => 5,
+                LogLevel::Error => 6,
+            };
+            if rank >= floor {
+                return true;
+            }
+            package_filter
+                && (record.tag.contains(&package) || record.message.contains(&package))
+        })
+        .collect();
+    let filtered = total - records.len();
+    let min_priority = match floor {
+        2 => "V",
+        3 => "D",
+        4 => "I",
+        5 => "W",
+        6 => "E",
+        _ => "F",
+    };
     let lines: Vec<Value> = records
         .iter()
         .map(|record| {
@@ -1682,9 +1762,21 @@ fn logs(session: &mut ArtSession) -> Result<Value, BackendError> {
     Ok(json!({
         "launched": true,
         "stage_reached": "first_frame",
-        "total": records.len(),
+        "total": total,
         "count": records.len(),
         "collapsed": 0,
+        "filter": {
+            "min_priority": min_priority,
+            "package": if package_filter { json!(package) } else { Value::Null },
+            "default_view": default_view,
+            "dropped": filtered,
+            "note": if default_view {
+                "default view: priority >= W plus records naming the app package; pass \
+                 \"all\": true (or min_priority \"V\") for the whole buffer"
+            } else {
+                "explicit filter applied; the guest buffer and logs/logcat.txt keep every record"
+            },
+        },
         "logs": lines,
         "crash": crash.map(|crash| json!({
             "exception": crash.exception,

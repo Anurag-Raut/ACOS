@@ -1356,6 +1356,8 @@ pub fn build_guest(root: &ArtRoot) -> Result<GuestDex> {
         let classes = stage.join("classes");
         fs::create_dir_all(&classes)?;
         let out = Command::new(&javac)
+            // JVM dumps go to ACOS scratch, never the caller's cwd (`crate::jvm`).
+            .args(crate::jvm::dump_args())
             .args(["-nowarn", "-source", "11", "-target", "11"])
             .arg("-cp")
             .arg(&android_jar)
@@ -1373,6 +1375,7 @@ pub fn build_guest(root: &ArtRoot) -> Result<GuestDex> {
         }
         let class_files = walk(&classes, "class");
         let out = Command::new(&d8)
+            .args(crate::jvm::dump_args())
             .arg("--lib")
             .arg(&android_jar)
             .args(["--min-api", "34", "--output"])

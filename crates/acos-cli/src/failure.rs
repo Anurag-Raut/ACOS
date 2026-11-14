@@ -325,6 +325,16 @@ pub fn art_error(code: &str, message: &str, artifacts: &Path) -> ProtocolError {
         format!("acos-art: {code}: {message}")
     };
     let mut error = ProtocolError::new(mapped, text);
+    // A situation-specific hint beats the generic taxonomy hint when the message
+    // names the exact blocker. The one that bites agents hardest: an app that
+    // calls `startActivity` with an ACTION/CATEGORY-only Intent (Settings, a
+    // browser, a share sheet, `Intent.ACTION_VIEW`) wants a *different app* from
+    // the guest, and the guest only ever contains the APK under test.
+    if mapped == ErrorCode::UnsupportedAndroidApi && message.contains("no explicit component") {
+        error = error.with_hint(
+            "The app started an activity through an IMPLICIT intent (action/category/data, no              component), and no other apps exist in this guest: there is no Settings, browser,              share sheet, file picker or dialer to resolve it against. Such screens are              untestable here, and that is a capability gap, not an app bug. Do not stub the              Activity: assert up to the intent instead — prove the app issued it (`assert_log` on              the app's own log line, or `assert_state` on the control that triggered it) and              report the screen beyond it as unsupported.",
+        );
+    }
     if !known {
         error = error.with_hint(format!(
             "acos-art reported `{code}`, which is not in the registered taxonomy. \

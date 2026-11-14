@@ -74,6 +74,10 @@ pub fn mcp_tools() -> McpToolsList {
             McpToolDescriptor::new::<RunRequest>(
                 CommandName::Run,
                 concat!(
+                    "NOT THE CANONICAL TOOL — prefer `acos_launch`, which boots the APK on real ART in a ",
+                    "session that persists across MCP calls and returns the launch stage ladder. This tool ",
+                    "keeps the reference/generic session path (its own isolation/display vocabulary) and is ",
+                    "kept for compatibility. ",
                     "Create a session by launching an APK activity. Every later observe/capture/action/assert targets the returned session_id. ",
                     "Set isolation and display explicitly: `sandbox` for independent app data, `none` display for headless logic. ",
                     "Returns session_id, package, effective isolation/display/fidelity and optionally the first frame. ",
@@ -83,6 +87,10 @@ pub fn mcp_tools() -> McpToolsList {
             McpToolDescriptor::new::<ObserveRequest>(
                 CommandName::Observe,
                 concat!(
+                    "NOT THE CANONICAL TOOL — prefer `acos_observe_tree` for the live View hierarchy ",
+                    "(nodes, `content_desc`, bounds, flags) of an ART session; that is what selectors act on. ",
+                    "This tool observes the reference session (tree and/or text plus frame metadata) and is ",
+                    "kept for compatibility. ",
                     "Read the current UI tree and/or text for a session. Selectors in later steps refer to this tree's nodes. ",
                     "Returns node id/class/resource_id/text/content_desc/bounds/flags and frame metadata (frame_seq, cause_id, content_hash, meaningful). ",
                     "A headless session returns NO_DISPLAY; a route without text returns NO_TEXT. ",
@@ -100,8 +108,12 @@ pub fn mcp_tools() -> McpToolsList {
             McpToolDescriptor::new::<ActionRequest>(
                 CommandName::Action,
                 concat!(
-                    "Deliver one input action: tap, long_press, swipe, type, key, back, rotate or wait. ",
-                    "Prefer selectors over coordinates. Returns accepted/state_changed, an input-ack event seq and optionally a fresh frame. ",
+                    "NOT THE CANONICAL TOOL — prefer the one-purpose session tools on a live ART session: ",
+                    "`acos_tap` (id/text/testID or a point), `acos_text` (focused editor), `acos_key` and ",
+                    "`acos_swipe`. They report the action's own ack and settle evidence. This tool keeps the ",
+                    "generic multi-action path (tap, long_press, swipe, type, key, back, rotate, wait) and is ",
+                    "kept for compatibility. ",
+                    "Deliver one input action. Prefer selectors over coordinates. Returns accepted/state_changed, an input-ack event seq and optionally a fresh frame. ",
                     "Common errors: ELEMENT_NOT_FOUND, SESSION_NOT_FOUND, TIMEOUT, APP_NOT_RESPONDING, NO_DISPLAY."
                 ),
             ),

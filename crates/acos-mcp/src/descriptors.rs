@@ -271,9 +271,11 @@ pub fn session_tools() -> Vec<ToolInfo> {
     let mut out = Vec::with_capacity(SESSION_TOOL_NAMES.len());
     for name in SESSION_TOOL_NAMES {
         let (description, schema) = session_tool_spec(name);
-        // `acos_doctor` is a host preflight, not a runtime session op.
+        // `acos_doctor` is a host preflight, not a runtime session op — and, like
+        // `acos_help`/`acos_capabilities`, it says nothing about app behaviour, so
+        // its fidelity is `n/a` rather than a misleading `static-analysis`.
         let fidelity = if *name == "acos_doctor" {
-            Fidelity::StaticAnalysis
+            Fidelity::NotApplicable
         } else {
             Fidelity::NativeRuntime
         };
@@ -482,16 +484,21 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             })),
         ),
         "acos_logs" => (
-            "Read the guest log buffer of the held session. Optional `tag` (substring, \
-             case-insensitive) and `min_priority` (`V`/`D`/`I`/`W`/`E`/`F` or `2`..=`7`) filter the \
-             records. Consecutive identical records are collapsed: each carries `repeat_count` and \
-             its `line` gains a `(repeated N times)` suffix. Returns `total`, `count` and \
-             `collapsed` plus `launched` and `stage_reached`. An empty buffer is a valid pass, but \
-             is only meaningful once the app reached `onCreate`; check `stage_reached` before \
-             concluding the run was clean. It never fabricates lifecycle lines.",
+            "Read the guest log buffer of the held session. By DEFAULT it returns the agent-relevant \
+             view: records at priority `W` and above plus anything that names the app's own package, \
+             so framework/SoLoader noise does not bury the app's words. Optional `tag` (substring, \
+             case-insensitive), `min_priority` (`V`/`D`/`I`/`W`/`E`/`F` or `2`..=`7`, default `W`) and \
+             `all: true` (no defaults at all: the whole buffer) filter the records. The unfiltered \
+             buffer stays on disk (`logs/logcat.txt` in a verify run), and `min_priority: \"V\"` \
+             returns it. Consecutive identical records are collapsed: each carries `repeat_count` and \
+             its `line` gains a `(repeated N times)` suffix. Returns `total`, `count`, `collapsed`, \
+             `filter` (the defaults that were applied) plus `launched` and `stage_reached`. An empty \
+             buffer is a valid pass, but is only meaningful once the app reached `onCreate`; check \
+             `stage_reached` before concluding the run was clean. It never fabricates lifecycle lines.",
             with_base(json!({
                 "tag": {"type": "string", "description": "Keep only records whose tag contains this substring."},
-                "min_priority": {"type": ["string", "integer"], "description": "Minimum logcat priority (`V`/`D`/`I`/`W`/`E`/`F` or 2..7)."}
+                "min_priority": {"type": ["string", "integer"], "description": "Minimum logcat priority (`V`/`D`/`I`/`W`/`E`/`F` or 2..7). Defaults to `W`."},
+                "all": {"type": "boolean", "description": "Return the whole buffer with no default priority/package filter (the same view as `min_priority: \"V\"`)."}
             })),
         ),
         "acos_status" => (
@@ -584,7 +591,7 @@ pub fn capabilities_tool() -> ToolInfo {
             "additionalProperties": false
         }),
         available: true,
-        fidelity: Fidelity::StaticAnalysis,
+        fidelity: Fidelity::NotApplicable,
         reason: None,
     }
 }
@@ -597,11 +604,13 @@ pub fn help_tool() -> ToolInfo {
         description: concat!(
             "The ACOS agent guide. With no `topic` this returns a SHORT skeleton: the three status ",
             "rules, the loop in ten lines, and the topic list with one-line descriptions. Call it ",
-            "before your first ACOS call, then ask for one section by name: `workflow` (the loop), ",
-            "`cli` (every command with a runnable example), `scenarios` (writing a verify YAML), ",
-            "`errors` (code -> action), `limits` (rotate unsupported, Flutter/RN deferred, x86_64 ",
-            "native libs, API 34, memory admission). `topic: \"all\"` returns the complete guide; ",
-            "an unknown topic returns the skeleton again."
+            "before your first ACOS call, then ask for one section by name: `mcp` (every advertised ",
+            "MCP tool: required/optional args, one example call, what it returns — generated from the ",
+            "tool descriptors), `workflow` (the loop plus the screenshot/type/content_desc/prove-a-flow ",
+            "recipes), `cli` (every command with a runnable example), `scenarios` (writing a verify YAML), ",
+            "`errors` (code -> action), `limits` (one support row per route for native Views, React ",
+            "Native and Flutter; API 34, x86_64, rotation, memory admission). `topic: \"all\"` returns the ",
+            "complete guide; an unknown topic returns the skeleton again."
         )
         .to_string(),
         input_schema: json!({
@@ -609,14 +618,14 @@ pub fn help_tool() -> ToolInfo {
             "properties": {
                 "topic": {
                     "type": "string",
-                    "enum": ["overview", "workflow", "cli", "scenarios", "errors", "limits", "all"],
+                    "enum": ["overview", "mcp", "workflow", "cli", "scenarios", "errors", "limits", "all"],
                     "description": "Optional section of the guide: `overview` (the default skeleton), \n`workflow` (the loop), `cli` (commands + examples), `scenarios` (verify YAML), `errors` \n(codes -> action), `limits` (what is not supported), `all` (the whole guide)."
                 }
             },
             "additionalProperties": false
         }),
         available: true,
-        fidelity: Fidelity::StaticAnalysis,
+        fidelity: Fidelity::NotApplicable,
         reason: None,
     }
 }
