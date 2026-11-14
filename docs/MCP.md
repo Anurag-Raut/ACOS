@@ -45,7 +45,7 @@ and registers nothing when `--dry-run` is given. It defaults
 ### Claude Code, by hand
 
 ```bash
-claude mcp add user acos \
+claude mcp add --scope user acos \
   --env ACOS_BIN="$PWD/target/release/acos" \
   --env ACOS_ALLOWED_ROOTS="$HOME" \
   -- "$PWD/target/release/acos-mcp"

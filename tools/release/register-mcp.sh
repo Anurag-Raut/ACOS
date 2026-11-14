@@ -72,7 +72,10 @@ done
 acos_bin=$(cd -- "$(dirname -- "$acos_bin")" && pwd)/$(basename -- "$acos_bin")
 acos_mcp_bin=$(cd -- "$(dirname -- "$acos_mcp_bin")" && pwd)/$(basename -- "$acos_mcp_bin")
 
+# The artifacts directory must exist before the server starts: it is added to
+# the allowed roots, and a missing root cannot be canonicalised.
 [ -n "$artifacts_dir" ] || artifacts_dir="$HOME/.acos-mcp-artifacts"
+mkdir -p "$artifacts_dir"
 
 echo "acos      : $acos_bin"
 echo "acos-mcp  : $acos_mcp_bin"
@@ -81,7 +84,7 @@ echo "artifacts : $artifacts_dir"
 echo "scope     : $scope"
 echo
 
-cmd=(claude mcp add "$scope" acos
+cmd=(claude mcp add --scope "$scope" acos
      --env "ACOS_BIN=$acos_bin"
      --env "ACOS_ALLOWED_ROOTS=$allowed_roots"
      --env "ACOS_ARTIFACTS_DIR=$artifacts_dir"
