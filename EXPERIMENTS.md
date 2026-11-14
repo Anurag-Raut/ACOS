@@ -2247,7 +2247,7 @@ through `run-exclusive.sh --task NET1` + `guarded.sh --mem 8G`.
 | 3 | ✓ | ✓ | 1821.2 ms | ✓ | ✓ | empty |
 
 All three: `activity_resumed: true`, `guest_crash: null`, no SIGABRT.
-`cargo test -p acos-services --test net1_connectivity`: 9/9.
+`cargo test -p acos-services --test net1_connectivity`: 10/10, including a scan of the image's own `writeToParcel` for all four classes (`NetworkRequest` and `NetworkInfo` full-match).
 
 **Interpretation.** The wall was ACOS policy, not RN: the framework's
 `NetworkCallback` machinery works unchanged against a declared network. The

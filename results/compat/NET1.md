@@ -29,6 +29,20 @@ AOSP's `NetworkCallback` protocol on it.
   `acos-aidl` table (`crates/acos-aidl/src/generated/tables.rs`) agrees for every
   code used here (42 request, 45 listen, 47 release, 1/2/3/4/5/6/8/9/10/12/13/14/16/17/20/32/55/63/73/78 queries).
   The AIDL argument lists and the decoded `WireOp` lists are identical.
+* **Parcel shapes, DEX-verified.** The four new specs are also scanned out of
+  the **image's own** `writeToParcel`
+  (`test the_connectivity_specs_match_the_boot_images_write_to_parcel`, which
+  reads `.cache/boot/android-34/dex/framework-connectivity` — the classes are in
+  the `framework-connectivity` APEX, so `tests/parcelable.rs`'s
+  `dex/framework` scan skips them):
+  * `android.net.NetworkRequest` — **4/4 full match** (image order + arity).
+  * `android.net.NetworkInfo` — **11/11 full match**.
+  * `NetworkCapabilities` (18 direct `Parcel` calls) and `LinkProperties` (17)
+    call private helpers (`writeParcelableArraySet`, `writeAddresses`,
+    `writeAddress`) the scanner cannot see into; the specs model those as their
+    inlined wire form, so the test **pins** the image's observed call sequence
+    (it fails if the image's order or arity changes). The bytes are identical:
+    the helper writes are exactly the `-1`/`0` counts the specs emit.
 * **Parcel shapes** were transcribed from the same tag and cross-checked against
   the API-34 image's reader (`NetworkCapabilities.CREATOR`,
   `NetworkRequest.CREATOR`, `LinkProperties.CREATOR`, `NetworkInfo.CREATOR`,
@@ -115,7 +129,10 @@ than a fabricated address.
 ### Unit tests (acceptance 1) — PASS
 
 ```
-cargo test -p acos-services --test net1_connectivity   → 9 passed, 0 failed
+cargo test -p acos-services --test net1_connectivity   → 10 passed, 0 failed
+cargo test -p acos-services                            → all suites green once the
+  boot-DEX symlink exists; `tests/parcelable.rs` needs `.cache/boot/android-34`
+  (it was missing from this worktree at first and recreated).
 ```
 
 Through the real `ServiceHost` dispatcher (table lookup → argument decode →
@@ -132,6 +149,7 @@ handler → reply encode → queued deliveries):
 | `network_queries_describe_the_emulated_default_network` | `Network` 100, one entry in `getAllNetworks`, caps bits (INTERNET set, VALIDATED unset, WIFI transport), `LinkProperties`, `NetworkInfo` `CONNECTED`, `getNetworkInfoForUid` |
 | `pending_intent_registrations_stay_a_structured_refusal` | `UnsupportedAndroidApi`, never a silent success |
 | `state_counters_record_each_registration_and_release` | state machine counters |
+| `the_connectivity_specs_match_the_boot_images_write_to_parcel` | the image's DEX `writeToParcel` for all four classes (see §2) |
 
 ### Joplin (acceptance 2) — launch PASS, NetInfo JS state NOT CAPTURED
 
