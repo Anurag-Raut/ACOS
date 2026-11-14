@@ -2323,6 +2323,75 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   counter/reset/Gaten checks now pass with the demand-probe channel plumbed; remaining are the
   flag-on/off latency comparison, ZYGOTE_DEAD restart/new-epoch/refork (ZPROD4) and F3 per-child
   cgroups.
+- **ZPROD5 (same number, same branch): the serve/daemon `argv 0` stall — ROOT CAUSE, FIX, live
+  proof.** ZPROD4's open defect is closed: an `AF_UNIX` `sun_path` overflow, not the keeper.
+  *Measured* (one `acos_launch` against a warm `serve` daemon with `ACOS_ART_ZYGOTE=on`,
+  `.cache/zprod5/repro/run1.log`): the **session launcher** — not the keeper — exited in ~0.2 s
+  after `acos-art: io: path must be shorter than SUN_LEN`, so `<plan>/0/argv` was never written
+  and `ZygoteHost::wait_contract` polled it for the full 180 s. A zygote session's directory
+  *carries its sockets* (the forked child bind-mounts `<plan>/<tag>/sock` as `/dev/socket` and
+  `<plan>/<tag>/sock/peer.sock` as `/data/acos-launch.sock`), and `sun_path` is 108 bytes
+  including its NUL: `acos verify`'s artifacts root (`out/<scenario>`, ≈80 bytes) fit, the
+  daemon's (`…/r1-a/latency/sessions/zygote/zygote/<45-char key>/plan/0`, ≈128) did not. The flag-
+  on path had only ever run through `verify`, which is exactly why the gates were green while
+  every bench launch failed. *Second defect, why it cost 180 s and no diagnosis:* the contract
+  wait watched only the **keeper's** liveness and its error carried the **keeper's** log (healthy),
+  while the launcher's one-line cause was drained into a tail created only *after* the wait.
+  Fix: (1) `ZygoteHost::for_artifacts` keeps `<artifacts>/zygote` when a worst-case session socket
+  fits and otherwise relocates the plan tree to a short runtime root it owns
+  (`ACOS_ART_ZYGOTE_ROOT` → `/run/user/<uid>/z<pid>` → `/dev/shm/z<pid>`; host-side only, bound
+  into the zygote as `/sessions`, the W43 argument) — `verify`'s layout is unchanged; (2)
+  `prepare` fails closed with the lengths and the knob when the **exact** session path cannot fit,
+  *before* a keeper boots, and `wait_contract_with`/`wait_contract_and_spawn(peer_gone)` follow the
+  **launcher** too, so a launcher that dies before `argv` is a `ZYGOTE_DEAD` in milliseconds
+  carrying its exit status and stderr tail; (3) the redundant duplicated `zygote` path level is
+  gone (`<root>/<key>/plan/<tag>`, +8 bytes of headroom); (4) an owned short root is removed on
+  graceful exit and stale `z<pid>` roots (a SIGTERMed serve installs no handler) are swept at the
+  next start. 4 new tests (mock keeper, no ART): a launcher dying before `argv` fails in <10 s
+  naming `exit status: 3` and `path must be shorter than SUN_LEN`; a too-deep root is refused
+  with `keeper_count()==0`; a deep artifacts root is displaced while a short one is kept and an
+  explicit root wins; 8/8 `zygote_host::tests` green. **Live `acos serve` proof**
+  (`.cache/zprod5/live/proof.json`): launch `isolation=fresh-zygote-child child_pid=8
+  epoch=20612077173`, tap `inc` → tree count **1**, `reset` → count **0** (`state_reset`,
+  `data_cleared`) with child **8→35** and the **same epoch**, `destroy` `teardown_ms=307
+  survivors=[]`; then SIGKILL the keeper → `ZYGOTE_DEAD session="lost" repointed=false`, the next
+  launch boots a **new keeper** (`epoch 20612077173→20619119756`, child 62→8), and after serve
+  exit **no keeper, launcher, bwrap or daemon** survives. The same invocation that stalled now
+  reaches `argv` in **4.21 s** (3.9 s of which is the cold `shared-fixed` image build the OFF arm
+  also pays), `launch ok=True`. — **and the A/B, 1:1 interleaved, OFF = the shipped default
+  (exec path + shared-fixed) vs ON = the zygote**: see the table this bullet adds below; the
+  orchestrator decision for ZPROD5 is that the comparison arm is what users get, not an
+  lz4-pinned exec arm, and the keeper keeps its `lz4` pin (F11: `-Xzygote` refuses a `/data/img`
+  oat), so the zygote currently cannot use the shared-fixed image — a named follow-up, and the
+  honest limit of any ON/OFF delta. **Result, 2 interleaved reps per arm (12 latency samples
+  each, same binary `sha256 ac8b06bd…`, groups `a:latency:8G:300`, `.cache/zprod5/ab/`)**:
+  launch gets faster, reset and teardown get much slower, interactive verbs are unchanged.
+
+  | metric (p50, pooled over the 2 reps) | OFF — shipped default | ON — zygote | delta |
+  |---|---:|---:|---:|
+  | M4 launch strict | 306.5 ms | **259.1 ms** | −15.5 % |
+  | M4 launch fast | 166.1 ms | **123.1 ms** | −25.9 % |
+  | M6 reset strict | **333.8 ms** | 574.5 ms | +72.1 % |
+  | M6 reset fast | **193.1 ms** | 431.7 ms | +123.5 % |
+  | M8 tap counter strict / fast | 950.1 / 45.0 ms | 947.2 / 45.7 ms | −0.3 % / +1.6 % (parity) |
+  | M8 tap form strict / fast | 948.3 / 45.6 ms | 942.0 / 47.5 ms | −0.7 % / +4.0 % (parity) |
+  | M5 screenshot | 24.1 ms | 24.9 ms | +3.1 % (parity) |
+  | tap ack | 5.0 ms | 5.0 ms | 0 |
+  | teardown (`acos_destroy`) | **12.5 ms** (wall 18.0) | 307.0 ms (wall 316.7) | +2356 % |
+
+  Load1 before/after per acquisition: OFF 0.93→1.70 and 1.10→0.83; ON 1.70→1.10 and 0.83→1.26;
+  MemAvailable 32.3–32.6 GiB throughout; no phase was flagged noisy; every arm `ok=True`, 0
+  failed steps, `survivors=[]`. Zygote evidence for the ON arm is real and preserved
+  (`.cache/zprod5/ab/zygote-evidence/`): one keeper per `ZygoteKey` (counter, form), `plan/ready`
+  `epoch=21672502580 boot_ms=13` and `epoch=21596387361`, 30 session dirs with
+  `sock/{logdw,peer.sock}`, `argv`, `binds`, `spawned`. (An earlier interleaved pair gave the
+  same shape — OFF M4 311.5/169.1 vs ON 259.8/124.4 — and its ON arm also hit **one** 60 s
+  `NO_LIVE_FRAME` on the discarded `m4-warm` launch, the first launch after a keeper boot; the
+  two reported reps had no failure. A chain-script naming bug overwrote that pair's raw JSON, so
+  it is not pooled.) Reading: the zygote **wins the launch metric it exists for** (−16 to −26 %)
+  and **loses reset** (+72 %: `reset` = kill the old child, keep the epoch, re-fork through the
+  launcher's contract) and **teardown** (+295 ms: `acos_destroy` kills the child's process group
+  and reaps it). Both regressions are named follow-ups, not corrected here.
 
 ## E13.10 — SE1: an opt-in per-step `expect_change` closes GR4's vacuous-flow gap (a no-op tap can no longer pass) — PASS (ADR-0026 decision 2 shipped; 0 false passes)
 
