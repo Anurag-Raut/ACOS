@@ -2144,6 +2144,45 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
 - **Trade-offs / regressions:** none measured. Risks: the 5 s probe fallback is only safe together with the host `last_requested_seq` fix (`w42-back-frame` is the canary — it fails deterministically without it), and the binder-looper untimed wait is correct by construction (broadcast under `g.mu`) but not separately gate-proven (reverting only that file reproduces the same w42 timeout).
 - **Fidelity / evidence:** `art-reference` (real ART, release), MEASURED; `results/bench/H4.md` (method, tables, attribution, risks), `results/handoff/H4.md` (pre-fix state), `.cache/h4/results/{ab,loop}/` merged JSON/MD + raw per-rep phase files, `.cache/h4/logs/` gate and test transcripts.
 
+## E2.17 — ZPROD1: a persistent zygote and a reset that forks **one** child — MEASURED (mechanism; throughput pending P2)
+
+- **Date / commit:** 2026-11-14; branch `zygote-prod-1` (off `main` `863def1`).
+- **Question / goal:** Z7 measured the zygote arms at 30.0/30.1 tasks/min vs the exec arms'
+  39.0/39.1 and named the cause: the prototype's reset restarted the **whole cohort**, re-paying the
+  zygote's pre-fork core every round; Z7 §7 item 2 explicitly left "a product zygote that forks a
+  new child per reset" unmeasured. Does a persistent zygote whose reset kills **one** session's
+  child and forks one fresh child actually work, and does it leave every sibling untouched?
+- **Method:** guest-side ART zygote (Z3/Z4 lineage) with a command FIFO (`spawn <tag>` /
+  `kill <tag>` / `exit`) instead of a fixed cohort; each session is its own process group
+  (`setpgid0`), so the zygote ends exactly that session; the driver then wipes that session's run
+  root, starts a fresh foreign launcher (new peer + new contract) and asks the zygote for one new
+  child. N=2 `counter.apk`, real ART, one release binary; both sessions verified `0` → tap → `1`
+  before the reset, then one session reset and both re-verified.
+- **Inputs:** `fixtures/build/apps/counter.apk`; zygote build `research/zygote-proto/z3/build.sh`
+  (`ZBUILD=zprod1-build`); API-34 sysroot; x86_64 host; guard `--mem 16G --time 300`.
+- **Result:** zygote pre-fork core **13 ms** once. Reset of tag 0: kill **20.2 ms** (`status=0x9`,
+  SIGKILL on pid 8), fresh launcher **70.6 ms**, new child pid **62**, total **390.1 ms**. Session 0
+  after the reset: counter **`0`** and first frame md5 **`39d1e4e3…`**, byte-identical to a
+  never-tapped session's first frame (the old child's tapped frame was `9f3406c1…`). Sibling
+  session 1: child pid **35 → 35**, counter **`1` → `1`**, launcher never restarted. Zygote pid
+  **2 → 2** and boot epoch unchanged. Verdict PASS, 0 failures, 7.76 s end to end.
+- **Finding (proven vs hypothesis):** proven — a reset can be scoped to one child of a persistent
+  zygote, with a provable fresh state and siblings untouched. Not measured (no claim): any
+  tasks/min or tasks/GiB-min number for this reset; the Z7 loop was not re-run, and the keeper is
+  not yet owned by `acos serve`, so the flag-on gate/Gaten runs are not possible yet.
+- **Fidelity / evidence:** MEASURED on real ART, `real-ART` fidelity.
+  `results/art-runtime/ZPROD1.md`, `results/art-runtime/ZPROD1/{reset-n2.json,zygote.log,
+  session-0.log,session-1.log}`; design `docs/decisions/2026-11-14-zygote-prod.md`; driver
+  `research/zygote-proto/z4/reset.py`.
+- **Regression / false pass:** every check is a fresh read from the new/old child's own `tree` and
+  `screenshot` reply, never an ack; the freshness assertion compares PNG bytes with a brand-new
+  session's first frame. 0 false passes. Two real defects found and fixed on the way: a zygote host
+  that inherited the guest Landlock guard could not write its own contract dir (`EACCES`), and a
+  silent `writeText` hid it.
+- **Conclusion / next:** keep the mechanism; **P2** wires the keeper into `acos serve`
+  (`ACOS_ART_ZYGOTE=on`), adds the per-child cgroup memory limit (F3) and then runs the Z7 loop for
+  the ≥25 % gate. Exact commands and acceptance: `results/handoff/ZPROD1.md`.
+
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
 Central objective: verified agent tasks per second per GiB (tasks/GiB-min).

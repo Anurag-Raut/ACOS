@@ -1,0 +1,10 @@
+Z3 zygote_pid=2 threads=6 sigchld_reset=0 args=15 heap=used_kb=68 total_kb=2048
+Z3 preapp_init ms=7 preloaded=34 threads=6 heap=used_kb=1044 total_kb=2048
+Z3 post_preload_gc ms=3 threads=6 heap=used_kb=374 total_kb=1858
+ZP1 persist start sessions=/sessions n=0 cmd=/sessions/cmd
+ZP1 ready epoch=26971873464 boot_ms=13 threads=6
+ZP1 forked tag=0 child=8 threads=6 total_ms=75
+ZP1 forked tag=1 child=35 threads=6 total_ms=2940
+ZP1 killed tag=0 pid=8 kill_rc=0 status=0x9
+ZP1 forked tag=0 child=62 threads=6 total_ms=5831
+ZP1 killed tag=0 pid=62 kill_rc=0 status=0x9

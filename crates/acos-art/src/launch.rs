@@ -960,7 +960,13 @@ pub(crate) fn launch_session(
     // seccomp/Landlock guard is applied per forked child (the child loads the
     // same `libacos_seccomp_guest.so` after its bind mounts, exactly AOSP's
     // order). The production path keeps the preload-at-start ordering.
-    sb.seccomp_guest(session_dir.is_none());
+    // ZPROD1: a zygote host is a process *without* app code; the guard belongs to
+    // every forked child (which loads it after its mounts — AOSP order), so the
+    // zygote itself must not carry the guest seccomp/Landlock preload either: a
+    // Landlock ruleset in the pre-fork process would deny the child's writes to
+    // its own contract directory (`/sessions/<tag>`, measured: EACCES). With
+    // the zygote seam unset this expression is exactly `session_dir.is_none()`.
+    sb.seccomp_guest(session_dir.is_none() && zygote_app.is_none());
     sb.with_shim(false);
     sb.ro_bind(&shims.art_shim, "/data/shim/libartshim.so");
     // The per-run extracted native libraries (installd's `nativeLibraryDir`).
@@ -1002,13 +1008,22 @@ pub(crate) fn launch_session(
         if let Ok(n) = std::env::var("ACOS_ZYGOTE_N") {
             sb.env("ACOS_ZYGOTE_N", &n);
         }
+        // ZPROD1: the persistent zygote. `spawn`/`kill`/`exit` arrive on
+        // `<plan>/cmd`, so the zygote outlives one session's reset instead of
+        // forking a fixed cohort once (Z7 §7 item 2: the cohort restart was the
+        // whole throughput loss). Off unless the caller asks for it.
+        if std::env::var_os("ACOS_ZYGOTE_PERSIST").is_some() {
+            sb.env("ACOS_ZYGOTE_PERSIST", "1");
+        }
     }
-    if session_dir.is_some() {
+    if session_dir.is_some() || zygote_app.is_some() {
         // ZS/Z4: forward the research security-probe switch into the child.
         if std::env::var_os("ACOS_ZYGOTE_PROBE").is_some() {
             sb.env("ACOS_ZYGOTE_PROBE", "1");
         }
         // The child loads the production guard itself; it must see the blob.
+        // ZPROD1: a zygote host keeps no session of its own, but its forked
+        // children still need the blob and the loadable `.so`.
         sb.ro_bind(&root.data.join("seccomp"), "/data/seccomp");
         if let Some(dir) = &zygote_app {
             // Z4: same source, same blob, but loadable via System.load from a

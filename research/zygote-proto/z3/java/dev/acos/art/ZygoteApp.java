@@ -29,6 +29,7 @@ public final class ZygoteApp {
 
     public static void main(String[] args) throws Throwable {
         long t0 = now();
+        zygoteEpoch = (now() / 1000L) ^ ((long) dev.acos.z1.Nat.getpid() << 32);
         int sig = dev.acos.z1.Nat.resetSigchld();
         say("Z3 zygote_pid=" + dev.acos.z1.Nat.getpid()
                 + " threads=" + threads()
@@ -69,6 +70,13 @@ public final class ZygoteApp {
         // ---- 4. freeze, fork, one app child --------------------------------
         String sessions = System.getenv("ACOS_ZYGOTE_SESSIONS");
         if (sessions != null) {
+            // ZPROD1: the persistent zygote (opt-in, research): fork the initial
+            // sessions, then serve spawn/kill/exit from `<sessions>/cmd` instead
+            // of restarting the cohort whenever one session resets.
+            if (System.getenv("ACOS_ZYGOTE_PERSIST") != null) {
+                z4Persist(sessions, t0, envInt("ACOS_ZYGOTE_N", 1));
+                return;
+            }
             z4Main(sessions, t0, args);
             return;
         }
@@ -105,6 +113,137 @@ public final class ZygoteApp {
                 + " sig=" + (status & 0x7f)
                 + " total_ms=" + (now() - t0) / 1000000L);
         System.exit(ret > 0 && status == 0 ? 0 : 1);
+    }
+
+    /** ZPROD1: this zygote's identity, written into every spawn ack so the host
+     * can prove a reset did *not* restart the zygote. */
+    private static long zygoteEpoch;
+
+    private static int envInt(String name, int fallback) {
+        String v = System.getenv(name);
+        if (v == null) return fallback;
+        try {
+            return Integer.parseInt(v.trim());
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
+    /**
+     * ZPROD1 (research, opt-in via `ACOS_ZYGOTE_PERSIST`): the **persistent**
+     * zygote. Same pre-fork core as {@link #z4Main}, but instead of forking a
+     * fixed cohort once and waiting for all of it, it forks the requested
+     * sessions and then serves commands from `<sessions>/cmd` (a FIFO the host
+     * opens read-write so neither side blocks on open). Every command is
+     * acknowledged by a file, so the host never guesses:
+     *
+     * <pre>
+     *   spawn &lt;tag&gt;   forks one child for &lt;tag&gt; (its argv/binds must exist), writes
+     *                 `spawned` = `pid=&lt;A&gt; epoch=&lt;n&gt;`
+     *   kill  &lt;tag&gt;   kill(-A, SIGKILL) + wait4(A), writes `reaped` = `status=0x…`
+     *   exit          kills every live session, exits 0
+     * </pre>
+     *
+     * The child body is Z4's, plus `setpgid0()` first: one session is then one
+     * process group (A warden, B pidns init, C app), so ending a session cannot
+     * reach a sibling, the zygote or a sibling's descriptors.
+     */
+    private static void z4Persist(String sessions, long t0, int n) throws Throwable {
+        say("ZP1 persist start sessions=" + sessions + " n=" + n + " cmd=" + sessions + "/cmd");
+        int[] live = new int[1024];
+        for (int k = 0; k < n; k++) {
+            live[k] = z4ForkOne(sessions, k, t0);
+        }
+        writeText(sessions + "/zygote.pid", Integer.toString(dev.acos.z1.Nat.getpid()));
+        writeText(sessions + "/ready", "epoch=" + zygoteEpoch + " boot_ms=" + (now() - t0) / 1000000L);
+        say("ZP1 ready epoch=" + zygoteEpoch + " boot_ms=" + (now() - t0) / 1000000L
+                + " threads=" + threads());
+        BufferedReader cmd = new BufferedReader(new FileReader(sessions + "/cmd"));
+        for (;;) {
+            String line = cmd.readLine();
+            if (line == null) {
+                say("ZP1 cmd eof");
+                break;
+            }
+            line = line.trim();
+            if (line.isEmpty()) continue;
+            String[] f = line.split("\\s+");
+            if (f[0].equals("spawn") && f.length == 2) {
+                int tag = Integer.parseInt(f[1]);
+                live[tag] = z4ForkOne(sessions, tag, t0);
+            } else if (f[0].equals("kill") && f.length == 2) {
+                int tag = Integer.parseInt(f[1]);
+                z4KillOne(sessions, tag, live[tag]);
+                live[tag] = -1;
+            } else if (f[0].equals("exit")) {
+                for (int k = 0; k < live.length; k++) {
+                    if (live[k] > 0) z4KillOne(sessions, k, live[k]);
+                }
+                break;
+            } else {
+                say("ZP1 cmd unknown=" + line);
+            }
+        }
+        System.exit(0);
+    }
+
+    /** Fork exactly one session (Z4's child body) and publish its pid. */
+    private static int z4ForkOne(String sessions, int tag, long t0) throws Throwable {
+        String[] argv = readArgv(sessions + "/" + tag + "/argv");
+        ZygoteHooks.preFork();
+        long tFork = now();
+        int pid = dev.acos.z1.Nat.fork();
+        if (pid == 0) {
+            // One session = one process group: this is what lets the zygote end
+            // exactly this session later (`kill` uses the negated warden pid).
+            int pgrp = dev.acos.z1.Nat.setpgid0();
+            long f1 = now();
+            int rc = dev.acos.z1.Nat.spawnSession(tag);
+            if (rc != 0) {
+                say("ZP1 child tag=" + tag + " sandbox_fail rc=" + rc);
+                System.exit(70);
+            }
+            ZygoteHooks.postForkChild(0, false, false, null);
+            say("ZP1 child tag=" + tag + " pgrp_rc=" + pgrp
+                    + " pid_in_ns=" + dev.acos.z1.Nat.sandboxRc(7)
+                    + " fork_to_sandbox_ms=" + (now() - f1) / 1000000L
+                    + " userns=" + dev.acos.z1.Nat.sandboxRc(0)
+                    + " mntns=" + dev.acos.z1.Nat.sandboxRc(1)
+                    + " pidns=" + dev.acos.z1.Nat.sandboxRc(2)
+                    + " binds_rc=" + dev.acos.z1.Nat.sandboxRc(4)
+                    + " binds=" + dev.acos.z1.Nat.sandboxRc(5)
+                    + " threads=" + threads());
+            long g0 = now();
+            System.load("/data/seccomp/libacos_seccomp_guest.so");
+            say("ZP1 child tag=" + tag + " guard_ms=" + (now() - g0) / 1000000L
+                    + " seccomp=" + dev.acos.z1.Nat.seccompStatus());
+            startDaemons();
+            say("ZP1 child tag=" + tag + " fork_to_ready_ms=" + (now() - tFork) / 1000000L
+                    + " threads=" + threads());
+            LaunchMain.main(argv);
+            return -1;
+        }
+        ZygoteHooks.postForkCommon();
+        writeText(sessions + "/" + tag + "/pid", Integer.toString(pid));
+        writeText(sessions + "/" + tag + "/spawned", "pid=" + pid + " epoch=" + zygoteEpoch);
+        say("ZP1 forked tag=" + tag + " child=" + pid + " threads=" + threads()
+                + " total_ms=" + (now() - t0) / 1000000L);
+        return pid;
+    }
+
+    /** End exactly one session: the whole process group, then reap the warden. */
+    private static void z4KillOne(String sessions, int tag, int pid) throws Throwable {
+        if (pid <= 0) {
+            writeText(sessions + "/" + tag + "/reaped", "status=-1 pid=" + pid + " kill_rc=0");
+            return;
+        }
+        int rc = dev.acos.z1.Nat.kill(-pid, 9);
+        long st = dev.acos.z1.Nat.waitPid(pid);
+        int status = (int) st;
+        writeText(sessions + "/" + tag + "/reaped",
+                "status=0x" + Integer.toHexString(status) + " kill_rc=" + rc + " pid=" + pid);
+        say("ZP1 killed tag=" + tag + " pid=" + pid + " kill_rc=" + rc
+                + " status=0x" + Integer.toHexString(status));
     }
 
     /**
@@ -200,7 +339,11 @@ public final class ZygoteApp {
             } finally {
                 w.close();
             }
-        } catch (Throwable ignored) {
+        } catch (Throwable t) {
+            // ZPROD1: silent failures here made a persistent zygote look dead
+            // while it was alive. Name the file and the exception.
+            say("ZP1 write_fail path=" + path + " err=" + t.getClass().getSimpleName()
+                    + ":" + t.getMessage());
         }
     }
 

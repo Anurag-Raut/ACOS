@@ -53,6 +53,7 @@ struct ts {
 #define SYS_mount 165
 #define SYS_unshare 272
 #define SYS_openat 257
+#define SYS_setpgid 109
 #define SYS_fork 57
 #define SYS_wait4 61
 #define SYS_pipe2 293
@@ -119,6 +120,15 @@ EXPORT jint Java_dev_acos_z1_Nat_getppid(void) { return (jint)z2_sys0(SYS_getppi
 EXPORT jint Java_dev_acos_z1_Nat_getuid(void) { return (jint)z2_sys0(SYS_getuid); }
 EXPORT jint Java_dev_acos_z1_Nat_getgid(void) { return (jint)z2_sys0(SYS_getgid); }
 EXPORT jint Java_dev_acos_z1_Nat_geteuid(void) { return (jint)z2_sys0(SYS_geteuid); }
+
+/* ZPROD1: give a zygote session its own process group so the *zygote* can end
+ * exactly that session.  Called in the forked child (A) before it unshares
+ * anything and before it forks B/C; B and C then inherit pgid == A's pid, so a
+ * single kill(-A, SIGKILL) takes the whole session down and nothing else.
+ * Returns 0 on success, -errno otherwise. */
+EXPORT jint Java_dev_acos_z1_Nat_setpgid0(void) {
+  return (jint)z2_sys2(SYS_setpgid, 0, 0);
+}
 
 static long wait_any(int pid, int options) {
   int st = 0;
