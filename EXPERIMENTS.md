@@ -4678,3 +4678,82 @@ nothing in this change is on the tap path).
   peak vs the 256 MiB limit). INT-KG-AB recorded the same `launch_hang` flake on
   `main` and queued it as LHFLAKE.
 
+
+## E9.5 — ROT7: the server half of `Activity.onBackPressed` (a `back` now destroys the Activity), and the "task finished" screen that does not exist yet — PARTIAL (the framework path is proven end to end; the strict settle still cannot bind the step)
+
+- **Date / commit:** 2026-11-15, branch `art-back-1` off `int-021` `52beccf`.
+  Report: `results/handoff/ROT7.md`.
+- **Question / goal:** make `back` on real ART reach the framework's real back
+  path — `IActivityClientController.onBackPressed` → `finish` → previous Activity
+  resumes / the app's task finishes, as on API 34 — and answer which stage claimed
+  back's UP while ROT6 believed `Activity.mDefaultBackCallback == null`.
+- **Method:** `ACOS_ATMS_TRACE` moved from stderr (which the CLI engine keeps only
+  as an 8 KiB ring buffer, surfaced on errors) to a file sink
+  (`ACOS_ATMS_TRACE=<path>`, `…=1` keeps stderr). That alone reversed two ROT6
+  readings. Runs: `counter.yaml --engine art` through
+  `tools/art-runtime/run-exclusive.sh --task ROT7` + `tools/guarded.sh`;
+  `cargo test -p acos-services`. The AOSP cache
+  (`.cache/aosp/base/core/java/android/app/Activity.java`,
+  `…/servertransaction/{TransactionExecutor,ResumeActivityItem}.java`,
+  `…/view/ViewRootImpl.java`, `…/policy/DecorView.java`) and the image's decoded
+  AIDL tables (`crates/acos-aidl`, regenerated) were the ground truth.
+- **Inputs:** `fixtures/build/apps/counter.apk` (sha256
+  `8170835e70f2d8d5c4a9ec6498e2571ab2bc8571e4681ccbcb1a4bd394100c39`),
+  `fixtures/build/apps/hello-views.apk`, `multi-activity.apk`; API-34
+  `android.jar` for the guest compile; boot classpath `.cache/boot/android-34`.
+- **Result:**
+  - The ATMS **does** adopt the guest's token (ROT6 said it never does):
+    `activityResumed token=0x100000003 known=false` →
+    `adopted … guest_tagged=true`. The ROT6 trace was invisible because
+    `acos verify` runs the `acos-art` named by `ACOS_ART_BIN`; a rebuilt `acos`
+    does not rebuild it (measured twice: a stale binary shows zero ATMS calls).
+  - `back` reaches the framework's own back path and the host refused the last
+    step of it: the peer's unsupported log has
+    `IActivityClientController onBackPressed code 62 UNSUPPORTED_ANDROID_API`.
+    API 34's `Activity.onBackPressed()` only *asks* the server
+    (`ActivityClient.onBackPressed(mToken, RequestFinishCallback)`, code 62,
+    one-way — hence ROT6's 5 ms "handled" ack with no finish).
+  - Implemented `AtmsState::on_back_pressed` + `pending_reverse_calls` (encoded
+    into `CallResult::deliveries`, an `F_TXN` to the guest's callback binder) and
+    decoded `android.app.IRequestFinishCallback` (`requestFinish`, code 1,
+    one-way) from the image. Measured on `counter.yaml`:
+    `back-pressed token=0x100000003 callback=0x10000001a` →
+    `finishActivity` → `finish-request` → and the app's own log
+    `onPause / onStop / onSaveInstanceState count=2 / onDestroy`.
+  - Step 3 answer: the UP is claimed by
+    `ViewRootImpl$NativePreImeInputStage.doOnBackKeyEvent` (ahead-of-time back),
+    not by ACOS and not by the legacy `Activity.onKeyUp` branch — `Activity.onCreate`
+    registers `mDefaultBackCallback` because
+    `WindowOnBackInvokedDispatcher.isOnBackInvokedCallbackEnabled` is true at
+    targetSdk 34. ROT6's `mDefaultBackCallback == null` came from bytecode, not a
+    measurement; a `back_dispatcher=` marker now records it per Activity.
+  - **Still failing:** the `back` *step* now ends
+    `TIMEOUT (detached)`: after the last window is removed the guest probe
+    (`LaunchMain.checkSettle`) can never publish a settled sample, and the strict
+    settle binds a step to a guest draw at/after the gesture — a window removal
+    draws nothing. On a phone the screen is the launcher; ACOS has no launcher and
+    no second layer, so "the app's task finished" has no screen. `handled=true`
+    for `back` was never evidence of a finish; `onDestroy` is.
+  - *Tests:* `cargo test --release --offline -p acos-services -p acos-art
+    -p acos-cli -p acos-verify` green — 34 targets, 0 failures (1 pre-existing
+    `#[ignore]`); `acos-services` = 86 lib tests + every integration target,
+    incl. the new `tests/rot7_back.rs` (5:
+    the press queues exactly one `requestFinish` to the callback binder with the
+    image's code/one-way shape and fabricates no finish; the client's
+    `finishActivity` after it flips `finished`; zero/unknown tokens still error;
+    a null callback is a `BadRequest`; a press on the top of a two-Activity task
+    leaves the record below untouched) and the untouched W38
+    `an_unknown_or_zero_token_still_errors` (3/3).
+- **Decision:** the ATMS answers `onBackPressed` the AOSP way — record the press,
+  ask the client through the callback it was handed, and let the client's own
+  `Activity.finish()` be the only thing that sets `mFinished`. No host-side
+  "finish by token" shortcut was added (it would skip the framework's path, which
+  is the whole point of the rung). `ACOS_ATMS_TRACE` may now name a file.
+- **Not done:** hello-views / multi-activity / v1-recreate / counter `back` steps do
+  not pass yet (the settle wall above), so there is no "wrong expectation →
+  `ASSERTION_FAILED`" negative yet, and the 15 gates / 5 Gaten flows / 5 negatives
+  were not re-run (unaffected by an added one-way method; the ART lock was held by
+  two foreign `--exclusive` benchmark loops for most of the window).
+- **Left open (pre-existing, measured):** `reportSizeConfigurations` fails in the
+  codec (`SizeConfigurationBuckets`, "parcel underflow: need 4 bytes at 124",
+  3 records in one `counter` run) — a separate row, unrelated to back.

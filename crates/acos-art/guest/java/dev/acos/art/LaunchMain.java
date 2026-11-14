@@ -3111,6 +3111,61 @@ public final class LaunchMain {
      * never claim more than the framework's own state — and `note` is where the
      * reason for the second case is recorded.
      */
+    /**
+     * ROT7: which half of the framework's back handling is armed for `activity`.
+     *
+     * <p>API 34 `Activity.onCreate` registers `mDefaultBackCallback`
+     * (`this::onBackInvoked`) on the window's `OnBackInvokedDispatcher` when
+     * `WindowOnBackInvokedDispatcher.isOnBackInvokedCallbackEnabled(activity)`
+     * (targetSdk >= T). When it is registered,
+     * `ViewRootImpl$NativePreImeInputStage.doOnBackKeyEvent` claims
+     * `KEYCODE_BACK_UP` and calls `onBackInvoked()`; `Activity.onKeyUp`'s legacy
+     * branch (`... && mDefaultBackCallback == null`) is then unreachable. When
+     * it is not, `ViewRootImpl` registers a `CompatOnBackInvokedCallback` and
+     * the legacy path runs. Both end in
+     * `ActivityClient.onBackPressed(token, callback)`, so the reported facts are
+     * what distinguish "who claimed the key" from "the server refused the
+     * finish".
+     */
+    static String backDispatcherFacts(Object activity) {
+        StringBuilder b = new StringBuilder();
+        try {
+            Class<?> wobi = Class.forName("android.window.WindowOnBackInvokedDispatcher");
+            Object enabled = null;
+            for (java.lang.reflect.Method m : wobi.getDeclaredMethods()) {
+                if (!m.getName().equals("isOnBackInvokedCallbackEnabled")) continue;
+                if (m.getParameterCount() != 1) continue;
+                m.setAccessible(true);
+                enabled = m.invoke(null, activity);
+                break;
+            }
+            b.append("ahead_of_time=").append(enabled);
+        } catch (Throwable t) {
+            b.append("ahead_of_time=error:").append(unwrap(t));
+        }
+        Object callback = null;
+        try {
+            callback = get(activity, "mDefaultBackCallback");
+        } catch (Throwable ignored) {
+        }
+        b.append(" mDefaultBackCallback=").append(callback == null ? "null" : "set");
+        try {
+            Object dispatcher = activity.getClass().getMethod("getOnBackInvokedDispatcher")
+                    .invoke(activity);
+            Object top = null;
+            for (java.lang.reflect.Method m : dispatcher.getClass().getDeclaredMethods()) {
+                if (!m.getName().equals("getTopCallback")) continue;
+                m.setAccessible(true);
+                top = m.invoke(dispatcher);
+                break;
+            }
+            b.append(" top_callback=").append(top == null ? "null" : top.getClass().getName());
+        } catch (Throwable t) {
+            b.append(" top_callback=error:").append(unwrap(t));
+        }
+        return b.toString();
+    }
+
     static String writeResumeMarker(Object thread, Object activity, String note) throws Exception {
         String am = "package=" + sPkg + "\nactivity=" + activity.getClass().getName()
                 + "\nlifecycle=onCreate,onStart,onResume"
@@ -3127,6 +3182,11 @@ public final class LaunchMain {
                         ? "unknown" : sFirstTraversalEvidence)
                 + "\ndraw_skip=" + (sTraversalSkipReason == null
                         ? "none" : sTraversalSkipReason)
+                // ROT7: who owns a KEYCODE_BACK_UP for this Activity. API 34 has
+                // two halves — the ahead-of-time `OnBackInvokedDispatcher` and
+                // the legacy `Activity.onKeyUp` branch — and only one of them
+                // can claim the key. Recorded, not forced.
+                + "\nback_dispatcher=" + backDispatcherFacts(activity)
                 + (note == null ? "" : "\n" + note) + "\n";
         write(new File(sOut, "activity-resumed.marker"), am);
         return am;
