@@ -168,6 +168,14 @@ pub enum ErrorCode {
     /// it, so it is never a pass for `wait_for`/`assert_text`/`assert_visible`/
     /// `tap`; the error names the off-screen match and its bounds.
     ElementOffscreen,
+    /// A selector matched **several** user-visible nodes and the caller did not
+    /// say which one it meant.
+    ///
+    /// Input and assertion verbs on the live channel refuse a silent pick: the
+    /// error's `details.candidates` (`id`, `text`, `content_desc`, `class`,
+    /// `bounds`) plus `details.selector` say exactly what matched, so the caller
+    /// can pass a narrower selector (`id`, `content_desc`, `bounds`) or `index`.
+    AmbiguousSelector,
     /// A selector matched nothing in a tree the probe reported as truncated
     /// (`UiTree::truncated`, any window). The node may exist beyond the
     /// sampled prefix, so this is not proof of absence.
@@ -404,6 +412,7 @@ impl ErrorCode {
             ErrorCode::AssertionFailed => "ASSERTION_FAILED",
             ErrorCode::ElementNotFound => "ELEMENT_NOT_FOUND",
             ErrorCode::ElementOffscreen => "ELEMENT_OFFSCREEN",
+            ErrorCode::AmbiguousSelector => "AMBIGUOUS_SELECTOR",
             ErrorCode::TreeTruncated => "TREE_TRUNCATED",
             ErrorCode::StaleRef => "STALE_REF",
             ErrorCode::InsufficientHostEvidence => "INSUFFICIENT_HOST_EVIDENCE",
@@ -586,6 +595,9 @@ impl ErrorCode {
             ErrorCode::ElementOffscreen => {
                 "The selector matched only a node that is not visible to the user (off screen, clipped by an ancestor scroll/pager, or inside a hidden window). The error details carry the node's bounds and its (empty) visible rect. Scroll it into view first (or use a visible element); do not treat it as a pass."
             }
+            ErrorCode::AmbiguousSelector => {
+                "The selector names more than one node the user can see, so nothing was tapped/asserted: a silent pick could act on the wrong one. `error.details.candidates` lists every match (id, text, content_desc, bounds, class); pass a narrower selector (`id`, `content_desc`, `bounds`) or `index` to choose. Never guess the first match."
+            }
             ErrorCode::TreeTruncated => {
                 "The tree was truncated at the node budget (2000 nodes per window by default), so the node may exist beyond the sampled prefix. Raise the probe node budget or narrow the selector (id/class/bounds); this is not proof the node is absent."
             }
@@ -745,6 +757,7 @@ impl ErrorCode {
             ErrorCode::AssertionFailed
             | ErrorCode::ElementNotFound
             | ErrorCode::ElementOffscreen
+            | ErrorCode::AmbiguousSelector
             | ErrorCode::TreeTruncated
             | ErrorCode::InsufficientHostEvidence => ErrorClass::Assertion,
 
@@ -784,6 +797,7 @@ impl ErrorCode {
             ErrorCode::AssertionFailed
             | ErrorCode::ElementNotFound
             | ErrorCode::ElementOffscreen
+            | ErrorCode::AmbiguousSelector
             | ErrorCode::TreeTruncated
             | ErrorCode::InsufficientHostEvidence => Status::Fail,
             ErrorCode::AppCrashed => Status::Crash,
@@ -1000,6 +1014,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::AssertionFailed,
     ErrorCode::ElementNotFound,
     ErrorCode::ElementOffscreen,
+    ErrorCode::AmbiguousSelector,
     ErrorCode::TreeTruncated,
     ErrorCode::StaleRef,
     ErrorCode::InsufficientHostEvidence,

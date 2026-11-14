@@ -1,0 +1,25 @@
+v2-art-counter                             pass                          expected=pass               rc=0 4s ok
+w22-counter-reset                          pass                          expected=pass               rc=0 2s ok
+w54-dialog-pixels                          pass                          expected=pass               rc=0 3s ok
+w42-back-frame                             pass                          expected=pass               rc=0 3s ok
+w15-dialog-menu                            pass                          expected=pass               rc=0 0s ok
+form-validation                            pass                          expected=pass               rc=0 8s ok
+suite/T03-render-good                      pass                          expected=pass               rc=0 1s ok
+v1-offscreen-pager                         pass                          expected=pass               rc=0 1s ok
+w7-insets-report                           pass                          expected=pass               rc=0 1s ok
+se1-expect-change-tap                      pass                          expected=pass               rc=0 1s ok
+suite/T03-render-wrong                     fail       ASSERTION_FAILED   expected=ASSERTION_FAILED   rc=1 0s MISMATCH
+w7-insets-carve-negative                   fail       ASSERTION_FAILED   expected=ASSERTION_FAILED   rc=1 1s MISMATCH
+negative/se1-expect-change-noop            fail       ASSERTION_FAILED   expected=ASSERTION_FAILED   rc=1 0s MISMATCH
+negative/offscreen-pager-visible           fail       ELEMENT_OFFSCREEN  expected=ELEMENT_OFFSCREEN  rc=1 1s MISMATCH
+p11-progress-timeout                       timeout    TIMEOUT            expected=TIMEOUT            rc=1 3s MISMATCH
+gaten-home                                 pass                          expected=pass               rc=0 7s ok
+gaten-tabs                                 pass                          expected=pass               rc=0 11s ok
+gaten-settings                             pass                          expected=pass               rc=0 13s ok
+gaten-search                               pass                          expected=pass               rc=0 9s ok
+gaten-lesson                               pass                          expected=pass               rc=0 12s ok
+negative/gaten-home-wrong                  fail       ASSERTION_FAILED   expected=ASSERTION_FAILED   rc=1 5s MISMATCH
+negative/gaten-tabs-wrong                  fail       ASSERTION_FAILED   expected=ASSERTION_FAILED   rc=1 5s MISMATCH
+negative/gaten-settings-wrong              fail       ASSERTION_FAILED   expected=ASSERTION_FAILED   rc=1 6s MISMATCH
+negative/gaten-search-wrong                fail       ASSERTION_FAILED   expected=ASSERTION_FAILED   rc=1 9s MISMATCH
+negative/gaten-lesson-wrong                fail       ASSERTION_FAILED   expected=ASSERTION_FAILED   rc=1 7s MISMATCH

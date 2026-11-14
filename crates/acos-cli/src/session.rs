@@ -317,6 +317,12 @@ pub struct TapArgs {
     /// name after `/`), the same value `observe --tree` exposes.
     #[arg(long = "id")]
     pub id: Option<String>,
+    /// Tap the node whose `content_desc` equals this value — the accessibility
+    /// label a React Native pressable carries its whole name in (for example
+    /// `--content-desc "Search Japanese dictionary"`). Exactly one visible
+    /// match; several are `AMBIGUOUS_SELECTOR` with the candidates listed.
+    #[arg(long = "content-desc")]
+    pub content_desc: Option<String>,
     /// Tap the React Native node with this `testID` (resolves to the nearest
     /// clickable ancestor; requires an RN session).
     #[arg(long = "testID")]
@@ -344,6 +350,7 @@ pub fn tap(args: TapArgs) -> ExitCode {
             "y": args.y,
             "text": args.label,
             "id": args.id,
+            "content_desc": args.content_desc,
             "testID": args.test_id,
         });
         if let Some(code) = call_running_daemon("acos_tap", &daemon_args, args.json) {
@@ -351,6 +358,24 @@ pub fn tap(args: TapArgs) -> ExitCode {
         }
     }
     let request_id = new_request_id();
+    if let Some(desc) = &args.content_desc {
+        if args.apk.is_none() {
+            // A content description can only be resolved against a live tree,
+            // which the daemon owns. Say so instead of falling back to a
+            // tree-less session that cannot honour the selector.
+            let envelope = fail(
+                &request_id,
+                ErrorCode::UnsupportedBackend,
+                format!(
+                    "`--content-desc {desc}` needs a live session in the `acos serve` daemon \
+                     (start one, or launch with `acos launch --keep`); the stateless path has no \
+                     UI tree to resolve it against"
+                ),
+                json!({"field": "content_desc", "engine": "daemon"}),
+            );
+            return emit(&envelope, args.json);
+        }
+    }
     let session = start_session(args.timeout);
     if let Some(envelope) = maybe_launch(&session, &args.apk, &request_id) {
         return emit(&envelope, args.json);
@@ -830,6 +855,10 @@ pub struct SessionTapArgs {
     /// Tap the node whose `resource_id` equals this value.
     #[arg(long = "id")]
     pub id: Option<String>,
+    /// Tap the node whose `content_desc` equals this value (the accessibility
+    /// label RN pressables carry their name in); exactly one visible match.
+    #[arg(long = "content-desc")]
+    pub content_desc: Option<String>,
     /// Tap the React Native node with this `testID`.
     #[arg(long = "testID")]
     pub test_id: Option<String>,
@@ -986,6 +1015,7 @@ fn session_tap(args: SessionTapArgs) -> ExitCode {
         "y": args.y,
         "text": args.label,
         "id": args.id,
+        "content_desc": args.content_desc,
         "testID": args.test_id,
         "settle_timeout_ms": args.settle_timeout_ms,
     });
@@ -998,6 +1028,7 @@ fn session_tap(args: SessionTapArgs) -> ExitCode {
         y: args.y,
         label: args.label,
         id: args.id,
+        content_desc: args.content_desc,
         test_id: args.test_id,
         apk: None,
         timeout: 120,
