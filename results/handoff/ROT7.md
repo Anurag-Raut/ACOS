@@ -197,3 +197,41 @@ same `back` step first.
    codec (`SizeConfigurationBuckets`: parcel underflow at 124, 3 records in
    `counter`). It is a pre-existing ROT6-era record, unrelated to back, and worth
    its own row.
+
+---
+
+# ROT8 — `back` binds on the settled empty window forest (`window-gone`); B→A resumes A first
+
+**Status: see the acceptance table below (filled from the measured runs).** Commits on `art-back-1`
+after `99a65f1`.
+
+## What changed
+
+1. **Guest probe** (`LaunchMain.emitProbe` / `taskFinished`): when the Activity that was last
+   live is `mFinished` + `isDestroyed()`, no Activity record of the process is alive, and
+   WindowManagerGlobal holds no attached root, the sample is an empty window forest with
+   `settle.settled=true, window_gone=true, task_finished=true` (no `detached` pending).
+   `sLastLiveActivity` keeps the finished Activity (the framework drops its record on destroy).
+2. **Host settle** (`acos-art/src/launch.rs`): `window_gone_binds` (settled + empty forest + the
+   guest flag) → `SettleEnd::Settled` with `bound:"window-gone"`, `task_finished:true`,
+   `pixels_changed:false`, no draw requirement. A non-empty forest, an unsettled sample or an
+   ordinary empty tree never binds this way. Replies carry no PNG (`pixels:false`,
+   `frame_seq` = the logical id, advanced as for any pixel-less tree reply); the compositor has
+   no layer, so no frame exists and none is invented. Tree requests answer the same bound.
+3. **CLI engine** (`engine/art.rs::absorb`): a `window_gone` reply binds the empty tree to the
+   last committed pixels under the new `frame_seq`; the step evidence carries the settle block
+   (`bound:"window-gone"`, `task_finished:true`).
+4. **B→A back**: finish watcher order is now Pause(finished) B → Resume A → (A resumed) Stop B →
+   Destroy B (AOSP). A is relaid out and drawn (`pixels_changed:true`, new frame).
+5. **Scenarios** (AOSP-correct): the back-step log pattern drops `onSaveInstanceState`
+   (`performStopActivityInner`: `!r.activity.mFinished`); `assert_not_visible` after the final back;
+   `multi-activity.yaml` uses hardware Back and asserts A's text afterwards;
+   `multi-activity-finish.yaml` keeps the Finish-button path; negatives
+   `negative/multi-wrong-after-back.yaml` (ASSERTION_FAILED) and
+   `negative/hello-views-back-text-gone.yaml` (ELEMENT_NOT_FOUND: the text is gone).
+6. **Unit tests**: `launch.rs::window_gone_sample_is_parsed_and_binds_only_with_state_proof`,
+   `tests/rot8_resume.rs` (back from B leaves A as the task top).
+
+## Open rows
+* A second B cycle + relaunch aborts the guest (layer-handle pool suspected) — EXPERIMENTS E9.6.
+* `reportSizeConfigurations` `SizeConfigurationBuckets` underflow — EXPERIMENTS E9.6.

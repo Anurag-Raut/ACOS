@@ -4757,3 +4757,45 @@ nothing in this change is on the tap path).
 - **Left open (pre-existing, measured):** `reportSizeConfigurations` fails in the
   codec (`SizeConfigurationBuckets`, "parcel underflow: need 4 bytes at 124",
   3 records in one `counter` run) — a separate row, unrelated to back.
+
+## E9.6 — ROT8: a `back` that finishes the last window binds on STATE (`window-gone`), and Back from B resumes A before B stops — PASS (acceptance in `results/handoff/ROT7.md` §ROT8)
+
+- **Branch/worktree:** `art-back-1` (`.cache/wt-rot7`), commits after `99a65f1`.
+  Report: `results/handoff/ROT7.md` §ROT8.
+- **Hypothesis:** the `back` step failed only because the strict settle needs a
+  guest draw and a destroyed last window draws nothing. Orchestrator decision
+  (option a): bind the step on the guest's *state* proof — every Activity
+  destroyed + the finishing one `mFinished` + no attached window root — never a
+  timeout, never an invented frame.
+- **Result:** `LaunchMain.emitProbe`→`taskFinished()` reports `settle.window_gone`
+  / `task_finished` with an empty window forest; the host
+  (`window_gone_binds`) binds `bound:"window-gone"`, `pixels_changed:false`,
+  `task_finished:true` (step evidence), the reply carries no PNG and a logical
+  `frame_seq`, and the CLI engine binds the empty tree to the last committed
+  pixels. `assert_not_visible` then passes, `assert_text` fails.
+  hello-views 27/27, counter, v1-recreate, multi-activity, multi-activity-finish
+  pass on `--engine art`; the negative "wrong text after Back" → `ASSERTION_FAILED`.
+- **Decision (scenario correction):** the old `onSaveInstanceState` pattern on the
+  *back* step was written before back worked and contradicts AOSP:
+  `ActivityThread.performStopActivityInner` computes
+  `shouldSaveState = saveState && !r.activity.mFinished && …`, so a FINISHING
+  Activity is never asked to save. The patterns are now `onPause → onStop →
+  onDestroy` (rotate keeps `onSaveInstanceState`).
+- **Back from B resumes A:** it already resumed once `onBackPressed` landed, but
+  in the wrong order (Pause → Destroy → Resume A). The finish watcher now sends
+  the AOSP order: `Pause(finished)` B → `Resume` A (onStart/onResume, A relaid out
+  and drawn: new frame, `pixels_changed:true`) → `Stop` B → `Destroy` B.
+- **Row (pre-existing, found here, NOT fixed):** a **second** SecondActivity
+  cycle (B2 up, then back/finish) followed by a relaunch (rotate) — or a B2
+  start after the rotations — SIGABRTs the guest (`__android_log_assert`,
+  `ISurfaceComposerClient code 1: unknown binder handle 0x1001011` in
+  `unsupported.jsonl`). Reproduces with the legacy watcher order, so it is not
+  the ROT8 reorder; suspect the bounded, never-recycled 16-handle layer pool
+  (`surface_client::LAYER_HANDLE_POOL`). `multi-activity.yaml` therefore uses ONE
+  B cycle (hardware Back); the Finish-button path is kept in
+  `multi-activity-finish.yaml`.
+- **Row (pre-existing, NOT fixed): `reportSizeConfigurations`** still dies in the
+  codec (`SizeConfigurationBuckets`, parcel underflow "need 4 bytes at 124"). The
+  curated spec in `acos-services/src/parcelable.rs` starts with a `Byte` before
+  four `IntArray`s; the AOSP source is not in the cache to verify, so it was not
+  touched (the real layout is probably four int arrays, no leading byte).
