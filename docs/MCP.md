@@ -148,8 +148,51 @@ Server limits (all optional):
 | `ACOS_MCP_QUIET` | unset | silence stderr logging |
 | `ACOS_ART_MEM_MAX` | `2G` | per-session guest cgroup memory ceiling (also the budget the host admission check accounts for) |
 | `ACOS_MEMORY_GUARD` | on | `off` disables the `HOST_MEMORY_LOW` admission check (the cgroup ceiling still applies) |
-| `ACOS_SESSION_DAEMON` | unset | `1` forwards session tools to a running `acos serve` (by default the server holds sessions in-process on the Rust VM; start `acos serve --engine art` for real-ART sessions) |
-| `ACOS_SESSION_SOCKET` | `<runtime dir>/session.sock` | socket of that daemon |
+| `ACOS_SESSION_DAEMON` | unset | `1` forwards session tools to a **running external** `acos serve` at `ACOS_SESSION_SOCKET`. Without it the server spawns its own private `acos serve --engine art` (real ART) on first use |
+| `ACOS_SESSION_SOCKET` | `<runtime dir>/session.sock` | socket of that external daemon |
+| `ACOS_MCP_ENGINE` | unset (`art`) | `legacy` keeps the frozen in-process Rust VM / RN-bridge backend (diagnostics only; no real Android). Never chosen implicitly |
+
+---
+
+## 1b. Which engine do the tools run?
+
+**Real ART, by default.** The MCP session tools (`acos_launch`, `acos_observe`,
+`acos_observe_tree`, `acos_tap`, `acos_text`, `acos_key`, `acos_logs`,
+`acos_status`, `acos_reset`, `acos_destroy`) do not run on the frozen in-process
+Rust VM any more. On the first session tool call the server lazily spawns **its
+own private** `acos serve --engine art` daemon on a socket under
+`$XDG_RUNTIME_DIR/acos/mcp-<pid>-<rand>/session.sock` and forwards every session
+call to it, so the reply carries `engine: "art"`, `fidelity: "art-reference"`
+and the real launch ladder to `first_frame`, and `acos_reset` really restarts
+the guest in a fresh app-data directory (`data_cleared: true`).
+
+That daemon is a child of the server: `PR_SET_PDEATHSIG(SIGTERM)` is set when it
+is spawned, and on MCP stdin EOF/exit the server destroys its sessions, sends
+`SIGTERM` (the daemon closes every ART guest), reaps the child and removes the
+socket directory. Nothing outlives `acos-mcp`.
+
+The in-process backend still exists but is **frozen and opt-in only**:
+`ACOS_MCP_ENGINE=legacy` selects it; it is for diagnostics and cannot run a real
+APK. `ACOS_SESSION_DAEMON=1` is unchanged: it connects to an **external**
+`acos serve` (any `--engine`) at `ACOS_SESSION_SOCKET` when one is listening. If
+that daemon is not listening the server falls back to its own private ART
+daemon.
+
+Default session ids are unique per server process (`mcp-<pid>`), so two agents
+sharing one external daemon never address each other's session.
+
+### The `engine` argument
+
+`acos_verify` advertises an `engine` argument, an enum of `art` (default, real
+ART) and `rust-vm` (the frozen Rust VM). Omitted means `art`; the reply's
+`fidelity` says which engine actually ran (`art-reference` or `native-runtime`),
+and `required_fidelity: "art-reference"` on a non-ART run is refused
+(`UNSUPPORTED_BACKEND`), never passed.
+
+The **scenario YAML `engine:` field is a different thing**: it is the legacy
+native-vs-reference preference (`native-preferred` | `native-only` |
+`reference-only`) and ART verification does not read it. Do not confuse the two;
+the tool/CLI argument selects the execution engine.
 
 ---
 

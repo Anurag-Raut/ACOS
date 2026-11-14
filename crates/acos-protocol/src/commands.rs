@@ -1102,6 +1102,38 @@ pub struct DestroyResponse {
 // verify
 // ---------------------------------------------------------------------------
 
+/// The execution engine `verify` runs on.
+///
+/// This is the **execution** engine (real ART or the frozen Rust VM). It is not
+/// the scenario YAML `engine:` field, which is a legacy native/reference
+/// preference (`native-preferred` | `native-only` | `reference-only`) that ART
+/// verification does not consume.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum VerifyEngine {
+    /// Real Google ART through an `acos-art` guest (the default).
+    Art,
+    /// The frozen Rust VM / native runtime (diagnostics; never silently chosen).
+    RustVm,
+}
+
+impl Default for VerifyEngine {
+    fn default() -> Self {
+        VerifyEngine::Art
+    }
+}
+
+impl VerifyEngine {
+    /// The stable CLI string.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            VerifyEngine::Art => "art",
+            VerifyEngine::RustVm => "rust-vm",
+        }
+    }
+}
+
 /// `verify`: run an APK + scenario and produce artifacts.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct VerifyRequest {
@@ -1120,6 +1152,9 @@ pub struct VerifyRequest {
     /// Minimum fidelity the verdict must achieve.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub required_fidelity: Option<Fidelity>,
+    /// Execution engine: `art` (default, real ART) or `rust-vm` (frozen).
+    #[serde(default)]
+    pub engine: VerifyEngine,
     /// Deterministic flags recorded in the reproducer.
     #[serde(default)]
     pub flags: Vec<String>,

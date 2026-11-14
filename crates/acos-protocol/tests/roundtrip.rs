@@ -645,6 +645,7 @@ fn command_requests_and_responses_round_trip() {
             artifacts: "out/".to_string(),
             reference: Some("ref/".to_string()),
             required_fidelity: Some(Fidelity::NativeRuntime),
+            engine: VerifyEngine::RustVm,
             flags: vec!["--x".to_string()],
         }),
         CommandRequest::CapabilityReport(CapabilityReportRequest {

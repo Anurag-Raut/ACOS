@@ -172,6 +172,64 @@ def tree_texts(env: dict) -> list[str]:
     return out
 
 
+def clickable_texts(env: dict) -> list[str]:
+    """Texts of nodes the user can actually tap (visible and clickable)."""
+    nodes: list[dict] = []
+
+    def walk(value):
+        if isinstance(value, dict):
+            if "clickable" in value and "text" in value:
+                nodes.append(value)
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    walk(env.get("result", {}))
+    seen: list[str] = []
+    for node in nodes:
+        text = (node.get("text") or "").strip()
+        if (
+            text
+            and node.get("clickable") is True
+            and node.get("visible") is True
+            and text not in seen
+        ):
+            seen.append(text)
+    return seen
+
+
+def node_center(env: dict, text: str):
+    """Centre of the first tree node whose text matches, from its bounds."""
+    found = []
+
+    def walk(value):
+        if isinstance(value, dict):
+            if value.get("text") == text and value.get("bounds"):
+                found.append(value)
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    walk(env.get("result", {}))
+    for node in found:
+        raw = node.get("visible_bounds") or node.get("bounds")
+        try:
+            left, rest = raw.split("][")
+            x1, y1 = left.lstrip("[").split(",")
+            x2, y2 = rest.rstrip("]").split(",")
+            x = (int(x1) + int(x2)) // 2
+            y = (int(y1) + int(y2)) // 2
+            if int(x2) > int(x1) and int(y2) > int(y1):
+                return x, y
+        except (AttributeError, ValueError):
+            continue
+    return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--mcp-bin", required=True, help="the acos-mcp binary or wrapper")
@@ -180,6 +238,23 @@ def main() -> int:
     ap.add_argument("--scenario-apk", help="APK the scenario should use (app: rewritten)")
     ap.add_argument("--artifacts", help="artifacts dir for the verify call")
     ap.add_argument("--timeout", type=float, default=600.0, help="per tool call, seconds")
+    ap.add_argument(
+        "--mode",
+        choices=["counter", "gaten"],
+        default="counter",
+        help="counter: 0 -> tap Increment -> 1 -> reset -> 0; gaten: launch, read the "
+        "real RN tree, tap a bottom tab and require the tree to change",
+    )
+    ap.add_argument(
+        "--tap-text",
+        help="counter mode: node text to tap (default Increment); gaten mode: the "
+        "bottom-tab label to tap (default: the first candidate present in the tree)",
+    )
+    ap.add_argument(
+        "--verify-engine",
+        help="optional engine argument for acos_verify. Omitted means the tool's "
+        "default (real ART); pass rust-vm only for the frozen VM",
+    )
     args = ap.parse_args()
 
     mcp_bin = Path(args.mcp_bin).resolve()
@@ -269,30 +344,89 @@ def main() -> int:
         sid = launched.get("session_id") or launched.get("result", {}).get("session_id")
         check("session_id", bool(sid), sid)
 
+        # The default engine is real ART. A default run must say so, both in the
+        # envelope fidelity and in the launch result, with an honest ladder that
+        # ends at first_frame.
+        result0 = launched.get("result") or {}
+        stages = result0.get("stages") or []
+        ladder_ok = bool(stages) and all(
+            stage.get("ok") is True for stage in stages
+        ) and any(stage.get("stage") == "first_frame" for stage in stages)
+        check(
+            "engine_art_reference",
+            launched.get("fidelity") == "art-reference"
+            and result0.get("engine") == "art"
+            and result0.get("stage_reached") == "first_frame"
+            and ladder_ok,
+            {
+                "fidelity": launched.get("fidelity"),
+                "engine": result0.get("engine"),
+                "stage_reached": result0.get("stage_reached"),
+                "stages": stages,
+            },
+        )
+
         tree0 = envelope(
             client.call_tool(
                 "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
             )
         )
         texts0 = tree_texts(tree0)
-        check(
-            "observe_tree initial",
-            tree0.get("status") == "pass" and "0" in texts0 and "Increment" in texts0,
-            {"texts": texts0},
-        )
 
-        tapped = envelope(
-            client.call_tool(
-                "acos_tap",
-                {"session_id": sid, "text": "Increment"},
-                timeout=args.timeout,
+        if args.mode == "counter":
+            check(
+                "observe_tree initial",
+                tree0.get("status") == "pass"
+                and "0" in texts0
+                and "Increment" in texts0,
+                {"texts": texts0},
             )
+            tap_text = args.tap_text or "Increment"
+        else:
+            real = [t for t in texts0 if t and t.lower() not in {"gaten"}]
+            check(
+                "observe_tree gaten",
+                tree0.get("status") == "pass" and len(real) >= 5,
+                {"texts": texts0, "non_empty": len(real)},
+            )
+            # A fresh Gaten install boots into onboarding, so the bottom tabs
+            # may not exist yet; pick a node the tree says is visible and
+            # clickable (a bottom tab when present, else the onboarding action).
+            # React Native's tree reports `clickable`/`visible` as false on this
+            # channel, so a text tap is refused as off-screen even for a node
+            # the user sees. Read the label from the tree and tap its bounds.
+            tabs = ["Home", "Recognition", "Lessons", "Kanji", "Search", "Settings"]
+            ctas = ["Skip", "Open Gaten", "Continue", "Turn on lookup mode", "Set up Gaten"]
+            present = [c for c in tabs + ctas if c in texts0]
+            tap_text = args.tap_text or (present[0] if present else None)
+            check(
+                "gaten_tab_or_cta_present",
+                tap_text is not None,
+                {"present": present, "texts": texts0[:40]},
+            )
+
+        if tap_text is None:
+            raise SmokeError("no node text to tap")
+        if args.mode == "gaten":
+            center = node_center(tree0, tap_text)
+            check(
+                "gaten_tap_target_bounds",
+                center is not None,
+                {"text": tap_text, "center": center},
+            )
+            tap_args = {"session_id": sid, "x": center[0], "y": center[1]}
+        else:
+            tap_args = {"session_id": sid, "text": tap_text}
+        tapped = envelope(
+            client.call_tool("acos_tap", tap_args, timeout=args.timeout)
         )
         check(
-            "acos_tap Increment",
+            "acos_tap",
             tapped.get("status") == "pass"
             and tapped.get("result", {}).get("accepted") is True,
             {
+                "text": tap_text,
+                "args": tap_args,
                 "status": tapped.get("status"),
                 "accepted": tapped.get("result", {}).get("accepted"),
                 "state_changed": tapped.get("result", {}).get("state_changed"),
@@ -306,11 +440,45 @@ def main() -> int:
             )
         )
         texts1 = tree_texts(tree1)
-        check(
-            "observe_tree after tap",
-            tree1.get("status") == "pass" and "1" in texts1 and "0" not in texts1,
-            {"texts": texts1},
-        )
+        if args.mode == "counter":
+            check(
+                "observe_tree after tap",
+                tree1.get("status") == "pass" and "1" in texts1 and "0" not in texts1,
+                {"texts": texts1},
+            )
+        else:
+            check(
+                "gaten_tree_changed_after_tab",
+                tree1.get("status") == "pass" and texts1 != texts0,
+                {"before": texts0, "after": texts1},
+            )
+
+        if args.mode == "counter":
+            reset = envelope(
+                client.call_tool(
+                    "acos_reset",
+                    {"session_id": sid, "scope": "app"},
+                    timeout=args.timeout,
+                )
+            )
+            reset_result = reset.get("result") or {}
+            check(
+                "acos_reset",
+                reset.get("status") == "pass"
+                and reset_result.get("data_cleared") is True,
+                {"status": reset.get("status"), "result": reset_result},
+            )
+            tree2 = envelope(
+                client.call_tool(
+                    "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
+                )
+            )
+            texts2 = tree_texts(tree2)
+            check(
+                "observe_tree after reset",
+                tree2.get("status") == "pass" and "0" in texts2,
+                {"texts": texts2},
+            )
 
         destroyed = envelope(
             client.call_tool("acos_destroy", {"session_id": sid}, timeout=args.timeout)
@@ -320,6 +488,21 @@ def main() -> int:
             destroyed.get("status") == "pass"
             and destroyed.get("result", {}).get("destroyed") is True,
             {"status": destroyed.get("status"), "result": destroyed.get("result")},
+        )
+        # After destroy the id is gone: status must say so, never `live: true`.
+        gone = envelope(
+            client.call_tool("acos_status", {"session_id": sid}, timeout=args.timeout)
+        )
+        check(
+            "status_after_destroy",
+            gone.get("status") != "pass"
+            and (gone.get("error") or {}).get("code")
+            in {"SESSION_NOT_FOUND", "UNSUPPORTED_BACKEND"},
+            {
+                "status": gone.get("status"),
+                "code": (gone.get("error") or {}).get("code"),
+                "result": gone.get("result"),
+            },
         )
         sid = None
 
@@ -365,7 +548,11 @@ def main() -> int:
                         "scenario": str(run_scenario),
                         "artifacts": str(artifacts),
                         "apk": str(scenario_apk),
-                        "engine": "art",
+                        **(
+                            {"engine": args.verify_engine}
+                            if args.verify_engine
+                            else {}
+                        ),
                         "base": {"request_id": "rel1c_verify"},
                     },
                     timeout=args.timeout,
@@ -380,10 +567,15 @@ def main() -> int:
             )
             check(
                 "acos_verify",
-                verified.get("status") == "pass" and verdict_state == "pass",
+                verified.get("status") == "pass"
+                and verdict_state == "pass"
+                and verified.get("fidelity") == "art-reference"
+                and (verdict or {}).get("engine") == "art",
                 {
                     "status": verified.get("status"),
+                    "fidelity": verified.get("fidelity"),
                     "verdict": verdict_state,
+                    "engine": None if verdict is None else verdict.get("engine"),
                     "steps": None if verdict is None else len(verdict.get("steps", [])),
                     "error": verified.get("error"),
                 },

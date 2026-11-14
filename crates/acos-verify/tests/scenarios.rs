@@ -283,6 +283,7 @@ fn verify_envelope_satisfies_protocol_invariants() {
         artifacts: scratch("envelope").display().to_string(),
         reference: Some(reference_dir("hello-views").display().to_string()),
         required_fidelity: None,
+        engine: acos_protocol::VerifyEngine::RustVm,
         flags: vec!["--reference".to_string()],
     };
     let mut backend = ReferenceBackend::new(reference_dir("hello-views"));

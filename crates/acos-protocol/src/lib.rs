@@ -54,7 +54,7 @@ pub use commands::{
     DestroyResponse, EventsRequest, EventsResponse, InspectRequest, InspectResult, KeyName,
     ObserveRequest, ObserveResponse, Orientation, Point, ProfileRequest, ProfileResponse,
     RequestBase, ResetRequest, ResetResponse, ResetScope, RunDexRequest, RunDexResult, RunRequest,
-    RunResponse, VerifyRequest, VerifyResponse,
+    RunResponse, VerifyEngine, VerifyRequest, VerifyResponse,
 };
 pub use envelope::{Backend, Envelope, EnvelopeError, Evidence, Fidelity, Metrics, Status};
 pub use error::{

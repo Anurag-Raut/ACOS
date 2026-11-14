@@ -35,6 +35,7 @@ use serde_json::{json, Value};
 
 use crate::backend::{Backend, BackendConfig, BackendInfo, CallContext, Capabilities, CliBackend};
 use crate::daemon::{self, DaemonClient};
+use crate::private_daemon::PrivateDaemon;
 use crate::flutter_backend::{self, FlutterSessions};
 use crate::rn_backend::{self, RnSessions};
 use acos_jni::FlutterSessionError;
@@ -51,7 +52,38 @@ const SESSION_COMMANDS: &[CommandName] = &[
 ];
 
 /// The default session id when a request omits `base.session_id`.
-pub const DEFAULT_SESSION: &str = "s_mcp";
+///
+/// It is unique **per server process** (`mcp-<pid>`): two agents pointed at the
+/// same external daemon can never address each other's session by accident.
+/// Callers that want a stable id pass `base.session_id` explicitly.
+#[must_use]
+pub fn default_session_id() -> &'static str {
+    static DEFAULT: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    DEFAULT.get_or_init(|| format!("mcp-{}", std::process::id()))
+}
+
+/// Teardown handle for this server's private ART daemon.
+#[derive(Clone)]
+pub struct ArtDaemonHandle(std::sync::Arc<Mutex<Option<PrivateDaemon>>>);
+
+impl ArtDaemonHandle {
+    /// Destroy held sessions, terminate the daemon and reap it (idempotent).
+    pub fn shutdown(&self) {
+        if let Some(daemon) = self.0.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+            daemon.shutdown();
+        }
+    }
+
+    /// The daemon's pid, when it has been spawned.
+    #[must_use]
+    pub fn pid(&self) -> Option<u32> {
+        self.0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(PrivateDaemon::pid)
+    }
+}
 
 /// A [`Backend`] that holds in-process sessions and delegates the rest to a
 /// [`CliBackend`].
@@ -67,6 +99,11 @@ pub struct SessionBackend {
     next_child: AtomicU64,
     /// Optional running session daemon to forward session tools to (F-08).
     daemon: Option<Mutex<DaemonClient>>,
+    /// The `acos` binary to spawn as this server's private ART daemon, when the
+    /// default engine is requested (see [`crate::private_daemon`]).
+    private_acos: Option<PathBuf>,
+    /// The lazily spawned private ART daemon (one per server process).
+    private: std::sync::Arc<Mutex<Option<PrivateDaemon>>>,
     /// Flutter sessions owned by this process (the confined child).
     flutter: FlutterSessions,
     /// React Native sessions owned by this process (the confined child).
@@ -95,6 +132,8 @@ impl SessionBackend {
             child_binary: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("acos-mcp")),
             next_child: AtomicU64::new(0),
             daemon: None,
+            private_acos: None,
+            private: std::sync::Arc::new(Mutex::new(None)),
             flutter: FlutterSessions::default(),
             rn: RnSessions::default(),
         }
@@ -110,6 +149,8 @@ impl SessionBackend {
             child_binary: std::env::current_exe().unwrap_or_else(|_| PathBuf::from("acos-mcp")),
             next_child: AtomicU64::new(0),
             daemon: None,
+            private_acos: None,
+            private: std::sync::Arc::new(Mutex::new(None)),
             flutter: FlutterSessions::default(),
             rn: RnSessions::default(),
         }
@@ -142,6 +183,128 @@ impl SessionBackend {
     #[must_use]
     pub fn with_daemon(self) -> Self {
         self.with_daemon_socket(daemon::socket_path())
+    }
+
+    /// Make every session tool run on real ART (the default engine).
+    ///
+    /// The first session tool call lazily spawns this server's **own**
+    /// `acos serve --engine art` on a private socket and forwards to it; the
+    /// daemon is a child of this process and is torn down (sessions destroyed,
+    /// `SIGTERM`, reaped) when it exits. `ACOS_SESSION_DAEMON=1` still wins and
+    /// connects to the external daemon instead.
+    #[must_use]
+    pub fn with_art_daemon(mut self, acos: PathBuf) -> Self {
+        self.private_acos = Some(acos);
+        self
+    }
+
+    /// The private ART daemon's socket, once it has been spawned.
+    #[must_use]
+    pub fn private_daemon_socket(&self) -> Option<PathBuf> {
+        self.private
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|daemon| daemon.socket().to_path_buf())
+    }
+
+    /// Destroy held sessions, terminate and reap the private ART daemon.
+    ///
+    /// Called on MCP stdin EOF/exit; `Drop` does the same for a backend that is
+    /// dropped without it.
+    pub fn shutdown(&self) {
+        self.art_daemon_handle().shutdown();
+    }
+
+    /// A handle that survives `self` moving into the server, so the process can
+    /// tear the daemon down after stdin EOF.
+    #[must_use]
+    pub fn art_daemon_handle(&self) -> ArtDaemonHandle {
+        ArtDaemonHandle(std::sync::Arc::clone(&self.private))
+    }
+
+    /// Forward a session tool to the external daemon, else to the private ART
+    /// daemon. `None` means "serve it in-process" (the legacy engine).
+    fn forward_session_tool(&self, tool: &str, args: &Value) -> Option<Envelope> {
+        // Fill the default identity here, not in the daemon: the default session
+        // id is unique per MCP server process (`mcp-<pid>`), and a shared
+        // external daemon must never invent one for us.
+        let mut normalized = args.clone();
+        if let Some(object) = normalized.as_object_mut() {
+            let mut base = session_base(args);
+            // Older clients (and `tools/release/mcp_smoke.py`'s first form) sent
+            // `session_id` at the top level; accept it as `base.session_id`
+            // rather than silently addressing the default session.
+            if let (Some(top), Some(map)) = (
+                args.get("session_id").and_then(Value::as_str),
+                base.as_object_mut(),
+            ) {
+                map.insert("session_id".to_string(), json!(top));
+            }
+            object.insert("base".to_string(), base);
+        }
+        let args = &normalized;
+        if let Some(daemon) = &self.daemon {
+            let mut client = daemon.lock().unwrap_or_else(|e| e.into_inner());
+            return Some(match client.call(tool, args) {
+                Ok(envelope) => envelope,
+                Err(e) => daemon_error(&request_id(args), args, &e.to_string()),
+            });
+        }
+        let acos = self.private_acos.clone()?;
+        let mut slot = self.private.lock().unwrap_or_else(|e| e.into_inner());
+        if slot.is_none() {
+            match PrivateDaemon::spawn(&acos, crate::private_daemon::ENGINE_ART) {
+                Ok(daemon) => {
+                    eprintln!(
+                        "acos-mcp: private ART session daemon pid {} on {} (engine {})",
+                        daemon.pid(),
+                        daemon.socket().display(),
+                        daemon.engine()
+                    );
+                    *slot = Some(daemon);
+                }
+                Err(e) => {
+                    return Some(private_daemon_error(
+                        &request_id(args),
+                        args,
+                        &format!(
+                            "start `{} serve --engine art`: {e}",
+                            acos.display()
+                        ),
+                    ))
+                }
+            }
+        }
+        let daemon = slot.as_mut().expect("spawned above");
+        match daemon.call(tool, args) {
+            Ok(envelope) => Some(envelope),
+            Err(first) => {
+                // A private daemon that died (idle exit, guest OOM) is replaced
+                // once: the session is gone either way, and the retry keeps a
+                // long-lived agent server usable without a restart.
+                eprintln!("acos-mcp: private ART daemon call failed ({first}); restarting it");
+                daemon.shutdown();
+                *slot = None;
+                match PrivateDaemon::spawn(&acos, crate::private_daemon::ENGINE_ART) {
+                    Ok(mut fresh) => {
+                        let result = fresh.call(tool, args);
+                        *slot = Some(fresh);
+                        Some(match result {
+                            Ok(envelope) => envelope,
+                            Err(e) => {
+                                daemon_error(&request_id(args), args, &e.to_string())
+                            }
+                        })
+                    }
+                    Err(e) => Some(private_daemon_error(
+                        &request_id(args),
+                        args,
+                        &format!("restart `{} serve --engine art`: {e}", acos.display()),
+                    )),
+                }
+            }
+        }
     }
 
     /// Number of live sessions (in-process tasks plus confined native children).
@@ -1378,12 +1541,8 @@ impl SessionBackend {
     /// Server-local session tools (`acos_launch`, `acos_tap`, ...).
     pub fn session_call(&self, name: &str, args: &Value, ctx: &CallContext) -> Option<Envelope> {
         if name != "acos_doctor" && !name.is_empty() {
-            if let Some(daemon) = &self.daemon {
-                let mut client = daemon.lock().unwrap_or_else(|e| e.into_inner());
-                return Some(match client.call(name, args) {
-                    Ok(envelope) => envelope,
-                    Err(e) => daemon_error(&request_id(args), args, &e.to_string()),
-                });
+            if let Some(envelope) = self.forward_session_tool(name, args) {
+                return Some(envelope);
             }
         }
         let request_id = request_id(args);
@@ -1531,21 +1690,17 @@ impl SessionBackend {
 
 impl Backend for SessionBackend {
     fn call(&self, command: CommandName, args: &Value, ctx: &CallContext) -> Envelope {
-        if let Some(daemon) = &self.daemon {
-            let tool = match command {
-                CommandName::Run => Some("acos_launch"),
-                CommandName::Observe => Some("acos_observe"),
-                CommandName::Action => Some("acos_action"),
-                CommandName::Reset => Some("acos_reset"),
-                CommandName::Destroy => Some("acos_destroy"),
-                _ => None,
-            };
-            if let Some(tool) = tool {
-                let mut client = daemon.lock().unwrap_or_else(|e| e.into_inner());
-                return match client.call(tool, args) {
-                    Ok(envelope) => envelope,
-                    Err(e) => daemon_error(&request_id(args), args, &e.to_string()),
-                };
+        let forwarded = match command {
+            CommandName::Run => Some("acos_launch"),
+            CommandName::Observe => Some("acos_observe"),
+            CommandName::Action => Some("acos_action"),
+            CommandName::Reset => Some("acos_reset"),
+            CommandName::Destroy => Some("acos_destroy"),
+            _ => None,
+        };
+        if let Some(tool) = forwarded {
+            if let Some(envelope) = self.forward_session_tool(tool, args) {
+                return envelope;
             }
         }
         let request_id = request_id(args);
@@ -1584,7 +1739,7 @@ impl Backend for SessionBackend {
 fn session_id(args: &Value) -> String {
     args.pointer("/base/session_id")
         .and_then(Value::as_str)
-        .unwrap_or(DEFAULT_SESSION)
+        .unwrap_or_else(|| default_session_id())
         .to_string()
 }
 
@@ -2101,6 +2256,28 @@ impl ConfinedChild {
 /// A transport failure while forwarding to the session daemon.
 fn daemon_error(request_id: &str, args: &Value, message: &str) -> Envelope {
     native_child_error(request_id, &session_id(args), "SESSION_NOT_FOUND", message)
+}
+
+/// The private ART daemon could not be started (no session command ran).
+fn private_daemon_error(request_id: &str, args: &Value, message: &str) -> Envelope {
+    let error = ProtocolError::new(
+        ErrorCode::Internal,
+        format!("the private ART session daemon is unavailable: {message}"),
+    )
+    .with_hint(
+        "The MCP server runs session tools on `acos serve --engine art`; check that the `acos` \
+         binary is installed and executable (set ACOS_BIN to it), or set ACOS_MCP_ENGINE=legacy \
+         for the frozen in-process engine (diagnostics only: no real Android).",
+    )
+    .with_details(json!({"engine": "art", "session_id": session_id(args)}));
+    Envelope::failure(
+        request_id,
+        ProtocolBackend::AcosNative,
+        Fidelity::StaticAnalysis,
+        error,
+        Metrics::wall_ms(0),
+    )
+    .with_session_id(session_id(args))
 }
 
 fn native_child_error(

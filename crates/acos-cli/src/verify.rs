@@ -339,6 +339,10 @@ pub fn run(args: VerifyArgs) -> ExitCode {
             .as_ref()
             .map(|path| path.display().to_string()),
         required_fidelity,
+        engine: match engine {
+            Engine::Art => acos_protocol::VerifyEngine::Art,
+            Engine::RustVm => acos_protocol::VerifyEngine::RustVm,
+        },
         flags: args.flags.clone(),
     };
 

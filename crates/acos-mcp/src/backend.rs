@@ -391,13 +391,22 @@ impl CliBackend {
             argv.push("--required-fidelity".to_string());
             argv.push(fidelity.to_string());
         }
-        // Engine selection (`art` for real ART). Without it `acos verify` uses
-        // the frozen Rust VM, which cannot honour an ART-only scenario (for
-        // example `animations: off`): the agent has to be able to ask for the
-        // real engine from MCP, exactly as `--engine art` does on the CLI.
-        if let Some(engine) = args.get("engine").and_then(Value::as_str) {
+        // Engine selection: **real ART by default**, exactly like every other
+        // MCP session tool. `acos verify`'s own CLI default is the frozen Rust
+        // VM, which cannot honour an ART-only scenario (for example
+        // `animations: off`), so the tool must pass the engine explicitly.
+        // `engine: "rust-vm"` is the only way to get the frozen VM and every
+        // reply then says so. A `reference` replay is a recorded-evidence run,
+        // not live ART, and cannot be combined with `--engine art`, so it keeps
+        // the CLI default.
+        let engine = match args.get("engine").and_then(Value::as_str) {
+            Some(value) => Some(value.to_string()),
+            None if args.get("reference").is_none() => Some("art".to_string()),
+            None => None,
+        };
+        if let Some(engine) = engine {
             argv.push("--engine".to_string());
-            argv.push(engine.to_string());
+            argv.push(engine);
         }
         if let Some(flags) = args.get("flags").and_then(Value::as_array) {
             for flag in flags.iter().filter_map(Value::as_str) {
