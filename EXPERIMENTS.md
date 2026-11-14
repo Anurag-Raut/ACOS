@@ -2183,7 +2183,7 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   (`ACOS_ART_ZYGOTE=on`), adds the per-child cgroup memory limit (F3) and then runs the Z7 loop for
   the ≥25 % gate. Exact commands and acceptance: `results/handoff/ZPROD1.md`.
 
-## E2.18 — ZPROD2/ZPROD3: the persistent zygote's host half and its engine wiring — MEASURED (unit/gateway level); real-ART gates pending
+## E2.18 — ZPROD2/ZPROD3/ZPROD3b: the persistent zygote's host half, its engine wiring and the flag-on probe path — MEASURED (unit/gateway level + real-ART gates, flag off and on)
 
 - **Date / commit:** 2026-11-14; branch `zygote-prod-1` (merge of `main` `0c0b322`, then the step-1
   commit). Design `docs/decisions/2026-11-14-zygote-prod.md`. (E2.17 was claimed by ZPROD1's
@@ -2247,10 +2247,37 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   published no probe (fixed: `ACOSLAUNCH_INTERACTIVE`/`LIVE_PROBE`/`FRAME_WAIT_SECS`/
   `ACOS_INPUT_ACK_MS`/`ACOS_ZYGOTE_PROBE` on the keeper). No flag-on claim is made; the exact
   evidence and the next probe-floor diagnostic are in `results/handoff/ZPROD3.md`.
+- **ZPROD3b (same number, same branch, orchestrator decision 2026-11-14): the flag-on probe path —
+  PASS.** Root cause, proven not hypothesised: the guest's demand probe is its **stdin**
+  (`LaunchMain.startLiveProbe` reads a `PROBE` line from `System.in`), but the keeper is spawned by
+  `PersistentZygote::start` with **`.stdin(Stdio::null())`**, so a forked child's fd 0 is `/dev/null`;
+  in this mode the session launcher's own `child` is the `/system/bin/sleep` tombstone (it never
+  runs ART), so the launcher's `PROBE` wake went to the stub and was discarded. After the tap the
+  child's own dirty draws still produced samples (the strict tap passed, `pixels_changed=true`), but
+  an idle screen emits nothing, the following `tree` request set `entry_floor` = the newest sample
+  (41) and no newer one ever arrived — `probe-floor`, `tree_age_ms` = that sample's age. Shadowing
+  of the old symptom: the keeper log of the pre-fix run had no probe-channel line at all. Fix: the
+  session launcher publishes `<session>/probe.fifo` (`0600`, opened read-write like the keeper's
+  `cmd` FIFO) **before** `<session>/argv` (i.e. before any `spawn`), `ZygoteApp.z4ProbeStdin` opens
+  it and `System.setIn`s it in the child **before** `spawnSession` (no namespace/seccomp/Landlock
+  rule yet; fd 0 is inherited down the fork chain), and the launcher's `GuestProbeChannel {Pipe,
+  Fifo}` sends the wake there; the exec path keeps its own stdin pipe unchanged. Strict settle was
+  **not** touched (a stale sample still cannot back a pass). 3 new unit tests (wakes delivered in
+  order, vanished reader cannot `EPIPE`/break the next wake, guest source installs the FIFO before
+  its sandbox) green; `-p acos-cli` and `-p acos-art` suites green (`CLI_RC=0`, `ART_RC=0`).
+  **Flag ON PASS**: `v2-art-counter`, `w22-counter-reset`, `gaten-home` pass (the post-tap
+  `04-assert_text` that used to time out now passes; tap `strict-event`, `pixels_changed=true`),
+  `suite/T03-render-wrong` and `negative/gaten-home-wrong` fail `ASSERTION_FAILED`; every run is a
+  real zygote child (keeper log `ready epoch=33137279661` once, `probe_stdin=on`, child 8 → reset →
+  child 35, same epoch, old child `status=0x9`). **Flag OFF PASS**: the same three pass and the same
+  two negatives fail; no zygote artifact is created (all `out/*/zygote` files predate the off run).
+  Not measured: flag ON vs OFF latency (lock queue); no number claimed. Evidence
+  `.cache/zprod3b/on.log`, `off.log`, `cli.log`, `art.log` and `results/handoff/ZPROD3b.md`.
 - **Conclusion / next:** step 2 (engine wiring: `ZygoteHost`, `ArtSession` zygote branch,
-  reset/status reply fields, `ErrorCode::ZygoteDead`, `shutdown_all`) is landed; the flag-off gate
-  list and the flag-on counter/reset/Gaten checks are the evidence that remains, then ZYGOTE_DEAD
-  restart/new-epoch/refork (ZPROD4) and F3 per-child cgroups.
+  reset/status reply fields, `ErrorCode::ZygoteDead`, `shutdown_all`) is landed and the flag-on
+  counter/reset/Gaten checks now pass with the demand-probe channel plumbed; remaining are the
+  flag-on/off latency comparison, ZYGOTE_DEAD restart/new-epoch/refork (ZPROD4) and F3 per-child
+  cgroups.
 
 ## E13.10 — SE1: an opt-in per-step `expect_change` closes GR4's vacuous-flow gap (a no-op tap can no longer pass) — PASS (ADR-0026 decision 2 shipped; 0 false passes)
 
