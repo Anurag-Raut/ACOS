@@ -959,10 +959,10 @@ A step is a **one-key map**. Valid keys:
 |---|---|
 | `launch` | `activity` / `intent_action` / `data` / `extras` / `clear_state` |
 | `wait_for` | `selector`, `timeout_ms`, `require_visible` |
-| `tap` | `selector` or `x`+`y`, optional `timeout_ms` |
-| `type` | optional `selector`, `text`, `clear` |
-| `key` | `key` (`back`, `home`, `enter`, `tab`, `delete`, `escape`, `volume_up`, `volume_down`, `power`, `menu`, `dpad_*`) |
-| `back` | `{}` |
+| `tap` | `selector` or `x`+`y`, optional `timeout_ms`, `settle`, `settle_timeout_ms`, `expect_change` |
+| `type` | optional `selector`, `text`, `clear`, `settle`, `settle_timeout_ms`, `expect_change` |
+| `key` | `key` (`back`, `home`, `enter`, `tab`, `delete`, `escape`, `volume_up`, `volume_down`, `power`, `menu`, `dpad_*`), `settle`, `settle_timeout_ms`, `expect_change` |
+| `back` | `{}` or `{expect_change: true}` |
 | `rotate` | `orientation: portrait\|landscape` |
 | `assert_text` | `selector`, `text` matcher, optional `bounds`, `timeout_ms` |
 | `assert_visible` / `assert_not_visible` | `selector`, optional `bounds`, `timeout_ms` |
@@ -1080,6 +1080,48 @@ Rules the runner enforces:
 
 If a `scenarios/negative/*.yaml` file passes, the runner is broken; report a
 harness failure, never a successful test.
+
+### 9.5 `expect_change`: prove that an action changed the screen (SE1)
+
+Strict settle does **not** require the pixels to change (ADR-0026 decision 2,
+the P12 rule): an action that draws but leaves the screen pixel-identical still
+settles, passes, and reports the fact as `settle.pixels_changed: false` in the
+step's `settle` evidence. That is deliberate - a tap that only moves focus is
+not a failure.
+
+The trap it leaves open is a **vacuous flow**: a tap on a control that is
+already in the state the scenario asserts writes nothing, and every following
+assertion then holds on state the tap never produced (GR4 Backlog `G4c`: a
+Gaten `gaten-kanji` draft was 3/3 while its tap was a no-op).
+
+`expect_change: true` is the per-step opt-in that closes it. It is accepted on
+the input steps `tap`, `type`, `key` and `back`, and the rule is:
+
+```yaml
+steps:
+  - tap: {selector: {id: inc}, expect_change: true}   # must change the screen
+```
+
+* after the strict settle, `settle.pixels_changed: true` passes as usual;
+* `settle.pixels_changed: false` fails the step with `ASSERTION_FAILED`,
+  `details.reason: "expect_change"`, `details.pixels_changed: false`,
+  `details.step_kind`, and `details.before` / `details.after` frame refs
+  (`frame_seq`, plus `frame: frames/<seq>.png` when that frame was captured);
+* a reply with **no** measured `pixels_changed` (a backend without the evidence,
+  or a fast frame) is `UNSUPPORTED_ASSERTION` - a pixel claim that cannot be
+  measured never passes;
+* `expect_change: true` + `settle: fast` is rejected at parse time
+  (`INVALID_SCENARIO` at `steps[i].<kind>.expect_change`): a fast frame may be
+  mid-animation and is never verification evidence;
+* the flag is a boolean; any other YAML type is a parse error.
+
+Absent (the default `false`), nothing changes: the P12 rule, every existing
+scenario and every settle reply are untouched.
+
+A step that provokes no **draw** at all does not settle, so it is a `TIMEOUT`
+(`reason: "no-draw-after-action"`), not an `expect_change` failure; both are
+non-passes. The same flag is available per action on the serve/MCP input tools
+(`acos_tap`, `acos_key`, `acos_text`) as `expect_change: true`.
 
 ---
 

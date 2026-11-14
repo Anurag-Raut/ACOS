@@ -1355,37 +1355,42 @@ fn observe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError
 
 fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let settle = requested_settle(args)?;
-    if let Some(id) = args.get("id").and_then(Value::as_str) {
+    // SE1: reject an unverifiable pass before the input is injected.
+    reject_fast_expect_change(args)?;
+    let result = if let Some(id) = args.get("id").and_then(Value::as_str) {
         let target = resolve_selector(session, &Selector::by_id(id), "id", id)?;
         session.set_settle_mode(settle);
         session.begin_input();
         let (x, y) = target.tap_point();
         session.tap_in_window(&target.window, x, y)?;
-        return Ok(input_result(session, "tap", json!({"id": id})));
-    }
-    if let Some(text) = args.get("text").and_then(Value::as_str) {
+        input_result(session, "tap", json!({"id": id}))
+    } else if let Some(text) = args.get("text").and_then(Value::as_str) {
         session.set_settle_mode(settle);
         session.begin_input();
         session.tap_text(text)?;
-        return Ok(input_result(session, "tap", json!({"text": text})));
-    }
-    let (Some(x), Some(y)) = (
-        args.get("x").and_then(Value::as_i64),
-        args.get("y").and_then(Value::as_i64),
-    ) else {
-        return Err(BackendError::Failed {
-            code: ErrorCode::InvalidArgument,
-            detail: "acos_tap needs `id`, `text`, or both `x` and `y`".to_string(),
-        });
+        input_result(session, "tap", json!({"text": text}))
+    } else {
+        let (Some(x), Some(y)) = (
+            args.get("x").and_then(Value::as_i64),
+            args.get("y").and_then(Value::as_i64),
+        ) else {
+            return Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: "acos_tap needs `id`, `text`, or both `x` and `y`".to_string(),
+            });
+        };
+        session.set_settle_mode(settle);
+        session.begin_input();
+        session.tap(x as i32, y as i32)?;
+        input_result(session, "tap", json!({"x": x, "y": y}))
     };
-    session.set_settle_mode(settle);
-    session.begin_input();
-    session.tap(x as i32, y as i32)?;
-    Ok(input_result(session, "tap", json!({"x": x, "y": y})))
+    check_expect_change(args, session, &result)?;
+    Ok(result)
 }
 
 fn type_text(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let settle = requested_settle(args)?;
+    reject_fast_expect_change(args)?;
     let Some(text) = args.get("text").and_then(Value::as_str) else {
         return Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
@@ -1409,7 +1414,9 @@ fn type_text(session: &mut ArtSession, args: &Value) -> Result<Value, BackendErr
     session.set_settle_mode(settle);
     session.begin_input();
     session.type_text(text)?;
-    Ok(input_result(session, "text", json!({"text": text})))
+    let result = input_result(session, "text", json!({"text": text}));
+    check_expect_change(args, session, &result)?;
+    Ok(result)
 }
 
 /// The focused editable node, if any. A text-typing command needs one.
@@ -1436,6 +1443,7 @@ fn is_editable_class(class: &str) -> bool {
 
 fn key(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let settle = requested_settle(args)?;
+    reject_fast_expect_change(args)?;
     let code = args.get("code").cloned().unwrap_or(Value::Null);
     let value = if let Some(name) = code.as_str() {
         let name = name.to_ascii_lowercase();
@@ -1455,7 +1463,9 @@ fn key(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
              (enter, back, tab, ...)",
         ));
     };
-    Ok(input_result(session, "key", value))
+    let result = input_result(session, "key", value);
+    check_expect_change(args, session, &result)?;
+    Ok(result)
 }
 
 fn action(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
@@ -1463,6 +1473,10 @@ fn action(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError>
     // A top-level `settle` applies to the inner input verb as well.
     if let (Some(settle), Some(object)) = (args.get("settle"), action.as_object_mut()) {
         object.entry("settle").or_insert_with(|| settle.clone());
+    }
+    // SE1: so does a top-level `expect_change`.
+    if let (Some(flag), Some(object)) = (args.get("expect_change"), action.as_object_mut()) {
+        object.entry("expect_change").or_insert_with(|| flag.clone());
     }
     let kind = action.get("kind").and_then(Value::as_str).unwrap_or("tap");
     match kind {
@@ -1857,6 +1871,96 @@ fn input_result(session: &ArtSession, kind: &str, target: Value) -> Value {
         "target": target,
         "settle": settle,
         "input_evidence": "guest-asserted acks; state_changed is the host's own pixel+tree comparison in strict mode; in fast mode it is the guest's tree-change verdict and a fast frame may be mid-animation",
+    })
+}
+
+/// SE1: parse the per-action `expect_change` flag. Strict-only, exactly like the
+/// scenario step flag; a non-bool is an argument error, never ignored.
+fn expect_change_arg(args: &Value) -> Result<bool, BackendError> {
+    match args.get("expect_change") {
+        None => Ok(false),
+        Some(Value::Bool(value)) => Ok(*value),
+        Some(other) => Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: format!("`expect_change` must be a boolean (got {other})"),
+        }),
+    }
+}
+
+/// SE1: `expect_change: true` with `settle: fast` would be an unverifiable pass
+/// (a fast frame may be mid-animation and is never verification evidence), so
+/// it is rejected before any input is injected.
+fn reject_fast_expect_change(args: &Value) -> Result<(), BackendError> {
+    if expect_change_arg(args)?
+        && matches!(args.get("settle").and_then(Value::as_str), Some("fast"))
+    {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: "`expect_change: true` cannot be combined with `settle: fast`: a fast frame \
+                     may be mid-animation and is never verification evidence; use `settle: \
+                     strict` (the default)"
+                .to_string(),
+        });
+    }
+    Ok(())
+}
+
+/// SE1: enforce `expect_change: true` on a per-action reply.
+///
+/// The rule reads the same fact the reply carries (`settle.pixels_changed`): a
+/// settled action that changed no pixel fails with `ASSERTION_FAILED` and
+/// `details.reason = "expect_change"`. A reply with no measured pixel fact is
+/// `UNSUPPORTED_ASSERTION` - an unmeasured change never passes.
+fn check_expect_change(
+    args: &Value,
+    session: &ArtSession,
+    result: &Value,
+) -> Result<(), BackendError> {
+    if !expect_change_arg(args)? {
+        return Ok(());
+    }
+    let settle = result.get("settle").filter(|settle| !settle.is_null());
+    let pixels_changed = settle
+        .and_then(|settle| settle.get("pixels_changed"))
+        .and_then(Value::as_bool);
+    if pixels_changed == Some(true) {
+        return Ok(());
+    }
+    let after_frame_seq = session.last_frame_seq();
+    let details = json!({
+        "reason": "expect_change",
+        "pixels_changed": pixels_changed,
+        "frame_seq": after_frame_seq,
+        "settle": settle.cloned().unwrap_or(Value::Null),
+    });
+    if pixels_changed == Some(false) {
+        return Err(BackendError::Protocol {
+            code: ErrorCode::AssertionFailed,
+            detail: format!(
+                "the settled frame is pixel-identical to the pre-action frame \
+                 (`settle.pixels_changed:false`); the action proved no visual change"
+            ),
+            hint: Some(
+                "The input was delivered and settled, but nothing on screen changed, so anything \
+                 asserted afterwards would describe state this action never produced (GR4 G4c). \
+                 Target the control that really writes the state, or drop `expect_change`."
+                    .to_string(),
+            ),
+            details: Some(details),
+        });
+    }
+    Err(BackendError::Protocol {
+        code: ErrorCode::UnsupportedAssertion,
+        detail: "`expect_change` cannot be verified: the reply carries no measured \
+                 `settle.pixels_changed`"
+            .to_string(),
+        hint: Some(
+            "A pixel-change claim needs a strict settle record that measures the pixels. Use \
+             `settle: strict` (the default) on a backend that reports `pixels_changed`, or drop \
+             `expect_change`; an unmeasured change never passes."
+                .to_string(),
+        ),
+        details: Some(details),
     })
 }
 

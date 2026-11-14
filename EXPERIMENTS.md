@@ -2237,6 +2237,80 @@ wire/native bugs, and keep a bounded `HostGuard` in `render_views` so a future
 guest loop fails loudly. File the five real failures as T1a–T1e; do not weaken
 any verify/assertion or mark a real failure `#[ignore]`.
 
+## E13.9 — SE1: an opt-in per-step `expect_change` closes GR4's vacuous-flow gap (a no-op tap can no longer pass) — PASS (ADR-0026 decision 2 shipped; 0 false passes)
+
+**Date:** 2026-11-14. **Commit:** the SE1 commit on branch `settle-se1-expect-change`
+(base `main` `3e11d9c`). **Responsible agent:** SE1 (worktree `3oxa6xao/gr4`,
+`.cache/gr4-target`, one ART-lock acquisition per batch).
+
+- **Question / goal:** ADR-0026 decision 2: keep the P12 rule (a step whose
+  action drew but changed no pixel still settles and passes, and the reply keeps
+  reporting `settle.pixels_changed`) **and** add an opt-in per-step
+  `expect_change: true` that fails the step when the settled frame's pixels did
+  not change. That is GR4 Backlog `G4c`: a tap on a control that is already in
+  the asserted state writes nothing, and every later assertion then holds on
+  state the tap never produced (`gaten-kanji` v1 was 3/3 while its RTK tap was a
+  no-op; only a hand-run byte-diff of the captures noticed).
+- **Design (as shipped):**
+  * the flag lives on the input step bodies that carry a strict settle record —
+    `tap`, `type`, `key`, and `back` (the protocol's `EmptyStep` becomes
+    `BackStep { expect_change }`, so `- back: {}` still parses) — and defaults to
+    `false`, skipped on the wire, so the format and every existing scenario are
+    unchanged;
+  * after the strict settle, `settle.pixels_changed: true` passes;
+    `false` fails the step with **`ASSERTION_FAILED`**,
+    `details.reason="expect_change"`, `pixels_changed:false`, `step_kind`, and
+    `details.before`/`details.after` frame refs (`frame_seq` + `frames/<n>.png`
+    when that frame was captured). No new `ErrorCode`: the codebase's convention
+    is "one code per outcome class, `details` for the situation"
+    (`ELEMENT_OFFSCREEN`, `INSUFFICIENT_HOST_EVIDENCE` do the same), and an
+    `expect_change` miss *is* an assertion that ran and did not hold;
+  * a reply with **no** measured `pixels_changed` is `UNSUPPORTED_ASSERTION`
+    (the engine cannot supply the evidence) — an unmeasured change never passes;
+  * `expect_change: true` + `settle: fast` is rejected at scenario-validation
+    time (`INVALID_SCENARIO` at `steps[i].<kind>.expect_change`, for tap/type/key)
+    because a fast frame may be mid-animation and never backs a pass (ADR-0026
+    decision 5). A non-bool is a parse error;
+  * the same flag is on the serve/MCP input tools (`acos_tap`, `acos_key`,
+    `acos_text`) with the same fast rejection before any input is injected and
+    the same measured-fact rule.
+- **Tests (green):** `cargo test -p acos-protocol` (3 new: bool+default, non-bool
+  rejected for `yes`/`1`/`"true"`/`[true]`, fast rejected for tap/type/key with
+  the stable path); `cargo test -p acos-verify` (4 new end-to-end on the
+  vertical-slice backend: changed→pass with `settle.pixels_changed:true`,
+  unchanged→`ASSERTION_FAILED` with the full details and frame refs, flag absent
+  →the P12 pass with `pixels_changed:false`, no settle record→
+  `UNSUPPORTED_ASSERTION`). `acos-cli`, `acos-services` and `acos-art` green (the
+  `sandbox_s5` order flake run alone with `--exact`, as documented).
+- **Gates (measured, one lock acquisition per batch, `--engine art`, animations
+  on):** new `scenarios/se1-expect-change-tap.yaml` **pass** (5 steps, counter
+  tap really moves 0→1) and `scenarios/negative/se1-expect-change-noop.yaml`
+  **fail `ASSERTION_FAILED`** at its tap (3 steps) — the flipped flag flips the
+  verdict, no other step involved. Existing gates unchanged:
+  `v2-art-counter` 11/11, `w22-counter-reset` 9/9, `w54-dialog-pixels` 14/14,
+  `w42-back-frame` 17/17, `w15-dialog-menu` 3/3, `form-validation` 28/28,
+  `T03-render-good` 5/5, `v1-offscreen-pager` 9/9 pass; `T03-render-wrong`
+  `ASSERTION_FAILED`, `negative/offscreen-pager-visible` `ELEMENT_OFFSCREEN`,
+  `p11-progress-timeout` `TIMEOUT`. Gaten: `home`/`tabs`/`settings`/`search`/
+  `lesson` pass (14/22/33/22/28 steps) and the five wrong twins fail
+  `ASSERTION_FAILED` (at 7/7/12/16/10). **All 21 runs are step-for-step identical
+  to the main-side run** in `.cache/wt-int/.cache/int/suite` (status, verdict,
+  failure code, and every step's status/code compared programmatically) —
+  0 false passes, 0 changed codes.
+- **Negative-control note (honest, measured):** a tap on the counter's *blank*
+  content area with `expect_change: true` does **not** fail with
+  `ASSERTION_FAILED` — it never draws, so the strict settle times out
+  (`TIMEOUT`, `reason: no-draw-after-action`). The gate twin therefore uses the
+  measured pixel-identical-but-drawing case (focus the form's empty `Name`
+  field: `settled:true, bound:strict-event, pixels_changed:false`, exactly the
+  tap P12 recorded). Both are non-passes; the SE1 rule is the subtler one.
+- **Conclusion / next:** `G4c` is addressed at the harness level: a flow that
+  needs a state change can now say so per step, and the scenario that quietly
+  proved nothing fails. Scenario authors (GR4/GR3) can add
+  `expect_change: true` to the mutating tap of any claim they care about; no
+  assertion, settle horizon or gate was weakened, and P12's no-change pass is
+  still the default.
+
 ## Backlog (optimization hypotheses; rank = impact × confidence ÷ (cost × risk))
 
 Re-ranked by B2 (E3.2) on the measured objective: **verified tasks per second per

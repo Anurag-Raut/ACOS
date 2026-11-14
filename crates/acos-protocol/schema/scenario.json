@@ -1,6 +1,16 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
+    "BackStep": {
+      "description": "The `back` payload (`- back: {}`).\n\nIt has no target: Back goes to the focused window. SE1's opt-in `expect_change` is the only field, so `- back: {}` keeps parsing.",
+      "properties": {
+        "expect_change": {
+          "description": "SE1: fail the step when the settled frame's pixels are unchanged.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "Bounds": {
       "description": "Integer screen bounds `[left, top, right, bottom]` in pixels.\n\nSerialized as a four-element array. `right`/`bottom` are exclusive at the Android/UI-automator pixel-grid level.",
       "items": {
@@ -153,10 +163,6 @@
           "type": "object"
         }
       ]
-    },
-    "EmptyStep": {
-      "description": "An empty step payload (`- back: {}`).",
-      "type": "object"
     },
     "Engine": {
       "description": "Which engine should run the scenario.",
@@ -382,6 +388,10 @@
     "KeyStep": {
       "description": "`key`.",
       "properties": {
+        "expect_change": {
+          "description": "SE1: fail the step when the settled frame's pixels are unchanged.",
+          "type": "boolean"
+        },
         "key": {
           "allOf": [
             {
@@ -1205,7 +1215,7 @@
         "back": {
           "anyOf": [
             {
-              "$ref": "#/definitions/EmptyStep"
+              "$ref": "#/definitions/BackStep"
             },
             {
               "type": "null"
@@ -1403,6 +1413,10 @@
     "TapStep": {
       "description": "`tap`.",
       "properties": {
+        "expect_change": {
+          "description": "SE1: fail the step when the settled frame's pixels are unchanged.\n\nOpt-in and strict-only: `expect_change: true` with `settle: fast` is rejected at scenario-validation time, because a fast frame may be mid-animation and can never back a claim.",
+          "type": "boolean"
+        },
         "selector": {
           "anyOf": [
             {
@@ -1604,6 +1618,10 @@
         "clear": {
           "default": false,
           "description": "Clear the field first.",
+          "type": "boolean"
+        },
+        "expect_change": {
+          "description": "SE1: fail the step when the settled frame's pixels are unchanged.",
           "type": "boolean"
         },
         "selector": {
