@@ -1,0 +1,41 @@
+# gaten-kanji NEGATIVE CONTROL: the same write is made, and the hub is read as if it
+# did not happen.
+# Must produce status=fail (ASSERTION_FAILED), never pass.
+version: 1
+name: gaten-kanji-wrong
+description: >-
+  Settings hub -> Kanji reference -> choose WaniKani -> Back is asserted to leave
+  the hub row on its old value, Remembering the Kanji (wrong).
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: fail
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  - tap: {selector: {text: {contains: "Set up Gaten"}}, settle_timeout_ms: 5000}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - capture: {name: kanji-home, format: png, fresh: true}
+  - tap: {selector: {content_desc: {exact: Settings}}}
+  - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - capture: {name: kanji-hub, format: png, fresh: true}
+  - assert_visible: {selector: {content_desc: {exact: "Kanji reference. Remembering the Kanji"}}}
+  - tap: {selector: {content_desc: {contains: "Kanji reference."}}, settle_timeout_ms: 8000}
+  - wait_for: {selector: {text: {exact: "Remembering the Kanji"}}, timeout_ms: 30000}
+  - capture: {name: kanji-page, format: png, fresh: true}
+  - tap: {selector: {content_desc: {contains: "WaniKani. Your WaniKani account"}}, settle_timeout_ms: 8000}
+  - capture: {name: kanji-wanikani-selected, format: png, fresh: true}
+  - back: {}
+  - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - capture: {name: kanji-hub-wanikani, format: png, fresh: true}
+  # Wrong on purpose: the row carries the stored value WaniKani now, so a visible
+  # node whose text is "WaniKani" cannot read "Remembering the Kanji" (the hub's
+  # own WaniKani row label is the one such node).
+  - assert_text: {selector: {text: {exact: "WaniKani"}}, text: {exact: "Remembering the Kanji"}}

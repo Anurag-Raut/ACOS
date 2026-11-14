@@ -1,0 +1,44 @@
+# gaten-backstack NEGATIVE CONTROL: the round trip is the same, the page after Back is read wrong.
+# Must produce status=fail (ASSERTION_FAILED), never pass.
+version: 1
+name: gaten-backstack-wrong
+description: >-
+  Analytics -> Connect pushes the WaniKani settings page on the Analytics stack
+  -> Back is asserted to return to the Settings hub instead of Analytics (wrong).
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: fail
+budgets: {memory_mib: 4096, wall_ms: 240000}
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  - tap: {selector: {text: {contains: "Set up Gaten"}}, settle_timeout_ms: 5000}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - capture: {name: backstack-home, format: png, fresh: true}
+  - tap: {selector: {content_desc: {exact: Analytics}}, settle_timeout_ms: 8000}
+  - wait_for: {selector: {text: {contains: "Study activity"}}, timeout_ms: 30000}
+  - capture: {name: backstack-analytics, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "Not connected"}}, text: {exact: "Not connected"}}
+  - assert_text: {selector: {text: {contains: "Connect to see WaniKani progress"}}, text: {contains: "Connect to see WaniKani progress"}}
+  - tap: {selector: {text: {exact: "Connect"}}, settle_timeout_ms: 8000}
+  - wait_for: {selector: {content_desc: {exact: "Personal access token"}}, timeout_ms: 30000}
+  - capture: {name: backstack-wanikani-page, format: png, fresh: true}
+  - assert_text: {selector: {content_desc: {exact: "Personal access token"}}, text: {contains: "Paste your token"}}
+  - assert_text: {selector: {text: {exact: "New per day"}}, text: {exact: "New per day"}}
+  - assert_text: {selector: {text: {exact: "Not connected"}}, text: {exact: "Not connected"}}
+  - assert_visible: {selector: {text: {exact: "Save"}}}
+  - back: {}
+  - wait_for: {selector: {text: {contains: "Study activity"}}, timeout_ms: 30000}
+  - capture: {name: backstack-analytics-again, format: png, fresh: true}
+  - assert_text: {selector: {text: {exact: "Accuracy"}}, text: {exact: "Accuracy"}}
+  # Wrong on purpose: Back returns to the Analytics dashboard, whose heading
+  # reads "Analytics"; the Settings hub it was never pushed from would mean the
+  # push went onto the Settings stack instead of the Analytics one.
+  - assert_text: {selector: {content_desc: {exact: "Analytics"}}, text: {exact: "Settings"}}
