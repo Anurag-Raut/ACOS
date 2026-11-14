@@ -2289,6 +2289,104 @@ is real variance, not a leak; the 10–12 MiB median saving survives.
   three sibling worktrees (~92 GB host-wide), including the required symlinks
   and the prebuilt target; they were recreated and the release rebuilt. Other
   tracks' `.cache` scratch evidence is gone.
+## E2.15 — H13b: `shared-fixed` boot image is the default and cached on disk — MEASURED (accepted by ADR-0026 §4; H13C closed the serve-path and memory/loop rows)
+
+- **Date / commit:** 2026-11-14; branch `perf-h13b-shared-image` off `main`
+  `3e11d9c`; worktree `/home/Qui/.paseo/worktrees/3oxa6xao/h4`. Host: Ryzen 9
+  9950X, 62 GiB (load1 7.89 → 5.66 during the A/B; recorded in
+  `results/bench/H13b.md`). Binaries: `acos-art 03e9832c…`, `acos 9905ccbf…`.
+- **Question.** ADR-0026 §4 makes the shared uncompressed image the default and
+  gives up image ASLR. H13 measured the cost that blocked it: **+3.6 s on every
+  serve's first launch** (one `dex2oat64` build, ~173 MiB). Can the build be
+  cached on disk so every serve after the first pays ~0, and can that cache be
+  atomic, concurrent-safe and corruption-detecting?
+- **Change.** `crates/acos-art/src/boot_image.rs`: unset
+  `ACOS_ART_BOOT_IMAGE` = `shared-fixed`; `<cache>/fixed-<input-hash>/` entries
+  with `manifest.json` (input hash, image-format version, per-file size and a
+  sampled FNV-1a checksum of the first/last 4 KiB); atomic publish (temp dir on
+  the same fs, `fsync`, `rename`, `fsync` dir); exclusive `flock` around
+  check+build+publish so two serves build once; the input hash covers the ACOS
+  image-format version, the `dex2oat64` flags, the boot-classpath environ text
+  and the identity (path, size, mtime) of every sysroot boot jar (37 here) and
+  of `dex2oat64`/`dalvikvm64`/`libart.so`/`libartbase.so`/`libnativehelper.so`.
+  Cache root `ACOS_BOOT_IMAGE_CACHE` → `ACOS_CACHE_DIR` →
+  `$XDG_CACHE_HOME/acos` → `~/.cache/acos`, then `art/boot-images` (0700/0444,
+  never `/tmp`). New reply field `boot_image: {mode, cache, reason, dir,
+  input_hash, base, prep_ms}` in `LaunchResult`, the interactive ready line,
+  `acos verify`'s `engine.timing.boot_image` and `acos serve`'s launch reply +
+  session list. `acos-cli` prewarm warms the entry named by `current.json`.
+- **Failure policy (decided here).** Explicit `shared-fixed` fails closed;
+  the *default* falls back to the sysroot LZ4 image with
+  `cache: "fallback"` + `reason` in the reply and the log. Justification: the
+  default must not be less available than `lz4` was (a machine without
+  `dex2oat64` or with a full disk would otherwise fail every launch), and the
+  fallback is reported, not silent, so a benchmark and a gate can assert on it.
+- **Method.** Cold: `ACOS_BOOT_IMAGE_CACHE=.cache/h13b/cache2` empty, one
+  `acos verify scenarios/v2-art-counter.yaml --engine art`; warm: two more runs.
+  A/B: one lock acquisition, alternating `lz4` / `shared-fixed` (3 reps each,
+  one process per sample). Goldens: no assertion or scenario touched. Gates
+  11/11 and Gaten 5 flows + 5 negatives through `.cache/h13b/run_suite.sh`.
+- **Cold vs warm (launch-side metric `session_start_ms`, guest boot to ready).**
+
+| arm | `session_start_ms` | `boot_image` |
+|---|---:|---|
+| cold cache (build) | **3817** | `shared-fixed/built prep_ms=3584 input=4b0adb4f56cff1ad` |
+| warm cache | **153** | `shared-fixed/hit` |
+| warm again | **151** | `shared-fixed/hit` |
+
+- **Interleaved A/B, old default vs new default (3 reps).** lz4 174 / 176 / 169
+  ms, shared-fixed 175 / 166 / 162 ms (medians **174 vs 166**, load1 2.64 →
+  2.41), all shared-fixed samples `cache: hit`. The shared image is not slower on a warm
+  cache; the +3.6 s H13 measured moves from per-serve to per-machine (and to
+  zero after the first serve).
+- **Correctness.** Gates: `v2-art-counter`, `w22-counter-reset`,
+  `w54-dialog-pixels`, `w42-back-frame`, `w15-dialog-menu`, `form-validation`,
+  `suite/T03-render-good`, `v1-offscreen-pager` pass; `suite/T03-render-wrong`
+  → `ASSERTION_FAILED`; `negative/offscreen-pager-visible` →
+  `ELEMENT_OFFSCREEN`; `p11-progress-timeout` → `TIMEOUT`. Gaten
+  `scenarios/gaten-{home,tabs,settings,search,lesson}.yaml` 5/5 pass,
+  `scenarios/negative/gaten-*-wrong.yaml` 5/5 `ASSERTION_FAILED`. 0 false
+  passes. `w7-insets-report` is main-side red (W7B), excluded.
+  `cargo test --release -p acos-art` (the order-dependent
+  `sandbox_s5::refuses_to_run_when_no_cgroup_can_be_created` run separately and
+  passing), `-p acos-cli`, `-p acos-services`, `-p acos-verify`: green.
+- **Cache unit tests (14 in `boot_image::tests`).** Cold miss builds; second run
+  hits without calling the builder; a changed input set is a new entry; a
+  truncated file (size mismatch, file named) and a same-size corruption
+  (checksum, file named) both rebuild; two concurrent builders produce exactly
+  one build (`Built` + `Hit`); a failed/empty build is a structured error and
+  leaves no entry; pruning keeps 2 entries.
+- **H13C follow-up (serve path + memory/loop rows, same branch `0676c6f`).**
+  The handoff's "`acos serve` dies `GUEST_EXITED` 134 on both arms" was the probe
+  fixture, not the serve path: `fixtures/build/apps/acos-counter.apk` is a 47 MB
+  **Flutter** app that SIGABRTs in its `1.raster` thread (`__android_log_assert`
+  through `/data/shim/libartshim.so`, logcat `tid 19 name 1.raster >>> …
+  dalvikvm64 <<<`) on main `3e11d9c` **and** on this branch, while the plain
+  `counter.apk` — the fixture every scenario and `acos_bench.py` uses — serves
+  and launches `first_frame` on both arms. A second probe mistake set
+  `XDG_RUNTIME_DIR` to a private dir, which breaks `systemd-run --user --scope`
+  (the mandatory cgroup) → `MEMORY_CGROUP_UNAVAILABLE`. No code change; the
+  proof and the abort evidence are in `results/bench/H13b/serve/`.
+- **Serve reply proof.** `boot_image: {mode:shared-fixed, cache:built,
+  prep_ms:3628, input_hash:4b0adb4f56cff1ad, base:0x70000000, reason:"no usable
+  manifest…"}` in the `acos_launch` reply and in the `session list` row for
+  `s_cli`; the next serve reports `cache:"hit"` in both.
+- **M1/M2 + N=10 loop, interleaved 3 reps, `--groups "ml:memory,loop10:16G:600"`,
+  animations on, load1 1.2–1.9, MemAvail 51.4–52.3 GiB.** cgroup anon+shmem
+  per session: lz4 **64.85 / 65.35 / 65.89** → shared-fixed **53.95 / 53.45 /
+  53.55** MiB at N=1/5/10 (medians, **−10.9 / −11.9 / −12.3 MiB**, −16.8…−18.7 %);
+  M1 idle 66.41 → 55.53 MiB (−16.4 %); ΣPss/session at N=10 61.09 → 54.37
+  (−11.0 %). N=10 loop latency **1431.2 → 1413.9 ms/task** (−1.2 %, tie). One
+  pre-existing lz4 flake (`reset → GUEST_EXITED`, 49/50, fail-closed, 0 false
+  passes); no shared-fixed task failed. The page-cache-included
+  `tasks/GiB-min` cell (819.6 vs 664.9) is *not* an A/B claim: it charges the
+  ~173 MiB image file pages per session and its cohort sampler covered
+  0.55–0.64 of guests; the label-matched anon+shmem cell ties (571.0 vs 575.1).
+- **Conclusion.** Accepted as ADR-0026 §4's default: the shared image's memory
+  win is kept, image ASLR is traded away (owner accepted), and the cold-start
+  cost that blocked H13 is paid once per machine instead of once per serve.
+  Raw evidence: `.cache/h13b/{cache2,boot-images,art,out,ab,suite}`,
+  `results/bench/H13b.md`, `results/handoff/H13B.md`.
 
 ## Leaderboard (best measured configuration per metric; update on every accepted experiment)
 
@@ -2318,6 +2416,9 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | Memory / extra session | **64.96 / 65.22 / 65.59 MiB cgroup anon+shmem** at N=1/5/10; ΣPss 195.4 / 76.8 / 62.6 MiB | main `4958703` (H2 on) | B2, E3.2 | 2026-11-13 | pre-H2 97.3/98.0/97.7 cgroup and 213/108/94 Pss — **−33 %** anon+shmem, −29/−33 % ΣPss at N=5/N=10 |
 | Memory / extra session, opt-in shared boot image (H13) | **65.5 (N=1) / 66.9 (N=5) / 64.4 (N=10) MiB cgroup anon+shmem, lz4 + H2**; best opt-in shared image **56.7 / 55.2 / 54.1** (`shared-aslr`, N=5/10 median of 2 cohorts; `shared-fixed` 54.3/53.6/53.0) | `mem-h13-shared-image` off `f9f6ffa` | H13, E2.12 | 2026-11-13 | H2 on; shared image −8.7 / −11.6 / −10.3 MiB/session vs lz4, +3.6 s first launch. Pre-H2 H6 row: 97.3/98.0/97.7 |
 | Idle CPU / wakeups | **0.166 / 0.743 / 1.394 %** of one core at N=1/5/10 (**0.139 %**/session at N=10); **1.21 / 2.06 / 3.08** wakeups/s | `perf-h4-idle-cpu` (H4) off `4737bb7` | H4, E2.16 | 2026-11-14 | interleaved 3-rep A/B vs `4737bb7`: wakeups **−96.4/−97.7/−98.1 %**, CPU **−73.0/−70.8/−71.6 %**; latency unchanged (worst +1.0 %, loop −1.1 %), 0 false passes. Supersedes the B2 row (0.647/2.77/5.28 %, 34.1/90.8/161.7 wakeups/s, main `4958703`) |
+| Boot-image cold start (default `shared-fixed`) | **3.58 s once per machine** (`session_start_ms` 3 817 ms including the boot it replaces), then **153–161 ms** with `cache: hit` on every later serve; lz4 median 173 ms in the same interleaved window | `perf-h13b-shared-image` off `main` `3e11d9c` | H13b, E2.15 | 2026-11-14 | ADR-0026 §4 default; H13's +3.6 s per serve was the only blocker and is now per machine |
+| Memory / extra session, default shared boot image (H13b/H13C) | **53.95 / 53.45 / 53.55 MiB cgroup anon+shmem** at N=1/5/10 (lz4 64.85 / 65.35 / 65.89 in the same interleaved window; ΣPss 54.37 vs 61.09 at N=10); M1 idle 55.53 vs 66.41 | `perf-h13b-shared-image` `0676c6f` off `main` `3e11d9c` | H13C (E2.15) | 2026-11-14 | **−10.9 / −11.9 / −12.3 MiB/session** vs lz4, cached image at ~0 per serve; N=10 loop latency 1431.2 → 1413.9 ms/task (tie) |
+| Idle CPU / wakeups | **0.647 / 2.77 / 5.28 %** of one core at N=1/5/10 (0.647/0.554/0.528 per session); **34.1 / 90.8 / 161.7** wakeups/s | main `4958703` | B2, E3.2 | 2026-11-13 | pre-H2 0.61/2.44/4.47 % — within the 21–38 % load-derived bands; wakeups unchanged |
 | Teardown | **12 ms** (`teardown_ms`, lifecycle) | main `4958703` | B2, E3.2 | 2026-11-13 | tie with GL1 12 ms (−33…−40 % vs 18–20) |
 | Agent loop (animations on) | **1421.9 ms/task; 0.658 tasks/s, 281.6 (page cache) / 891.7 (anon+shmem) tasks/GiB-min at N=1; 1424.6 ms, 2.699 tasks/s, 681.3 / 846.6 at N=5** (H15 binary, 3 reps, verified 1.000); main `4958703` measured 1437.6 / 1441.0 ms in the same H15 window | `perf-h15-reset` (H15) off main `1ce336b`; B2 row for main `4958703` | H15, E2.14 (B2, E3.2) | 2026-11-13 | H15 vs its own interleaved base: **−1.1 % latency at N=1 and N=5**; 0 false passes, verified rate 1.000 |
 | Agent loop (animations off, functional-check mode) | **507–523 ms/task, 1.79 tasks/s, 5239 tasks/GiB-min (anon+shmem) at N=1; 537 ms / 6.28 / 3942 at N=5; 530 ms / 10.22 / 3798 at N=10**; H15 re-measured 490.8 (base) / 501.7 (H15 binary) at N=1 and 518.3 / 516.9 at N=5 | main `4958703`, `--animations off` | H14, E3.3 (H15, E2.14) | 2026-11-13 | 2.71–2.84× latency; the 5.8×/5.0×/8.7× anon+shmem tasks/GiB-min ratios at N=1/5/10 were the S3c denominator bias — corrected (E3.5) the *latency* ratio 2.76–2.79× holds and the cohort GiB-min ratio tracks throughput (1.23–1.30× at N=20); loop becomes reset-bound (48 %); not a default change. H15's Δ is inside noise (±5 % threshold, overlapping rep ranges) |
@@ -2397,7 +2498,7 @@ denominator is now the per-task **boot/relaunch transient**, not steady state.
 | S3b | **Reset relaunch guest exits 1 in 133–301 ms.** `GUEST_EXITED: the guest ended before its first live frame (status exit status: 1)`; 1/150 tasks at N=10, 1/300 at N=20, 1/100 reproduced. No signal, no `native_crash` record (R3 retention only fires on a crash signal) and the guard line was not kept, so the cause is unnamed; it is the symptom class H17 fixed (torn `<data>/seccomp/landlock.plan` or mapped APK), which must be ruled out first. Evidence `results/bench/S3-evidence/loop-n20-reset-guestexited.json` | loop verified rate at N≥10 | back to 100 % | high (reproduced) | low (retain guard/`session-exit.json` for exit 1, then re-read) | low | **open, found by S3 (E3.4)** |
 | S3c | **The bench's anon+shmem and Pss sampling undercounts churn.** `WarmSampler` rediscovers guest cgroups every 1 s, so guests that live < 1 s (every animations-off task, every short compat app) are missing from most samples: the anon+shmem GiB-min integral is inflated 5–10× on the off arm and ~1.4× on the on arm (E3.3's 5–8.7× off-arm ratio is this bias; the true ratio is 2.7–2.9×). `session_pss()` sums the serve's *current* children, so during a relaunch burst it sees launchers without guests (off N=20 read 2.7 / 0.0 / 51.5 MiB per session). | tasks/GiB-min, M2 | trustworthy GiB metric | high (measured both arms) | low (discover on change; Pss per session id) | low (metric only) | **open, found by S3 (E3.4)** |
 | H15 | **Measured: the reset's 341 ms is 13 stop + 186 cold boot + 142 strict bind, and 117 ms of that bind is a framework animator run (`RippleAnimationSession`/`StateListAnimator`) that redraws byte-identical pixels for 7 frames.** Implemented (in the worktree, uncommitted): the per-boot cgroup capability cache (≈7 ms/launch; pooled fast reset −1.4 %, p95 −7.7 %). Strict reset does not move outside noise without a rule/architecture change | M6, loop | −150–200 ms/task → −10…14 % loop (on), −30…40 % (off) | high (split measured) | medium | medium | **done 2026-11-13, E2.14: strict −0.6 % (noise), fast −3.9 %, loop −1.1 % both modes, 0 false passes.** The 25 % target needs an owner decision: (A) content-stable strict confirmation (prize −117 ms = −34 % M6 strict, loop −8 %/−22 %; cost an async C1 content hash — `capture_composite` is 10–30 ms), or (B) let the agent loop's reset step use `settle: fast` (harness, −142 ms/task; the next strict step still backs the verdict). Zygote (C) would cut the 186 ms boot and is declined (H3) |
-| H13 | **Memory per session (now 65–67 MiB with H2) is the GiB denominator.** B3's shared uncompressed image is implemented as `ACOS_ART_BOOT_IMAGE=lz4|shared-fixed|shared-aslr`; `shared-aslr` relocates once per serve (16-bit base) and saves 10–12 MiB/session at N=5/10 | M2, tasks/GiB-min | −10–12 MiB/session (shared image); zygote CoW still −25–60 % at N≥5 | high (shared image) / medium (zygote) | low (shared image) / medium | medium (fixed image address for `shared-fixed`; +3.6 s first launch) | **#1, implemented opt-in (E2.12); not default — owner decision. Next: offline relocator or zygote CoW** |
+| H13 | **Memory per session (now 65–67 MiB with H2) is the GiB denominator.** B3's shared uncompressed image is implemented as `ACOS_ART_BOOT_IMAGE=lz4|shared-fixed|shared-aslr`; `shared-aslr` relocates once per serve (16-bit base) and saves 10–12 MiB/session at N=5/10 | M2, tasks/GiB-min | −10–12 MiB/session (shared image); zygote CoW still −25–60 % at N≥5 | high (shared image) / medium (zygote) | low (shared image) / medium | medium (fixed image address for `shared-fixed`; +3.6 s first launch) | **done as the default, E2.15 (ADR-0026 §4): `shared-fixed` is unset's value and is served from a content-addressed disk cache — cold build 3.58 s once per machine, every later serve `cache: hit` at 153–161 ms (`session_start_ms`, same as lz4 173 ms median). H13's per-serve +3.6 s is gone. Next: M1/M2 + N=10 loop rows** |
 | H14 | **Strict tap 956 ms with the framework press/elevation animator.** Adopted the P12 `animations:off` switch as the agent-facing functional-check mode: 7.34×/8.35× taps, 2.71–2.84× loop, 5–8.7× tasks/GiB-min (anon+shmem), 0 false passes. Defaults unchanged | M8, loop | measured | high | low | medium (verification semantics: fast never backs an assertion) | **done: mode available, E3.3; use it for functional checks** |
 | H17 | **N=10 verified loop: fixed.** Two shared-input races: `<data>/seccomp/landlock.plan` rewritten in place by every launch and read by the guard at start (`ERR landlock=plan-missing`, exit 126/1), and the shared `<data>/app/<apk>` truncated by `fs::copy` while ART had it mapped (SIGBUS, exit 135). Atomic `publish_atomic` + per-run APK. 428/450 → **600/600** verified over 12 after-reps, 0 false passes; N=5 75/75, N=20 40/40 | loop verified rate at N≥8 | 100 % | high | done | low | **done 2026-11-13, E2.13** |
 | H17b | **The M6 bench harness ignored its launch result** (H17 follow-up): a failed launch became 20 fast reset refusals and `ok=True`; P5/s3_scale also admitted failed-task latency and always exited 0, and per-task PNGs grew without bound. Fixed by checking every step, excluding failed tasks from latency, exiting non-zero on harness failures, capping screenshots and porting all harnesses to `ChurnSampler` with coverage. Negative proof: main 20+20 fast samples (0.009–0.010 ms), `ok=true`, exit 0 → after 0 latency values, 170 coded failures, exit 1; N=5 45/45 verified, p50 1431.8 → 1448.9 ms (noise). | harness integrity | no false good numbers | high (measured) | done | low | **done 2026-11-13, E3.6** |

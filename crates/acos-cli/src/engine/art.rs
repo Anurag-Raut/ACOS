@@ -102,6 +102,10 @@ pub struct ArtSession {
     width: u32,
     height: u32,
     density: u32,
+    /// H13b: the boot image this session's ready line reported —
+    /// `{mode, cache: hit|built|fallback|external|none, reason}` — so a serve's
+    /// launch reply and session list can say whether the shared-image cache hit.
+    boot_image: Option<serde_json::Value>,
     /// The newest *bound* frame seen (tree and, when the reply carried one,
     /// PNG of one traversal). A tree-only reply updates the tree but never
     /// invents pixels.
@@ -1333,6 +1337,7 @@ impl ArtSession {
             width: 1080,
             height: 2400,
             density: 420,
+            boot_image: None,
             cached: None,
             last_pixel: None,
             seen_seq: 0,
@@ -1438,6 +1443,10 @@ impl ArtSession {
         if let Some(density) = ready.get("density").and_then(|v| v.as_u64()) {
             session.density = density as u32;
         }
+        // H13b: the boot-image mode and cache outcome of this guest.
+        if let Some(boot) = ready.get("boot_image") {
+            session.boot_image = Some(boot.clone());
+        }
         if let Some(package) = ready.get("package").and_then(|v| v.as_str()) {
             session.package = package.to_string();
         }
@@ -1455,6 +1464,12 @@ impl ArtSession {
     /// step clock starts, so no step could be charged with it.
     pub const fn session_start_ms(&self) -> u64 {
         self.session_start_ms
+    }
+
+    /// H13b: the `boot_image` record the guest's ready line carried.
+    #[must_use]
+    pub fn boot_image(&self) -> Option<&serde_json::Value> {
+        self.boot_image.as_ref()
     }
 
     /// The bound frame's identity: `(frame_seq, md5, captured_at)`.

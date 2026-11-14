@@ -206,6 +206,11 @@ pub struct LaunchResult {
     /// the heap configuration that produced it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub heap: Option<serde_json::Value>,
+    /// H13b: `{mode, cache: hit|built|fallback|external|none, reason}` — which
+    /// boot image this launch used and whether the shared-image cache hit, so a
+    /// caller (and a benchmark row) can tell a warm serve from a cold one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boot_image: Option<crate::boot_image::BootImageReport>,
     pub marker: Option<String>,
 }
 
@@ -864,7 +869,13 @@ pub(crate) fn launch_session(
     let zygote_app: Option<PathBuf> = std::env::var_os("ACOS_ZYGOTE_APP").map(PathBuf::from);
     // H13/B3: the boot-image source is resolved before the sandbox is wired so
     // a bad knob fails the launch instead of silently running another image.
-    let boot_image = crate::boot_image::resolve(root)?;
+    // H13b: the default (`shared-fixed`) is served from a content-addressed
+    // on-disk cache; `report` is the reply field, set even when the default
+    // falls back to the sysroot LZ4 image.
+    let resolution = crate::boot_image::resolve(root)?;
+    let boot_image = resolution.image.clone();
+    let boot_image_report = resolution.report.clone();
+    eprintln!("acos-art: launch: {}", boot_image_report.line());
     let mut argv: Vec<String> = Vec::new();
     if let Some(image) = &boot_image {
         // `with_image` below ro-binds the prepared directory to /data/img.
@@ -1440,6 +1451,7 @@ pub(crate) fn launch_session(
         let frames_dir = out.join("live-frames");
         let dead = interactive_serve(
             opts.density_dpi,
+            &boot_image_report,
             &mut child,
             &mut cgroup,
             &live,
@@ -1680,6 +1692,7 @@ pub(crate) fn launch_session(
     if let Some(image) = &boot_image {
         unsupported_notes.push(image.note());
     }
+    unsupported_notes.push(boot_image_report.line());
     unsupported_notes.push(cgroup.summary());
     if cgroup.oom_kills() > 0 {
         unsupported_notes.push(format!(
@@ -1726,6 +1739,7 @@ pub(crate) fn launch_session(
     let mut result = LaunchResult {
         outcome,
         code,
+        boot_image: Some(boot_image_report),
         apk: opts.apk.display().to_string(),
         package,
         until: opts.until.clone(),
@@ -2367,6 +2381,8 @@ fn disk_full_result(opts: &LaunchOpts, package: &str, free: u64, min: u64) -> La
     LaunchResult {
         outcome: Outcome::Unsupported,
         code: Some("HOST_DISK_FULL".to_string()),
+        // The disk-full refusal happens before the image is resolved.
+        boot_image: None,
         apk: opts.apk.display().to_string(),
         package: package.to_string(),
         until: opts.until.clone(),
@@ -3793,6 +3809,7 @@ enum ServeEvent {
 #[allow(clippy::too_many_arguments)]
 fn interactive_serve(
     density_dpi: u32,
+    boot_image: &crate::boot_image::BootImageReport,
     child: &mut std::process::Child,
     cgroup: &mut crate::cgroup::RunCgroup,
     live: &acos_services::registry::LiveHandles,
@@ -3907,6 +3924,9 @@ fn interactive_serve(
         "capture_source": CAPTURE_SOURCE,
         "buffer_generation": latest_generation(live),
         "probe_seq": probe.seq,
+        // H13b: the boot-image mode and cache outcome of *this* session, so a
+        // serve's launch reply can report a warm cache without a second probe.
+        "boot_image": boot_image,
         "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
     });
     protocol_write(&ready);

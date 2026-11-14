@@ -164,6 +164,7 @@ impl ServeEngine {
                     session.frame_info().map(|f| f.0).unwrap_or(0)
                 },
                 "engine": ENGINE_ART,
+                "boot_image": session.boot_image().cloned().unwrap_or(Value::Null),
                 "mode": if exit.is_some() { "dead" } else { "live" },
                 "live": exit.is_none(),
                 "guest_exit": exit.as_ref().map(GuestExit::to_json),
@@ -1197,6 +1198,11 @@ fn launch_reply(
     label_meta(&mut result, ENGINE_ART, held.trust, EVIDENCE_HOST_PIXEL);
     result["animations"] = json!(session.animations());
     result["insets"] = json!(session.insets());
+    // H13b: which boot image this session booted and whether its cache hit.
+    result["boot_image"] = session
+        .boot_image()
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
     label_frame(&mut result, session);
     // P9: the same `settle` object the tree verbs return, so a launch says how
     // its tree was bound (`strict-event` on the P12 event rule, or
