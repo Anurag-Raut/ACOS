@@ -1,0 +1,2289 @@
+{
+ "schema_version": 1,
+ "source": "phone",
+ "fidelity": "physical-device",
+ "scenario": {
+  "name": "hello-views",
+  "path": "scenarios/hello-views.yaml",
+  "sha256": "65bdac60630312d09f23ea18bee82502fc2f233f73065f86d8f29b0e0f715422"
+ },
+ "app": {
+  "package": "dev.acos.fixtures.helloviews",
+  "activity": "dev.acos.fixtures.helloviews/.MainActivity",
+  "apk": "fixtures/build/apps/hello-views.apk"
+ },
+ "device": {
+  "ro.build.fingerprint": "motorola/manila_g/manila:15/VUOA35.116-151/a43dc2:user/release-keys",
+  "ro.build.version.sdk": "35",
+  "ro.build.version.release": "15",
+  "ro.product.model": "moto g35 5G",
+  "wm_size": "1080x2400",
+  "density_dpi": 400,
+  "font_scale": "1.0"
+ },
+ "started": "2026-11-14T09:48:18.262+00:00",
+ "steps": [
+  {
+   "index": 0,
+   "kind": "launch",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Enter your name",
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "clicks: 0"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-00-launch.png",
+   "error": null,
+   "visible_labels": [
+    "Enter your name",
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "clicks: 0"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 1,
+   "kind": "wait_for",
+   "status": "pass",
+   "selector": {
+    "id": "result"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "clicks: 0",
+    "identifier": "dev.acos.fixtures.helloviews:id/result",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     566,
+     166,
+     612
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Enter your name",
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "clicks: 0"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-01-wait_for.png",
+   "error": null,
+   "visible_labels": [
+    "Enter your name",
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "clicks: 0"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 2,
+   "kind": "assert_text",
+   "status": "pass",
+   "selector": {
+    "id": "title"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Hello ACOS",
+    "identifier": "dev.acos.fixtures.helloviews:id/title",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     288,
+     215,
+     334
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Enter your name",
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "clicks: 0"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "Hello ACOS",
+    "mode": "exact",
+    "passed": true,
+    "expected_bounds": [
+     42,
+     317,
+     231,
+     368
+    ]
+   },
+   "screenshot": "screenshot-02-assert_text.png",
+   "error": null,
+   "visible_labels": [
+    "Enter your name",
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "clicks: 0"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 3,
+   "kind": "assert_text",
+   "status": "pass",
+   "selector": {
+    "id": "input"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Enter your name",
+    "identifier": "dev.acos.fixtures.helloviews:id/input",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     334,
+     1040,
+     446
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Enter your name",
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "clicks: 0"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "Enter your name",
+    "mode": "exact",
+    "passed": true,
+    "expected_bounds": [
+     42,
+     368,
+     1038,
+     486
+    ]
+   },
+   "screenshot": "screenshot-03-assert_text.png",
+   "error": null,
+   "visible_labels": [
+    "Enter your name",
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "clicks: 0"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 4,
+   "kind": "assert_text",
+   "status": "pass",
+   "selector": {
+    "id": "btn"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Greet",
+    "identifier": "dev.acos.fixtures.helloviews:id/btn",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     446,
+     260,
+     566
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Enter your name",
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "clicks: 0"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "Greet",
+    "mode": "exact",
+    "passed": true,
+    "expected_bounds": [
+     42,
+     486,
+     273,
+     612
+    ]
+   },
+   "screenshot": "screenshot-04-assert_text.png",
+   "error": null,
+   "visible_labels": [
+    "Enter your name",
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "clicks: 0"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 5,
+   "kind": "assert_text",
+   "status": "pass",
+   "selector": {
+    "id": "result"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "clicks: 0",
+    "identifier": "dev.acos.fixtures.helloviews:id/result",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     566,
+     166,
+     612
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Enter your name",
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "clicks: 0"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "clicks: 0",
+    "mode": "exact",
+    "passed": true,
+    "expected_bounds": [
+     42,
+     612,
+     175,
+     663
+    ]
+   },
+   "screenshot": "screenshot-05-assert_text.png",
+   "error": null,
+   "visible_labels": [
+    "Enter your name",
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "clicks: 0"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 6,
+   "kind": "assert_log",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Enter your name",
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "clicks: 0"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": {
+    "kind": "log",
+    "expected": [
+     "^onCreate$",
+     "^onStart$",
+     "^onResume$"
+    ],
+    "passed": true,
+    "matched": [
+     "^onCreate$",
+     "^onStart$",
+     "^onResume$"
+    ],
+    "lines": [
+     "I/AcosFixture( 2611): onCreate",
+     "I/AcosFixture( 2611): onStart",
+     "I/AcosFixture( 2611): onResume"
+    ]
+   },
+   "screenshot": "screenshot-06-assert_log.png",
+   "error": null,
+   "visible_labels": [
+    "Enter your name",
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "clicks: 0"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 7,
+   "kind": "tap",
+   "status": "pass",
+   "selector": {
+    "id": "input"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Enter your name",
+    "identifier": "dev.acos.fixtures.helloviews:id/input",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     334,
+     1040,
+     446
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Enter your name",
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "clicks: 0"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-07-tap.png",
+   "error": null,
+   "visible_labels": [
+    "Enter your name",
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "clicks: 0"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 8,
+   "kind": "type",
+   "status": "pass",
+   "selector": {
+    "id": "input"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Enter your name",
+    "identifier": "dev.acos.fixtures.helloviews:id/input",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     334,
+     1040,
+     446
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "World",
+    "clicks: 0"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-08-type.png",
+   "error": null,
+   "visible_labels": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "World",
+    "clicks: 0"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 9,
+   "kind": "tap",
+   "status": "pass",
+   "selector": {
+    "id": "btn"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Greet",
+    "identifier": "dev.acos.fixtures.helloviews:id/btn",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     446,
+     260,
+     566
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "Hello, World! clicks: 1",
+    "World"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-09-tap.png",
+   "error": null,
+   "visible_labels": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "Hello, World! clicks: 1",
+    "World"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 10,
+   "kind": "assert_log",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "Hello, World! clicks: 1",
+    "World"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": {
+    "kind": "log",
+    "expected": [
+     "^greet name=World clicks=1$"
+    ],
+    "passed": true,
+    "matched": [
+     "^greet name=World clicks=1$"
+    ],
+    "lines": [
+     "I/AcosFixture( 2611): greet name=World clicks=1"
+    ]
+   },
+   "screenshot": "screenshot-10-assert_log.png",
+   "error": null,
+   "visible_labels": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "Hello, World! clicks: 1",
+    "World"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 11,
+   "kind": "assert_text",
+   "status": "pass",
+   "selector": {
+    "id": "result"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Hello, World! clicks: 1",
+    "identifier": "dev.acos.fixtures.helloviews:id/result",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     566,
+     372,
+     612
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "Hello, World! clicks: 1",
+    "World"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "Hello, World! clicks: 1",
+    "mode": "exact",
+    "passed": true,
+    "expected_bounds": [
+     42,
+     612,
+     392,
+     663
+    ]
+   },
+   "screenshot": "screenshot-11-assert_text.png",
+   "error": null,
+   "visible_labels": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "Hello, World! clicks: 1",
+    "World"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 12,
+   "kind": "capture",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "Hello, World! clicks: 1",
+    "World"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-12-capture-after-click-1.png",
+   "error": null,
+   "visible_labels": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "Hello, World! clicks: 1",
+    "World"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 13,
+   "kind": "tap",
+   "status": "pass",
+   "selector": {
+    "id": "btn"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Greet",
+    "identifier": "dev.acos.fixtures.helloviews:id/btn",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     446,
+     260,
+     566
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "Hello, World! clicks: 2",
+    "World"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-13-tap.png",
+   "error": null,
+   "visible_labels": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "Hello, World! clicks: 2",
+    "World"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 14,
+   "kind": "assert_log",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "Hello, World! clicks: 2",
+    "World"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": {
+    "kind": "log",
+    "expected": [
+     "^greet name=World clicks=2$"
+    ],
+    "passed": true,
+    "matched": [
+     "^greet name=World clicks=2$"
+    ],
+    "lines": [
+     "I/AcosFixture( 2611): greet name=World clicks=2"
+    ]
+   },
+   "screenshot": "screenshot-14-assert_log.png",
+   "error": null,
+   "visible_labels": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "Hello, World! clicks: 2",
+    "World"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 15,
+   "kind": "assert_text",
+   "status": "pass",
+   "selector": {
+    "id": "result"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "Hello, World! clicks: 2",
+    "identifier": "dev.acos.fixtures.helloviews:id/result",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     566,
+     378,
+     612
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "Hello, World! clicks: 2",
+    "World"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "Hello, World! clicks: 2",
+    "mode": "exact",
+    "passed": true,
+    "expected_bounds": [
+     42,
+     612,
+     392,
+     663
+    ]
+   },
+   "screenshot": "screenshot-15-assert_text.png",
+   "error": null,
+   "visible_labels": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "Hello, World! clicks: 2",
+    "World"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 16,
+   "kind": "rotate",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "World",
+    "clicks: 2"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-16-rotate.png",
+   "error": null,
+   "visible_labels": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "World",
+    "clicks: 2"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 17,
+   "kind": "assert_log",
+   "status": "pass_with_failure",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "World",
+    "clicks: 2"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": {
+    "kind": "log",
+    "expected": [
+     "^onPause$",
+     "^onStop$",
+     "^onSaveInstanceState clicks=2$",
+     "^onDestroy$",
+     "^onCreate$",
+     "^onStart$",
+     "^onResume$"
+    ],
+    "passed": false,
+    "matched": [
+     "^onPause$",
+     "^onStop$",
+     "^onSaveInstanceState clicks=2$",
+     "^onDestroy$"
+    ],
+    "lines": [
+     "I/AcosFixture( 2611): onPause",
+     "I/AcosFixture( 2611): onStop",
+     "I/AcosFixture( 2611): onSaveInstanceState clicks=2",
+     "I/AcosFixture( 2611): onDestroy"
+    ]
+   },
+   "screenshot": "screenshot-17-assert_log.png",
+   "error": "LOG_PATTERN_MISSING",
+   "note": "logcat on the phone is a global buffer; a missing pattern here is a measurement, not a scenario verdict",
+   "visible_labels": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "World",
+    "clicks: 2"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 18,
+   "kind": "assert_text",
+   "status": "pass",
+   "selector": {
+    "id": "input"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "World",
+    "identifier": "dev.acos.fixtures.helloviews:id/input",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     148,
+     266,
+     2360,
+     378
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "World",
+    "clicks: 2"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "World",
+    "mode": "exact",
+    "passed": true,
+    "expected_bounds": [
+     170,
+     282,
+     2358,
+     400
+    ]
+   },
+   "screenshot": "screenshot-18-assert_text.png",
+   "error": null,
+   "visible_labels": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "World",
+    "clicks: 2"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 19,
+   "kind": "assert_text",
+   "status": "pass",
+   "selector": {
+    "id": "result"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "clicks: 2",
+    "identifier": "dev.acos.fixtures.helloviews:id/result",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     148,
+     498,
+     273,
+     544
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "World",
+    "clicks: 2"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "clicks: 2",
+    "mode": "exact",
+    "passed": true,
+    "expected_bounds": [
+     170,
+     526,
+     303,
+     577
+    ]
+   },
+   "screenshot": "screenshot-19-assert_text.png",
+   "error": null,
+   "visible_labels": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "World",
+    "clicks: 2"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 20,
+   "kind": "rotate",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "World",
+    "clicks: 2"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-20-rotate.png",
+   "error": null,
+   "visible_labels": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "World",
+    "clicks: 2"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 21,
+   "kind": "assert_log",
+   "status": "pass_with_failure",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "World",
+    "clicks: 2"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": {
+    "kind": "log",
+    "expected": [
+     "^onPause$",
+     "^onStop$",
+     "^onSaveInstanceState clicks=2$",
+     "^onDestroy$",
+     "^onCreate$",
+     "^onStart$",
+     "^onResume$"
+    ],
+    "passed": false,
+    "matched": [],
+    "lines": []
+   },
+   "screenshot": "screenshot-21-assert_log.png",
+   "error": "LOG_PATTERN_MISSING",
+   "note": "logcat on the phone is a global buffer; a missing pattern here is a measurement, not a scenario verdict",
+   "visible_labels": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "World",
+    "clicks: 2"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 22,
+   "kind": "assert_text",
+   "status": "pass",
+   "selector": {
+    "id": "result"
+   },
+   "target": {
+    "text": "",
+    "content_desc": "clicks: 2",
+    "identifier": "dev.acos.fixtures.helloviews:id/result",
+    "enabled": true,
+    "checked": null,
+    "clickable": null,
+    "bounds": [
+     40,
+     566,
+     165,
+     612
+    ]
+   },
+   "visible_texts": [],
+   "visible_descs": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "World",
+    "clicks: 2"
+   ],
+   "screen": {
+    "activity": "dev.acos.fixtures.helloviews/dev.acos.fixtures.helloviews.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": {
+    "kind": "text",
+    "expected": "clicks: 2",
+    "mode": "exact",
+    "passed": true,
+    "expected_bounds": [
+     42,
+     612,
+     175,
+     663
+    ]
+   },
+   "screenshot": "screenshot-22-assert_text.png",
+   "error": null,
+   "visible_labels": [
+    "Greet",
+    "Hello ACOS",
+    "Hello Views",
+    "World",
+    "clicks: 2"
+   ],
+   "node_count": 9
+  },
+  {
+   "index": 23,
+   "kind": "back",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": null,
+   "screenshot": "screenshot-23-back.png",
+   "error": null,
+   "visible_labels": [],
+   "node_count": 0
+  },
+  {
+   "index": 24,
+   "kind": "assert_log",
+   "status": "pass_with_failure",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": {
+    "kind": "log",
+    "expected": [
+     "^onPause$",
+     "^onStop$",
+     "^onSaveInstanceState clicks=2$",
+     "^onDestroy$"
+    ],
+    "passed": false,
+    "matched": [],
+    "lines": []
+   },
+   "screenshot": "screenshot-24-assert_log.png",
+   "error": "LOG_PATTERN_MISSING",
+   "note": "logcat on the phone is a global buffer; a missing pattern here is a measurement, not a scenario verdict",
+   "visible_labels": [],
+   "node_count": 0
+  },
+  {
+   "index": 25,
+   "kind": "assert_no_crash",
+   "status": "pass",
+   "selector": null,
+   "target": null,
+   "visible_texts": [],
+   "visible_descs": [],
+   "screen": {
+    "activity": "dev.acos.fixtures.formvalidation/dev.acos.fixtures.formvalidation.MainActivity",
+    "package": "dev.acos.fixtures.helloviews",
+    "app_bundle_in_snapshot": "dev.acos.fixtures.helloviews"
+   },
+   "assertion": {
+    "kind": "no_crash",
+    "passed": true,
+    "matched": []
+   },
+   "screenshot": "screenshot-25-assert_no_crash.png",
+   "error": null,
+   "visible_labels": [],
+   "node_count": 0
+  }
+ ],
+ "finished": "2026-11-14T09:48:51.703+00:00",
+ "commands": [
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "pm",
+    "list",
+    "packages"
+   ],
+   "ts": "2026-11-14T09:48:17.675+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "getprop",
+    "ro.build.fingerprint"
+   ],
+   "ts": "2026-11-14T09:48:17.799+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "getprop",
+    "ro.build.version.sdk"
+   ],
+   "ts": "2026-11-14T09:48:17.847+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "getprop",
+    "ro.build.version.release"
+   ],
+   "ts": "2026-11-14T09:48:17.898+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "getprop",
+    "ro.product.model"
+   ],
+   "ts": "2026-11-14T09:48:17.940+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "wm",
+    "size"
+   ],
+   "ts": "2026-11-14T09:48:17.985+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "wm",
+    "density"
+   ],
+   "ts": "2026-11-14T09:48:18.076+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "settings",
+    "get",
+    "system",
+    "font_scale"
+   ],
+   "ts": "2026-11-14T09:48:18.170+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "logcat",
+    "-d",
+    "-v",
+    "brief"
+   ],
+   "ts": "2026-11-14T09:48:18.262+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "pm",
+    "clear",
+    "dev.acos.fixtures.helloviews"
+   ],
+   "ts": "2026-11-14T09:48:18.387+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "open",
+    "dev.acos.fixtures.helloviews",
+    "--activity",
+    "dev.acos.fixtures.helloviews/.MainActivity",
+    "--relaunch",
+    "--foreground",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:18.493+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:21.008+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:21.130+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-00-launch.png"
+   ],
+   "ts": "2026-11-14T09:48:21.235+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:21.636+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:21.746+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:21.863+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-01-wait_for.png"
+   ],
+   "ts": "2026-11-14T09:48:21.973+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:22.274+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:22.387+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:22.497+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-02-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:48:22.606+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:22.896+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:23.006+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:23.124+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-03-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:48:23.246+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:23.535+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:23.638+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:23.760+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-04-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:48:23.864+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:24.180+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:24.295+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:24.404+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-05-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:48:24.527+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "logcat",
+    "-d",
+    "-v",
+    "brief"
+   ],
+   "ts": "2026-11-14T09:48:24.817+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:24.944+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:25.058+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-06-assert_log.png"
+   ],
+   "ts": "2026-11-14T09:48:25.171+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:25.467+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "press",
+    "540",
+    "390",
+    "--settle"
+   ],
+   "ts": "2026-11-14T09:48:25.582+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:26.992+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:27.208+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-07-tap.png"
+   ],
+   "ts": "2026-11-14T09:48:27.321+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:27.630+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "press",
+    "540",
+    "390",
+    "--settle"
+   ],
+   "ts": "2026-11-14T09:48:27.805+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "type",
+    "World"
+   ],
+   "ts": "2026-11-14T09:48:28.807+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:29.341+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:29.544+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-08-type.png"
+   ],
+   "ts": "2026-11-14T09:48:29.612+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:29.894+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "press",
+    "150",
+    "506",
+    "--settle"
+   ],
+   "ts": "2026-11-14T09:48:30.050+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:31.023+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:31.239+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-09-tap.png"
+   ],
+   "ts": "2026-11-14T09:48:31.350+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "logcat",
+    "-d",
+    "-v",
+    "brief"
+   ],
+   "ts": "2026-11-14T09:48:31.682+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:31.811+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:31.974+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-10-assert_log.png"
+   ],
+   "ts": "2026-11-14T09:48:32.080+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:32.379+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:32.608+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:32.822+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-11-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:48:32.931+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:33.253+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:33.429+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-12-capture-after-click-1.png"
+   ],
+   "ts": "2026-11-14T09:48:33.532+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:33.844+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "press",
+    "150",
+    "506",
+    "--settle"
+   ],
+   "ts": "2026-11-14T09:48:34.015+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:35.000+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:35.215+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-13-tap.png"
+   ],
+   "ts": "2026-11-14T09:48:35.324+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "logcat",
+    "-d",
+    "-v",
+    "brief"
+   ],
+   "ts": "2026-11-14T09:48:35.653+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:35.777+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:35.954+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-14-assert_log.png"
+   ],
+   "ts": "2026-11-14T09:48:36.062+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:36.372+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:36.545+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:36.766+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-15-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:48:36.865+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "orientation",
+    "landscape-left"
+   ],
+   "ts": "2026-11-14T09:48:37.162+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "keyboard",
+    "dismiss"
+   ],
+   "ts": "2026-11-14T09:48:39.695+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:40.748+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:40.837+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-16-rotate.png"
+   ],
+   "ts": "2026-11-14T09:48:40.903+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "logcat",
+    "-d",
+    "-v",
+    "brief"
+   ],
+   "ts": "2026-11-14T09:48:41.207+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:41.331+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:41.439+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-17-assert_log.png"
+   ],
+   "ts": "2026-11-14T09:48:41.547+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:41.832+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:41.943+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:42.056+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-18-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:48:42.162+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:42.458+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:42.571+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:42.697+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-19-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:48:42.812+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "orientation",
+    "portrait"
+   ],
+   "ts": "2026-11-14T09:48:43.105+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "keyboard",
+    "dismiss"
+   ],
+   "ts": "2026-11-14T09:48:46.253+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:46.881+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:46.992+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-20-rotate.png"
+   ],
+   "ts": "2026-11-14T09:48:47.099+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "logcat",
+    "-d",
+    "-v",
+    "brief"
+   ],
+   "ts": "2026-11-14T09:48:47.400+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:47.518+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:47.657+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-21-assert_log.png"
+   ],
+   "ts": "2026-11-14T09:48:47.758+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:48.047+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:48.206+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:48.324+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-22-assert_text.png"
+   ],
+   "ts": "2026-11-14T09:48:48.421+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "back",
+    "--settle"
+   ],
+   "ts": "2026-11-14T09:48:48.719+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:49.867+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:49.992+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-23-back.png"
+   ],
+   "ts": "2026-11-14T09:48:50.123+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "logcat",
+    "-d",
+    "-v",
+    "brief"
+   ],
+   "ts": "2026-11-14T09:48:50.429+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:50.548+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:50.657+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-24-assert_log.png"
+   ],
+   "ts": "2026-11-14T09:48:50.776+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "logcat",
+    "-d",
+    "-v",
+    "brief"
+   ],
+   "ts": "2026-11-14T09:48:51.068+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "snapshot",
+    "--force-full",
+    "--json"
+   ],
+   "ts": "2026-11-14T09:48:51.179+00:00"
+  },
+  {
+   "tool": "adb",
+   "args": [
+    "shell",
+    "dumpsys",
+    "window"
+   ],
+   "ts": "2026-11-14T09:48:51.290+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "screenshot",
+    ".cache/phone-probe/hello-views/screenshot-25-assert_no_crash.png"
+   ],
+   "ts": "2026-11-14T09:48:51.400+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "close"
+   ],
+   "ts": "2026-11-14T09:48:51.703+00:00"
+  },
+  {
+   "tool": "agent-device",
+   "args": [
+    "home"
+   ],
+   "ts": "2026-11-14T09:48:51.842+00:00"
+  }
+ ]
+}
