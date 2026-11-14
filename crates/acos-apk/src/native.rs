@@ -49,12 +49,19 @@ pub const SYSTEM_LIBS: &[&str] = &[
     "libOpenMAXAL.so",
     "libOpenSLES.so",
     "libRS.so",
+    // FB2c: audio HAL / MIDI / the linker's own Android companion. An app links
+    // against these from the system image (`libaaudio` is what AAudio and
+    // Oboe's AAudio backend need), so a bundled library's `NEEDED` entry for
+    // one of them is not a packaging mistake.
+    "libaaudio.so",
+    "libamidi.so",
     "libandroid.so",
     "libandroid_runtime.so",
     "libbinder_ndk.so",
     "libc.so",
     "libcamera2ndk.so",
     "libdl.so",
+    "libdl_android.so",
     "libjnigraphics.so",
     "liblog.so",
     "libm.so",
@@ -123,8 +130,19 @@ pub fn missing_native_libs(apk: &Apk, abi: &str) -> Vec<NativeLibWarning> {
     }
 
     // 2. The names the app's own `loadLibrary` call sites ask for.
+    //
+    // FB2c: a React Native build carries **one** JS engine. The JSC executor
+    // (`libjscexecutor.so`, named by `System.loadLibrary("jscexecutor")` in
+    // `SoLoader`'s initialisation path) is never loaded when the APK ships
+    // Hermes, so warning about it on a Hermes APK is a false alarm about a
+    // library the app will not ask for. Hermes present -> the JSC executor is
+    // not a reference.
+    let has_hermes = present.iter().any(|name| name == "libhermes.so");
     for dex in &apk.dex_files {
         for name in dex_load_library_names(&dex.bytes) {
+            if has_hermes && name == "libjscexecutor.so" {
+                continue;
+            }
             record(
                 &mut warnings,
                 &present,
@@ -393,60 +411,152 @@ pub fn dex_load_library_names(data: &[u8]) -> Vec<String> {
         return out;
     }
 
-    let mut i = 0usize;
-    while i + 6 < data.len() {
-        let (string_idx, next) = match data[i] {
-            0x1a => match u16_at(i + 2) {
-                Some(idx) => (idx as u32, i + 4),
-                None => break,
-            },
-            0x1b => match u32_at(i + 2) {
-                Some(idx) => (idx, i + 6),
-                None => break,
-            },
-            _ => {
-                i += 1;
-                continue;
-            }
+    // FB2c: decode the call sites instead of byte-scanning the whole file for
+    // `const-string` opcodes. Walk class_defs -> class_data -> code_item, decode
+    // every instruction (`acos_dex::decode` knows each opcode's size, so a
+    // `0x1a` inside another instruction's operand or in a data payload is never
+    // taken for an opcode) and pair an `invoke-static` of a `loadLibrary` method
+    // with the `const-string` that last wrote its first argument register.
+    let (Some(class_defs_size), Some(class_defs_off)) = (u32_at(96), u32_at(100)) else {
+        return out;
+    };
+    if !section_ok(class_defs_off, class_defs_size, 32) {
+        return out;
+    }
+    for c in 0..class_defs_size as usize {
+        let def = class_defs_off as usize + c * 32;
+        let Some(class_data_off) = u32_at(def + 24) else {
+            break;
         };
-        i += 1;
-        if string_idx >= string_ids_size {
+        if class_data_off == 0 {
             continue;
         }
-        let limit = (next + 16).min(data.len().saturating_sub(6));
-        let mut j = next;
-        let mut found = None;
-        while j <= limit {
-            if matches!(data[j], 0x71 | 0x77) {
-                if let Some(method_idx) = u16_at(j + 4) {
-                    if load_library_methods.contains(&(method_idx as u32)) {
-                        found = Some(());
-                        break;
-                    }
+        for code_off in class_code_offsets(data, class_data_off as usize) {
+            for string_idx in
+                load_library_string_indices(data, code_off as usize, &load_library_methods)
+            {
+                let Some(raw) = dex_string(data, string_ids_off, string_ids_size, string_idx)
+                else {
+                    continue;
+                };
+                // A `loadLibrary` argument is a bare handle:
+                // `System.loadLibrary("foo")`, `SoLoader.loadLibrary("foo")`. A
+                // `loadLibrary("libfoo.so")` form is accepted too and
+                // normalised to the file name.
+                let handle = raw.trim();
+                let file = if handle.ends_with(".so") {
+                    handle.to_string()
+                } else {
+                    format!("lib{handle}.so")
+                };
+                if is_library(&file) && !out.contains(&file) {
+                    out.push(file);
                 }
             }
-            j += 1;
-        }
-        if found.is_none() {
-            continue;
-        }
-        let Some(raw) = dex_string(data, string_ids_off, string_ids_size, string_idx) else {
-            continue;
-        };
-        // A `loadLibrary` argument is a bare handle: `System.loadLibrary("foo")`,
-        // `SoLoader.loadLibrary("foo")`. A `loadLibrary("libfoo.so")` form is
-        // accepted too and normalised to the file name.
-        let handle = raw.trim();
-        let file = if handle.ends_with(".so") {
-            handle.to_string()
-        } else {
-            format!("lib{handle}.so")
-        };
-        if is_library(&file) && !out.contains(&file) {
-            out.push(file);
         }
     }
     out
+}
+
+fn read_uleb(data: &[u8], pos: &mut usize) -> Option<u32> {
+    let mut result = 0u32;
+    let mut shift = 0u32;
+    loop {
+        let byte = *data.get(*pos)?;
+        *pos += 1;
+        if shift < 32 {
+            result |= ((byte & 0x7f) as u32) << shift;
+        }
+        if byte & 0x80 == 0 {
+            return Some(result);
+        }
+        shift += 7;
+        if shift > 35 {
+            return None;
+        }
+    }
+}
+
+/// The `code_off` of every method in one `class_data_item` (bounded: a hostile
+/// item yields what could be read, never a read past the buffer).
+fn class_code_offsets(data: &[u8], at: usize) -> Vec<u32> {
+    let mut offs = Vec::new();
+    let mut pos = at;
+    let (Some(statics), Some(instances), Some(direct), Some(virtuals)) = (
+        read_uleb(data, &mut pos),
+        read_uleb(data, &mut pos),
+        read_uleb(data, &mut pos),
+        read_uleb(data, &mut pos),
+    ) else {
+        return offs;
+    };
+    for _ in 0..(statics as u64 + instances as u64).min(1 << 16) {
+        if read_uleb(data, &mut pos).is_none() || read_uleb(data, &mut pos).is_none() {
+            return offs;
+        }
+    }
+    for _ in 0..(direct as u64 + virtuals as u64).min(1 << 16) {
+        let (Some(_idx), Some(_flags), Some(code)) = (
+            read_uleb(data, &mut pos),
+            read_uleb(data, &mut pos),
+            read_uleb(data, &mut pos),
+        ) else {
+            return offs;
+        };
+        if code != 0 {
+            offs.push(code);
+        }
+    }
+    offs
+}
+
+/// The string index handed to a `loadLibrary` method by each call site of one
+/// code item.
+fn load_library_string_indices(data: &[u8], code_off: usize, methods: &[u32]) -> Vec<u32> {
+    let mut found = Vec::new();
+    let Some(header) = data.get(code_off..code_off + 16) else {
+        return found;
+    };
+    let insns_size = u32::from_le_bytes([header[12], header[13], header[14], header[15]]) as usize;
+    let Some(bytes) = insns_size
+        .checked_mul(2)
+        .and_then(|len| data.get(code_off + 16..(code_off + 16).checked_add(len)?))
+    else {
+        return found;
+    };
+    let insns: Vec<u16> = bytes
+        .chunks_exact(2)
+        .map(|b| u16::from_le_bytes([b[0], b[1]]))
+        .collect();
+    let mut constants: std::collections::HashMap<u16, u32> = std::collections::HashMap::new();
+    let mut pc = 0usize;
+    while pc < insns.len() {
+        let Ok(insn) = acos_dex::decode(&insns, pc) else {
+            // A data payload (after the last `return`) or a malformed stream:
+            // nothing after it is code.
+            break;
+        };
+        let name = insn.opcode.mnemonic();
+        if name == "const-string" || name == "const-string/jumbo" {
+            constants.insert(insn.regs[0], insn.index);
+        } else if name == "invoke-static" || name == "invoke-static/range" {
+            if methods.contains(&insn.index) && insn.reg_count > 0 {
+                if let Some(idx) = constants.get(&insn.regs[0]) {
+                    found.push(*idx);
+                }
+            }
+        } else if !matches!(
+            name.split(['-', '/']).next().unwrap_or(""),
+            "nop" | "invoke" | "if" | "goto" | "return" | "iput" | "aput" | "sput" | "monitor"
+                | "throw" | "packed" | "sparse" | "fill"
+        ) {
+            // Anything else may overwrite its first register (`move`, `new`,
+            // `iget`, arithmetic, …): the remembered constant is gone.
+            constants.remove(&insn.regs[0]);
+        }
+        pc += insn.size_in_code_units().max(1);
+    }
+    found
 }
 
 /// Decode one `string_data_item` of a DEX string table (MUTF-8, NUL-terminated).
@@ -557,6 +667,7 @@ mod tests {
     /// A DEX with one `SoLoader.loadLibrary("worklets")` call site.
     fn tiny_dex_with_load_library(handle: &str) -> Vec<u8> {
         let mut data = vec![0u8; 0x200];
+        // (layout: ids <0x100, strings @0x100, class_def/data @0xc0/0xe0, code @0x160)
         data[0..8].copy_from_slice(b"dex\n035\0");
         let strings = ["Lcom/facebook/soloader/SoLoader;", "loadLibrary", handle];
         let mut payload: Vec<u8> = Vec::new();
@@ -579,10 +690,18 @@ mod tests {
         data[0x9a..0x9c].copy_from_slice(&0u16.to_le_bytes()); // proto_idx
         data[0x9c..0xa0].copy_from_slice(&1u32.to_le_bytes()); // name_idx = loadLibrary
 
-        // const-string v0, strings[2]  ;  invoke-static {v0}, method@0
+        // class_def @0xc0 (class_data_off @+24 -> 0xe0); class_data @0xe0: no
+        // fields, one direct method (idx 0, flags 0, code_off 0x160); code_item
+        // @0x160: const-string v0, strings[2]; invoke-static {v0}, method@0;
+        // return-void.
+        data[0xc0 + 24..0xc0 + 28].copy_from_slice(&0xe0u32.to_le_bytes());
+        data[0xe0..0xe8].copy_from_slice(&[0, 0, 1, 0, 0, 0, 0xe0, 0x02]);
         let mut code = vec![0x1a, 0x00, 0x02, 0x00];
-        code.extend_from_slice(&[0x71, 0x00, 0x00, 0x00, 0x00, 0x00]);
-        data[0xb0..0xb0 + code.len()].copy_from_slice(&code);
+        code.extend_from_slice(&[0x71, 0x10, 0x00, 0x00, 0x00, 0x00]);
+        code.push(0x0e);
+        code.push(0x00);
+        data[0x160 + 12..0x160 + 16].copy_from_slice(&((code.len() / 2) as u32).to_le_bytes());
+        data[0x160 + 16..0x160 + 16 + code.len()].copy_from_slice(&code);
 
         let put32 = |data: &mut Vec<u8>, at: usize, v: u32| {
             data[at..at + 4].copy_from_slice(&v.to_le_bytes())
@@ -593,6 +712,8 @@ mod tests {
         put32(&mut data, 68, 0x90);
         put32(&mut data, 88, 1);
         put32(&mut data, 92, 0x98);
+        put32(&mut data, 96, 1);
+        put32(&mut data, 100, 0xc0);
         data
     }
 
@@ -654,5 +775,61 @@ mod tests {
         assert!(!missing_native_libs(&crafted, abi)
             .iter()
             .any(|w| w.lib == "libc.so"));
+    }
+
+    /// FB2c item 8: the call sites are decoded, not byte-scanned. The same bytes
+    /// (`const-string` + `invoke-static`) sitting in a string payload — outside
+    /// any code item — are not a call site.
+    #[test]
+    fn a_call_site_is_a_decoded_instruction_not_a_byte_pattern() {
+        let mut dex = tiny_dex_with_load_library("worklets");
+        assert_eq!(dex_load_library_names(&dex), vec!["libworklets.so"]);
+        // Detach the code item from its class: the instruction bytes are still in
+        // the file, but no method points at them any more.
+        dex[0xc0 + 24..0xc0 + 28].copy_from_slice(&0u32.to_le_bytes());
+        assert!(
+            dex_load_library_names(&dex).is_empty(),
+            "bytes that are not in a code item are not a loadLibrary call"
+        );
+    }
+
+    /// An operand byte equal to a `const-string` opcode (0x1a) is never read as one.
+    #[test]
+    fn an_operand_byte_that_looks_like_an_opcode_is_not_an_instruction() {
+        let mut dex = tiny_dex_with_load_library("worklets");
+        // `const/16 v0, 0x1a1a` at the start of the code: both bytes of the
+        // literal are 0x1a. The old scan would have paired them with the call.
+        let at = 0x160 + 16;
+        dex[at..at + 4].copy_from_slice(&[0x13, 0x00, 0x1a, 0x1a]);
+        assert!(
+            dex_load_library_names(&dex).is_empty(),
+            "the string register was overwritten by a const; no call site names a string"
+        );
+    }
+
+    /// An RN APK carries one JS engine: `jscexecutor` is not referenced when
+    /// Hermes is present, and the audio/linker system libraries are never missing.
+    #[test]
+    fn jscexecutor_is_ignored_when_hermes_ships_and_audio_libs_are_system() {
+        let dex = tiny_dex_with_load_library("jscexecutor");
+        let elf = tiny_elf(&["libaaudio.so", "libamidi.so", "libdl_android.so", "libc.so"]);
+        let with_hermes = crate::Apk::from_bytes(zip_of(&[
+            ("classes.dex", dex.clone()),
+            ("lib/x86_64/libhermes.so", Vec::new()),
+            ("lib/x86_64/libfoo.so", elf.clone()),
+        ]))
+        .unwrap();
+        assert!(
+            missing_native_libs(&with_hermes, "x86_64").is_empty(),
+            "{:?}",
+            missing_native_libs(&with_hermes, "x86_64")
+        );
+        let without_hermes = crate::Apk::from_bytes(zip_of(&[
+            ("classes.dex", dex),
+            ("lib/x86_64/libfoo.so", elf),
+        ]))
+        .unwrap();
+        let warnings = missing_native_libs(&without_hermes, "x86_64");
+        assert!(warnings.iter().any(|w| w.lib == "libjscexecutor.so"), "{warnings:?}");
     }
 }

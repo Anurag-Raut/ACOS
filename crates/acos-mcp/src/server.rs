@@ -747,6 +747,22 @@ fn append_screenshot_content(
     if !full.is_file() || image_mime(path).is_none() {
         return;
     }
+    // FB2c item 5: a session verb writes inside its artifacts dir, but the path
+    // in the reply is data, not a trust anchor. Inline a file only when it lives
+    // under one of this server's allowed roots (`canonicalize` resolves symlinks,
+    // so a link pointing outside is refused too).
+    let mut roots = config.allowed_roots.clone();
+    // The session daemon writes a session's screenshots under its own private
+    // runtime directory (`<runtime>/art-sessions/<id>/screenshots/`, or the
+    // operator's `ACOS_SERVE_ARTIFACTS`): that tree is the default destination,
+    // so it is a root too — and nothing else outside the allowed roots is.
+    roots.push(crate::daemon::runtime_dir().join("art-sessions"));
+    if let Some(dir) = std::env::var_os("ACOS_SERVE_ARTIFACTS") {
+        roots.push(PathBuf::from(dir));
+    }
+    if !path_within_allowed_roots(full, &roots) {
+        return;
+    }
     if let Some(preview) =
         crate::preview::image_preview(full, config.max_image_side, config.max_image_bytes)
     {
@@ -767,6 +783,21 @@ fn append_screenshot_content(
             "name": "screenshot",
         }));
     }
+}
+
+/// FB2c: is this file inside one of the server's allowed roots?
+///
+/// Both sides are canonicalized, so a symlink cannot smuggle a file out of a
+/// root and a root the user configured through a link still matches. A path
+/// that cannot be canonicalized (missing file) is not in a root.
+fn path_within_allowed_roots(path: &Path, roots: &[PathBuf]) -> bool {
+    let Ok(real) = std::fs::canonicalize(path) else {
+        return false;
+    };
+    roots.iter().any(|root| {
+        let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.clone());
+        real.starts_with(&root)
+    })
 }
 
 /// One line describing the inline image: which file it came from, whether it is
@@ -968,6 +999,30 @@ pub fn capabilities_of<B: Backend>(server: &Server<B>) -> Capabilities {
 mod tests {
     use super::*;
     use acos_protocol::Status;
+
+    /// FB2c item 5: the MCP server inlines an image only when it lives under one
+    /// of its allowed roots; a symlink out of a root and a file elsewhere are refused.
+    #[test]
+    fn a_screenshot_is_inlined_only_from_an_allowed_root() {
+        let dir = std::env::temp_dir().join(format!("acos-roots-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let root = dir.join("root");
+        let elsewhere = dir.join("elsewhere");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        let inside = root.join("a.png");
+        let outside = elsewhere.join("b.png");
+        std::fs::write(&inside, b"x").unwrap();
+        std::fs::write(&outside, b"x").unwrap();
+        let link = root.join("link.png");
+        std::os::unix::fs::symlink(&outside, &link).unwrap();
+        let roots = vec![root.clone()];
+        assert!(path_within_allowed_roots(&inside, &roots));
+        assert!(!path_within_allowed_roots(&outside, &roots));
+        assert!(!path_within_allowed_roots(&link, &roots), "a symlink out of the root");
+        assert!(!path_within_allowed_roots(&root.join("missing.png"), &roots));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     struct NullBackend;
 

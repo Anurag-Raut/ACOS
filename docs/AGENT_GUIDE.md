@@ -82,7 +82,9 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    `System.loadLibrary`/`SoLoader.loadLibrary` call site in the DEX that has no
    `lib/<abi>/` entry. Platform libraries (`libc.so`, `libm.so`, …) are never
    warnings, and a healthy APK answers `warnings: []` — so a non-empty list is a
-   packaging bug (`acos_inspect` on the APK before you debug the UI).
+   **hint**, not the cause: it says "this library is referenced and absent", not
+   "this is why the app misbehaves". Treat it as the first thing to check before
+   debugging the UI, then confirm at runtime.
 3. **Run it.** `acos_launch {"apk": "..."}` (MCP, session persists) or
    `acos launch <apk> --engine art --json`. **The MCP session tools always run
    real ART** (the server starts its own private `acos serve --engine art`
@@ -332,7 +334,7 @@ On a placeholder frame (window exists, app content never mounted) the answer is
 |---|---|---|
 | `UNSUPPORTED_ANDROID_API`, `UNSUPPORTED_JAVA_API`, `UNSUPPORTED_BYTECODE`, `UNSUPPORTED_NATIVE_SYMBOL`, `UNSUPPORTED_RELOCATION`, `UNSUPPORTED_BACKEND`, `NEEDS_REAL_DEVICE`, `REQUIRES_GMS`, `WRONG_ABI`, `NO_DISPLAY`, `NO_TEXT` | the engine cannot do this | read `details.api`/`details.at`/`details.symbol`/`details.reason`, avoid the API, or report unsupported. Never rewrite the app to hide it |
 | `ASSERTION_FAILED`, `ELEMENT_NOT_FOUND`, `ELEMENT_OFFSCREEN`, `TREE_TRUNCATED` | the app ran, a check did not hold | read the diff, re-observe the tree, fix the app or the expectation |
-| `PLACEHOLDER_CONTENT` | the window exists but the app's own content never mounted (an empty/skeleton tree, `frame.placeholder: true`, no fresh frames) | read `error.details.log_hint` (one quoted log line) and `error.details` (`nodes`, `traversals`, `waited_ms`); then run `acos_inspect` and look at `native_lib_check.warnings` (`NATIVE_LIB_MISSING`) — a missing `lib/<abi>/*.so` is the common cause. Not a pass, and not an app verdict until the library or the JS bundle is fixed |
+| `PLACEHOLDER_CONTENT` | the window exists but the app's own content never mounted (a bare skeleton tree **and** no frame movement: `frame.placeholder: true`, unchanged `frame_number`/`frame_seq`, identical pixels, after the whole `ACOS_ART_FIRST_FRAME_MS` budget) | read `error.details.log_hint` (one quoted log line) and `error.details` (`nodes`, `traversals`, `waited_ms`, `budget_ms`, `frames_advanced`, `pixels_changed`); then run `acos_inspect` and look at `native_lib_check.warnings` (`NATIVE_LIB_MISSING`) — a missing `lib/<abi>/*.so` is a common **hint**, not a proven cause. A longer timeout cannot help (the budget was already spent). Not a pass, and not an app verdict until the library or the JS bundle is fixed |
 | `APP_CRASHED`, `APP_NOT_RESPONDING`, `JAVA_EXCEPTION` | the app crashed or hung | read `details.root_cause` (deepest `caused by:`) and `acos_logs`; fix the app |
 | `APK_*`, `AXML_MALFORMED`, `ARSC_MALFORMED`, `DEX_*`, `ELF_MALFORMED`, `NATIVE_*` | the build artifact is broken | rebuild/re-sign/repackage, then `acos inspect` again. Not an app verdict |
 | `UNSUPPORTED_ABI` | the APK ships native code but no `lib/x86_64/` | rebuild with the x86_64 ABI, or run the pure-Java path |

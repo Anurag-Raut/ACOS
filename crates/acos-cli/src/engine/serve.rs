@@ -1225,10 +1225,28 @@ fn launch_reply(
     // `frame.meaningful: false`, so an assertion can never rest on it.
     if let Some(report) = session.first_frame_report() {
         result["first_frame"] = report.to_json();
-        if report.placeholder {
+        if report.placeholder || report.suspect {
             if let Some(frame) = result.get_mut("frame").and_then(Value::as_object_mut) {
-                frame.insert("meaningful".into(), json!(false));
-                frame.insert("placeholder".into(), json!(true));
+                frame.insert("meaningful".into(), json!(!report.placeholder));
+                frame.insert("placeholder".into(), json!(report.placeholder));
+                if report.suspect {
+                    // FB2c: a text-free skeleton whose frame moved is a normal
+                    // frame with a warning, never a blocked verdict.
+                    frame.insert("placeholder_suspect".into(), json!(true));
+                }
+            }
+            if report.suspect {
+                result["warnings"] = json!([{
+                    "code": "PLACEHOLDER_SUSPECT",
+                    "message": "the first frame is the window skeleton (no app text), but its pixels \
+                                changed and/or a newer frame was published: reported as a normal frame \
+                                (a text-free custom View / SurfaceView / GL / image-only screen looks \
+                                like this), not as a placeholder. If the screen should show app UI, \
+                                check that the content actually mounted.",
+                    "frame_seq": report.frame_seq,
+                    "pixels_changed": report.pixels_changed,
+                    "frames_advanced": report.frames_advanced,
+                }]);
             }
         }
     }
@@ -1239,18 +1257,20 @@ fn launch_reply(
     // `pixels: false`, stuck for 40+ s while SoLoader looped on a missing
     // `libworklets.so`). Report it as `blocked` with `reason:
     // placeholder-content` and the first log line that explains it.
-    let placeholder_failure = session
-        .first_frame_report()
-        .filter(|report| report.placeholder)
-        .map(|report| {
+    // FB2c: the label is not sticky — `placeholder_frame_report()` answers only
+    // while the *current* bound frame is still the placeholder.
+    let placeholder_failure = match session.placeholder_frame_report().cloned() {
+        Some(report) => {
             let lines = log_lines_for_hint(session);
-            placeholder_launch_error(
+            Some(placeholder_launch_error(
                 id,
                 &report,
                 session.last_frame_number(),
                 placeholder_hint_line(&lines),
-            )
-        });
+            ))
+        }
+        None => None,
+    };
     if let Some(error) = placeholder_failure {
         // The ladder is published with the reply, so a caller sees *where* the
         // launch stopped even though the envelope is a failure.
@@ -1364,13 +1384,11 @@ fn placeholder_launch_error(
     frame_number: Option<u64>,
     log_hint: Option<String>,
 ) -> ProtocolError {
-    let number = frame_number
-        .map(|n| n.to_string())
-        .unwrap_or_else(|| "unknown".to_string());
+    let sentence = crate::engine::art::placeholder_evidence_sentence(report);
     let detail = format!(
-        "launch reached the window skeleton but the app's content never mounted \
-         ({} node(s), no app text) after {} traversal(s)/{} ms ({} event wait(s)); \
-         frame_number {number} did not advance past the placeholder; reason: placeholder-content",
+        "launch reached the window skeleton and nothing about the frame moved, so the app's content \
+         never mounted ({} node(s), no app text) after {} traversal(s)/{} ms ({} event wait(s)); \
+         {sentence}; reason: placeholder-content",
         report.nodes, report.traversals, report.waited_ms, report.event_waits
     );
     let mut details = json!({
@@ -1383,22 +1401,32 @@ fn placeholder_launch_error(
         "settled": report.settled,
         "bound": report.bound,
         "frame_number": frame_number,
+        "frame_number_advanced": report.frames_advanced,
+        "pixels_compared": report.pixels_compared,
+        "pixels_changed": report.pixels_changed,
+        "budget_ms": report.budget_ms,
     });
     let hint = match &log_hint {
         Some(line) => {
             details["log_hint"] = json!(line);
             format!(
-                "The window exists; the app's own content never mounted. The guest log names the \
-                 cause in this line: `{line}`. A native library the app references but the APK \
-                 does not ship for the host ABI is the usual cause: run `acos_inspect` and read \
-                 its `warnings`, then `acos_logs` around that line."
+                "The window exists; the app's own content never mounted. The launch already waited its \
+                 whole content budget (`ACOS_ART_FIRST_FRAME_MS`, {} ms), so a longer timeout cannot \
+                 mount content that is not there: the guest log names the cause in this line: \
+                 `{line}`. A native library the app references but the APK does not ship for the host \
+                 ABI is the usual cause: run `acos_inspect` and read its `warnings`, then `acos_logs` \
+                 around that line.",
+                report.budget_ms
             )
         }
-        None => "The window exists; the app's own content never mounted and the guest log carried \
-                 no explaining line. Read `acos_logs` for the first UnsatisfiedLinkError / \
-                 SoLoader / fatal JS line; `acos_inspect` cross-checks the APK's referenced native \
-                 libraries against lib/<abi>/."
-            .to_string(),
+        None => format!(
+            "The window exists; the app's own content never mounted and the guest log carried no \
+             explaining line. The launch already waited its whole content budget \
+             (`ACOS_ART_FIRST_FRAME_MS`, {} ms); a longer timeout only reproduces this. Read \
+             `acos_logs` for the first UnsatisfiedLinkError / SoLoader / fatal JS line; \
+             `acos_inspect` cross-checks the APK's referenced native libraries against lib/<abi>/.",
+            report.budget_ms
+        ),
     };
     ProtocolError::new(ErrorCode::PlaceholderContent, detail)
         .with_hint(hint)
@@ -1503,6 +1531,117 @@ fn placeholder_screenshot_error(verb: &str) -> BackendError {
     ))
 }
 
+/// FB2c: confine a screenshot destination to the session's artifacts directory.
+///
+/// The argument came from an MCP caller, so it is untrusted input: `true` means
+/// the session's own `screenshots/` dir, a relative path resolves **against that
+/// directory** (never the daemon's cwd), and an absolute path must stay inside
+/// it. `..` components, a symlink leaving the directory and a destination that
+/// is the source frame itself are all refused before anything is created or
+/// copied — the old code called `create_dir_all` on any path and could truncate
+/// the frame artifact to zero bytes.
+fn confine_screenshot_dest(
+    artifacts: &Path,
+    request_dest: Option<PathBuf>,
+    verb: &str,
+    frame_seq: u64,
+    source: &Path,
+) -> Result<PathBuf, BackendError> {
+    let base = std::fs::canonicalize(artifacts).map_err(|error| BackendError::Error {
+        code: ErrorCode::RenderIo,
+        detail: format!(
+            "the session artifacts directory {} is not usable: {error}",
+            artifacts.display()
+        ),
+    })?;
+    let Some(requested) = request_dest else {
+        let dir = base.join("screenshots");
+        std::fs::create_dir_all(&dir).map_err(|error| BackendError::Error {
+            code: ErrorCode::RenderIo,
+            detail: format!("cannot create {}: {error}", dir.display()),
+        })?;
+        return Ok(dir.join(format!("{}-{frame_seq}.png", verb.replace("acos_", ""))));
+    };
+    let reject = |why: &str| BackendError::Error {
+        code: ErrorCode::InvalidArgument,
+        detail: format!(
+            "`screenshot` must be true or a path inside the session's artifacts directory ({}); \
+             {why}",
+            base.display()
+        ),
+    };
+    if requested
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return Err(reject("a `..` component is refused"));
+    }
+    if requested.as_os_str().is_empty() {
+        return Err(reject("an empty path is refused"));
+    }
+    let candidate = if requested.is_absolute() {
+        requested.clone()
+    } else {
+        base.join(&requested)
+    };
+    let Some(name) = candidate.file_name().map(|n| n.to_os_string()) else {
+        return Err(reject("the path names no file"));
+    };
+    let Some(parent) = candidate.parent() else {
+        return Err(reject("the path names no directory"));
+    };
+    // Refuse *before* creating anything: resolve the deepest ancestor that
+    // already exists, so a symlink that leaves the artifacts directory is caught
+    // without mkdir'ing through it.
+    let mut probe = parent.to_path_buf();
+    while !probe.exists() {
+        let Some(up) = probe.parent().map(Path::to_path_buf) else {
+            return Err(reject("no existing ancestor directory"));
+        };
+        probe = up;
+    }
+    let probe_real = std::fs::canonicalize(&probe).map_err(|error| BackendError::Error {
+        code: ErrorCode::RenderIo,
+        detail: format!("cannot resolve {}: {error}", probe.display()),
+    })?;
+    if !probe_real.starts_with(&base) {
+        return Err(reject(&format!(
+            "{} is outside the artifacts directory",
+            probe_real.display()
+        )));
+    }
+    std::fs::create_dir_all(parent).map_err(|error| BackendError::Error {
+        code: ErrorCode::RenderIo,
+        detail: format!("cannot create {}: {error}", parent.display()),
+    })?;
+    // Canonicalize *after* creating the directory: symlinks resolve, so a link
+    // that leaves the artifacts directory is caught here, not by the write.
+    let parent_real = std::fs::canonicalize(parent).map_err(|error| BackendError::Error {
+        code: ErrorCode::RenderIo,
+        detail: format!("cannot resolve {}: {error}", parent.display()),
+    })?;
+    if !parent_real.starts_with(&base) {
+        return Err(reject(&format!(
+            "{} is outside the artifacts directory",
+            parent_real.display()
+        )));
+    }
+    let dest = parent_real.join(name);
+    // A symlink as the last component would be followed by `fs::copy` (writing
+    // through it, wherever it points).
+    if std::fs::symlink_metadata(&dest).is_ok_and(|meta| meta.file_type().is_symlink()) {
+        return Err(reject(&format!("{} is a symlink", dest.display())));
+    }
+    let source_real = std::fs::canonicalize(source).unwrap_or_else(|_| source.to_path_buf());
+    let dest_real = std::fs::canonicalize(&dest).unwrap_or_else(|_| dest.clone());
+    if dest_real == source_real {
+        return Err(reject(
+            "the destination is the frame artifact itself; copying it would truncate the frame",
+        ));
+    }
+    Ok(dest)
+}
+
 /// The write/report half of [`attach_screenshot`], for a caller that already
 /// holds the frame's artifact (a verb that just captured one).
 fn write_screenshot(
@@ -1519,27 +1658,15 @@ fn write_screenshot(
             "the frame artifact for this screenshot is empty",
         ));
     }
-    let dest = request_dest.unwrap_or_else(|| {
-        artifacts
-            .join("screenshots")
-            .join(format!("{}-{frame_seq}.png", verb.replace("acos_", "")))
-    });
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| BackendError::Error {
-            code: ErrorCode::RenderIo,
-            detail: format!("cannot create {}: {error}", parent.display()),
-        })?;
-    }
-    if dest != source {
-        std::fs::copy(source, &dest).map_err(|error| BackendError::Error {
-            code: ErrorCode::RenderIo,
-            detail: format!(
-                "cannot write the screenshot {} from {}: {error}",
-                dest.display(),
-                source.display()
-            ),
-        })?;
-    }
+    let dest = confine_screenshot_dest(artifacts, request_dest, verb, frame_seq, source)?;
+    std::fs::copy(source, &dest).map_err(|error| BackendError::Error {
+        code: ErrorCode::RenderIo,
+        detail: format!(
+            "cannot write the screenshot {} from {}: {error}",
+            dest.display(),
+            source.display()
+        ),
+    })?;
     let absolute = std::fs::canonicalize(&dest).unwrap_or_else(|_| dest.clone());
     let (width, height) = png_pixel_size(&absolute).ok_or_else(|| BackendError::Error {
         code: ErrorCode::RenderIo,
@@ -1579,7 +1706,10 @@ fn observe_tree(
     // the reply, and never accepted by an assertion.
     let settle = requested_settle(args)?;
     let t_begin = m5_now_us();
-    let tree = session.tree_with_settle(settle)?;
+    // FB2c item 6: a screenshot is captured by the same traversal as the tree,
+    // so the two cannot disagree about which frame is on screen.
+    let tree = session
+        .tree_with_settle_pixels(settle, !matches!(screenshot, ScreenshotRequest::None))?;
     let t_tree = m5_now_us();
     let (max_nodes, node_count, truncated, tree_value) = tree_json(&tree, max_nodes);
     let t_end = m5_now_us();
@@ -1630,7 +1760,8 @@ fn observe(
         _ => None,
     };
     if want_tree || want_text {
-        let tree = session.tree_with_settle(settle)?;
+        let tree = session
+            .tree_with_settle_pixels(settle, !matches!(screenshot, ScreenshotRequest::None))?;
         let mut result = json!({
             "package": session.package(),
             "stage_reached": "first_frame",
@@ -2086,6 +2217,20 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
     // to its preserved evidence travel with the successful reset reply.
     if let Some(retry) = session.relaunch_retry() {
         reply["relaunch_retry"] = retry.clone();
+    }
+    // FB2c item 3: the reset reply publishes the same first-frame evidence a
+    // launch does. The reset bound the relaunched guest's first frame through
+    // the launch's content wait and placeholder rule, so a relaunch that never
+    // mounted is a `PLACEHOLDER_CONTENT` error (returned above), never a
+    // `stage_reached: first_frame` pass.
+    if let Some(report) = session.first_frame_report() {
+        reply["first_frame"] = report.to_json();
+        if report.placeholder || report.suspect {
+            if let Some(frame) = reply.get_mut("frame").and_then(Value::as_object_mut) {
+                frame.insert("meaningful".into(), json!(!report.placeholder));
+                frame.insert("placeholder".into(), json!(report.placeholder));
+            }
+        }
     }
     Ok(reply)
 }
@@ -2935,6 +3080,7 @@ mod tests {
         let source = dir.join("frame.png");
         std::fs::write(&source, crate::engine::fake::TINY_PNG).unwrap();
         let artifacts = dir.join("artifacts");
+        std::fs::create_dir_all(&artifacts).unwrap();
         let mut result = json!({"node_count": 9});
         write_screenshot(
             &artifacts,
@@ -2984,17 +3130,21 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// FB2: an explicit path is honoured (the CLI's `--screenshot <path>` form).
+    /// FB2/FB2c: an explicit path is honoured (the CLI's `--screenshot <path>`
+    /// form) and made absolute; a **relative** path resolves against the
+    /// session's artifacts directory, never the daemon's cwd.
     #[test]
     fn a_screenshot_path_argument_is_honoured_and_made_absolute() {
         let dir = fb2_scratch("path");
         let source = dir.join("frame.png");
         std::fs::write(&source, crate::engine::fake::TINY_PNG).unwrap();
-        let dest = dir.join("out/agent.png");
+        let artifacts = dir.join("artifacts");
+        std::fs::create_dir_all(&artifacts).unwrap();
+        let dest = artifacts.join("out/agent.png");
         let mut result = json!({});
         write_screenshot(
-            &dir.join("artifacts"),
-            Some(dest.clone()),
+            &artifacts,
+            Some(PathBuf::from("out/agent.png")),
             "acos_observe",
             (&source, 3, "m3", crate::engine::fake::TINY_PNG.len() as u64),
             (1080, 2400),
@@ -3006,7 +3156,69 @@ mod tests {
             result["screenshot"]["path"],
             json!(std::fs::canonicalize(&dest).unwrap().display().to_string())
         );
-        assert!(dest.is_file());
+        assert!(dest.is_file(), "a relative path lands under the artifacts dir");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// FB2c item 5: the screenshot destination is caller input, so it is confined
+    /// to the session's artifacts directory: `..`, an absolute path outside it, a
+    /// symlink that leaves it and the frame artifact itself are all refused, and a
+    /// refusal writes nothing.
+    #[test]
+    fn a_screenshot_destination_cannot_leave_the_session_artifacts() {
+        let dir = fb2_scratch("confine");
+        let source = dir.join("frame.png");
+        std::fs::write(&source, crate::engine::fake::TINY_PNG).unwrap();
+        let artifacts = dir.join("artifacts");
+        std::fs::create_dir_all(artifacts.join("screenshots")).unwrap();
+        let attempt = |dest: Option<PathBuf>| {
+            let mut result = json!({});
+            write_screenshot(
+                &artifacts,
+                dest,
+                "acos_observe",
+                (&source, 3, "m3", crate::engine::fake::TINY_PNG.len() as u64),
+                (1080, 2400),
+                (0, 0),
+                &mut result,
+            )
+        };
+        for (why, dest) in [
+            ("a `..` component", PathBuf::from("../../../escape.png")),
+            ("an absolute path outside", dir.join("outside.png")),
+            ("a `..` even when it lands inside", PathBuf::from("screenshots/../x.png").join("..").join("y.png")),
+        ] {
+            let error = attempt(Some(dest)).expect_err(why);
+            match error {
+                BackendError::Error { code, detail } => {
+                    assert_eq!(code, ErrorCode::InvalidArgument, "{why}: {detail}");
+                    assert!(detail.contains("artifacts directory"), "{why}: {detail}");
+                }
+                other => panic!("{why}: expected an argument error, got {other:?}"),
+            }
+        }
+        // A symlink inside the artifacts dir that points outside it.
+        let link = artifacts.join("screenshots/escape.png");
+        std::os::unix::fs::symlink(dir.join("target-dir"), &link).unwrap();
+        std::fs::create_dir_all(dir.join("target-dir")).unwrap();
+        let error = attempt(Some(PathBuf::from("screenshots/escape.png/x.png")))
+            .expect_err("a symlink out of the directory is refused");
+        assert!(matches!(error, BackendError::Error { .. }), "{error:?}");
+        assert!(
+            !dir.join("target-dir/x.png").exists(),
+            "nothing may be created through the symlink"
+        );
+        // The frame artifact itself: copying it onto itself truncates it to 0.
+        let error = attempt(Some(source.clone())).expect_err("the source is refused");
+        assert!(matches!(error, BackendError::Error { .. }), "{error:?}");
+        assert_eq!(
+            std::fs::read(&source).unwrap(),
+            crate::engine::fake::TINY_PNG,
+            "the frame artifact is untouched"
+        );
+        // Nothing was created outside the artifacts dir by any refusal.
+        assert!(!dir.join("escape.png").exists());
+        assert!(!dir.join("outside.png").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -3069,6 +3281,14 @@ mod tests {
             bound: Some("strict-event".to_string()),
             nodes,
             placeholder,
+            suspect: false,
+            frame_seq: Some(7),
+            frame_number: Some(1),
+            frames: 2,
+            frames_advanced: false,
+            pixels_compared: true,
+            pixels_changed: false,
+            budget_ms: 5000,
         }
     }
 
@@ -3108,6 +3328,24 @@ mod tests {
             "the message names the reason: {}",
             error.message
         );
+        // FB2c: the budget and its env knob are named, and the frame number is
+        // quoted as a *measured* fact, never asserted as "did not advance" when
+        // nothing measured it.
+        assert!(
+            error.message.contains("ACOS_ART_FIRST_FRAME_MS=5000"),
+            "the message names the budget it spent: {}",
+            error.message
+        );
+        assert!(
+            error.message.contains("frame_number stayed 1"),
+            "a measured frame number is quoted: {}",
+            error.message
+        );
+        assert!(
+            error.hint.contains("ACOS_ART_FIRST_FRAME_MS"),
+            "the hint says a longer timeout cannot help: {}",
+            error.hint
+        );
 
         // The same facts with no explaining log line still name the reason and
         // point at the log, never at a guessed cause.
@@ -3118,6 +3356,16 @@ mod tests {
             bare.details.as_ref().unwrap().get("log_hint"),
             None,
             "no guessed cause"
+        );
+        // A report that never measured a frame number says so instead of
+        // claiming it did not advance.
+        let mut unmeasured = placeholder_report(9, true);
+        unmeasured.frame_number = None;
+        let unmeasured = placeholder_launch_error("s_y", &unmeasured, None, None);
+        assert!(
+            !unmeasured.message.contains("did not advance"),
+            "an unmeasured frame number is never asserted: {}",
+            unmeasured.message
         );
     }
 

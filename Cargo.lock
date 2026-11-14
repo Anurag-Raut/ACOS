@@ -16,6 +16,7 @@ dependencies = [
 name = "acos-apk"
 version = "0.2.0"
 dependencies = [
+ "acos-dex",
  "acos-test-support",
  "serde",
  "serde_json",

@@ -457,3 +457,86 @@ decisions; the two follow-ups that are **not** FB2's to do are listed there.
   not a pass) — intended, same false green one layer down, and the Gaten sweep
   above proves the pass paths are untouched.
 * **`PLACEHOLDER_CONTENT` as a `blocked` status, not a new rung**: FB2 §5.
+
+---
+
+## Review (Opus review of FB2 / FB2b — copied from the FB2c brief)
+
+1. **HIGH** `first_frame_is_bare_skeleton` (engine/art.rs) blocked on node count
+   alone: a full-screen custom View / SurfaceView / GL / image-only activity /
+   Flutter without semantics / RN ActivityIndicator-only screen was wrongly
+   `PLACEHOLDER_CONTENT`. Needs evidence beyond the tree (frame not advancing /
+   placeholder pixels); a skeleton with real pixels = pass + `placeholder_suspect`.
+2. **HIGH** an unsettled first traversal returned `one_traversal` with the
+   bare-skeleton verdict and `waited_ms: 0`: the content wait
+   (`ACOS_ART_FIRST_FRAME_MS`) never ran. The error must name the budget and the
+   knob; docs/MCP.md "Never retry with a longer timeout" is wrong for slow RN
+   bundles; "frame_number N did not advance" was asserted, not measured.
+3. **MED-HIGH** `reset` skipped `bind_first_frame` (and `acos_reset` hardcoded
+   `stage_reached: first_frame`): a relaunch that never mounts passed.
+4. **MED** the placeholder state was sticky (`first_frame_report` set once).
+5. **MED** screenshot path not confined (serve.rs; MCP `append_screenshot_content`):
+   any path, `..`, symlink, dest == source (truncates the frame).
+6. **LOW-MED** `screenshot_source` could capture a newer frame than the tree in
+   the same reply.
+7. **LOW-MED** acos-mcp discovery order: ACOS_BIN > $ACOS_HOME/bin/acos >
+   sibling of current_exe > PATH > repo walk, plus a stderr warning on a version
+   mismatch.
+8. **LOW** `acos_inspect` loadLibrary scan was a raw byte scan; ignore
+   `jscexecutor` when Hermes ships; SYSTEM_LIBS += libaaudio/libamidi/
+   libdl_android; the guide must call the warning a hint.
+9. cosmetic: runs of spaces in the `Backend::launch` detail string.
+
+## FB2c — what was fixed
+
+A previous agent ran out of quota mid-fix and left ~1090 uncommitted lines; this
+continuation read all of it, kept what was right and finished the rest.
+
+| # | Fix | Where | Tests |
+|---|---|---|---|
+| 1 | verdict = tree skeleton **and** no frame movement (no newer `frame_seq`/`frame_number`, identical pixel digest; pixels decide when comparable). Skeleton + moved frame = pass, `result.first_frame.placeholder_suspect: true`, `warnings[PLACEHOLDER_SUSPECT]`, `frame.meaningful` stays true | `engine/art.rs` `first_frame_placeholder_verdict`, `serve.rs launch_reply` | `the_placeholder_verdict_needs_frame_evidence_not_a_node_count`, `fb2c_a_skeleton_with_changing_pixels_passes_with_a_suspect_warning` |
+| 2 | the unsettled first traversal is the rollback baseline, not an early return: the content wait always runs first; error/hint name `ACOS_ART_FIRST_FRAME_MS` and the spent budget; the "frame_number" sentence is built from measured facts only (`placeholder_evidence_sentence`); docs/MCP.md + AGENT_GUIDE rewritten (budget is for slow RN bundles; a longer timeout after a *spent* budget cannot help) | `art.rs bind_first_frame`, `serve.rs placeholder_launch_error`, docs | `fb2c_an_unsettled_first_traversal_still_spends_the_content_budget`, `placeholder_launch_error` test (budget, measured number, unmeasured number never "did not advance") |
+| 3 | `ArtSession::reset` binds the relaunched first frame through `bind_first_frame`; a placeholder is `PLACEHOLDER_CONTENT` (serve + verify `reset` step); the reset reply carries `first_frame` | `art.rs reset`, `serve.rs reset` | `fb2c_a_reset_that_never_mounts_is_blocked` |
+| 4 | not sticky: `absorb` clears the report when a later frame has content; `placeholder_frame_report()` answers from the current frame | `art.rs` | `fb2c_a_placeholder_is_cleared_once_a_later_frame_has_content` |
+| 5 | `confine_screenshot_dest`: only `true` or a path inside the session artifacts dir (relative = relative to it; canonicalized; no `..`; no symlink escape, nothing created through a link; dest != source canonical); MCP inlines only files under its allowed roots (`path_within_allowed_roots`, canonical) | `serve.rs`, `acos-mcp/src/server.rs` | `a_screenshot_destination_cannot_leave_the_session_artifacts`, `a_screenshot_is_inlined_only_from_an_allowed_root` |
+| 6 | `screenshot_source` returns only the bound tree's own PNG; a tree without pixels is refused (`NO_FRESH_FRAME`) instead of being paired with a newer capture, so `screenshot.frame_seq == tree frame_seq` | `art.rs` | `fb2c_a_screenshot_never_comes_from_a_newer_frame_than_the_tree` |
+| 7 | discovery order `resolve_binary_from` (ACOS_BIN > ACOS_HOME > sibling > PATH > repo walk — identical to main v0.2.1) + one stderr warning on `--version` mismatch / unanswered | `acos-mcp/src/backend.rs` | `discovery_order_is_bin_then_home_then_sibling_then_path`, `a_cli_version_mismatch_is_detected` |
+| 8 | `loadLibrary` call sites are **decoded** (class_defs → class_data → code_item → `acos_dex::decode`, `const-string` register tracking paired with the `invoke-static`), no byte scan; `jscexecutor` ignored when `libhermes.so` ships; SYSTEM_LIBS += libaaudio/libamidi/libdl_android; AGENT_GUIDE calls it a hint | `acos-apk/src/native.rs` (+ `acos-dex` dep) | `a_call_site_is_a_decoded_instruction_not_a_byte_pattern`, `an_operand_byte_that_looks_like_an_opcode_is_not_an_instruction`, `jscexecutor_is_ignored_when_hermes_ships_and_audio_libs_are_system` |
+| 9 | the Backend::launch detail string is built by `placeholder_evidence_detail` (no embedded runs of spaces) | `art.rs` | covered by the item-3 test |
+
+Found while running the live acceptance (and fixed):
+
+* item 6, the first cut (refuse a tree without pixels) broke `acos_observe_tree
+  screenshot:true`, because the tree traversal was tree-only. A request with a
+  screenshot now asks the **same traversal** to capture (`tree_with_settle_pixels`),
+  so `screenshot.frame_seq == tree.frame_seq` by construction.
+* item 5, the first cut (MCP inlines only under `allowed_roots`) stopped inlining
+  the default screenshot (`<runtime>/acos/art-sessions/<id>/screenshots/`). That
+  tree (and `ACOS_SERVE_ARTIFACTS`) is now a root of its own; nothing else
+  outside `allowed_roots` is inlined.
+* the placeholder evidence compares the baseline against the **latest** traversal
+  (taken before the rollback), so an animating skeleton that never settles is not
+  "unchanged" by construction. A launch whose retry saw app content but never
+  settled is now `placeholder_suspect` (pass, skeleton bound), no longer blocked
+  (`g3f1_unsettled_retry_rolls_back_to_the_settled_traversal` updated).
+* test fakes: the reset fakes returned an empty tree (0 nodes), which is a
+  skeleton; they now carry a text node (a mounted app). `g3f1_content_first…`
+  asserted `waited_ms == 0` for one forked-shell traversal (a 1 ms flake); it now
+  asserts `< 250` and keeps the request-count + `event_waits == 0` proofs.
+
+### FB2c acceptance (A: gr4 build, scratch prefix `.cache/fb2c/prefix`, defaults, empty dir, `env -u ACOS_HOME`)
+
+| criterion | result |
+|---|---|
+| unit tests per finding | see table above; all green |
+| crafted Gaten APK without `lib/x86_64/libworklets.so` (zipalign + apksigner, debug keystore, v1+v2+v3) over MCP | `.cache/fb2c/crafted.jsonl`: inspect warns exactly `libworklets.so`; **launch → blocked PLACEHOLDER_CONTENT** (message: `8 frame(s) over 8 traversal(s)/207 ms (7 event wait(s), budget ACOS_ART_FIRST_FRAME_MS=5000 ms): frame_number advanced to 1, the pixels are identical to the skeleton's`); hint names the log line; **`acos_reset` on the blocked session → blocked PLACEHOLDER_CONTENT**; `acos_verify` of gaten-home → blocked; `smoke: ok` |
+| normal counter + Gaten pass | gates `v2-art-counter` etc. below; `mcp_smoke --mode counter` ok; Gaten 5 flows ok |
+| 15 gates exact | `.cache/fb2c/gates/summary.tsv`: OK=15 FAIL=0 (10 pass; T03-render-wrong, w7-insets-carve-negative, se1-expect-change-noop → ASSERTION_FAILED; offscreen-pager-visible → ELEMENT_OFFSCREEN; p11-progress-timeout → TIMEOUT) |
+| Gaten 5+5 | `.cache/fb2c/gatensweep/summary.tsv`: OK=10 FAIL=0 (5 pass, 5 `*-wrong` ASSERTION_FAILED) |
+| `mcp_smoke.py --mode gaten-shot` from a scratch install | `smoke: ok` (inline image present, frame_seq equal) |
+| `cargo test --release --offline -p acos-cli -p acos-art -p acos-mcp -p acos-verify -p acos-protocol -p acos-apk` | green, 60 `test result: ok` blocks, 0 failed (`--no-fail-fast`; `acos-art launch_hang::guest_exits_before_milestone…` flaked once under benchmark load — 13.6 s vs 5 s bound — and passed on the rerun; that crate is untouched) |
+
+Remaining: nothing known. Decision for the orchestrator: a skeleton whose
+pixels changed is now a **pass** with `placeholder_suspect` (warning
+`PLACEHOLDER_SUSPECT`), by design (finding 1); a text-free screen can therefore
+no longer be proven "unmounted" by the launcher alone.

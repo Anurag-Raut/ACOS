@@ -300,9 +300,19 @@ boot-classpath cache, host memory) and returns each failing check's `fix`.
 {"name": "acos_observe_tree", "arguments": {"session_id": "mcp-1234", "screenshot": "/abs/out/home.png"}}
 ```
 
-* `true` writes `<session artifacts>/screenshots/<verb>-<frame_seq>.png`; a path
-  writes there and is made absolute. Anything else (`7`, `""`) is
+* `true` writes `<session artifacts>/screenshots/<verb>-<frame_seq>.png`; a
+  **relative** path resolves against the session's artifacts directory (never the
+  daemon's cwd) and an **absolute** path must stay inside it. `..` components, a
+  symlink that leaves the directory and a destination that is the frame artifact
+  itself are refused with `INVALID_ARGUMENT` before anything is created or
+  written — a screenshot can never create directories or overwrite files outside
+  the session. Anything that is not `true` or such a path (`7`, `""`) is
   `INVALID_ARGUMENT` — never a silent no-op.
+* The screenshot is always bound to the frame of the tree in the same reply: a
+  request that asks for a screenshot makes the tree traversal capture pixels
+  itself, so the reply's `screenshot.frame_seq` equals the tree's. A bound tree
+  that has no pixels of its own is `NO_FRESH_FRAME` (refused) rather than paired
+  with a newer capture.
 * The reply's `result.screenshot` carries `path` (absolute), `bytes`, `md5`,
   `frame_seq`, `width`/`height` from the PNG's IHDR, and the coordinate mapping
   `display_size` + `display_origin`: PNG pixels are display pixels shifted by
@@ -319,16 +329,34 @@ boot-classpath cache, host memory) and returns each failing check's `fix`.
 
 ### A launch that never mounts is `blocked`, not `pass`
 
-`acos_launch` (and `acos_verify`'s `launch` step) report
+`acos_launch`,`acos_reset` (and `acos_verify`'s `launch`/`reset` step) report
 `status: "blocked"` with `error.code = PLACEHOLDER_CONTENT` when the window and
-its decor exist but the app's own content never mounts (<= 16 nodes, no app text
-anywhere, after the whole first-frame budget). The reply keeps the ladder in
-`result` for diagnosis: `stage_reached: "window"`, `content: {"mounted": false,
+its decor exist but the app's own content never mounts. The label needs evidence
+beyond the tree: the frame is the bare window skeleton (<= 16 nodes, no app text)
+**and** nothing about the frame moved while the whole first-frame budget ran —
+no newer `frame_number`/`frame_seq` and the same pixel digest. A text-free
+skeleton whose pixels *did* change (a custom `View`, a `SurfaceView`/GL surface,
+an image-only activity, Flutter without semantics) is a normal pass with a
+`warning` (`code: PLACEHOLDER_SUSPECT`, `result.first_frame.placeholder_suspect:
+true`), never a blocked verdict. The reply keeps the ladder in `result` for
+diagnosis: `stage_reached: "window"`, `content: {"mounted": false,
 "reason": "placeholder-content"}`, the `first_frame` rung rewritten to
-`blocked`, and `error.details.log_hint` with the one guest log line that explains
-it (`UnsatisfiedLinkError`, `SoLoader`, `couldn't find`, `FATAL`, else the first
-`E` line). Never retry a placeholder launch with a longer timeout: read the log
-line, then `acos_inspect`.
+`blocked`, `error.details` with `nodes`, `traversals`, `waited_ms`, `budget_ms`,
+`frames_advanced`, `pixels_changed`, and `error.details.log_hint` with the one
+guest log line that explains it (`UnsatisfiedLinkError`, `SoLoader`, `couldn't
+find`, `FATAL`, else the first `E` line).
+
+Never retry a placeholder launch with a longer timeout: the launch already spent
+its whole `ACOS_ART_FIRST_FRAME_MS` budget (default 5000 ms) and the frame never
+changed, so a bigger budget only reproduces the same answer more slowly. The
+budget is for the opposite case — a **slow React Native bundle**: a launch whose
+first paint lands after a second is waited for, and the wait is what makes the
+first frame the app's content instead of the skeleton. Read the log line, then
+`acos_inspect`.
+
+A placeholder label is never sticky: once a later frame carries content, the
+session answers from the current frame (a second `acos_launch`, a `reset` or a
+screenshot are judged on what is on screen now).
 
 ### `acos_inspect` cross-checks the native libraries
 
@@ -336,7 +364,7 @@ line, then `acos_inspect`.
 native libraries it asks for?": `result.native_lib_check` =
 
 ```json
-{"abi": "x86_64", "platform_libs_ignored": 24,
+{"abi": "x86_64", "platform_libs_ignored": 27,
  "warnings": [{"code": "NATIVE_LIB_MISSING", "lib": "libworklets.so",
                "abi": "x86_64", "source": "elf-needed",
                "referenced_by": ["libgesturehandler.so", "libreanimated.so"]}]}

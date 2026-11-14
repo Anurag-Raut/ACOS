@@ -854,25 +854,55 @@ pub(crate) struct FirstFrameReport {
     /// Nodes in the bound tree.
     pub nodes: usize,
     /// True when the bound tree is still only the window skeleton after the
-    /// budget: no app content, so the frame is a placeholder, never a claim.
+    /// budget **and** the frame moved no content: no newer frame identity and
+    /// the same pixels (see [`first_frame_placeholder_verdict`]). Only then is
+    /// the frame a placeholder, never a claim.
     pub placeholder: bool,
+    /// FB2c: the bound tree is still the window skeleton, but the frame *did*
+    /// move (a newer frame identity and/or changed pixels). That is the normal
+    /// frame of a text-free screen (a custom View, a SurfaceView/GL surface, an
+    /// image-only activity, Flutter without semantics): a pass that carries a
+    /// warning, never a blocked verdict.
+    pub suspect: bool,
+    /// The frame the report describes (`cached.seq` at bind time).
+    pub frame_seq: Option<u64>,
+    /// The guest's own frame number for it, when the reply carried one.
+    pub frame_number: Option<u64>,
+    /// Frames (tree replies) the launch bound, including the launch's own.
+    pub frames: usize,
+    /// Did the frame identity advance across the content wait?
+    pub frames_advanced: bool,
+    /// Were the pixels comparable (both frames carried a frame digest)?
+    pub pixels_compared: bool,
+    /// Did the pixels change across the content wait?
+    pub pixels_changed: bool,
+    /// The budget the content wait was allowed (`ACOS_ART_FIRST_FRAME_MS`).
+    pub budget_ms: u64,
+}
+
+impl Default for FirstFrameReport {
+    fn default() -> Self {
+        FirstFrameReport {
+            traversals: 0,
+            waited_ms: 0,
+            event_waits: 0,
+            settled: true,
+            bound: None,
+            nodes: 0,
+            placeholder: false,
+            suspect: false,
+            frame_seq: None,
+            frame_number: None,
+            frames: 0,
+            frames_advanced: false,
+            pixels_compared: false,
+            pixels_changed: false,
+            budget_ms: 0,
+        }
+    }
 }
 
 impl FirstFrameReport {
-    /// The report for a launch whose first traversal is the frame (no wait,
-    /// no claim about content).
-    fn one_traversal(tree: &UiTree, settled: bool, bound: Option<String>) -> Self {
-        FirstFrameReport {
-            traversals: 1,
-            waited_ms: 0,
-            event_waits: 0,
-            settled,
-            bound,
-            nodes: ui_tree_node_count(&tree.nodes),
-            placeholder: first_frame_is_bare_skeleton(tree),
-        }
-    }
-
     /// The evidence object a launch reply publishes (`result.first_frame`).
     pub(crate) fn to_json(&self) -> serde_json::Value {
         serde_json::json!({
@@ -883,8 +913,143 @@ impl FirstFrameReport {
             "bound": self.bound,
             "nodes": self.nodes,
             "placeholder": self.placeholder,
+            "placeholder_suspect": self.suspect,
+            "budget_ms": self.budget_ms,
+            "frame_seq": self.frame_seq,
+            "frame_number": self.frame_number,
+            "frames": self.frames,
+            "frames_advanced": self.frames_advanced,
+            "pixels_compared": self.pixels_compared,
+            "pixels_changed": self.pixels_changed,
         })
     }
+}
+
+/// FB2c: the frame identity a launch baseline was bound to.
+///
+/// The placeholder verdict needs evidence *beyond the tree*: a node count alone
+/// cannot tell an unmounted window from a text-free mounted screen.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct FrameIdentity {
+    seq: Option<u64>,
+    frame_number: Option<u64>,
+    md5: Option<String>,
+}
+
+/// FB2c: what the frame did while the launch's content wait ran.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct FirstFrameEvidence {
+    /// Frames bound by the launch (the launch's own traversal counts).
+    frames: usize,
+    /// A newer frame identity was published (`frame_number` or `frame_seq`).
+    frames_advanced: bool,
+    /// Both the baseline and the bound frame carried a digest.
+    pixels_compared: bool,
+    /// The digest changed (the frame's pixels are not the skeleton's).
+    pixels_changed: bool,
+}
+
+fn frame_identity(frame: Option<&CachedFrame>) -> FrameIdentity {
+    match frame {
+        Some(frame) => FrameIdentity {
+            seq: Some(frame.seq),
+            frame_number: frame.frame_number,
+            md5: (!frame.md5.is_empty()).then(|| frame.md5.clone()),
+        },
+        None => FrameIdentity::default(),
+    }
+}
+
+fn frame_evidence(
+    baseline: &FrameIdentity,
+    current: &FrameIdentity,
+    frames: usize,
+) -> FirstFrameEvidence {
+    let seq_advanced = match (baseline.seq, current.seq) {
+        (Some(before), Some(after)) => after > before,
+        _ => false,
+    };
+    let number_advanced = match (baseline.frame_number, current.frame_number) {
+        (Some(before), Some(after)) => after > before,
+        _ => false,
+    };
+    let pixels_compared = baseline.md5.is_some() && current.md5.is_some();
+    let pixels_changed = match (&baseline.md5, &current.md5) {
+        (Some(before), Some(after)) => before != after,
+        _ => false,
+    };
+    FirstFrameEvidence {
+        frames,
+        frames_advanced: seq_advanced || number_advanced,
+        pixels_compared,
+        pixels_changed,
+    }
+}
+
+/// FB2c: is this bound frame a placeholder, and is it merely *suspect*?
+///
+/// * a mounted frame (text, a description/hint, or more nodes than the skeleton)
+///   is never either;
+/// * a skeleton whose **pixels changed** while the content wait ran is the app's
+///   frame — a text-free screen is a real screen — so it is a pass with a
+///   `placeholder_suspect` warning, never a blocked verdict;
+/// * a skeleton whose frame identity advanced but whose pixels are the same is
+///   *still* the window (the launcher re-published the same buffer), so the
+///   pixels decide when they are comparable;
+/// * a skeleton that nothing moved is the placeholder: the app never mounted.
+fn first_frame_placeholder_verdict(
+    tree: &UiTree,
+    evidence: &FirstFrameEvidence,
+) -> (bool, bool) {
+    if !first_frame_is_bare_skeleton(tree) {
+        return (false, false);
+    }
+    let moved = if evidence.pixels_compared {
+        evidence.pixels_changed
+    } else {
+        evidence.frames_advanced
+    };
+    (!moved, moved)
+}
+
+/// FB2c: what the launch actually measured, in one sentence.
+///
+/// Never asserts an unmeasured fact: a frame number is quoted only when the
+/// guest reported one, and pixel identity is only claimed when both frames
+/// carried a digest.
+pub(crate) fn placeholder_evidence_sentence(report: &FirstFrameReport) -> String {
+    let mut facts: Vec<String> = Vec::new();
+    match (report.frame_number, report.frames_advanced) {
+        (Some(number), true) => facts.push(format!("frame_number advanced to {number}")),
+        (Some(number), false) => facts.push(format!("frame_number stayed {number}")),
+        (None, true) => facts.push("the frame sequence advanced".to_string()),
+        (None, false) => facts.push("no newer frame was published".to_string()),
+    }
+    match (report.pixels_compared, report.pixels_changed) {
+        (true, true) => facts.push("the pixels changed".to_string()),
+        (true, false) => facts.push("the pixels are identical to the skeleton's".to_string()),
+        (false, _) => facts.push("no pixel digest was comparable".to_string()),
+    }
+    format!(
+        "{} frame(s) over {} traversal(s)/{} ms ({} event wait(s), budget ACOS_ART_FIRST_FRAME_MS={} ms): {}",
+        report.frames,
+        report.traversals,
+        report.waited_ms,
+        report.event_waits,
+        report.budget_ms,
+        facts.join(", ")
+    )
+}
+
+/// FB2c: the `PLACEHOLDER_CONTENT` detail for the verify/launch route.
+pub(crate) fn placeholder_evidence_detail(report: &FirstFrameReport) -> String {
+    format!(
+        "launch reached the window skeleton and nothing about the frame moved, so the app's content \
+         never mounted ({} node(s), no app text); {}; reason: placeholder-content. Read the guest log \
+         for the first UnsatisfiedLinkError / SoLoader / fatal JS line.",
+        report.nodes,
+        placeholder_evidence_sentence(report)
+    )
 }
 
 /// G3c: node count of a tree (all windows, all depths).
@@ -2362,6 +2527,20 @@ impl ArtSession {
             self.last_pixel = Some(frame.clone());
         }
         self.cached = Some(frame);
+        // FB2c: the placeholder label describes the frame it was bound to. A
+        // later traversal that binds app content clears it, so a sticky report
+        // can never block a launch/screenshot of an app that has since mounted.
+        if self
+            .first_frame_report
+            .as_ref()
+            .is_some_and(|report| report.placeholder)
+            && self
+                .cached
+                .as_ref()
+                .is_some_and(|frame| !first_frame_is_bare_skeleton(&frame.tree))
+        {
+            self.first_frame_report = None;
+        }
         Ok(())
     }
 
@@ -2890,6 +3069,20 @@ impl ArtSession {
         self.require_cached_tree()
     }
 
+    /// FB2c item 6: a tree traversal that **captures** the frame in the same
+    /// request when the caller wants a screenshot, so the tree and the PNG of one
+    /// reply are one frame (`screenshot.frame_seq == tree frame_seq`). Without a
+    /// screenshot it is exactly [`ArtSession::tree_with_settle`] (tree-only).
+    pub fn tree_with_settle_pixels(
+        &mut self,
+        settle: &'static str,
+        pixels: bool,
+    ) -> Result<UiTree, BackendError> {
+        let settle = if settle == "fast" { "fast" } else { "strict" };
+        self.request_tree_with(settle, pixels)?;
+        self.require_cached_tree()
+    }
+
     /// G3c: how the most recent launch bound its first frame (serve publishes
     /// it in the launch reply, so a placeholder is visible and never silent).
     pub(crate) fn first_frame_report(&self) -> Option<FirstFrameReport> {
@@ -2902,21 +3095,55 @@ impl ArtSession {
     /// FB2: is the bound launch frame still the bare window skeleton?
     ///
     /// True only when the launch waited its whole content budget and the frame
-    /// never grew past the skeleton (see [`FirstFrameReport::placeholder`]).
-    /// A screenshot of such a frame is not a screenshot of the app, so the
-    /// session verbs refuse it instead of returning splash pixels.
+    /// never grew past the skeleton **and** nothing about the frame moved (see
+    /// [`first_frame_placeholder_verdict`]). A screenshot of such a frame is not
+    /// a screenshot of the app, so the session verbs refuse it instead of
+    /// returning splash pixels.
+    ///
+    /// FB2c: the label is not sticky. Every later traversal that binds a frame
+    /// with content clears it (see [`ArtSession::absorb`]), so a second `launch`, a
+    /// `reset` or a screenshot after the app mounted is judged on the current
+    /// frame, never on a report from the failed launch.
     pub(crate) fn placeholder_frame(&self) -> bool {
-        self.first_frame_report
-            .as_ref()
-            .is_some_and(|report| report.placeholder)
+        self.placeholder_frame_report().is_some()
+    }
+
+    /// FB2c: the placeholder report, when the **current** bound frame is still
+    /// the placeholder (the reply publishes it; `None` once content was seen).
+    pub(crate) fn placeholder_frame_report(&self) -> Option<&FirstFrameReport> {
+        let report = self.first_frame_report.as_ref()?;
+        if !report.placeholder {
+            return None;
+        }
+        match self.cached.as_ref() {
+            Some(frame) => {
+                if report.frame_seq.is_some() && report.frame_seq != Some(frame.seq) {
+                    // A newer frame is bound: its content decides, not the
+                    // launch report. `absorb` clears the report on content; this
+                    // is the same rule for a frame bound by another path.
+                    if first_frame_is_bare_skeleton(&frame.tree) {
+                        return Some(report);
+                    }
+                    return None;
+                }
+                Some(report)
+            }
+            None => Some(report),
+        }
     }
 
     /// FB2: the PNG artifact the session's current frame is bound to.
     ///
-    /// The bound traversal's own PNG when it carried pixels (the normal case:
-    /// a strict tree traversal captures), otherwise one fresh host capture. The
-    /// returned path is the launcher's artifact — the SHOTZ encoder already wrote
-    /// it, so a caller copies the compressed bytes and never re-encodes.
+    /// The bound traversal's own PNG (the normal case: a strict tree traversal
+    /// captures). The returned path is the launcher's artifact — the SHOTZ
+    /// encoder already wrote it, so a caller copies the compressed bytes and
+    /// never re-encodes.
+    ///
+    /// FB2c item 6: never a *newer* frame than the tree in the same reply. This
+    /// used to fall back to `capture_frame()`, so a `pixels:false` tree reply got
+    /// a screenshot whose `frame_seq` was newer than the tree's and the two
+    /// disagreed about what was on screen. A tree without its own pixels is now
+    /// a structured refusal.
     pub(crate) fn screenshot_source(&mut self) -> Result<(PathBuf, u64, String, u64), BackendError> {
         if let Some(cached) = self.cached.as_ref() {
             if let Some(artifact) = cached.png.as_ref() {
@@ -2929,13 +3156,16 @@ impl ArtSession {
                     ));
                 }
             }
+            return Err(live_frame_unavailable(format!(
+                "the bound tree's frame (frame_seq {}) carries no pixel artifact of its own, so a \
+                 screenshot would have to be a *different* frame than the tree in this reply; \
+                 refusing to pair them. Request the tree with pixels (the default strict \
+                 traversal) and ask for the screenshot again",
+                cached.seq
+            )));
         }
-        let captured = self.capture_frame()?;
-        Ok((
-            captured.path,
-            captured.frame_seq,
-            captured.md5,
-            captured.bytes,
+        Err(live_frame_unavailable(
+            "no frame is bound to the session, so there is nothing to screenshot",
         ))
     }
 
@@ -2994,6 +3224,26 @@ pub(crate) fn ensure_launch_tree(
         Ok(tree)
     }
 
+    /// FB2c: the frame identity the placeholder verdict compares.
+    ///
+    /// The tree's own identity (`frame_number`/`frame_seq`) is always available;
+    /// the pixel digest only when the traversal captured one. A bare-skeleton
+    /// traversal that did not capture is captured here: the pixel comparison is
+    /// what keeps a text-free **mounted** screen (SurfaceView/GL/image-only) from
+    /// being called a placeholder, so the one extra capture is paid only on the
+    /// path where the verdict is genuinely in doubt.
+    fn verdict_identity(&mut self, tree: &UiTree) -> FrameIdentity {
+        let mut identity = frame_identity(self.cached.as_ref());
+        if first_frame_is_bare_skeleton(tree) && identity.md5.is_none() {
+            if let Ok(captured) = self.capture_frame() {
+                if !captured.md5.is_empty() {
+                    identity.md5 = Some(captured.md5.clone());
+                }
+            }
+        }
+        identity
+    }
+
     /// G3c/G3f1: bind a launch's first frame, waiting past an unmounted window
     /// skeleton.
     ///
@@ -3049,19 +3299,18 @@ pub(crate) fn ensure_launch_tree(
         waited_ms += started.elapsed().as_millis() as u64;
         first?;
         let mut tree = self.require_cached_tree()?;
-        if !tree_settle_settled(&self.last_tree_settle) {
-            // Pre-existing behaviour: a first traversal that did not settle is
-            // handed back as-is (the caller's settle deadline decides).
-            let bound = settle_bound(&self.last_tree_settle);
-            let report =
-                FirstFrameReport::one_traversal(&tree, false, bound.clone());
-            self.first_frame_bound = Some((false, bound));
-            return Ok((tree, report));
-        }
-        // The last **settled** binding. A retry is an optimisation, never a new
-        // failure mode: when it does not settle, the launch frame and its settle
-        // verdict roll back to this one, exactly as a launch without the wait
-        // would have.
+        // FB2c: the frame the launch's own traversal bound is the baseline for
+        // the placeholder evidence. A skeleton tree alone is not evidence of an
+        // unmounted app (a custom View / SurfaceView / GL / image-only / Flutter
+        // screen is text-free too), so the verdict compares the frame identity
+        // and the pixels across the content wait.
+        let baseline_identity = self.verdict_identity(&tree);
+        let budget_ms = first_frame_budget_ms();
+        // FB2c item 2: an unsettled first traversal is **not** an early return.
+        // It used to return `one_traversal` (waited_ms 0, placeholder from the
+        // bare skeleton), so an animating splash answered a placeholder verdict
+        // before the content budget ever ran. It is the rollback baseline here
+        // and the wait below still gets its budget.
         let mut settled_binding = (
             self.require_cached_frame()?.clone(),
             self.last_tree_settle.clone(),
@@ -3069,7 +3318,7 @@ pub(crate) fn ensure_launch_tree(
 
         // 2. The content wait. Only an unmounted skeleton reaches it.
         if first_frame_is_unmounted(&tree) {
-            let deadline = Instant::now() + Duration::from_millis(first_frame_budget_ms());
+            let deadline = Instant::now() + Duration::from_millis(budget_ms);
             while first_frame_is_unmounted(&tree) && traversals < FIRST_FRAME_MAX_ATTEMPTS {
                 let remaining = deadline.saturating_duration_since(Instant::now());
                 if remaining.is_zero() {
@@ -3131,6 +3380,12 @@ pub(crate) fn ensure_launch_tree(
             }
         }
 
+        // FB2c: the evidence is what the *latest* traversal saw, taken before the
+        // rollback below can restore an older bound frame (an animating skeleton
+        // that never settles is rolled back to the baseline, which would make
+        // "nothing moved" true by construction).
+        let observed_identity = self.verdict_identity(&tree);
+
         // 3. Keep the settled binding as the launch frame whenever the last
         // traversal did not leave a usable one of its own (a settle timeout or a
         // guest error). A `change-draw` bind *is* usable and stays.
@@ -3144,6 +3399,9 @@ pub(crate) fn ensure_launch_tree(
             bound = settle_bound(&self.last_tree_settle);
         }
         let unmounted = first_frame_is_unmounted(&tree);
+        let current_identity = self.verdict_identity(&tree);
+        let evidence = frame_evidence(&baseline_identity, &observed_identity, traversals);
+        let (placeholder, suspect) = first_frame_placeholder_verdict(&tree, &evidence);
         self.first_frame_bound = Some((settled, bound.clone()));
         let report = FirstFrameReport {
             traversals,
@@ -3152,16 +3410,49 @@ pub(crate) fn ensure_launch_tree(
             settled,
             bound,
             nodes: ui_tree_node_count(&tree.nodes),
-            placeholder: unmounted && first_frame_is_bare_skeleton(&tree),
+            placeholder,
+            suspect,
+            frame_seq: current_identity.seq,
+            frame_number: current_identity.frame_number,
+            frames: evidence.frames,
+            frames_advanced: evidence.frames_advanced,
+            pixels_compared: evidence.pixels_compared,
+            pixels_changed: evidence.pixels_changed,
+            budget_ms,
         };
+        if suspect {
+            eprintln!(
+                "acos serve: launch first frame is a text-free skeleton ({} nodes) but the frame \
+                 moved ({} frame(s), identity advanced: {}, pixels compared: {}, pixels changed: \
+                 {}); reported as placeholder_suspect, never blocked",
+                report.nodes,
+                report.frames,
+                report.frames_advanced,
+                report.pixels_compared,
+                report.pixels_changed
+            );
+        }
         if report.placeholder {
             eprintln!(
                 "acos serve: launch first frame is a window skeleton ({} nodes, no app text) \
-                 after {} traversal(s)/{} ms ({} event wait(s)); reported as placeholder, \
-                 never as app content",
-                report.nodes, report.traversals, report.waited_ms, report.event_waits
+                 after {} traversal(s)/{} ms ({} event wait(s), budget {} ms); nothing about the \
+                 frame moved (identity advanced: {}, pixels compared: {}, pixels changed: {}), so \
+                 it is reported as a placeholder, never as app content",
+                report.nodes,
+                report.traversals,
+                report.waited_ms,
+                report.event_waits,
+                report.budget_ms,
+                report.frames_advanced,
+                report.pixels_compared,
+                report.pixels_changed
             );
         }
+        // FB2c: the report is session state (serve publishes it, the screenshot
+        // verbs read it, `reset` replaces it). Storing it here means every route
+        // that binds a first frame — serve, verify, reset — keeps it honest.
+        self.first_frame_report = Some(report.clone());
+        let _ = unmounted;
         Ok((tree, report))
     }
 
@@ -3338,19 +3629,11 @@ impl SessionBackend for ArtSession {
             // reached only the skeleton is `blocked` / `placeholder-content`.
             return Err(BackendError::Error {
                 code: ErrorCode::PlaceholderContent,
-                detail: format!(
-                    "launch reached the window skeleton but the app's content never mounted                      ({} node(s), no app text) after {} traversal(s)/{} ms ({} event wait(s));                      reason: placeholder-content. Read the guest log for the first                      UnsatisfiedLinkError / SoLoader / fatal JS line.",
-                    report.nodes, report.traversals, report.waited_ms, report.event_waits
-                ),
+                detail: placeholder_evidence_detail(&report),
             });
         }
         let frame = self.require_cached_frame()?.observed(previous)?;
         let mut meta = frame.tree.frame.clone();
-        if report.placeholder {
-            // The protocol rule: a placeholder must never satisfy a UI
-            // assertion. Say so in the frame itself, not only in prose.
-            meta.meaningful = false;
-        }
         Ok(LaunchOutcome {
             session_id: format!(
                 "s_art_{}",
@@ -3658,13 +3941,33 @@ impl SessionBackend for ArtSession {
         // no PNG; `strict` (default) is the unchanged 150 ms settled rule.
         let (bind_settle, bind_pixels) = (self.reset_settle, self.reset_pixels);
         let bind_started = Instant::now();
-        let bound = fresh
-            .request_tree_with(bind_settle, bind_pixels)
-            .and_then(|()| fresh.require_cached_tree());
-        if let Err(error) = bound {
+        // FB2c item 3: the reset binds the relaunched guest's **first frame**
+        // through the same rule a launch uses — the content wait and the
+        // placeholder verdict included. Before this, reset bound one plain
+        // traversal and `acos_reset` hardcoded `stage_reached: first_frame`, so
+        // a relaunched app that never mounted passed the step and every later
+        // screenshot served splash pixels.
+        let bound = fresh.bind_first_frame(bind_settle, bind_pixels);
+        let report = match bound {
+            Ok((_tree, report)) => report,
+            Err(error) => {
+                let _ = fresh.close();
+                self.invalidate_frame();
+                return Err(error);
+            }
+        };
+        if report.placeholder {
+            let detail = format!(
+                "reset relaunched the app and its first frame is still the window skeleton: {}",
+                placeholder_evidence_detail(&report)
+            );
             let _ = fresh.close();
             self.invalidate_frame();
-            return Err(error);
+            self.first_frame_report = None;
+            return Err(BackendError::Error {
+                code: ErrorCode::PlaceholderContent,
+                detail,
+            });
         }
         let bind_ms = bind_started.elapsed().as_millis() as u64;
         fresh.last_input = None;
@@ -4137,6 +4440,91 @@ mod tests {
         assert!(first_frame_is_unmounted(&tree(vec![])));
     }
 
+    /// FB2c item 1: the placeholder verdict is frame evidence, not a node count.
+    ///
+    /// A synthetic window skeleton whose pixels **change** (a text-free mounted
+    /// screen) is a pass with a `placeholder_suspect` warning; the same tree whose
+    /// frame never moves is the placeholder. A content tree is neither.
+    #[test]
+    fn the_placeholder_verdict_needs_frame_evidence_not_a_node_count() {
+        use acos_protocol::ui::Bounds;
+        let node = |class: &str, children: Vec<UiNode>| {
+            let mut node = UiNode::new("n", class, Bounds::new(0, 0, 1080, 2209));
+            node.children = children;
+            node
+        };
+        let tree = |nodes: Vec<UiNode>| {
+            UiTree::new(
+                FrameMeta::new(1, "t", "c", 1080, 2400, 420, "h", true),
+                "com.gaten",
+                nodes,
+            )
+        };
+        let app_root = node("android.widget.FrameLayout", vec![]);
+        let content = node("android.widget.FrameLayout", vec![app_root]);
+        let skeleton = vec![node(
+            "com.android.internal.policy.DecorView",
+            vec![node(
+                "android.widget.LinearLayout",
+                vec![content, node("android.view.ViewStub", vec![])],
+            )],
+        )];
+        let identity = |seq: u64, md5: &str| FrameIdentity {
+            seq: Some(seq),
+            frame_number: Some(seq),
+            md5: Some(md5.to_string()),
+        };
+        let evidence = |before: &FrameIdentity, after: &FrameIdentity| {
+            frame_evidence(before, after, 2)
+        };
+
+        // Skeleton, same pixels, no newer frame: the placeholder.
+        let still = evidence(&identity(1, "aa"), &identity(1, "aa"));
+        assert_eq!(
+            first_frame_placeholder_verdict(&tree(skeleton.clone()), &still),
+            (true, false),
+            "a skeleton that nothing moved is the placeholder"
+        );
+        // Skeleton, same pixels but a republished frame: the pixels decide, so it
+        // is still the placeholder (the launcher re-published the window).
+        let republished = evidence(&identity(1, "aa"), &identity(2, "aa"));
+        assert_eq!(
+            first_frame_placeholder_verdict(&tree(skeleton.clone()), &republished),
+            (true, false)
+        );
+        // Skeleton, changed pixels: a text-free mounted screen — pass + suspect.
+        let animating = evidence(&identity(1, "aa"), &identity(2, "bb"));
+        assert_eq!(
+            first_frame_placeholder_verdict(&tree(skeleton.clone()), &animating),
+            (false, true),
+            "changing pixels are the app's frame, never a blocked verdict"
+        );
+        // No comparable digest: the frame identity decides.
+        let no_digest_moved = evidence(
+            &FrameIdentity { seq: Some(1), frame_number: Some(1), md5: None },
+            &FrameIdentity { seq: Some(2), frame_number: Some(2), md5: None },
+        );
+        assert_eq!(
+            first_frame_placeholder_verdict(&tree(skeleton.clone()), &no_digest_moved),
+            (false, true)
+        );
+        let no_digest_still = evidence(
+            &FrameIdentity { seq: Some(1), frame_number: Some(1), md5: None },
+            &FrameIdentity { seq: Some(1), frame_number: Some(1), md5: None },
+        );
+        assert_eq!(
+            first_frame_placeholder_verdict(&tree(skeleton.clone()), &no_digest_still),
+            (true, false)
+        );
+        // Content is never a placeholder, whatever the pixels did.
+        let mut painted = skeleton.clone();
+        painted[0].children[0].children[0].text = "Set up Gaten".to_string();
+        assert_eq!(
+            first_frame_placeholder_verdict(&tree(painted), &still),
+            (false, false)
+        );
+    }
+
     #[test]
     fn art_capabilities_name_the_protocol_gaps() {
         let caps = SessionCapabilities {
@@ -4293,7 +4681,7 @@ mod tests {
         body.push_str("    *'\"cmd\":\"tree\"'*)\n");
         body.push_str("      seq=$((seq+1))\n");
         body.push_str(&format!(
-            "      echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[]}}}}'\n",
+            "      echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[{{\"class\":\"android.widget.TextView\",\"text\":\"Counter\",\"children\":[]}}]}}}}'\n",
             png.display()
         ));
         body.push_str("      ;;\n");
@@ -4806,7 +5194,7 @@ mod tests {
         body.push_str("while IFS= read -r line; do\n");
         body.push_str("  case \"$line\" in\n");
         body.push_str(&format!(
-            "    *'\"cmd\":\"tree\"'*) echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[]}}}}' ;;\n",
+            "    *'\"cmd\":\"tree\"'*) echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[{{\"class\":\"android.widget.TextView\",\"text\":\"Counter\",\"children\":[]}}]}}}}' ;;\n",
             png.display()
         ));
         body.push_str("    *'\"cmd\":\"logs\"'*) echo '{\"ok\":true,\"cmd\":\"logs\",\"total\":0,\"kept\":0,\"dropped\":0,\"entries\":[]}' ;;\n");
@@ -5158,7 +5546,7 @@ mod tests {
         body.push_str("  case \"$line\" in\n");
         body.push_str("    *'\"cmd\":\"tree\"'*)\n");
         body.push_str(&format!(
-            "      echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[]}}}}'\n",
+            "      echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[{{\"class\":\"android.widget.TextView\",\"text\":\"Counter\",\"children\":[]}}]}}}}'\n",
             png.display()
         ));
         body.push_str("      ;;\n");
@@ -5348,7 +5736,13 @@ mod tests {
         dir
     }
 
-    /// `mode`: `content-first` | `late` | `never` | `unsettled-change`.
+    /// `mode`: `content-first` | `late` | `never` | `unsettled-change` |
+    /// `skeleton-animating` | `unsettled-first`.
+    ///
+    /// FB2c: the frame identity (`frame_seq`/`md5`) is what the placeholder
+    /// verdict measures, so the fake is explicit about it: `never` re-publishes
+    /// one stored frame (constant identity, like an app whose SoLoader loop never
+    /// mounts), every other mode publishes a new one.
     fn fake_first_frame_art(dir: &Path, mode: &str) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
         let png = dir.join("tiny.png");
@@ -5361,36 +5755,57 @@ mod tests {
         body.push_str("seq=0\ngated=0\n");
         body.push_str(&format!("requests='{}'\n", requests.display()));
         body.push_str(&format!("png='{}'\n", png.display()));
+        // The mode lives in a file so a test can change the app's behaviour
+        // mid-session (FB2c: a placeholder that later mounts).
+        let mode_file = dir.join("mode.txt");
+        std::fs::write(&mode_file, mode).unwrap();
         body.push_str(&format!("mode='{mode}'\n"));
+        body.push_str(&format!("mode_file='{}'\n", mode_file.display()));
         body.push_str(&format!("skeleton='{FAKE_SKELETON}'\n"));
         body.push_str(&format!("content='{FAKE_CONTENT}'\n"));
         body.push_str("while IFS= read -r line; do\n");
         body.push_str("  printf '%s\\n' \"$line\" >> \"$requests\"\n");
+        body.push_str("  mode=$(cat \"$mode_file\")\n");
         body.push_str("  case \"$line\" in\n");
         body.push_str("    *'\"cmd\":\"tree\"'*)\n");
         body.push_str("      seq=$((seq+1))\n");
+        // A `pixels:false` request gets no PNG (like the real launcher).
+        body.push_str("      case \"$line\" in *'\"pixels\":false'*) pngf= ;; *) pngf=\"\\\"png\\\":\\\"$png\\\",\" ;; esac\n");
+        body.push_str("      fseq=$seq\n");
+        body.push_str("      fmd5=m$seq\n");
+        body.push_str("      if [ \"$mode\" = never ]; then fseq=1; fmd5=m1; fi\n");
         body.push_str("      case \"$line\" in\n");
         body.push_str("        *'baseline_tree'*)\n");
         body.push_str("          gated=$((gated+1))\n");
         body.push_str("          case \"$mode\" in\n");
         body.push_str("            late)\n");
-        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$seq,\\\"md5\\\":\\\"m$seq\\\",\\\"png\\\":\\\"$png\\\",\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"strict-event\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"strict-event\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
         body.push_str("              ;;\n");
         body.push_str("            never)\n");
-        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$seq,\\\"md5\\\":\\\"m$seq\\\",\\\"png\\\":\\\"$png\\\",\\\"tree\\\":$skeleton,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"tree-unchanged\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$skeleton,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"tree-unchanged\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("              ;;\n");
+        body.push_str("            skeleton-animating)\n");
+        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$skeleton,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"animating\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
         body.push_str("              ;;\n");
         body.push_str("            late-change-draw)\n");
-        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$seq,\\\"md5\\\":\\\"m$seq\\\",\\\"png\\\":\\\"$png\\\",\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"change-draw\\\",\\\"awaited\\\":\\\"tree-change\\\",\\\"changed_since_baseline\\\":true}}\"\n");
+        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"change-draw\\\",\\\"awaited\\\":\\\"tree-change\\\",\\\"changed_since_baseline\\\":true}}\"\n");
+        body.push_str("              ;;\n");
+        body.push_str("            unsettled-first)\n");
+        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"strict-event\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
         body.push_str("              ;;\n");
         body.push_str("            unsettled-change)\n");
-        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$seq,\\\"md5\\\":\\\"m$seq\\\",\\\"png\\\":\\\"$png\\\",\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"animating\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("              echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$content,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"animating\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
         body.push_str("              ;;\n");
         body.push_str("          esac\n");
         body.push_str("          ;;\n");
         body.push_str("        *)\n");
         body.push_str("          tree=$skeleton\n");
         body.push_str("          [ \"$mode\" = content-first ] && tree=$content\n");
-        body.push_str("          echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$seq,\\\"md5\\\":\\\"m$seq\\\",\\\"png\\\":\\\"$png\\\",\\\"tree\\\":$tree,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"strict-event\\\"}}\"\n");
+        body.push_str("          if [ \"$mode\" = unsettled-first ]; then\n");
+        body.push_str("            echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$tree,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":false,\\\"bound\\\":\\\"timeout\\\",\\\"reason\\\":\\\"animating\\\",\\\"awaited\\\":\\\"tree-change\\\"}}\"\n");
+        body.push_str("          else\n");
+        body.push_str("            echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"tree\\\",\\\"frame_seq\\\":$fseq,\\\"md5\\\":\\\"$fmd5\\\",$pngf\\\"tree\\\":$tree,\\\"settle\\\":{\\\"mode\\\":\\\"strict\\\",\\\"settled\\\":true,\\\"bound\\\":\\\"strict-event\\\"}}\"\n");
+        body.push_str("          fi\n");
         body.push_str("          ;;\n");
         body.push_str("      esac\n");
         body.push_str("      ;;\n");
@@ -5500,6 +5915,183 @@ mod tests {
             Some("strict-event"),
             "{settle}"
         );
+        // FB2c: the placeholder needed evidence beyond the tree — the frame
+        // never moved (constant identity, identical pixels) — and the label is
+        // what refuses a screenshot.
+        assert!(!report.frames_advanced, "{report:?}");
+        assert!(report.pixels_compared, "{report:?}");
+        assert!(!report.pixels_changed, "{report:?}");
+        assert!(session.placeholder_frame());
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// FB2c item 1: a text-free skeleton whose pixels **change** is a mounted,
+    /// image-only screen (a custom `View`, a SurfaceView/GL surface, an
+    /// image-only activity, Flutter without semantics). The node count alone used
+    /// to call it a placeholder — a blocked verdict on both routes. It is a pass
+    /// with a `placeholder_suspect` warning now.
+    #[test]
+    fn fb2c_a_skeleton_with_changing_pixels_passes_with_a_suspect_warning() {
+        let dir = g3f1_scratch("skeleton-animating");
+        let _guard = art_bin_env_lock();
+        let mut session = start_fake_first_frame(&dir, "skeleton-animating");
+        let apk = dir.join("fake.apk");
+        let outcome = session
+            .launch(&apk)
+            .expect("a text-free mounted screen must not be a blocked launch");
+        let report = session.first_frame_report().expect("report");
+        assert!(!report.placeholder, "changing pixels are app frame: {report:?}");
+        assert!(report.suspect, "…but the skeleton is still a suspicion: {report:?}");
+        assert!(report.pixels_compared && report.pixels_changed, "{report:?}");
+        assert!(
+            !session.placeholder_frame(),
+            "a suspect frame is not a placeholder: no screenshot may be refused"
+        );
+        assert_eq!(
+            outcome.detail["first_frame"]["placeholder_suspect"],
+            serde_json::json!(true),
+            "the launch reply carries the warning: {}",
+            outcome.detail
+        );
+        assert_eq!(
+            outcome.detail["first_frame"]["placeholder"],
+            serde_json::json!(false),
+            "{}",
+            outcome.detail
+        );
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// FB2c item 2: a first traversal that does not settle (an animating splash)
+    /// used to answer `placeholder` with `waited_ms: 0` — the content budget never
+    /// ran. The wait now runs first and the launch binds the content frame.
+    #[test]
+    fn fb2c_an_unsettled_first_traversal_still_spends_the_content_budget() {
+        let dir = g3f1_scratch("unsettled-first");
+        let _guard = art_bin_env_lock();
+        let mut session = start_fake_first_frame(&dir, "unsettled-first");
+        let tree = session
+            .ensure_launch_tree("strict", true)
+            .expect("the wait binds the content frame");
+        let report = session.first_frame_report().expect("report");
+        assert_eq!(report.traversals, 2, "the content wait ran: {report:?}");
+        assert_eq!(report.event_waits, 1, "{report:?}");
+        assert!(!report.placeholder && !report.suspect, "{report:?}");
+        assert!(
+            ui_tree_has_app_text(&tree.nodes),
+            "the bound tree is the app's content, not the splash skeleton"
+        );
+        assert_eq!(report.budget_ms, first_frame_budget_ms(), "{report:?}");
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// FB2c item 4: the placeholder label is not sticky. Once a later frame
+    /// carries content the session answers from that frame, so a second launch or
+    /// a screenshot is not refused forever.
+    #[test]
+    fn fb2c_a_placeholder_is_cleared_once_a_later_frame_has_content() {
+        let dir = g3f1_scratch("sticky");
+        let _guard = art_bin_env_lock();
+        let mut session = start_fake_first_frame(&dir, "never");
+        std::env::set_var("ACOS_ART_FIRST_FRAME_MS", "60");
+        session
+            .ensure_launch_tree("strict", true)
+            .expect("the launch binds");
+        std::env::remove_var("ACOS_ART_FIRST_FRAME_MS");
+        assert!(session.placeholder_frame(), "the launch is a placeholder");
+        // The app mounts after all (the fake reads its mode each request).
+        std::fs::write(dir.join("mode.txt"), "content-first").unwrap();
+        let tree = session.tree_with_settle("strict").expect("a later traversal");
+        assert!(ui_tree_has_app_text(&tree.nodes), "the frame has content now");
+        assert!(
+            !session.placeholder_frame(),
+            "the placeholder label must clear when content arrives"
+        );
+        assert!(
+            session.first_frame_report().is_none(),
+            "a cleared report is cleared, not silently rewritten"
+        );
+        // …and the screenshot path works again (no `NO_FRESH_FRAME` forever).
+        // …a second launch is judged on the current frame, not refused, and its
+        // own PNG is what a screenshot serves.
+        session
+            .ensure_launch_tree("strict", true)
+            .expect("a relaunch after the app mounted is not blocked");
+        session
+            .request_tree_with("strict", true)
+            .expect("a traversal with pixels");
+        let tree = session.require_cached_tree().expect("bound tree");
+        assert!(!session.placeholder_frame());
+        let (path, seq, _md5, bytes) = session.screenshot_source().expect("pixels of the content frame");
+        assert!(path.is_file() && bytes > 0);
+        assert_eq!(seq, tree.frame.frame_seq);
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// FB2c item 3: `reset` binds the relaunched guest's first frame through the
+    /// same content wait and placeholder verdict a launch uses. A relaunch that
+    /// never mounts is `PLACEHOLDER_CONTENT`, not a `first_frame` pass.
+    #[test]
+    fn fb2c_a_reset_that_never_mounts_is_blocked() {
+        let dir = g3f1_scratch("reset-never");
+        let _guard = art_bin_env_lock();
+        let mut session = start_fake_first_frame(&dir, "never");
+        std::env::set_var("ACOS_ART_FIRST_FRAME_MS", "60");
+        let error = session
+            .reset()
+            .expect_err("a relaunch that never mounts is not a pass");
+        std::env::remove_var("ACOS_ART_FIRST_FRAME_MS");
+        match &error {
+            BackendError::Error { code, detail } => {
+                assert_eq!(*code, crate::engine::ErrorCode::PlaceholderContent);
+                assert!(detail.contains("placeholder-content"), "{detail}");
+                assert!(detail.contains("ACOS_ART_FIRST_FRAME_MS"), "{detail}");
+            }
+            other => panic!("expected PLACEHOLDER_CONTENT, got {other:?}"),
+        }
+        assert!(session.last_frame().is_none(), "no stale frame survives");
+        assert!(!session.placeholder_frame());
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// FB2c item 5/6: the screenshot source is the frame the tree is bound to.
+    /// A tree bound without pixels is refused instead of being paired with a
+    /// newer capture.
+    #[test]
+    fn fb2c_a_screenshot_never_comes_from_a_newer_frame_than_the_tree() {
+        let dir = g3f1_scratch("shot-frame");
+        let _guard = art_bin_env_lock();
+        let mut session = start_fake_first_frame(&dir, "late");
+        session
+            .ensure_launch_tree("strict", true)
+            .expect("the launch binds");
+        let (path, seq, _md5, bytes) = session.screenshot_source().expect("the bound PNG");
+        assert!(path.is_file() && bytes > 0);
+        assert_eq!(Some(seq), session.frame_info().map(|info| info.0));
+        // A tree traversal without pixels has no artifact of its own.
+        session
+            .tree_with_settle("strict")
+            .expect("a pixels:false traversal");
+        let error = session
+            .screenshot_source()
+            .expect_err("a tree without its own pixels must not borrow a newer frame");
+        assert!(
+            error.to_string().contains("NO_FRESH_FRAME") || error.to_string().contains("frame"),
+            "{error}"
+        );
+        // The screenshot path asks the *same traversal* for pixels, so the tree
+        // and the PNG of one reply are one frame.
+        let tree = session
+            .tree_with_settle_pixels("strict", true)
+            .expect("a traversal that captures");
+        let (path, seq, _md5, bytes) = session.screenshot_source().expect("the same frame's PNG");
+        assert!(path.is_file() && bytes > 0);
+        assert_eq!(seq, tree.frame.frame_seq, "screenshot.frame_seq == tree.frame_seq");
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -5549,7 +6141,13 @@ mod tests {
             .ensure_launch_tree("strict", true)
             .expect("launch binds");
         let report = session.first_frame_report().expect("report");
-        assert!(report.placeholder, "{report:?}");
+        // FB2c: the retry *saw* app content (a newer frame with different
+        // pixels), it just never settled. The launch is not a blocked
+        // placeholder any more (the frame moved) — it keeps the settled skeleton
+        // as its bound frame and carries the `placeholder_suspect` warning, so no
+        // assertion can rest on a frame the launch could not prove.
+        assert!(!report.placeholder, "{report:?}");
+        assert!(report.suspect, "{report:?}");
         assert_eq!(report.traversals, 2, "{report:?}");
         assert!(
             first_frame_is_bare_skeleton(&tree),
@@ -5578,7 +6176,9 @@ mod tests {
         let report = session.first_frame_report().expect("report");
         assert_eq!(report.traversals, 1, "{report:?}");
         assert_eq!(report.event_waits, 0, "{report:?}");
-        assert_eq!(report.waited_ms, 0, "{report:?}");
+        // The single traversal's own wall time (a forked shell answers in ~1 ms);
+        // no content wait ran, which `event_waits == 0` and the request count prove.
+        assert!(report.waited_ms < 250, "{report:?}");
         assert!(!report.placeholder, "{report:?}");
         assert!(report.settled, "{report:?}");
         assert!(ui_tree_has_app_text(&tree.nodes));
