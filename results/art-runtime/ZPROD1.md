@@ -94,6 +94,21 @@ concretely on this engine.
    Z4), which is what makes the single-child reset possible at all.
 5. **The keeper is not idle-bounded** and does not survive a `serve` restart: P2/P6.
 
+## 4.1 Flag-off checks run in this task (product path unchanged)
+
+Both with every `ACOS_ZYGOTE*`/`ACOS_ART_ZYGOTE*` variable unset, i.e. the product path, on the
+tree that contains the two gated `launch.rs` lines:
+
+| check | result | evidence |
+|---|---|---|
+| `scenarios/v2-art-counter.yaml` (the counter gate) | `status=pass` | `results/art-runtime/ZPROD1/flag-off-gates/gate-v2-art-counter.json` |
+| `scenarios/gaten-home.yaml` (one Gaten flow) | `status=pass` | `results/art-runtime/ZPROD1/flag-off-gates/gaten-home-flagoff.json` |
+| `cargo test -p acos-cli` | green (every target `ok`, 0 failed) | this task's run, guarded |
+| `cargo test -p acos-art -- --test-threads=1 --skip refuses_to_run_when_no_cgroup_can_be_created` + that test alone with `--exact` | green (100+8+4+6+1+2+6+5+3+5+5+4 passed, 0 failed; the skipped one passes alone) | this task's run, guarded |
+
+The other gates in the full list and the other four Gaten flows were **not** re-run in this task
+(hour limit); they must be part of P2's flag-passing check.
+
 ## 5. Reproducing
 
 ```bash
