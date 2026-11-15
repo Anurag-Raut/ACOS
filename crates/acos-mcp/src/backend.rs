@@ -283,7 +283,7 @@ fn resolve_binary_from(
     None
 }
 
-/// The version word out of `acos --version` output (`acos 0.2.1`), when it
+/// The version word out of `acos --version` output (`acos 0.2.2`), when it
 /// differs from `ours`. `None` means "matches" or "unreadable".
 fn version_mismatch(version_output: &str, ours: &str) -> Option<String> {
     let theirs = version_output
