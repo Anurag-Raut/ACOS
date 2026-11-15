@@ -89,6 +89,18 @@ pub const PAGE: &str = r##"<!doctype html>
   #events .st.bad { color: var(--bad); }
   #events .txt { color: var(--muted); font-family: var(--mono); }
   .note { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  /* Watching one session: only the screen, scaled to fit the pane. */
+  body.watching { height: 100vh; overflow: hidden; }
+  body.watching header, body.watching aside, body.watching .bar .titles,
+  body.watching .bar .spacer, body.watching .bar .pill { display: none; }
+  body.watching #detail { display: flex; align-items: center; justify-content: center;
+    height: 100vh; padding: 8px; gap: 0; }
+  body.watching .bar { position: fixed; top: 8px; left: 8px; z-index: 5; }
+  body.watching .bar button { opacity: .55; }
+  body.watching .bar button:hover { opacity: 1; }
+  body.watching .screenwrap { align-self: center; height: calc(100vh - 16px);
+    aspect-ratio: var(--ar, 9 / 20); max-width: 100%; border-radius: 10px; }
+  body.watching #frame { width: 100%; height: 100%; object-fit: contain; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -228,6 +240,7 @@ function openSession(s) {
   display = { w: (s.display && s.display.w) || 0, h: (s.display && s.display.h) || 0 };
   grid.hidden = true;
   detail.hidden = false;
+  document.body.classList.add("watching");
   $("dtitle").textContent = s.package || s.session_id;
   $("dsub").textContent = s.session_id + " · " + clientLabel(s) + " · " + (s.project_dir || "-");
   $("dactivity").textContent = s.activity || "-";
@@ -238,6 +251,9 @@ function openSession(s) {
   frame.removeAttribute("src");
   if (s.stream) {
     frame.src = auth("/api/frames/" + encodeURIComponent(s.session_id));
+    if (s.display && s.display.w && s.display.h) {
+      frame.parentElement.style.setProperty("--ar", s.display.w + " / " + s.display.h);
+    }
     connectEvents(s);
   }
   location.hash = "s=" + encodeURIComponent(s.session_id);
@@ -251,6 +267,7 @@ function closeSession() {
   current = null;
   detail.hidden = true;
   grid.hidden = false;
+  document.body.classList.remove("watching");
   location.hash = "";
   history.replaceState(null, "", location.pathname + location.search);
   refresh();
