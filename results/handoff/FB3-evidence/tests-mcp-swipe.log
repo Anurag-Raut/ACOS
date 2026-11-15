@@ -1,0 +1,237 @@
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:656:7
+    |
+656 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-services` (lib) generated 1 warning
+   Compiling acos-mcp v0.2.0 (/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/crates/acos-mcp)
+    Finished `release` profile [optimized + debuginfo] target(s) in 3.79s
+     Running unittests src/lib.rs (.cache/g3f1-target/release/deps/acos_mcp-69a43c0e9f8e663e)
+
+running 60 tests
+test backend::tests::cli_pass_envelope_is_rebuilt ... ok
+test bound::tests::short_strings_are_untouched ... ok
+test backend::tests::cli_error_envelope_gets_hint_and_status ... ok
+test base64::tests::rfc4648_vectors ... ok
+test bound::tests::a_huge_message_is_capped_and_names_its_artifacts ... ok
+test backend::tests::unsupported_backend_envelope_is_never_a_pass ... ok
+test descriptors::tests::command_lookup_round_trips ... ok
+test backend::tests::help_parsing_finds_clap_commands ... ok
+test bound::tests::repeated_short_strings_are_not_deduplicated ... ok
+test bound::tests::the_cap_is_configurable_and_zero_disables_it ... ok
+test bound::tests::the_help_guide_is_exempt_but_an_error_tail_is_not ... ok
+test bound::tests::a_reply_keeps_the_full_text_once_and_back_references_repeats ... ok
+test flutter_backend::tests::unknown_session_is_a_setup_error ... ok
+test gate::tests::cancelled_waiter_stops ... ok
+test jsonrpc::tests::id_key_is_stable ... ok
+test jsonrpc::tests::malformed_inputs_are_reported ... ok
+test jsonrpc::tests::request_and_notification_are_distinguished ... ok
+test paths::tests::unset_keeps_the_legacy_developer_lookup ... ok
+test flutter_backend::tests::all_commands_run_on_one_stable_worker_thread ... ok
+test paths::tests::empty_acos_home_is_unset ... ok
+test paths::tests::acos_home_wins_over_the_checkout ... ok
+test preview::preview_tests::preview_size_keeps_the_aspect_ratio ... ok
+test private_daemon::tests::private_dir_is_per_process_and_under_the_runtime_dir ... ok
+test paths::tests::installed_boot_dir_is_the_home_copy ... ok
+test preview::preview_tests::a_small_image_is_inlined_losslessly_and_unscaled ... ok
+test rn_backend::tests::unknown_session_is_a_setup_error ... ok
+test preview::preview_tests::a_non_png_file_is_not_inlined ... ok
+test safety::tests::accepts_paths_under_a_root ... ok
+test safety::tests::arg_limits_apply_recursively ... ok
+test session_backend::tests::logs_on_an_unlaunched_session_carry_the_stage ... ok
+test rn_backend::tests::detection_is_structural ... ok
+test server::tests::server_constructs_with_defaults ... ok
+test transport::tests::crlf_is_tolerated ... ok
+test private_daemon::tests::legacy_is_opt_in_only ... ok
+test session_backend::tests::session_root_is_private_unpredictable_and_symlink_safe ... ok
+test safety::tests::rejects_parent_dir_and_outside_paths ... ok
+test rn_backend::tests::all_commands_run_on_one_stable_worker_thread ... ok
+test transport::tests::reads_lines_and_reports_eof ... ok
+test transport::tests::oversized_line_is_drained ... ok
+test server::tests::busy_envelope_is_blocked_not_pass ... ok
+test server::tests::tool_lookup_resolves_meta_and_commands ... ok
+test server::tests::evidence_becomes_image_and_resource_link ... ok
+test session_backend::tests::observe_without_a_frame_is_not_ready ... ok
+test descriptors::tests::availability_reflects_capabilities ... ok
+test help::tests::compatibility_summary_is_read_when_present ... ok
+test process::tests::output_limit_is_enforced ... ok
+test help::tests::help_lists_supported_and_unsupported ... ok
+test descriptors::tests::every_protocol_tool_is_mapped_to_a_command ... ok
+test process::tests::captures_stdout ... ok
+test session_backend::tests::oversized_child_frame_is_rejected_by_the_parent ... ok
+test backend::tests::verify_relays_the_explicit_overwrite_choice ... ok
+test preview::preview_tests::a_full_frame_is_inlined_as_a_bounded_preview ... ok
+test preview::preview_tests::an_impossible_cap_yields_no_inline_image ... ok
+test gate::tests::permits_are_bounded_and_released ... ok
+test session::tests::sessions_expire_after_ttl ... ok
+test process::tests::cancellation_kills_child ... ok
+test process::tests::timeout_kills_child ... ok
+test session::tests::get_touches_idle_timer ... ok
+test preview::preview_tests::a_noisy_frame_is_bounded_by_the_byte_cap ... ok
+test flutter_backend::tests::a_slow_command_times_out_without_hanging_the_caller ... ok
+
+test result: ok. 60 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+
+     Running unittests src/main.rs (.cache/g3f1-target/release/deps/acos_mcp-d0dec3f7778a975f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/art_default.rs (.cache/g3f1-target/release/deps/art_default-24af4c1059733d8b)
+
+running 4 tests
+test verify_schema_advertises_engine_and_defaults_to_art ... ok
+test default_session_tools_use_the_private_art_daemon ... ok
+test private_daemon_is_reaped_when_the_server_exits ... ok
+test default_session_ids_are_unique_per_server ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/bounded.rs (.cache/g3f1-target/release/deps/bounded-3756c0b5c4d0ba3b)
+
+running 3 tests
+test a_huge_error_tail_is_capped_once_with_the_full_text_on_disk ... ok
+test flags_are_name_value_metadata_and_malformed_ones_are_invalid_argument ... ok
+test the_cap_is_configurable_and_zero_disables_it ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/docs.rs (.cache/g3f1-target/release/deps/docs-cd287d744e59c304)
+
+running 1 test
+test docs_tool_table_matches_descriptors ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/e2e.rs (.cache/g3f1-target/release/deps/e2e-d1f0cd57b9716d74)
+
+running 1 test
+test end_to_end_mcp_session_over_stdio ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/flutter_session.rs (.cache/g3f1-target/release/deps/flutter_session-0f28ae291548fbe2)
+
+running 1 test
+test flutter_launch_observe_tap_round_trip ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/guide.rs (.cache/g3f1-target/release/deps/guide-f8cd3c7c781e4bbb)
+
+running 7 tests
+test embedded_guide_matches_the_checked_in_file ... ok
+test the_default_help_reply_is_a_bounded_skeleton ... ok
+test the_guide_covers_the_contract ... ok
+test every_topic_slices_a_real_section ... ok
+test verify_android_flow_prompt_is_usable ... ok
+test resources_serve_the_same_guide_text ... ok
+test help_tool_serves_the_guide_and_its_topics ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/native_session.rs (.cache/g3f1-target/release/deps/native_session-8dd331864103630d)
+
+running 1 test
+acos-mcp: confined child active=true
+acos-services: keychars: /home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/crates/acos-services/../../.cache/art/sysroot/system/usr/keychars/Generic.kcm: Permission denied (os error 13)
+acos-services: keychars: /home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/crates/acos-services/../../.cache/art/sysroot/system/usr/keychars/Virtual.kcm: Permission denied (os error 13)
+test native_launch_runs_in_a_confined_child_session ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.17s
+
+     Running tests/protocol.rs (.cache/g3f1-target/release/deps/protocol-5d54c46bac405ee3)
+
+running 20 tests
+test invalid_params_are_rejected ... ok
+test malformed_json_reports_parse_error ... ok
+test unimplemented_command_returns_unsupported_never_a_pass ... ok
+test capabilities_tool_reports_available_commands ... ok
+test oversized_request_is_rejected_without_crashing ... ok
+test initialize_handshake_negotiates_and_describes_server ... ok
+test missing_required_argument_is_invalid_argument ... ok
+test unknown_method_reports_method_not_found ... ok
+test unknown_protocol_version_falls_back_to_latest ... ok
+test path_escape_attempts_are_rejected ... ok
+test help_tool_returns_the_agent_workflow ... ok
+test inspect_fixture_returns_pass_with_static_fidelity ... ok
+test run_dex_fixture_matches_expected_stdout ... ok
+test tools_list_advertises_only_what_this_build_can_run ... ok
+test structured_content_is_only_sent_for_2025_06_18 ... ok
+test verify_returns_the_same_truthful_envelope_as_the_cli ... ok
+test doctor_tool_returns_the_preflight_report ... ok
+test cancellation_kills_a_long_running_child ... ok
+test wall_clock_budget_produces_timeout ... ok
+test concurrency_limit_serialises_calls ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+
+     Running tests/rn_session.rs (.cache/g3f1-target/release/deps/rn_session-b47e53a0b67bb0fe)
+
+running 1 test
+acos-mcp: confined child active=true
+[android-log 3] jni_lib_merge: Entering merged library JNI_OnLoad.
+
+[android-log 3] jni_lib_merge: Preparing 4 pre-merged libs (including stub)
+
+[android-log 3] jni_lib_merge: Preparing to register libhermes_executor_so.  onload_func: 0x7f7b0a43c730
+
+[android-log 3] jni_lib_merge: Preparing to register libhermesinstancejni_so.  onload_func: 0x7f7b0a443db0
+
+[android-log 3] jni_lib_merge: Preparing to register libjsijniprofiler_so.  onload_func: 0x7f7b0a444540
+
+[android-log 3] jni_lib_merge: About to register 3 actual methods.
+
+[android-log 3] jni_lib_merge: Entering merged library JNI_OnLoad.
+
+[android-log 3] jni_lib_merge: Preparing 12 pre-merged libs (including stub)
+
+[android-log 3] jni_lib_merge: Preparing to register libfabricjni_so.  onload_func: 0x7f7b0990fba0
+
+[android-log 3] jni_lib_merge: Preparing to register libreact_devsupportjni_so.  onload_func: 0x7f7b099eb530
+
+[android-log 3] jni_lib_merge: Preparing to register libreact_featureflagsjni_so.  onload_func: 0x7f7b099fe0a0
+
+[android-log 3] jni_lib_merge: Preparing to register libreact_newarchdefaults_so.  onload_func: 0x7f7b09a24fa0
+
+[android-log 3] jni_lib_merge: Preparing to register libreactnativeblob_so.  onload_func: 0x7f7b09acca50
+
+[android-log 3] jni_lib_merge: Preparing to register libreactnativejni_so.  onload_func: 0x7f7b09ae78c0
+
+[android-log 3] jni_lib_merge: Preparing to register libreactnativejni_common_so.  onload_func: 0x7f7b09aee150
+
+[android-log 3] jni_lib_merge: Preparing to register librninstance_so.  onload_func: 0x7f7b09b0c450
+
+[android-log 3] jni_lib_merge: Preparing to register libturbomodulejsijni_so.  onload_func: 0x7f7b09bb7b90
+
+[android-log 3] jni_lib_merge: Preparing to register libuimanagerjni_so.  onload_func: 0x7f7b09bbfac0
+
+[android-log 3] jni_lib_merge: Preparing to register libyoga_so.  onload_func: 0x7f7b09bc7140
+
+[android-log 3] jni_lib_merge: About to register 11 actual methods.
+
+[android-log 4] ReactNativeJS: Running "rnhello"
+[android-log 5] ReactNativeJS: The app is running using the Legacy Architecture. The Legacy Architecture is deprecated and will be removed in a future version of React Native. Please consider migrating to the New Architecture. For more information, please see https://reactnative.dev/blog/2024/10/23/the-new-architecture-is-here
+test rn_launch_observe_tree_tap_round_trip ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.00s
+
+     Running tests/session.rs (.cache/g3f1-target/release/deps/session-cdc2b20197021798)
+
+running 3 tests
+test launch_without_apk_is_invalid_argument ... ok
+test launch_non_apk_is_an_error_not_a_pass ... ok
+test session_tools_round_trip_in_process ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests acos_mcp
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

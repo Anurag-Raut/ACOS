@@ -431,12 +431,29 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              A selector that matches more than one user-visible node is refused as \
              `AMBIGUOUS_SELECTOR` with every candidate (`id`, `text`, `content_desc`, `bounds`) \
              — narrow it or pass `index`; nothing is tapped silently. Requires \
-             `acos_observe_tree` first for selector taps. Returns action/accepted/input_ack_seq. \
+             `acos_observe_tree` first for selector taps. Returns action/accepted/input_ack_seq \
+             plus `changes`, the settled tree diff of the tap (`added`/`removed`/`changed` \
+             nodes, current activity, focused node) so the next step usually needs no \
+             `acos_observe_tree`; `diff:false` turns it off. \
              Common errors: AMBIGUOUS_SELECTOR (several matches), ELEMENT_NOT_FOUND with \
              `details.kind=NoSuchNode`/`NoUiTree` (observe first), ELEMENT_OFFSCREEN (only an \
              invisible node matches), TIMEOUT. A React Native session has no View tree and no \
              pixel frame, so point taps are unsupported there.",
             with_base(json!({
+                "diff": {
+                    "type": "boolean",
+                    "description": "FB3: include `changes`, the settled UI-tree diff of this action \
+                                    (added/removed/changed nodes with `id`/`text`/`content_desc`/ \
+                                    `class`/`bounds`; a changed node also lists which `fields` \
+                                    changed, old -> new; plus the current activity and the focused \
+                                    node). Computed from trees the session already holds, so it \
+                                    costs no extra traversal and no extra guest round trip. \
+                                    Default `true`; `false` returns the pre-FB3 reply byte for \
+                                    byte. Each list is capped at 40 entries with \
+                                    `truncated:true` and the true `counts`; \
+                                    `changes.baseline:\"none\"` means the session held no \
+                                    pre-action tree (no diff is invented)."
+                },
                 "x": {"type": "integer", "description": "X coordinate for a point tap (requires `y`)."},
                 "y": {"type": "integer", "description": "Y coordinate for a point tap (requires `x`)."},
                 "text": {"type": "string", "description": "Node label to tap: the platform's accessible name (text, else content description) among visible nodes."},
@@ -473,8 +490,23 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
         "acos_key" => (
             "Press a key in the held session. `code` is an Android key code (4=BACK, 66=ENTER, \
              3=HOME) or a name (`back`, `home`, `enter`, `menu`, `tab`, `escape`, `delete`). \
+             Returns `changes` (the settled tree diff of the key) by default. \
              Common errors: ELEMENT_NOT_FOUND with `details.kind=NoFocusedWindow` (launch/observe first).",
             with_base(json!({
+                "diff": {
+                    "type": "boolean",
+                    "description": "FB3: include `changes`, the settled UI-tree diff of this action \
+                                    (added/removed/changed nodes with `id`/`text`/`content_desc`/ \
+                                    `class`/`bounds`; a changed node also lists which `fields` \
+                                    changed, old -> new; plus the current activity and the focused \
+                                    node). Computed from trees the session already holds, so it \
+                                    costs no extra traversal and no extra guest round trip. \
+                                    Default `true`; `false` returns the pre-FB3 reply byte for \
+                                    byte. Each list is capped at 40 entries with \
+                                    `truncated:true` and the true `counts`; \
+                                    `changes.baseline:\"none\"` means the session held no \
+                                    pre-action tree (no diff is invented)."
+                },
                 "code": {"type": ["integer", "string"], "description": "Numeric key code or name."},
                 "expect_change": {
                     "type": "boolean",
@@ -503,8 +535,23 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              password field, `mask: true`, or an unknown target (the tree names no focused field \
              -- nothing is guessed). Common errors: UNSUPPORTED_BACKEND when a character cannot be \
              represented on the key-event fallback, TIMEOUT when the screen never settles. Composing text and IME \
-             actions are not modelled.",
+             actions are not modelled. Returns `changes` (the settled tree diff of the typing) \
+             by default; `diff:false` turns it off.",
             with_base(json!({
+                "diff": {
+                    "type": "boolean",
+                    "description": "FB3: include `changes`, the settled UI-tree diff of this action \
+                                    (added/removed/changed nodes with `id`/`text`/`content_desc`/ \
+                                    `class`/`bounds`; a changed node also lists which `fields` \
+                                    changed, old -> new; plus the current activity and the focused \
+                                    node). Computed from trees the session already holds, so it \
+                                    costs no extra traversal and no extra guest round trip. \
+                                    Default `true`; `false` returns the pre-FB3 reply byte for \
+                                    byte. Each list is capped at 40 entries with \
+                                    `truncated:true` and the true `counts`; \
+                                    `changes.baseline:\"none\"` means the session held no \
+                                    pre-action tree (no diff is invented)."
+                },
                 "text": {"type": "string", "description": "Text to type into the focused field."},
                 "mask": {"type": "boolean", "description": "Withhold the typed text from the reply (`target.text_masked`, `target.chars`). Use it for a secret whose field the tree does not report as focused. Without it, a focused non-password field is echoed and any other target is masked."},
                 "expect_change": {
@@ -523,9 +570,25 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
         ),
         "acos_swipe" => (
             "Swipe in the held session from `from` to `to`; each point is an object with integer \
-             `x` and `y`. `duration_ms` defaults to 300. Common errors: ELEMENT_NOT_FOUND with \
+             `x` and `y`. `duration_ms` defaults to 300. The ART engine has no swipe command \
+             (UNSUPPORTED_BACKEND, `input.swipe`), so it returns no `changes` there. `changes` \
+             (the `diff` argument) applies when the engine supports the action. Common errors: ELEMENT_NOT_FOUND with \
              `details.kind=NoWindowAtPoint` (no frame yet), INVALID_ARGUMENT (a point missing x/y).",
             with_base(json!({
+                "diff": {
+                    "type": "boolean",
+                    "description": "FB3: include `changes`, the settled UI-tree diff of this action \
+                                    (added/removed/changed nodes with `id`/`text`/`content_desc`/ \
+                                    `class`/`bounds`; a changed node also lists which `fields` \
+                                    changed, old -> new; plus the current activity and the focused \
+                                    node). Computed from trees the session already holds, so it \
+                                    costs no extra traversal and no extra guest round trip. \
+                                    Default `true`; `false` returns the pre-FB3 reply byte for \
+                                    byte. Each list is capped at 40 entries with \
+                                    `truncated:true` and the true `counts`; \
+                                    `changes.baseline:\"none\"` means the session held no \
+                                    pre-action tree (no diff is invented)."
+                },
                 "from": {"type": "object", "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}}, "required": ["x", "y"]},
                 "to": {"type": "object", "properties": {"x": {"type": "integer"}, "y": {"type": "integer"}}, "required": ["x", "y"]},
                 "duration_ms": {"type": "integer", "minimum": 1}

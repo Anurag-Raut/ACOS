@@ -1,0 +1,310 @@
+{
+  "request_id": "req_3a276b_18e808e61bd1a755",
+  "ok": false,
+  "status": "timeout",
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "session_id": "s_art_settle-lab",
+  "isolation": "process",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "code": "TIMEOUT",
+    "class": "infra_timeout",
+    "message": "tap: strict settle timed out (traversal); the step is a non-pass because the screen was still changing when the deadline elapsed",
+    "hint": "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT failure; use wait_for for a later event, or `animations:off` for a functional check. The latest tree/frame is kept in the step evidence.",
+    "retryable": true,
+    "details": {
+      "animating": false,
+      "backend": "acos-art-session",
+      "context": "tap",
+      "frame_seq": 4,
+      "reason": "traversal",
+      "settle": {
+        "ack_ms": 5,
+        "animating": false,
+        "bound": "timeout",
+        "first_change_ms": null,
+        "frame_ms": null,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "traversal",
+        "settled": false,
+        "state_changed": null,
+        "strict_rule": "event"
+      }
+    }
+  },
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/.cache/fb3/gates2/p11-progress-timeout",
+    "certification": "certified-with-limits",
+    "certification_limits": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "section": "§8.7"
+    },
+    "certification_policy": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+      "section": "§8.8"
+    },
+    "trust": "trusted",
+    "verdict": {
+      "animations": "on",
+      "app": {
+        "package": "dev.acos.fixtures.settletab",
+        "path": "fixtures/build/apps/settle-lab.apk",
+        "sha256": "3ea3d28b33ba3bd842e82e61c962633b88ef7406bb24291f8ef89c7e8df778c4"
+      },
+      "backend": "acos-native",
+      "certification": "certified-with-limits",
+      "certification_limits": {
+        "doc": "docs/SANDBOX_CERTIFICATION.md",
+        "section": "§8.7"
+      },
+      "certification_policy": {
+        "doc": "docs/SANDBOX_CERTIFICATION.md",
+        "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+        "section": "§8.8"
+      },
+      "engine": "art",
+      "evidence": {
+        "artifacts": "/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/.cache/fb3/gates2/p11-progress-timeout",
+        "engine_report": "/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/.cache/fb3/gates2/p11-progress-timeout/engine.json",
+        "retention": "/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/.cache/fb3/gates2/p11-progress-timeout/retention.json",
+        "verdict": "/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/.cache/fb3/gates2/p11-progress-timeout/verdict.json"
+      },
+      "evidence_provenance": {
+        "binder_transactions": "host-observed",
+        "crash_reports": "guest-asserted",
+        "frames": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "logs": "guest-asserted",
+        "static_manifest": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "failure": {
+        "code": "TIMEOUT",
+        "error": {
+          "class": "infra_timeout",
+          "code": "TIMEOUT",
+          "details": {
+            "animating": false,
+            "backend": "acos-art-session",
+            "context": "tap",
+            "frame_seq": 4,
+            "reason": "traversal",
+            "settle": {
+              "ack_ms": 5,
+              "animating": false,
+              "bound": "timeout",
+              "first_change_ms": null,
+              "frame_ms": null,
+              "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+              "mode": "strict",
+              "pixels_changed": true,
+              "reason": "traversal",
+              "settled": false,
+              "state_changed": null,
+              "strict_rule": "event"
+            }
+          },
+          "hint": "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT failure; use wait_for for a later event, or `animations:off` for a functional check. The latest tree/frame is kept in the step evidence.",
+          "message": "tap: strict settle timed out (traversal); the step is a non-pass because the screen was still changing when the deadline elapsed",
+          "retryable": true
+        },
+        "step_index": 2,
+        "summary": "step 2 (tap) timeout"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-14T22:10:39.346Z",
+      "insets": "report",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [
+        "stopped at step 2 (tap): timeout; later steps were not executed",
+        "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+        "artifacts: referenced (keep-all): 15 file(s) / 0.8 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json"
+      ],
+      "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+      "reproducer": {
+        "acos_version": "0.2.0",
+        "apk_path": "fixtures/build/apps/settle-lab.apk",
+        "apk_sha256": "3ea3d28b33ba3bd842e82e61c962633b88ef7406bb24291f8ef89c7e8df778c4",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 420,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": "scenarios/p11-progress-timeout.yaml",
+        "scenario_sha256": "94c246e69b799da349fb43528577fade7e22729f0d8b532379fbbed8c2dc4816"
+      },
+      "request_id": "req_3a276b_18e808e61bd1a755",
+      "resources": {
+        "events": 83,
+        "frames_captured": 2,
+        "memory_mib": 14,
+        "peak_rss_bytes": 15204352,
+        "sessions": 1,
+        "steps": 3,
+        "wall_ms": 3289
+      },
+      "scenario": {
+        "name": "p11-progress-timeout",
+        "path": "scenarios/p11-progress-timeout.yaml",
+        "sha256": "94c246e69b799da349fb43528577fade7e22729f0d8b532379fbbed8c2dc4816"
+      },
+      "schema_version": 1,
+      "session_exit": {
+        "abi": null,
+        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=71MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3811190-i3879075.scope)",
+        "code": null,
+        "disk_free_bytes": 169674321920,
+        "guest_crash": null,
+        "guest_exit": 0,
+        "guest_signal": null,
+        "native_crash": null,
+        "native_crash_path": null,
+        "outcome": "ok",
+        "panic": null,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/.cache/fb3/gates2/p11-progress-timeout/art-frames/session-exit.json",
+        "retryable": false,
+        "stage": "teardown-evidence"
+      },
+      "session_id": "s_art_settle-lab",
+      "started_at": "2026-11-14T22:10:36.057Z",
+      "status": "timeout",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 157,
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "provenance": {
+            "frame": "host-observed",
+            "launch_markers": "guest-asserted",
+            "lifecycle_markers": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "launch"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 55,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/2.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/2.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/01-wait_for.json"
+            }
+          ],
+          "frame_seq": 2,
+          "index": 1,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "settle": {
+            "bound": "strict-event",
+            "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+            "mode": "strict",
+            "probe_seq": 7,
+            "settled": true,
+            "strict_rule": "event",
+            "tree_age_ms": 39
+          },
+          "status": "pass",
+          "step": "wait_for"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 3077,
+          "error": {
+            "class": "infra_timeout",
+            "code": "TIMEOUT",
+            "details": {
+              "animating": false,
+              "backend": "acos-art-session",
+              "context": "tap",
+              "frame_seq": 4,
+              "reason": "traversal",
+              "settle": {
+                "ack_ms": 5,
+                "animating": false,
+                "bound": "timeout",
+                "first_change_ms": null,
+                "frame_ms": null,
+                "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+                "mode": "strict",
+                "pixels_changed": true,
+                "reason": "traversal",
+                "settled": false,
+                "state_changed": null,
+                "strict_rule": "event"
+              }
+            },
+            "hint": "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT failure; use wait_for for a later event, or `animations:off` for a functional check. The latest tree/frame is kept in the step evidence.",
+            "message": "tap: strict settle timed out (traversal); the step is a non-pass because the screen was still changing when the deadline elapsed",
+            "retryable": true
+          },
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/02-tap.json"
+            }
+          ],
+          "index": 2,
+          "provenance": {
+            "frame": "host-observed",
+            "host_input": "host-observed",
+            "input_acks": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "timeout",
+          "step": "tap"
+        }
+      ],
+      "trust": "trusted",
+      "unsupported_steps": [],
+      "verdict": "timeout"
+    },
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-d41b3b08-5ea0b20149a5a9a9/.cache/fb3/gates2/p11-progress-timeout/verdict.json"
+  },
+  "metrics": {
+    "wall_ms": 3289,
+    "peak_rss_bytes": 15204352
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  }
+}
