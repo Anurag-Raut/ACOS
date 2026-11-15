@@ -4,85 +4,85 @@ acos-art: build-cache HIT 1d56c2d1e06e /home/Qui/Projects/acos/.cache/wt-perf/.c
 acos-art: build-cache HIT 4f9115f46831 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4f9115f4683130edd6f7e1b0afe123c6dae8f253bcc227d7fba2eb5bd475a29c
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-01_hello                       PASS       0     0      60 
+01_hello                       PASS       0     0      82 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-02_int_arith                   PASS       0     0      74 
+02_int_arith                   PASS       0     0      65 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-03_long_arith                  PASS       0     0      69 
+03_long_arith                  PASS       0     0      78 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-04_float_double                PASS       0     0      67 
+04_float_double                PASS       0     0      66 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-05_branches_loops              PASS       0     0      67 
+05_branches_loops              PASS       0     0      72 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
 06_switch                      PASS       0     0      67 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-07_static_methods_recursion    PASS       0     0      65 
+07_static_methods_recursion    PASS       0     0      71 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-08_arrays                      PASS       0     0      65 
+08_arrays                      PASS       0     0      74 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-09_strings                     PASS       0     0      67 
+09_strings                     PASS       0     0      68 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-10_objects_fields              PASS       0     0      67 
+10_objects_fields              PASS       0     0      72 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-11_inheritance_virtual         PASS       0     0      70 
+11_inheritance_virtual         PASS       0     0      65 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-12_interfaces                  PASS       0     0      74 
+12_interfaces                  PASS       0     0      65 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-13_exceptions                  PASS       0     0      71 
+13_exceptions                  PASS       0     0      66 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-14_instanceof_casts            PASS       0     0      76 
+14_instanceof_casts            PASS       0     0      73 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-15_inner_lambda                PASS       0     0      75 
+15_inner_lambda                PASS       0     0      70 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-16_enums                       PASS       0     0      71 
+16_enums                       PASS       0     0      67 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-17_generics_collections        PASS       0     0      65 
+17_generics_collections        PASS       0     0      69 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
 18_string_format_misc          PASS       0     0      71 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-19_threads_sync                PASS       0     0      91 
+19_threads_sync                PASS       0     0      84 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
 20_uncaught                    PASS       1     1      69 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-21_regex_basic                 PASS       0     0      67 
+21_regex_basic                 PASS       0     0      65 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-22_regex_advanced              PASS       0     0      75 
+22_regex_advanced              PASS       0     0      72 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-23_regex_split_replace         PASS       0     0      74 
+23_regex_split_replace         PASS       0     0      69 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-24_zip_roundtrip               PASS       0     0      74 
+24_zip_roundtrip               PASS       0     0      61 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-25_security_digest             PASS       0     0      70 
+25_security_digest             PASS       0     0      68 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-26_regex_matrix                PASS       0     0      83 
+26_regex_matrix                PASS       0     0      77 
 acos-art: build-cache HIT 4d6cffa95a5d /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/4d6cffa95a5de8aea10035ce5e97372bd72ea8a07d93e8ad90cffb2a46d349b4
 acos-art: build-cache HIT e402a71a3dd5 /home/Qui/Projects/acos/.cache/wt-perf/.cache/art/build-cache/e402a71a3dd55ba0952f4b212bf0bf3f4855b6e2a2099223bd086dc77c5ceec3
-27_annotations_reflection      PASS       0     0      75 
+27_annotations_reflection      PASS       0     0      71 
 28_sqlite_basic                skip       -     -       - no dex built
 
 27/27 pass, 0 fail (1 skipped)
@@ -104,7 +104,7 @@ fatal ART log entries recorded: 0
       "program": "01_hello",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 60
+      "wall_ms": 82
     },
     {
       "code": null,
@@ -117,7 +117,7 @@ fatal ART log entries recorded: 0
       "program": "02_int_arith",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 74
+      "wall_ms": 65
     },
     {
       "code": null,
@@ -130,7 +130,7 @@ fatal ART log entries recorded: 0
       "program": "03_long_arith",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 69
+      "wall_ms": 78
     },
     {
       "code": null,
@@ -143,7 +143,7 @@ fatal ART log entries recorded: 0
       "program": "04_float_double",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 67
+      "wall_ms": 66
     },
     {
       "code": null,
@@ -156,7 +156,7 @@ fatal ART log entries recorded: 0
       "program": "05_branches_loops",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 67
+      "wall_ms": 72
     },
     {
       "code": null,
@@ -182,7 +182,7 @@ fatal ART log entries recorded: 0
       "program": "07_static_methods_recursion",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 65
+      "wall_ms": 71
     },
     {
       "code": null,
@@ -195,7 +195,7 @@ fatal ART log entries recorded: 0
       "program": "08_arrays",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 65
+      "wall_ms": 74
     },
     {
       "code": null,
@@ -208,7 +208,7 @@ fatal ART log entries recorded: 0
       "program": "09_strings",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 67
+      "wall_ms": 68
     },
     {
       "code": null,
@@ -221,7 +221,7 @@ fatal ART log entries recorded: 0
       "program": "10_objects_fields",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 67
+      "wall_ms": 72
     },
     {
       "code": null,
@@ -234,7 +234,7 @@ fatal ART log entries recorded: 0
       "program": "11_inheritance_virtual",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 70
+      "wall_ms": 65
     },
     {
       "code": null,
@@ -247,7 +247,7 @@ fatal ART log entries recorded: 0
       "program": "12_interfaces",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 74
+      "wall_ms": 65
     },
     {
       "code": null,
@@ -260,7 +260,7 @@ fatal ART log entries recorded: 0
       "program": "13_exceptions",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 71
+      "wall_ms": 66
     },
     {
       "code": null,
@@ -273,7 +273,7 @@ fatal ART log entries recorded: 0
       "program": "14_instanceof_casts",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 76
+      "wall_ms": 73
     },
     {
       "code": null,
@@ -286,7 +286,7 @@ fatal ART log entries recorded: 0
       "program": "15_inner_lambda",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 75
+      "wall_ms": 70
     },
     {
       "code": null,
@@ -299,7 +299,7 @@ fatal ART log entries recorded: 0
       "program": "16_enums",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 71
+      "wall_ms": 67
     },
     {
       "code": null,
@@ -312,7 +312,7 @@ fatal ART log entries recorded: 0
       "program": "17_generics_collections",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 65
+      "wall_ms": 69
     },
     {
       "code": null,
@@ -338,7 +338,7 @@ fatal ART log entries recorded: 0
       "program": "19_threads_sync",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 91
+      "wall_ms": 84
     },
     {
       "code": null,
@@ -364,7 +364,7 @@ fatal ART log entries recorded: 0
       "program": "21_regex_basic",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 67
+      "wall_ms": 65
     },
     {
       "code": null,
@@ -377,7 +377,7 @@ fatal ART log entries recorded: 0
       "program": "22_regex_advanced",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 75
+      "wall_ms": 72
     },
     {
       "code": null,
@@ -390,7 +390,7 @@ fatal ART log entries recorded: 0
       "program": "23_regex_split_replace",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 74
+      "wall_ms": 69
     },
     {
       "code": null,
@@ -403,7 +403,7 @@ fatal ART log entries recorded: 0
       "program": "24_zip_roundtrip",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 74
+      "wall_ms": 61
     },
     {
       "code": null,
@@ -416,7 +416,7 @@ fatal ART log entries recorded: 0
       "program": "25_security_digest",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 70
+      "wall_ms": 68
     },
     {
       "code": null,
@@ -429,7 +429,7 @@ fatal ART log entries recorded: 0
       "program": "26_regex_matrix",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 83
+      "wall_ms": 77
     },
     {
       "code": null,
@@ -442,7 +442,7 @@ fatal ART log entries recorded: 0
       "program": "27_annotations_reflection",
       "stderr_ok": true,
       "stdout_ok": true,
-      "wall_ms": 75
+      "wall_ms": 71
     },
     {
       "note": "no dex built",
