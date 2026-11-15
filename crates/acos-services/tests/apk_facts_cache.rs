@@ -31,11 +31,14 @@ fn scratch(name: &str) -> PathBuf {
 
 #[test]
 fn cache_matches_fresh_reads_and_invalidates_on_change() {
+    // Required fixture: `fixtures/build` is gitignored, so a missing file fails
+    // loudly with its path. A silent skip would make this test prove nothing.
     let counter = repo(COUNTER);
-    if !counter.is_file() {
-        eprintln!("SKIP apk_facts_cache: fixtures missing");
-        return;
-    }
+    assert!(
+        counter.is_file(),
+        "required fixture missing: {} (fixtures/build is not in git; build the fixtures)",
+        counter.display()
+    );
     clear_cache();
 
     // 1. Cold read, then a hit: same answers, no second open.

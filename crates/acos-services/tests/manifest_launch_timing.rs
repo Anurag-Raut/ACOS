@@ -31,7 +31,7 @@ use std::hint::black_box;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use acos_services::apk_facts::clear_cache;
+use acos_services::apk_facts::{clear_cache, open_count, open_shared, prime_from};
 use acos_services::manifest_resolve::{
     launch_budget, launcher_activity, RESUME_MS_BASE, RESUME_MS_LARGE,
 };
@@ -169,26 +169,38 @@ fn manifest_parses_are_correct_and_timed_per_call() {
              (open_dom_p50_ms={p_dom:.3})"
         );
 
-        // After: the same five call sites in launch order. `native_libs::install`
-        // still opens the APK itself (it extracts the .so files), so its open is
-        // counted as is; the four manifest facts come from one cached open.
+        // After (PERF-REL3c): the launch sequence the ART launch now runs. Its one
+        // source open is `open_shared` (the native-library install reads it through
+        // `install_from`; its extraction is not in this model, it is the same before
+        // and after), `prime_from` caches the facts from that open, and the manifest
+        // calls are cache hits. The open is dropped at the end of the sequence.
+        let sequence = || {
+            let src = open_shared(&path).expect("launch open");
+            prime_from(&path, &src);
+            let a = launcher_activity(&path).expect("launcher");
+            let b = manifest_labels(&path).expect("labels");
+            let c = launch_budget(&path).expect("budget");
+            let d = launcher_activity(&path).expect("launcher, config changes");
+            (a, b, c, d)
+        };
+        // Correctness of the claim: one cold launch opens the APK exactly once.
+        clear_cache();
+        let opens0 = open_count();
+        let _ = sequence();
+        assert_eq!(
+            open_count() - opens0,
+            1,
+            "{}: one cold launch must open its APK once",
+            t.name
+        );
         let cold = time_ms(n, || {
             clear_cache();
-            let a = launcher_activity(&path).expect("cold launcher");
-            let _ = acos_apk::Apk::open(&path).expect("native open");
-            let b = manifest_labels(&path).expect("cold labels");
-            let c = launch_budget(&path).expect("cold budget");
-            let d = launcher_activity(&path).expect("cold launcher 2");
-            (a, b, c, d)
+            sequence()
         });
-        let warm = time_ms(n, || {
-            let a = launcher_activity(&path).expect("warm launcher");
-            let _ = acos_apk::Apk::open(&path).expect("native open");
-            let b = manifest_labels(&path).expect("warm labels");
-            let c = launch_budget(&path).expect("warm budget");
-            let d = launcher_activity(&path).expect("warm launcher 2");
-            (a, b, c, d)
-        });
+        // Warm: the facts of a previous launch are cached; the launch still opens
+        // once, for its native-library install.
+        let _ = sequence();
+        let warm = time_ms(n, sequence);
         let p_cold = report(apk, "launch-sequence-after(cold)", cold);
         let p_warm = report(apk, "launch-sequence-after(warm)", warm);
         eprintln!(

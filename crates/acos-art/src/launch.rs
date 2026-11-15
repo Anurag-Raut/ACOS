@@ -530,8 +530,22 @@ pub(crate) fn launch_session(
     // `dlopen` saw `library "libhellojni.so" not found`. Extract into this
     // run's own tree (bound read-only at `/data/app-lib`).
     let native_lib_root = run.dir("app-lib");
-    let native_libs = acos_services::native_libs::install(&opts.apk, &native_lib_root)
-        .map_err(|e| Error::Layout(format!("native libs: {e}")))?;
+    // PERF-REL3c: the launch opens its source APK once. The native-library install,
+    // the package state (`installed`) and the manifest facts (budget, launcher,
+    // labels, config changes) all read that one open. The facts are cached
+    // (`prime_from`) and the open is dropped at the end of this block, so only the
+    // small facts outlive it.
+    let (native_libs, installed) = {
+        let source = acos_services::apk_facts::open_shared(&opts.apk).map_err(|e| {
+            Error::Layout(format!("native libs: open {}: {e}", opts.apk.display()))
+        })?;
+        let native_libs =
+            acos_services::native_libs::install_from(&source, &opts.apk, &native_lib_root)
+                .map_err(|e| Error::Layout(format!("native libs: {e}")))?;
+        acos_services::apk_facts::prime_from(&opts.apk, &source);
+        let installed = acos_services::pms::PmsState::from_opened(&opts.apk, &source).ok();
+        (native_libs, installed)
+    };
     match &native_libs {
         acos_services::native_libs::NativeLibInstall::Installed { libs, .. } => {
             eprintln!(
@@ -586,7 +600,7 @@ pub(crate) fn launch_session(
     // what `PackageParser` resolves into the activity's `ActivityInfo.theme`;
     // without it an AppCompat activity aborts with "You need to use a
     // Theme.AppCompat theme" (W17: rn-hello's next wall after SoLoader).
-    let installed = acos_services::pms::PmsState::from_apk(&opts.apk).ok();
+    // `installed` was read from the launch's one open (above).
     let application_class = installed
         .as_ref()
         .map(|state| state.app.class_name.clone())
@@ -1151,7 +1165,11 @@ pub(crate) fn launch_session(
     // hardcoded 0 — that field is what `ActivityRecord
     // .getRealConfigChanged()` compares when a rotation has to decide between a
     // re-create (`ActivityRelaunchItem`) and `onConfigurationChanged`.
-    let config_changes = acos_services::manifest_resolve::launcher_activity(&apk)
+    // PERF-REL3c: read from the source APK (`opts.apk`), not the staged copy
+    // above. The staged file is a byte copy of it made earlier in this launch, so
+    // the facts are the same, and the cached facts answer without another open of
+    // a fresh per-run path (a cache miss that opened the APK on every launch).
+    let config_changes = acos_services::manifest_resolve::launcher_activity(&opts.apk)
         .map(|l| l.config_changes)
         .unwrap_or(0);
     sb.env("ACOSLAUNCH_CONFIG_CHANGES", &config_changes.to_string());

@@ -1107,9 +1107,17 @@ impl PmsState {
     /// Build from an APK on disk.
     pub fn from_apk(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
-        let apk = acos_apk::Apk::open(path).map_err(|e| {
-            ServiceError::Internal(format!("open {}: {e}", path.display()))
-        })?;
+        // PERF-REL3c: the shared open, so a launch already holding it does not read
+        // the file again.
+        let apk = crate::apk_facts::open_shared(path)
+            .map_err(|e| ServiceError::Internal(format!("open {}: {e}", path.display())))?;
+        Self::from_opened(path, &apk)
+    }
+
+    /// [`PmsState::from_apk`] for an APK that is already open (`apk` is the open of
+    /// `path`). PERF-REL3c: a launch reads its source APK once.
+    pub fn from_opened(path: impl AsRef<Path>, apk: &acos_apk::Apk) -> Result<Self> {
+        let path = path.as_ref();
         let manifest = apk
             .manifest()
             .map_err(|e| ServiceError::Internal(format!("manifest: {e}")))?;
