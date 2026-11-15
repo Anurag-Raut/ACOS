@@ -553,6 +553,82 @@ def main() -> int:
             after_destroy["sessions"] == [] and not registry_entries(registry),
             {"sessions": after_destroy["sessions"], "files": [str(p) for p in registry_entries(registry)]},
         )
+
+        # --- VIEW1d: a focused password EditText never streams its input. ---
+        # (one serve session is one guest, so this runs after the counter session ends)
+        # `text-input` rebuilt with android:inputType="textPassword" (scratch
+        # build, .cache/view1d-root; not a committed fixture).
+        pw_apk = WT / ".cache/view1d-root/fixtures/build/apps/text-input.apk"
+        secret = "hunter2-SECRET"
+        launched_pw = smoke.envelope(
+            client.call_tool(
+                "acos_launch",
+                {"apk": str(pw_apk), "artifacts": str(scratch / "artifacts-pw")},
+                timeout=420,
+            )
+        )
+        pw_session = launched_pw.get("session_id")
+        check(report, "password_app_launch", launched_pw.get("status") == "pass",
+              {"status": launched_pw.get("status"), "error": launched_pw.get("error")})
+        if launched_pw.get("status") == "pass":
+            pw_events = EventReader(port, f"/api/events/{pw_session}?t={token}", 20.0)
+            pw_events.start()
+            time.sleep(1.5)
+            smoke.envelope(client.call_tool(
+                "acos_tap", {"session_id": pw_session, "id": "input"}, timeout=180))
+            typed = smoke.envelope(client.call_tool(
+                "acos_text", {"session_id": pw_session, "text": secret}, timeout=180))
+            keyed = smoke.envelope(client.call_tool(
+                "acos_key", {"session_id": pw_session, "code": 9}, timeout=180))
+            tree = smoke.envelope(client.call_tool(
+                "acos_observe_tree", {"session_id": pw_session}, timeout=180))
+            tree_text = json.dumps(tree)
+            pw_events.join(timeout=40)
+            raw = pw_events.raw
+            parsed_pw = pw_events.of("ev")
+            text_events = [
+                i for i in parsed_pw
+                if i.get("kind") == "action" and i.get("event", {}).get("cmd") == "text"
+            ]
+            key_events = [
+                i for i in parsed_pw
+                if i.get("kind") == "action" and i.get("event", {}).get("cmd") == "key"
+            ]
+            def edit_nodes(node, out):
+                if isinstance(node, dict):
+                    if "EditText" in str(node.get("class", "")):
+                        out.append({k: node.get(k) for k in
+                                    ("class", "password", "focused", "password_unknown")})
+                    for value in node.values():
+                        edit_nodes(value, out)
+                elif isinstance(node, list):
+                    for value in node:
+                        edit_nodes(value, out)
+                return out
+
+            report["password"] = {
+                "edit_nodes": edit_nodes(tree, []),
+                "typed_status": typed.get("status"), "key_status": keyed.get("status"),
+                "text_events": text_events, "key_events": key_events,
+                "tree_has_password_true": '"password": true' in tree_text or '"password":true' in tree_text,
+            }
+            check(
+                report,
+                "password_field_input_is_masked_in_the_stream",
+                typed.get("status") == "pass"
+                and len(text_events) >= 1
+                and secret not in raw
+                and "hunter2" not in raw
+                and all(i["event"].get("text") == "[masked]" for i in text_events)
+                and all(i["event"].get("key") == "[masked]" for i in key_events),
+                {"text_events": [i["event"] for i in text_events],
+                 "key_events": [i["event"] for i in key_events],
+                 "secret_in_raw_sse": secret in raw,
+                 "tree_reports_password": report["password"]["tree_has_password_true"]},
+            )
+            smoke.envelope(client.call_tool(
+                "acos_destroy", {"session_id": pw_session}, timeout=180))
+
     finally:
         if view is not None:
             view.terminate()

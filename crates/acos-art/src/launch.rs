@@ -2300,7 +2300,7 @@ fn install_session_panic_hook(out: &Path) {
 /// and of the `--data` path length:
 /// `/run/user/<uid>/acos-art-<pid>-<seq>/`, falling back to
 /// `<repo>/.cache/art-sock/<pid>-<seq>/`. The directory is removed on drop.
-struct ShortSocketDir(PathBuf);
+struct ShortSocketDir(PathBuf, bool);
 
 impl ShortSocketDir {
     fn new() -> std::io::Result<Self> {
@@ -2342,7 +2342,7 @@ impl ShortSocketDir {
         let mut last = None;
         for dir in candidates {
             match private_dir(&dir) {
-                Ok(()) => return Ok(Self(dir)),
+                Ok(()) => return Ok(Self(dir, kind == "view")),
                 Err(e) => last = Some(e),
             }
         }
@@ -2358,7 +2358,7 @@ impl ShortSocketDir {
     /// drop (the session directory is the shared plan's, not this process's).
     fn at(dir: &Path) -> std::io::Result<Self> {
         private_dir(dir)?;
-        Ok(Self(dir.to_path_buf()))
+        Ok(Self(dir.to_path_buf(), false))
     }
 }
 
@@ -2413,8 +2413,10 @@ fn private_dir(dir: &Path) -> std::io::Result<()> {
 
 impl Drop for ShortSocketDir {
     fn drop(&mut self) {
-        // Z4: a foreign-guest session directory is owned by the driver.
-        if std::env::var_os("ACOS_ZYGOTE_SESSION").is_some() {
+        // Z4: a foreign-guest session directory is owned by the driver. The
+        // host-only live-view directory (field 1) is never the driver's: it is
+        // always removed here.
+        if !self.1 && std::env::var_os("ACOS_ZYGOTE_SESSION").is_some() {
             return;
         }
         let _ = fs::remove_dir_all(&self.0);

@@ -294,7 +294,7 @@ fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
         file.write_all(text.as_bytes())?;
         file.flush()?;
     }
-    let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600));
+    std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
     std::fs::rename(&tmp, path)
 }
 
@@ -364,8 +364,9 @@ pub struct ReadEntry {
 #[must_use]
 #[allow(dead_code)]
 pub fn read_entries(dir: &Path) -> Vec<ReadEntry> {
-    // L6: a directory another uid owns (or one that is not 0700) is not ours:
-    // its entries could point the hub at a socket that is not a session's.
+    // L6: a directory another uid owns, or one that is group/world-writable (any
+    // mode with 0o022 set; 0700 and 0755 are both accepted), is not ours: its
+    // entries could point the hub at a socket that is not a session's.
     if verify_private_dir(dir, false).is_err() {
         return Vec::new();
     }

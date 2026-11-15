@@ -279,3 +279,15 @@ Note: the slow-subscriber drop test now waits for the 8 MiB cap (loop 4000 ticks
 2. `launch.rs` also got a `cargo fmt` pass (≈+100 lines of formatting noise in the diff).
 3. Stale `/run/user/1000/acos-art-*/view.sock` dirs from earlier killed sessions exist on the host (old layout); harmless, not cleaned.
 4. Hub does not forward the frame header's `secure` flag to the page (the placeholder is simply black).
+
+## §VIEW1d — security re-check follow-ups (branch `live-view-2`)
+
+| item | fix | test |
+|---|---|---|
+| 1 | `observe_request` resets the remembered focus state for `type_text`/`key` **before** the no-subscriber return; also reset when the first viewer attaches | `a_non_password_state_does_not_survive_a_detach` (fails without the fix: a key code leaked after detach) |
+| 2 | `LaunchMain.appendViewJson` fallback (no `AccessibilityNodeInfo`): TextView password from `getInputType()` variations (TEXT password/web/visible, NUMBER password) or `PasswordTransformationMethod`, as AOSP `TextView`; if unreadable the node is `password_unknown` (+ `password:true`) and Rust treats a focused `password_unknown` node as password | `a_fallback_shaped_tree_masks_a_password_or_undecidable_focus`; live proof below |
+| 3 | `write_atomic` propagates `set_permissions` error; `read_entries` comment states the real rule (owner = us, not group/world-writable; 0700 and 0755 ok); `ShortSocketDir` drop removes the host-only view dir even under `ACOS_ZYGOTE_SESSION` | existing registry/launch tests |
+| 4 | `docs/LIVE_VIEW.md` + `docs/AGENT_GUIDE.md`: agent screenshots ignore `FLAG_SECURE`; only the stream blanks | — |
+
+Live proof: `drive.py` extended with a password phase (a scratch `text-input` rebuilt with `inputType=textPassword`, `.cache/view1d-root`, not a committed fixture): `live-proof-report-view1d.json` **22/22 checks pass**; typed text -> `[masked]`, secret absent from the raw SSE, key code -> `[masked]`.
+Observation (not changed): the tree attached to a reply is probed *after* the command, so a key that moves focus (ENTER in a single-line field moves focus to the next control) can make a post-command tree prove a non-password focus and leave that one key code unmasked. No typed secret leaks (text is masked from the field that had focus when typed only if the reply tree says so); worth a follow-up decision.
