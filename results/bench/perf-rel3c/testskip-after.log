@@ -1,0 +1,18 @@
+   Compiling acos-services v0.2.1 (/home/Qui/Projects/acos/.cache/wt-perf/crates/acos-services)
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:656:7
+    |
+656 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-services` (lib test) generated 1 warning
+    Finished `release` profile [optimized + debuginfo] target(s) in 3.42s
+     Running unittests src/lib.rs (.cache/perf-target/release/deps/acos_services-0c9c4e0ebb436c80)
+
+running 1 test
+test manifest_resolve::tests::real_apks_resolve_like_aapt2_could_not ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 85 filtered out; finished in 0.07s
+

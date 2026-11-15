@@ -1,0 +1,18 @@
+TIMING apk=counter call=Apk::open n=100 mean_ms=0.028 p50_ms=0.025 p95_ms=0.052
+TIMING apk=counter call=Apk::open+manifest_dom n=100 mean_ms=0.032 p50_ms=0.032 p95_ms=0.034
+TIMING apk=counter call=launcher_activity n=100 mean_ms=0.033 p50_ms=0.032 p95_ms=0.035
+TIMING apk=counter call=launch_budget n=100 mean_ms=0.026 p50_ms=0.026 p95_ms=0.026
+TIMING apk=counter call=manifest_labels n=100 mean_ms=0.038 p50_ms=0.033 p95_ms=0.067
+TIMING apk=counter call=per-launch-model parses=5 sum_p50_ms=0.148 (open_dom_p50_ms=0.032)
+TIMING apk=form-validation call=Apk::open n=100 mean_ms=0.026 p50_ms=0.026 p95_ms=0.027
+TIMING apk=form-validation call=Apk::open+manifest_dom n=100 mean_ms=0.033 p50_ms=0.032 p95_ms=0.034
+TIMING apk=form-validation call=launcher_activity n=100 mean_ms=0.033 p50_ms=0.033 p95_ms=0.034
+TIMING apk=form-validation call=launch_budget n=100 mean_ms=0.027 p50_ms=0.026 p95_ms=0.027
+TIMING apk=form-validation call=manifest_labels n=100 mean_ms=0.033 p50_ms=0.033 p95_ms=0.034
+TIMING apk=form-validation call=per-launch-model parses=5 sum_p50_ms=0.152 (open_dom_p50_ms=0.032)
+TIMING apk=gaten call=Apk::open n=100 mean_ms=67.015 p50_ms=64.233 p95_ms=82.396
+TIMING apk=gaten call=Apk::open+manifest_dom n=100 mean_ms=62.747 p50_ms=62.116 p95_ms=67.100
+TIMING apk=gaten call=launcher_activity n=100 mean_ms=61.560 p50_ms=61.422 p95_ms=62.492
+TIMING apk=gaten call=launch_budget n=100 mean_ms=61.389 p50_ms=61.342 p95_ms=61.947
+TIMING apk=gaten call=manifest_labels n=100 mean_ms=61.490 p50_ms=61.386 p95_ms=61.981
+TIMING apk=gaten call=per-launch-model parses=5 sum_p50_ms=309.804 (open_dom_p50_ms=62.116)

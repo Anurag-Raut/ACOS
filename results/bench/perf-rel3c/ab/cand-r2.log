@@ -1,0 +1,62 @@
+acos-bench: start 2026-11-15T00:10:51Z
+acos-bench: groups [a:latency:8G:300 ] reps=1 latency_reps=20 fast_reps=40 p11_reps=3 animations=on task=PERF-REL3c
+acos-bench: run dir .cache/perf-rel3c/cand-r2-run
+acos-bench: binary /home/Qui/Projects/acos/.cache/wt-perf/.cache/perf-target/release/acos sha256 255440b38bc677ccef2e99f94d9901ad6dc5b2ed3c7e819264347b1baaf54739
+acos-bench: rep 1/1 group a [latency] mem 8G time 300s
+acos-bench: bundle phase latency ok=True wall=200.8s -> .cache/perf-rel3c/cand-r2-run/rep-1/latency.json
+# ACOS bench baseline -- 2026-11-15T00:14:13+00:00
+
+Command: `tools/bench/acos-bench.sh --reps 1` (branch `perf-rel3b`, commit `a0aad161779c`).
+
+Mode `full`; `ACOS_STRICT_SETTLE=default`; `animations=on`; binary sha256 `255440b38bc677cc`.
+
+Host: AMD Ryzen 9 9950X, 32 threads, 61908 MiB. Noisy phases: 0/1 (load1 > 4 or MemAvailable < 20 GiB; recorded, not deleted).
+
+## Metrics (p50 / p95, pooled across reps)
+
+| metric | label | p50 | p95 | n | threshold | prev best | method |
+|---|---|---:|---:|---:|---:|---|---|
+| `m4_launch_strict_ms` | M4 warm launch (strict) | 305.5 ms | 308.0 | 20 | ±5.0% / 2.000 | 440 (P9) | warm daemon, app not running -> acos_launch settle=strict -> reply tree count=0 + post-frame strict tree count |
+| `m4_launch_fast_ms` | M4 warm launch (fast) | 156.0 ms | 172.5 | 40 | ±5.0% / 2.000 | 184 (P9) | acos_launch settle=fast (probe-fresh label recorded) -> reply tree count=0 + post-frame strict tree count=0 |
+| `m5_screenshot_ms` | M5 fresh screenshot (PNG) | 11.56 ms | 12.04 | 20 | ±5.0% / 2.000 | 24.4 (P2/W1) | acos_observe {png:true} on a held session; PNG magic + newer frame_seq + meaningful frame required |
+| `m6_reset_strict_ms` | M6 reset -> first correct screen (strict) | 344.5 ms | 361.3 | 20 | ±5.0% / 2.000 | 463 (P9) | count=1 strictly read -> acos_reset settle=strict -> reply tree count=0 + following strict tree count=0 |
+| `m6_reset_fast_ms` | M6 reset -> first correct screen (fast) | 196.9 ms | 212.1 | 40 | ±5.0% / 2.000 | 195 (P9) | acos_reset settle=fast; state_reset + data_cleared + count=0 in the reply and in a following strict tree |
+| `m7_tree_strict_ms` | M7 UI tree with text (strict) | 41.24 ms | 41.46 | 20 | ±5.0% / 2.000 | 151 (P10) | acos_observe_tree settle=strict on a held session; tree has nodes and text, not truncated |
+| `m7_tree_fast_ms` | M7 UI tree with text (fast) | 0.558 ms | 0.925 | 20 | ±5.0% / 2.000 | 0.2 (P10) | acos_observe_tree settle=fast; the fast tree must show the same count text as a strict read (no stale tree) |
+| `m8_tap_counter_strict_ms` | M8 tap -> settled, counter (strict) | 946.4 ms | 957.9 | 20 | ±5.0% / 2.000 | 955 (P11 event) | acos_tap {id:inc} settle=strict on counter, one session; every tap must report state_changed and the final str |
+| `m8_tap_counter_fast_ms` | M8 tap -> settled, counter (fast) | 50.38 ms | 65.30 | 40 | ±5.0% / 2.000 | 70.9 (P1) | acos_tap settle=fast; same state_changed/final-count checks |
+| `m8_tap_form_strict_ms` | M8 tap -> settled, form (strict) | 933.6 ms | 941.8 | 20 | ±5.0% / 2.000 | - | empty form, tap submit settle=strict; following strict tree must read error='Name is required'; fast reset (un |
+| `m8_tap_form_fast_ms` | M8 tap -> settled, form (fast) | 32.37 ms | 33.47 | 40 | ±5.0% / 2.000 | - | empty form, tap submit settle=fast; same strict post-check |
+| `tap_ack_ms` | tap acknowledgement (settle.ack_ms) | 5.000 ms | 5.000 | 120 | ±5.0% / 2.000 | 5 (P1) | input ack latency reported in the tap reply's settle block (counter + form, strict and fast) |
+| `teardown_ms` | acos_destroy teardown_ms (GL1) | 13.00 ms | 14.00 | 64 | ±5.0% / 2.000 | 18-20 (GL1) | reply teardown.teardown_ms for a live counter session (lifecycle label recorded); 20 samples |
+| `teardown_wall_ms` | acos_destroy wall | 19.14 ms | 20.36 | 64 | ±5.0% / 2.000 | - | client wall of acos_destroy incl. teardown evidence |
+| `cpu_active_tap_strict_pct` | active CPU, 20 strict counter taps | 45.11 % of one core | 45.11 | 1 | ±10.0% / 0.200 | - | utime+stime delta over the serve tree during the M8 strict counter cohort (20 taps, ~20 s) |
+
+## Fast-settle lattice (PERF-REL3)
+
+Every fast-settle sample waits for the compositor, so it lands on a frame-period lattice: a rep's p50 is whichever slot holds the middle sample. These numbers do not flip.
+
+| metric | n | frame ms (source) | median | 5%-trimmed mean | first-slot share | slot shares |
+|---|---:|---:|---:|---:|---:|---|
+| `m4_launch_fast_ms` | 40 | 15.74 (measured) | 156.0 | 162.0 | 55% | 0:55%, 1:45% |
+| `m6_reset_fast_ms` | 40 | 16.67 (fallback) | 196.9 | 199.6 | 8% | 0:8%, 1:52%, 2:40% |
+| `m8_tap_counter_fast_ms` | 40 | 15.18 (measured) | 50.38 | 50.84 | 2% | 0:2%, 1:2%, 2:88%, 3:8% |
+| `m8_tap_form_fast_ms` | 40 | 16.67 (fallback) | 32.37 | 32.41 | 100% | 0:100% |
+
+## Phases and host load
+
+| rep | phase | ok | load1 before -> after | MemAvailable | queue wait s | wall s | noisy |
+|---:|---|---|---:|---:|---:|---:|---|
+| 1 | latency | yes | 0.450 -> 0.450 | 31.20 GiB | - | 200.8 | no |
+
+## Notes
+
+* value = p50 pooled over every sample in every rep; p95 pooled the same way; per-rep p50s are kept for the threshold derivation.
+* threshold = max(category floor, 2 x worst rep-to-rep deviation), capped at 40 %; a delta must exceed both the relative and the absolute threshold to be called a regression.
+* memory rows are label-matched (cgroup anon+shmem vs Pss); they are never mixed.
+* M3 is measured with the launch working set evicted per rep; the warm-cache variant is M4 + daemon spawn (P7).
+* PERF-REL3: every metric now carries its raw `samples`; the fast-settle metrics (M4 launch fast, M6 reset fast, M8 tap fast) also carry `lattice`: a 5 %-trimmed mean, the frame period measured from the samples (phase coherence), and the share of samples per frame slot (slot = round((x - origin) / period), origin = the fastest observed sample). p50/p95 and the p50 compare gate are unchanged; the lattice fields are additive.
+
+acos-bench: baseline JSON .cache/perf-rel3c/ab/cand-r2.json
+acos-bench: baseline MD   /home/Qui/Projects/acos/.cache/wt-perf/results/bench/baseline-20261115T001051Z.md
+acos-bench: end 2026-11-15T00:14:13Z

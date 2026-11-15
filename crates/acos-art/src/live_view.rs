@@ -553,6 +553,11 @@ impl Inner {
             self.subscribers_dropped.fetch_add(1, Ordering::Relaxed);
             self.subscriber_count.fetch_sub(1, Ordering::AcqRel);
         }
+        if subscribers.is_empty() {
+            // First viewer after none: whatever focus state was remembered
+            // belongs to an earlier watch; masking is the default again.
+            *self.password_state.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        }
         subscribers.push(subscriber);
         self.subscriber_count.fetch_add(1, Ordering::AcqRel);
         drop(subscribers);
@@ -929,19 +934,23 @@ impl LiveView {
     /// own reply carries a fresh tree that proves the focused field is not a
     /// password. Masking is the default; a stale tree must never unmask a secret.
     pub fn observe_request(&self, request: &serde_json::Value) {
-        if self.inner.subscriber_count.load(Ordering::Acquire) == 0 {
-            return;
-        }
         let carries_input = matches!(
             request.get("cmd").and_then(serde_json::Value::as_str),
             Some("type_text" | "key")
         );
+        // The reset runs *before* the no-subscriber early return: a "proven
+        // non-password" state recorded while a viewer was attached must not
+        // survive a detach and be reused by a viewer that attaches during a
+        // later input command whose reply carries no tree.
         if carries_input {
             *self
                 .inner
                 .password_state
                 .lock()
                 .unwrap_or_else(|e| e.into_inner()) = None;
+        }
+        if self.inner.subscriber_count.load(Ordering::Acquire) == 0 {
+            return;
         }
         let mut slot = self
             .inner
@@ -1653,6 +1662,10 @@ pub fn tree_proves_non_password_focus(tree: &serde_json::Value) -> bool {
                         .get("password")
                         .and_then(serde_json::Value::as_bool)
                         .unwrap_or(false)
+                        || map
+                            .get("password_unknown")
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false)
                     {
                         *password = true;
                     }
@@ -2472,6 +2485,63 @@ mod tests {
         assert!(!tree_proves_non_password_focus(&serde_json::json!({})));
         view.shutdown();
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_non_password_state_does_not_survive_a_detach() {
+        let dir = scratch_dir("maskdetach");
+        let source = HandSource::new(8, 8, false);
+        let view = bound(&dir, "v.sock", &source);
+        let plain = serde_json::json!({"nodes": [
+            {"class": "android.widget.EditText", "password": false, "focused": true}]});
+        let attach = |view: &LiveView| {
+            let mut client = UnixStream::connect(view.socket_path()).expect("connect");
+            subscribe_line(&mut client, "\"frames\":false,");
+            client
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .expect("timeout");
+            assert_eq!(read_message(&mut client).expect("hello").0, TYPE_HELLO);
+            assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
+            client
+        };
+        // A viewer is attached and a fresh tree proves a non-password focus.
+        let mut client = attach(&view);
+        view.observe_request(&serde_json::json!({"cmd": "type_text", "text": "a"}));
+        view.observe_reply(&serde_json::json!({"ok": true, "cmd": "type_text", "tree": plain}));
+        assert_eq!(read_events(&mut client, 1).remove(0)["text"], "a");
+        // Detach; a text command runs with nobody watching.
+        drop(client);
+        // The producer notices a closed peer on its next write: keep poking.
+        assert!(wait_for(
+            || {
+                view.push_event(serde_json::json!({"kind": "lifecycle", "event": "poke"}));
+                !view.has_subscribers()
+            },
+            Duration::from_secs(10)
+        ));
+        view.observe_request(&serde_json::json!({"cmd": "key", "key": 66}));
+        // A viewer attaches mid-command; the reply carries no tree: masked.
+        let mut client = attach(&view);
+        view.observe_reply(&serde_json::json!({"ok": true, "cmd": "key", "code": 66}));
+        let event = (0..8)
+            .map(|_| read_events(&mut client, 1).remove(0))
+            .find(|event| event.get("cmd") == Some(&serde_json::json!("key")))
+            .expect("the key event");
+        assert_eq!(event["key"], MASKED_TEXT, "a key code must not leak after a detach");
+        view.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_fallback_shaped_tree_masks_a_password_or_undecidable_focus() {
+        let fallback_password = serde_json::json!({"nodes": [
+            {"class": "android.widget.EditText", "password": true, "focused": true,
+             "source": "view-fallback"}]});
+        let undecided = serde_json::json!({"nodes": [
+            {"class": "android.widget.EditText", "focused": true, "password": false,
+             "password_unknown": true, "source": "view-fallback"}]});
+        assert!(!tree_proves_non_password_focus(&fallback_password));
+        assert!(!tree_proves_non_password_focus(&undecided));
     }
 
     #[test]

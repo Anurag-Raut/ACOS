@@ -1,0 +1,26 @@
+# base477e99c vs cand-a0aad161 -- lattice-aware A/B (PERF-REL3)
+
+Arms: base477e99c = 2 file(s) [a0aad161, a0aad161]; cand-a0aad161 = 2 file(s) [a0aad161, a0aad161]
+
+## 1. Old gate -- medians of per-rep p50s (unchanged rule)
+
+| metric | base477e99c | cand-a0aad161 | delta | delta % | threshold | verdict |
+|---|---:|---:|---:|---:|---:|---|
+| M4 warm launch (strict) | 305.82 | 305.05 | -0.78 | -0.3% | ±5.00% / 2.00 | within-noise |
+| M4 warm launch (fast) | 168.83 | 162.73 | -6.09 | -3.6% | ±5.00% / 2.00 | within-noise |
+
+## 2. Pooled 5 %-trimmed mean, and 3. frame-slot shares
+
+| metric | n base477e99c/cand-a0aad161 | base477e99c trimmed | cand-a0aad161 trimmed | delta | delta % | frame ms | first slot base477e99c/cand-a0aad161 | slot shares base477e99c | slot shares cand-a0aad161 | verdict |
+|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|---|
+| M4 warm launch (fast) | 80/80 | 163.73 | 164.54 | +0.81 | +0.5% | 15.62 | 45%/38% | 0:45% 1:54% 2:1% | 0:38% 1:57% 2:5% | within-noise |
+
+## 4. Verdict
+
+Lattice gate (proposal): pooled 5 percent-trimmed mean worse by > 5 percent and > 2 ms; a first-slot share shift >= 10 pp is flagged separately.
+
+* M4 warm launch (fast): within-noise -- trimmed 163.73 vs 164.54 (+0.81 ms, +0.5%), first-slot 45% vs 38%
+
+No regression under either gate.
+
+JSON: results/bench/perf-rel3c/ab-m4.json
