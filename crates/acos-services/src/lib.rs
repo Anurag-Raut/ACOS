@@ -40,6 +40,7 @@
 #![forbid(unsafe_code)]
 
 pub mod ams;
+pub mod apk_facts; // PERF-REL3b: one APK open per launch facts set (manifest, budget)
 pub mod animation;
 pub mod atms;
 pub mod clipboard;

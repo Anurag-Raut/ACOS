@@ -74,12 +74,21 @@ impl NativeLibInstall {
 
 /// Extract the APK's x86_64 libraries under `dest_root/x86_64`.
 ///
+/// Opens the APK itself. A launch that already holds an open of it calls
+/// [`install_from`] instead, so the APK is read once.
+///
 /// `dest_root` must be a per-run directory the caller owns; it is created when
 /// needed and never reused across runs by this function.
 pub fn install(apk_path: &Path, dest_root: &Path) -> Result<NativeLibInstall> {
     let apk = Apk::open(apk_path).map_err(|e| {
         ServiceError::Internal(format!("native libs: open {}: {e}", apk_path.display()))
     })?;
+    install_from(&apk, apk_path, dest_root)
+}
+
+/// [`install`] for an APK that is already open (`apk` is the open of `apk_path`).
+/// PERF-REL3c: a launch opens its APK once and reuses that open here.
+pub fn install_from(apk: &Apk, apk_path: &Path, dest_root: &Path) -> Result<NativeLibInstall> {
     // AOSP's per-package ABI choice (`Apk::abi_gate`): one host ABI directory is
     // enough for the package to install, and only *that* directory is extracted
     // — a library that exists solely under another ABI stays missing at

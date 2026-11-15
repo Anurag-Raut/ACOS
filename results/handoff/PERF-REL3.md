@@ -152,19 +152,90 @@ abi-gate, settle-se2-content-stable, zygote-prod-1, art-rotate-1, rn-tap-visibil
 screenshot-compress, fb4-artifacts). 74e4ee9 is an ancestor of 52beccf (72 commits), so if the
 launch shift had been real the bisect range would have been those 72 commits.
 
-### 3b. REL3b activity-alias manifest parse cost — NOT measured
+### 3b. REL3b manifest parse cost on the launch path -- measured, cached
 
-Remaining. Plan (prepared, not run — the 60-minute limit was reached): a temporary
-`crates/acos-services/tests/` timing test calling
-`manifest_resolve::launcher_activity()` and `launch_budget()` 100x for counter.apk,
-form-validation.apk and the Gaten debug APK, run through
-`run-exclusive.sh --task PERF-REL3 -- guarded.sh -- cargo test --release -p acos-services`.
-Note from the code: the launch path parses the manifest at least twice per launch
-(`launch_budget` + `launcher_activity`, and `acos-art --config_changes` does a third), so the
-per-launch cost is 2–3 x one parse. Cache only if that sum is > 1 ms, keyed by APK sha256 (the
-parse depends only on the bytes); `LauncherActivity`/`LaunchBudget` are both `Clone`-able plain
-data, so a small process-local `HashMap<[u8;32], _>` behind a mutex would do. This is a proposal,
-not implemented.
+Track PERF-REL3b, branch `perf-rel3b` from 477e99c (main v0.2.1). Commit `39876dfa`.
+
+**Call sites on the default ART launch path** (`acos launch --engine art`, `until =
+application-created`, no `--activity`): five `Apk::open` calls per launch:
+
+1. `acos-art/src/session.rs` `apk_activity` -> `launcher_activity`;
+2. `acos-art/src/launch.rs` `native_libs::install` -> `Apk::open` (extracts the `.so` files; not a
+   manifest parse, left as it is);
+3. `acos-art/src/launch.rs` `pms::manifest_labels` -> `Apk::open` + manifest parse;
+4. `acos-art/src/launch.rs` `manifest_resolve::launch_budget` -> `Apk::open`;
+5. `acos-art/src/launch.rs` config changes -> `launcher_activity`.
+
+Three of the five parse the AXML manifest. `Apk::open` reads the whole APK, copies every dex and
+indexes the zip, so it is the dominant cost (Gaten: the open is ~61 ms, the AXML DOM parse is
+~0.5 ms on top of it).
+
+**Measured before the change** (`tests/manifest_launch_timing.rs`, 100 iterations, `run-exclusive
+--exclusive`; `results/bench/perf-rel3b/manifest-timing-before.txt`). Sum of p50s of the five call
+sites per launch:
+
+| APK | one `Apk::open` p50 | five call sites p50 (before) |
+|---|---:|---:|
+| counter (12.7 KB) | 0.020 ms | **0.127 ms** |
+| form-validation (12.7 KB) | 0.021 ms | **0.129 ms** |
+| Gaten debug (115 MB) | 60.7 ms | **304.5 ms** |
+
+Gaten is far above the 1 ms threshold, so a cache was added. The fixtures sit under 1 ms.
+
+**Change** (`crates/acos-services/src/apk_facts.rs`, `manifest_resolve.rs`, `pms.rs`): one process-wide
+cache of the derived facts (launcher, labels, budget) keyed by path, file length and mtime. Stat
+only, no hash, so the APK is never re-hashed just for the cache. The cache keeps the facts, not the
+APK bytes. Failed opens are not cached. The three public functions keep their signatures and error
+text.
+
+**Measured after the change** (`results/bench/perf-rel3b/manifest-timing-after.txt`):
+
+| APK | cold launch (first call opens) p50 | warm launch (second launch of the APK) p50 | before p50 |
+|---|---:|---:|---:|
+| counter | 0.048 ms | 0.022 ms | 0.127 ms |
+| form-validation | 0.049 ms | 0.023 ms | 0.129 ms |
+| Gaten debug | **121.8 ms** | **61.1 ms** | 304.5 ms |
+
+The warm Gaten cost is the one open left in `native_libs::install`. Passing it the already-opened
+`Apk` would remove that too; not done here (it is not a manifest parse and touches the extraction).
+
+**Correctness:** `tests/apk_facts_cache.rs` passes: a hit returns the same `Arc` and does not re-open
+the APK; a length change and an mtime-only change each re-read; a failed open is not cached. The
+`manifest_launch_timing` test checks the launcher, budget and labels on counter, form-validation and
+Gaten. Full `cargo test --release -p acos-services` passes (EXIT 0), run through `run-exclusive`.
+
+**A/B (M4 launch, cache vs base):** interleaved `ACOS_BENCH_TASK=PERF-REL3b tools/bench/acos-bench.sh
+--reps 1 --groups "a:latency:8G:300"`, order cand, base, cand, base (two reps per arm,
+`results/bench/perf-rel3b/ab-run-status.txt`). Binaries: cand `af9a5da5...` (39876dfa), base
+`40673a49...` (477e99c), built in separate target dirs; compile paths checked (cand strings reference
+only `wt-perf`, base only `perf-base`). `results/bench/perf-rel3b/ab-compare-m4.txt`:
+
+| metric | base 477e99c | cand 39876dfa | delta | verdict |
+|---|---:|---:|---:|---|
+| M4 launch fast, old gate (median of per-rep p50s) | 163.01 ms | 162.87 ms | -0.1% | within-noise |
+| M4 launch fast, pooled 5 %-trimmed mean (n 80/80) | 162.74 ms | 161.89 ms | -0.5% | within-noise |
+| M4 launch fast, first-slot share | 50 % | 56 % | +6 pp | below the 10 pp flag |
+| M4 launch strict, old gate | 305.89 ms | 305.28 ms | -0.2% | within-noise |
+
+**Limit of the A/B:** the bench's M4 launches use the counter fixture, where the saving is ~0.08 ms
+of ~160 ms. The bench cannot show a gain; it shows no regression. The gain (~180 ms per Gaten
+launch) is measured by the parse harness above, not end to end. End-to-end Gaten launch wall time was
+not measured.
+
+**Decision:** keep the cache. The five parses sum to 0.13 ms on fixtures (below 1 ms, the cache
+changes nothing there that the bench can see) and to 304 ms on Gaten (above 1 ms). M4 shows no
+regression. Not merged into main.
+
+**Notes for the orchestrator**
+
+- The cache lives in the process. In the daemon (`acos serve`) the facts survive across launches of
+  the same APK; a one-shot `acos` process only saves within its own launch.
+- The key is (length, mtime). A rewrite that keeps both is not seen. On ext4 with ns mtimes this is
+  not a practical concern, but it is a known gap.
+- Pre-existing and not changed: `manifest_resolve::tests::real_apks_resolve_like_aapt2_could_not`
+  opens `fixtures/build/apps/counter.apk` and `.cache/gaten/...` relative to the crate directory
+  (`crates/acos-services`), so under `cargo test` both checks are silently skipped. The new
+  `manifest_launch_timing` test uses `CARGO_MANIFEST_DIR/../..` and does not skip.
 
 ### Reproduction
 
@@ -189,12 +260,117 @@ sha256. `results/bench/perf-rel3/ab-cand-vs-main.json` is the same comparison wi
 reversed — its "REGRESSION" labels read as "the main arm is worse", i.e. the candidate's tap
 improvement.)
 
-### Tests / validation
+### 3c. PERF-REL3c: one APK open per launch, test-skip fix
+
+Track PERF-REL3c, branch `perf-rel3b` (not merged into main). Commits on `perf-rel3b`:
+`421ed4d7` (TESTSKIP fix) and `a0aad161` (one open per launch). Evidence: `results/bench/perf-rel3c/`.
+
+**(1) Correctness before and after the launch-path change**
+
+| check | before (dd906863) | after (a0aad161) |
+|---|---|---|
+| ART corpus `acos-art verify` (27 programs, run-exclusive) | 27 pass, 0 fail, 1 skipped, 0 fatal logs | 27 pass, 0 fail, 1 skipped, 0 fatal logs (`corpus-before.log`, `corpus-after.log`) |
+| gate `v2-art-counter` `--engine art` | pass | pass |
+| gate `form-validation` `--engine art` | pass | pass |
+| gate `gaten-home` `--engine art` (release-unsigned APK) | pass | pass |
+
+The corpus baseline is `results/art-runtime/verify-27-f2.json` (27/27, 0 fatal logs). The skipped entry is the
+same one the baseline records.
+
+**(2) TESTSKIP: `manifest_resolve::tests::real_apks_resolve_like_aapt2_could_not` never ran its checks**
+
+* Root cause: the paths were crate-relative (`fixtures/...`, `.cache/gaten/gaten-x86_64-debug.apk`), and `cargo test`
+  runs with the crate as cwd. The Gaten path also named a file that does not exist (the debug APK is
+  `gaten-dev-9feffd2-x86_64.apk`), so both halves were `if is_file()` no-ops. The test passed with zero assertions.
+* Fix (`421ed4d7`): paths resolve from `CARGO_MANIFEST_DIR/../..`. The counter fixture is required and panics
+  with its path when absent (`fixtures/build` is gitignored). The Gaten APK is optional: when absent the test prints
+  `SKIP ... (Gaten half): <path> is absent; documented environment gap` and returns. The path is now the real
+  release APK, `.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk`.
+* The Gaten expectation was wrong for that APK, and it only showed once the test ran. The old assertion
+  (`dex_count >= 8`, "31-dex APK") describes the debug build. The release APK has one `classes.dex` and 23 `.so`
+  files (~70 MB), so it is large by the native threshold. The test now asserts that shape (`dex_count == 1`,
+  `native_bytes >= 64 MiB`, `resume_ms == RESUME_MS_LARGE`). No threshold changed.
+* Same class of bug in `tests/apk_facts_cache.rs` (`SKIP apk_facts_cache: fixtures missing` returned green). It now
+  asserts the fixture (`a0aad161`).
+* Result: `real_apks_resolve_like_aapt2_could_not` runs both halves and passes; no SKIP line is printed when the
+  APK is present (`testskip-after.log`).
+
+**(3) One APK open per launch (`a0aad161`)**
+
+Before this change, `acos-art launch` (`launch::launch`) opened the source APK through four independent paths:
+* `native_libs::install` (`Apk::open`, extraction);
+* `apk_facts::launch_facts` (manifest labels, budget), a cache **miss** on a cold process;
+* `pms::PmsState::from_apk` (`Apk::open` + manifest), never cached;
+* the config-change lookup, which read the **staged** copy in the per-run directory. That path is new on every
+  launch, so it is a cache miss and an open on every launch, warm or cold.
+
+Counted from the code at `dd906863`: **4 opens cold, 3 opens warm** (warm = daemon, facts already cached). Each
+open of the 115 MB Gaten release APK is ~61 ms (`manifest-timing-100-after.log`).
+
+After `a0aad161`: **1 open** per launch, cold and warm.
+* `apk_facts::open_shared(path)` returns `Arc<Apk>`. The cache holds a `Weak`, so the bytes live only as long as the
+  launch holds the `Arc`. The cache keeps facts (kilobytes), never bytes.
+* `apk_facts::prime_from(path, &apk)` derives the facts from the open the launch already holds, so the later
+  `launch_facts`-based calls (`manifest_labels`, `launch_budget`, `launcher_activity`) are cache hits.
+* `native_libs::install_from(&apk, ...)` and `PmsState::from_opened(path, &apk)` take that open.
+  `native_libs::install` and `PmsState::from_apk` keep their signatures (`from_apk` now uses the shared open).
+* `launch.rs`: one block opens, installs, primes and builds `installed` from the same open, then drops it. The
+  config-change lookup reads `opts.apk` (the source; the staged file is a byte copy made earlier in the same launch).
+
+Tests:
+* `tests/launch_one_open.rs` (new, one test, `hello-jni`): one shared open; `install_from` and the facts add no
+  open; after the open is dropped the facts still answer with no read; a new shared open reads the file again.
+* `tests/manifest_launch_timing.rs`: the launch model is now the real sequence (`open_shared` + `prime_from` +
+  the manifest calls). It asserts one cold launch opens the APK exactly once.
+* `tests/apk_facts_cache.rs`: unchanged checks, now with a required fixture.
+* Full run `cargo test --release --offline -p acos-services -p acos-art -p acos-cli` through run-exclusive:
+  76 test-result blocks (lib, bin, integration and doc tests), **727 passed, 0 failed** (`cargo-test-summary.txt`).
+
+Timing (`ACOS_MANIFEST_TIMING_ITERS=100`, `run-exclusive --exclusive`, `manifest-timing-100-after.log`). Gaten, p50:
+
+| model of the launch's source-APK work | p50 |
+|---|---:|
+| before: five uncached call sites, five opens (the 3b base model, kept in the harness) | 378.0 ms |
+| after: one launch sequence, cold (`launch-sequence-after(cold)`, one open) | **63.1 ms** |
+| after: one launch sequence, warm (one open for native install; facts cached) | 62.5 ms |
+
+The counter and form-validation fixtures stay under 0.2 ms in every row, so this change is invisible to the M4 bench,
+which uses the counter.
+
+Limits of the measurement:
+* The timing harness models the sequence. It does not time the real `launch::launch`, and the open count was checked
+  by the unit test and by reading `launch.rs`, not by tracing a live launch (no `strace` on this host).
+* `native_libs` extraction (the 73 MB `.so` copy) is not in the model. It is the same before and after.
+* In `acos-art session` (`session::session`) the launcher is still resolved through `apk_activity` with its own open.
+  That path is not the `launch` path this track measures, and it is left as is.
+
+**(4) M4 A/B vs 477e99c: no regression** (2 reps per arm, interleaved cand, base, cand, base;
+`ACOS_BENCH_TASK=PERF-REL3c tools/bench/acos-bench.sh --reps 1 --groups "a:latency:8G:300" --no-build`, each rep
+its own lock acquisition; `results/bench/perf-rel3c/ab-m4.txt`, raw runs in `results/bench/perf-rel3c/ab/`)
+
+* Arms: base = `477e99c` built in a linked worktree with its own target (binary sha256 `ccc43f31…`; compile paths
+  checked: only `wt-base477` strings). Cand = `a0aad161` (binary sha256 `255440b3…`; only `wt-perf` strings).
+  The `commit` field in each bench JSON is the checkout's HEAD for every arm, so the binary hash is the arm's
+  identity. The base worktree and its target were deleted after the runs.
+* `ab-compare.py`, M4 (counter fixture, the bench's launch):
+
+| metric | base 477e99c | cand a0aad161 | delta | verdict |
+|---|---:|---:|---:|---|
+| M4 warm launch fast, old gate (median of per-rep p50s) | 168.83 ms | 162.73 ms | -3.6 % | within-noise |
+| M4 warm launch fast, pooled 5 %-trimmed mean (n 80/80) | 163.73 ms | 164.54 ms | +0.5 % | within-noise |
+| M4 warm launch fast, first-slot share | 45 % | 38 % | -7 pp | below the 10 pp flag |
+| M4 warm launch strict, old gate | 305.82 ms | 305.05 ms | -0.3 % | within-noise |
+
+* The bench's M4 launch is the counter fixture. Its open saving is ~0.1 ms of ~160 ms, so the bench can show no gain,
+  only the absence of a regression. The Gaten gain is the open count in (3): three fewer opens cold (about 180 ms at
+  ~61 ms each) and two fewer warm (about 120 ms). The bench does not measure it, and end-to-end Gaten launch wall time
+  was not measured.
+
+### Tests / validation (PERF-REL3 bench tooling; 3b tests are under 3b above)
 
 * `python3 -m unittest discover -s tools/bench -p 'test_*.py'` — 29 pass.
 * Old baselines: `acos_bench.py --merge` on `results/bench/run-20261112T200322Z` produces the same
   p50/p95/threshold fields plus `samples`/`lattice`; `--compare` against `results/bench/BASELINE.json`
   prints the unchanged gate; `ab-compare.py` on two pre-PERF-REL3 baselines reports `no-samples` for
   the fast rows and scores the old gate.
-* No Rust was changed, so no `cargo test` was needed. (The temporary timing test for 3b was
-  created and deleted without being run; the tree is clean of it.)
+* PERF-REL3 itself changed no Rust. The 3b Rust changes and their tests are described in §3b.
