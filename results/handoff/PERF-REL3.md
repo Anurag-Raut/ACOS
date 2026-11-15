@@ -260,6 +260,112 @@ sha256. `results/bench/perf-rel3/ab-cand-vs-main.json` is the same comparison wi
 reversed — its "REGRESSION" labels read as "the main arm is worse", i.e. the candidate's tap
 improvement.)
 
+### 3c. PERF-REL3c: one APK open per launch, test-skip fix
+
+Track PERF-REL3c, branch `perf-rel3b` (not merged into main). Commits on `perf-rel3b`:
+`421ed4d7` (TESTSKIP fix) and `a0aad161` (one open per launch). Evidence: `results/bench/perf-rel3c/`.
+
+**(1) Correctness before and after the launch-path change**
+
+| check | before (dd906863) | after (a0aad161) |
+|---|---|---|
+| ART corpus `acos-art verify` (27 programs, run-exclusive) | 27 pass, 0 fail, 1 skipped, 0 fatal logs | 27 pass, 0 fail, 1 skipped, 0 fatal logs (`corpus-before.log`, `corpus-after.log`) |
+| gate `v2-art-counter` `--engine art` | pass | pass |
+| gate `form-validation` `--engine art` | pass | pass |
+| gate `gaten-home` `--engine art` (release-unsigned APK) | pass | pass |
+
+The corpus baseline is `results/art-runtime/verify-27-f2.json` (27/27, 0 fatal logs). The skipped entry is the
+same one the baseline records.
+
+**(2) TESTSKIP: `manifest_resolve::tests::real_apks_resolve_like_aapt2_could_not` never ran its checks**
+
+* Root cause: the paths were crate-relative (`fixtures/...`, `.cache/gaten/gaten-x86_64-debug.apk`), and `cargo test`
+  runs with the crate as cwd. The Gaten path also named a file that does not exist (the debug APK is
+  `gaten-dev-9feffd2-x86_64.apk`), so both halves were `if is_file()` no-ops. The test passed with zero assertions.
+* Fix (`421ed4d7`): paths resolve from `CARGO_MANIFEST_DIR/../..`. The counter fixture is required and panics
+  with its path when absent (`fixtures/build` is gitignored). The Gaten APK is optional: when absent the test prints
+  `SKIP ... (Gaten half): <path> is absent; documented environment gap` and returns. The path is now the real
+  release APK, `.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk`.
+* The Gaten expectation was wrong for that APK, and it only showed once the test ran. The old assertion
+  (`dex_count >= 8`, "31-dex APK") describes the debug build. The release APK has one `classes.dex` and 23 `.so`
+  files (~70 MB), so it is large by the native threshold. The test now asserts that shape (`dex_count == 1`,
+  `native_bytes >= 64 MiB`, `resume_ms == RESUME_MS_LARGE`). No threshold changed.
+* Same class of bug in `tests/apk_facts_cache.rs` (`SKIP apk_facts_cache: fixtures missing` returned green). It now
+  asserts the fixture (`a0aad161`).
+* Result: `real_apks_resolve_like_aapt2_could_not` runs both halves and passes; no SKIP line is printed when the
+  APK is present (`testskip-after.log`).
+
+**(3) One APK open per launch (`a0aad161`)**
+
+Before this change, `acos-art launch` (`launch::launch`) opened the source APK through four independent paths:
+* `native_libs::install` (`Apk::open`, extraction);
+* `apk_facts::launch_facts` (manifest labels, budget), a cache **miss** on a cold process;
+* `pms::PmsState::from_apk` (`Apk::open` + manifest), never cached;
+* the config-change lookup, which read the **staged** copy in the per-run directory. That path is new on every
+  launch, so it is a cache miss and an open on every launch, warm or cold.
+
+Counted from the code at `dd906863`: **4 opens cold, 3 opens warm** (warm = daemon, facts already cached). Each
+open of the 115 MB Gaten release APK is ~61 ms (`manifest-timing-100-after.log`).
+
+After `a0aad161`: **1 open** per launch, cold and warm.
+* `apk_facts::open_shared(path)` returns `Arc<Apk>`. The cache holds a `Weak`, so the bytes live only as long as the
+  launch holds the `Arc`. The cache keeps facts (kilobytes), never bytes.
+* `apk_facts::prime_from(path, &apk)` derives the facts from the open the launch already holds, so the later
+  `launch_facts`-based calls (`manifest_labels`, `launch_budget`, `launcher_activity`) are cache hits.
+* `native_libs::install_from(&apk, ...)` and `PmsState::from_opened(path, &apk)` take that open.
+  `native_libs::install` and `PmsState::from_apk` keep their signatures (`from_apk` now uses the shared open).
+* `launch.rs`: one block opens, installs, primes and builds `installed` from the same open, then drops it. The
+  config-change lookup reads `opts.apk` (the source; the staged file is a byte copy made earlier in the same launch).
+
+Tests:
+* `tests/launch_one_open.rs` (new, one test, `hello-jni`): one shared open; `install_from` and the facts add no
+  open; after the open is dropped the facts still answer with no read; a new shared open reads the file again.
+* `tests/manifest_launch_timing.rs`: the launch model is now the real sequence (`open_shared` + `prime_from` +
+  the manifest calls). It asserts one cold launch opens the APK exactly once.
+* `tests/apk_facts_cache.rs`: unchanged checks, now with a required fixture.
+* Full run `cargo test --release --offline -p acos-services -p acos-art -p acos-cli` through run-exclusive:
+  76 test-result blocks (lib, bin, integration and doc tests), **727 passed, 0 failed** (`cargo-test-summary.txt`).
+
+Timing (`ACOS_MANIFEST_TIMING_ITERS=100`, `run-exclusive --exclusive`, `manifest-timing-100-after.log`). Gaten, p50:
+
+| model of the launch's source-APK work | p50 |
+|---|---:|
+| before: five uncached call sites, five opens (the 3b base model, kept in the harness) | 378.0 ms |
+| after: one launch sequence, cold (`launch-sequence-after(cold)`, one open) | **63.1 ms** |
+| after: one launch sequence, warm (one open for native install; facts cached) | 62.5 ms |
+
+The counter and form-validation fixtures stay under 0.2 ms in every row, so this change is invisible to the M4 bench,
+which uses the counter.
+
+Limits of the measurement:
+* The timing harness models the sequence. It does not time the real `launch::launch`, and the open count was checked
+  by the unit test and by reading `launch.rs`, not by tracing a live launch (no `strace` on this host).
+* `native_libs` extraction (the 73 MB `.so` copy) is not in the model. It is the same before and after.
+* In `acos-art session` (`session::session`) the launcher is still resolved through `apk_activity` with its own open.
+  That path is not the `launch` path this track measures, and it is left as is.
+
+**(4) M4 A/B vs 477e99c: no regression** (2 reps per arm, interleaved cand, base, cand, base;
+`ACOS_BENCH_TASK=PERF-REL3c tools/bench/acos-bench.sh --reps 1 --groups "a:latency:8G:300" --no-build`, each rep
+its own lock acquisition; `results/bench/perf-rel3c/ab-m4.txt`, raw runs in `results/bench/perf-rel3c/ab/`)
+
+* Arms: base = `477e99c` built in a linked worktree with its own target (binary sha256 `ccc43f31…`; compile paths
+  checked: only `wt-base477` strings). Cand = `a0aad161` (binary sha256 `255440b3…`; only `wt-perf` strings).
+  The `commit` field in each bench JSON is the checkout's HEAD for every arm, so the binary hash is the arm's
+  identity. The base worktree and its target were deleted after the runs.
+* `ab-compare.py`, M4 (counter fixture, the bench's launch):
+
+| metric | base 477e99c | cand a0aad161 | delta | verdict |
+|---|---:|---:|---:|---|
+| M4 warm launch fast, old gate (median of per-rep p50s) | 168.83 ms | 162.73 ms | -3.6 % | within-noise |
+| M4 warm launch fast, pooled 5 %-trimmed mean (n 80/80) | 163.73 ms | 164.54 ms | +0.5 % | within-noise |
+| M4 warm launch fast, first-slot share | 45 % | 38 % | -7 pp | below the 10 pp flag |
+| M4 warm launch strict, old gate | 305.82 ms | 305.05 ms | -0.3 % | within-noise |
+
+* The bench's M4 launch is the counter fixture. Its open saving is ~0.1 ms of ~160 ms, so the bench can show no gain,
+  only the absence of a regression. The Gaten gain is the open count in (3): three fewer opens cold (about 180 ms at
+  ~61 ms each) and two fewer warm (about 120 ms). The bench does not measure it, and end-to-end Gaten launch wall time
+  was not measured.
+
 ### Tests / validation (PERF-REL3 bench tooling; 3b tests are under 3b above)
 
 * `python3 -m unittest discover -s tools/bench -p 'test_*.py'` — 29 pass.

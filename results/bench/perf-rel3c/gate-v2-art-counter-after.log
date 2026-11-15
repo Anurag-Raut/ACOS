@@ -1,0 +1,4 @@
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  artifacts: .cache/perf-rel3c/gates-after/v2-art-counter
+  steps: 11
