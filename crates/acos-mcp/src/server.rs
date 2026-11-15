@@ -638,6 +638,15 @@ fn tool_result(
     let text = serde_json::to_string(&envelope_json).unwrap_or_default();
     let mut content = vec![json!({"type": "text", "text": text})];
     append_evidence_content(&mut content, envelope, config, protocol_version);
+    // FB2: a live-session screenshot is a *result*, not an evidence file; inline
+    // its bounded preview too (the lossless path is in the reply above).
+    append_screenshot_content(
+        &mut content,
+        envelope,
+        envelope.evidence().and_then(|e| e.screenshot.as_deref()),
+        config,
+        protocol_version,
+    );
     let mut result = json!({
         "content": content,
         "isError": !envelope.status().is_pass(),
@@ -725,6 +734,90 @@ fn append_evidence_content(
             }));
         }
     }
+}
+
+/// FB2: inline the bounded preview of a screenshot a session verb wrote.
+///
+/// `acos_observe_tree {"screenshot": true}` (and `acos_observe`) answer with the
+/// absolute path of a lossless PNG plus `display_origin`; without this the agent
+/// would have to read the file itself to see the frame. The image is inlined
+/// under the same SHOTZ bound as an evidence image (long side
+/// `ACOS_MCP_PREVIEW_MAX_SIDE`, bytes `ACOS_MCP_MAX_IMAGE_BYTES`) and the reply
+/// still names the lossless file.
+fn append_screenshot_content(
+    content: &mut Vec<Value>,
+    envelope: &Envelope,
+    evidence_path: Option<&str>,
+    config: &ServerConfig,
+    protocol_version: &str,
+) {
+    let Some(path) = envelope
+        .result()
+        .and_then(|result| result.get("screenshot"))
+        .and_then(|screenshot| screenshot.get("path"))
+        .and_then(Value::as_str)
+    else {
+        return;
+    };
+    // An evidence screenshot already carries the same file: never inline twice.
+    if evidence_path == Some(path) {
+        return;
+    }
+    let full = Path::new(path);
+    if !full.is_file() || image_mime(path).is_none() {
+        return;
+    }
+    // FB2c item 5: a session verb writes inside its artifacts dir, but the path
+    // in the reply is data, not a trust anchor. Inline a file only when it lives
+    // under one of this server's allowed roots (`canonicalize` resolves symlinks,
+    // so a link pointing outside is refused too).
+    let mut roots = config.allowed_roots.clone();
+    // The session daemon writes a session's screenshots under its own private
+    // runtime directory (`<runtime>/art-sessions/<id>/screenshots/`, or the
+    // operator's `ACOS_SERVE_ARTIFACTS`): that tree is the default destination,
+    // so it is a root too — and nothing else outside the allowed roots is.
+    roots.push(crate::daemon::runtime_dir().join("art-sessions"));
+    if let Some(dir) = std::env::var_os("ACOS_SERVE_ARTIFACTS") {
+        roots.push(PathBuf::from(dir));
+    }
+    if !path_within_allowed_roots(full, &roots) {
+        return;
+    }
+    if let Some(preview) =
+        crate::preview::image_preview(full, config.max_image_side, config.max_image_bytes)
+    {
+        content.push(json!({
+            "type": "image",
+            "data": crate::base64::encode(&preview.data),
+            "mimeType": preview.mime,
+        }));
+        content.push(json!({
+            "type": "text",
+            "text": preview_note("screenshot", full, &preview),
+        }));
+    }
+    if supports_structured_content(protocol_version) {
+        content.push(json!({
+            "type": "resource_link",
+            "uri": format!("file://{}", full.display()),
+            "name": "screenshot",
+        }));
+    }
+}
+
+/// FB2c: is this file inside one of the server's allowed roots?
+///
+/// Both sides are canonicalized, so a symlink cannot smuggle a file out of a
+/// root and a root the user configured through a link still matches. A path
+/// that cannot be canonicalized (missing file) is not in a root.
+fn path_within_allowed_roots(path: &Path, roots: &[PathBuf]) -> bool {
+    let Ok(real) = std::fs::canonicalize(path) else {
+        return false;
+    };
+    roots.iter().any(|root| {
+        let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.clone());
+        real.starts_with(&root)
+    })
 }
 
 /// One line describing the inline image: which file it came from, whether it is
@@ -930,6 +1023,30 @@ mod tests {
     use super::*;
     use acos_protocol::Status;
 
+    /// FB2c item 5: the MCP server inlines an image only when it lives under one
+    /// of its allowed roots; a symlink out of a root and a file elsewhere are refused.
+    #[test]
+    fn a_screenshot_is_inlined_only_from_an_allowed_root() {
+        let dir = std::env::temp_dir().join(format!("acos-roots-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let root = dir.join("root");
+        let elsewhere = dir.join("elsewhere");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        let inside = root.join("a.png");
+        let outside = elsewhere.join("b.png");
+        std::fs::write(&inside, b"x").unwrap();
+        std::fs::write(&outside, b"x").unwrap();
+        let link = root.join("link.png");
+        std::os::unix::fs::symlink(&outside, &link).unwrap();
+        let roots = vec![root.clone()];
+        assert!(path_within_allowed_roots(&inside, &roots));
+        assert!(!path_within_allowed_roots(&outside, &roots));
+        assert!(!path_within_allowed_roots(&link, &roots), "a symlink out of the root");
+        assert!(!path_within_allowed_roots(&root.join("missing.png"), &roots));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     struct NullBackend;
 
     impl Backend for NullBackend {
@@ -998,6 +1115,79 @@ mod tests {
             writer.finish().unwrap();
         }
         out
+    }
+
+    /// FB2: `acos_observe_tree {"screenshot": true}` answers with the lossless
+    /// PNG's path in `result.screenshot`; the MCP reply inlines its *bounded*
+    /// preview (SHOTZ cap) and still links the lossless file, so an agent sees
+    /// the frame without a second call and without a multi-MB blob.
+    #[test]
+    fn a_result_screenshot_is_inlined_as_a_bounded_preview() {
+        let dir = std::env::temp_dir().join(format!("acos-mcp-shot-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("screenshots")).unwrap();
+        let png = dir.join("screenshots/observe_tree-7.png");
+        std::fs::write(&png, tiny_png()).unwrap();
+        let config = ServerConfig::for_roots(vec![dir.clone()], dir.clone());
+        let envelope = Envelope::pass(
+            "req",
+            ProtocolBackend::AcosNative,
+            Fidelity::ArtReference,
+            Metrics::wall_ms(2),
+        )
+        .with_value_result(json!({
+            "node_count": 9,
+            "screenshot": {
+                "path": png.display().to_string(),
+                "bytes": std::fs::metadata(&png).unwrap().len(),
+                "format": "png",
+                "frame_seq": 7,
+                "display_origin": [0, 128],
+            },
+        }));
+        let modern = tool_result(&json!(11), &envelope, "2025-06-18", &config);
+        let content = modern["result"]["content"].as_array().unwrap();
+        assert!(
+            content
+                .iter()
+                .any(|c| c["type"] == "image" && c["mimeType"] == "image/png"),
+            "the screenshot is inlined as an image: {content:?}"
+        );
+        assert!(
+            content.iter().any(|c| c["type"] == "text"
+                && c["text"].as_str().unwrap().contains("lossless file:")),
+            "the inline image names the lossless file: {content:?}"
+        );
+        let links: Vec<&str> = content
+            .iter()
+            .filter(|c| c["type"] == "resource_link")
+            .filter_map(|link| link["uri"].as_str())
+            .collect();
+        assert!(
+            links.iter().any(|uri| uri.ends_with("observe_tree-7.png")),
+            "the lossless screenshot stays linked: {links:?}"
+        );
+        // No `screenshot` in the result, no extra content: nothing is invented.
+        let plain = Envelope::pass(
+            "req",
+            ProtocolBackend::AcosNative,
+            Fidelity::ArtReference,
+            Metrics::wall_ms(1),
+        )
+        .with_value_result(json!({"node_count": 9}));
+        let plain = tool_result(&json!(12), &plain, "2025-06-18", &config);
+        assert_eq!(plain["result"]["content"].as_array().unwrap().len(), 1);
+        // A path that does not exist is never inlined or linked.
+        let missing = Envelope::pass(
+            "req",
+            ProtocolBackend::AcosNative,
+            Fidelity::ArtReference,
+            Metrics::wall_ms(1),
+        )
+        .with_value_result(json!({"screenshot": {"path": dir.join("nope.png").display().to_string()}}));
+        let missing = tool_result(&json!(13), &missing, "2025-06-18", &config);
+        assert_eq!(missing["result"]["content"].as_array().unwrap().len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -28,6 +28,7 @@ pub mod arsc;
 pub mod axml;
 pub mod error;
 pub mod manifest;
+pub mod native;
 pub mod signing;
 
 pub use apk::{AbiGate, Apk, ApkEntry, DexFile, NativeLib, HOST_ABI, SUPPORTED_ABIS};
@@ -38,4 +39,5 @@ pub use manifest::{
     ApplicationInfo, Component, ComponentKind, IntentData, IntentFilter, Manifest, UsesFeature,
     UsesPermission,
 };
+pub use native::{missing_native_libs, NativeLibWarning, NATIVE_LIB_MISSING, SYSTEM_LIBS};
 pub use signing::SigningInfo;

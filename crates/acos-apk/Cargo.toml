@@ -9,6 +9,7 @@ description = "APK ingest for ACOS: zip container, binary AndroidManifest.xml (A
 [dependencies]
 serde = { workspace = true }
 thiserror = { workspace = true }
+acos-dex = { path = "../acos-dex" }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
