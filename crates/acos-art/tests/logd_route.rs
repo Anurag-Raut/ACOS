@@ -30,11 +30,40 @@ use acos_art::{Logd, SHIM_SOURCE};
 /// `sun_path` is 108 bytes including its NUL (the same wall ZPROD5 measured on
 /// the session directory).
 fn scratch(name: &str) -> PathBuf {
+    // A unix socket path must fit SUN_LEN (108 bytes including the NUL), i.e. at
+    // most 107 characters. `CARGO_MANIFEST_DIR` is absolute but the suffix below
+    // carries `..` segments, and a git worktree under `.t3/worktrees/<repo>/<id>/`
+    // adds ~40 characters, so the *resolved* path overflows the limit and the
+    // sink cannot bind. Resolve first, then fall back to a short hashed name
+    // (still inside this checkout's `.cache`, never /tmp).
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../.cache/z7")
         .join(format!("{}-{name}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).expect("scratch dir");
+    let mut dir = std::fs::canonicalize(&dir).unwrap_or(dir);
+    // `/k/logdw` and `/s0/logdw` are the longest suffixes the tests add.
+    let budget = 107 - "/k/logdw".len();
+    if dir.as_os_str().len() > budget {
+        let mut hash = 0xcbf2_9ce4_8422_2325u64;
+        for byte in format!("{}-{name}", std::process::id()).bytes() {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x100_0000_01b3);
+        }
+        dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../.cache")
+            .join(format!("z7-{hash:016x}"));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("scratch dir");
+        dir = std::fs::canonicalize(&dir).unwrap_or(dir);
+    }
+    let sink = dir.join("k/logdw");
+    assert!(
+        sink.as_os_str().len() <= 107,
+        "the test's own sink path {} is {} characters; SUN_LEN allows 107",
+        sink.display(),
+        sink.as_os_str().len()
+    );
     dir
 }
 

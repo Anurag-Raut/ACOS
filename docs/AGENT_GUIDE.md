@@ -174,9 +174,16 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    lists every match with id/text/content_desc/bounds) — narrow it with
    `content_desc`/`id`/`bounds`, or pass `index`; nothing is tapped on a guess.
    A node that is not visible to the user is never tapped: `ELEMENT_OFFSCREEN`
-   names its bounds. Re-observe after every action;
+   names its bounds. **The reply already says what changed** (FB3): `changes`
+   carries the settled tree diff of the action — `added`, `removed` and
+   `changed` nodes (each with `id`, `text`, `content_desc`, `class`, `bounds`; a
+   changed node also lists the `fields` that changed, old → new), plus the
+   current `activity` and the `focused` node. A normal step is one call, not
+   tap-then-observe; call `acos_observe_tree` only when you need the whole tree
+   or bounds you have not seen (`diff: false` restores the old reply).
    `state_changed: false` with `accepted: true` means the event was delivered
-   but the screen did not change — read the in-band `note`.
+   but the screen did not change — read the in-band `note` and `changes`.
+   Identity rule, compared fields and the 40-entry cap: `docs/MCP.md` §1c.
 6. **Read the app's own words.** `acos_logs` returns the guest log buffer and
    also `launched` / `stage_reached`, so an empty buffer is only clean if the
    app actually reached `onCreate`. The **default view is `min_priority: "W"`
