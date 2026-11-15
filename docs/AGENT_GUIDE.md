@@ -494,6 +494,8 @@ Two session-specific hints worth memorising:
   `stream_socket` for local viewers (half-resolution frames + an action feed,
   ≤ 15 fps). Agents never need it; `docs/LIVE_VIEW.md` has the protocol and the
   measured cost. Nothing an agent reads or asserts comes from the stream.
+  Agent screenshots (`observe` screenshot / `capture_c1`) do **not** honour
+  `FLAG_SECURE`; only the live stream blanks secure windows.
   To actually **watch** one (yours, or an agent's, from a browser or T3 Code),
   run `acos view` in a terminal and open the one line it prints:
 

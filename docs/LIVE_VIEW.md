@@ -108,6 +108,12 @@ knows it. While any non-hidden window has it the stream shows the placeholder,
 like Android's own screenshot/screen-record blanking. A window the guest
 positions itself (no WMS placement) can neither set nor hide it.
 
+**Agent screenshots ignore `FLAG_SECURE`.** `observe` screenshots (`capture_c1`,
+the agent's own pixel capture) do **not** honour `FLAG_SECURE`: an agent that asks
+for a screenshot gets the real pixels of a secure window. Only the live stream
+blanks secure windows. The stream is the surface that leaves the owner's
+control, which is why the blanking lives there.
+
 Frames are **not** acknowledged, ordered relative to events beyond `seq`/`ts_ms`,
 or re-sent. Intermediate frames are dropped: the producer always encodes the
 newest available frame, at most `max_fps` times per second. A viewer that cannot
