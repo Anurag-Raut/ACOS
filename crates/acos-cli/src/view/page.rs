@@ -273,6 +273,15 @@ function closeSession() {
   refresh();
 }
 
+function markLive() {
+  $("offline").hidden = true;
+  $("dstate").textContent = "live";
+  $("dstate").className = "pill ok";
+}
+
+// A decoded frame is the strongest liveness signal there is.
+frame.addEventListener("load", markLive);
+
 function connectEvents(s) {
   source = new EventSource(auth("/api/events/" + encodeURIComponent(s.session_id)));
   source.addEventListener("state", (message) => {
@@ -288,6 +297,9 @@ function connectEvents(s) {
   source.addEventListener("ev", (message) => {
     let data = {};
     try { data = JSON.parse(message.data); } catch (error) { return; }
+    // An event from the session proves the upstream is live: the one-shot
+    // `state` sent at subscribe time can predate the hub's connection.
+    markLive();
     onEvent(data.event || {}, data.kind || "event");
   });
   source.addEventListener("lag", (message) => {
