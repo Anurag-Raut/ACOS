@@ -1,0 +1,34 @@
+######## GATES
+OK     v2-art-counter                     status=pass             want=pass             code=none rc=0 4s
+OK     w22-counter-reset                  status=pass             want=pass             code=none rc=0 2s
+OK     w54-dialog-pixels                  status=pass             want=pass             code=none rc=0 3s
+OK     w42-back-frame                     status=pass             want=pass             code=none rc=0 1s
+OK     w15-dialog-menu                    status=pass             want=pass             code=none rc=0 1s
+OK     form-validation                    status=pass             want=pass             code=none rc=0 7s
+OK     T03-render-good                    status=pass             want=pass             code=none rc=0 0s
+OK     v1-offscreen-pager                 status=pass             want=pass             code=none rc=0 1s
+OK     w7-insets-report                   status=pass             want=pass             code=none rc=0 1s
+OK     se1-expect-change-tap              status=pass             want=pass             code=none rc=0 1s
+OK     T03-render-wrong                   status=fail             want=fail             code=ASSERTION_FAILED rc=1 1s
+OK     w7-insets-carve-negative           status=fail             want=fail             code=ASSERTION_FAILED rc=1 0s
+OK     se1-expect-change-noop             status=fail             want=fail             code=ASSERTION_FAILED rc=1 1s
+OK     offscreen-pager-visible            status=fail             want=fail             code=ELEMENT_OFFSCREEN rc=1 0s
+OK     p11-progress-timeout               status=timeout          want=timeout          code=TIMEOUT rc=1 3s
+
+== summary (/home/Qui/.paseo/worktrees/3oxa6xao/gr4/.cache/fb2/gates/summary.tsv)
+OK=15 FAIL=0
+
+######## GATEN
+OK     gaten-home                         status=pass             want=pass             code=none rc=0 7s
+OK     gaten-tabs                         status=pass             want=pass             code=none rc=0 10s
+OK     gaten-settings                     status=pass             want=pass             code=none rc=0 12s
+OK     gaten-search                       status=pass             want=pass             code=none rc=0 11s
+OK     gaten-lesson                       status=pass             want=pass             code=none rc=0 12s
+OK     gaten-home-wrong                   status=fail             want=fail             code=ASSERTION_FAILED rc=1 5s
+OK     gaten-tabs-wrong                   status=fail             want=fail             code=ASSERTION_FAILED rc=1 5s
+OK     gaten-settings-wrong               status=fail             want=fail             code=ASSERTION_FAILED rc=1 5s
+OK     gaten-search-wrong                 status=fail             want=fail             code=ASSERTION_FAILED rc=1 8s
+OK     gaten-lesson-wrong                 status=fail             want=fail             code=ASSERTION_FAILED rc=1 6s
+
+== summary (/home/Qui/.paseo/worktrees/3oxa6xao/gr4/.cache/fb2/gaten/summary.tsv)
+OK=10 FAIL=0

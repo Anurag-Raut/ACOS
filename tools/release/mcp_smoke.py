@@ -311,6 +311,147 @@ def node_center(env: dict, text: str):
     return None
 
 
+def png_ihdr(data: bytes):
+    """(width, height) from a PNG's IHDR, or None when the bytes are not a PNG."""
+    if len(data) < 33 or data[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    if data[12:16] != b"IHDR":
+        return None
+    width = int.from_bytes(data[16:20], "big")
+    height = int.from_bytes(data[20:24], "big")
+    return width, height
+
+
+def check_screenshot(env: dict, result: dict, args):
+    """FB2b: `acos_observe_tree {"screenshot": true}` gives a real, bounded PNG."""
+    import base64
+
+    shot = (env.get("result") or {}).get("screenshot")
+    check(
+        "observe_tree_screenshot_status",
+        env.get("status") == "pass" and isinstance(shot, dict),
+        {"status": env.get("status"), "screenshot": shot, "error": env.get("error")},
+    )
+    raw_path = shot.get("path") or ""
+    path = Path(raw_path)
+    check(
+        "screenshot_path_absolute_and_exists",
+        bool(raw_path) and path.is_absolute() and path.is_file(),
+        {"path": raw_path, "exists": path.is_file()},
+    )
+    size = path.stat().st_size
+    check(
+        "screenshot_bytes_under_1MB",
+        0 < size < 1024 * 1024,
+        {"bytes": size, "reported": shot.get("bytes")},
+    )
+    data = path.read_bytes()
+    ihdr = png_ihdr(data)
+    check(
+        "screenshot_is_a_png",
+        ihdr is not None and shot.get("format") == "png",
+        {"format": shot.get("format"), "ihdr": ihdr, "magic": data[:8].hex()},
+    )
+    display_size = shot.get("display_size") or []
+    origin = shot.get("display_origin")
+    width, height = ihdr
+    check(
+        "screenshot_geometry",
+        display_size == [1080, 2400]
+        and isinstance(origin, list)
+        and len(origin) == 2
+        and all(isinstance(v, int) for v in origin)
+        and width == shot.get("width")
+        and height == shot.get("height")
+        and 0 < width <= 2400
+        and 0 < height <= 2400,
+        {
+            "ihdr": ihdr,
+            "reported": [shot.get("width"), shot.get("height")],
+            "display_size": display_size,
+            "display_origin": origin,
+        },
+    )
+
+    content = result.get("content") or []
+    images = [b for b in content if b.get("type") == "image"]
+    links = [b for b in content if b.get("type") == "resource_link"]
+    # The envelope itself is the first text block; the preview's own line is the
+    # one that names the lossless file.
+    notes = [
+        b.get("text", "")
+        for b in content
+        if b.get("type") == "text" and "lossless file:" in b.get("text", "")
+    ]
+    note = notes[0] if notes else ""
+    check(
+        "screenshot_inline_preview_present",
+        len(images) == 1 and images[0].get("mimeType") == "image/png",
+        {"images": len(images), "mime": [i.get("mimeType") for i in images]},
+    )
+    preview_bytes = base64.b64decode(images[0]["data"])
+    max_bytes = int(os.environ.get("ACOS_MCP_MAX_IMAGE_BYTES", 512 * 1024))
+    max_side = int(os.environ.get("ACOS_MCP_PREVIEW_MAX_SIDE", 1280))
+    preview_ihdr = png_ihdr(preview_bytes)
+    check(
+        "screenshot_inline_preview_bounded",
+        preview_ihdr is not None
+        and len(preview_bytes) <= max_bytes
+        and max(preview_ihdr) <= max_side,
+        {
+            "bytes": len(preview_bytes),
+            "max_bytes": max_bytes,
+            "ihdr": preview_ihdr,
+            "max_side": max_side,
+        },
+    )
+    check(
+        "screenshot_preview_names_the_lossless_file",
+        bool(note)
+        and raw_path in note
+        and (not links or any(raw_path in link.get("uri", "") for link in links)),
+        {"note": note, "links": links},
+    )
+    emit(
+        {
+            "screenshot_evidence": {
+                "path": raw_path,
+                "bytes": size,
+                "ihdr": ihdr,
+                "display_size": display_size,
+                "display_origin": origin,
+                "preview_bytes": len(preview_bytes),
+                "preview_ihdr": preview_ihdr,
+            }
+        }
+    )
+
+
+def destroy_and_check(client: "Mcp", sid: str, args):
+    destroyed = envelope(
+        client.call_tool("acos_destroy", {"session_id": sid}, timeout=args.timeout)
+    )
+    check(
+        "acos_destroy",
+        destroyed.get("status") == "pass"
+        and destroyed.get("result", {}).get("destroyed") is True,
+        {"status": destroyed.get("status"), "result": destroyed.get("result")},
+    )
+    gone = envelope(
+        client.call_tool("acos_status", {"session_id": sid}, timeout=args.timeout)
+    )
+    check(
+        "status_after_destroy",
+        gone.get("status") != "pass"
+        and (gone.get("error") or {}).get("code")
+        in {"SESSION_NOT_FOUND", "UNSUPPORTED_BACKEND"},
+        {
+            "status": gone.get("status"),
+            "code": (gone.get("error") or {}).get("code"),
+        },
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--mcp-bin", required=True, help="the acos-mcp binary or wrapper")
@@ -321,12 +462,15 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=600.0, help="per tool call, seconds")
     ap.add_argument(
         "--mode",
-        choices=["counter", "gaten", "gaten-search"],
+        choices=["counter", "gaten", "gaten-search", "gaten-shot"],
         default="counter",
         help="counter: 0 -> tap Increment -> 1 -> reset -> 0; gaten: launch, read the "
         "real RN tree, tap a bottom tab and require the tree to change; "
         "gaten-search: focus the search field by its `content_desc`, type with "
-        "`acos_text`, and require the query/results in the next tree",
+        "`acos_text`, and require the query/results in the next tree; gaten-shot: "
+        "launch and ask acos_observe_tree for {screenshot: true}, then check the PNG "
+        "on disk (exists, < 1 MB, decodes, IHDR size, display_origin) and that the "
+        "reply carries a bounded inline preview",
     )
     ap.add_argument(
         "--search-text",
@@ -478,14 +622,24 @@ def main() -> int:
             },
         )
 
-        tree0 = envelope(
-            client.call_tool(
-                "acos_observe_tree", {"session_id": sid}, timeout=args.timeout
-            )
+        observe_args: dict = {"session_id": sid}
+        if args.mode == "gaten-shot":
+            # The FB2 item: a screenshot through the observe verb an agent
+            # already calls, not a separate capture tool.
+            observe_args["screenshot"] = True
+        tree0_result = client.call_tool(
+            "acos_observe_tree", observe_args, timeout=args.timeout
         )
+        tree0 = envelope(tree0_result)
         texts0 = tree_texts(tree0)
 
-        if args.mode == "counter":
+        if args.mode == "gaten-shot":
+            check_screenshot(tree0, tree0_result, args)
+
+        if args.mode == "gaten-shot":
+            # Nothing to tap: the PNG + inline preview is the whole assertion.
+            tap_text = None
+        elif args.mode == "counter":
             check(
                 "observe_tree initial",
                 tree0.get("status") == "pass"
@@ -560,6 +714,10 @@ def main() -> int:
                 present[0],
             )
 
+        if args.mode == "gaten-shot":
+            destroy_and_check(client, sid, args)
+            emit({"smoke": "ok"})
+            return 0
         if args.mode == "gaten-search":
             # FB1: the live channel types. Three claims, each an agent call:
             #  1. the field is named by its `content_desc` (its `text` is the

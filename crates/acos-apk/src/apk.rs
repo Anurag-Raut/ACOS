@@ -563,6 +563,27 @@ impl Apk {
             .find(|d| d.name == name)
             .map(|d| d.bytes.as_slice())
     }
+
+    /// Raw bytes of any zip entry, or `None` when it is absent / unreadable.
+    ///
+    /// Used by the static native-library cross-check ([`crate::native`]) to read
+    /// the ELF headers of the libraries the APK ships. A read error is `None`:
+    /// the check must never turn `inspect` into an error.
+    pub fn entry_bytes(&self, name: &str) -> Option<Vec<u8>> {
+        if let Some(dex) = self.dex_files.iter().find(|d| d.name == name) {
+            return Some(dex.bytes.clone());
+        }
+        let mut archive = zip::ZipArchive::new(Cursor::new(self.raw.as_slice())).ok()?;
+        let mut entry = archive.by_name(name).ok()?;
+        const MAX_BYTES: u64 = 256 * 1024 * 1024;
+        let declared = entry.size();
+        if declared > MAX_BYTES {
+            return None;
+        }
+        let mut bytes = Vec::with_capacity(declared.min(self.raw.len() as u64) as usize);
+        std::io::Read::read_to_end(&mut entry, &mut bytes).ok()?;
+        Some(bytes)
+    }
 }
 
 fn method_name(method: zip::CompressionMethod) -> String {

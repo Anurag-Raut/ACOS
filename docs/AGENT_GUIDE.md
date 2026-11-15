@@ -123,7 +123,17 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
 2. **Know the APK before running it.** `acos_inspect` / `acos inspect <apk>`
    is static only (package, launcher activity, min/target SDK, DEX and native
    inventory). It never executes the app and is never proof of runtime
-   behaviour.
+   behaviour. It also cross-checks the **native libraries the app asks for**
+   against the ones the APK ships: `result.native_lib_check.warnings` lists
+   `{"code": "NATIVE_LIB_MISSING", "lib": "libworklets.so", "abi": "x86_64",
+   "source": "elf-needed"|"dex-load-library", "referenced_by": [...]}` for every
+   library named by a bundled library's `DT_NEEDED` or by a
+   `System.loadLibrary`/`SoLoader.loadLibrary` call site in the DEX that has no
+   `lib/<abi>/` entry. Platform libraries (`libc.so`, `libm.so`, …) are never
+   warnings, and a healthy APK answers `warnings: []` — so a non-empty list is a
+   **hint**, not the cause: it says "this library is referenced and absent", not
+   "this is why the app misbehaves". Treat it as the first thing to check before
+   debugging the UI, then confirm at runtime.
 3. **Run it.** `acos_launch {"apk": "..."}` (MCP, session persists) or
    `acos launch <apk> --engine art --json`. **The MCP session tools always run
    real ART** (the server starts its own private `acos serve --engine art`
@@ -132,7 +142,17 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    `apk_parsed -> process_booted -> bind_application -> application_on_create ->
    client_transaction -> activity_on_create -> on_resume -> first_frame`.
    `reached_stage` is the honest answer to "how far did it get"; the first
-   rung that is not `ok` carries the blocker.
+   rung that is not `ok` carries the blocker. **A launch that gets a window but
+   never mounts the app's own content is `blocked` with
+   `error.code = PLACEHOLDER_CONTENT`**, never `pass`/`first_frame`: the reply's
+   `result.content` says `{"mounted": false, "reason": "placeholder-content"}`,
+   `stage_reached` is `window`, and `error.details.log_hint` quotes the one guest
+   log line that explains it (an `UnsatisfiedLinkError`, a `SoLoader` line, a
+   `couldn't find` line, else the first `E` line; if the log says nothing the
+   hint says so instead of guessing). The usual cause is a native library the
+   APK references and does not ship — `acos_inspect`'s
+   `native_lib_check.warnings` names it statically. Do not retry the same APK
+   with a longer timeout; it is the packaging.
 4. **Observe before acting.** `acos_observe_tree` returns nodes with
    `resource_id`, `text`, `content_desc`, `class`, `bounds`,
    `clickable/enabled/focused/scrollable`. Use those bounds and ids for the
@@ -442,6 +462,15 @@ that returns a screenshot) inlines at most 1280 px on the long side and 512 KiB
 arrives as a 576x1280 PNG plus the path of the lossless file. Use the file when
 you need to compare pixels, and the inline preview for "is it the right screen".
 
+**Ask the observe verb for the frame you just read.**
+`acos_observe_tree {"screenshot": true}` (or `screenshot: "<path>"`) writes a PNG
+of the tree's own frame and returns its absolute path, `display_size` and
+`display_origin` in the same reply — `png_x = display_x - display_origin.x`, the
+same offset the input channel applies. `screenshot: true` lands under the
+session's artifacts (`<artifacts>/screenshots/`), so it is reachable from any cwd.
+On a placeholder frame (window exists, app content never mounted) the answer is
+`NO_FRESH_FRAME`, never a splash PNG presented as the app.
+
 <!-- /topic:scenarios -->
 
 <!-- topic:errors -->
@@ -451,6 +480,7 @@ you need to compare pixels, and the inline preview for "is it the right screen".
 |---|---|---|
 | `UNSUPPORTED_ANDROID_API`, `UNSUPPORTED_JAVA_API`, `UNSUPPORTED_BYTECODE`, `UNSUPPORTED_NATIVE_SYMBOL`, `UNSUPPORTED_RELOCATION`, `UNSUPPORTED_BACKEND`, `NEEDS_REAL_DEVICE`, `REQUIRES_GMS`, `WRONG_ABI`, `NO_DISPLAY`, `NO_TEXT` | the engine cannot do this | read `details.api`/`details.at`/`details.symbol`/`details.reason`, avoid the API, or report unsupported. Never rewrite the app to hide it |
 | `ASSERTION_FAILED`, `ELEMENT_NOT_FOUND`, `ELEMENT_OFFSCREEN`, `AMBIGUOUS_SELECTOR`, `TREE_TRUNCATED` | the app ran, a check did not hold | read the diff, re-observe the tree, fix the app or the expectation. `AMBIGUOUS_SELECTOR` means several visible nodes match: pick one with `id`/`content_desc`/`bounds` or `index` (`error.details.candidates` lists them) |
+| `PLACEHOLDER_CONTENT` | the window exists but the app's own content never mounted (a bare skeleton tree **and** no frame movement: `frame.placeholder: true`, unchanged `frame_number`/`frame_seq`, identical pixels, after the whole `ACOS_ART_FIRST_FRAME_MS` budget) | read `error.details.log_hint` (one quoted log line) and `error.details` (`nodes`, `traversals`, `waited_ms`, `budget_ms`, `frames_advanced`, `pixels_changed`); then run `acos_inspect` and look at `native_lib_check.warnings` (`NATIVE_LIB_MISSING`) — a missing `lib/<abi>/*.so` is a common **hint**, not a proven cause. A longer timeout cannot help (the budget was already spent). Not a pass, and not an app verdict until the library or the JS bundle is fixed |
 | `APP_CRASHED`, `APP_NOT_RESPONDING`, `JAVA_EXCEPTION` | the app crashed or hung | read `details.root_cause` (deepest `caused by:`) and `acos_logs`; fix the app |
 | `APK_*`, `AXML_MALFORMED`, `ARSC_MALFORMED`, `DEX_*`, `ELF_MALFORMED`, `NATIVE_*` | the build artifact is broken | rebuild/re-sign/repackage, then `acos inspect` again. Not an app verdict |
 | `UNSUPPORTED_ABI` | the APK ships native code but no `lib/x86_64/` | rebuild with the x86_64 ABI, or run the pure-Java path |

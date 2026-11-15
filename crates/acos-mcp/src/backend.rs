@@ -217,56 +217,125 @@ impl BackendConfig {
 
 /// Find the `acos` binary.
 ///
-/// Order: an explicit `ACOS_BIN`, then the **sibling** of this executable, then
-/// `PATH`, then a checkout's `target/{release,debug}/acos`.
+/// Order (FB2c, matching the v0.2.1 integration branch's `discover_binary` so the
+/// later merge is trivial): `ACOS_BIN`, then `$ACOS_HOME/bin/acos` (an explicit
+/// `ACOS_HOME` wins over an installed sibling: it is the operator's statement of
+/// which CLI to drive), then the CLI installed **next to this executable** (the
+/// REL1a layout: `<prefix>/bin/acos` beside `<prefix>/bin/acos-mcp`), then `acos`
+/// on `PATH`, then `target/{release,debug}/acos` walking up from the cwd.
 ///
-/// The sibling step is what makes an installed prefix (`<prefix>/bin/acos-mcp`
-/// next to `<prefix>/bin/acos`, or the versioned `…/share/acos/<v>/bin/` pair)
-/// work with no environment at all: an MCP client registers only the `acos-mcp`
-/// path, and starting from an empty directory outside any checkout used to leave
-/// the server with no CLI to drive real ART (`session tools will answer INTERNAL`).
+/// The installed sibling must come before `PATH`: an agent that installs ACOS
+/// into a scratch prefix and runs it from an unrelated directory otherwise
+/// silently drives whatever *other* `acos` happens to be on `PATH` — a different
+/// build, with different verbs and verdicts. When the resolved CLI answers a
+/// different `--version` than this server, that is said once on stderr.
 pub fn discover_binary() -> Option<PathBuf> {
-    if let Ok(value) = std::env::var("ACOS_BIN") {
+    let found = resolve_binary();
+    if let Some(path) = found.as_ref() {
+        warn_on_version_mismatch(path);
+    }
+    found
+}
+
+fn resolve_binary() -> Option<PathBuf> {
+    resolve_binary_from(
+        std::env::var("ACOS_BIN").ok(),
+        std::env::var_os("ACOS_HOME"),
+        std::env::current_exe().ok(),
+        std::env::var_os("PATH"),
+    )
+    .or_else(find_repo_binary)
+}
+
+/// The discovery order as a pure function of its inputs (testable without
+/// touching the process environment): `ACOS_BIN` > `$ACOS_HOME/bin/acos` >
+/// sibling of the executable > `PATH`. The repo walk is the caller's fallback.
+fn resolve_binary_from(
+    acos_bin: Option<String>,
+    acos_home: Option<std::ffi::OsString>,
+    exe: Option<PathBuf>,
+    path: Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
+    if let Some(value) = acos_bin {
         if !value.trim().is_empty() {
             return Some(PathBuf::from(value));
         }
     }
-    // An explicit ACOS_HOME names the install to use.
-    if let Some(home) = std::env::var_os("ACOS_HOME").filter(|v| !v.is_empty()) {
+    if let Some(home) = acos_home.filter(|v| !v.is_empty()) {
         let candidate = PathBuf::from(home).join("bin").join("acos");
         if candidate.is_file() {
             return Some(candidate);
         }
     }
-    // The `acos` installed next to this server (same prefix, same version)
-    // wins over whatever `acos` happens to be first on PATH: an install that is
-    // not first on PATH (a scratch prefix, a newer version beside an older one)
-    // must never silently drive another version's daemon.
-    if let Some(path) = sibling_binary() {
-        return Some(path);
+    if let Some(exe) = exe {
+        if let Some(sibling) = installed_sibling(&exe, "acos") {
+            return Some(sibling);
+        }
     }
-    if let Some(path) = find_on_path("acos") {
-        return Some(path);
-    }
-    find_repo_binary()
-}
-
-/// `acos` in the same directory as the running `acos-mcp` executable.
-fn sibling_binary() -> Option<PathBuf> {
-    let exe = std::env::current_exe().ok()?;
-    let candidate = exe.parent()?.join("acos");
-    (candidate.is_file() && candidate != exe).then_some(candidate)
-}
-
-fn find_on_path(name: &str) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&path) {
-        let candidate = dir.join(name);
-        if candidate.is_file() {
-            return Some(candidate);
+    if let Some(path) = path {
+        for dir in std::env::split_paths(&path) {
+            let candidate = dir.join("acos");
+            if candidate.is_file() {
+                return Some(candidate);
+            }
         }
     }
     None
+}
+
+/// The version word out of `acos --version` output (`acos 0.2.1`), when it
+/// differs from `ours`. `None` means "matches" or "unreadable".
+fn version_mismatch(version_output: &str, ours: &str) -> Option<String> {
+    let theirs = version_output
+        .split_whitespace()
+        .find(|word| word.chars().next().is_some_and(|c| c.is_ascii_digit()))?;
+    (theirs != ours).then(|| theirs.to_string())
+}
+
+/// FB2c: say once, on stderr, that the CLI this server drives is a different
+/// version than the server itself.
+///
+/// This is the failure mode that makes an MCP smoke test lie: a scratch-prefix
+/// server silently drove another installation's `acos`, which lacked the verb
+/// under test. A path is only *proven* by asking it; a CLI that will not answer
+/// `--version` is reported as unverified, never as matching.
+fn warn_on_version_mismatch(path: &Path) {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        let ours = env!("CARGO_PKG_VERSION");
+        let output = std::process::Command::new(path)
+            .arg("--version")
+            .output();
+        match output {
+            Ok(output) if output.status.success() => {
+                let text = String::from_utf8_lossy(&output.stdout);
+                if let Some(theirs) = version_mismatch(&text, ours) {
+                    eprintln!(
+                        "acos-mcp: warning: backend CLI {} reports version {theirs} but acos-mcp is \
+                         {ours}; a reply may describe a different build than this server",
+                        path.display()
+                    );
+                }
+            }
+            _ => eprintln!(
+                "acos-mcp: warning: backend CLI {} did not answer `--version`; its build cannot be \
+                 verified against acos-mcp {ours}",
+                path.display()
+            ),
+        }
+    });
+}
+
+/// `<exe dir>/<name>` when that file exists and is not the executable itself.
+pub(crate) fn installed_sibling(exe: &Path, name: &str) -> Option<PathBuf> {
+    let dir = exe.parent()?;
+    let candidate = dir.join(name);
+    if candidate.is_file() && candidate != exe {
+        Some(candidate)
+    } else {
+        None
+    }
 }
 
 fn find_repo_binary() -> Option<PathBuf> {
@@ -1095,6 +1164,75 @@ fn truncate(text: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_installed_cli_beside_this_binary_wins_over_path() {
+        // The REL1a layout: <prefix>/bin/acos-mcp sits beside <prefix>/bin/acos.
+        let dir = std::env::temp_dir().join(format!("acos-sibling-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let exe = dir.join("acos-mcp");
+        std::fs::write(&exe, b"").unwrap();
+        assert_eq!(installed_sibling(&exe, "acos"), None, "nothing beside it yet");
+        let sibling = dir.join("acos");
+        std::fs::write(&sibling, b"").unwrap();
+        assert_eq!(installed_sibling(&exe, "acos"), Some(sibling.clone()));
+        assert_eq!(
+            installed_sibling(&sibling, "acos"),
+            None,
+            "the executable is never its own backend"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// FB2c item 7: the discovery order is ACOS_BIN > ACOS_HOME > sibling > PATH.
+    #[test]
+    fn discovery_order_is_bin_then_home_then_sibling_then_path() {
+        let dir = std::env::temp_dir().join(format!("acos-order-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mk = |rel: &str| {
+            let path = dir.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, b"").unwrap();
+            path
+        };
+        let home_acos = mk("home/bin/acos");
+        let sibling = mk("prefix/bin/acos");
+        let exe = mk("prefix/bin/acos-mcp");
+        let on_path = mk("pathdir/acos");
+        let path = std::env::join_paths([dir.join("pathdir")]).unwrap();
+        let home = Some(dir.join("home").into_os_string());
+        let all = |bin: Option<String>, home: Option<std::ffi::OsString>| {
+            resolve_binary_from(bin, home, Some(exe.clone()), Some(path.clone()))
+        };
+        assert_eq!(
+            all(Some("/x/acos".into()), home.clone()),
+            Some(PathBuf::from("/x/acos")),
+            "ACOS_BIN beats everything"
+        );
+        assert_eq!(all(None, home.clone()), Some(home_acos), "explicit ACOS_HOME beats the sibling");
+        assert_eq!(all(None, None), Some(sibling.clone()), "the sibling beats PATH");
+        assert_eq!(
+            all(Some("  ".into()), Some(dir.join("nohome").into_os_string())),
+            Some(sibling),
+            "a blank ACOS_BIN and an ACOS_HOME without a CLI fall through"
+        );
+        let lone = mk("lone/acos-mcp");
+        assert_eq!(
+            resolve_binary_from(None, None, Some(lone), Some(path)),
+            Some(on_path),
+            "PATH is last"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// FB2c item 7: a version mismatch is detected from `--version`; a match or
+    /// an unreadable answer is not reported as a mismatch.
+    #[test]
+    fn a_cli_version_mismatch_is_detected() {
+        assert_eq!(version_mismatch("acos 0.2.0\n", "0.2.1"), Some("0.2.0".to_string()));
+        assert_eq!(version_mismatch("acos 0.2.1\n", "0.2.1"), None);
+        assert_eq!(version_mismatch("garbage", "0.2.1"), None);
+    }
 
     #[test]
     fn help_parsing_finds_clap_commands() {
