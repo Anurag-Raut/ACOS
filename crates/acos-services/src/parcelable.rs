@@ -110,6 +110,14 @@ pub enum FieldOp {
     /// field as `writeByte(0|1)` and only then the payload. Same body rule as
     /// [`FieldOp::Cond`].
     ByteCond(&'static [FieldOp]),
+    /// A conditional group with a **boolean** presence marker (`writeBoolean`
+    /// then the payload only when true). This image's
+    /// `ClientTransaction.writeToParcel` writes both `mActivityToken` and
+    /// `mActivityCallbacks` that way: `writeBoolean(token != null)` before the
+    /// strong binder, and `writeBoolean(callbacks != null)` before the
+    /// parcelable list — so a null member writes **one** byte-marker int and no
+    /// payload at all. Same body rule as [`FieldOp::Cond`].
+    BoolCond(&'static [FieldOp]),
     /// `Parcel.writePersistableBundle`: the same wire shape as [`FieldOp::Bundle`]
     /// (an int length, `-1` for null, then the `BaseBundle` map).
     PersistableBundle,
@@ -986,20 +994,25 @@ pub static SPECS: &[ParcelableSpec] = &[
         fields: &[FieldOp::Int, FieldOp::Str16],
         verification: Verification::Curated,
     },
-    // `android.app.servertransaction.ClientTransaction.writeToParcel`:
-    //   writeBoolean(mIsGlobal)
-    //   writeStrongBinder(mActivityToken)
+    // `android.app.servertransaction.ClientTransaction.writeToParcel` (the
+    // **image's** own dex, `classes.dex`, API 34 UE1A — it predates
+    // `mTransactionItems`):
+    //   writeBoolean(mActivityToken != null)
+    //   if (mActivityToken != null) writeStrongBinder(mActivityToken)
     //   writeParcelable(mLifecycleStateRequest)
-    //   writeBoolean(mIsReady)
-    //   writeParcelableList(mCallbacks)
+    //   writeBoolean(mActivityCallbacks != null)
+    //   if (mActivityCallbacks != null) writeParcelableList(mActivityCallbacks)
+    // The first boolean is NOT `mIsGlobal`; it is the token's presence marker
+    // (the reader skips the binder when false), and an absent callbacks list
+    // writes only its `false` marker — no list count at all.
     ParcelableSpec {
         class: "android.app.servertransaction.ClientTransaction",
         fields: &[
-            FieldOp::Bool,
-            FieldOp::Binder,
+            FieldOp::BoolCond(&[FieldOp::Binder]),
             FieldOp::Named("android.app.servertransaction.ActivityLifecycleItem"),
-            FieldOp::Bool,
-            FieldOp::ParcelableList("android.app.servertransaction.ClientTransactionItem"),
+            FieldOp::BoolCond(&[FieldOp::ParcelableList(
+                "android.app.servertransaction.ClientTransactionItem",
+            )]),
         ],
         verification: Verification::Full,
     },
@@ -1924,6 +1937,16 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
             }
             Value::Cond { present, values }
         }
+        FieldOp::BoolCond(fields) => {
+            let present = parcel.read_bool()?;
+            let mut values = Vec::new();
+            if present {
+                for field in fields {
+                    values.push(read_field(*field, parcel)?);
+                }
+            }
+            Value::Cond { present, values }
+        }
         FieldOp::PersistableBundle => Value::Bundle(read_bundle(parcel)?),
         FieldOp::TypedList(class) => {
             let n = parcel.read_int32()?;
@@ -2216,6 +2239,24 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
                 if values.len() != fields.len() {
                     return Err(bad(format!(
                         "conditional expects {} fields, got {}",
+                        fields.len(),
+                        values.len()
+                    )));
+                }
+                for (field, value) in fields.iter().zip(values) {
+                    write_field(*field, parcel, value)?;
+                }
+            }
+        }
+        FieldOp::BoolCond(fields) => {
+            let Value::Cond { present, values } = value else {
+                return Err(bad(format!("expected boolean conditional, got {value:?}")));
+            };
+            parcel.write_bool(*present);
+            if *present {
+                if values.len() != fields.len() {
+                    return Err(bad(format!(
+                        "boolean conditional expects {} fields, got {}",
                         fields.len(),
                         values.len()
                     )));
@@ -3657,6 +3698,7 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         // linear scanner, so only the marker can be verified.
         FieldOp::Cond(_) => call == "writeInt",
         FieldOp::ByteCond(_) => call == "writeByte",
+        FieldOp::BoolCond(_) => call == "writeBoolean",
         FieldOp::CountedTyped(_) => call == "writeInt",
         // `DisplayCutout$ParcelableWrapper.writeCutoutToParcel` is a static
         // helper, which the scanner records as a nested `writeToParcel` call.
@@ -3710,6 +3752,20 @@ fn field_consumes(field: FieldOp, calls: &[String]) -> usize {
         }
         FieldOp::ByteCond(inner) => {
             if first != "writeByte" {
+                return 0;
+            }
+            let mut n = 1;
+            for f in inner {
+                let c = field_consumes(*f, &calls[n..]);
+                if c == 0 {
+                    return n;
+                }
+                n += c;
+            }
+            n
+        }
+        FieldOp::BoolCond(inner) => {
+            if first != "writeBoolean" {
                 return 0;
             }
             let mut n = 1;

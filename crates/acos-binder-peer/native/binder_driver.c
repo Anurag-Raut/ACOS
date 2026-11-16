@@ -82,6 +82,7 @@
 #define E3G_MAX_SLOT 32
 #define E3G_MAX_NODE 64
 #define E3G_MAX_HANDLE 64
+#define E3G_MAX_DEATH 64
 
 static int g_dbg = -1;
 #define DBG(...)                                     \
@@ -279,6 +280,19 @@ struct drv {
     int n_handles;
     uint32_t next_wire;
     uint32_t next_handle;
+    // MPROC5b: `BC_REQUEST_DEATH_NOTIFICATION` registrations, keyed by our
+    // local handle. A registration is one-shot: the kernel drops it when it
+    // delivers `BR_DEAD_BINDER`, and the app answers `BC_DEAD_BINDER_DONE`.
+    struct death_reg {
+        int used;
+        uint32_t handle;
+        uint64_t cookie;
+    } deaths[E3G_MAX_DEATH];
+    // Cookies queued by `F_DEATH` and not yet handed to a looper thread. The
+    // reader thread must not pend them itself: `T.pend` belongs to the thread
+    // that will later read, and only a looper thread dispatches callbacks.
+    uint64_t death_queue[E3G_MAX_DEATH];
+    int death_head, death_tail, death_count;
 };
 
 static struct drv g;
@@ -409,6 +423,73 @@ static uint64_t peer_node_for_handle(uint32_t h) {
     for (int i = 0; i < g.n_handles; i++)
         if (g.handles[i].h == h) return g.handles[i].peer_node;
     return 0;
+}
+
+// -------------------------------------------------- death notifications (MPROC5b)
+// Stock libbinder asks for `BC_REQUEST_DEATH_NOTIFICATION(handle, cookie)` —
+// the cookie is the `BpBinder*` it wants back in `BR_DEAD_BINDER`, and the
+// handle is our local wire handle. The peer owns liveness (a node dies when the
+// process that owns it disconnects), so the driver only remembers the
+// registrations, turns `F_DEATH(target = peer node)` into one `BR_DEAD_BINDER`
+// per registration with that exact cookie, and lets `BC_DEAD_BINDER_DONE` fall
+// through (the registration is one-shot, as in the kernel).
+static void request_death(uint32_t handle, uint64_t cookie) {
+    for (int i = 0; i < E3G_MAX_DEATH; i++) {
+        if (g.deaths[i].used && g.deaths[i].handle == handle && g.deaths[i].cookie == cookie)
+            return;
+    }
+    for (int i = 0; i < E3G_MAX_DEATH; i++) {
+        if (!g.deaths[i].used) {
+            g.deaths[i].used = 1;
+            g.deaths[i].handle = handle;
+            g.deaths[i].cookie = cookie;
+            DBG("death: handle=%u cookie=%llx registered", handle, (unsigned long long)cookie);
+            return;
+        }
+    }
+    WARN("death registration table full (handle %u cookie %llx)", handle,
+         (unsigned long long)cookie);
+}
+
+static void clear_death(uint32_t handle, uint64_t cookie) {
+    for (int i = 0; i < E3G_MAX_DEATH; i++) {
+        if (g.deaths[i].used && g.deaths[i].handle == handle && g.deaths[i].cookie == cookie) {
+            g.deaths[i].used = 0;
+            DBG("death: handle=%u cookie=%llx cleared", handle, (unsigned long long)cookie);
+            return;
+        }
+    }
+}
+
+// Queue one cookie for a looper thread. Caller holds `g.mu`.
+static void queue_death(uint64_t cookie) {
+    if (g.death_count >= E3G_MAX_DEATH) {
+        WARN("death queue full, dropping cookie %llx", (unsigned long long)cookie);
+        return;
+    }
+    g.death_queue[g.death_tail] = cookie;
+    g.death_tail = (g.death_tail + 1) % E3G_MAX_DEATH;
+    g.death_count++;
+    pthread_cond_broadcast(&g.cv_txn);
+}
+
+// The peer reported that `node` died. Every local handle standing for that peer
+// node loses its registrations, one `BR_DEAD_BINDER` each. Caller holds `g.mu`.
+static int deaths_for_node(uint64_t node) {
+    int queued = 0;
+    for (int i = 0; i < g.n_handles; i++) {
+        if (g.handles[i].peer_node != node) continue;
+        uint32_t handle = g.handles[i].h;
+        for (int d = 0; d < E3G_MAX_DEATH; d++) {
+            if (!g.deaths[d].used || g.deaths[d].handle != handle) continue;
+            uint64_t cookie = g.deaths[d].cookie;
+            g.deaths[d].used = 0;
+            queue_death(cookie);
+            queued++;
+        }
+    }
+    DBG("death: node=%llx -> %d BR_DEAD_BINDER queued", (unsigned long long)node, queued);
+    return queued;
 }
 
 // Rewrite the flat objects of a parcel in place.

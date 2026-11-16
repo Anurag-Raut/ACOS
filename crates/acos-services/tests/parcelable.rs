@@ -306,11 +306,11 @@ fn sample_for(class: &str) -> Option<Parcelable> {
         "android.app.servertransaction.ClientTransaction" => Parcelable::ordered(
             class,
             vec![
-                Value::Bool(false),
-                Value::Binder(None),
+                // `writeBoolean(mActivityToken != null)` + binder when present.
+                Value::Cond { present: false, values: Vec::new() },
                 Value::NamedParcelable(Parcelable::Null),
-                Value::Bool(false),
-                Value::List(None),
+                // `writeBoolean(mActivityCallbacks != null)` + list when present.
+                Value::Cond { present: false, values: Vec::new() },
             ],
         ),
         "android.os.LocaleList" => Parcelable::ordered(

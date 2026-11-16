@@ -229,13 +229,18 @@ impl ClientTransaction {
 
     /// The **framework wire shape** of a one-item lifecycle transaction.
     ///
-    /// `ClientTransaction.writeToParcel` (image dex) is
-    /// `writeBoolean(mIsGlobal)`, `writeStrongBinder(mActivityToken)`,
-    /// `writeParcelable(mLifecycleStateRequest)`, `writeBoolean(mIsReady)`,
-    /// `writeParcelableList(mActivityCallbacks)`; the framework's own `obtain`
-    /// leaves the callbacks list null, so a null list is what a real AMS
-    /// writes here too. The item is the transaction's lifecycle request, which
-    /// is exactly what `TransactionExecutor` runs on the app's main thread.
+    /// `ClientTransaction.writeToParcel` in the **image's** own dex
+    /// (`.cache/boot/android-34/dex/framework/classes.dex`, API 34 UE1A) is
+    /// `writeBoolean(mActivityToken != null)`, `writeStrongBinder(mActivityToken)`
+    /// when present, `writeParcelable(mLifecycleStateRequest)`,
+    /// `writeBoolean(mActivityCallbacks != null)`, then the callbacks list only
+    /// when present. The two booleans are **presence markers**, not fields: a
+    /// `false` marker writes no payload at all (the previous encoding wrote a
+    /// binder after a `false` token marker and a `-1` list count after a `false`
+    /// callbacks marker, which the guest's reader never consumes — the token
+    /// came back null and the item was misparsed). The framework's own
+    /// `obtain` leaves the callbacks list null, so a real AMS writes exactly
+    /// that.
     ///
     /// `None` when the item has no decoded shape (nothing is fabricated).
     #[must_use]
@@ -244,11 +249,18 @@ impl ClientTransaction {
         Some(Parcelable::ordered(
             "android.app.servertransaction.ClientTransaction",
             vec![
-                Value::Bool(false),           // mIsGlobal
-                Value::Binder(Some(acos_parcel::BinderId(token))), // mActivityToken
+                // `mActivityToken` presence marker + strong binder when present.
+                Value::Cond {
+                    present: true,
+                    values: vec![Value::Binder(Some(acos_parcel::BinderId(token)))],
+                },
                 Value::NamedParcelable(item), // mLifecycleStateRequest
-                Value::Bool(false),           // mIsReady
-                Value::List(None),            // mActivityCallbacks
+                // `mActivityCallbacks` presence marker only; the real AMS leaves
+                // the callbacks list null on a lifecycle-only transaction.
+                Value::Cond {
+                    present: false,
+                    values: Vec::new(),
+                },
             ],
         ))
     }
@@ -949,12 +961,38 @@ impl AtmsState {
     }
 
     /// Report `activityResumed`.
+    ///
+    /// The app reporting a resume is proof that `onCreate`/`onStart`/`onResume`
+    /// already ran, so this is the writer that establishes the record's state
+    /// when the host adopted the guest's own token (W38): an adopted record
+    /// starts in `Uncreated`, and before MPROC5b the next honest report — the
+    /// `activityStopped` a finishing activity sends — was rejected as
+    /// `illegal transition Stop from Uncreated` (MPROC5b run0/run1).
     pub fn activity_resumed(&mut self, token: u64, resumed: bool) -> Result<()> {
         let index = self.ensure_known(token)?;
-        self.activities[index].resumed = resumed;
-        if resumed {
-            self.top_of_task(token);
+        if !resumed {
+            self.activities[index].resumed = false;
+            return Ok(());
         }
+        match self.activities[index].lifecycle {
+            ActivityLifecycle::Uncreated => {
+                self.transition(token, Transition::Create)?;
+                self.transition(token, Transition::Start)?;
+            }
+            ActivityLifecycle::Created => {
+                self.transition(token, Transition::Start)?;
+            }
+            ActivityLifecycle::Resumed => {
+                // A repeated report (the framework sends one per resume): the
+                // record is already where it belongs.
+                self.activities[index].resumed = true;
+                self.top_of_task(token);
+                return Ok(());
+            }
+            _ => {}
+        }
+        self.transition(token, Transition::Resume)?;
+        self.top_of_task(token);
         Ok(())
     }
 
@@ -1604,8 +1642,15 @@ impl ServiceObject for AtmsService {
             (AtmsInterface::ClientController, "getDisplayId") => vec![Value::Int(0)],
             (AtmsInterface::ClientController, "activityResumed") => {
                 let token = binder_u64(args.first());
-                let resumed = args.get(1).and_then(Value::as_bool).unwrap_or(true);
-                state.activity_resumed(token, resumed)?;
+                // The AIDL boolean is `handleSplashScreenExit`, NOT a resumed
+                // flag (image `IActivityClientController`
+                // `oneway void activityResumed(IBinder token, boolean
+                // handleSplashScreenExit)`). Reading it as "resumed" meant the
+                // host recorded `resumed=false` on every real resume and never
+                // ran the top-of-task rule (MPROC5b run0/run1: no
+                // `activityPaused` reached proc-a). The callback itself is the
+                // resume.
+                state.activity_resumed(token, true)?;
                 Vec::new()
             }
             (AtmsInterface::ClientController, "activityIdle") => {
