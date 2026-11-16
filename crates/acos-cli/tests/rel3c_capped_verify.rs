@@ -34,7 +34,9 @@ fn gaten_apk() -> Option<PathBuf> {
     let apk = std::env::var_os("ACOS_GATEN_APK")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
-            workspace().join("../../.cache/gaten/gaten-dev-current-x86_64-release.apk")
+            // The worktree's .cache/gaten symlink (see the common brief's test
+            // env setup); `ACOS_GATEN_APK` overrides it.
+            workspace().join(".cache/gaten/gaten-dev-current-x86_64-release.apk")
         });
     apk.is_file().then_some(apk)
 }
@@ -57,8 +59,6 @@ fn live_verify(scenario: &str, apk: &Path, artifacts: &Path) -> (Value, usize, P
         .arg(apk)
         .arg("--artifacts")
         .arg(artifacts)
-        .arg("--timeout")
-        .arg("300")
         .arg("--json")
         .env_remove("ACOS_HOME")
         .output()

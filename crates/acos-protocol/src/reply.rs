@@ -615,16 +615,32 @@ fn capped_result_pointer(
     // The failing step, said in one line: index, kind, message. `step` is the
     // scenario's step kind; `message` is the step error's message (a failing
     // step always carries one), falling back to the verdict's failure summary.
-    if let Some(step) = verdict
-        .and_then(|verdict| verdict.pointer("/steps"))
-        .and_then(Value::as_array)
-        .and_then(|steps| {
-            steps.iter().find(|step| {
-                step.get("status")
-                    .and_then(Value::as_str)
-                    .is_some_and(|status| status != "pass")
-            })
+    //
+    // Only a run that did not pass has a failing step: the step list can hold a
+    // transient non-pass attempt that the engine retried to a pass (a strict
+    // settle timeout, `results/handoff/INTEG030/gaten/gaten-home`), and reporting
+    // that as "the failing step" of a passing run would be a false diagnosis.
+    let verdict_passed = replacement
+        .get("verdict_status")
+        .and_then(Value::as_str)
+        .is_some_and(|status| status == "pass");
+    let failure_step = verdict
+        .and_then(|verdict| verdict.pointer("/failure/step_index"))
+        .and_then(Value::as_u64);
+    if let Some(step) = (!verdict_passed)
+        .then(|| {
+            verdict
+                .and_then(|verdict| verdict.pointer("/steps"))
+                .and_then(Value::as_array)
+                .and_then(|steps| {
+                    steps.iter().find(|step| {
+                        step.get("status")
+                            .and_then(Value::as_str)
+                            .is_some_and(|status| status != "pass")
+                    })
+                })
         })
+        .flatten()
     {
         let mut summary = Map::new();
         for (key, from) in [
@@ -635,6 +651,9 @@ fn capped_result_pointer(
             if let Some(value) = step.pointer(from) {
                 summary.insert(key.to_string(), value.clone());
             }
+        }
+        if let Some(index) = failure_step {
+            summary.insert("failure_index".into(), json!(index));
         }
         if let Some(message) = step
             .pointer("/error/message")
