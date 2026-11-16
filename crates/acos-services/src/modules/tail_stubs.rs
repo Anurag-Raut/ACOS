@@ -74,6 +74,7 @@ macro_rules! stub_module {
             id: $id,
             version: "1.0.0",
             summary: $summary,
+            process_initializers: &[],
             features: &[],
             services: &[ServiceProvide {
                 name: $service,
@@ -104,6 +105,7 @@ macro_rules! off_module {
             id: $id,
             version: "1.0.0",
             summary: $summary,
+            process_initializers: &[],
             features: &[],
             services: &[ServiceProvide {
                 name: $service,

@@ -6,7 +6,7 @@
 //! | name | descriptor | what answers |
 //! |---|---|---|
 //! | `bluetooth_manager` | `android.bluetooth.IBluetoothManager` | `registerAdapter` (hands the adapter binder), `getState`, `getAddress`, `getName`, `enable`/`disable`, `isBleScanAlwaysAvailable`, `enableBle`/`disableBle`, `registerStateChangeCallback` |
-//! | `bluetooth` | `android.bluetooth.IBluetooth` | `getState`, `getAddress`, `getName`, `getScanMode`, `startDiscovery`/`cancelDiscovery`/`isDiscovering`, `getBondedDevices` (a real `List<BluetoothDevice>` through the client's `ISynchronousResultReceiver`) |
+//! | `bluetooth` | `android.bluetooth.IBluetooth` | `getState`, `getAddress`, `getName`, `getScanMode`, `startDiscovery`/`cancelDiscovery`/`isDiscovering`, `getBondedDevices` — all of them oneway and answered through the client's `ISynchronousResultReceiver` (the image's AIDL shape; `getBondedDevices` carries a real `List<BluetoothDevice>`) |
 //!
 //! Transaction codes come from the image (`framework-bluetooth/classes.dex`).
 //! The two client paths that carry a binder to call back (`getBondedDevices`,
@@ -43,8 +43,8 @@ use crate::error::{Result, ServiceError};
 use crate::exception::write_no_exception;
 use crate::host::{CallResult, PendingDelivery, ServiceHost, ServiceObject};
 use crate::module::{
-    AttachMode, Budget, ControlOp, Module, ModuleConfig, ModuleManifest, ModuleReport, Profile,
-    SecurityClass, ServiceProvide,
+    AttachMode, Budget, ControlOp, Module, ModuleConfig, ModuleManifest, ModuleReport,
+    ProcessInitializer, Profile, SecurityClass, ServiceProvide,
 };
 use crate::parcelable;
 use crate::value::{DynamicValue, Parcelable};
@@ -57,8 +57,27 @@ pub const MANAGER_DESCRIPTOR: &str = "android.bluetooth.IBluetoothManager";
 pub const BLUETOOTH_DESCRIPTOR: &str = "android.bluetooth.IBluetooth";
 /// `IBluetoothManagerCallback` descriptor.
 pub const MANAGER_CALLBACK_DESCRIPTOR: &str = "android.bluetooth.IBluetoothManagerCallback";
-/// `ISynchronousResultReceiver` descriptor (the client's result binder).
-pub const RESULT_RECEIVER_DESCRIPTOR: &str = "com.android.modules.utils.ISynchronousResultReceiver";
+/// `ISynchronousResultReceiver` descriptor (the client's result binder), **as
+/// the Bluetooth module jar names it**.
+///
+/// The build renames the shared `com.android.modules.utils` library inside each
+/// mainline APEX jar to a module-private package, so the class the Bluetooth
+/// client instantiates is
+/// `com.android.bluetooth.x.com.android.modules.utils.SynchronousResultReceiver`
+/// and the AIDL descriptor its generated Stub enforces is the same prefixed
+/// name — verified in the image's own `framework-bluetooth` dex
+/// (`.cache/boot/android-34/dex/framework-bluetooth/classes.dex`:
+/// `Class descriptor : 'Lcom/android/bluetooth/x/com/android/modules/utils/ISynchronousResultReceiver;'`,
+/// interface constant `com.android.bluetooth.x.com.android.modules.utils.ISynchronousResultReceiver`).
+/// Writing the unprefixed name makes the client's `enforceInterface` reject the
+/// frame, so the result is never delivered and the caller waits out its whole
+/// `getSyncTimeout()`.
+pub const RESULT_RECEIVER_DESCRIPTOR: &str =
+    "com.android.bluetooth.x.com.android.modules.utils.ISynchronousResultReceiver";
+/// The unprefixed library name, for diagnostics (a frame written with it is
+/// rejected by the module-jar client).
+pub const RESULT_RECEIVER_DESCRIPTOR_PLAIN: &str =
+    "com.android.modules.utils.ISynchronousResultReceiver";
 /// `BluetoothDevice` parcelable class.
 pub const DEVICE_CLASS: &str = "android.bluetooth.BluetoothDevice";
 
@@ -92,7 +111,7 @@ const MANAGER_ENABLE_BLE: u32 = 16;
 /// `IBluetoothManager.disableBle()`.
 const MANAGER_DISABLE_BLE: u32 = 17;
 
-/// `IBluetooth.getState()`.
+/// `IBluetooth.getState(ISynchronousResultReceiver)` (oneway, answered through the receiver).
 const ADAPTER_GET_STATE: u32 = 1;
 /// `IBluetooth.getAddress(AttributionSource)`.
 const ADAPTER_GET_ADDRESS: u32 = 4;
@@ -250,6 +269,17 @@ fn manifest_ref() -> &'static ModuleManifest {
         id: MODULE_ID,
         version: "1.0.0",
         summary: "bluetooth: scripted adapter state, name/address, bonded-device list and classic-discovery results (no radio, no BLE/GATT)",
+        // The Bluetooth mainline module's own process installs the framework's
+        // `BluetoothServiceManager`; `BluetoothAdapter.createAdapter` reads it
+        // and logs "BluetoothServiceManager is null" without it
+        // (BluetoothAdapter.java:1096-1114), so no adapter ever reaches the
+        // module's binder. Same at-launch install as telephony.
+        process_initializers: &[ProcessInitializer {
+            class: "android.bluetooth.BluetoothFrameworkInitializer",
+            method: "setBluetoothServiceManager",
+            manager: "android.os.BluetoothServiceManager",
+            evidence: "packages/modules/Bluetooth framework/java/android/bluetooth/BluetoothFrameworkInitializer.java: `setBluetoothServiceManager` throws IllegalStateException on a second call and `getBluetoothServiceManager` returns null until it runs; BluetoothAdapter.createAdapter (BluetoothAdapter.java:1096-1114) returns a null adapter when it is null",
+        }],
         features: &["android.hardware.bluetooth"],
         services: &[
             ServiceProvide {
@@ -357,15 +387,24 @@ fn result_receiver(data: &acos_parcel::Parcel) -> Option<u64> {
 
 /// The `ISynchronousResultReceiver.send(Result)` frame.
 ///
-/// `Result.writeToParcel` is `writeValue(mException)` then `writeValue(mObject)`,
-/// and AIDL writes the `Result` parameter as a typed object (presence word, no
-/// class name).
+/// `Result.writeToParcel` writes **`mObject` first, then `mException`**
+/// (image dex `SynchronousResultReceiver$Result.writeToParcel`: `iget-object
+/// v0, ...mObject` → `writeValue`, then `mException` → `writeValue`; the
+/// `Result(Parcel)` constructor reads them in the same order and casts the
+/// second to `RuntimeException`). Writing them the other way round throws
+/// `ClassCastException: java.lang.Integer cannot be cast to
+/// java.lang.RuntimeException` inside the client's `Stub.onTransact`, so the
+/// result is lost and the caller waits out its sync timeout — exactly what the
+/// first `tail-bluetooth` run logged.
+///
+/// AIDL writes the `Result` parameter as a typed object (presence word, no class
+/// name).
 fn result_delivery(target: u64, value: DynamicValue) -> Option<PendingDelivery> {
     let mut data = acos_parcel::Parcel::new();
     data.write_interface_token(RESULT_RECEIVER_DESCRIPTOR).ok()?;
     data.write_int32(1); // `Result` is a present typed object
-    parcelable::write_dynamic(&mut data, &DynamicValue::Null).ok()?;
     parcelable::write_dynamic(&mut data, &value).ok()?;
+    parcelable::write_dynamic(&mut data, &DynamicValue::Null).ok()?;
     Some(PendingDelivery {
         target: acos_parcel::BinderId(target),
         interface: RESULT_RECEIVER_DESCRIPTOR.to_string(),
@@ -494,48 +533,38 @@ impl ServiceObject for AdapterService {
         interface: &str,
         code: u32,
         data: &mut acos_parcel::Parcel,
-        reply: &mut acos_parcel::Parcel,
+        _reply: &mut acos_parcel::Parcel,
     ) -> Result<bool> {
         if interface != BLUETOOTH_DESCRIPTOR {
             return Ok(false);
         }
         let mut state = state_of(&self.state);
         match code {
-            ADAPTER_GET_STATE => {
-                write_no_exception(reply);
-                reply.write_int32(if state.on { STATE_ON } else { STATE_OFF });
-                Ok(true)
-            }
-            ADAPTER_GET_ADDRESS => {
-                let address = state.address.clone();
-                write_no_exception(reply);
-                reply
-                    .write_string16_opt(Some(&address))
-                    .map_err(ServiceError::Parcel)?;
-                Ok(true)
-            }
-            ADAPTER_GET_NAME => {
-                let name = state.name.clone();
-                write_no_exception(reply);
-                reply
-                    .write_string16_opt(Some(&name))
-                    .map_err(ServiceError::Parcel)?;
-                Ok(true)
-            }
-            ADAPTER_GET_SCAN_MODE => {
-                let mode = if state.on {
-                    SCAN_MODE_DISCOVERABLE
-                } else {
-                    SCAN_MODE_NONE
-                };
-                write_no_exception(reply);
-                reply.write_int32(mode);
-                Ok(true)
-            }
-            ADAPTER_START_DISCOVERY | ADAPTER_CANCEL_DISCOVERY | ADAPTER_IS_DISCOVERING
+            // **Every** `IBluetooth` method in this image is
+            // `oneway (…, in SynchronousResultReceiver)` — the android-34
+            // `framework-bluetooth` AIDL declares `getState`, `getAddress`,
+            // `getName`, `getScanMode`, `startDiscovery`, `cancelDiscovery`,
+            // `isDiscovering` and `getBondedDevices` that way (verified against
+            // the image dex: `IBluetooth$Stub.TRANSACTION_getState = 1`, and
+            // `BluetoothAdapter.getStateInternal` builds a
+            // `SynchronousResultReceiver` and calls `getState(receiver)`).
+            //
+            // So the answer travels through the *receiver*, never as a decoded
+            // reply: a `write_no_exception` reply on a oneway call is silently
+            // dropped and the client burns its whole `getSyncTimeout()` before
+            // giving up (ART-observed: `BluetoothAdapter.getState()` blocked the
+            // UI thread ~5 s and then threw `TimeoutException`, which cost the
+            // scenario its tap settle).
+            ADAPTER_GET_STATE
+            | ADAPTER_GET_ADDRESS
+            | ADAPTER_GET_NAME
+            | ADAPTER_GET_SCAN_MODE
+            | ADAPTER_START_DISCOVERY
+            | ADAPTER_CANCEL_DISCOVERY
+            | ADAPTER_IS_DISCOVERING
             | ADAPTER_GET_BONDED_DEVICES => {
-                // All four are `oneway` and answer through the client's
-                // `ISynchronousResultReceiver`; a oneway reply has no header.
+                // A oneway request carries no reply header; the client's
+                // receiver is the last binder object in it.
                 let Some(target) = result_receiver(data) else {
                     let detail = format!(
                         "code {code}: no ISynchronousResultReceiver binder in the request ({} object(s), {} byte(s))",
@@ -550,6 +579,40 @@ impl ServiceObject for AdapterService {
                     });
                 };
                 match code {
+                    ADAPTER_GET_STATE => {
+                        let answer = if state.on { STATE_ON } else { STATE_OFF };
+                        if let Some(delivery) =
+                            result_delivery(target, DynamicValue::Int(answer))
+                        {
+                            self.queued.push(delivery);
+                        }
+                    }
+                    ADAPTER_GET_ADDRESS => {
+                        let address = state.address.clone();
+                        if let Some(delivery) =
+                            result_delivery(target, DynamicValue::String(Some(address)))
+                        {
+                            self.queued.push(delivery);
+                        }
+                    }
+                    ADAPTER_GET_NAME => {
+                        let name = state.name.clone();
+                        if let Some(delivery) =
+                            result_delivery(target, DynamicValue::String(Some(name)))
+                        {
+                            self.queued.push(delivery);
+                        }
+                    }
+                    ADAPTER_GET_SCAN_MODE => {
+                        let mode = if state.on {
+                            SCAN_MODE_DISCOVERABLE
+                        } else {
+                            SCAN_MODE_NONE
+                        };
+                        if let Some(delivery) = result_delivery(target, DynamicValue::Int(mode)) {
+                            self.queued.push(delivery);
+                        }
+                    }
                     ADAPTER_START_DISCOVERY => {
                         if !state.on {
                             return Err(rejected(

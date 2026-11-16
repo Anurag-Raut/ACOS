@@ -51,6 +51,41 @@ fn transact_oneway(host: &mut ServiceHost, name: &str, code: u32, data: Parcel) 
         .unwrap_or_else(|error| panic!("{name} code {code} (oneway) failed: {error}"));
 }
 
+/// Ask `IBluetooth.getState` the way the image's client does (oneway, with a
+/// `SynchronousResultReceiver`) and return the answer the module delivered to
+/// the receiver, or `None` when nothing was delivered.
+fn adapter_state_via_receiver(host: &mut ServiceHost, receiver: u64) -> Option<i32> {
+    let (code, mut data) = open(host, "bluetooth", 1);
+    data.write_strong_binder(BinderId(receiver));
+    transact_oneway(host, "bluetooth", code, data);
+    let deliveries = host.take_deliveries();
+    let delivery = deliveries
+        .iter()
+        .find(|delivery| delivery.target.0 == receiver)?;
+    assert_eq!(
+        delivery.interface,
+        "com.android.bluetooth.x.com.android.modules.utils.ISynchronousResultReceiver",
+        "the answer must travel through the client's receiver"
+    );
+    let mut payload = delivery.data.clone();
+    payload.set_data_position(0);
+    payload
+        .enforce_interface("com.android.bluetooth.x.com.android.modules.utils.ISynchronousResultReceiver")
+        .expect("ISynchronousResultReceiver token");
+    assert_eq!(payload.read_int32().unwrap(), 1, "Result is a typed object");
+    // Image order: `mObject` first, then `mException`.
+    let value = acos_services::parcelable::read_dynamic(&mut payload).expect("mObject");
+    let exception = acos_services::parcelable::read_dynamic(&mut payload).expect("mException");
+    assert!(matches!(
+        exception,
+        acos_services::value::DynamicValue::Null
+    ));
+    match value {
+        acos_services::value::DynamicValue::Int(answer) => Some(answer),
+        other => panic!("expected VAL_INTEGER, got {other:?}"),
+    }
+}
+
 fn register_receiver(host: &mut ServiceHost, receiver: u64, action: &str) {
     let shared = host
         .ensure("android.app.IActivityManager")
@@ -83,9 +118,14 @@ fn the_manager_hands_out_the_adapter_and_the_scripted_state_answers() {
         "registerAdapter returns the IBluetooth `bluetooth` service"
     );
 
-    let (code, data) = open(&mut host, "bluetooth", 1);
-    let mut reply = transact(&mut host, "bluetooth", code, data).expect("getState");
-    assert_eq!(reply.read_int32().unwrap(), 10, "STATE_OFF by default");
+    // `IBluetooth.getState` is oneway with an `ISynchronousResultReceiver`:
+    // a blocking decoded reply would be dropped and the client would burn its
+    // whole sync timeout (that was the ART failure this test now pins).
+    assert_eq!(
+        adapter_state_via_receiver(&mut host, java_binder(22)),
+        Some(10),
+        "STATE_OFF by default"
+    );
 
     // `set {on: true}` broadcasts ACTION_STATE_CHANGED and calls the manager
     // callback.
@@ -122,9 +162,11 @@ fn the_manager_hands_out_the_adapter_and_the_scripted_state_answers() {
         .expect("onBluetoothServiceUp");
     assert_eq!(callback.code, 1);
 
-    let (code, data) = open(&mut host, "bluetooth", 1);
-    let mut reply = transact(&mut host, "bluetooth", code, data).expect("getState");
-    assert_eq!(reply.read_int32().unwrap(), 12, "STATE_ON after set");
+    assert_eq!(
+        adapter_state_via_receiver(&mut host, java_binder(23)),
+        Some(12),
+        "STATE_ON after set"
+    );
 }
 
 #[test]
@@ -152,20 +194,25 @@ fn get_bonded_devices_answers_a_real_list_of_bluetooth_device_parcels() {
     assert_eq!(delivery.target.0, receiver);
     assert_eq!(
         delivery.interface,
-        "com.android.modules.utils.ISynchronousResultReceiver"
+        "com.android.bluetooth.x.com.android.modules.utils.ISynchronousResultReceiver"
     );
     let mut data = delivery.data.clone();
     data.set_data_position(0);
-    data.enforce_interface("com.android.modules.utils.ISynchronousResultReceiver")
+    data.enforce_interface("com.android.bluetooth.x.com.android.modules.utils.ISynchronousResultReceiver")
         .unwrap();
     assert_eq!(data.read_int32().unwrap(), 1, "Result is a typed object");
+    // `Result.writeToParcel` writes `mObject` then `mException` (image dex:
+    // `SynchronousResultReceiver$Result.writeToParcel`), and the client's
+    // constructor reads them in that order, casting the second to
+    // `RuntimeException` — the reverse order is a `ClassCastException` in the
+    // client and a lost result.
+    let value = acos_services::parcelable::read_dynamic(&mut data).expect("Result.mObject");
     let exception =
         acos_services::parcelable::read_dynamic(&mut data).expect("Result.mException");
     assert!(matches!(
         exception,
         acos_services::value::DynamicValue::Null
     ));
-    let value = acos_services::parcelable::read_dynamic(&mut data).expect("Result.mObject");
     let acos_services::value::DynamicValue::List(Some(items)) = value else {
         panic!("expected VAL_LIST, got {value:?}");
     };

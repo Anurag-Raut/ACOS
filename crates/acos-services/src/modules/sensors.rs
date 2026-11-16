@@ -124,6 +124,7 @@ fn manifest_ref() -> &'static ModuleManifest {
             name: sensors::SERVICE_NAME,
             descriptor: sensors::SENSOR_SERVER_DESCRIPTOR,
         }],
+        process_initializers: &[],
         features: &[],
         providers: &[],
         broadcasts: &[],

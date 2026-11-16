@@ -133,6 +133,7 @@ fn manifest_ref() -> &'static ModuleManifest {
             name: SERVICE_NAME,
             descriptor: DESCRIPTOR,
         }],
+        process_initializers: &[],
         features: &[],
         providers: &[],
         broadcasts: &[],

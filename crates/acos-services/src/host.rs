@@ -42,6 +42,44 @@ pub struct PendingDelivery {
     pub data: Parcel,
 }
 
+/// One `IServiceManager.registerForNotifications` request waiting for its name
+/// to appear (ADR-0029: a module that is not attached yet).
+#[derive(Clone, Debug)]
+struct PendingNotification {
+    /// Service name the client is waiting for.
+    name: String,
+    /// The client's `android.os.IServiceCallback` binder.
+    callback: BinderId,
+}
+
+/// `android.os.IServiceManager` name, for the notification frame.
+const SERVICE_MANAGER_DESCRIPTOR: &str = "android.os.IServiceManager";
+/// `android.os.IServiceCallback`, the client's registration callback.
+const SERVICE_CALLBACK_DESCRIPTOR: &str = "android.os.IServiceCallback";
+/// `IServiceCallback.onRegistration(String, IBinder)`.
+const SERVICE_CALLBACK_ON_REGISTRATION: u32 = 1;
+
+/// The `IServiceCallback.onRegistration(@utf8InCpp String, IBinder)` frame.
+///
+/// The AIDL is `oneway interface IServiceCallback { void onRegistration(
+/// @utf8InCpp String name, IBinder binder); }`
+/// (`frameworks/native/libs/binder/aidl/android/os/IServiceCallback.aidl`), so the
+/// name is `Parcel::writeUtf8` (= `writeString8`) and a oneway frame carries no
+/// exception header.
+fn registration_delivery(callback: BinderId, name: &str, binder: BinderId) -> PendingDelivery {
+    let mut data = Parcel::new();
+    let _ = data.write_interface_token(SERVICE_CALLBACK_DESCRIPTOR);
+    let _ = data.write_string8(name);
+    data.write_strong_binder(binder);
+    PendingDelivery {
+        target: callback,
+        interface: SERVICE_CALLBACK_DESCRIPTOR.to_string(),
+        code: SERVICE_CALLBACK_ON_REGISTRATION,
+        method: "onRegistration".to_string(),
+        data,
+    }
+}
+
 /// The result of one service handler call.
 #[derive(Debug, Default)]
 pub struct CallResult {
@@ -193,6 +231,13 @@ pub struct ServiceHost {
     /// Binders created while answering a transaction (the `IBulkCursor` a
     /// `query` hands back), keyed by binder id.
     dynamic: HashMap<u64, Box<dyn ServiceObject>>,
+    /// `ServiceManager` names a shipped module may provide later: AOSP's VINTF
+    /// declaration (`isDeclared`), which is what lets `waitForService` wait for a
+    /// service that is not running yet.
+    declared: Vec<&'static str>,
+    /// Pending `IServiceManager.registerForNotifications` callbacks (ADR-0029:
+    /// a live module attach is the event they wait for).
+    notifications: Vec<PendingNotification>,
     deliveries: Vec<PendingDelivery>,
     trace: Option<Box<dyn TraceSink>>,
     seq: AtomicU64,
@@ -235,6 +280,8 @@ impl ServiceHost {
             names: HashMap::new(),
             aux: HashMap::new(),
             dynamic: HashMap::new(),
+            declared: Vec::new(),
+            notifications: Vec::new(),
             deliveries: Vec::new(),
             trace: None,
             seq: AtomicU64::new(1),
@@ -253,6 +300,7 @@ impl ServiceHost {
         let binder = self.registry.register_local(descriptor);
         self.binder_descriptors.insert(binder.0, descriptor);
         self.names.insert(name, descriptor);
+        self.notify_registered(name);
         self.entries.insert(
             descriptor,
             ServiceEntry {
@@ -302,6 +350,7 @@ impl ServiceHost {
     ) -> BinderId {
         let binder = self.register_dynamic(descriptor, object);
         self.names.insert(name, descriptor);
+        self.notify_registered(name);
         binder
     }
 
@@ -314,6 +363,7 @@ impl ServiceHost {
     /// second `register_dynamic_named` would allocate a second binder.
     pub fn alias_service_name(&mut self, name: &'static str, descriptor: &'static str) {
         self.names.insert(name, descriptor);
+        self.notify_registered(name);
     }
 
     /// Register an auxiliary binder (a binder returned by another service).
@@ -451,8 +501,12 @@ impl ServiceHost {
             self.names.remove(key);
         }
         // Restore any pre-existing alias the module overwrote.
+        let restored: Vec<&'static str> = scope.names.keys().copied().collect();
         for (name, descriptor) in &scope.names {
             self.names.insert(name, descriptor);
+        }
+        for name in restored {
+            self.notify_registered(name);
         }
         let added_aux: Vec<&'static str> = self
             .aux
@@ -555,10 +609,72 @@ impl ServiceHost {
         v
     }
 
-    /// True when `name` is registered.
+    /// True when `name` is registered **or** declared by a shipped module.
+    ///
+    /// AOSP answers this from the device's VINTF manifest
+    /// (`ServiceManager::isDeclared`, `servicemanager/ServiceManager.cpp:596`):
+    /// true for a service that exists on the device even while it is not
+    /// running. ACOS's equivalent declaration is a module manifest's
+    /// `services` list, registered here by [`Self::declare_service_name`], so
+    /// `ServiceManager.isDeclared`/`waitForDeclaredService` agree with the
+    /// modules the build can attach.
     #[must_use]
     pub fn is_declared(&self, name: &str) -> bool {
-        self.names.contains_key(name)
+        self.names.contains_key(name) || self.declared.iter().any(|declared| *declared == name)
+    }
+
+    /// Declare `name`: a shipped module can provide it even though it is not
+    /// registered now (the module is `off` or not attached yet).
+    pub fn declare_service_name(&mut self, name: &'static str) {
+        if !self.names.contains_key(name) && !self.declared.contains(&name) {
+            self.declared.push(name);
+        }
+    }
+
+    /// The declared-but-not-registered names (the module-provided gaps).
+    #[must_use]
+    pub fn declared_names(&self) -> Vec<&'static str> {
+        let mut names: Vec<&'static str> = self
+            .declared
+            .iter()
+            .copied()
+            .filter(|name| !self.names.contains_key(name))
+            .collect();
+        names.sort_unstable();
+        names
+    }
+
+    /// Fire the pending `registerForNotifications` callbacks for `name`, if it
+    /// resolves now.
+    ///
+    /// Called from every path that gives a descriptor a `ServiceManager` name
+    /// (a live module attach, an alias), so a client blocked in
+    /// `ServiceManager.waitForService` gets `IServiceCallback.onRegistration`
+    /// exactly when the service appears — AOSP's `ServiceManager::addService`
+    /// (`servicemanager/ServiceManager.cpp:480-499`).
+    fn notify_registered(&mut self, name: &str) {
+        if self.notifications.is_empty() {
+            return;
+        }
+        let Ok(Some(binder)) = self.check_service(name) else {
+            return;
+        };
+        let (fire, keep): (Vec<PendingNotification>, Vec<PendingNotification>) = std::mem::take(
+            &mut self.notifications,
+        )
+        .into_iter()
+        .partition(|notification| notification.name == name);
+        self.notifications = keep;
+        for notification in fire {
+            self.deliveries
+                .push(registration_delivery(notification.callback, name, binder));
+        }
+    }
+
+    /// How many registration callbacks are waiting (tests and the report).
+    #[must_use]
+    pub fn pending_notifications(&self) -> usize {
+        self.notifications.len()
     }
 
     /// Resolve a service-manager name to its binder, constructing the service
@@ -1093,6 +1209,77 @@ impl ServiceHost {
             "isDeclared" => {
                 let name = args.first().and_then(|v| v.as_str()).unwrap_or_default();
                 reply_values.push(crate::value::Value::Bool(self.is_declared(name)));
+            }
+            // `registerForNotifications(String, IServiceCallback)`: AOSP stores
+            // the callback and calls it at once when the service already exists
+            // (`servicemanager/ServiceManager.cpp:527-570`, including the
+            // `mNameToService.find(name) != end` immediate `onRegistration`).
+            // ACOS adds one deliberate difference: a name that is neither
+            // registered nor declared by a shipped module can never appear here
+            // (there is no VINTF manifest and no lazy service start), so the
+            // registration is refused with `EX_ILLEGAL_ARGUMENT` and the reason.
+            // AOSP would accept it and never fire, which is exactly the endless
+            // `waitForService` sleep an agent hit on a module name (the
+            // guest-side complaint travels back as the exception message, which
+            // libbinder logs as "Failed to registerForNotifications ...").
+            "registerForNotifications" => {
+                let name = args
+                    .first()
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let Some(callback) = args.get(1).and_then(crate::value::Value::as_binder) else {
+                    return Err(ServiceError::BadRequest {
+                        interface: descriptor,
+                        method: method.name.clone(),
+                        detail: "registerForNotifications needs an IServiceCallback binder"
+                            .to_string(),
+                    });
+                };
+                if name.trim().is_empty() {
+                    return Err(ServiceError::BadRequest {
+                        interface: descriptor,
+                        method: method.name.clone(),
+                        detail: "registerForNotifications needs a non-empty service name"
+                            .to_string(),
+                    });
+                }
+                if !self.is_declared(&name) {
+                    return Err(ServiceError::BadRequest {
+                        interface: descriptor,
+                        method: method.name.clone(),
+                        detail: format!(
+                            "no service {name:?} is registered or declared by any module; it can never appear, so waiting for it would never return (AOSP's servicemanager would accept this registration and never fire it)"
+                        ),
+                    });
+                }
+                self.notifications.push(PendingNotification {
+                    name: name.clone(),
+                    callback,
+                });
+                // AOSP fires immediately for an already-registered name.
+                self.notify_registered(&name);
+            }
+            "unregisterForNotifications" => {
+                let name = args
+                    .first()
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let callback = args.get(1).and_then(crate::value::Value::as_binder);
+                let before = self.notifications.len();
+                self.notifications.retain(|notification| {
+                    !(notification.name == name && Some(notification.callback) == callback)
+                });
+                if self.notifications.len() == before {
+                    // AOSP: EX_ILLEGAL_STATE, "Nothing to unregister."
+                    return Err(ServiceError::IllegalState {
+                        component: "servicemanager",
+                        detail: format!(
+                            "Trying to unregister callback, but none exists for {name:?} (AOSP: \"Nothing to unregister\")"
+                        ),
+                    });
+                }
             }
             "addService" => {
                 return Err(ServiceError::UnsupportedAndroidApi {

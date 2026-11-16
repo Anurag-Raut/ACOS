@@ -72,6 +72,7 @@ impl CoreModule {
                 version: "1.0.0",
                 summary: "the Android system services every session boots with (AMS, ATMS, PMS, WMS, IME, clipboard, settings, display, extras)",
                 services,
+                process_initializers: &[],
                 features: &[],
         providers: &["settings"],
                 broadcasts: &[],

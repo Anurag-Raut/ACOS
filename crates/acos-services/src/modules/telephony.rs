@@ -55,8 +55,8 @@ use crate::error::{Result, ServiceError};
 use crate::exception::write_no_exception;
 use crate::host::{CallResult, PendingDelivery, ServiceHost, ServiceObject};
 use crate::module::{
-    AttachMode, Budget, ControlOp, Module, ModuleConfig, ModuleManifest, ModuleReport, Profile,
-    SecurityClass, ServiceProvide,
+    AttachMode, Budget, ControlOp, Module, ModuleConfig, ModuleManifest, ModuleReport,
+    ProcessInitializer, Profile, SecurityClass, ServiceProvide,
 };
 
 /// The module id (the id `TOMBSTONES` already names for `phone`).
@@ -331,6 +331,17 @@ fn manifest_ref() -> &'static ModuleManifest {
         id: MODULE_ID,
         version: "1.0.0",
         summary: "telephony: scripted SIM/phone/network state, line-1 number, SMS send recording and SMS_RECEIVED/call-state events (no radio)",
+        // The telephony mainline module's own process installs the framework's
+        // `TelephonyServiceManager` before any app runs; ACOS has no such
+        // process, so the session that attaches this module runs the same call
+        // in the guest, once, before the app boots (see
+        // `ModuleManifest::process_initializers`).
+        process_initializers: &[ProcessInitializer {
+            class: "android.telephony.TelephonyFrameworkInitializer",
+            method: "setTelephonyServiceManager",
+            manager: "android.os.TelephonyServiceManager",
+            evidence: "base/telephony/common/com/android/internal/telephony/frameworks/base/core/java/android/telephony/TelephonyFrameworkInitializer.java: `setTelephonyServiceManager` is the only setter for `sTelephonyServiceManager`, and `getTelephonyServiceManager` returns null until it runs; every `TelephonyManager`/`SmsManager` path resolves its binder through `TelephonyServiceManager.ServiceRegisterer.get()`, so without it the manager is null in the app process",
+        }],
         features: &[
             "android.hardware.telephony",
             "android.hardware.telephony.messaging",

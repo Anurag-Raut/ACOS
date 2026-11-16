@@ -170,6 +170,7 @@ fn manifest_ref() -> &'static ModuleManifest {
         id: MODULE_ID,
         version: "1.0.0",
         summary: "biometrics: scripted canAuthenticate and BiometricPrompt authenticate results (no hardware, no prompt UI)",
+        process_initializers: &[],
         features: &[],
         services: &[ServiceProvide {
             name: "auth",

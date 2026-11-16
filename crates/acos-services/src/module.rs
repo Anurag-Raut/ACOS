@@ -167,6 +167,52 @@ pub struct ControlOp {
     pub args: &'static str,
 }
 
+/// A framework initializer the **guest process** must run before any app code
+/// (`Application.onCreate`) when the module is attached.
+///
+/// A mainline module on a real device has its own process that installs the
+/// framework's service manager before an app can use it: the telephony module's
+/// process calls `TelephonyFrameworkInitializer.setTelephonyServiceManager`, the
+/// Bluetooth module's calls `BluetoothFrameworkInitializer.setBluetoothServiceManager`.
+/// ACOS has no such process, so the session runs the same call in the guest,
+/// once, before the app boots — but *only* when the module is attached, because
+/// a manager installed without its module would hand the app a binder nothing
+/// serves. The data lives in the manifest (never in a per-module environment
+/// variable) so a new module declares it the same way every other promise is
+/// declared, and the guest side is one generic reflective installer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProcessInitializer {
+    /// Framework class holding the initializer (`android.telephony.TelephonyFrameworkInitializer`).
+    pub class: &'static str,
+    /// Static setter on that class (`setTelephonyServiceManager`).
+    pub method: &'static str,
+    /// The manager class the setter takes; constructed with its no-argument
+    /// constructor (`android.os.TelephonyServiceManager`).
+    pub manager: &'static str,
+    /// The AOSP source that makes this necessary (file:line), quoted in the
+    /// report so a reviewer can check the claim instead of trusting it.
+    pub evidence: &'static str,
+}
+
+impl ProcessInitializer {
+    /// The `class#method#manager` wire form the launcher forwards to the guest.
+    #[must_use]
+    pub fn wire(&self) -> String {
+        format!("{}#{}#{}", self.class, self.method, self.manager)
+    }
+
+    /// The one-row description for the manifest/capability JSON.
+    #[must_use]
+    pub fn to_json(&self) -> Value {
+        json!({
+            "class": self.class,
+            "method": self.method,
+            "manager": self.manager,
+            "evidence": self.evidence,
+        })
+    }
+}
+
 /// Everything a module promises about itself (ADR-0029 item 1).
 ///
 /// A manifest is static data: one row in the registry, never per-session. The
@@ -186,6 +232,9 @@ pub struct ModuleManifest {
     /// (`android.hardware.telephony`). Attach turns them on, detach off, so
     /// `hasSystemFeature` agrees with the attached set.
     pub features: &'static [&'static str],
+    /// Framework initializers the guest process runs before `Application.onCreate`
+    /// (see [`ProcessInitializer`]); empty for a module that needs none.
+    pub process_initializers: &'static [ProcessInitializer],
     /// Content-provider authorities the module provides.
     pub providers: &'static [&'static str],
     /// Broadcasts the module starts or answers.
@@ -293,6 +342,37 @@ impl ModuleManifest {
                 self.id
             ));
         }
+        let mut seen_initializers: Vec<&str> = Vec::new();
+        for initializer in self.process_initializers {
+            if initializer.class.is_empty()
+                || initializer.method.is_empty()
+                || initializer.manager.is_empty()
+            {
+                return Err(format!(
+                    "module {:?}: process initializer {initializer:?} needs a class, a method and a manager class",
+                    self.id
+                ));
+            }
+            if !initializer.class.contains('.') || !initializer.manager.contains('.') {
+                return Err(format!(
+                    "module {:?}: process initializer {:?} needs fully qualified class names",
+                    self.id, initializer.class
+                ));
+            }
+            if initializer.evidence.is_empty() {
+                return Err(format!(
+                    "module {:?}: process initializer {:?} has no AOSP evidence",
+                    self.id, initializer.class
+                ));
+            }
+            if seen_initializers.contains(&initializer.class) {
+                return Err(format!(
+                    "module {:?}: process initializer {:?} is listed twice",
+                    self.id, initializer.class
+                ));
+            }
+            seen_initializers.push(initializer.class);
+        }
         let mut seen_ops: Vec<&str> = Vec::new();
         for op in self.controls {
             if op.name.is_empty() {
@@ -349,6 +429,11 @@ impl ModuleManifest {
                 "windows": self.windows,
                 "system_apps": self.system_apps,
             },
+            "process_initializers": self
+                .process_initializers
+                .iter()
+                .map(ProcessInitializer::to_json)
+                .collect::<Vec<_>>(),
             "requires": self.requires,
             "requires_host_tools": self.requires_host_tools,
             "budget": {
@@ -1452,6 +1537,55 @@ impl ModuleRegistry {
             .find_map(|entry| entry.module.take_session_handles())
     }
 
+    /// Every `ServiceManager` name some module in this registry can provide,
+    /// attached or not.
+    ///
+    /// The session declares these on its host
+    /// ([`ServiceHost::declare_service_name`]) so `ServiceManager.isDeclared` and
+    /// `registerForNotifications` know that a name which is not registered *yet*
+    /// (the module is `off`) is nevertheless real — AOSP's VINTF declaration.
+    #[must_use]
+    pub fn provided_names(&self) -> Vec<&'static str> {
+        let mut names: Vec<&'static str> = Vec::new();
+        for entry in &self.entries {
+            for service in entry.module.manifest().services {
+                if !names.contains(&service.name) {
+                    names.push(service.name);
+                }
+            }
+        }
+        names.sort_unstable();
+        names
+    }
+
+    /// The framework initializers the **guest process** must run before the app
+    /// boots, for the modules attached to this session (ADR-0029 item 1).
+    ///
+    /// In registry (standard-set) order, so the guest's log line is stable, and
+    /// deduplicated by `class#method`: two modules may need the same initializer
+    /// and the guest must not install a manager twice (the framework setters
+    /// throw `IllegalStateException` on a second call). A detached module
+    /// contributes nothing, which is the whole point: the manager is present
+    /// exactly when something can serve it.
+    #[must_use]
+    pub fn process_initializers(&self) -> Vec<ProcessInitializer> {
+        let mut out: Vec<ProcessInitializer> = Vec::new();
+        for entry in &self.entries {
+            if !entry.profile.is_attached() {
+                continue;
+            }
+            for initializer in entry.module.manifest().process_initializers {
+                if !out
+                    .iter()
+                    .any(|seen| seen.class == initializer.class && seen.method == initializer.method)
+                {
+                    out.push(*initializer);
+                }
+            }
+        }
+        out
+    }
+
     /// The attached set as the `verdict.json` / launch-reply rows.
     ///
     /// One row per module the session *asked for* plus every module that is
@@ -1773,9 +1907,12 @@ impl SessionModules {
     /// An empty host and the standard module set (nothing attached yet).
     #[must_use]
     pub fn new() -> Self {
+        let registry = ModuleRegistry::standard();
+        let mut host = ServiceHost::new();
+        Self::declare_modules(&mut host, &registry);
         Self {
-            host: ServiceHost::new(),
-            registry: ModuleRegistry::standard(),
+            host,
+            registry,
             adopted_handles: None,
         }
     }
@@ -1783,9 +1920,12 @@ impl SessionModules {
     /// A session around a host that already exists (the zygote host template).
     #[must_use]
     pub fn with_host(host: ServiceHost) -> Self {
+        let registry = ModuleRegistry::standard();
+        let mut host = host;
+        Self::declare_modules(&mut host, &registry);
         Self {
             host,
-            registry: ModuleRegistry::standard(),
+            registry,
             adopted_handles: None,
         }
     }
@@ -1798,10 +1938,21 @@ impl SessionModules {
         registry
             .adopt_attached("core", Profile::Real)
             .expect("the standard registry contains core");
+        let mut host = host;
+        Self::declare_modules(&mut host, &registry);
         Self {
             host,
             registry,
             adopted_handles: Some(handles),
+        }
+    }
+
+    /// Declare every module's `ServiceManager` names on the host, so a name a
+    /// module owns is *declared* before the module is attached (ADR-0029 item 3:
+    /// the session knows the whole module set, an agent attaches a subset).
+    fn declare_modules(host: &mut ServiceHost, registry: &ModuleRegistry) {
+        for name in registry.provided_names() {
+            host.declare_service_name(name);
         }
     }
 
@@ -1852,6 +2003,12 @@ impl SessionModules {
         &self.host
     }
 
+    /// The host, mutably: attach/detach, `ServiceManager` lookups and the
+    /// `system -> app` deliveries they queue all run against it.
+    pub fn host_mut(&mut self) -> &mut ServiceHost {
+        &mut self.host
+    }
+
     /// Handles `core` published at attach (compositor/input).
     pub fn take_session_handles(&mut self) -> Option<crate::registry::LiveHandles> {
         self.adopted_handles
@@ -1863,6 +2020,13 @@ impl SessionModules {
     #[must_use]
     pub fn verdict_modules(&self) -> Vec<Value> {
         self.registry.verdict_modules()
+    }
+
+    /// The framework initializers this session's attached modules declare
+    /// (ADR-0029 item 1); the launcher forwards them to the guest process.
+    #[must_use]
+    pub fn process_initializers(&self) -> Vec<ProcessInitializer> {
+        self.registry.process_initializers()
     }
 
     /// The capability payload with this session's attached set.
