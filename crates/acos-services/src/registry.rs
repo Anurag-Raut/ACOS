@@ -419,6 +419,19 @@ pub fn install_with_handles_and_insets(
     // It is a raw node (`android.gui.*` has no decoded table) published under
     // the `ServiceManager` name the framework asks for, so `checkService`
     // answers on the first try and `SensorManager` never enters its retry loop.
+    // SPIKE-WV (ADR-0031 gate, `research/spike-wv/`): the `webviewupdate` peer
+    // is wall 3 of `WebViewFactory.getProvider()` — `getUpdateService()` ->
+    // `ServiceManager.getService("webviewupdate")` -> a null service NPEs inside
+    // `waitForAndGetProvider()` and surfaces as
+    // `MissingWebViewPackageException`. Spike only: registered when
+    // `ACOS_SPIKE_WV=1`, answering one provider package record.
+    if crate::spike_webview::enabled() {
+        host.register_dynamic_named(
+            "webviewupdate",
+            crate::spike_webview::DESCRIPTOR,
+            Box::new(crate::spike_webview::WebViewUpdateService::new()),
+        );
+    }
     let sensors = Arc::new(Mutex::new(crate::misc::SensorState::default()));
     host.register_dynamic_named(
         "sensorservice",

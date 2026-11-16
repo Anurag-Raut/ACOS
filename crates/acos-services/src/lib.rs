@@ -67,6 +67,9 @@ pub mod parcelable;
 pub mod pms;
 pub mod provider;
 pub mod registry;
+// SPIKE-WV (ADR-0031 gate, `research/spike-wv/`): the `webviewupdate` peer.
+// Active only with `ACOS_SPIKE_WV=1`; see `results/handoff/SPIKE-WV/REPORT.md`.
+pub mod spike_webview;
 pub mod surface_client;
 pub mod trace;
 pub mod value;

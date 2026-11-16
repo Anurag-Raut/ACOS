@@ -867,6 +867,14 @@ impl Default for FeatureTable {
         let mut t = Self {
             features: Vec::new(),
         };
+        // SPIKE-WV (ADR-0031 gate, `research/spike-wv/`): `android.software.webview`
+        // is the first wall in `WebViewFactory.getProvider()` —
+        // `isWebViewSupported()` reads this feature and, when it is false,
+        // throws `UnsupportedOperationException` with a null message. The
+        // flag only flips the answer so the spike can walk the next wall; it
+        // is **not** the v0.4.0 design (the real answer must follow from a
+        // provider package actually being installed, not from an env var).
+        let spike_wv = matches!(std::env::var("ACOS_SPIKE_WV").as_deref(), Ok("1"));
         for (name, enabled) in [
             ("android.hardware.touchscreen", true),
             ("android.hardware.touchscreen.multitouch", true),
@@ -876,7 +884,7 @@ impl Default for FeatureTable {
             ("android.hardware.vulkan.version", false),
             ("android.software.companion_device_setup", false),
             ("android.software.picture_in_picture", false),
-            ("android.software.webview", false),
+            ("android.software.webview", spike_wv),
             ("android.software.app_widgets", false),
             ("android.software.input_methods", false),
         ] {
@@ -1060,6 +1068,69 @@ pub struct PmsState {
     pub installer_package: Option<String>,
     /// `sourceDir` the state was built from.
     pub apk_path: PathBuf,
+    /// SPIKE-WV: the WebView provider package (ADR-0031 gate,
+    /// `research/spike-wv/`). `Some` only when `ACOS_SPIKE_WV=1`; the real
+    /// foundation replaces this field with a real multi-package table (see
+    /// `results/handoff/SPIKE-WV/REPORT.md` §3).
+    pub spike_webview: Option<PackageInfo>,
+}
+
+/// SPIKE-WV: the package record for the WebView provider — "a system package
+/// baked into the session image", exactly what `com.android.webview` is on a
+/// phone (ADR-0031 gate, `research/spike-wv/`; active only with
+/// `ACOS_SPIKE_WV=1`).
+///
+/// The real foundation keeps this record in a real multi-package table built
+/// from the image's packages (see `results/handoff/SPIKE-WV/REPORT.md` §3);
+/// this function is the one-record stand-in, and it deliberately shares every
+/// field with the `webviewupdate` reply so `WebViewFactory.verifyPackageInfo`
+/// (signature + version code, from the image's own dex) compares the record
+/// against itself.
+#[must_use]
+pub fn spike_webview_provider_package() -> PackageInfo {
+    let package = crate::spike_webview::PROVIDER_PACKAGE.to_string();
+    let source_dir = crate::spike_webview::PROVIDER_GUEST_SOURCE.to_string();
+    // `ApplicationInfo.FLAG_SYSTEM` (1) | `FLAG_HAS_CODE` (4). No
+    // `com.android.webview.WebViewLibrary` meta-data: the provider is pure Java,
+    // so `WebViewLibraryLoader.loadNativeLibrary` finds nothing to load
+    // (the image's `WebViewFactory.getWebViewLibrary` reads exactly that key).
+    let app = AppInfo {
+        package_name: package.clone(),
+        name: String::new(),
+        class_name: String::new(),
+        public_source_dir: source_dir.clone(),
+        source_dir,
+        data_dir: format!("/data/user/{FIXTURE_USER}/{package}"),
+        device_protected_data_dir: format!("/data/user_de/{FIXTURE_USER}/{package}"),
+        credential_protected_data_dir: format!("/data/user/{FIXTURE_USER}/{package}"),
+        native_library_dir: format!("/data/user/{FIXTURE_USER}/{package}/lib/{}", acos_apk::HOST_ABI),
+        // The system-app uid band; the package is not an app the user launches.
+        uid: 10100,
+        flags: 1 | 4,
+        private_flags: 0,
+        target_sdk: 34,
+        min_sdk: 26,
+        process_name: package.clone(),
+        theme: 0,
+        label_res: 0,
+        icon: 0,
+        resource_dirs: Vec::new(),
+        split_names: Vec::new(),
+        shared_library_files: Vec::new(),
+        target_sandbox_version: 2,
+        meta_data: Vec::new(),
+    };
+    PackageInfo {
+        package_name: package,
+        version_code: 1,
+        version_name: "1.0".into(),
+        application: app,
+        activities: Vec::new(),
+        requested_permissions: Vec::new(),
+        first_install_time: 0,
+        last_update_time: 0,
+        signatures: Vec::new(),
+    }
 }
 
 impl PmsState {
@@ -1101,6 +1172,7 @@ impl PmsState {
             component_settings: Vec::new(),
             installer_package: None,
             apk_path: apk,
+            spike_webview: None,
         }
     }
 
@@ -1216,6 +1288,10 @@ impl PmsState {
             component_settings: Vec::new(),
             installer_package: None,
             apk_path: path.to_path_buf(),
+            // SPIKE-WV: the provider package is a *system* package in the image,
+            // so it is installed next to the launched app, not derived from it.
+            spike_webview: crate::spike_webview::enabled()
+                .then(spike_webview_provider_package),
         })
     }
 
@@ -1415,10 +1491,16 @@ impl PmsService {
     fn lookup<'a>(state: &'a PmsState, package: Option<&str>) -> Result<&'a PackageInfo> {
         match package {
             Some(p) if p == state.package.package_name => Ok(&state.package),
+            // SPIKE-WV: the second package (the WebView provider). A real
+            // foundation looks this up in the package table; here it is the one
+            // extra record the spike installs.
+            Some(p) => match state.spike_webview.as_ref() {
+                Some(rec) if rec.package_name == p => Ok(rec),
+                _ => Err(ServiceError::UnknownService {
+                    name: p.to_string(),
+                }),
+            },
             Some("") => Ok(&state.package),
-            Some(p) => Err(ServiceError::UnknownService {
-                name: p.to_string(),
-            }),
             None => Ok(&state.package),
         }
     }
