@@ -618,8 +618,28 @@ fn write_parcelable_value(
     Ok(())
 }
 
+/// Start an `IRemoteCallback.sendResult(in Bundle)` payload: the interface
+/// token, then `Parcel.writeTypedObject`'s presence word.
+///
+/// The image's `IRemoteCallback$Stub.onTransact` (code 1) reads the argument
+/// with `Parcel.readTypedObject(Bundle.CREATOR)` — an `int` presence word and
+/// then `Bundle.writeToParcel` — and finishes with `enforceNoDataAvail()`. A
+/// payload that starts straight at the `Bundle` makes the framework read the
+/// Bundle's length word as the presence flag and the magic as the length, which
+/// is exactly the `-Bundle length is not aligned by 4` the guest threw out of
+/// the reverse delivery.
+fn begin_send_result(parcel: &mut Parcel) -> Result<()> {
+    parcel.write_interface_token(crate::a11y_bind::REMOTE_CALLBACK)?;
+    parcel.write_int32(1);
+    Ok(())
+}
+
 /// Write the failure `Bundle` of `sendScreenshotFailure`.
+///
+/// The whole `sendResult` payload is written: interface token, the typed-object
+/// presence word, then the `Bundle` body.
 pub fn write_failure_bundle(parcel: &mut Parcel, status: i32) -> Result<()> {
+    begin_send_result(parcel)?;
     let start = parcel.data_size();
     // `BaseBundle.writeToParcelInner` starts with its `-1` placeholder and
     // back-patches the payload length after the entries.
@@ -653,13 +673,17 @@ fn backpatch_bundle_length(parcel: &mut Parcel, start: usize, payload_start: usi
     Ok(())
 }
 
-/// Write the success `Bundle` of `sendScreenshotSuccess`: status, the
-/// `HardwareBuffer`, the `ParcelableColorSpace` and `capture_time_ms`.
+/// Write the success `sendResult` payload of `sendScreenshotSuccess`: status,
+/// the `HardwareBuffer`, the `ParcelableColorSpace` and `capture_time_ms`.
+///
+/// The whole payload is written: interface token, the typed-object presence
+/// word, then the `Bundle` body (see [`begin_send_result`]).
 pub fn write_success_bundle(
     parcel: &mut Parcel,
     frame: &ScreenshotFrame,
     capture_time_ms: i64,
 ) -> Result<()> {
+    begin_send_result(parcel)?;
     let keys = [
         KEY_SCREENSHOT_STATUS,
         KEY_SCREENSHOT_HARDWAREBUFFER,

@@ -67,14 +67,24 @@ steps:
   - assert_log:
       tag: AcosA11yProbe
       patterns:
+        # MODA11YNATIVE2: the display facts `dispatchGesture` is sampled against.
+        # `AccessibilityService.calculateGestureSampleTimeMs` is 1000/refreshRate,
+        # so a `0 Hz` display collapses a swipe to its press/release key points
+        # and no MOVE ever reaches the app (the list cannot scroll).
+        # `button_text` is logged by the activity itself (before the service
+        # binds), so it is the first line this ordered assertion can match.
+        - "button_text a11y=Click target drawn="
+        - "display id=0 refresh_rate=60.000004 mode_id=1 mode_rate=60.000004 modes=1"
         - "windows count=1"
         - "type=1 layer=0 active=true focused=true"
         - "root class=android.widget.FrameLayout"
         - "by_view_id count=1"
-        # MODA11YNATIVE: the label's case is the theme's (`textAllCaps` on the
-        # default Button style), not this app's; the identity, the label and
-        # clickability are what the by-view-id query and the click assert.
-        - "node class=android.widget.Button text=(?i)click target view_id=null clickable=true"
+        # MODA11YNATIVE2: the label is the ORIGINAL string, in its own case.
+        # `AccessibilityNodeInfo.getText()` is `TextView.getTextForAccessibility`
+        # -> `getText()`, never the drawn (transformed) label; the probe logs
+        # both side by side (`button_text a11y=… drawn=…`) so the two APIs can
+        # never be confused for one another again.
+        - "node class=android.widget.Button text=Click target view_id=null clickable=true"
         - "click handled=true"
   - assert_text:
       selector: {id: status}
@@ -149,21 +159,36 @@ steps:
         - "gesture_target_pressed count=1"
         - "gesture_sent kind=swipe accepted=true"
         - "gesture_result kind=swipe completed=true"
+        # The stroke reaches the list as DOWN + MOVE... + UP (`ACOSA11Y
+        # dispatchGesture seq=… t=…` in the trace), so the ScrollView really
+        # moves. MODA11YNATIVE2: the whole stream is published in one turn, so
+        # the guest batches it and only the slop-crossing delta is applied
+        # (11 px of a 400 px stroke) — AOSP's injector paces the events over the
+        # stroke's duration. See results/handoff/A11YNATIVE2/README.md.
         - "list_scrolled y=\\d+"
   # MODA11YNATIVE step 2: `takeScreenshot`. The success payload really is the
-  # composited frame (1080x2400 RGBA_8888 over a memfd, imported by the guest's
-  # own gralloc/GraphicBuffer path), and the three reachable failure codes come
-  # back through the framework's `TakeScreenshotCallback.onFailure`.
+  # composited frame: the framework's own `TakeScreenshotCallback.onSuccess`
+  # runs with a `HardwareBuffer` that reports the display's size, RGBA_8888 and
+  # the read-often/sampled usage the wrapper needs (the buffer is the guest's
+  # own gralloc `GraphicBuffer` over a memfd copy of the frame), and the three
+  # reachable failure codes come back through `onFailure`.
+  #
+  # MODA11YNATIVE2: reading one PIXEL out of that buffer needs
+  # `Bitmap.wrapHardwareBuffer` — a hardware bitmap, i.e. an EGL/GLES
+  # implementation the image does not have (see the probe's
+  # `screenshot_pixel unavailable=…` line and results/handoff/A11YNATIVE2). The
+  # app-side assertion is therefore the buffer's description; the frame's own
+  # pixels are asserted host-side from the same compositor capture.
   - assert_log:
       tag: AcosA11yProbe
       ordered: false
       patterns:
         - "screenshot_result kind=capture status=0 width=1080 height=2400 format=1"
+        - "screenshot_result kind=capture status=0 .* usage=257"
         - "screenshot_result kind=interval status=3"
         - "screenshot_result kind=display status=4"
         - "screenshot_result kind=secure status=6"
-        - "screenshot_bitmap width=1080 height=2400"
-        - "screenshot_pixel .* color=#FF3366CC"
+        - "screenshot_pixel unavailable=hardware_bitmap_needs_egl"
   - tap:
       selector: {id: a11y_back}
   - assert_log:

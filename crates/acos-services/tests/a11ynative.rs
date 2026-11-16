@@ -194,6 +194,26 @@ fn frame() -> a11y_native::ScreenshotFrame {
     }
 }
 
+/// Skip the `sendResult` prefix (`writeInterfaceToken`, then the typed-object
+/// presence word `Parcel.writeTypedObject`/`readTypedObject` use for the
+/// `Bundle` argument) and land on the Bundle body.
+fn send_result_prefix(parcel: &mut Parcel) {
+    // `writeInterfaceToken`: strict-mode policy, work source, header, string16.
+    let _policy = parcel.read_int32().expect("strict mode policy");
+    let _work_source = parcel.read_int32().expect("work source");
+    let _header = parcel.read_int32().expect("token header");
+    assert_eq!(
+        parcel.read_string16().expect("token").as_deref(),
+        Some("android.os.IRemoteCallback"),
+        "the sendResult interface token"
+    );
+    assert_eq!(
+        parcel.read_int32().expect("presence"),
+        1,
+        "writeTypedObject's non-null presence word"
+    );
+}
+
 /// Read the `[length][magic][count]` header of a `Bundle` body.
 ///
 /// The magic is the framework's own `BaseBundle.BUNDLE_MAGIC`; comparing with
@@ -222,6 +242,7 @@ fn the_failure_bundle_decodes_with_the_framework_bundle_reader() {
     let mut parcel = Parcel::new();
     a11y_native::write_failure_bundle(&mut parcel, 6).expect("writes");
     parcel.set_data_position(0);
+    send_result_prefix(&mut parcel);
     let bundle = acos_services::parcelable::read_bundle(&mut parcel)
         .expect("the framework's own Bundle reader accepts the payload")
         .expect("a non-null Bundle");
@@ -243,6 +264,7 @@ fn the_failure_bundle_carries_the_error_code_the_callback_reads() {
     let mut parcel = Parcel::new();
     a11y_native::write_failure_bundle(&mut parcel, 6).expect("writes");
     parcel.set_data_position(0);
+    send_result_prefix(&mut parcel);
     assert_eq!(bundle_header(&mut parcel), 1);
     assert_eq!(
         parcel.read_string16().expect("key").as_deref(),
@@ -267,6 +289,7 @@ fn the_success_bundle_carries_a_flattened_graphic_buffer_over_a_memfd() {
         "the HardwareBuffer travels as one fd"
     );
     parcel.set_data_position(0);
+    send_result_prefix(&mut parcel);
     assert_eq!(bundle_header(&mut parcel), 4);
 
     let mut seen = Vec::new();

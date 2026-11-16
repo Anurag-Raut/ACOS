@@ -1012,7 +1012,6 @@ impl A11yConnectionNode {
             }
         };
         let mut data = Parcel::new();
-        data.write_interface_token(REMOTE_CALLBACK)?;
         crate::a11y_native::write_success_bundle(&mut data, &frame, now)?;
         self.deliveries.push(PendingDelivery {
             target: BinderId(callback.0),
@@ -1037,7 +1036,6 @@ impl A11yConnectionNode {
     /// Send one `sendScreenshotFailure` `Bundle` (`screenshot_status` only).
     fn screenshot_failure(&mut self, callback: BinderId, status: i32) -> Result<()> {
         let mut data = Parcel::new();
-        data.write_interface_token(REMOTE_CALLBACK)?;
         crate::a11y_native::write_failure_bundle(&mut data, status)?;
         self.deliveries.push(PendingDelivery {
             target: callback,

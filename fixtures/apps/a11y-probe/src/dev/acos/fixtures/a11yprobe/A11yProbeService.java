@@ -3,7 +3,6 @@ package dev.acos.fixtures.a11yprobe;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.accessibilityservice.GestureDescription;
-import android.graphics.Bitmap;
 import android.graphics.ColorSpace;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
@@ -148,6 +147,12 @@ public class A11yProbeService extends AccessibilityService {
         Rect gestureTarget = boundsOf(root, "dev.acos.fixtures.a11yprobe:id/gesture_target");
         Rect gestureList = boundsOf(root, "dev.acos.fixtures.a11yprobe:id/gesture_list");
         Rect swatch = boundsOf(root, "dev.acos.fixtures.a11yprobe:id/swatch");
+        if (swatch != null) {
+            // The swatch the composited frame uses for the pixel claim; logged
+            // because a host-side region assertion has to name display pixels.
+            Log.i(TAG, "swatch bounds=[" + swatch.left + "," + swatch.top
+                    + "][" + swatch.right + "," + swatch.bottom + "]");
+        }
 
         if (root != null) {
             List<AccessibilityNodeInfo> byId =
@@ -212,7 +217,7 @@ public class A11yProbeService extends AccessibilityService {
         Log.i(TAG, "windows2 overlay=" + overlay);
         Log.i(TAG, "overlay_probe_done");
 
-        probeScreenshots(swatch == null ? 400 : swatch.centerY());
+        probeScreenshots();
     }
 
     /**
@@ -290,11 +295,12 @@ public class A11yProbeService extends AccessibilityService {
      * interval with `ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT` (3), an unknown
      * display with `…INVALID_DISPLAY` (4) and a screen showing a
      * `FLAG_SECURE` window with `…SECURE_WINDOW` (6), all through
-     * `TakeScreenshotCallback.onFailure`. The last call succeeds and reads one
-     * pixel of the `#FF3366CC` swatch out of the returned `HardwareBuffer`.
+     * `TakeScreenshotCallback.onFailure`. The first call succeeds and reports
+     * the returned `HardwareBuffer`'s own description (frame size, format,
+     * usage, colour space) — the most an app can read here, see
+     * `screenshot_pixel unavailable=…`.
      */
-    private void probeScreenshots(int swatchCenterY) {
-        this.swatchRow = swatchCenterY;
+    private void probeScreenshots() {
         final Executor executor = getMainExecutor();
         // 1. The success path first: it also arms the 333 ms interval.
         takeScreenshot(0, executor, screenshotCallback("capture", true));
@@ -326,7 +332,16 @@ public class A11yProbeService extends AccessibilityService {
                         + " color_space=" + (colorSpace == null ? "null" : colorSpace.getName())
                         + " timestamp=" + result.getTimestamp());
                 Log.i(TAG, "screenshot_expect kind=" + kind + " success=" + success);
-                readPixel(buffer, colorSpace);
+                // MODA11YNATIVE2: reading one pixel needs
+                // `Bitmap.wrapHardwareBuffer`, i.e. a HARDWARE bitmap, i.e. an
+                // EGL/GLES implementation in the guest. This image has none
+                // ("libEGL: assertion failed: !hnd couldn't find an OpenGL ES
+                // implementation", then SIGABRT on RenderThread), so the pixel
+                // read is not reachable here; the buffer's own metadata (frame
+                // size, format, usage, colour space) is what the app can
+                // assert, and the compositor frame it points at is asserted
+                // host-side. Logged, not silently skipped.
+                Log.i(TAG, "screenshot_pixel unavailable=hardware_bitmap_needs_egl");
                 buffer.close();
             }
 
@@ -337,42 +352,6 @@ public class A11yProbeService extends AccessibilityService {
             }
         };
     }
-
-    /**
-     * Wrap the `HardwareBuffer` the way an app does and read one pixel of the
-     * swatch (200x80 dp at the top centre of a 1080x2400 screen; the frame is
-     * display-sized, so the pixel is read at the display centre X and at the
-     * swatch's own row).
-     */
-    private void readPixel(HardwareBuffer buffer, ColorSpace colorSpace) {
-        try {
-            Bitmap bitmap = Bitmap.wrapHardwareBuffer(buffer, colorSpace);
-            if (bitmap == null) {
-                Log.i(TAG, "screenshot_bitmap null");
-                return;
-            }
-            Log.i(TAG, "screenshot_bitmap width=" + bitmap.getWidth()
-                    + " height=" + bitmap.getHeight()
-                    + " config=" + bitmap.getConfig());
-            // A hardware bitmap has no CPU pixels; the copy is the app-side way
-            // to read one (`Bitmap.copy`).
-            Bitmap software = bitmap.copy(Bitmap.Config.ARGB_8888, false);
-            if (software == null) {
-                Log.i(TAG, "screenshot_pixel null reason=no_software_copy");
-                return;
-            }
-            int x = software.getWidth() / 2;
-            int y = swatchRow;
-            int pixel = software.getPixel(x, y);
-            Log.i(TAG, "screenshot_pixel x=" + x + " y=" + y
-                    + " color=" + String.format("#%08X", pixel));
-        } catch (Throwable failure) {
-            Log.i(TAG, "screenshot_pixel error=" + failure);
-        }
-    }
-
-    /** The swatch's centre row, read from the app's tree before the overlay. */
-    private int swatchRow = 400;
 
     /**
      * Add (or remove) a {@code FLAG_SECURE} accessibility overlay.
