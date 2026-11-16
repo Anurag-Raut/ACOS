@@ -12,3 +12,9 @@ Use them to understand behaviour and wire formats BEFORE guessing or disassembli
 | `libbase/`, `core/` | libbase, libutils, libcutils, liblog, property_service | RefBase, logging, properties |
 
 Sparse checkouts: add more paths with `git -C <dir> sparse-checkout add <path>` (blobs are fetched on demand, partial clone).
+
+## Known differences between the image and the r75 source cache
+The image's framework dex is authoritative (see the wire-format rule in agent briefs). Measured differences so far:
+- `ILocationManager` geocoder ABI is pre-r75 in the image: `getFromLocation(GeocoderParams, IGeocodeListener)` / `getFromLocationName(...)`, not r75's `reverseGeocode`/`forwardGeocode` (MODLOC).
+- `IActivityManager.addPackageDependency` takes one `String` in the image (code 96), not `(String,int)` (WV3).
+- Three parcelable fields differ from r75 (WV2 `results/handoff/WV2/WALLS.md` §2); `Icon` resource branch and `Notification.allPendingIntents` follow the image (MODNOTIF4).
