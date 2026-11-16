@@ -39,6 +39,7 @@ name = "acos-art"
 version = "0.2.3"
 dependencies = [
  "acos-binder-peer",
+ "acos-parcel",
  "acos-render",
  "acos-sandbox",
  "acos-services",

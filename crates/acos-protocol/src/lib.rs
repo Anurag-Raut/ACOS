@@ -84,8 +84,9 @@ pub use scenario::{
 };
 pub use ui::{Bounds, Selector, TextMatch, UiNode, UiTree};
 pub use verdict::{
-    AppIdentity, ArtifactRef, FailureClassification, Reproducer, ResourceReport, ScenarioIdentity,
-    StepAttempt, StepResult, Verdict, VERDICT_SCHEMA_VERSION,
+    AppIdentity, ArtifactRef, FailureClassification, HandledEvidence, HandledSource, Reproducer,
+    ResourceReport, ScenarioIdentity, StepAttempt, StepInputResult, StepResult, Verdict,
+    VERDICT_SCHEMA_VERSION,
 };
 
 /// The settle `reason` of an input whose every published event the app window

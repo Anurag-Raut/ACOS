@@ -227,6 +227,17 @@ impl Default for BinderRegistry {
     }
 }
 
+impl core::fmt::Debug for BinderRegistry {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let inner = lock(&self.inner);
+        f.debug_struct("BinderRegistry")
+            .field("objects", &inner.objects.len())
+            .field("services", &inner.services.len())
+            .field("next_id", &inner.next_id)
+            .finish()
+    }
+}
+
 impl BinderRegistry {
     /// An empty registry.
     #[must_use]

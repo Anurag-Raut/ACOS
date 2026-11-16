@@ -805,6 +805,78 @@ fn hint_node_name(node: &serde_json::Value) -> String {
     String::from("(no name)")
 }
 
+/// REL3I3: which fact an input action's `handled` verdict rests on.
+///
+/// MERGE3I3 precedence (one rule for the whole class):
+///
+/// 1. a guest `handled: true` ack is the app's own proof and wins - some window
+///    consumed the event;
+/// 2. else the host's own record that the **delivered** window was removed
+///    within the step is the next strongest fact: the press acted on that window
+///    (a dismissed dialog), so the gesture is handled. This outranks a
+///    `finishInputEvent(handled) = false` answer because that answer cannot exist
+///    for a disposed `InputEventReceiver` and, when it does exist, describes a
+///    window that is provably gone - the same gesture the removal consumed;
+/// 3. else a complete set of acks is the guest's own answer (handled or not);
+/// 4. else nothing was answered: `None`, never a guess.
+///
+/// `any_handled` is "at least one ack said `handled: true`", `acked` counts every
+/// `FINISHED` ack (handled or not). The removal is token-scoped by the caller
+/// (`was_removed_since`), so a *different* window's removal is never evidence.
+#[must_use]
+pub fn handled_source(
+    published: usize,
+    acked: usize,
+    any_handled: bool,
+    window_removed: bool,
+) -> crate::HandledSource {
+    use crate::HandledSource;
+    if published == 0 {
+        return HandledSource::None;
+    }
+    if any_handled {
+        return HandledSource::Guest;
+    }
+    if window_removed {
+        // Precedence over the all-unhandled answer below: the window this input
+        // was delivered to is gone, so the host's removal is the proof.
+        return HandledSource::HostWindowRemoved;
+    }
+    if acked >= published {
+        return HandledSource::Guest;
+    }
+    HandledSource::None
+}
+
+/// REL3I3: the `handled` verdict an input action can report.
+///
+/// The same ladder as [`handled_source`], so the answer and the fact it rests on
+/// can never disagree:
+///
+/// * a guest `handled: true` ack, or a complete handled ack set, stands as is;
+/// * a guest `handled: false` (or no answer at all) is overridden to `true` only
+///   when no ack claimed the event and the delivered window was removed - then
+///   the host's removal is the answer;
+/// * no removal leaves the guest's answer (or `None`), never a guess.
+#[must_use]
+pub fn handled_answer(
+    handled: Option<bool>,
+    published: usize,
+    any_handled: bool,
+    window_removed: bool,
+) -> Option<bool> {
+    if published == 0 {
+        return handled;
+    }
+    if any_handled {
+        return handled;
+    }
+    if window_removed {
+        return Some(true);
+    }
+    handled
+}
+
 /// REL3E: the one-line reason a reply is not enough on its own.
 ///
 /// It only ever explains the framework fact (`handled`) together with the
@@ -1487,5 +1559,39 @@ mod tests {
         assert!(empty.path.is_empty());
         assert_eq!(empty.node(), None);
         assert_eq!(empty.consumer, None);
+    }
+
+    /// MERGE3I3 precedence: the host's window-removal fact outranks an
+    /// all-unhandled guest ack set, and never outranks a guest `handled: true`.
+    /// The source and the answer always agree.
+    #[test]
+    fn a_host_window_removal_outranks_an_unhandled_ack() {
+        use crate::HandledSource;
+        // Every event acked `handled: false` and the delivered window removed:
+        // the removal wins - the press acted on that window.
+        assert_eq!(
+            handled_source(2, 2, false, true),
+            HandledSource::HostWindowRemoved
+        );
+        assert_eq!(handled_answer(Some(false), 2, false, true), Some(true));
+        // No ack at all (a disposed InputEventReceiver): same answer.
+        assert_eq!(
+            handled_source(2, 0, false, true),
+            HandledSource::HostWindowRemoved
+        );
+        assert_eq!(handled_answer(None, 2, false, true), Some(true));
+        // A guest `handled: true` is the app's own proof and wins.
+        assert_eq!(handled_source(2, 2, true, true), HandledSource::Guest);
+        assert_eq!(handled_answer(Some(true), 2, true, true), Some(true));
+        // Without a removal the unhandled acks stay the guest's own answer
+        // (REL3H2's `INPUT_UNHANDLED` path, unchanged).
+        assert_eq!(handled_source(2, 2, false, false), HandledSource::Guest);
+        assert_eq!(handled_answer(Some(false), 2, false, false), Some(false));
+        // No delivery and no removal: nothing to claim.
+        assert_eq!(handled_source(0, 0, false, false), HandledSource::None);
+        assert_eq!(handled_answer(None, 0, false, false), None);
+        // A removal with nothing delivered is not evidence either.
+        assert_eq!(handled_source(0, 0, false, true), HandledSource::None);
+        assert_eq!(handled_answer(None, 0, false, true), None);
     }
 }

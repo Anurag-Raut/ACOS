@@ -2602,7 +2602,7 @@ fn step_input(
     step: &Step,
     delivery: Option<&crate::backend::InputDelivery>,
     until: Option<&serde_json::Value>,
-) -> Option<serde_json::Value> {
+) -> Option<acos_protocol::StepInputResult> {
     let expect_change = match step.as_step() {
         // A tap's state-change rule runs on every step, so an unflagged tap says
         // `"auto"` - never a silent `false` that hides the rule.
@@ -2621,12 +2621,14 @@ fn step_input(
         _ => return None,
     };
     let mut input = match delivery {
-        None => serde_json::json!({
-            "handled": serde_json::Value::Null,
-            "handled_evidence": {"source": "none", "published": 0, "acked": 0},
-            "target": serde_json::Value::Null,
-            "expect_change": expect_change,
-        }),
+        None => acos_protocol::StepInputResult {
+            handled: None,
+            handled_evidence: acos_protocol::HandledEvidence::none(),
+            target: serde_json::Value::Null,
+            expect_change,
+            until: None,
+            handled_hint: None,
+        },
         Some(delivery) => {
             let unhandled: Vec<u64> = delivery
                 .acks
@@ -2634,32 +2636,43 @@ fn step_input(
                 .filter(|ack| !ack.handled)
                 .map(|ack| ack.seq)
                 .collect();
+            // REL3I3/MERGE3I3: one ladder for both facts, so a step's `handled`
+            // and the `handled_evidence.source` it rests on can never disagree.
+            let any_handled = delivery.acks.iter().any(|ack| ack.handled);
             let target = delivery.target.clone();
-            let mut input = serde_json::json!({
-                "handled": delivery.handled,
-                "handled_evidence": {
-                    "source": if delivery.published > 0 { "finishInputEvent" } else { "none" },
-                    "published": delivery.published,
-                    "acked": delivery.acks.len(),
-                    "unhandled": unhandled,
-                },
-                "target": target.clone().unwrap_or(serde_json::Value::Null),
-                "expect_change": expect_change,
-            });
-            // The same one-line explanation an MCP reply carries, from the same facts.
-            if let Some(hint) = acos_protocol::ui::handling_hint(
-                target.as_ref(),
-                delivery.handled,
-                delivery.visual_change,
-            ) {
-                input["handled_hint"] = serde_json::json!(hint);
+            let evidence = acos_protocol::HandledEvidence::new(
+                acos_protocol::ui::handled_source(
+                    delivery.published,
+                    delivery.acks.len(),
+                    any_handled,
+                    delivery.window_removed,
+                ),
+                delivery.published,
+                delivery.acks.len(),
+                unhandled,
+            );
+            acos_protocol::StepInputResult {
+                handled: acos_protocol::ui::handled_answer(
+                    delivery.handled,
+                    delivery.published,
+                    any_handled,
+                    delivery.window_removed,
+                ),
+                handled_evidence: evidence,
+                target: target.clone().unwrap_or(serde_json::Value::Null),
+                expect_change,
+                until: None,
+                // The same one-line explanation an MCP reply carries, from the
+                // same facts.
+                handled_hint: acos_protocol::ui::handling_hint(
+                    target.as_ref(),
+                    delivery.handled,
+                    delivery.visual_change,
+                ),
             }
-            input
         }
     };
-    if let Some(until) = until {
-        input["until"] = until.clone();
-    }
+    input.until = until.cloned();
     Some(input)
 }
 
@@ -4244,6 +4257,7 @@ mod region_tests {
                     latency_us: Some(950),
                 },
             ],
+            window_removed: false,
             target: Some(serde_json::json!({
                 "selector": {"id": "title"},
                 "hit": {"node": {"class": "android.widget.TextView"}, "suggest": {"class": "android.widget.Switch"}},
@@ -4252,17 +4266,23 @@ mod region_tests {
         });
         let input =
             step_input(step, current.input.as_ref(), None).expect("a tap step always has input evidence");
-        assert_eq!(input["handled"], serde_json::json!(false));
-        assert_eq!(input["expect_change"], serde_json::json!("auto"));
-        assert_eq!(input["handled_evidence"]["source"], serde_json::json!("finishInputEvent"));
-        assert_eq!(input["handled_evidence"]["published"], serde_json::json!(2));
-        assert_eq!(input["handled_evidence"]["acked"], serde_json::json!(2));
+        assert_eq!(input.handled, Some(false));
+        assert_eq!(input.expect_change, serde_json::json!("auto"));
         assert_eq!(
-            input["handled_evidence"]["unhandled"],
-            serde_json::json!([1, 2]),
+            input.handled_evidence.source,
+            acos_protocol::HandledSource::Guest
+        );
+        assert_eq!(input.handled_evidence.published, 2);
+        assert_eq!(input.handled_evidence.acked, 2);
+        assert_eq!(
+            input.handled_evidence.unhandled,
+            vec![1, 2],
             "the unhandled event seqs are named"
         );
-        assert_eq!(input["target"]["selector"]["id"], serde_json::json!("title"));
+        assert_eq!(input.target["selector"]["id"], serde_json::json!("title"));
+        // The serialised shape is the one verdict.json has always carried.
+        let input_json = serde_json::to_value(&input).expect("the input block serialises");
+        assert_eq!(input_json["handled_evidence"]["source"], serde_json::json!("guest"));
 
         // The finding must not turn "nothing consumed it" into a failure, and it
         // must not claim a state change either.
@@ -4285,13 +4305,81 @@ mod region_tests {
         .expect("a flagged tap scenario");
         let input = step_input(flagged.steps.first().expect("the tap step"), current.input.as_ref(), None)
             .expect("input evidence");
-        assert_eq!(input["expect_change"], serde_json::json!(true));
+        assert_eq!(input.expect_change, serde_json::json!(true));
 
         // No delivery at all is "unknown", never "not handled".
         current.input = None;
         let input = step_input(step, current.input.as_ref(), None).expect("input evidence");
-        assert_eq!(input["handled"], serde_json::Value::Null);
-        assert_eq!(input["handled_evidence"]["source"], serde_json::json!("none"));
+        assert_eq!(input.handled, None);
+        assert_eq!(
+            input.handled_evidence.source,
+            acos_protocol::HandledSource::None
+        );
+    }
+
+    /// REL3I3: a press that removes the window it was delivered to cannot be
+    /// acked (the dialog's `InputEventReceiver` is disposed first), so the host's
+    /// removal is the evidence: `handled: true` from `host_window_removed`, and
+    /// never from a different window's removal.
+    #[test]
+    fn a_removed_delivered_window_is_host_handled_and_not_a_guest_ack() {
+        const HEAD: &str = "version: 1\nname: rel3i3\napp: dev.acos.fixtures.taptargets\n\
+             isolation: process\ndisplay: {mode: offscreen, width: 100, height: 100, \
+             density_dpi: 420}\n";
+        let scenario = Scenario::from_yaml_str(&format!(
+            "{HEAD}steps:\n  - back: {{}}\n"
+        ))
+        .expect("a one-back scenario");
+        let step = scenario.steps.first().expect("the back step");
+        assert!(matches!(step.as_step(), Some(StepRef::Back(_))));
+
+        let mut current = observation(&[[0, 0, 0, 255]], 1, 1);
+        current.input = Some(InputDelivery {
+            delivered: true,
+            visual_change: true,
+            handled: None,
+            published: 2,
+            acks: Vec::new(),
+            window_removed: true,
+            target: None,
+            settle: None,
+        });
+        let input = step_input(step, current.input.as_ref(), None).expect("input evidence");
+        assert_eq!(
+            input.handled,
+            Some(true),
+            "the delivered window's removal is the consumer's proof"
+        );
+        assert_eq!(
+            input.handled_evidence.source,
+            acos_protocol::HandledSource::HostWindowRemoved
+        );
+        assert_eq!(input.handled_evidence.published, 2);
+        assert_eq!(input.handled_evidence.acked, 0);
+        let json = serde_json::to_value(&input).expect("serialises");
+        assert_eq!(
+            json["handled_evidence"]["source"],
+            serde_json::json!("host_window_removed")
+        );
+
+        // A removal of a *different* window leaves the answer unknown, exactly
+        // as it was before this change.
+        current.input = Some(InputDelivery {
+            delivered: true,
+            visual_change: true,
+            handled: None,
+            published: 2,
+            acks: Vec::new(),
+            window_removed: false,
+            target: None,
+            settle: None,
+        });
+        let input = step_input(step, current.input.as_ref(), None).expect("input evidence");
+        assert_eq!(input.handled, None, "no evidence, no claim");
+        assert_eq!(
+            input.handled_evidence.source,
+            acos_protocol::HandledSource::None
+        );
     }
 
     // ---- REL3H2: an unhandled input is never a silent plain pass -----------
@@ -4314,6 +4402,7 @@ mod region_tests {
                     latency_us: Some(950),
                 },
             ],
+            window_removed: false,
             target: Some(serde_json::json!({
                 "selector": {"id": "title"},
                 "hit": {"node": {"class": "android.widget.TextView"},
@@ -4371,6 +4460,82 @@ mod region_tests {
         );
         // The step's own status is untouched: a warning is a fact, not a verdict.
         assert_eq!(exec.status, Status::Pass);
+    }
+
+    /// MERGE3I3 precedence: a gesture the guest acked `handled: false` whose
+    /// delivered window the host recorded as removed is *handled* - `handled:
+    /// true`, `source: host_window_removed`, and **no** `INPUT_UNHANDLED`
+    /// warning, no `INPUT_NOT_HANDLED` failure. The window the press acted on is
+    /// gone, so the unhandled ack (which can only describe a window that no
+    /// longer exists) cannot outrank that fact. Without the removal the very same
+    /// acks keep REL3H2's honest warning.
+    #[test]
+    fn merge3i3_a_removed_dialog_outranks_an_unhandled_ack() {
+        const HEAD: &str = "version: 1\nname: merge3i3\napp: dev.acos.fixtures.taptargets\n\
+             isolation: process\ndisplay: {mode: offscreen, width: 100, height: 100, \
+             density_dpi: 420}\n";
+        let scenario = Scenario::from_yaml_str(&format!(
+            "{HEAD}steps:\n  - back: {{}}\n"
+        ))
+        .expect("a one-back scenario");
+        let step = scenario.steps.first().expect("the back step");
+        // The engine's own mapping (`acos-cli`'s `delivery()`): two events
+        // published, both acked `handled: false`, and the host recorded that the
+        // window they went to was removed during the step.
+        let handled = acos_protocol::ui::handled_answer(Some(false), 2, false, true);
+        assert_eq!(
+            handled,
+            Some(true),
+            "the removal answers the question the disposed receiver could not"
+        );
+        let mut delivery = unhandled_delivery(Some(false));
+        delivery.handled = handled;
+        delivery.window_removed = true;
+        let exec = tap_exec(Some(delivery.clone()));
+
+        let input = step_input(step, Some(&delivery), None).expect("input evidence");
+        assert_eq!(input.handled, Some(true));
+        assert_eq!(
+            input.handled_evidence.source,
+            acos_protocol::HandledSource::HostWindowRemoved
+        );
+        assert_eq!(
+            input.handled_evidence.unhandled,
+            vec![1, 2],
+            "the guest acks are still reported, they just do not decide"
+        );
+        let json = serde_json::to_value(&input).expect("serialises");
+        assert_eq!(
+            json["handled_evidence"]["source"],
+            serde_json::json!("host_window_removed")
+        );
+        assert!(
+            input_unhandled_warning(step, 0, &exec).is_none(),
+            "a removed dialog is handled: never INPUT_UNHANDLED"
+        );
+        let strict = Scenario::from_yaml_str(&format!(
+            "{HEAD}steps:\n  - back:\n      expect_handled: true\n"
+        ))
+        .expect("a one-back scenario");
+        assert!(
+            expect_handled_failure(strict.steps.first().expect("the back step"), &exec).is_none(),
+            "and `expect_handled: true` holds"
+        );
+
+        // The other half of the merge is untouched: the same acks with no
+        // removal are the guest's own unhandled answer.
+        let plain = unhandled_delivery(Some(false));
+        let plain_exec = tap_exec(Some(plain.clone()));
+        assert_eq!(
+            step_input(step, Some(&plain), None)
+                .expect("input evidence")
+                .handled_evidence
+                .source,
+            acos_protocol::HandledSource::Guest
+        );
+        let warning =
+            input_unhandled_warning(step, 0, &plain_exec).expect("an unhandled pass still warns");
+        assert_eq!(warning["unhandled"], serde_json::json!([1, 2]));
     }
 
     /// A handled input, an unknown ack and a step with no delivery never warn -
@@ -4478,6 +4643,7 @@ mod region_tests {
             handled: None,
             published: 0,
             acks: Vec::new(),
+            window_removed: false,
             target: None,
             settle: None,
         });
@@ -4910,6 +5076,7 @@ mod content_settle_tests {
             handled: None,
             published: 0,
             acks: Vec::new(),
+            window_removed: false,
             target: None,
             settle: Some(content_record_for(6)),
         });

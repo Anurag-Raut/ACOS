@@ -78,6 +78,88 @@ impl StepAttempt {
     }
 }
 
+/// Where an input step's `handled` answer came from (REL3I3).
+///
+/// The field exists because "the app handled it" has two honest proofs that
+/// are *not* interchangeable:
+///
+/// * [`HandledSource::Guest`] — the app window's own
+///   `InputEventReceiver.finishInputEvent(handled)` bit, one per acknowledged
+///   `InputMessage`;
+/// * [`HandledSource::HostWindowRemoved`] — the host's own record that the
+///   window this input was delivered to was removed during the step, so its
+///   receiver was destroyed before it could finish the event. That is what
+///   AOSP sees when a dialog's Back dismisses the dialog: the press *did* act
+///   (the window it acted on is gone), but no ack can exist.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum HandledSource {
+    /// A guest `finishInputEvent` ack.
+    Guest,
+    /// The delivered window was removed within the step.
+    HostWindowRemoved,
+    /// No input was delivered, so there is nothing to have handled.
+    None,
+}
+
+/// The delivery evidence behind [`StepInputResult::handled`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct HandledEvidence {
+    /// Which fact the `handled` verdict rests on.
+    pub source: HandledSource,
+    /// `InputMessage`s the host published for the gesture.
+    pub published: usize,
+    /// `FINISHED` acks the guest returned for them.
+    pub acked: usize,
+    /// Sequence numbers the guest answered `handled: false`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unhandled: Vec<u64>,
+}
+
+impl HandledEvidence {
+    /// Build the evidence block.
+    #[must_use]
+    pub fn new(source: HandledSource, published: usize, acked: usize, unhandled: Vec<u64>) -> Self {
+        Self {
+            source,
+            published,
+            acked,
+            unhandled,
+        }
+    }
+
+    /// Nothing was delivered.
+    #[must_use]
+    pub fn none() -> Self {
+        Self::new(HandledSource::None, 0, 0, Vec::new())
+    }
+}
+
+/// REL3E: the `input` block of a step result.
+///
+/// `handled` is the app's own `finishInputEvent(handled)` answer, or the host's
+/// window-removal fact when the app could not answer; `handled_evidence` says
+/// which. `target` is the resolved node plus the hit-test at the injected point
+/// and `expect_change` is the rule the step asked for (`"auto"` for a `tap`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StepInputResult {
+    /// The consumer's verdict (`null` when the guest did not ack).
+    pub handled: Option<bool>,
+    /// The facts the verdict rests on.
+    pub handled_evidence: HandledEvidence,
+    /// The resolved node plus the hit-test at the injected point.
+    pub target: serde_json::Value,
+    /// `true`/`false`, or `"auto"` for a tap (the step's own check).
+    pub expect_change: serde_json::Value,
+    /// The `scroll_until`/`wait_for` search outcome, when the action searched.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<serde_json::Value>,
+    /// One line explaining a `handled`/hit-test combination that is not
+    /// self-evident (REL3E).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handled_hint: Option<String>,
+}
+
 /// One step in a scenario run.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct StepResult {
@@ -108,18 +190,25 @@ pub struct StepResult {
     pub settle: Option<serde_json::Value>,
     /// REL3E: the input step's own evidence. `handled` is the app window's
     /// `finishInputEvent(handled)` answer (`null` when the guest did not ack),
-    /// `target` is what the selector resolved to plus the hit-test at the
-    /// injected point, and `expect_change` says whether a change was required -
-    /// `"auto"` for a `tap` (the step's own state-change check), `true`/`false`
-    /// for the scenario's explicit flag. `None` for steps that inject no input.
+    /// or the host's window-removal fact when the delivered window died before
+    /// it could answer (`handled_evidence.source`). `target` is what the
+    /// selector resolved to plus the hit-test at the injected point, and
+    /// `expect_change` says whether a change was required - `"auto"` for a
+    /// `tap` (the step's own state-change check), `true`/`false` for the
+    /// scenario's explicit flag. `None` for steps that inject no input.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub input: Option<serde_json::Value>,
+    pub input: Option<StepInputResult>,
     /// REL3H2: structured, non-fatal facts about this step (for example
     /// `INPUT_UNHANDLED`: the gesture was delivered and nothing consumed it).
     /// The step's status is exactly as measured; a warning never changes it, and
     /// the same records are copied into the verdict's `provenance.warnings[]` so
     /// a reader of either file sees them. Empty (and absent on the wire) when
     /// there is nothing to say.
+    ///
+    /// A warning is a *guest* fact (`finishInputEvent(handled) = false`), so a
+    /// gesture whose delivered window the host removed reports no warning: that
+    /// input is handled (`handled_evidence.source: host_window_removed`), which
+    /// is the MERGE3I3 precedence (see `acos_protocol::ui::handled_source`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<serde_json::Value>,
     /// Evidence backing this step. A passing step must have at least one entry.

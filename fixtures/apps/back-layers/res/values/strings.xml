@@ -4,6 +4,8 @@
     <string name="show_dialog">Show dialog</string>
     <string name="hint">Type here</string>
     <string name="idle">Idle</string>
+    <string name="ime_up">ImeUp</string>
+    <string name="ime_down">ImeDown</string>
     <string name="dialog_title">Confirm</string>
     <string name="dialog_message">Are you sure?</string>
 </resources>

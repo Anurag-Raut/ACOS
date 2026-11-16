@@ -7,6 +7,7 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.WindowInsets;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
@@ -45,6 +46,8 @@ public class MainActivity extends Activity {
 
     private EditText input;
     private TextView status;
+    /** Last IME visibility the window insets reported (null until the first). */
+    private Boolean imeShown;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,6 +56,24 @@ public class MainActivity extends Activity {
         setContentView(R.layout.main);
         status = (TextView) findViewById(R.id.status);
         input = (EditText) findViewById(R.id.input);
+        // The IME's app-visible state is its window inset (`WindowInsets.Type.ime`).
+        // A phone's app learns that the keyboard appeared/disappeared this way and
+        // relayouts; the log line is the assertion's evidence.
+        findViewById(android.R.id.content).setOnApplyWindowInsetsListener(
+                new View.OnApplyWindowInsetsListener() {
+                    @Override
+                    public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
+                        boolean shown = insets.isVisible(WindowInsets.Type.ime());
+                        Log.i(TAG, "insets_ime visible=" + shown);
+                        // The first callback is the launch-time state (hidden);
+                        // it is not a change, so `Idle` stays.
+                        if (imeShown != null && imeShown != shown) {
+                            status.setText(shown ? R.string.ime_up : R.string.ime_down);
+                        }
+                        imeShown = shown;
+                        return v.onApplyWindowInsets(insets);
+                    }
+                });
 
         ((Button) findViewById(R.id.dialog)).setOnClickListener(new View.OnClickListener() {
             @Override

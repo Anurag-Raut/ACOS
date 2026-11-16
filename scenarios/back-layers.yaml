@@ -1,4 +1,4 @@
-# Back-layer ordering: which layer consumes a Back press (REL3K2).
+# Back-layer ordering: which layer consumes a Back press (REL3K2 + REL3I3).
 #
 # AOSP order on API 34: a Back key goes to the focused window, and the layer
 # that owns the press handles it before the Activity finishes:
@@ -10,6 +10,7 @@
 # The fixture (fixtures/apps/back-layers) logs which layer acted, tag AcosBack:
 #   dialog_shown / dialog_dismissed        the dialog window
 #   input_focus=… ime accepting=… active=… the field's focus + IME binding
+#   insets_ime visible=…                   the IME inset source the app sees
 #   dispatchKeyBack action=…               the Activity's window saw the key
 #   onBackPressed / onPause / onDestroy    the framework's default handling
 version: 1
@@ -17,8 +18,8 @@ name: back-layers
 description: >-
   Back closes the open AlertDialog first: the dialog window's own
   onBackPressed dismisses it, the Activity stays resumed (no onPause, no
-  onBackPressed, its views are unchanged), and only the next Back finishes the
-  task.
+  onBackPressed, its views are unchanged), the soft input then consumes the
+  next Back and hides, and only the third Back finishes the task.
 app: fixtures/build/apps/back-layers.apk
 engine: native-preferred
 fallback: report-and-escalate
@@ -58,16 +59,15 @@ steps:
 
   # Back with the dialog up: the dialog takes it.
   #
-  # `key: back` with the content settle rule: dismissing a dialog window does
-  # not publish a *new* Activity draw that the strict event rule can attribute
-  # to this key (REL3K2 report: `no-draw-after-action`, pixels_changed=true,
-  # acked=0 because the destroyed dialog window never sends finishInputEvent).
-  # The claim here is about the tree (which layer consumed the key), and the
-  # content rule is the tree rule; the strict-rule gap is a product bug, not a
-  # scenario setting.
-  - key:
-      key: back
-      settle: content
+  # REL3I3: this is a plain `back` (the strict rule), because the press now
+  # binds honestly. Dismissing a dialog window destroys the window the key was
+  # delivered to, so its `InputEventReceiver` is disposed before it can call
+  # `finishInputEvent(handled)` and no guest ack can exist. The host records the
+  # removal of *that* window, which is the consumer's proof
+  # (`handled_evidence.source: "host_window_removed"`) and the draw the step
+  # binds (`settle.bound: "host-window-removal"`: the composite changed because a
+  # layer went away, not because the app traversed).
+  - back: {}
 
   # Both halves of the claim: the dialog is gone ...
   - assert_not_visible:
@@ -88,6 +88,45 @@ steps:
       patterns:
         - 'dialog_shown$'
         - 'dialog_dismissed$'
+
+  # ---- layer 2: the soft input -----------------------------------------
+  # Focusing the field raises the soft input. `InputMethodManager.showSoftInput`
+  # reaches the in-process IME, which turns on the IME inset source on the
+  # window: the app logs `insets_ime visible=true` and shows `ImeUp`, exactly
+  # the change a phone's app sees before the keyboard is drawn.
+  - tap:
+      selector: {id: input}
+  - assert_log:
+      tag: AcosBack
+      since_previous_step: true
+      patterns:
+        - 'input_focus=true ime accepting=true active=true'
+  - assert_text:
+      selector: {id: status}
+      text: {exact: "ImeUp"}
+
+  # Back with the soft input up: the IME consumes the press. The layer stack's
+  # second layer hides the keyboard and reports the key handled, so the
+  # Activity's window never sees it: no `dispatchKeyBack`, no `onBackPressed`,
+  # and the task stays resumed. The app sees the IME insets disappear
+  # (`ImeDown`), which is the draw this press is attributed to.
+  - key:
+      key: back
+      settle: content
+  # The hide's guest log line belongs to the key step, so it is asserted before
+  # any other step consumes the log cursor: `since_previous_step: true` here is
+  # exactly the lines this press produced.
+  - assert_log:
+      tag: AcosBack
+      since_previous_step: true
+      patterns:
+        - 'insets_ime visible=false'
+  - assert_text:
+      selector: {id: status}
+      text: {exact: "ImeDown"}
+  - assert_text:
+      selector: {id: dialog}
+      text: {exact: "Show dialog"}
 
   # ---- layer 3: the Activity itself -------------------------------------
   # The next Back reaches the Activity's window (the dialog never offered it

@@ -510,6 +510,7 @@ impl Backend for SliceBackend {
                 handled: None,
                 published: 0,
                 acks: Vec::new(),
+                window_removed: false,
                 target: None,
                 settle: Some(serde_json::json!({
                     "mode": "strict",

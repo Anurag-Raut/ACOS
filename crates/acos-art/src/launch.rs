@@ -29,7 +29,9 @@ use crate::launcher::Outcome;
 use crate::logd::Logd;
 use crate::watchdog::{MemoryWatchdog, HOST_MEMORY_LIMIT};
 use crate::{ArtRoot, Error, Result};
-use acos_binder_peer::{accept, close_frame_fds, listen, read_frame, write_frame, Frame, Peer};
+use acos_binder_peer::{
+    accept, close_frame_fds, listen, read_frame, wait_for_idle, write_frame, Frame, IdleWake, Peer,
+};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
@@ -701,6 +703,13 @@ pub(crate) fn launch_session(
     }
     let stop = Arc::new(AtomicBool::new(false));
     let peer_stop = Arc::clone(&stop);
+    // REL3I3: the peer sleeps in `poll(2)` until the guest speaks, a delivery is
+    // due, or this wake fires. Producers that queue a `system -> app` delivery
+    // outside a peer turn (the in-process IME hiding itself on a key) write to
+    // it; so does `stop`, which the receive timeout used to notice after up to
+    // a second. One pipe, no idle timer.
+    let delivery_wake = Arc::new(acos_services::DeliveryWake::new().map_err(Error::Io)?);
+    let peer_wake_fd = delivery_wake.read_fd();
     let unsupported_log = staging.join("unsupported.jsonl");
     let (tx, rx) = mpsc::channel::<PeerSummary>();
     let peer_log = unsupported_log.clone();
@@ -721,6 +730,18 @@ pub(crate) fn launch_session(
                 (host, handles)
             }
         };
+        // REL3I3: this session's delivery wake. The host hands it to the
+        // producers it installs (the WMS's IME insets queue) and the peer's
+        // idle wait polls the same pipe. A prebuilt (host-template) child
+        // installed its graph before this process existed, so the state is
+        // attached here as well; the receiver end is this process's, never the
+        // template's.
+        host.set_delivery_wake(Arc::clone(&delivery_wake));
+        handles
+            .wms
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .attach_delivery_wake(Arc::clone(&delivery_wake));
         // K3d: the PMS publishes the APK path the **guest** can open
         // (`/data/app/<name>.apk`, read-only bound by the sandbox), not the host
         // file. `PackageManager.getResourcesForApplication` builds `Resources`
@@ -774,10 +795,11 @@ pub(crate) fn launch_session(
             };
             unsafe {
                 libc::close(listener);
-                // H4: the receive timeout only exists to notice `stop` after a
-                // guest death. Process exit closes this socket, which is the
-                // real wake; a 1 s bound keeps a wedged peer from parking the
-                // launcher forever without a 10/s idle timer.
+                // REL3I3: this is no longer the idle cadence. The peer sleeps
+                // in `poll(2)` (see `serve`), and `stop` is a wake, so the
+                // bounds below only matter for a *mid-frame* stall: process
+                // exit closes this socket, a wedged partial frame would park
+                // `read_frame` forever, and 1 s is that bound.
                 let tv = libc::timeval {
                     tv_sec: 1,
                     tv_usec: 0,
@@ -795,7 +817,7 @@ pub(crate) fn launch_session(
             // `getApplicationInfo` and must get the real package, not the
             // hello-views fixture (and never a fabricated null).
             let mut peer = Peer::with_host(peer_host, Some(peer_log));
-            let rc = serve(&mut peer, client, &peer_stop);
+            let rc = serve(&mut peer, client, &peer_stop, peer_wake_fd);
             unsafe {
                 libc::close(client);
             }
@@ -1635,6 +1657,9 @@ pub(crate) fn launch_session(
     // inside its scope. Both actions are idempotent and happen before any
     // capture/join, which is what bounds teardown after a guest death.
     stop.store(true, Ordering::Release);
+    // The peer is asleep in `poll(2)`: an idle session has no timer to notice
+    // `stop`, so wake it (the byte is the edge, the flag is the decision).
+    delivery_wake.wake();
     cgroup.sample();
     if status.is_some() {
         cgroup.kill();
@@ -3745,6 +3770,17 @@ fn wait_for_event_settled(
     // e.g. after a `pixels:false` launch). The unhandled-input branch measures
     // `pixels_changed` against it instead of inventing a value.
     entry_fnv: Option<u64>,
+    // REL3I3: `(delivered token, removal mark)`. A dialog's Back destroys the
+    // window it was delivered to: the app never traverses (its views are
+    // unchanged), so no guest draw follows the press, while the composite still
+    // changes because a layer went away. The removal is that draw's cause, and
+    // the host recorded it for exactly this token.
+    //
+    // MERGE3I3 precedence: this fact outranks `unhandled_ack_floor`. A removed
+    // dialog is *handled* (`source: host_window_removed`) even when every guest
+    // ack of the same gesture said `finishInputEvent(handled) = false`; the
+    // window it acted on is gone, so it is never reported `INPUT_UNHANDLED`.
+    window_removal: Option<(acos_parcel::BinderId, u64)>,
 ) -> SettleEnd {
     let confirm = Duration::from_millis(env_u64("ACOS_STRICT_SETTLE_CONFIRM_MS", 24));
     // Owner decision (2026-11-12): the pixel-unchanged guard is OFF by default.
@@ -3835,6 +3871,12 @@ fn wait_for_event_settled(
             last_generation = generation;
         }
         let probe = latest_probe(probe_state);
+        // The delivered window is gone: the removal is this step's draw (see
+        // `window_removal`), so a sample drawn before the publish is still the
+        // post-action state — the screen changed because a window was removed,
+        // not because the app drew.
+        let removal_binds = window_removal
+            .is_some_and(|(token, mark)| live.input.window_removed_since(token, mark));
         let mut valid: Option<ProbeSample> = None;
         match &probe {
             None => last_reason = "no-probe".to_string(),
@@ -3937,7 +3979,21 @@ fn wait_for_event_settled(
                         .first()
                         .cloned()
                         .unwrap_or_else(|| "unsettled".to_string());
-                } else if publish_epoch_ms != 0 && sample.draw_ms < publish_epoch_ms {
+                } else if publish_epoch_ms != 0
+                    && sample.draw_ms < publish_epoch_ms
+                    && !removal_binds
+                {
+                    // MERGE3I3 precedence: `!removal_binds` is the first guard
+                    // of this arm on purpose. When the host recorded the removal
+                    // of the very window this input was delivered to (after the
+                    // publish), that removal **is** the step's draw, so the
+                    // sample falls through to the normal strict rule and binds
+                    // with `bound: "host-window-removal"` below. The gesture was
+                    // handled by definition (a removed dialog consumed the Back),
+                    // so it can never be the `INPUT_UNHANDLED` shortcut - even
+                    // when every guest ack of the same gesture said
+                    // `finishInputEvent(handled) = false` because the app's
+                    // `InputEventReceiver` was disposed before it could answer.
                     // REL3H: no draw landed since the action *and* the framework
                     // acknowledged every event as unhandled. Nothing consumed
                     // the input, so the app has no new state to settle into: the
@@ -4053,7 +4109,13 @@ fn wait_for_event_settled(
                     && candidate_since.elapsed() >= confirm
                     && sample.generation == generation
                 {
-                    let bound = if sample.settled {
+                    let bound = if removal_binds {
+                        // REL3I3: the screen changed because the window this
+                        // input was delivered to was removed (a dismissed
+                        // dialog). Named, so no reader mistakes it for a guest
+                        // draw.
+                        "host-window-removal"
+                    } else if sample.settled {
                         "strict-event"
                     } else {
                         "change-draw"
@@ -4197,6 +4259,12 @@ fn wait_for_settled_observation(
     // unhandled branch measures against when the caller has no capture of its own.
     unhandled_ack_floor: Option<u64>,
     entry_fnv: Option<u64>,
+    // REL3I3: `(delivered token, removal mark)` for an input action. When the
+    // window this input went to is removed during the wait, the removal is the
+    // draw (the composite changes with no guest traversal), so the step may bind
+    // it; `None` keeps the strict draw requirement for every other caller.
+    // Precedence over the unhandled shortcut: see [`wait_for_event_settled`].
+    window_removal: Option<(acos_parcel::BinderId, u64)>,
 ) -> SettleEnd {
     if mode == SettleMode::Strict {
         return wait_for_event_settled(
@@ -4213,6 +4281,7 @@ fn wait_for_settled_observation(
             await_tree,
             unhandled_ack_floor,
             entry_fnv,
+            window_removal,
         );
     }
     // ---- fast (P1): first probe tree that differs from the pre-action baseline.
@@ -5261,7 +5330,9 @@ fn interactive_serve(
                         0,
                         baseline_tree.as_ref(),
                         // A tree request publishes no input, so no gesture's
-                        // acks can make it an unhandled-input settle (REL3H).
+                        // acks can make it an unhandled-input settle (REL3H)
+                        // and no delivered token can have been removed (REL3I3).
+                        None,
                         None,
                         None,
                     );
@@ -5786,6 +5857,12 @@ fn interactive_serve(
                 // phase; the looper lines the guest printed in between are the
                 // stages. Both are stamped on the same monotonic base.
                 let injection_started = Instant::now();
+                // REL3I3: the host's own window-removal counter, taken before
+                // the input is published. A window destroyed during this step
+                // that is the one this gesture went to explains a missing ack:
+                // its `InputEventReceiver` was disposed before it could finish
+                // the event. A different window's removal never matches.
+                let removal_mark = live.input.removal_mark();
                 let gesture_label = if cmd == "swipe" {
                     format!(
                         "from ({},{}) to ({},{}) in {} ms",
@@ -5847,6 +5924,7 @@ fn interactive_serve(
                         let reply = serde_json::json!({
                             "ok": false, "cmd": cmd, "code": "INPUT_UNAVAILABLE",
                             "error": format!("the real InputChannel accepted no gesture: {error}"),
+                            "live_tokens": live.input.live_tokens(),
                         });
                         protocol_write(&reply);
                         evidence.push(reply);
@@ -5896,6 +5974,7 @@ fn interactive_serve(
                     None,
                     unhandled_ack_floor,
                     entry_fnv,
+                    Some((injected.token, removal_mark)),
                 );
                 let (settled_probe, g1, p1, settle_timing) = match settled {
                     SettleEnd::Settled(settled) => (
@@ -5983,6 +6062,21 @@ fn interactive_serve(
                         settle_timing.mode.as_str()
                     ),
                 );
+                // The window this gesture went to is gone (dialog dismissed, task
+                // finished): the host's fact, checked against the *delivered*
+                // token only.
+                let window_removed = live
+                    .input
+                    .window_removed_since(injected.token, removal_mark);
+                if window_removed {
+                    trace_host(
+                        probe_state,
+                        &format!(
+                            "{cmd} delivered window {:#x} was removed within the step",
+                            injected.token.0
+                        ),
+                    );
+                }
                 if settled_probe.is_none() {
                     // P12b: a settle timeout is still an observation. Return the
                     // latest tree and C1 frame identity with `settled:false` so
@@ -6004,6 +6098,7 @@ fn interactive_serve(
                                     "seq": a.seq, "handled": a.handled, "latency_us": a.latency_us,
                                 })).collect::<Vec<_>>(),
                                 "token": format!("{:#x}", injected.token.0),
+                                "window_removed": window_removed,
                             },
                             "settle": settle_timing.to_json(false, ack_ms),
                         });
@@ -6056,6 +6151,7 @@ fn interactive_serve(
                                 "seq": a.seq, "handled": a.handled, "latency_us": a.latency_us,
                             })).collect::<Vec<_>>(),
                             "token": format!("{:#x}", injected.token.0),
+                            "window_removed": window_removed,
                         }),
                     );
                     map.insert("settle".into(), settle_timing.to_json(false, ack_ms));
@@ -6107,6 +6203,7 @@ fn interactive_serve(
                                     "seq": a.seq, "handled": a.handled, "latency_us": a.latency_us,
                                 })).collect::<Vec<_>>(),
                                 "token": format!("{:#x}", injected.token.0),
+                                "window_removed": window_removed,
                                 "new_buffer_generation": g1,
                                 "new_probe_seq": p1,
                             },
@@ -6167,6 +6264,7 @@ fn interactive_serve(
                             "seq": a.seq, "handled": a.handled, "latency_us": a.latency_us,
                         })).collect::<Vec<_>>(),
                         "token": format!("{:#x}", injected.token.0),
+                        "window_removed": window_removed,
                         "new_buffer_generation": g1,
                         "new_probe_seq": p1,
                     }),
@@ -6784,11 +6882,66 @@ struct PeerSummary {
     resource_limits: u64,
 }
 
-fn serve(peer: &mut Peer, fd: RawFd, stop: &AtomicBool) -> std::io::Result<()> {
+fn serve(peer: &mut Peer, fd: RawFd, stop: &AtomicBool, wake: RawFd) -> std::io::Result<()> {
+    let dbg = std::env::var_os("ACOS_PEER_DEBUG").is_some();
     loop {
+        // REL3I3: the idle turn waits for whichever comes first — a guest frame,
+        // a queued delivery's deadline, or the launcher's wake (stop, or a
+        // producer that queued a `system -> app` delivery no transaction will
+        // carry). With nothing queued and nothing to stop for, the wait is
+        // unbounded: an idle session has zero wakeups. The old shape blocked in
+        // `recvmsg` on a 1 s `SO_RCVTIMEO` and used that tick as its only drain,
+        // so an IME hide driven by a key reached the app up to a second late.
+        let deadline = peer
+            .next_timed_deadline()
+            .map(|due| due.saturating_duration_since(Instant::now()));
+        match wait_for_idle(fd, wake, deadline)? {
+            IdleWake::Wake => {
+                // Drain the wakeup bytes: the delivery queue is the state, the
+                // byte is only the edge (a byte left behind would spin this
+                // loop on a flush that finds nothing).
+                let mut buf = [0u8; 64];
+                loop {
+                    let read = unsafe {
+                        libc::read(wake, buf.as_mut_ptr().cast::<libc::c_void>(), buf.len())
+                    };
+                    if read <= 0 {
+                        break;
+                    }
+                }
+                if stop.load(Ordering::Acquire) {
+                    return Ok(());
+                }
+                // A producer queued deliveries outside this turn: flush them
+                // now (the queue, not the byte, is the state).
+                for out in peer.flush_deliveries() {
+                    if let Err(e) = write_frame(fd, &out) {
+                        eprintln!("peer-trace: wake flush write_frame FAILED: {e}");
+                        close_frame_fds(&out);
+                        return Err(e);
+                    }
+                    close_frame_fds(&out);
+                }
+                continue;
+            }
+            IdleWake::Deadline => {
+                for out in peer.flush_deliveries() {
+                    if let Err(e) = write_frame(fd, &out) {
+                        eprintln!("peer-trace: deadline flush write_frame FAILED: {e}");
+                        close_frame_fds(&out);
+                        return Err(e);
+                    }
+                    close_frame_fds(&out);
+                }
+                continue;
+            }
+            IdleWake::Frame => {}
+        }
         let frame: Frame = match read_frame(fd) {
             Ok(f) => f,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+            // `poll(2)` said readable but the frame is not (a short write from a
+            // dying guest): end the session, never spin.
             Err(e)
                 if (e.kind() == std::io::ErrorKind::WouldBlock
                     || e.kind() == std::io::ErrorKind::TimedOut)
@@ -6796,8 +6949,6 @@ fn serve(peer: &mut Peer, fd: RawFd, stop: &AtomicBool) -> std::io::Result<()> {
             {
                 return Ok(())
             }
-            // A live guest may be idle; the timeout only exists to observe
-            // `stop`, not to end the session.
             Err(e)
                 if e.kind() == std::io::ErrorKind::WouldBlock
                     || e.kind() == std::io::ErrorKind::TimedOut =>
@@ -6810,7 +6961,6 @@ fn serve(peer: &mut Peer, fd: RawFd, stop: &AtomicBool) -> std::io::Result<()> {
         // reply/`write_frame` failure line is *not* gated: a reply the peer
         // cannot send is the difference between a structured guest error and a
         // main thread blocked in `transact`, so it must always be visible.
-        let dbg = std::env::var_os("ACOS_PEER_DEBUG").is_some();
         if dbg {
             eprintln!(
                 "peer-trace: in ty={} seq={} code={} flags={:#x} target={:#x} data={} offs={} fds={}",

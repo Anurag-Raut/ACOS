@@ -279,6 +279,13 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
      (`handled_evidence.acked` < `published`): **unknown**, never reported as
      "not handled". `handled_evidence` always travels with the boolean
      (`source`, `published`, `acked`, `unhandled` seqs).
+   - `handled: true` + `handled_evidence.source: "host_window_removed"` — the
+     window the input was delivered to was removed during the step (a dialog
+     dismissed by `back`). Its `InputEventReceiver` is disposed before it can
+     finish the event, so the host's removal is the proof and it outranks an
+     all-unhandled ack set (`source` is then `host_window_removed`, never
+     `guest`, and the step carries no `INPUT_UNHANDLED` warning). `source` is
+     `guest` when an ack answered, `none` when nothing was delivered.
 
    Two consequences worth knowing. (a) `state_changed` is evidence about the
    screen; `handled` is evidence about the app. An agent that only reads

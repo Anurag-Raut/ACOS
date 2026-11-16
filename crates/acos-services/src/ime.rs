@@ -1,39 +1,40 @@
 //! `svc.ime`: the `IInputMethodManager` / `IInputMethodClient` /
-//! `IImeTracker` service side.
+//! `IImeTracker` service side and the in-process IME's key path.
 //!
-//! # The honest headless case: an in-process *null IME*
+//! # Two modes, selected by the transport
 //!
-//! ACOS V1 does not run an `InputMethodService`: there is no IME APK, no IME
-//! process and no soft keyboard surface. `InputMethodManager` in the app process
-//! is the **real framework class**, so it must get an answer it can act on. This
-//! manager therefore plays the system IME service role in-process and declares
-//! exactly what it can do:
+//! * **Bound IME (ART transport).** The transport attaches an
+//!   `IInputMethodSession` binder ([`ImeState::attach_session`]); from then on
+//!   `startInputOrWindowGainedFocus` answers `InputBindResult.SUCCESS` with that
+//!   session, a session id and a real `InputChannel` pair. The app's
+//!   `InputMethodManager` keeps the client end in `mCurChannel` and its
+//!   `dispatchInputEvent` writes each `KeyEvent` into it; this manager keeps
+//!   the server end and reads those parcels ([`ImeState::service_pending_keys`]).
+//!   On `KEYCODE_BACK` while the soft input is shown it hides it (the WMS
+//!   insets change the app sees, plus the IME visibility state) and answers
+//!   `FINISHED(handled=true)`; every other key is answered
+//!   `FINISHED(handled=false)` and therefore follows the existing view-tree
+//!   typing path unchanged. This is AOSP's `InputMethodService` key path,
+//!   reached through the framework's own `InputMethodManager`.
+//! * **Null IME (VM transport).** Without an attached session the manager is the
+//!   declared V1 null IME: `startInput` answers `NO_IME`, `showSoftInput`
+//!   answers `false`, and typed text reaches the app only as injected
+//!   `KeyEvent`s.
 //!
-//! * `startInputOrWindowGainedFocus` returns a real `InputBindResult` with
-//!   `result = NO_IME` (1). The framework's `InputMethodManager` handles that
-//!   value by reporting "no IME bound for this field" and never blocking — the
-//!   measured divergence, not a hang.
-//! * `showSoftInput` returns `false` **and still answers the `ResultReceiver`**
-//!   with `RESULT_UNSHOWN_IME_IS_NOT_CURRENT` (2), so
-//!   `InputMethodManager.showSoftInput` completes instead of waiting for a
-//!   callback that never comes.
-//! * `hideSoftInput` returns `false` (nothing was shown).
-//! * Typed text does not go through an IME at all: the ACOS agent injects keys
-//!   through the **input dispatcher** (`acos_services::input`), which delivers
-//!   real `KeyEvent`s to the focused window's `InputChannel`.
-//! * `IInputMethodClient.setActive/onBindMethod/reportFullscreenMode` and
-//!   `IInputMethodSession.viewClicked/updateSelection` are decoded and recorded
-//!   so the trace shows what the framework asked for. `onBindMethod` is only
-//!   delivered when a client is actually bound (never in V1 for the null IME).
-//! * `IImeTracker` tokens/progress are recorded; `onProgress` counting matches
-//!   the measured 22 ± 3 (the trace's own value is reported as evidence).
+//! `IInputMethodClient.setActive/onBindMethod/reportFullscreenMode` and
+//! `IInputMethodSession.viewClicked/updateSelection` are decoded and recorded so
+//! the trace shows what the framework asked for. `IImeTracker` tokens/progress
+//! are recorded.
 
+use std::os::fd::OwnedFd;
 use std::sync::{Arc, Mutex};
 
 use acos_parcel::binder::BinderId;
+use acos_parcel::BinderRegistry;
 
 use crate::error::{ServiceError, Result};
 use crate::host::{CallResult, ServiceObject};
+use crate::input_channel::{open_channel_fds, InputMessage, LoopbackConsumer};
 use crate::value::Value;
 
 /// `InputBindResult.SUCCESS`.
@@ -49,6 +50,69 @@ pub const BIND_ALREADY_BOUND: i32 = -1;
 pub const RESULT_UNSHOWN_IME_IS_NOT_CURRENT: i32 = 2;
 /// `InputMethodManager.RESULT_SHOWN`.
 pub const RESULT_SHOWN: i32 = 2;
+
+/// Append one diagnostic line to `$ACOS_IME_TRACE` when the env seam is set.
+///
+/// The launcher's stderr is a bounded tail the engine only reports on failure,
+/// so the IME's key path needs its own opt-in trace file (the same pattern as
+/// `ACOS_IME_DUMP`). Not a result channel: nothing reads it back.
+fn trace(line: &str) {
+    if let Ok(path) = std::env::var("ACOS_IME_TRACE") {
+        use std::io::Write;
+        if let Ok(mut file) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            let _ = writeln!(file, "{line}");
+        }
+    }
+}
+
+/// The binder descriptor of the fresh token every `InputChannel` pair carries.
+///
+/// `InputChannel::openInputChannelPair` (`frameworks/base/libs/input/
+/// InputTransport.cpp`) creates `sp<IBinder> token = new BBinder();` **per
+/// pair**; the token is the channel's identity, not the connection's. Nothing
+/// ever transacts on it: the framework only compares it
+/// (`InputMethodManager.areSameInputChannel`).
+pub const CHANNEL_TOKEN_DESCRIPTOR: &str = "android.os.IBinder";
+/// `KeyEvent.KEYCODE_BACK`.
+pub const KEYCODE_BACK: i32 = 4;
+
+/// One key the app offered to the IME through its `InputChannel`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ImeKeyEvent {
+    /// The channel sequence (`ImeInputEventSender`'s `getSequenceNumber`).
+    pub seq: u32,
+    /// `KeyEvent.getKeyCode()`.
+    pub key_code: i32,
+    /// `KeyEvent.getAction()` (`0` down, `1` up).
+    pub action: i32,
+    /// The `FINISHED(handled)` this manager answered.
+    pub handled: bool,
+    /// `true` when this key hid the soft input (the layer consumed it).
+    pub hid_ime: bool,
+}
+
+/// The server end of the IME `InputBindResult` channel plus the client end
+/// until the reply parcel carries it.
+///
+/// Direction: the **app** produces (`InputMethodManager.dispatchInputEvent` ->
+/// `ImeInputEventSender`), ACOS consumes. That is why this side is a
+/// [`LoopbackConsumer`] and not the `InputPublisher` a window channel uses.
+#[derive(Debug)]
+pub struct ImeChannel {
+    /// The decoder + `FINISHED` writer over the server end.
+    pub consumer: LoopbackConsumer,
+    /// The `InputChannel` token written into the parcel (the session binder).
+    pub token: BinderId,
+    /// The channel name the app sees (`"<name> (client)"`).
+    pub name: String,
+    /// The client end, until [`ImeState::take_bind_channel`] hands it to the
+    /// reply writer. `None` once written (this process keeps no copy).
+    pub client_fd: Option<OwnedFd>,
+}
 
 /// One registered `IInputMethodClient`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,8 +161,32 @@ pub struct ImeState {
     pub view_clicks: u32,
     /// Recorded `IInputMethodClient` deliveries (`setActive`, ...).
     pub client_deliveries: Vec<(&'static str, bool)>,
+    /// The `IInputMethodSession` binder this transport can hand the app, once
+    /// attached by the service registry. `None` keeps the null-IME mode.
+    session_binder: Option<BinderId>,
+    /// The live `InputBindResult` channel (server end held here).
+    pub channel: Option<ImeChannel>,
+    /// The session id last handed out (`InputBindResult.id`, non-null exactly
+    /// when the bind succeeded).
+    pub session_id: Option<String>,
+    /// Every key the app offered to the IME, in arrival order.
+    pub channel_keys: Vec<ImeKeyEvent>,
+    /// Every `FINISHED(seq, handled)` written back to the app, in order.
+    pub channel_replies: Vec<(u32, bool)>,
+    /// `true` once a `startInput` bound a session (the soft input can be shown).
+    session_bound: bool,
+    /// `true` while a handled BACK's UP half is still owed an answer.
+    back_tracking: bool,
+    /// The `ACOSWMS` state whose IME insets follow this manager's visibility.
+    wms: Option<Arc<Mutex<crate::wms::WmsState>>>,
     /// The next synthetic session binder (never handed out by the null IME).
     next_session: u64,
+    /// The registry the per-pair `InputChannel` token is allocated from. The
+    /// ART transport attaches the session's own registry
+    /// ([`ImeState::attach_binder_registry`]); a unit-test state allocates from
+    /// a registry of its own. `BinderRegistry` is internally synchronised, so a
+    /// shared `Arc` is all a token needs.
+    tokens: Arc<BinderRegistry>,
 }
 
 impl ImeState {
@@ -116,8 +204,80 @@ impl ImeState {
             selection_updates: 0,
             view_clicks: 0,
             client_deliveries: Vec::new(),
+            session_binder: None,
+            channel: None,
+            session_id: None,
+            channel_keys: Vec::new(),
+            channel_replies: Vec::new(),
+            session_bound: false,
+            back_tracking: false,
+            wms: None,
             next_session: 0x1_3e00,
+            tokens: Arc::new(BinderRegistry::new()),
         }
+    }
+
+    /// Attach the `IInputMethodSession` binder the transport answers with.
+    ///
+    /// This is what turns the null IME into the bound IME: without it the
+    /// manager keeps the declared `NO_IME` answer, with it every
+    /// `startInputOrWindowGainedFocus` binds a real session and channel.
+    pub fn attach_session(&mut self, session: BinderId) {
+        self.session_binder = Some(session);
+    }
+
+    /// `true` when this manager can bind an IME session.
+    #[must_use]
+    pub fn has_session_binder(&self) -> bool {
+        self.session_binder.is_some()
+    }
+
+    /// Follow the `ACOSWMS` window state: an IME show/hide flips the app's IME
+    /// insets source on the focused window (the change the app sees).
+    pub fn attach_wms(&mut self, wms: Arc<Mutex<crate::wms::WmsState>>) {
+        self.wms = Some(wms);
+    }
+
+    /// Allocate the per-pair `InputChannel` tokens from `registry`.
+    ///
+    /// AOSP's `openInputChannelPair` gives **every** pair its own fresh
+    /// `BBinder` token. The token is what the framework compares in
+    /// `InputMethodManager.areSameInputChannel`: with a token shared between
+    /// pairs, a second `startInput` looks like "the same connection" and the
+    /// framework keeps the *old* `mCurChannel` while this manager keeps the
+    /// *new* pair's server end — the app then writes keys into a socket whose
+    /// peer was dropped (`sendInputEvent` returns false and the key silently
+    /// falls through to the view tree). Allocating from the session's own
+    /// registry keeps the written handle a real, releasable binder.
+    pub fn attach_binder_registry(&mut self, registry: Arc<BinderRegistry>) {
+        self.tokens = registry;
+    }
+
+    /// The token of one new channel pair: a fresh local binder handle, exactly
+    /// like `openInputChannelPair`'s `new BBinder()`.
+    fn next_channel_token(&mut self) -> BinderId {
+        self.tokens.register_local(CHANNEL_TOKEN_DESCRIPTOR)
+    }
+
+    /// Pop the `IWindow` insets callbacks this manager's IME show/hide queued.
+    ///
+    /// The show rides the `showSoftInput` transaction, but the hide is driven by
+    /// a key on the channel (no transaction of its own), so the binder peer's
+    /// idle flush drains this queue too (`ServiceHost::drain_raw_deliveries_all`).
+    pub fn take_ime_deliveries(&mut self) -> Vec<crate::host::PendingDelivery> {
+        let Some(wms) = &self.wms else {
+            return Vec::new();
+        };
+        let mut state = wms.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        crate::window_session::take_ime_insets_deliveries(&mut state)
+    }
+
+    /// Take the client end of the newly bound channel (the reply writer owns it
+    /// from here, exactly like `addToDisplayAsUser`'s `out InputChannel`).
+    pub fn take_bind_channel(&mut self) -> Option<(BinderId, String, OwnedFd)> {
+        let channel = self.channel.as_mut()?;
+        let fd = channel.client_fd.take()?;
+        Some((channel.token, channel.name.clone(), fd))
     }
 
     /// `addClient(client, remoteConnection, userId)`; repeated calls update.
@@ -145,11 +305,13 @@ impl ImeState {
         });
     }
 
-    /// `startInputOrWindowGainedFocus` for the null IME.
+    /// `startInputOrWindowGainedFocus`.
     ///
-    /// Returns `(result_code, method, session_binder)`: `NO_IME` with no
-    /// session, which is exactly what a real device returns when no IME is
-    /// installed for the user.
+    /// Returns `(result_code, method, session_binder)`. With a session binder
+    /// attached (the ART transport) this binds the real session and creates a
+    /// fresh `InputChannel` pair, so the framework's `InputMethodManager` can
+    /// offer keys to the IME (`mCurChannel != null`). Without one it stays the
+    /// declared null-IME answer: `NO_IME`, no session, no channel.
     pub fn start_input(
         &mut self,
         client: Option<BinderId>,
@@ -164,30 +326,177 @@ impl ImeState {
             } else {
                 self.add_client(Some(c), remote_connection, 0);
             }
-            self.start_inputs.push((c, sequence, BIND_NO_IME));
-        } else {
-            self.start_inputs.push((BinderId(0), sequence, BIND_NO_IME));
         }
-        // The null IME never has a session. Keeping `next_session` bumping here
-        // would imply one; it stays untouched so a future real IME can hand out
-        // this range.
-        let _ = &mut self.next_session;
-        self.ime_visible = false;
-        (BIND_NO_IME, None, None)
+        let Some(session) = self.session_binder else {
+            let client = client.unwrap_or(BinderId(0));
+            self.start_inputs.push((client, sequence, BIND_NO_IME));
+            // The null IME never has a session. Keeping `next_session` bumping
+            // here would imply one; it stays untouched so the bound IME can
+            // hand out this range.
+            let _ = &mut self.next_session;
+            self.ime_visible = false;
+            return (BIND_NO_IME, None, None);
+        };
+        let id = format!("acos-ime-{sequence}");
+        // `InputChannel::openInputChannelPair("<ime> (server)", ...)`: the app
+        // gets the client end in the bind result, this manager keeps the
+        // server end. A previous bind's channel is disposed (the framework
+        // disposed `mCurChannel` for the old sequence before it asked again).
+        match open_channel_fds() {
+            Ok((server, client_fd)) => {
+                // AOSP: a fresh token per pair (never the session binder, which
+                // is shared by every bind from the same session).
+                let token = self.next_channel_token();
+                let name = format!("{id} (client)");
+                self.channel = Some(ImeChannel {
+                    consumer: LoopbackConsumer::new(server),
+                    token,
+                    name: name.clone(),
+                    client_fd: Some(client_fd),
+                });
+                self.back_tracking = false;
+                self.session_bound = true;
+                let client = client.unwrap_or(BinderId(0));
+                if let Some(entry) = self.clients.iter_mut().find(|e| e.binder == Some(client)) {
+                    entry.session_bound = true;
+                }
+                self.start_inputs.push((client, sequence, BIND_SUCCESS));
+                self.session_id = Some(id.clone());
+                let line = format!(
+                    "bind sequence={sequence} client={:#x} session={:#x} channel=\"{name}\"",
+                    client.0, token.0
+                );
+                eprintln!("ACOSIME {line}");
+                trace(&line);
+                (BIND_SUCCESS, Some(id), Some(session))
+            }
+            Err(e) => {
+                // No channel means the framework would silently fall back to
+                // the view tree; that is a structured failure, never a success.
+                let client = client.unwrap_or(BinderId(0));
+                self.start_inputs.push((client, sequence, BIND_NO_IME));
+                eprintln!("ACOSIME bind sequence={sequence} channel pair failed: {e}");
+                (BIND_NO_IME, None, None)
+            }
+        }
     }
 
-    /// `showSoftInput`: false, but the receiver is answered.
+    /// `showSoftInput`: the soft input is shown when a session is bound.
     pub fn show_soft_input(&mut self, client: BinderId, flags: i32) -> bool {
-        self.show_inputs.push((client, flags, true));
-        self.ime_visible = false;
-        false
+        let bound = self.session_bound
+            && (client.is_null()
+                || self
+                    .clients
+                    .iter()
+                    .any(|c| c.session_bound && c.binder == Some(client)));
+        self.show_inputs.push((client, flags, bound));
+        if bound {
+            self.ime_visible = true;
+            self.set_wms_ime_visible(true);
+            eprintln!("ACOSIME showSoftInput client={:#x} shown=true", client.0);
+            trace(&format!("showSoftInput client={:#x} shown=true", client.0));
+        }
+        bound
     }
 
-    /// `hideSoftInput`: false (nothing was visible).
+    /// `hideSoftInput`: hides the soft input; the receiver is still answered.
     pub fn hide_soft_input(&mut self, client: BinderId, flags: i32) -> bool {
         self.hide_inputs.push((client, flags));
+        let was = self.ime_visible;
         self.ime_visible = false;
-        false
+        self.back_tracking = false;
+        if was {
+            self.set_wms_ime_visible(false);
+        }
+        was
+    }
+
+    fn set_wms_ime_visible(&mut self, visible: bool) {
+        let Some(wms) = &self.wms else { return };
+        let mut state = wms.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        match state.set_ime_visible(visible) {
+            Ok(()) => trace(&format!("wms set_ime_visible({visible})")),
+            Err(e) => {
+                eprintln!("ACOSIME wms set_ime_visible({visible}) failed: {e}");
+                trace(&format!("wms set_ime_visible({visible}) failed: {e}"));
+            }
+        }
+    }
+
+    /// Read every key the app offered to the IME and answer it.
+    ///
+    /// AOSP's path: `InputMethodManager.dispatchInputEvent` writes the
+    /// `KeyEvent` into `mCurChannel`; the IME service reads it, and
+    /// `InputMethodService.onKeyDown/onKeyUp` hides the soft input on BACK and
+    /// reports the key handled. Every other key is answered `handled=false`, so
+    /// `ViewRootImpl.ImeInputStage` forwards it to the view tree exactly as
+    /// before (the typing path is unchanged).
+    ///
+    /// Returns the number of keys answered.
+    pub fn service_pending_keys(&mut self) -> usize {
+        let mut answered = 0;
+        loop {
+            let Some(channel) = self.channel.as_mut() else {
+                return answered;
+            };
+            let message = match channel.consumer.recv() {
+                Ok(Some(message)) => message,
+                Ok(None) => return answered,
+                Err(crate::input_channel::ChannelError::PeerClosed) => {
+                    // The app disposed `mCurChannel`; nothing can be answered on
+                    // this end any more. The next `startInput` makes a new one.
+                    eprintln!("ACOSIME channel closed by the app");
+                    self.channel = None;
+                    return answered;
+                }
+                Err(e) => {
+                    eprintln!("ACOSIME channel read failed: {e}");
+                    return answered;
+                }
+            };
+            let InputMessage::Key { seq, event } = message else {
+                // The IME channel carries keys only (`ImeInputEventSender`).
+                continue;
+            };
+            let is_back = event.key_code == KEYCODE_BACK;
+            let handled = match (is_back, event.action) {
+                (true, 0) => {
+                    let handled = self.ime_visible;
+                    if handled {
+                        // The soft input consumed the press: hide it (the
+                        // app sees the IME insets change and the framework's
+                        // visibility state flips) and finish the key handled.
+                        self.ime_visible = false;
+                        self.set_wms_ime_visible(false);
+                        self.back_tracking = true;
+                        eprintln!("ACOSIME back-down hid the soft input (seq={seq})");
+                        trace(&format!("back-down hid the soft input seq={seq}"));
+                    }
+                    handled
+                }
+                (true, 1) => {
+                    let handled = self.back_tracking;
+                    self.back_tracking = false;
+                    handled
+                }
+                _ => false,
+            };
+            let hid_ime = is_back && event.action == 0 && handled;
+            if let Some(channel) = self.channel.as_mut() {
+                match channel.consumer.send_finished(seq, handled) {
+                    Ok(()) => self.channel_replies.push((seq, handled)),
+                    Err(e) => eprintln!("ACOSIME FINISHED({seq}, {handled}) failed: {e}"),
+                }
+            }
+            self.channel_keys.push(ImeKeyEvent {
+                seq,
+                key_code: event.key_code,
+                action: event.action,
+                handled,
+                hid_ime,
+            });
+            answered += 1;
+        }
     }
 
     /// Record a `IInputMethodClient.setActive` / `reportFullscreenMode`.
@@ -224,12 +533,18 @@ impl ImeState {
     /// The declared capability set, for evidence output.
     #[must_use]
     pub fn capabilities(&self) -> serde_json::Value {
+        let bound = self.session_binder.is_some();
         serde_json::json!({
-            "soft_keyboard": false,
-            "ime_bound": false,
-            "bind_result": "NO_IME",
+            "soft_keyboard": bound,
+            "ime_bound": bound,
+            "bind_result": if bound { "SUCCESS" } else { "NO_IME" },
+            "input_channel": bound,
             "text_injection": "input-dispatcher",
-            "divergence": "IME not bound (ACOS V1 runs a null in-process IME)",
+            "divergence": if bound {
+                "the soft input is an in-process IME role: no IME APK, no keyboard surface; keys reach it on a real InputChannel"
+            } else {
+                "IME not bound (this transport runs the null in-process IME)"
+            },
         })
     }
 }
@@ -263,6 +578,42 @@ pub fn shared() -> Arc<Mutex<ImeState>> {
 /// Replace the shared IME state (test isolation / session reset).
 pub fn install(state: Arc<Mutex<ImeState>>) {
     *IME.lock().unwrap() = Some(state);
+}
+
+/// Service the bound IME's key channel, if one exists.
+///
+/// Called by the input dispatcher while it waits for the window's `FINISHED`
+/// replies: the app's `ViewRootImpl.ImeInputStage` offers the key to its
+/// `InputMethodManager`, which writes it into the IME channel and blocks on our
+/// answer. Reading and answering it here is what keeps that wait bounded (the
+/// framework's own `INPUT_METHOD_NOT_RESPONDING_TIMEOUT` otherwise fires).
+///
+/// Returns the number of keys answered; installing nothing when no session is
+/// bound.
+pub fn service_pending_keys() -> usize {
+    let state = {
+        let slot = IME.lock().unwrap();
+        let Some(state) = slot.as_ref() else {
+            return 0;
+        };
+        Arc::clone(state)
+    };
+    let mut state = state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    state.service_pending_keys()
+}
+
+/// `true` when a client is bound and the soft input is shown.
+#[must_use]
+pub fn soft_input_shown() -> bool {
+    let slot = IME.lock().unwrap();
+    slot.as_ref()
+        .map(|state| {
+            state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .ime_visible
+        })
+        .unwrap_or(false)
 }
 
 fn unsupported(interface: &str, method: &acos_aidl::MethodInfo) -> ServiceError {

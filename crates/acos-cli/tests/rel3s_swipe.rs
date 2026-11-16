@@ -291,7 +291,7 @@ fn swipe_scrolls_a_long_list_and_scroll_until_finds_a_deep_row() {
     );
     assert_eq!(
         result["handled_evidence"]["source"],
-        json!("finishInputEvent"),
+        json!("guest"),
         "REL3E's handled contract reaches swipe: {swipe:#?}"
     );
     let published = result["handled_evidence"]["published"].as_u64().unwrap_or(0);

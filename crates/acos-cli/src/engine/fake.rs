@@ -475,6 +475,7 @@ impl SessionBackend for FakeSession {
             handled: None,
             published: 0,
             acks: Vec::new(),
+            window_removed: false,
             target: None,
             settle: Some(settle.clone()),
         })

@@ -1,0 +1,57 @@
+{
+  "assertions": [],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 5812,
+  "error": {
+    "class": "infra_timeout",
+    "code": "NO_FRESH_FRAME",
+    "details": {
+      "art_code": "NO_FRESH_FRAME",
+      "backend": "acos-art-session",
+      "context": "key",
+      "reply": {
+        "animations": "on",
+        "cmd": "tree",
+        "code": "NO_FRESH_FRAME",
+        "error": "C1 has stored no buffer yet",
+        "ok": false
+      },
+      "session_exit_path": ".cache/rel3i/artifacts-ime/art-frames/session-exit.json"
+    },
+    "hint": "Do not reuse an older capture. Wait for a new frame after the action, or request capture with the correct after_seq/cause_id, then retry.",
+    "message": "acos-art: NO_FRESH_FRAME: C1 has stored no buffer yet",
+    "retryable": true
+  },
+  "evidence": [
+    {
+      "kind": "step",
+      "path": "steps/14-key.json"
+    }
+  ],
+  "index": 14,
+  "input": {
+    "expect_change": false,
+    "handled": null,
+    "handled_evidence": {
+      "acked": 0,
+      "published": 2,
+      "source": "finishInputEvent",
+      "unhandled": []
+    },
+    "handled_hint": "the guest did not ack every event of this action (see handled_evidence.published vs acked), so whether the app consumed it is unknown; nothing here claims it was handled or that nothing happened",
+    "target": null
+  },
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "status": "error",
+  "step": "key",
+  "trust": "trusted"
+}

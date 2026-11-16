@@ -939,12 +939,27 @@ fn acks_from_reply(reply: &serde_json::Value) -> Vec<InputAck> {
 /// verbatim and remain guest-asserted.
 fn delivery(reply: &serde_json::Value, visual_change: bool) -> InputDelivery {
     let (handled, published) = handled_from_reply(reply);
+    // REL3I3: the host's own record that the window this input went to was
+    // removed during the step. A dismissed dialog's `InputEventReceiver` is
+    // disposed before it can finish the event, so there is no ack to wait for;
+    // the removal *is* the proof that the press acted on that window.
+    let window_removed = reply
+        .pointer("/gesture/window_removed")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    // REL3I3/MERGE3I3: the same precedence `handled_source` applies - the
+    // delivered window's removal answers `true` unless a guest ack already
+    // claimed the event.
+    let any_handled = acks_from_reply(reply).iter().any(|ack| ack.handled);
+    let handled =
+        acos_protocol::ui::handled_answer(handled, published, any_handled, window_removed);
     InputDelivery {
         delivered: true,
         visual_change,
         handled,
         published,
         acks: acks_from_reply(reply),
+        window_removed,
         target: reply.get("target").cloned(),
         settle: reply.get("settle").cloned(),
     }
@@ -2934,16 +2949,9 @@ impl ArtSession {
         if self.last_input_settle.is_none() {
             self.last_input_settle = reply.get("settle").cloned();
         }
-        let (handled, published) = handled_from_reply(reply);
-        self.last_input = Some(InputDelivery {
-            delivered: true,
-            visual_change,
-            handled,
-            published,
-            acks: acks_from_reply(reply),
-            target: reply.get("target").cloned(),
-            settle: reply.get("settle").cloned(),
-        });
+        // One constructor for both paths: the host facts (including REL3I3's
+        // window-removal evidence) are read in exactly one place.
+        self.last_input = Some(delivery(reply, visual_change));
         Ok(())
     }
 

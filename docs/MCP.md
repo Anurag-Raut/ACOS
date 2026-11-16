@@ -386,9 +386,15 @@ separates the two:
   * any unhandled ack → `false` (nothing consumed that event);
   * every published event acked handled → `true`;
   * a short or missing ack list → `null` **unknown**, never "not handled".
-  `handled_evidence` always travels with it: `source` (always
-  `finishInputEvent` for a real delivery), `published`, `acked` and the
-  `unhandled` sequence numbers.
+  **Except** when the host recorded that the window this input was delivered to
+  was removed during the step (a dialog dismissed by `back`): its
+  `InputEventReceiver` is disposed before it can finish the event, so the removal
+  is the consumer's proof and the answer is `true` with
+  `handled_evidence.source: "host_window_removed"` — that outranks even an
+  all-unhandled ack set, and such a step never carries `INPUT_UNHANDLED`.
+  `handled_evidence` always travels with it: `source` (`guest` for an ack,
+  `host_window_removed` for the host's removal fact, `none` when nothing was
+  delivered), `published`, `acked` and the `unhandled` sequence numbers.
 * **`target` says what was there.** `node` is the node the selector resolved to
   (for a coordinate tap there is none); `hit` is the tree-geometry hit-test at
   the injected point from the same tree — the deepest visible node whose rect
