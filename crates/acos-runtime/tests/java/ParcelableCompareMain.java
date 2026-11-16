@@ -1,3 +1,4 @@
+import android.bluetooth.BluetoothDevice;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.InstrumentationInfo;
@@ -12,6 +13,8 @@ import android.os.Parcelable;
 import android.os.PersistableBundle;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -133,6 +136,22 @@ public final class ParcelableCompareMain {
         void write(Parcel p) throws Exception;
     }
 
+    /**
+     * The `List<BluetoothDevice>` `IBluetooth.getBondedDevices` answers inside a
+     * `SynchronousResultReceiver.Result`. `BluetoothDevice(String)` is the
+     * `@hide` constructor the framework itself uses (`mAddressType` 0), so the
+     * case builds it reflectively.
+     */
+    static List<BluetoothDevice> bondedDevices() throws Exception {
+        java.lang.reflect.Constructor<BluetoothDevice> ctor =
+                BluetoothDevice.class.getDeclaredConstructor(String.class);
+        ctor.setAccessible(true);
+        List<BluetoothDevice> devices = new ArrayList<>();
+        devices.add(ctor.newInstance("11:22:33:44:55:66"));
+        devices.add(ctor.newInstance("AA:BB:CC:DD:EE:FF"));
+        return devices;
+    }
+
     static void emit(String name, Writer writer) throws Exception {
         Parcel p = Parcel.obtain();
         try {
@@ -146,6 +165,19 @@ public final class ParcelableCompareMain {
     public static void main(String[] args) throws Exception {
         emit("configuration", p -> configuration().writeToParcel(p, 0));
         emit("persistable_bundle", p -> persistableBundle().writeToParcel(p, 0));
+        // `SynchronousResultReceiver$Result.writeToParcel` (image dex):
+        // `writeValue(mObject)` then `writeValue(mException)`. The Bluetooth
+        // module answers `getBondedDevices` with a `List<BluetoothDevice>` and
+        // `getState` with an `Integer`; both cases are emitted here so the Rust
+        // `Result` codec can be byte-compared against the real writer.
+        emit("bluetooth_result", p -> {
+            p.writeValue(bondedDevices());
+            p.writeValue(null);
+        });
+        emit("bluetooth_state", p -> {
+            p.writeValue(Integer.valueOf(12));
+            p.writeValue(null);
+        });
 
         for (String arg : args) {
             int eq = arg.indexOf('=');
@@ -158,8 +190,34 @@ public final class ParcelableCompareMain {
             try {
                 p.unmarshall(bytes, 0, bytes.length);
                 p.setDataPosition(0);
-                Parcelable got;
+                Parcelable got = null;
+                Object dynamicObject = null;
+                Object dynamicException = null;
                 switch (name) {
+                    case "bluetooth_result": {
+                        dynamicObject = p.readValue(null);
+                        dynamicException = p.readValue(null);
+                        check(dynamicException == null, "bluetooth_result exception is null");
+                        check(dynamicObject instanceof List,
+                                "bluetooth_result is a List: " + dynamicObject);
+                        List<?> devices = (List<?>) dynamicObject;
+                        check(devices.size() == 2, "bluetooth_result size " + devices.size());
+                        BluetoothDevice first = (BluetoothDevice) devices.get(0);
+                        check("11:22:33:44:55:66".equals(first.getAddress()),
+                                "bluetooth_result address " + first.getAddress());
+                        BluetoothDevice second = (BluetoothDevice) devices.get(1);
+                        check("AA:BB:CC:DD:EE:FF".equals(second.getAddress()),
+                                "bluetooth_result second address " + second.getAddress());
+                        break;
+                    }
+                    case "bluetooth_state": {
+                        dynamicObject = p.readValue(null);
+                        dynamicException = p.readValue(null);
+                        check(dynamicException == null, "bluetooth_state exception is null");
+                        check(Integer.valueOf(12).equals(dynamicObject),
+                                "bluetooth_state object " + dynamicObject);
+                        break;
+                    }
                     case "configuration":
                         got = Configuration.CREATOR.createFromParcel(p);
                         Configuration c = (Configuration) got;
@@ -233,7 +291,12 @@ public final class ParcelableCompareMain {
                 // pure function of the parsed fields (no hidden defaults).
                 Parcel rewritten = Parcel.obtain();
                 try {
-                    got.writeToParcel(rewritten, 0);
+                    if (got != null) {
+                        got.writeToParcel(rewritten, 0);
+                    } else {
+                        rewritten.writeValue(dynamicObject);
+                        rewritten.writeValue(dynamicException);
+                    }
                     System.out.println("roundtrip." + name + "=" + hex(rewritten.marshall()));
                 } finally {
                     rewritten.recycle();

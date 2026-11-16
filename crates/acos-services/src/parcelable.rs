@@ -181,12 +181,19 @@ pub static SPECS: &[ParcelableSpec] = &[
         verification: Verification::Curated,
     },
     ParcelableSpec {
-        // `BluetoothDevice.writeToParcel` (API 34): `writeString(mAddress)` then
-        // `writeInt(mAddressType)`. The bonded-device list and the
+        // `BluetoothDevice.writeToParcel` (image dex `BluetoothDevice.writeToParcel`:
+        // `writeString(mAddress)` then `writeInt(mAddressType)`; the image's
+        // `BluetoothDevice(Parcel)` reads `readString()` + `readInt()`).
+        // `writeString` is the **UTF-16** string (`Parcel.writeString`), not
+        // `writeString8`: a `Str8` here made the client read the address as
+        // UTF-16 and abandon the whole `Result`, so
+        // `BluetoothAdapter.getBondedDevices()` logged a `TimeoutException` and
+        // returned null (MODTAIL2 `BONDED null`). The bonded-device list and the
         // `ACTION_FOUND` extra both carry this payload.
+        // `real_java_write_to_parcel_matches_the_rust_codec` byte-compares it.
         class: "android.bluetooth.BluetoothDevice",
-        fields: &[FieldOp::Str8, FieldOp::Int],
-        verification: Verification::Curated,
+        fields: &[FieldOp::Str16, FieldOp::Int],
+        verification: Verification::Full,
     },
     ParcelableSpec {
         class: "android.content.pm.PackageItemInfo",

@@ -18,7 +18,7 @@ use std::collections::HashMap;
 
 use common::{compile_case, run_case_args};
 use acos_services::parcelable;
-use acos_services::value::{Parcelable, Value};
+use acos_services::value::{DynamicValue, Parcelable, Value};
 use acos_services::Bundle;
 
 fn rect(left: i32, top: i32, right: i32, bottom: i32) -> Value {
@@ -231,6 +231,27 @@ fn resolve_info_value(app: &acos_services::pms::AppInfo) -> Parcelable {
     )
 }
 
+/// A `BluetoothDevice` in the image's `writeToParcel` order: `mAddress`
+/// (`writeString`) then `mAddressType` (`writeInt`), read back by
+/// `BluetoothDevice(Parcel)` (image dex).
+fn bluetooth_device(address: &str) -> DynamicValue {
+    DynamicValue::Parcelable(Parcelable::ordered(
+        "android.bluetooth.BluetoothDevice",
+        vec![Value::Str(Some(address.into())), Value::Int(0)],
+    ))
+}
+
+/// The `SynchronousResultReceiver$Result` payload the Bluetooth module sends:
+/// `writeValue(mObject)` then `writeValue(mException)` (image dex
+/// `SynchronousResultReceiver$Result.writeToParcel`).
+fn encoded_result(object: DynamicValue, exception: DynamicValue) -> Vec<u8> {
+    let mut parcel = acos_parcel::Parcel::new();
+    for value in [object, exception] {
+        parcelable::write_dynamic(&mut parcel, &value).expect("encode writeValue payload");
+    }
+    parcel.marshall()
+}
+
 fn encoded(value: &Parcelable) -> Vec<u8> {
     let mut parcel = acos_parcel::Parcel::new();
     parcelable::write_payload(&mut parcel, value).expect("encode payload");
@@ -293,6 +314,33 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
         hex(&bundle_bytes)
     );
 
+    // The Bluetooth result payloads: `Result.writeToParcel` writes
+    // `mObject` then `mException` with `writeValue`. `getBondedDevices` sends a
+    // `List<BluetoothDevice>`, `getState` an `Integer`. These are the two shapes
+    // the `hw.bluetooth` module delivers on a oneway call.
+    let bonded_bytes = encoded_result(
+        DynamicValue::List(Some(vec![
+            bluetooth_device("11:22:33:44:55:66"),
+            bluetooth_device("AA:BB:CC:DD:EE:FF"),
+        ])),
+        DynamicValue::Null,
+    );
+    assert_eq!(
+        writes.get("bluetooth_result").map(String::as_str),
+        Some(hex(&bonded_bytes).as_str()),
+        "Result(List<BluetoothDevice>) real-Java bytes differ from the Rust codec\njava={:?}\nrust={}",
+        writes.get("bluetooth_result"),
+        hex(&bonded_bytes)
+    );
+    let state_bytes = encoded_result(DynamicValue::Int(12), DynamicValue::Null);
+    assert_eq!(
+        writes.get("bluetooth_state").map(String::as_str),
+        Some(hex(&state_bytes).as_str()),
+        "Result(Integer) real-Java bytes differ from the Rust codec\njava={:?}\nrust={}",
+        writes.get("bluetooth_state"),
+        hex(&state_bytes)
+    );
+
     // Differential parcelables built from the parsed manifest/APK values.
     use acos_services::pms::{
         ActivityInfo as PmsActivityInfo, AppInfo, PackageInfo as PmsPackageInfo,
@@ -339,6 +387,8 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
     let args = vec![
         format!("configuration={}", hex(&config_bytes)),
         format!("persistable_bundle={}", hex(&bundle_bytes)),
+        format!("bluetooth_result={}", hex(&bonded_bytes)),
+        format!("bluetooth_state={}", hex(&state_bytes)),
         format!("application_info={}", hex(&app_bytes)),
         format!("activity_info={}", hex(&act_bytes)),
         format!("package_info={}", hex(&pkg_bytes)),
@@ -358,6 +408,8 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
     for name in [
         "configuration",
         "persistable_bundle",
+        "bluetooth_result",
+        "bluetooth_state",
         "application_info",
         "activity_info",
         "package_info",
@@ -376,6 +428,8 @@ fn real_java_write_to_parcel_matches_the_rust_codec() {
     for (name, bytes) in [
         ("configuration", &config_bytes),
         ("persistable_bundle", &bundle_bytes),
+        ("bluetooth_result", &bonded_bytes),
+        ("bluetooth_state", &state_bytes),
         ("application_info", &app_bytes),
         ("activity_info", &act_bytes),
         ("package_info", &pkg_bytes),
