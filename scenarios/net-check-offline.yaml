@@ -1,0 +1,83 @@
+# net-check-offline: the flag-off half of the SPIKE-NET app-level proof.
+#
+# Same APK as `net-check.yaml`, run with `ACOS_SPIKE_NET` unset. The sandbox has
+# its old `--unshare-net`, seccomp allows only `AF_UNIX`, no `dnsproxyd` is
+# served and `NetworkCapabilities` carries no VALIDATED bit. The honest result is
+# therefore *not* `HTTP 200`: the app must show the exception class name it
+# really got (`UnknownHostException` — bionic's resolver proxy has no socket to
+# talk to — or `SocketException`, the seccomp denial), and the connectivity line
+# must report an unvalidated network with no addresses.
+#
+# This scenario asserts that failure, so "the flag-off arm still works" is a
+# verdict with evidence rather than a manual reading of a screenshot. A pass
+# here with `HTTP 200` would be the bug.
+version: 1
+name: net-check-offline
+description: >-
+  Flag off: the same net-check APK must fail honestly (UnknownHostException or
+  SocketException, no VALIDATED capability, no addresses/DNS/routes), never
+  report a success it did not have.
+app: fixtures/build/apps/net-check.apk
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.netcheck/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: status}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: url}
+      text: {exact: https://example.com}
+
+  # Item 6, flag off: a real failure with the class name the platform raised.
+  - assert_text:
+      selector: {id: status}
+      # Measured with the flag off (2026-11-16): the seccomp filter's EACCES on
+      # `socket(AF_INET)` reaches libcore's IoBridge, which raises
+      # `java.lang.SecurityException: Permission denied (missing INTERNET
+      # permission?)` before any name is resolved. UnknownHostException is the
+      # other possible honest outcome (resolver proxy with no responder).
+      text: {regex: '^(java\.net\.|java\.lang\.)?(UnknownHostException|SocketException|ConnectException|SecurityException)$'}
+      timeout_ms: 60000
+
+  # Item 5, flag off: no validated internet network and nothing to describe.
+  - assert_text:
+      selector: {id: connectivity}
+      text: {contains: "internet=true validated=false"}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: connectivity}
+      text: {contains: "iface=wlan0 addrs=0 dns=0 dnsList=none routes=0"}
+      timeout_ms: 5000
+
+  # Item 4, flag off: no netd resolver proxy exists in the guest.
+  - assert_text:
+      selector: {id: dnsprobe}
+      text: {contains: "exists=false"}
+      timeout_ms: 5000
+
+  - capture:
+      name: net-check-offline
+      format: png
+      fresh: true
+
+  - assert_no_crash: {}

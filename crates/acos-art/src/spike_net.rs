@@ -29,7 +29,7 @@
 //! are out of scope for the spike).
 
 use std::io::{Read, Write};
-use std::net::{Ipv4Addr, Shutdown};
+use std::net::Shutdown;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -38,6 +38,10 @@ use std::process::Command;
 pub const FLAG: &str = "ACOS_SPIKE_NET";
 /// Path of the `pasta` binary the spike uses (default: `pasta` in `PATH`).
 pub const PASTA_ENV: &str = "ACOS_SPIKE_NET_PASTA";
+/// Optional file the DNS responder appends one line per request to (spike
+/// debugging: it answers the question "was the proxy contacted at all, and with
+/// what?"). Unset in normal runs.
+pub const DNS_LOG_ENV: &str = "ACOS_SPIKE_NET_DNS_LOG";
 
 /// True when the spike is switched on. The only gate in the module.
 #[must_use]
@@ -72,34 +76,40 @@ pub fn sandbox_flags() -> Vec<&'static str> {
 /// * `--map-host-loopback none` (implies `--no-map-gw`) — the gateway address
 ///   is not rewritten to the host, so the guest cannot reach host services by
 ///   aiming at its default gateway.
-/// * `-a 169.254.2.15/24 -g 169.254.2.1` — the guest gets a link-local
-///   address, not the host's LAN address, so nothing in the guest looks like it
-///   is on the LAN.
-/// * `-D 1.1.1.1` — the DHCP/NDP DNS answer handed to the guest.
+/// * `-a <guest>/24 -g <gateway>` — the guest gets a link-local address, not
+///   the host's LAN address, so nothing in the guest looks like it is on the LAN.
+/// * `-D <dns>` — the DHCP/NDP DNS answer handed to the guest.
+///
+/// The three addresses come from [`acos_services::connectivity`], which is also
+/// what `LinkProperties` reports to apps: the interface an app reads and the
+/// interface pasta configures are the same numbers by construction.
 #[must_use]
 pub fn pasta_args() -> Vec<String> {
+    use acos_services::connectivity::{
+        NET_DNS_SERVER, NET_GUEST_ADDRESS, NET_GUEST_GATEWAY, NET_GUEST_PREFIX_LEN,
+    };
+    let ip = |a: [u8; 4]| format!("{}.{}.{}.{}", a[0], a[1], a[2], a[3]);
     [
-        "-f",
-        "-q",
-        "--config-net",
-        "-a",
-        "169.254.2.15/24",
-        "-g",
-        "169.254.2.1",
-        "--no-map-gw",
-        "--map-host-loopback",
-        "none",
-        "-T",
-        "none",
-        "-U",
-        "none",
-        "--no-splice",
-        "-D",
-        "1.1.1.1",
-        "--",
+        "-f".to_string(),
+        "-q".to_string(),
+        "--config-net".to_string(),
+        "-a".to_string(),
+        format!("{}/{}", ip(NET_GUEST_ADDRESS), NET_GUEST_PREFIX_LEN),
+        "-g".to_string(),
+        ip(NET_GUEST_GATEWAY),
+        "--no-map-gw".to_string(),
+        "--map-host-loopback".to_string(),
+        "none".to_string(),
+        "-T".to_string(),
+        "none".to_string(),
+        "-U".to_string(),
+        "none".to_string(),
+        "--no-splice".to_string(),
+        "-D".to_string(),
+        ip(NET_DNS_SERVER),
+        "--".to_string(),
     ]
     .into_iter()
-    .map(str::to_string)
     .collect()
 }
 
@@ -214,8 +224,40 @@ pub fn wrap(bwrap_argv: &[std::ffi::OsString]) -> Command {
 // dnsproxyd (netd replacement, minimal)
 // ---------------------------------------------------------------------------
 
-/// Serve `/dev/socket/dnsproxyd` on `sock_dir/dnsproxyd` until the process
-/// exits.
+/// A running `dnsproxyd` responder for one directories-that-become-`/dev/socket`.
+///
+/// Dropping it stops the accept loop and removes the socket: the zygote recycles
+/// a session's socket directory on every reset, and a responder left on the old
+/// inode would both leak a thread per session and serve nobody.
+pub struct DnsProxy {
+    path: PathBuf,
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl DnsProxy {
+    /// The host path of the socket this responder serves.
+    #[must_use]
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for DnsProxy {
+    fn drop(&mut self) {
+        self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
+        // Wake a blocking `accept`: a self-connect returns at once and the loop
+        // then sees the stop flag. Nothing is served: the client sends nothing.
+        let _ = UnixStream::connect(&self.path);
+        if let Some(t) = self.thread.take() {
+            let _ = t.join();
+        }
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+/// Serve `/dev/socket/dnsproxyd` on `sock_dir/dnsproxyd` until the returned
+/// handle is dropped.
 ///
 /// Android's bionic resolver does not read `/etc/resolv.conf`: `getaddrinfo`
 /// serialises the query into a text request on this socket and expects netd to
@@ -224,32 +266,68 @@ pub fn wrap(bwrap_argv: &[std::ffi::OsString]) -> Command {
 /// The spike answers it with the host's `getaddrinfo`, i.e. the resolution
 /// happens on the host side of the session, outside the guest.
 ///
+/// **Which directory matters.** `sock_dir` must be a directory that a sandbox
+/// binds at `/dev/socket`. There is more than one: the session launcher's, the
+/// zygote's per-child `<plan>/<tag>/sock`, and `render-app`'s run socket dir.
+/// Serving only the launcher's was the bug this signature exists to make
+/// unfixable-by-accident: with the production zygote the app process mounts
+/// `<plan>/<tag>/sock`, so the socket was invisible and `getaddrinfo` answered
+/// `EAI_NODATA` without ever connecting (measured in `net-check`).
+///
 /// Request (NUL-terminated ASCII):
 /// `getaddrinfo <host|^> <serv|^> <flags> <family> <socktype> <protocol> <netid>`
 ///
 /// Answer: `222\0`, then per address `BE32 1, BE32 flags, family, socktype,
 /// protocol, BE32 addrlen, addr bytes, BE32 namelen, name`, then `BE32 0`.
 /// Any failure answers `500\0` + `000\0`, which bionic maps to `EAI_NODATA`.
-pub fn serve_dnsproxyd(sock_dir: &Path) -> std::io::Result<std::thread::JoinHandle<()>> {
+pub fn serve_dnsproxyd(sock_dir: &Path) -> std::io::Result<DnsProxy> {
+    std::fs::create_dir_all(sock_dir)?;
     let path = sock_dir.join("dnsproxyd");
     let _ = std::fs::remove_file(&path);
     let listener = UnixListener::bind(&path)?;
-    std::thread::Builder::new().name("spike-dnsproxyd".into()).spawn(move || {
-        for conn in listener.incoming() {
-            match conn {
-                Ok(s) => {
-                    // One request per connection is what bionic does (`fdopen`
-                    // + `fclose`), so a short-lived thread per client is enough.
-                    std::thread::spawn(move || {
-                        if let Err(e) = handle(s) {
-                            eprintln!("acos-art: spike dnsproxyd: {e}");
-                        }
-                    });
+    // Device fidelity: `/dev/socket/dnsproxyd` is world-writable on Android
+    // (`srw-rw-rw-`), because the resolver proxy is a service every app uid must
+    // reach and SELinux, not DAC, is what restricts it there. A default 0755
+    // bind here would deny `connect()` to the guest uid (10192) and bionic would
+    // report `EAI_NODATA` without ever reaching this responder (measured).
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o666))?;
+    }
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let flag = std::sync::Arc::clone(&stop);
+    let thread = std::thread::Builder::new()
+        .name("spike-dnsproxyd".into())
+        .spawn(move || {
+            for conn in listener.incoming() {
+                if flag.load(std::sync::atomic::Ordering::SeqCst) {
+                    break;
                 }
-                Err(e) => eprintln!("acos-art: spike dnsproxyd accept: {e}"),
+                match conn {
+                    Ok(s) => {
+                        // One request per connection is what bionic does
+                        // (`fdopen` + `fclose`), so a short-lived thread per
+                        // client is enough.
+                        std::thread::spawn(move || {
+                            if let Err(e) = handle(s) {
+                                eprintln!("acos-art: spike dnsproxyd: {e}");
+                            }
+                        });
+                    }
+                    Err(e) => eprintln!("acos-art: spike dnsproxyd accept: {e}"),
+                }
             }
-        }
-    })
+        })?;
+    Ok(DnsProxy { path, stop, thread: Some(thread) })
+}
+
+/// [`serve_dnsproxyd`] behind the spike flag: `None` when the flag is off, so
+/// every call site stays byte-identical in behaviour without the gate.
+pub fn serve_dnsproxyd_if_enabled(sock_dir: &Path) -> std::io::Result<Option<DnsProxy>> {
+    if !enabled() {
+        return Ok(None);
+    }
+    serve_dnsproxyd(sock_dir).map(Some)
 }
 
 fn handle(mut s: UnixStream) -> std::io::Result<()> {
@@ -272,6 +350,7 @@ fn handle(mut s: UnixStream) -> std::io::Result<()> {
         // `gethostbyname` is a separate netd command; bionic's
         // `gethostbyname` also goes through `android_getaddrinfo_proxy`, so the
         // spike answers it as an error instead of pretending.
+        log_request(&text, "500 unhandled-command");
         s.write_all(b"500\0")?;
         s.write_all(b"000\0")?;
         s.shutdown(Shutdown::Both).ok();
@@ -287,11 +366,13 @@ fn handle(mut s: UnixStream) -> std::io::Result<()> {
 
     let answers = resolve(host, serv, flags, family, socktype, protocol);
     let Some(answers) = answers else {
+        log_request(&text, "500 resolve-failed");
         s.write_all(b"500\0")?;
         s.write_all(b"000\0")?;
         s.shutdown(Shutdown::Both).ok();
         return Ok(());
     };
+    log_request(&text, &format!("222 answers={}", answers.len()));
     let mut out = Vec::new();
     out.extend_from_slice(b"222\0");
     for a in answers {
@@ -316,6 +397,19 @@ struct Answer {
     socktype: i32,
     protocol: i32,
     addr: Vec<u8>,
+}
+
+/// One line per answered request in the file named by [`DNS_LOG_ENV`] (no-op
+/// when unset). Appends are `O_APPEND` writes of a short line, so concurrent
+/// handler threads cannot interleave inside a line.
+fn log_request(request: &str, outcome: &str) {
+    use std::io::Write as _;
+    let Some(path) = std::env::var_os(DNS_LOG_ENV) else {
+        return;
+    };
+    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(f, "req={request:?} -> {outcome}");
+    }
 }
 
 /// Resolve one query with the host's resolver (`libc::getaddrinfo`).
@@ -378,10 +472,6 @@ fn resolve(
 pub fn dns_socket_env_path() -> Option<PathBuf> {
     std::env::var_os("ACOS_SPIKE_NET_DNS").map(PathBuf::from)
 }
-
-/// The guest's loopback for the LAN guard's own address (unused placeholder to
-/// keep the address in one place for the report/tests).
-pub const GUEST_ADDR: Ipv4Addr = Ipv4Addr::new(169, 254, 2, 15);
 
 #[cfg(test)]
 mod tests {

@@ -50,7 +50,71 @@ public class MainActivity extends Activity {
         String caps = describeNetwork();
         connectivity.setText(caps);
         Log.i(TAG, "connectivity " + caps);
+        String dns = probeDnsProxy();
+        ((TextView) findViewById(R.id.dnsprobe)).setText(dns);
+        Log.i(TAG, "dnsprobe " + dns);
         fetch();
+    }
+
+    /**
+     * Item 4 diagnostics: can the app process see and talk to the netd resolver
+     * proxy at all? Two facts, each with its failure spelled out:
+     *  - the library bionic's `netdClientInit()` dlopens to install
+     *    `dnsOpenProxy` (without it, every `getaddrinfo` answers EAI_NODATA and
+     *    the request never reaches the socket);
+     *  - a raw `getaddrinfo` request on /dev/socket/dnsproxyd, byte for byte what
+     *    `android_getaddrinfo_proxy()` writes, and the reply's first bytes.
+     * It never substitutes for the real fetch: `id=status` still comes from
+     * HttpURLConnection.
+     */
+    /** First `n` characters of a diagnostic, so one long message cannot fill the screen. */
+    private static String shortText(String s, int n) {
+        String one = s.replace('\n', ' ');
+        return one.length() <= n ? one : one.substring(0, n) + "...";
+    }
+
+    private String probeDnsProxy() {
+        StringBuilder sb = new StringBuilder("dnsprobe");
+        try {
+            java.io.File f = new java.io.File("/dev/socket/dnsproxyd");
+            sb.append(" exists=").append(f.exists());
+            sb.append(" canRead=").append(f.canRead());
+            sb.append(" canWrite=").append(f.canWrite());
+        } catch (Throwable t) {
+            sb.append(" stat-exc=").append(t.getClass().getName());
+        }
+        try {
+            System.loadLibrary("netd_client");
+            sb.append(" dlopen=ok");
+        } catch (Throwable t) {
+            sb.append(" dlopen=").append(t.getClass().getSimpleName()).append(':')
+                    .append(shortText(String.valueOf(t.getMessage()), 70));
+        }
+        android.net.LocalSocket s = new android.net.LocalSocket(
+                android.net.LocalSocket.SOCKET_STREAM);
+        try {
+            s.connect(new android.net.LocalSocketAddress("/dev/socket/dnsproxyd",
+                    android.net.LocalSocketAddress.Namespace.FILESYSTEM));
+            java.io.OutputStream out = s.getOutputStream();
+            out.write("getaddrinfo example.com ^ 0 0 0 0 0".getBytes("US-ASCII"));
+            out.write(0);
+            out.flush();
+            byte[] head = new byte[4];
+            int n = s.getInputStream().read(head);
+            sb.append(" proxy=bytes:").append(n);
+            if (n > 0) {
+                sb.append(" code=").append(new String(head, 0, Math.min(n, 3), "US-ASCII"));
+            }
+        } catch (Throwable t) {
+            sb.append(" proxy=").append(t.getClass().getSimpleName()).append(':')
+                    .append(shortText(String.valueOf(t.getMessage()), 70));
+        } finally {
+            try {
+                s.close();
+            } catch (Throwable ignored) {
+            }
+        }
+        return sb.toString();
     }
 
     /** What ConnectivityManager/NetworkCapabilities say (item 5). */
@@ -76,6 +140,19 @@ public class MainActivity extends Activity {
             sb.append(" iface=").append(lp == null ? "none" : lp.getInterfaceName());
             sb.append(" addrs=").append(lp == null ? 0 : lp.getLinkAddresses().size());
             sb.append(" dns=").append(lp == null ? 0 : lp.getDnsServers().size());
+            sb.append(" dnsList=");
+            if (lp == null) {
+                sb.append("none");
+            } else {
+                StringBuilder dns = new StringBuilder();
+                for (java.net.InetAddress a : lp.getDnsServers()) {
+                    if (dns.length() > 0) {
+                        dns.append(',');
+                    }
+                    dns.append(a.getHostAddress());
+                }
+                sb.append(dns.length() == 0 ? "none" : dns.toString());
+            }
             sb.append(" routes=").append(lp == null ? 0 : lp.getRoutes().size());
             return sb.toString();
         } catch (Throwable t) {

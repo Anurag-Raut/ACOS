@@ -72,6 +72,20 @@ use crate::value::{Parcelable, Value};
 /// from 100 on a device).
 pub const NET_ID: i32 = 100;
 
+/// The guest's IPv4 address in the SPIKE-NET namespace (`pasta -a`).
+///
+/// One source of truth: `acos_art::spike_net::pasta_args` builds its `-a`/`-g`/
+/// `-D` flags from these constants and this module reports them through
+/// `LinkProperties`, so the interface description an app reads cannot drift from
+/// the interface the namespace actually has.
+pub const NET_GUEST_ADDRESS: [u8; 4] = [169, 254, 2, 15];
+/// Prefix length of [`NET_GUEST_ADDRESS`] (`pasta -a 169.254.2.15/24`).
+pub const NET_GUEST_PREFIX_LEN: u8 = 24;
+/// pasta's gateway, which is also the DHCP server address the guest is told.
+pub const NET_GUEST_GATEWAY: [u8; 4] = [169, 254, 2, 1];
+/// The DNS server handed to the guest by DHCP (`pasta -D`).
+pub const NET_DNS_SERVER: [u8; 4] = [1, 1, 1, 1];
+
 /// `ConnectivityManager.TYPE_WIFI` (the legacy type of the emulated network).
 pub const LEGACY_TYPE_WIFI: i32 = 1;
 
@@ -320,27 +334,51 @@ pub fn default_network_capabilities() -> Parcelable {
 
 /// `android.net.LinkProperties` of the emulated default network.
 ///
-/// There is no interface in the sandbox, so the three address lists, the route
-/// list and the stacked-link list are explicit `0` counts. The interface name
-/// and MTU are the AOSP emulator's wifi defaults, so `getInterfaceName()` and
-/// `getMtu()` answer with a plausible, documented value instead of `null`.
+/// Without the network module there is no interface in the sandbox, so the three
+/// address lists, the route list and the stacked-link list are empty and the
+/// DHCP server address is null. The interface name and MTU are the AOSP
+/// emulator's wifi defaults, so `getInterfaceName()` and `getMtu()` answer with a
+/// plausible, documented value instead of `null`.
+///
+/// SPIKE-NET (ADR-0030 gate, item 5): with pasta attached the session really has
+/// an interface, an address, a DNS server and a default route, so
+/// `getLinkProperties()` describes them instead of lying by omission — the guest
+/// address pasta hands out (`169.254.2.15/24`), its gateway
+/// (`169.254.2.1`, which is also the DHCP server) and the DHCP-answered DNS
+/// server (`1.1.1.1`, `spike_net::pasta_args`' `-D`). Nothing is invented: the
+/// values are the ones the namespace actually has.
 #[must_use]
 pub fn default_link_properties() -> Parcelable {
+    let (addrs, dns, dhcp, routes) = if spike_net_enabled() {
+        (
+            Value::List(Some(vec![Value::Parcelable(guest_link_address())])),
+            Value::List(Some(vec![Value::ByteArray(Some(dns_server_bytes()))])),
+            Value::ByteArray(Some(dhcp_server_bytes())),
+            Value::List(Some(vec![Value::Parcelable(default_route())])),
+        )
+    } else {
+        (
+            Value::List(Some(Vec::new())),
+            Value::List(Some(Vec::new())),
+            Value::ByteArray(None),
+            Value::List(Some(Vec::new())),
+        )
+    };
     Parcelable::ordered(
         "android.net.LinkProperties",
         vec![
             Value::Str(Some("wlan0".to_string())),
-            Value::Int(0),  // link addresses
-            Value::Int(0),  // DNS servers
-            Value::Int(0),  // validated private DNS servers
+            addrs,          // link addresses
+            dns,            // DNS servers
+            Value::List(Some(Vec::new())), // validated private DNS servers
             Value::Bool(false), // usePrivateDns
             Value::Str(None),   // privateDnsServerName
-            Value::Int(0),      // PCSCF servers
+            Value::List(Some(Vec::new())), // PCSCF servers
             Value::Str(None),   // domains
-            Value::ByteArray(None), // dhcp server address
+            dhcp,               // dhcp server address
             Value::Int(1500),   // mtu
             Value::Str(None),   // tcpBufferSizes
-            Value::Int(0),      // routes
+            routes,             // routes
             Value::Byte(0),     // httpProxy presence
             Value::Str(None),   // nat64Prefix
             Value::Int(0),      // stacked links
@@ -349,6 +387,52 @@ pub fn default_link_properties() -> Parcelable {
             Value::Str(None),   // captivePortalData
         ],
     )
+}
+
+/// The guest's address in the SPIKE-NET namespace (`NET_GUEST_ADDRESS/24`),
+/// as a `LinkAddress`: scope link (`RT_SCOPE_LINK` = 253), no flags, unknown
+/// lifetimes (the namespace has no address lifetime).
+fn guest_link_address() -> Parcelable {
+    Parcelable::ordered(
+        "android.net.LinkAddress",
+        vec![
+            Value::ByteArray(Some(NET_GUEST_ADDRESS.to_vec())),
+            Value::Int(i32::from(NET_GUEST_PREFIX_LEN)),
+            Value::Int(0),   // flags
+            Value::Int(253), // RT_SCOPE_LINK
+            Value::Long(-1), // deprecationTime = LIFETIME_UNKNOWN
+            Value::Long(-1), // expirationTime = LIFETIME_UNKNOWN
+        ],
+    )
+}
+
+/// The default route of the namespace: `0.0.0.0/0` via pasta's gateway
+/// (`NET_GUEST_GATEWAY`), `RTN_UNICAST`, no MTU override.
+fn default_route() -> Parcelable {
+    Parcelable::ordered(
+        "android.net.RouteInfo",
+        vec![
+            Value::Parcelable(Parcelable::ordered(
+                "android.net.IpPrefix",
+                vec![
+                    Value::ByteArray(Some(vec![0, 0, 0, 0])),
+                    Value::Int(0), // /0
+                ],
+            )),
+            Value::ByteArray(Some(NET_GUEST_GATEWAY.to_vec())),
+            Value::Str(Some("wlan0".to_string())),
+            Value::Int(1), // RTN_UNICAST
+            Value::Int(0), // no per-route MTU
+        ],
+    )
+}
+
+fn dns_server_bytes() -> Vec<u8> {
+    NET_DNS_SERVER.to_vec()
+}
+
+fn dhcp_server_bytes() -> Vec<u8> {
+    NET_GUEST_GATEWAY.to_vec()
 }
 
 /// `android.net.NetworkInfo` (the deprecated reply) for the default network.

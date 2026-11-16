@@ -16,7 +16,9 @@ description: >-
   INTERNET network with a real interface/addresses/DNS/routes and that an
   in-app HTTPS GET of https://example.com returns HTTP 200.
 app: fixtures/build/apps/net-check.apk
-engine: art
+# Run with `--engine art` on the command line. A scenario `engine:` field only
+# accepts the backend vocabulary (`native-preferred`, `native-only`,
+# `reference-only`); `engine: art` is rejected by the loader (v0.3.0 track B).
 fallback: report-and-escalate
 api_level: 34
 isolation: process
@@ -53,10 +55,22 @@ steps:
       text: {exact: HTTP 200}
       timeout_ms: 60000
 
-  # Item 5: the connectivity report an app sees.
+  # Item 5: the connectivity report an app sees, including the interface,
+  # addresses, DNS servers and default route (LinkProperties parity).
   - assert_text:
       selector: {id: connectivity}
       text: {contains: "internet=true validated=true"}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: connectivity}
+      text: {contains: "iface=wlan0 addrs=1 dns=1 dnsList=1.1.1.1 routes=1"}
+      timeout_ms: 5000
+
+  # Item 4: the resolver proxy the guest's own bionic reaches.
+  - assert_text:
+      selector: {id: dnsprobe}
+      text: {contains: "exists=true"}
       timeout_ms: 5000
 
   - assert_log:
