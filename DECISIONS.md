@@ -1201,3 +1201,30 @@ beyond correctness (sessions must not disturb each other's results or controls).
 stay: no default guest route to host localhost services (it also protects the MCP daemon and
 `acos view`), explicit host-port opt-in (Metro), and fail-closed where it costs nothing. Any hardening
 that costs RAM or latency is out. Verdict honesty (0 false passes) is unaffected.
+
+**ADR-0029 note (MODNOTIF2, 2026-11-16): service-layer option C, built first.** The orchestrator chose
+option B (system UI from guest system apps); MODNOTIF2 built the option-C layer every option needs,
+without any window/dialog code. Three decisions were taken while building it:
+
+1. **A module may replace a `core` name.** `ModuleManifest::replaces` names the `ServiceManager` names
+   a module takes over (`permission` today; `notification`/`statusbar` when their modules land). The
+   module registers the same descriptor, so attaching *overwrites* core's factory and detaching must
+   put it back. `ServiceHost::end_scope` only deleted what a scope added, so a detached module kept
+   answering; `RegistrationScope` now records the overwritten descriptor's factory/binder and restores
+   them (and the host's notification/permission state slots). Core answers a replaced name only while
+   the module is `off`, so a session without the module behaves exactly as before.
+2. **One runtime-permission table, published on the host.** `crate::permissions::PermissionStore` is
+   created by `registry::install` and shared by `PmsState`, `AtmsState` and the `system.permissions`
+   module: `PackageManager.checkPermission` and `ActivityManager.checkPermission` cannot disagree, and
+   a grant changes both. A permission with no runtime entry still answers from the manifest, so
+   install-time grants keep working; a runtime (dangerous) permission now starts **not** granted, as on
+   a phone.
+3. **`requestPermissions` never resolves to a grant ACOS cannot complete.** The framework starts an
+   `Intent` at `com.android.permissioncontroller` and expects `onRequestPermissionsResult`; ACOS
+   installs no such app and has no activity-result delivery from the system side
+   (`IApplicationThread` + `ActivityResultItem`), so the ATMS answers the structured
+   `PERMISSION_UI_UNAVAILABLE` with the configured state (`granted` when everything is already granted
+   — what `GrantPermissionsActivity` would return without drawing — else `denied`), naming the
+   system-app work. A pre-granted request therefore *still* fails, because the result cannot be
+   delivered; that delivery path is the first thing the permission-controller system app needs, and it
+   belongs to the multi-process/`mproc` work, not to the service layer.
