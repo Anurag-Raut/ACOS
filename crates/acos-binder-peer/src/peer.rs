@@ -1016,6 +1016,7 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
     // rebase the object offsets. Without this every binder reads as null and
     // the following argument is misaligned.
     let mut out = Vec::with_capacity(frame.data.len());
+    let mut object_offsets: Vec<usize> = Vec::new();
     let mut cursor = 0usize;
     let mut fds = frame.fds.iter().copied();
     for off in frame.object_offsets() {
@@ -1051,6 +1052,12 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
         let mut obj = [0u8; 24];
         obj.copy_from_slice(&frame.data[off..off + 24]);
         obj[8..16].copy_from_slice(&new_id.to_le_bytes());
+        // The object table travels out of band in the frame, so the imported
+        // parcel must be told where each rewritten object landed: a handler that
+        // looks for a client binder in the request (`result_receiver` in the
+        // bluetooth module) walks `Parcel::objects()`. Before this the imported
+        // parcel answered zero objects for every guest request.
+        object_offsets.push(out.len());
         out.extend_from_slice(&obj);
         let mut next = off + 24;
         let binder = matches!(
@@ -1068,6 +1075,9 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
     out.extend_from_slice(&frame.data[cursor..]);
     let mut parcel = Parcel::new();
     parcel.unmarshall(&out);
+    for offset in object_offsets {
+        parcel.register_object(offset);
+    }
     parcel.set_data_position(0);
     // The guest's libbinder wrote this parcel: a null binder carries the 4-byte
     // stability record but no object-table entry (L1 §3.6).
