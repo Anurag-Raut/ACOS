@@ -106,6 +106,17 @@ requested rate, on-change suppression for light, `play`/`shake` timelines,
 stock-empty-list on the same binder, no `real` profile + honest report, `stub`
 refusing every scripted op, config selection, and the conformance kit.
 
+Two environment notes for a reviewer re-running this in a worktree:
+
+* `cargo test -p acos-art --lib` and `-p acos-cli` contain Unix-socket tests
+  whose scratch path is `<repo>/.cache/...`; a long worktree path exceeds
+  `sun_path` and 7 + 2 tests fail with `path too long for a unix socket`
+  (**pre-existing**, not this change). Both suites are green with
+  `ACOS_VIEW_TEST_DIR=/home/Qui/.cache/acos-view-test` (`art-lib-tests.log`:
+  153 passed, 1 ignored).
+* `cargo test -p acos-cli` did not compile on the base branch (`annotate` gained
+  a 12th argument in MOD1 and two test call sites were not updated); fixed here.
+
 ## Fail-before / pass-after
 
 `fail-before.txt`: the module, the `service_ctl` step, the verify seam and the
