@@ -1,0 +1,5 @@
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-aa9681f2-7ddfb13c1c0dc0bc/scenarios/rel3a-content-settle.yaml (sha 26765f816cdc), apk /home/Qui/.t3/worktrees/acos/t3-aa9681f2-7ddfb13c1c0dc0bc/fixtures/build/apps/settle-lab.apk (sha 3ea3d28b33ba), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  artifacts: results/handoff/MERGE3A/artifacts/content-settle
+  steps: 6
