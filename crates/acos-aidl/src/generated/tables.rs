@@ -7809,6 +7809,22 @@ pub static INTERFACES: LazyLock<Vec<crate::ir::InterfaceInfo>> = LazyLock::new(|
             ],
         },
         crate::ir::InterfaceInfo {
+            descriptor: "android.app.IRequestFinishCallback".to_string(),
+            first_call_transaction: 1,
+            methods: vec![
+                crate::ir::MethodInfo {
+                    name: "requestFinish".to_string(),
+                    signature: "()V".to_string(),
+                    return_type: "V".to_string(),
+                    code: 1,
+                    oneway: true,
+                    args: vec![],
+                    reply: vec![],
+                    incomplete: None,
+                },
+            ],
+        },
+        crate::ir::InterfaceInfo {
             descriptor: "android.app.IUiModeManager".to_string(),
             first_call_transaction: 1,
             methods: vec![

@@ -1,0 +1,15 @@
+{
+  "mode": "referenced",
+  "decision": "prune-unreferenced",
+  "reason": "passing run (mode `referenced`): declared evidence plus the first and last frame kept, intermediate frames and mirrored captures pruned",
+  "kept_files": 20,
+  "kept_bytes": 342117,
+  "pruned_files": 1,
+  "pruned_bytes": 67988,
+  "pruned": [
+    {
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-7-g7-c2.png",
+      "bytes": 67988
+    }
+  ]
+}

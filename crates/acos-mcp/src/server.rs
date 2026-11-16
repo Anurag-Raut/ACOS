@@ -356,7 +356,14 @@ impl<B: Backend> Server<B> {
             None => None,
         };
         if let Some(envelope) = valid_arguments {
-            return tool_result(id, &envelope, &self.negotiated_version(), &self.config);
+            // `args` still shapes the reply (`full`, `cursor`) on the error path.
+            return tool_result(
+                id,
+                &envelope,
+                &self.negotiated_version(),
+                &self.config,
+                &args,
+            );
         }
 
         let permit = match self.gate.acquire(self.config.queue_timeout, token) {

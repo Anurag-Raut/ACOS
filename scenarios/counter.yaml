@@ -156,6 +156,10 @@ steps:
       text: {exact: "0"}
       bounds: [42, 317, 63, 368]
 
+  # Back finishes the only Activity: no window remains (`window-gone`).
   - back: {}
 
   - assert_no_crash: {}
+
+  - assert_not_visible:
+      selector: {id: count}

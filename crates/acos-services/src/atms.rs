@@ -240,6 +240,8 @@ pub struct ActivityRecord {
     pub finished: bool,
     /// Saved instance state (`clicks`).
     pub saved_clicks: u32,
+    /// `IActivityClientController.onBackPressed` arrived for this token (ROT7).
+    pub back_pressed: bool,
 }
 
 impl ActivityRecord {
@@ -254,6 +256,7 @@ impl ActivityRecord {
             idle: false,
             finished: false,
             saved_clicks: 0,
+            back_pressed: false,
         }
     }
 }
@@ -374,6 +377,15 @@ pub struct AtmsState {
     pub transactions: Vec<ClientTransaction>,
     /// Pending `system -> app` calls as `(method, args)`.
     pub pending_app_thread_calls: Vec<(String, Vec<Value>)>,
+    /// Pending `system -> app` calls to an arbitrary guest binder named by the
+    /// transaction, as `(target binder, interface, method, args)` (ROT7).
+    ///
+    /// `IActivityClientController.onBackPressed` carries an
+    /// `IRequestFinishCallback` the **server** is expected to call back; that
+    /// callback binder is minted in the guest, so the reverse call goes through
+    /// the same `CallResult::deliveries` path the `IApplicationThread`
+    /// deliveries use (a `F_TXN` frame to the guest's Java binder).
+    pub pending_reverse_calls: Vec<(u64, String, String, Vec<Value>)>,
     /// Granted permissions.
     pub granted_permissions: Vec<String>,
     /// Logical clock (ms) advanced per event; the VM supplies the real clock.
@@ -405,6 +417,7 @@ impl AtmsState {
             protocol_events: Vec::new(),
             transactions: Vec::new(),
             pending_app_thread_calls: Vec::new(),
+            pending_reverse_calls: Vec::new(),
             granted_permissions: vec!["android.permission.INTERNET".into()],
             clock_ms: 1,
             next_seq: 1,
@@ -706,9 +719,13 @@ impl AtmsState {
     /// Returns whether the token is now known.
     fn adopt_activity(&mut self, token: u64) -> bool {
         if token == 0 {
+            atms_trace("adopt-rejected token=0x0 (null token)".into());
             return false;
         }
         if !self.process.as_ref().is_some_and(|p| p.attached) {
+            atms_trace(format!(
+                "adopt-rejected token={token:#x} (process not attached)"
+            ));
             return false;
         }
         if self.activities.iter().any(|a| a.token == token) {
@@ -723,7 +740,12 @@ impl AtmsState {
         let (name, placeholder) = match self.ams.adopt_launch_token(token) {
             Some((old, class)) => (class, Some(old)),
             None if guest_binder => ("activity".to_string(), None),
-            None => return false,
+            None => {
+                atms_trace(format!(
+                    "adopt-rejected token={token:#x} (not guest-tagged, no recorded launch)"
+                ));
+                return false;
+            }
         };
         if let Some(old) = placeholder {
             self.activities.retain(|a| a.token != old);
@@ -738,6 +760,9 @@ impl AtmsState {
         // Also on the launcher's stderr: the adoption is the answer to W31's
         // `no activity for token 0x0`, so a live run must show it directly.
         eprintln!("acos-services: ActivityManagerAdopt token={token:#x} activity={name}");
+        atms_trace(format!(
+            "adopted token={token:#x} activity={name} placeholder={placeholder:?} guest_tagged={guest_binder}"
+        ));
         true
     }
 
@@ -800,21 +825,69 @@ impl AtmsState {
         self.emit(LifecycleState::SaveInstanceState, None);
     }
 
+    /// `IActivityClientController.onBackPressed(token, callback)` — the server
+    /// half of the framework's own back path (API 34).
+    ///
+    /// `Activity.onBackPressed()` does **not** finish anything itself: it calls
+    /// `ActivityClient.onBackPressed(mToken, new RequestFinishCallback(this))`
+    /// (one-way, code 62), and `ActivityClientController.onBackPressed` is the
+    /// side that decides. AOSP resolves the `ActivityRecord` for the token and
+    /// asks the client to finish it through the callback it was handed; the
+    /// callback's `requestFinish()` posts `Activity.finishAfterTransition()`,
+    /// i.e. `Activity.finish()` → `IActivityClientController.finishActivity`,
+    /// whose `true` is what flips `Activity.mFinished`. Everything after that
+    /// (`onPause` → `onSaveInstanceState`/`onStop` → `onDestroy`) is a
+    /// `ClientTransaction` the server sends.
+    ///
+    /// So this records the back press and queues the reverse call to the
+    /// client's `IRequestFinishCallback`; the finish itself arrives
+    /// independently as `finishActivity`, and is never synthesised here.
+    ///
+    /// Returns the callback binder that was queued, for the trace/test.
+    pub fn on_back_pressed(&mut self, token: u64, callback: u64) -> Result<u64> {
+        let index = self.ensure_known(token)?;
+        atms_trace(format!(
+            "back-pressed token={token:#x} callback={callback:#x} activity={}",
+            self.activities[index].activity
+        ));
+        if callback == 0 {
+            // AOSP's controller dereferences the callback; a null one is a
+            // client bug and must not be turned into a silent finish.
+            return Err(ServiceError::BadRequest {
+                interface: "android.app.IActivityClientController".into(),
+                method: "onBackPressed".into(),
+                detail: format!("null IRequestFinishCallback for token {token:#x}"),
+            });
+        }
+        self.activities[index].back_pressed = true;
+        self.log_event(
+            "ActivityBackPressed",
+            acos_protocol::LogLevel::Debug,
+            format!(
+                "token={token:#x} activity={} action=request-finish",
+                self.activities[index].activity
+            ),
+        );
+        self.pending_reverse_calls.push((
+            callback,
+            "android.app.IRequestFinishCallback".into(),
+            "requestFinish".into(),
+            Vec::new(),
+        ));
+        Ok(callback)
+    }
+
     /// `finishActivity` (the app asked to finish).
     pub fn finish_activity(&mut self, token: u64) -> Result<()> {
-        if std::env::var_os("ACOS_ATMS_TRACE").is_some() {
-            eprintln!(
-                "ACOSATMS finish-request token={token:#x} known={:?} n={}",
-                self.activities.iter().map(|a| a.token).collect::<Vec<_>>(),
-                self.activities.len()
-            );
-        }
+        atms_trace(format!(
+            "finish-request token={token:#x} known={:?} n={}",
+            self.activities.iter().map(|a| a.token).collect::<Vec<_>>(),
+            self.activities.len()
+        ));
         let index = match self.ensure_known(token) {
             Ok(index) => index,
             Err(e) => {
-                if std::env::var_os("ACOS_ATMS_TRACE").is_some() {
-                    eprintln!("ACOSATMS finish-rejected token={token:#x} {e}");
-                }
+                atms_trace(format!("finish-rejected token={token:#x} {e}"));
                 return Err(e);
             }
         };
@@ -834,6 +907,31 @@ impl AtmsState {
         } else {
             -1
         }
+    }
+
+    /// ROT8b: does the host ATMS prove the task is finished?
+    ///
+    /// True only when no activity record is live (every record is finished or
+    /// `Destroyed`), no `startActivity` is pending (AMS
+    /// `pending_launches` is empty: a `finish()` + `startActivity(Home)` leaves
+    /// Home's launch queued here until the guest materialises it), and no
+    /// record is unnamed (a record with no class cannot be judged, so the
+    /// answer fails closed). The guest's own process state alone is never
+    /// enough: it cannot see a launch the host has accepted but not yet run.
+    #[must_use]
+    pub fn task_finished_proof(&self) -> bool {
+        if !self.ams.pending_launches.is_empty() {
+            return false;
+        }
+        self.activities
+            .iter()
+            .all(|a| {
+                // `finished` (the framework's finishActivity) or a reported
+                // destroy ends a record; anything else, including a record that
+                // never left `Uncreated`, is treated as live (fail closed).
+                !a.activity.is_empty()
+                    && (a.finished || a.lifecycle == ActivityLifecycle::Destroyed)
+            })
     }
 
     /// The lifecycle state of an activity.
@@ -1032,6 +1130,16 @@ impl ServiceObject for AtmsService {
             });
         }
         let mut state = self.state.lock().unwrap();
+        if std::env::var_os("ACOS_ATMS_TRACE").is_some() {
+            let token = binder_u64(args.first());
+            let known = state.activities.iter().any(|a| a.token == token);
+            atms_trace(format!(
+                "call {interface}.{} token={token:#x} known={known} known_tokens={:?} args={}",
+                method.name,
+                state.activities.iter().map(|a| a.token).collect::<Vec<_>>(),
+                args.len()
+            ));
+        }
         let mut deliveries = Vec::new();
         let reply = match (self.interface, method.name.as_str()) {
             (AtmsInterface::ActivityManager, "checkPermission") => {
@@ -1246,6 +1354,16 @@ impl ServiceObject for AtmsService {
             }
             (AtmsInterface::ClientController, "setTaskDescription")
             | (AtmsInterface::ClientController, "reportSizeConfigurations") => Vec::new(),
+            (AtmsInterface::ClientController, "onBackPressed") => {
+                // ROT7: `onBackPressed(IBinder token,
+                // IRequestFinishCallback callback)` (code 62, one-way). The
+                // client has already decided that the framework's own back
+                // handling ran; the server's half is to ask it to finish.
+                let token = binder_u64(args.first());
+                let callback = args.get(1).and_then(Value::as_binder).map(|b| b.0).unwrap_or(0);
+                state.on_back_pressed(token, callback)?;
+                Vec::new()
+            }
             (AtmsInterface::ClientController, "finishActivity") => {
                 let token = binder_u64(args.first());
                 state.finish_activity(token)?;
@@ -1343,6 +1461,27 @@ impl ServiceObject for AtmsService {
                 }
             }
         }
+        // Encode any queued `system -> guest` reverse calls: the
+        // `IApplicationThread` transaction deliveries above, and any call a
+        // transaction named a guest binder for (`IRequestFinishCallback`).
+        let reverse = std::mem::take(&mut state.pending_reverse_calls);
+        for (target, interface, method, values) in reverse {
+            let Some(info) = acos_aidl::lookup_by_name(&interface, &method) else {
+                return Err(ServiceError::UnsupportedAndroidApi {
+                    interface,
+                    code: 0,
+                    method,
+                });
+            };
+            let data = crate::codec::build_request(&interface, info, &values)?;
+            deliveries.push(PendingDelivery {
+                target: acos_parcel::BinderId(target),
+                interface,
+                code: info.code,
+                method,
+                data,
+            });
+        }
         let _ = parcelable::has_codec("android.app.servertransaction.ClientTransaction");
         Ok(CallResult { reply, deliveries })
     }
@@ -1359,6 +1498,33 @@ impl ServiceObject for AtmsService {
 
 fn binder_u64(v: Option<&Value>) -> u64 {
     v.and_then(Value::as_binder).map(|b| b.0).unwrap_or(0)
+}
+
+/// `ACOS_ATMS_TRACE` diagnostic sink.
+///
+/// `1` (or empty) writes the line to stderr; any other value is taken as a
+/// file path and the line is appended there. The launcher's stderr is only
+/// ring-buffered inside the CLI engine (8 KiB tail, surfaced on errors), so a
+/// path is what a live-ART investigation needs: `ACOS_ATMS_TRACE=/path/log`.
+fn atms_trace(line: String) {
+    match std::env::var_os("ACOS_ATMS_TRACE") {
+        None => {}
+        Some(value) => {
+            let value = value.to_string_lossy().into_owned();
+            if value.is_empty() || value == "1" {
+                eprintln!("ACOSATMS {line}");
+                return;
+            }
+            use std::io::Write as _;
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&value)
+            {
+                let _ = writeln!(file, "ACOSATMS {line}");
+            }
+        }
+    }
 }
 
 /// One-line description of a decoded `ParcelableCrashInfo` for the guest log.

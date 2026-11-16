@@ -163,6 +163,13 @@ steps:
       bounds: [42, 612, 175, 663]
 
   # ---- back destroys the activity ---------------------------------------
+  # The framework's own finish path (IActivityClientController.onBackPressed ->
+  # requestFinish -> finishActivity -> Pause(finished)/Stop/Destroy). A FINISHING
+  # Activity is not asked to save state: ActivityThread.performStopActivityInner
+  # computes `shouldSaveState = saveState && !r.activity.mFinished && ...`
+  # (AOSP android-14), so there is deliberately no onSaveInstanceState here
+  # (unlike the rotate recreate above). The step binds on the settled empty
+  # window forest (`window-gone`, task_finished), never on a frame.
   - back: {}
 
   - assert_log:
@@ -172,7 +179,9 @@ steps:
       patterns:
         - '^onPause$'
         - '^onStop$'
-        - '^onSaveInstanceState clicks=2$'
         - '^onDestroy$'
+
+  - assert_not_visible:
+      selector: {id: result}
 
   - assert_no_crash: {}

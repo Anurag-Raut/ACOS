@@ -1111,7 +1111,7 @@ fn session_observe(args: SessionObserveArgs) -> ExitCode {
     } else {
         "acos_observe"
     };
-    let daemon_args = json!({
+    let mut daemon_args = json!({
         "base": daemon_base(&args.session),
         "tree": args.tree,
         "text": args.text,
@@ -1119,8 +1119,13 @@ fn session_observe(args: SessionObserveArgs) -> ExitCode {
         "cursor": args.cursor,
         "png": args.screenshot.is_some(),
         "screenshot": args.screenshot.as_ref().map(|p| p.display().to_string()),
-        "settle_timeout_ms": args.settle_timeout_ms,
     });
+    // P12b's settle deadline is a property of the tree route: the reference
+    // `acos_observe` (frame/text) has no settle rule, so it is not sent there —
+    // its closed schema rejects an argument it cannot honour.
+    if tool == "acos_observe_tree" {
+        daemon_args["settle_timeout_ms"] = json!(args.settle_timeout_ms);
+    }
     if let Some(code) = call_ensure_daemon(tool, &daemon_args, args.json) {
         return code;
     }

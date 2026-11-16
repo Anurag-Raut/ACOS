@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.3",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/fixtures/build/apps/finish-start.apk",
+  "apk_sha256": "5358cd28c3afe40a39a728c92bd942dc2d6dffbdae0a1e8428cbd1548c5bfece",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/scenarios/finish-start.yaml",
+  "scenario_sha256": "6e4a45709c7948aa0b8ca17edcd73d645644f16d4eb3aff9dac7b1c33d30caf6",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

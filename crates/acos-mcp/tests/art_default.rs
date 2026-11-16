@@ -79,12 +79,17 @@ while True:
         session_id = (args.get("base") or {}).get("session_id")
         log({"kind": "call", "tool": request.get("tool"),
              "session_id": session_id, "engine": engine,
-             "socket": socket_path})
+             "args": args, "socket": socket_path})
+        # REL3E: an input reply's `handled` is the guest window's own
+        # `finishInputEvent(handled)` bit, relayed verbatim by the daemon.
         envelope = {
             "request_id": "req_fake", "ok": True, "status": "pass",
             "backend": "acos-native", "fidelity": "art-reference",
             "session_id": session_id, "metrics": {"wall_ms": 0},
-            "result": {"fake_session": session_id, "engine": engine},
+            "result": {"fake_session": session_id, "engine": engine,
+                       "handled": True,
+                       "settle": {"mode": "strict", "settled": True,
+                                  "bound": "window-gone", "task_finished": True}},
         }
         stream.write((json.dumps({"id": request["id"], "envelope": envelope}) + "\n").encode())
         stream.flush()
@@ -299,6 +304,65 @@ fn default_session_tools_use_the_private_art_daemon() {
 
     let status = server.close();
     assert!(status.success(), "acos-mcp exited with {status}");
+}
+
+/// ROT8/REL3E: MCP `acos_key {"code": "back"}` is the scenario `back` path.
+///
+/// The MCP server forwards the key to its private `acos serve --engine art`
+/// daemon, which maps `"back"` to key code 4 (`crates/acos-cli/src/session.rs`
+/// and `action_key_code` below) — the same `key` command a scenario `back`
+/// step sends, and therefore the same `IActivityClientController
+/// .onBackPressed` path. The reply's `handled` bit is relayed, not invented.
+#[test]
+fn acos_key_back_goes_to_the_art_daemon_and_reports_handled() {
+    let (dir, runtime, fake, log, pid_file) = setup("back");
+    let mut server = Server::spawn(&[
+        ("ACOS_BIN", &fake),
+        ("XDG_RUNTIME_DIR", &runtime),
+        ("ACOS_ALLOWED_ROOTS", &dir),
+        ("ACOS_FAKE_LOG", &log),
+        ("ACOS_FAKE_PID_FILE", &pid_file),
+    ]);
+    server.initialize();
+
+    let launch = server.tool(
+        "acos_launch",
+        json!({"apk": dir.join("app.apk").display().to_string()}),
+    );
+    assert_eq!(launch["status"], "pass", "{launch}");
+    let session = launch["result"]["session_id"]
+        .as_str()
+        .or_else(|| launch["session_id"].as_str())
+        .unwrap_or("s_default")
+        .to_string();
+
+    let key = server.tool(
+        "acos_key",
+        json!({"code": "back", "base": {"request_id": "req_back", "session_id": session}}),
+    );
+    assert_eq!(key["status"], "pass", "{key}");
+    assert_eq!(
+        key["result"]["handled"],
+        json!(true),
+        "the daemon's handled bit must survive the MCP boundary: {key}"
+    );
+    assert_eq!(
+        key["result"]["settle"]["task_finished"],
+        json!(true),
+        "the window-gone settle is relayed: {key}"
+    );
+
+    let calls = log_lines(&log);
+    let key_call = calls
+        .iter()
+        .find(|line| line["kind"] == "call" && line["tool"] == "acos_key")
+        .unwrap_or_else(|| panic!("no acos_key reached the daemon: {calls:?}"));
+    assert_eq!(key_call["args"]["code"], "back", "{key_call}");
+    assert_eq!(
+        key_call["engine"], "art",
+        "the key must reach the ART daemon"
+    );
+    let _ = server.close();
 }
 
 #[test]

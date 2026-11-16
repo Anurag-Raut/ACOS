@@ -4725,3 +4725,175 @@ nothing in this change is on the tap path).
   step, never as a sample.
 - **Conclusion / next:** the release gate can run again; the remaining work is the M8 form fast
   path (REL3C/REL3F reply work on the submit tap) before v0.3.0 is claimed green.
+## E9.5 — ROT7: the server half of `Activity.onBackPressed` (a `back` now destroys the Activity), and the "task finished" screen that does not exist yet — PARTIAL (the framework path is proven end to end; the strict settle still cannot bind the step)
+
+- **Date / commit:** 2026-11-15, branch `art-back-1` off `int-021` `52beccf`.
+  Report: `results/handoff/ROT7.md`.
+- **Question / goal:** make `back` on real ART reach the framework's real back
+  path — `IActivityClientController.onBackPressed` → `finish` → previous Activity
+  resumes / the app's task finishes, as on API 34 — and answer which stage claimed
+  back's UP while ROT6 believed `Activity.mDefaultBackCallback == null`.
+- **Method:** `ACOS_ATMS_TRACE` moved from stderr (which the CLI engine keeps only
+  as an 8 KiB ring buffer, surfaced on errors) to a file sink
+  (`ACOS_ATMS_TRACE=<path>`, `…=1` keeps stderr). That alone reversed two ROT6
+  readings. Runs: `counter.yaml --engine art` through
+  `tools/art-runtime/run-exclusive.sh --task ROT7` + `tools/guarded.sh`;
+  `cargo test -p acos-services`. The AOSP cache
+  (`.cache/aosp/base/core/java/android/app/Activity.java`,
+  `…/servertransaction/{TransactionExecutor,ResumeActivityItem}.java`,
+  `…/view/ViewRootImpl.java`, `…/policy/DecorView.java`) and the image's decoded
+  AIDL tables (`crates/acos-aidl`, regenerated) were the ground truth.
+- **Inputs:** `fixtures/build/apps/counter.apk` (sha256
+  `8170835e70f2d8d5c4a9ec6498e2571ab2bc8571e4681ccbcb1a4bd394100c39`),
+  `fixtures/build/apps/hello-views.apk`, `multi-activity.apk`; API-34
+  `android.jar` for the guest compile; boot classpath `.cache/boot/android-34`.
+- **Result:**
+  - The ATMS **does** adopt the guest's token (ROT6 said it never does):
+    `activityResumed token=0x100000003 known=false` →
+    `adopted … guest_tagged=true`. The ROT6 trace was invisible because
+    `acos verify` runs the `acos-art` named by `ACOS_ART_BIN`; a rebuilt `acos`
+    does not rebuild it (measured twice: a stale binary shows zero ATMS calls).
+  - `back` reaches the framework's own back path and the host refused the last
+    step of it: the peer's unsupported log has
+    `IActivityClientController onBackPressed code 62 UNSUPPORTED_ANDROID_API`.
+    API 34's `Activity.onBackPressed()` only *asks* the server
+    (`ActivityClient.onBackPressed(mToken, RequestFinishCallback)`, code 62,
+    one-way — hence ROT6's 5 ms "handled" ack with no finish).
+  - Implemented `AtmsState::on_back_pressed` + `pending_reverse_calls` (encoded
+    into `CallResult::deliveries`, an `F_TXN` to the guest's callback binder) and
+    decoded `android.app.IRequestFinishCallback` (`requestFinish`, code 1,
+    one-way) from the image. Measured on `counter.yaml`:
+    `back-pressed token=0x100000003 callback=0x10000001a` →
+    `finishActivity` → `finish-request` → and the app's own log
+    `onPause / onStop / onSaveInstanceState count=2 / onDestroy`.
+  - Step 3 answer: the UP is claimed by
+    `ViewRootImpl$NativePreImeInputStage.doOnBackKeyEvent` (ahead-of-time back),
+    not by ACOS and not by the legacy `Activity.onKeyUp` branch — `Activity.onCreate`
+    registers `mDefaultBackCallback` because
+    `WindowOnBackInvokedDispatcher.isOnBackInvokedCallbackEnabled` is true at
+    targetSdk 34. ROT6's `mDefaultBackCallback == null` came from bytecode, not a
+    measurement; a `back_dispatcher=` marker now records it per Activity.
+  - **Still failing:** the `back` *step* now ends
+    `TIMEOUT (detached)`: after the last window is removed the guest probe
+    (`LaunchMain.checkSettle`) can never publish a settled sample, and the strict
+    settle binds a step to a guest draw at/after the gesture — a window removal
+    draws nothing. On a phone the screen is the launcher; ACOS has no launcher and
+    no second layer, so "the app's task finished" has no screen. `handled=true`
+    for `back` was never evidence of a finish; `onDestroy` is.
+  - *Tests:* `cargo test --release --offline -p acos-services -p acos-art
+    -p acos-cli -p acos-verify` green — 34 targets, 0 failures (1 pre-existing
+    `#[ignore]`); `acos-services` = 86 lib tests + every integration target,
+    incl. the new `tests/rot7_back.rs` (5:
+    the press queues exactly one `requestFinish` to the callback binder with the
+    image's code/one-way shape and fabricates no finish; the client's
+    `finishActivity` after it flips `finished`; zero/unknown tokens still error;
+    a null callback is a `BadRequest`; a press on the top of a two-Activity task
+    leaves the record below untouched) and the untouched W38
+    `an_unknown_or_zero_token_still_errors` (3/3).
+- **Decision:** the ATMS answers `onBackPressed` the AOSP way — record the press,
+  ask the client through the callback it was handed, and let the client's own
+  `Activity.finish()` be the only thing that sets `mFinished`. No host-side
+  "finish by token" shortcut was added (it would skip the framework's path, which
+  is the whole point of the rung). `ACOS_ATMS_TRACE` may now name a file.
+- **Not done:** hello-views / multi-activity / v1-recreate / counter `back` steps do
+  not pass yet (the settle wall above), so there is no "wrong expectation →
+  `ASSERTION_FAILED`" negative yet, and the 15 gates / 5 Gaten flows / 5 negatives
+  were not re-run (unaffected by an added one-way method; the ART lock was held by
+  two foreign `--exclusive` benchmark loops for most of the window).
+- **Left open (pre-existing, measured):** `reportSizeConfigurations` fails in the
+  codec (`SizeConfigurationBuckets`, "parcel underflow: need 4 bytes at 124",
+  3 records in one `counter` run) — a separate row, unrelated to back.
+
+## E9.6 — ROT8: a `back` that finishes the last window binds on STATE (`window-gone`), and Back from B resumes A before B stops — PASS (acceptance in `results/handoff/ROT7.md` §ROT8)
+
+- **Branch/worktree:** `art-back-1` (`.cache/wt-rot7`), commits after `99a65f1`.
+  Report: `results/handoff/ROT7.md` §ROT8.
+- **Hypothesis:** the `back` step failed only because the strict settle needs a
+  guest draw and a destroyed last window draws nothing. Orchestrator decision
+  (option a): bind the step on the guest's *state* proof — every Activity
+  destroyed + the finishing one `mFinished` + no attached window root — never a
+  timeout, never an invented frame.
+- **Result:** `LaunchMain.emitProbe`→`taskFinished()` reports `settle.window_gone`
+  / `task_finished` with an empty window forest; the host
+  (`window_gone_binds`) binds `bound:"window-gone"`, `pixels_changed:false`,
+  `task_finished:true` (step evidence), the reply carries no PNG and a logical
+  `frame_seq`, and the CLI engine binds the empty tree to the last committed
+  pixels. `assert_not_visible` then passes, `assert_text` fails.
+  hello-views 27/27, counter, v1-recreate, multi-activity, multi-activity-finish
+  pass on `--engine art`; the negative "wrong text after Back" → `ASSERTION_FAILED`.
+- **Decision (scenario correction):** the old `onSaveInstanceState` pattern on the
+  *back* step was written before back worked and contradicts AOSP:
+  `ActivityThread.performStopActivityInner` computes
+  `shouldSaveState = saveState && !r.activity.mFinished && …`, so a FINISHING
+  Activity is never asked to save. The patterns are now `onPause → onStop →
+  onDestroy` (rotate keeps `onSaveInstanceState`).
+- **Back from B resumes A:** it already resumed once `onBackPressed` landed, but
+  in the wrong order (Pause → Destroy → Resume A). The finish watcher now sends
+  the AOSP order: `Pause(finished)` B → `Resume` A (onStart/onResume, A relaid out
+  and drawn: new frame, `pixels_changed:true`) → `Stop` B → `Destroy` B.
+- **Row (pre-existing, found here, NOT fixed):** a **second** SecondActivity
+  cycle (B2 up, then back/finish) followed by a relaunch (rotate) — or a B2
+  start after the rotations — SIGABRTs the guest (`__android_log_assert`,
+  `ISurfaceComposerClient code 1: unknown binder handle 0x1001011` in
+  `unsupported.jsonl`). Reproduces with the legacy watcher order, so it is not
+  the ROT8 reorder; suspect the bounded, never-recycled 16-handle layer pool
+  (`surface_client::LAYER_HANDLE_POOL`). `multi-activity.yaml` therefore uses ONE
+  B cycle (hardware Back); the Finish-button path is kept in
+  `multi-activity-finish.yaml`.
+- **Row (pre-existing, NOT fixed): `reportSizeConfigurations`** still dies in the
+  codec (`SizeConfigurationBuckets`, parcel underflow "need 4 bytes at 124"). The
+  curated spec in `acos-services/src/parcelable.rs` starts with a `Byte` before
+  four `IntArray`s; the AOSP source is not in the cache to verify, so it was not
+  touched (the real layout is probably four int arrays, no leading byte).
+
+## E9.7 — REL3K: Back on real ART is complete and merged onto rel-030 — PASS (acceptance in `results/handoff/REL3K/REPORT.md`)
+
+- **Date / branch:** 2026-11-16, `rel3k` = `art-back-1` (`15c6a111`) + the
+  finished ROT8b WIP (`361470bb`) merged with `rel-030` (`2022d89c`, merge
+  `332d2c5a`). Report: `results/handoff/REL3K/REPORT.md`.
+- **Question:** can Back ship? Every Back case must be a real observation on
+  ART: B→A in AOSP order, root Back finishes the task with an honest verdict,
+  no stale frame, an app-handled Back stays on screen, a `finish()`+`start`
+  tap never binds an empty "finished" screen, and the MCP `acos_key back` and
+  scenario `back` are one path.
+- **The fix (task-finished proof):** `AtmsState::task_finished_proof` is
+  positive — a record is ended by `finished` **or** `Destroyed` (plus a named
+  record and no pending launch). The old negative predicate (`!is_alive()`) was
+  both a false pass (an `Uncreated` record counted as ended) and a false stall
+  (a finished record whose destroy callback had not arrived kept the proof
+  false until the settle deadline). Seven unit tests; the two changed
+  behaviours fail on the old predicate (`rot8b-fail-before.log`).
+- **Merge:** textual conflicts were none; the merge exposed four rel-030
+  defects that had to be fixed for a green integration branch: the 5-argument
+  `tool_result` call site (acos-mcp did not compile), the compact tree dropping
+  `focused`/`password` (fb1's typing contract), `cursor`/`full` missing from
+  `acos_verify`/`acos_observe` schemas (paging a reply was impossible), and
+  `settle_timeout_ms` sent to `acos_observe` (no settle rule). Details and the
+  design choices are in the report §1.2.
+- **Result (ART, `--engine art`, artifacts under
+  `results/handoff/REL3K/artifacts/`):** `multi-activity` 22 steps pass —
+  back #1 binds `strict-event`, `handled:true` (2/2 acks), pixels changed, the
+  ordered log is Pause B → Start/Resume A → Stop B → Destroy B; back #2 binds
+  `window-gone`, `task_finished:true`, `pixels_changed:false`, no PNG, and
+  `assert_not_visible` passes. `hello-views` 27, `counter` 24,
+  `multi-activity-finish` 19, `v1-recreate` 18, `w42-back-frame` (gate) 17 and
+  `finish-start` 7 pass; the w42 region hashes equal Main's post-Back pixels
+  (no stale destroyed-window buffer). Negatives fail as designed:
+  wrong text after Back (`ASSERTION_FAILED`), `onSaveInstanceState` after a
+  finishing Back (`ASSERTION_FAILED`), text after a finished task
+  (`ELEMENT_NOT_FOUND`), wrong Home after `finish()`+start (`ASSERTION_FAILED`).
+- **MCP:** `acos_key {"code":"back"}` and the scenario `back` both reach the ART
+  daemon's `key` command (code 4 → the framework's own
+  `IActivityClientController.onBackPressed`); a new `art_default` test pins the
+  MCP route and that the REL3E `handled` bit and the `window-gone` settle cross
+  the MCP boundary verbatim.
+- **Crate tests:** all targets green except `acos-art --test cleanup`'s
+  `leak_scan_…` (fails only in the full parallel run, 8/8 alone — same load
+  class as the E9.4 LHFLAKE note) and `acos-cli --test native_launch`'s
+  `…_without_native_…` (the frozen Rust VM returns a top-level
+  `UNSUPPORTED_JAVA_API` with an empty ladder; sources identical to rel-030).
+- **Not done:** no dialog/IME-first Back scenario yet (the framework claims
+  Back before the IME on API 34, but the app-visible case should be asserted);
+  the MCP Back was not executed against a live guest (only its daemon wiring);
+  `hello-views`'s root-Back `state_changed` under-claims `false` when the
+  pre-action probe sample was empty (never over-claims).

@@ -690,6 +690,7 @@ public final class LaunchMain {
     // reports whether the framework's own UI work is finished, so the host can
     // bind a settled observation without a fixed delay.
     // The checks are read-only field reads / getters on the UI thread.
+    static volatile Object sLastLiveActivity;
     static volatile long sLastDrawMs = 0;
     static volatile long sDrawSeq = 0;
     static volatile String sWindowSignature = "";
@@ -715,6 +716,8 @@ public final class LaunchMain {
         long windowStableMs;
         /** H15: the window's touch-mode answer when this sample was built. */
         boolean inTouchMode;
+        /** ROT8: the app's last window is gone and every Activity is destroyed. */
+        boolean windowGone;
 
         void add(String reason) {
             for (int i = 0; i < pending.size(); i++) {
@@ -1786,7 +1789,24 @@ public final class LaunchMain {
                                         // describe the *resumed* Activity, not
                                         // the instance captured at launch.
                                         Object live = resumedActivity(sThread);
-                                        emitProbe(live != null ? live : activity, n, why);
+                                        // ROT8: remember the newest resumed
+                                        // Activity; once it is finished and
+                                        // destroyed the framework drops its
+                                        // record, and `taskFinished` needs it.
+                                        if (live != null) sLastLiveActivity = live;
+                                        // ROT8b: prefer any live (non-destroyed)
+                                        // record of the process over the stale
+                                        // remembered one; the remembered
+                                        // Activity is only the fallback once
+                                        // nothing is alive (and a new resume
+                                        // above already replaced it).
+                                        Object sample = live;
+                                        if (sample == null) sample = liveRecordActivity();
+                                        if (sample == null) {
+                                            sample = sLastLiveActivity != null
+                                                    ? sLastLiveActivity : activity;
+                                        }
+                                        emitProbe(sample, n, why);
                                         // H2: the first emitted sample is the
                                         // host's `ready` (first frame). Request
                                         // ART's own background collection now
@@ -1973,9 +1993,17 @@ public final class LaunchMain {
         // same main-window nodes before any dialog duplicate. Every node carries
         // a `window` label and screen bounds (`bounds_on_screen`).
         java.util.List<View> roots = windowViews();
-        if (roots == null || roots.isEmpty()) {
+        // ROT8: the task is finished when the framework itself says so: this
+        // Activity finished and was destroyed, no Activity record of the
+        // process is alive, and WindowManagerGlobal holds no live root. A
+        // phone would show the launcher; ACOS has none, so the honest state is
+        // an empty window forest, reported as settled (never a timeout, never a
+        // synthetic frame).
+        boolean gone = taskFinished(activity, roots);
+        if (!gone && (roots == null || roots.isEmpty())) {
             roots = java.util.Collections.singletonList((View) decor);
         }
+        if (gone) roots = java.util.Collections.emptyList();
         StringBuilder nodes = new StringBuilder(2048);
         StringBuilder windows = new StringBuilder(256);
         // W31: the per-window node budget is a hard cap, so the sample must say
@@ -2017,7 +2045,7 @@ public final class LaunchMain {
             }
             z++;
         }
-        if (!sawMain) {
+        if (!sawMain && !gone) {
             // The Activity decor was not in mViews (window not attached yet):
             // keep the old single-window sample rather than an empty tree.
             int[] budget = new int[]{PROBE_NODE_BUDGET};
@@ -2036,9 +2064,17 @@ public final class LaunchMain {
         }
         // P10: a new window root (dialog/menu/popup) is registered for dirty
         // events here, on the main thread and outside any draw dispatch.
-        watchProbeRoots((View) decor);
+        if (!gone) watchProbeRoots((View) decor);
         // P11/P12: strict settle is always the event rule.
-        SettleSignals settle = checkSettle(roots, (View) decor);
+        SettleSignals settle;
+        if (gone) {
+            settle = new SettleSignals();
+            settle.horizonMs = settleHorizonMs();
+            settle.windowGone = true;
+            settle.settled = true;
+        } else {
+            settle = checkSettle(roots, (View) decor);
+        }
         StringBuilder j = new StringBuilder(nodes.length() + 512);
         j.append("ACOSPROBE {\"seq\":").append(seq)
                 .append(",\"time\":").append(System.currentTimeMillis())
@@ -2068,6 +2104,8 @@ public final class LaunchMain {
                     .append(",\"draw_seq\":").append(sDrawSeq)
                     .append(",\"window_stable_ms\":").append(settle.windowStableMs)
                     .append(",\"in_touch_mode\":").append(settle.inTouchMode)
+                    .append(",\"window_gone\":").append(settle.windowGone)
+                    .append(",\"task_finished\":").append(settle.windowGone)
                     .append(",\"view_generation\":").append(sViewGeneration)
                     .append('}');
         }
@@ -2080,6 +2118,63 @@ public final class LaunchMain {
         j.append('}');
         System.out.println(j);
         System.out.flush();
+    }
+
+    /**
+     * ROT8: is the app's task finished? True only when (a) `activity` was
+     * finished and destroyed by the framework (`mFinished` + `isDestroyed()`),
+     * (b) no Activity record in this process holds a live (non-destroyed)
+     * Activity, and (c) no window root in WindowManagerGlobal is still attached.
+     * All three are the framework's own state, read on the UI thread.
+     */
+    /** ROT8b: a non-destroyed Activity from `mActivities`, or null. */
+    static Object liveRecordActivity() {
+        try {
+            Object activities = get(sThread, "mActivities");
+            if (activities instanceof java.util.Map) {
+                for (Object rec : ((java.util.Map<?, ?>) activities).values()) {
+                    Object a = get(rec, "activity");
+                    if (a == null) continue;
+                    if (!Boolean.TRUE.equals(a.getClass().getMethod("isDestroyed").invoke(a))) {
+                        return a;
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            // fall through
+        }
+        return null;
+    }
+
+    static boolean taskFinished(Object activity, java.util.List<View> roots) {
+        try {
+            if (!Boolean.TRUE.equals(get(activity, "mFinished"))) return false;
+            if (!Boolean.TRUE.equals(activity.getClass().getMethod("isDestroyed").invoke(activity))) {
+                return false;
+            }
+            Object activities = get(sThread, "mActivities");
+            if (activities instanceof java.util.Map) {
+                for (Object rec : ((java.util.Map<?, ?>) activities).values()) {
+                    Object a = get(rec, "activity");
+                    // ROT8b: a record whose Activity is not (yet) set may be a
+                    // launch in flight; it cannot prove the task is finished.
+                    if (a == null) return false;
+                    if (!Boolean.TRUE.equals(a.getClass().getMethod("isDestroyed").invoke(a))) {
+                        return false;
+                    }
+                }
+            }
+            if (roots != null) {
+                for (View root : roots) {
+                    if (root == null) continue;
+                    Object vr = viewRootOf(root);
+                    if (vr != null && !Boolean.FALSE.equals(get(vr, "mAdded"))) return false;
+                }
+            }
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     /** All attached root views, via the stock WindowManagerGlobal API. */
@@ -3140,6 +3235,61 @@ public final class LaunchMain {
      * never claim more than the framework's own state — and `note` is where the
      * reason for the second case is recorded.
      */
+    /**
+     * ROT7: which half of the framework's back handling is armed for `activity`.
+     *
+     * <p>API 34 `Activity.onCreate` registers `mDefaultBackCallback`
+     * (`this::onBackInvoked`) on the window's `OnBackInvokedDispatcher` when
+     * `WindowOnBackInvokedDispatcher.isOnBackInvokedCallbackEnabled(activity)`
+     * (targetSdk >= T). When it is registered,
+     * `ViewRootImpl$NativePreImeInputStage.doOnBackKeyEvent` claims
+     * `KEYCODE_BACK_UP` and calls `onBackInvoked()`; `Activity.onKeyUp`'s legacy
+     * branch (`... && mDefaultBackCallback == null`) is then unreachable. When
+     * it is not, `ViewRootImpl` registers a `CompatOnBackInvokedCallback` and
+     * the legacy path runs. Both end in
+     * `ActivityClient.onBackPressed(token, callback)`, so the reported facts are
+     * what distinguish "who claimed the key" from "the server refused the
+     * finish".
+     */
+    static String backDispatcherFacts(Object activity) {
+        StringBuilder b = new StringBuilder();
+        try {
+            Class<?> wobi = Class.forName("android.window.WindowOnBackInvokedDispatcher");
+            Object enabled = null;
+            for (java.lang.reflect.Method m : wobi.getDeclaredMethods()) {
+                if (!m.getName().equals("isOnBackInvokedCallbackEnabled")) continue;
+                if (m.getParameterCount() != 1) continue;
+                m.setAccessible(true);
+                enabled = m.invoke(null, activity);
+                break;
+            }
+            b.append("ahead_of_time=").append(enabled);
+        } catch (Throwable t) {
+            b.append("ahead_of_time=error:").append(unwrap(t));
+        }
+        Object callback = null;
+        try {
+            callback = get(activity, "mDefaultBackCallback");
+        } catch (Throwable ignored) {
+        }
+        b.append(" mDefaultBackCallback=").append(callback == null ? "null" : "set");
+        try {
+            Object dispatcher = activity.getClass().getMethod("getOnBackInvokedDispatcher")
+                    .invoke(activity);
+            Object top = null;
+            for (java.lang.reflect.Method m : dispatcher.getClass().getDeclaredMethods()) {
+                if (!m.getName().equals("getTopCallback")) continue;
+                m.setAccessible(true);
+                top = m.invoke(dispatcher);
+                break;
+            }
+            b.append(" top_callback=").append(top == null ? "null" : top.getClass().getName());
+        } catch (Throwable t) {
+            b.append(" top_callback=error:").append(unwrap(t));
+        }
+        return b.toString();
+    }
+
     static String writeResumeMarker(Object thread, Object activity, String note) throws Exception {
         String am = "package=" + sPkg + "\nactivity=" + activity.getClass().getName()
                 + "\nlifecycle=onCreate,onStart,onResume"
@@ -3156,6 +3306,11 @@ public final class LaunchMain {
                         ? "unknown" : sFirstTraversalEvidence)
                 + "\ndraw_skip=" + (sTraversalSkipReason == null
                         ? "none" : sTraversalSkipReason)
+                // ROT7: who owns a KEYCODE_BACK_UP for this Activity. API 34 has
+                // two halves — the ahead-of-time `OnBackInvokedDispatcher` and
+                // the legacy `Activity.onKeyUp` branch — and only one of them
+                // can claim the key. Recorded, not forced.
+                + "\nback_dispatcher=" + backDispatcherFacts(activity)
                 + (note == null ? "" : "\n" + note) + "\n";
         write(new File(sOut, "activity-resumed.marker"), am);
         return am;
@@ -4411,18 +4566,43 @@ public final class LaunchMain {
                         System.out.println("ACOSLAUNCH MARK finish-watcher-timeout");
                         return;
                     }
+                    // ROT8: the order stock ATMS uses when a non-last Activity
+                    // finishes (ActivityTaskSupervisor / ActivityRecord.
+                    // completePause + resumeTopActivity + activityStopped):
+                    //   B.onPause -> A.onStart/onResume (A is redrawn)
+                    //   -> B.onStop -> B.onDestroy
+                    // The previous Activity is resumed BEFORE the finished one is
+                    // stopped/destroyed, so the user never sees an empty task and
+                    // A's window is relaid out and drawn while B is still alive.
+                    Class<?> pauseCls = Class.forName("android.app.servertransaction.PauseActivityItem");
+                    Class<?> stopCls = Class.forName("android.app.servertransaction.StopActivityItem");
                     Class<?> destroyCls = Class.forName("android.app.servertransaction.DestroyActivityItem");
-                    Object destroyItem = obtainPrimitiveItem(destroyCls,
-                            new boolean[]{true, false, false});
-                    scheduleLocal(lifecycleTransaction(token, destroyItem));
-                    System.out.println("ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:"
-                            + Integer.toHexString(System.identityHashCode(token)));
-                    Thread.sleep(20);
                     Class<?> resumeCls = Class.forName("android.app.servertransaction.ResumeActivityItem");
+                    scheduleLocal(lifecycleTransaction(token,
+                            obtainPrimitiveItem(pauseCls, new boolean[]{true, false, false})));
+                    long pdl = System.currentTimeMillis() + 5000;
+                    while (System.currentTimeMillis() < pdl
+                            && Boolean.TRUE.equals(get(activity, "mResumed"))) {
+                        Thread.sleep(5);
+                    }
                     scheduleLocal(lifecycleTransaction(previous, obtainResume(resumeCls)));
                     sCurrentToken = previous;
                     System.out.println("ACOSLAUNCH MARK activity-resumed-after-finish token=binder:"
                             + Integer.toHexString(System.identityHashCode(previous)));
+                    long rdl = System.currentTimeMillis() + 10000;
+                    Object below = null;
+                    while (System.currentTimeMillis() < rdl) {
+                        below = activityForToken(previous);
+                        if (below != null && Boolean.TRUE.equals(get(below, "mResumed"))) break;
+                        Thread.sleep(5);
+                    }
+                    scheduleLocal(lifecycleTransaction(token,
+                            obtainPrimitiveItem(stopCls, new boolean[]{false})));
+                    scheduleLocal(lifecycleTransaction(token,
+                            obtainPrimitiveItem(destroyCls, new boolean[]{true, false, false})));
+                    System.out.println("ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:"
+                            + Integer.toHexString(System.identityHashCode(token))
+                            + " order=Pause(finished)->Resume(previous)->Stop->Destroy");
                     System.out.flush();
                 } catch (Throwable x) {
                     System.out.println("ACOSLAUNCH MARK finish-watcher-error " + x);

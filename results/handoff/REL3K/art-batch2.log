@@ -1,0 +1,48 @@
+
+##### hello-views
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/scenarios/hello-views.yaml (sha 65ad3f83ae3c), apk /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/fixtures/build/apps/hello-views.apk (sha 25d0615792c4), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  artifacts: results/handoff/REL3K/artifacts/hello-views
+  steps: 27
+
+##### counter
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/scenarios/counter.yaml (sha 45506d6ab497), apk /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/fixtures/build/apps/counter.apk (sha 8170835e70f2), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  artifacts: results/handoff/REL3K/artifacts/counter
+  steps: 24
+
+##### v1-recreate
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/scenarios/v1-recreate.yaml (sha 4a01fcfb8e22), apk /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/fixtures/build/apps/hello-views.apk (sha 25d0615792c4), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  artifacts: results/handoff/REL3K/artifacts/v1-recreate
+  steps: 18
+
+##### multi-wrong-after-back
+verify: fail (ok=false, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/scenarios/negative/multi-wrong-after-back.yaml (sha c25b585c9dd7), apk /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/fixtures/build/apps/multi-activity.apk (sha 986dbb18f339), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  error: ASSERTION_FAILED: expected text exactly "Goodbye", got text "Hello" / hint "Message"
+  artifacts: results/handoff/REL3K/artifacts/neg-multi-wrong-after-back
+  steps: 8
+verify: ASSERTION_FAILED (assertion): expected text exactly "Goodbye", got text "Hello" / hint "Message" [class=assertion, retryable=false]
+
+##### multi-back-save-state
+verify: fail (ok=false, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/scenarios/negative/multi-back-save-state.yaml (sha 637555c28bb4), apk /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/fixtures/build/apps/multi-activity.apk (sha 986dbb18f339), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  error: ASSERTION_FAILED: log assertion did not hold
+  artifacts: results/handoff/REL3K/artifacts/neg-multi-back-save-state
+  steps: 4
+verify: ASSERTION_FAILED (assertion): log assertion did not hold [class=assertion, retryable=false]
+
+##### hello-views-back-text-gone
+verify: fail (ok=false, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/scenarios/negative/hello-views-back-text-gone.yaml (sha 8ed71f13906a), apk /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/fixtures/build/apps/hello-views.apk (sha 25d0615792c4), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  error: ELEMENT_NOT_FOUND: selector id=="result" matched no node
+  artifacts: results/handoff/REL3K/artifacts/neg-hello-views-back-text-gone
+  steps: 4
+verify: ELEMENT_NOT_FOUND (assertion): selector id=="result" matched no node [class=assertion, retryable=false]

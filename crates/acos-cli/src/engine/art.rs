@@ -779,6 +779,10 @@ struct CachedFrame {
     signature: u64,
     captured_at_ms: u64,
     captured_at: String,
+    /// ROT8b: this observation is the task-finished (`window-gone`) state: an
+    /// empty window forest with NO pixels. It carries no PNG and never becomes
+    /// `last_pixel`; only the state proof is claimed.
+    gone: bool,
 }
 
 impl CachedFrame {
@@ -805,7 +809,11 @@ impl CachedFrame {
             captured_at_ms: self.captured_at_ms,
             captured_at: self.captured_at.clone(),
             md5: self.md5.clone(),
-            png: self.png_bytes()?,
+            png: if self.gone && self.png.is_none() {
+                Vec::new()
+            } else {
+                self.png_bytes()?
+            },
         })
     }
 
@@ -2136,7 +2144,13 @@ impl ArtSession {
         if self.closed {
             return Ok(None);
         }
-        let Some(cached) = self.last_pixel.as_ref() else {
+        // ROT8b: a task-finished observation is the newest state (no pixels);
+        // otherwise the last frame that really drew.
+        let source = match self.cached.as_ref() {
+            Some(gone) if gone.gone => Some(gone),
+            _ => self.last_pixel.as_ref(),
+        };
+        let Some(cached) = source else {
             return Ok(None);
         };
         let previous = self.seen_seq.min(cached.seq.saturating_sub(1));
@@ -2944,11 +2958,23 @@ impl ArtSession {
             Some(raw) => raw.saturating_add(self.seq_offset),
             None => self.cached.as_ref().map(|frame| frame.seq).unwrap_or(0),
         };
+        // ROT8: the guest proved the app's task finished (its last Activity
+        // is destroyed, no window root remains). Nothing draws then, so the
+        // reply carries no frame: the observation is the empty window forest
+        // bound to the LAST COMMITTED pixels (the display keeps its last frame;
+        // ACOS has no launcher to draw). `settle.task_finished` and
+        // `pixels_changed:false` say so; no frame is invented.
+        // ROT8b: the destroyed window's PNG is NOT rebound under the new
+        // frame sequence; the gone observation carries no PNG and `last_pixel`
+        // stays what it was (the last frame that really drew).
+        let window_gone = reply.get("window_gone").and_then(|v| v.as_bool()) == Some(true)
+            && reply.get("tree").is_some()
+            && reply.get("png").is_none();
         let md5 = reply
             .get("md5")
             .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+            .map(str::to_string)
+            .unwrap_or_default();
         let digest = FrameDigest::from_reply(reply, &md5);
         let buffer_generation = reply.get("buffer_generation").and_then(|v| v.as_u64());
         let frame_number = reply.get("frame_number").and_then(|v| v.as_u64());
@@ -3024,6 +3050,7 @@ impl ArtSession {
             signature,
             captured_at_ms,
             captured_at: rfc3339(captured_at_ms),
+            gone: window_gone,
         };
         if frame.png.is_some() {
             self.last_pixel = Some(frame.clone());

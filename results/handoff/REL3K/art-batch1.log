@@ -1,0 +1,42 @@
+
+##### multi-activity
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/scenarios/multi-activity.yaml (sha 06bc4492f0ef), apk /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/fixtures/build/apps/multi-activity.apk (sha 986dbb18f339), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  artifacts: results/handoff/REL3K/artifacts/multi-activity
+  steps: 22
+exit=0
+
+##### multi-activity-finish
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/scenarios/multi-activity-finish.yaml (sha 1112ef0d319b), apk /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/fixtures/build/apps/multi-activity.apk (sha 986dbb18f339), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  artifacts: results/handoff/REL3K/artifacts/multi-activity-finish
+  steps: 19
+exit=0
+
+##### finish-start
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/scenarios/finish-start.yaml (sha 6e4a45709c79), apk /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/fixtures/build/apps/finish-start.apk (sha 5358cd28c3af), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  artifacts: results/handoff/REL3K/artifacts/finish-start
+  steps: 7
+exit=0
+
+##### finish-start-wrong-home
+verify: fail (ok=false, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/scenarios/negative/finish-start-wrong-home.yaml (sha c343ea3e5217), apk /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/fixtures/build/apps/finish-start.apk (sha 5358cd28c3af), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  error: ASSERTION_FAILED: expected text exactly "Goodbye", got text "Home" / hint ""
+  artifacts: results/handoff/REL3K/artifacts/neg-finish-start-wrong-home
+  steps: 4
+verify: ASSERTION_FAILED (assertion): expected text exactly "Goodbye", got text "Home" / hint "" [class=assertion, retryable=false]
+exit=0
+
+##### w42-back-frame
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/scenarios/w42-back-frame.yaml (sha ca77a8389cff), apk /home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/fixtures/build/apps/multi-activity.apk (sha 986dbb18f339), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  artifacts: results/handoff/REL3K/artifacts/w42-back-frame
+  steps: 17
+exit=0

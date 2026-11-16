@@ -304,6 +304,12 @@ pub const DECLARED_INTERFACES: &[&str] = &[
     // `AlarmManager` is resolved by apps that schedule wakeups at startup
     // (com.fsck.k9, org.wikipedia); on a real device it is always published.
     "android.app.IAlarmManager",
+    // ROT7: `IActivityClientController.onBackPressed(IBinder,
+    // IRequestFinishCallback)` is the server half of `Activity.onBackPressed`
+    // (API 34): the ATMS answers by calling the client's callback, whose
+    // `onRequestFinish()` runs `Activity.finish()`. Decoded from the image, so
+    // the reverse delivery uses the framework's own transaction code.
+    "android.app.IRequestFinishCallback",
 ];
 
 /// `(interface -> AIDL method names)` referenced by the measured work-lists.

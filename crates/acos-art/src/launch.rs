@@ -2058,6 +2058,10 @@ struct ProbeSample {
     /// P11: the guest's framework-signal verdict for this sample.
     settled: bool,
     pending: Vec<String>,
+    /// ROT8: the guest reports the app's task finished: its last Activity is
+    /// destroyed and no window root is attached (`settle.window_gone`). The
+    /// tree of such a sample is an empty window forest.
+    window_gone: bool,
     /// P12: the guest's applied animation state (`None` if it did not report).
     animations_on: Option<bool>,
 }
@@ -2946,6 +2950,10 @@ fn drain_tee_lines<R: std::io::Read>(
                                 .collect::<Vec<_>>()
                         })
                         .unwrap_or_default();
+                    let window_gone = event
+                        .and_then(|v| v.get("window_gone"))
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
                     // P12: the guest is the authority on what it applied.
                     let animations_on = value
                         .get("animations")
@@ -2966,6 +2974,7 @@ fn drain_tee_lines<R: std::io::Read>(
                             draw_seq,
                             settled,
                             pending,
+                            window_gone,
                             animations_on,
                         });
                     }
@@ -3466,6 +3475,8 @@ struct SettleTiming {
     /// no pre-action capture to compare with. Never a failure when the guard is
     /// off (the default since the owner decision).
     pixels_changed: Option<bool>,
+    /// ROT8: the step ended with the app's task finished (`window-gone`).
+    task_finished: bool,
 }
 
 impl SettleTiming {
@@ -3481,6 +3492,12 @@ impl SettleTiming {
             "bound": self.bound,
             "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         });
+        if self.task_finished {
+            if let Some(map) = value.as_object_mut() {
+                map.insert("task_finished".into(), serde_json::json!(true));
+                map.insert("window_gone".into(), serde_json::json!(true));
+            }
+        }
         if let Some(rule) = self.rule {
             if let Some(map) = value.as_object_mut() {
                 map.insert("strict_rule".into(), serde_json::json!(rule));
@@ -3628,6 +3645,17 @@ fn wait_for_event_settled(
     let mut last_requested_seq = latest_probe(probe_state)
         .map(|sample| sample.seq)
         .unwrap_or(0);
+    // ROT8b: was the window forest already empty when the request began?
+    let entry_tree_empty = latest_probe(probe_state)
+        .map(|sample| {
+            sample
+                .tree
+                .get("nodes")
+                .and_then(|nodes| nodes.as_array())
+                .map(|nodes| nodes.is_empty())
+                .unwrap_or(false)
+        })
+        .unwrap_or(false);
     let mut candidate: Option<ProbeSample> = None;
     let mut candidate_since = Instant::now();
     let mut first_change_ms: Option<u64> = None;
@@ -3658,6 +3686,45 @@ fn wait_for_event_settled(
             Some(sample) => {
                 if sample.seq <= entry_floor {
                     last_reason = "probe-floor".to_string();
+                } else if window_gone_shape(sample) && !host_confirms_task_finished(live) {
+                    // ROT8b: the guest reports an empty settled forest, but the
+                    // host ATMS still has a live record or a pending start (a
+                    // `finish()` + `startActivity(Home)` leaves exactly this gap
+                    // before Home's launch transaction runs). That is not a
+                    // finished task: keep waiting (bounded by the deadline) and
+                    // settle on the next Activity's draw.
+                    last_reason = "window-gone-unconfirmed".to_string();
+                } else if window_gone_shape(sample) {
+                    // ROT8: the app's task is finished (last Activity
+                    // destroyed, no window root) and the HOST ATMS agrees (no
+                    // live record, no pending start). Nothing draws, so this
+                    // binds on the state proof, not on a draw.
+                    let timing = SettleTiming {
+                        mode: SettleMode::Strict,
+                        first_change_ms: Some(sample.at_ms.saturating_sub(publish_epoch_ms)),
+                        frame_ms: None,
+                        state_changed: Some(window_gone_state_changed(
+                            await_tree,
+                            entry_tree_empty,
+                        )),
+                        bound: "window-gone",
+                        rule: Some("event"),
+                        reason: None,
+                        pixels_changed: Some(false),
+                        task_finished: true,
+                    };
+                    trace_host(
+                        probe_state,
+                        &format!(
+                            "settle window-gone ready gen={generation} probe_seq={}",
+                            sample.seq
+                        ),
+                    );
+                    return SettleEnd::Settled(Settled {
+                        probe: sample.clone(),
+                        generation,
+                        timing,
+                    });
                 } else if await_tree
                     .map(|baseline| &sample.tree == baseline)
                     .unwrap_or(false)
@@ -3692,6 +3759,7 @@ fn wait_for_event_settled(
                             rule: Some("event"),
                             reason: None,
                             pixels_changed: None,
+                            task_finished: false,
                         };
                         trace_host(
                             probe_state,
@@ -3780,6 +3848,7 @@ fn wait_for_event_settled(
                         rule: Some("event"),
                         reason: None,
                         pixels_changed: last_pixels_changed,
+                        task_finished: false,
                     };
                     trace_host(
                         probe_state,
@@ -3861,6 +3930,7 @@ fn wait_for_event_settled(
                     rule: Some("event"),
                     reason: Some(last_reason),
                     pixels_changed: Some(pixels_changed),
+                    task_finished: false,
                 },
             };
         }
@@ -3995,6 +4065,7 @@ fn wait_for_settled_observation(
                 rule: None,
                 reason: None,
                 pixels_changed: None,
+                task_finished: false,
             };
             trace_host(
                 probe_state,
@@ -4052,6 +4123,7 @@ fn wait_for_settled_observation(
                         rule: None,
                         reason: None,
                         pixels_changed: None,
+                        task_finished: false,
                     };
                     trace_host(
                         probe_state,
@@ -4085,6 +4157,7 @@ fn wait_for_settled_observation(
                     rule: None,
                     reason: None,
                     pixels_changed: None,
+                    task_finished: false,
                 },
             };
         }
@@ -4101,6 +4174,43 @@ fn wait_for_settled_observation(
 /// began (so no frame landed between the sample and the request) and its guest
 /// sequence is past the caller's floor. Nothing about a 150 ms quiet window is
 /// involved: that is the strict rule, unchanged.
+/// ROT8: a sample proves the task finished only when the guest says so AND it
+/// is internally consistent: settled, with an empty window forest.
+fn window_gone_shape(sample: &ProbeSample) -> bool {
+    sample.window_gone
+        && sample.settled
+        && sample
+            .tree
+            .get("nodes")
+            .and_then(|nodes| nodes.as_array())
+            .map(|nodes| nodes.is_empty())
+            .unwrap_or(false)
+}
+
+/// ROT8b: the host ATMS confirms the task is finished (no live record, no
+/// pending start). The guest's own flag is only a claim until this holds.
+fn host_confirms_task_finished(live: &acos_services::registry::LiveHandles) -> bool {
+    live.atms
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .task_finished_proof()
+}
+
+/// ROT8b: did the step change state? The tree the caller held before the
+/// action is the baseline: an already-empty forest (`await_tree` with no
+/// nodes, or no tree at all and an empty screen before the action) is NOT a
+/// change; a non-empty previous tree is.
+fn window_gone_state_changed(await_tree: Option<&serde_json::Value>, entry_empty: bool) -> bool {
+    match await_tree {
+        Some(tree) => tree
+            .get("nodes")
+            .and_then(|nodes| nodes.as_array())
+            .map(|nodes| !nodes.is_empty())
+            .unwrap_or(true),
+        None => !entry_empty,
+    }
+}
+
 fn probe_usable_for_fast_tree(
     probe: &ProbeSample,
     entry_generation: u64,
@@ -4969,7 +5079,25 @@ fn interactive_serve(
                         .as_ref()
                         .map(|timing| timing.bound == "change-draw")
                         .unwrap_or(false);
-                let mut settle_json = if draw_commit {
+                // ROT8: the tree request bound on the guest's window-gone state.
+                let tree_window_gone = tree_timeout.is_none()
+                    && tree_bind
+                        .as_ref()
+                        .map(|timing| timing.task_finished)
+                        .unwrap_or(false);
+                let mut settle_json = if tree_window_gone {
+                    serde_json::json!({
+                        "mode": "strict",
+                        "settled": true,
+                        "probe_seq": probe.seq,
+                        "tree_age_ms": tree_age_ms,
+                        "bound": "window-gone",
+                        "strict_rule": "event",
+                        "task_finished": true,
+                        "window_gone": true,
+                        "meaning": "the app's last Activity is destroyed and no window root remains: the window forest is empty and no frame exists to bind",
+                    })
+                } else if draw_commit {
                     serde_json::json!({
                         "mode": "strict",
                         "settled": false,
@@ -5626,6 +5754,53 @@ fn interactive_serve(
                     continue;
                 }
                 let capture = match capture_c1(live, frames_dir, &mut captures) {
+                    // ROT8b: a finished task never publishes a capture, even if
+                    // the compositor still holds a stale buffer of the
+                    // destroyed window (it would be the dead window's pixels
+                    // under a new frame id).
+                    Ok(_) if settle_timing.task_finished => {
+                        // ROT8: the app's last window is gone, so the
+                        // compositor holds no layer and there is no frame to
+                        // bind. The step is proven by the guest's STATE (task
+                        // finished, empty window forest), not by a frame; none
+                        // is invented.
+                        let probe = settled_probe.expect("settled probe checked above");
+                        // The logical frame id advances (as on every pixel-less
+                        // tree reply, P9) so the observation is ordered after
+                        // the previous one; no buffer is claimed.
+                        captures += 1;
+                        let reply = serde_json::json!({
+                            "ok": true, "cmd": cmd,
+                            "frame_seq": captures,
+                            "pixels": false,
+                            "capture_source": CAPTURE_SOURCE,
+                            "frame_identity": "no frame: the app's task finished and no window layer remains",
+                            "window_gone": true,
+                            "task_finished": true,
+                            "tree": probe.tree.clone(),
+                            "probe_seq": probe.seq,
+                            "probe_at_ms": probe.at_ms,
+                            "gesture": {
+                                "x": x, "y": y,
+                                "seqs": injected.seqs,
+                                "acks": injected.acks.iter().map(|a| serde_json::json!({
+                                    "seq": a.seq, "handled": a.handled, "latency_us": a.latency_us,
+                                })).collect::<Vec<_>>(),
+                                "token": format!("{:#x}", injected.token.0),
+                                "new_buffer_generation": g1,
+                                "new_probe_seq": p1,
+                            },
+                            "settle": settle_timing.to_json(true, ack_ms),
+                        });
+                        protocol_write(&reply);
+                        evidence.push(serde_json::json!({
+                            "cmd": cmd, "ok": true, "window_gone": true,
+                            "frame_seq": captures,
+                            "probe_seq": probe.seq, "x": x, "y": y,
+                            "handled": injected.acks.iter().map(|a| a.handled).collect::<Vec<_>>(),
+                        }));
+                        continue;
+                    }
                     Ok(Some(capture)) => capture,
                     Ok(None) => {
                         let reply = serde_json::json!({
@@ -6761,8 +6936,59 @@ mod probe_line_tests {
             draw_seq: 0,
             settled: false,
             pending: Vec::new(),
+            window_gone: false,
             animations_on: None,
         }
+    }
+
+    /// ROT8b: `state_changed` is computed from the pre-action tree, never
+    /// hard-coded.
+    #[test]
+    fn window_gone_state_changed_is_computed() {
+        let full = serde_json::json!({"nodes": [{"id": "x"}]});
+        let empty = serde_json::json!({"nodes": []});
+        assert!(window_gone_state_changed(Some(&full), false));
+        assert!(!window_gone_state_changed(Some(&empty), true));
+        assert!(window_gone_state_changed(None, false));
+        assert!(!window_gone_state_changed(None, true), "already empty before the action");
+    }
+
+    /// ROT8: a probe line carrying `settle.window_gone` parses into the sample,
+    /// and only a settled sample with an EMPTY window forest binds a step as
+    /// `window-gone`. A stale-looking `window_gone` over a non-empty tree, or an
+    /// unsettled one, never does.
+    #[test]
+    fn window_gone_sample_is_parsed_and_binds_only_with_state_proof() {
+        let line = "ACOSPROBE {\"seq\":9,\"windows\":[],\"tree\":{\"nodes\":[],\"window_count\":0,\"node_budget\":2000,\"truncated\":false},\"settle\":{\"settled\":true,\"pending\":[],\"draw_ms\":5,\"draw_seq\":3,\"window_gone\":true,\"task_finished\":true}}\n";
+        let state = drain(line);
+        let sample = state.latest.expect("window-gone sample published");
+        assert!(sample.window_gone && sample.settled);
+        assert!(window_gone_shape(&sample));
+        let mut not_empty = sample.clone();
+        not_empty.tree = serde_json::json!({"nodes": [{"id": "x"}]});
+        assert!(!window_gone_shape(&not_empty), "a window forest that is not empty is not gone");
+        let mut unsettled = sample.clone();
+        unsettled.settled = false;
+        assert!(!window_gone_shape(&unsettled));
+        let mut plain = sample;
+        plain.window_gone = false;
+        assert!(!window_gone_shape(&plain), "an ordinary settled empty tree is not a finished task");
+        // The step evidence names the proof.
+        let timing = SettleTiming {
+            mode: SettleMode::Strict,
+            first_change_ms: None,
+            frame_ms: None,
+            state_changed: Some(true),
+            bound: "window-gone",
+            rule: Some("event"),
+            reason: None,
+            pixels_changed: Some(false),
+            task_finished: true,
+        };
+        let json = timing.to_json(true, 5);
+        assert_eq!(json["bound"], "window-gone");
+        assert_eq!(json["task_finished"], true);
+        assert_eq!(json["pixels_changed"], false);
     }
 
     /// P3b's invalidation rule: a fast tree may only use a probe parsed at a C1

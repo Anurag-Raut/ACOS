@@ -1,0 +1,47 @@
+# ROT8b: finish() + startActivity(Home) in ONE tap (logout / splash handoff).
+# The Splash Activity is finished and destroyed while Home's launch is still
+# queued in the ATMS. The tap must bind Home's first draw, never an empty
+# "task finished" window forest (window-gone requires the HOST ATMS to confirm
+# no live record and no pending start).
+version: 1
+name: finish-start
+description: >-
+  Tap Go: Splash finishes and starts HomeActivity in the same click. The step
+  binds on Home (its text is visible straight after the tap).
+app: fixtures/build/apps/finish-start.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.finishstart/.SplashActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: go}
+      timeout_ms: 5000
+  - tap:
+      selector: {id: go}
+  - assert_log:
+      tag: AcosFinishStart
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^Splash.go$'
+        - '^Home.onCreate$'
+        - '^Home.onResume$'
+  - assert_text:
+      selector: {id: home_title}
+      text: {exact: Home}
+  - assert_not_visible:
+      selector: {id: go}
+  - assert_no_crash: {}

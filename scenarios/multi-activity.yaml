@@ -85,16 +85,23 @@ steps:
       format: png
       fresh: true
 
-  # ---- Finish returns to MainActivity through the back stack -------------
-  - tap:
-      selector: {id: finish}
+  # ---- Back returns to MainActivity through the back stack ---------------
+  # The framework's own Back (IActivityClientController.onBackPressed ->
+  # requestFinish -> finishActivity). AOSP order (fixtures/reference/
+  # multi-activity lifecycle-summary): the Activity below is restarted and
+  # resumed BEFORE the finished one is stopped and destroyed.
+  - back: {}
 
   - assert_log:
       tag: AcosMulti
       since_previous_step: true
       ordered: true
       patterns:
-        - '^Second.finish$'
+        - '^Second.onPause$'
+        - '^Main.onStart$'
+        - '^Main.onResume$'
+        - '^Second.onStop$'
+        - '^Second.onDestroy$'
 
   - assert_text:
       selector: {id: message}
@@ -125,6 +132,10 @@ steps:
       text: {exact: Hello}
       bounds: [42, 317, 1038, 435]
 
+  # Back on the last Activity finishes the task: no window remains.
   - back: {}
 
   - assert_no_crash: {}
+
+  - assert_not_visible:
+      selector: {id: message}
