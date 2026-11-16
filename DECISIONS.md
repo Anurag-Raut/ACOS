@@ -1180,3 +1180,7 @@ app. Decision: keep the host-Chromium design; the in-session gate is re-run in v
 multi-package PMS foundation lands; the parcel defect is fixed in v0.3.0 as its own root-cause item
 (audit every ACOS parcelable writer against AOSP `writeToParcel`). The Android WebView APK fallback
 stays rejected.
+ADR-0030 note (SPIKE-NET2): the guest has no path to netfilter at all: `AF_NETLINK`, raw `AF_INET`
+and `SO_MARK` are denied by seccomp, CapEff is 0, and the guest userns is not the netns owner; a
+session whose drop rules cannot be installed fails closed. Session 1's AF_INET seccomp branch was dead
+code; the fixed program has an interpreter test.
