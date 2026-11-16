@@ -1608,4 +1608,91 @@ mod tests {
         let controls = reference_insets_controls(&land, 0x100);
         assert!(!controls.0.iter().any(|c| c.id == CONFIG_STATUS_BAR_SOURCE_ID));
     }
+
+    // ------------------------------------------------------- LAYER0 (stack)
+
+    fn overlay_params(type_: i32, flags: i32) -> LayoutParams {
+        LayoutParams {
+            type_,
+            flags,
+            ..LayoutParams::application("dev.acos.fixtures.overlaystack", "Overlay")
+        }
+    }
+
+    /// The layer stack the WMS reports is the order C1 draws in and the order
+    /// input hit-tests against: the activity bottom, an application overlay
+    /// above every activity window, the IME above the overlay.
+    ///
+    /// Before LAYER0 `z` was the insertion order, so an overlay added before the
+    /// activity was drawn *below* it and the tree reported that order as truth.
+    #[test]
+    fn the_layer_stack_orders_application_overlay_and_ime_by_window_type() {
+        use crate::layers::{TYPE_APPLICATION, TYPE_APPLICATION_OVERLAY, TYPE_INPUT_METHOD};
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        // Overlay and IME first, the activity last (a real launch order: the
+        // system windows exist before the app's window does).
+        wm.add_to_display_as_user(sess, BinderId(0x20), overlay_params(TYPE_INPUT_METHOD, 0), 0)
+            .unwrap();
+        wm.add_to_display_as_user(
+            sess,
+            BinderId(0x10),
+            overlay_params(TYPE_APPLICATION_OVERLAY, 0),
+            0,
+        )
+        .unwrap();
+        wm.add_to_display_as_user(sess, BinderId(0x01), overlay_params(TYPE_APPLICATION, 0), 0)
+            .unwrap();
+
+        let rows = wm.layer_stack().describe();
+        let ids: Vec<u64> = rows.iter().map(|r| r.0).collect();
+        assert_eq!(ids, vec![0x01u64, 0x10, 0x20], "activity < overlay < IME");
+        // `z` is the stack index and is what C1 receives as placement.z.
+        assert_eq!(wm.windows[&0x01u64].z, 0);
+        assert_eq!(wm.windows[&0x10].z, 1);
+        assert_eq!(wm.windows[&0x20].z, 2);
+        assert_eq!(wm.windows[&0x10].kind.name(), "application_overlay");
+        assert_eq!(wm.windows[&0x20].kind.name(), "input_method");
+        // Removing the bottom window renumbers the rest (no hole).
+        wm.remove(0x01).unwrap();
+        assert_eq!(wm.windows[&0x10u64].z, 0);
+        assert_eq!(wm.windows[&0x20].z, 1);
+    }
+
+    /// A tap goes to the topmost **touchable** window at the point, so an
+    /// overlay that sets `FLAG_NOT_TOUCHABLE` passes touches through to the
+    /// activity below it, and a touchable one takes them.
+    #[test]
+    fn hit_test_and_focus_follow_the_stack_and_the_flags() {
+        use crate::layers::{
+            TYPE_APPLICATION, TYPE_APPLICATION_OVERLAY, FLAG_NOT_FOCUSABLE, FLAG_NOT_TOUCHABLE,
+        };
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        let activity = wm
+            .add_to_display_as_user(sess, BinderId(0x01), overlay_params(TYPE_APPLICATION, 0), 0)
+            .unwrap()
+            .window;
+        // The overlay covers the top-left 300x300 of the display.
+        let mut params = overlay_params(TYPE_APPLICATION_OVERLAY, 0);
+        params.width = 300;
+        params.height = 300;
+        wm.add_to_display_as_user(sess, BinderId(0x10), params, 0)
+            .unwrap();
+        let overlay_frame = wm.windows[&0x10].frame;
+        let inside = PointI::new(overlay_frame.left + 5, overlay_frame.top + 5);
+        // Above every activity window: the overlay's own top-left corner is its.
+        assert_eq!(wm.hit_test(inside), Some(0x10));
+        assert_eq!(wm.focus_target(), Some(0x10));
+        // Beside it: the activity.
+        assert_eq!(wm.hit_test(PointI::new(900, 2000)), Some(activity));
+
+        // Flip the overlay to NOT_TOUCHABLE | NOT_FOCUSABLE: the same point now
+        // belongs to the activity, and focus goes back to it.
+        wm.windows.get_mut(&0x10).unwrap().params.flags = FLAG_NOT_TOUCHABLE | FLAG_NOT_FOCUSABLE;
+        assert_eq!(wm.hit_test(inside), Some(activity));
+        assert_eq!(wm.focus_target(), Some(activity));
+        // It is still drawn: composition order does not depend on touchability.
+        assert_eq!(wm.layer_stack().z_of(0x10), Some(1));
+    }
 }
