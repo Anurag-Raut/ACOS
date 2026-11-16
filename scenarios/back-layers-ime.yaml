@@ -1,14 +1,22 @@
 # Back-layer ordering with the soft input up (REL3I).
 #
 # STATUS: expectation `fail` — this is the fail-before arm of the IME layer.
-# The dialog and Activity layers pass (see back-layers.yaml); the IME steps go
-# as far as the app showing the IME (`insets_ime visible=true`, `ImeUp`) and
-# then the Back is answered by the Activity, not the IME. Root cause and the
-# measured hand-off are in results/handoff/REL3I/REPORT.md §3: the bind result
-# now carries a real session + InputChannel pair and ACOS reads keys from its
-# server end, but the framework's `ImeInputEventSender` never writes the key
-# into it (no `back-down` on the ACOS side; the Activity's `finishInputEvent`
-# answered `handled=true` and the task finished).
+# The dialog and Activity layers pass (see back-layers.yaml). REL3I2 closed the
+# first gap (the sender link): the bind result's channel now carries its own
+# token per pair (`InputChannel::openInputChannelPair` makes a fresh `BBinder`
+# per pair), so the framework's `areSameInputChannel` no longer keeps the stale
+# `mCurChannel` and the app's `ImeInputEventSender` really writes the Back into
+# the channel ACOS holds. The IME now consumes the press (host trace:
+# `back-down hid the soft input seq=1`, `wms set_ime_visible(false)`) and its
+# `FINISHED(handled=true)` is what the Activity's window acks.
+#
+# The remaining gap is one step later, the app-visible hide: the IME hide is
+# driven by a key on the input channel, so its `IWindow` insets callbacks have
+# no transaction to ride. The only drain that runs is the binder peer's idle
+# tick (a 1 s `SO_RCVTIMEO` stop check), so the app never receives the
+# `InsetsState` that says the IME is gone and keeps `ImeUp` (measured: the host
+# logs `wms set_ime_visible(false)`, the guest log only ever shows
+# `insets_ime visible=true`). See results/handoff/REL3I2/REPORT.md §3.
 #
 # Back-layer ordering: which layer consumes a Back press (REL3K2).
 #

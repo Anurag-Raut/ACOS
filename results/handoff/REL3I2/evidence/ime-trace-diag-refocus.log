@@ -1,0 +1,8 @@
+bind sequence=1 client=0x100000006 session=0x4c channel="acos-ime-1 (client)"
+bind sequence=5 client=0x100000006 session=0x4d channel="acos-ime-5 (client)"
+wms set_ime_visible(true)
+showSoftInput client=0x100000006 shown=true
+wms set_ime_visible(false)
+back-down hid the soft input seq=1
+wms set_ime_visible(true)
+showSoftInput client=0x100000006 shown=true
