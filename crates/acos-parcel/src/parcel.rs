@@ -1099,6 +1099,26 @@ impl Parcel {
         &self.objects
     }
 
+    /// Record a flat object the caller placed at `offset`.
+    ///
+    /// `unmarshall` copies bytes without rebuilding the object table, so a
+    /// caller that imports a wire parcel (and rewrites its binder objects)
+    /// records them here. The table is what `marshall`/`frame_from_parcel` walk
+    /// to re-emit the wire stability records, and what
+    /// `acos-services`' `writeValue` length check uses to account for them.
+    pub fn note_flat_object(&mut self, offset: usize) {
+        match self.objects.binary_search(&offset) {
+            Ok(_) => {}
+            Err(index) => self.objects.insert(index, offset),
+        }
+    }
+
+    /// Whether null binders carry the libbinder wire stability record.
+    #[must_use]
+    pub fn wire_null_stability(&self) -> bool {
+        self.wire_null_stability
+    }
+
     /// Number of flat objects.
     #[must_use]
     pub fn objects_count(&self) -> usize {

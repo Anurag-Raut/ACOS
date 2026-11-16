@@ -1074,6 +1074,18 @@ impl AmsState {
         binder: u64,
         code: i32,
     ) -> Result<crate::pending_intent::SendEvidence> {
+        self.send_pending_intent_with_fill_in(binder, code, false)
+    }
+
+    /// [`Self::send_pending_intent`] for a caller that read the request's
+    /// fill-in marker: `fill_in_ignored` is the evidence bit (the intent is
+    /// never merged — `Intent.fillIn` is not modelled).
+    pub fn send_pending_intent_with_fill_in(
+        &mut self,
+        binder: u64,
+        code: i32,
+        fill_in_ignored: bool,
+    ) -> Result<crate::pending_intent::SendEvidence> {
         let Some(record) = self.intent_senders.record_cloned(binder) else {
             return Err(ServiceError::BadRequest {
                 interface: "android.content.IIntentSender".into(),
@@ -1122,6 +1134,7 @@ impl AmsState {
             outcome: outcome.clone(),
             intent,
             refused_cancelled: cancelled,
+            fill_in_ignored,
         };
         self.intent_senders.record_send(binder, evidence.clone());
         Ok(evidence)

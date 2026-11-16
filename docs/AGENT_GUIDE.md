@@ -370,7 +370,7 @@ A step is a **one-key map**. Valid keys:
 | `set_network` | `offline`, `rules[]` (`method`,`url`,`status`,`headers`,`body`,`delay_ms`,`times`) |
 | `set_permission` | `permission`, `state: grant\|deny\|revoke\|reset` |
 | `set_locale` / `set_density` / `set_theme` / `set_time` | `locale` / `density_dpi` / `theme` / `timestamp` |
-| `service_ctl` | `module`, `op` (`attach`/`detach`/a module control op), optional `profile`+`config` (attach), `args` (control arguments) |
+| `service_ctl` | `module`, `op` (`attach`/`detach`/a module control op), optional `profile`+`config` (attach), `args` (control arguments), `expect` (a JSON subset the reply must contain — this is what makes the op an assertion) |
 | `call_activity_method` | only for debuggable, source-owned builds with an injected hook |
 
 There is no `sleep` step and no polling: `wait_for` and the assertions are
@@ -398,8 +398,8 @@ behaviour the session does not have. The scenario `services:` block needs
 `--engine art`; the Rust VM refuses it.
 
 **Driving a scripted module mid-run (`service_ctl`).** `service_ctl` is the
-scenario spelling of `acos_services {op: attach|detach}` and
-`acos_service_ctl {module, op, args}` (MCP): it attaches/detaches a module or
+scenario spelling of `acos_services {op: attach|detach|ctl}` (MCP, with
+`id` + `ctl_op` + `args` for `ctl`): it attaches/detaches a module or
 applies one of its control ops **between** steps, so a scripted feed can be
 changed while the app runs. The reply is the step's evidence (what the module
 actually applied), never a pass claim.

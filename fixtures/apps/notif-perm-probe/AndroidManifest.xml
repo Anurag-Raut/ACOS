@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.acos.fixtures.notifpermprobe"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+    <!-- The runtime permission the notification gate reads. A manifest entry is
+         a *declaration*, not a grant: `targetSdk >= 33` starts denied until the
+         session's permission store grants it. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:label="@string/app_name"
+        android:allowBackup="false"
+        android:debuggable="true">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!-- The notification's content/action PendingIntent target. A tap fires
+             the sender; whether the guest draws this second activity is the
+             system->app delivery class (MPROC), so the scenarios assert the
+             sender's `{start_result}`, not this window. -->
+        <activity
+            android:name=".TargetActivity"
+            android:exported="false" />
+    </application>
+</manifest>

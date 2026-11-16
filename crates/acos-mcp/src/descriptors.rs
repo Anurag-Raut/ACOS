@@ -646,9 +646,12 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             "ADR-0029 item 4: the service modules of a live session. `op: \"list\"` (default) \
              returns `attached` and the honest per-module `modules` rows; `status` is the same \
              set with the session's allow/refuse detail; `attach`/`detach` change the session \
-             and answer with the new set. Only `hot` modules can change on a live session: an \
-             `at-launch` module (e.g. `core`) is refused with the launch call in the message, \
-             never silently ignored. `acos_capabilities` with `session_id` shows the same set.",
+             and answer with the new set; `ctl` applies one of a module's own control ops \
+             (`{id, ctl_op, args}`) and answers with the module's evidence — it is the MCP \
+             spelling of a scenario `service_ctl` step, never a pass claim. Only `hot` modules \
+             can change on a live session: an `at-launch` module (e.g. `core`) is refused with \
+             the launch call in the message, never silently ignored. `acos_capabilities` with \
+             `session_id` shows the same set.",
             json!({
                 "type": "object",
                 "additionalProperties": false,
@@ -656,12 +659,14 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                 "properties": {
                     "op": {
                         "type": "string",
-                        "enum": ["list", "status", "attach", "detach"],
-                        "description": "`list`/`status` are read-only. `attach`/`detach` need `id` and are refused for an `at-launch` module."
+                        "enum": ["list", "status", "attach", "detach", "ctl"],
+                        "description": "`list`/`status` are read-only. `attach`/`detach` need `id` and are refused for an `at-launch` module. `ctl` needs `id` and `ctl_op`."
                     },
-                    "id": {"type": "string", "minLength": 1, "description": "Module id for attach/detach (`feedback.vibrator`)."},
+                    "id": {"type": "string", "minLength": 1, "description": "Module id for attach/detach/ctl (`feedback.vibrator`, `system.notifications`)."},
                     "profile": {"type": "string", "enum": ["off", "stub", "scripted", "real"], "description": "attach: requested profile; omit for the module's default."},
                     "config": {"type": "object", "description": "attach: module configuration object."},
+                    "ctl_op": {"type": "string", "minLength": 1, "description": "ctl: the module's control op (`list`, `tap`, `action`, `dismiss`, `set_value`, ...); see `acos_capabilities.modules`."},
+                    "args": {"type": "object", "description": "ctl: the control op's arguments (e.g. `{id: 7}` for `dismiss`)."},
                     "base": base.clone()
                 }
             }),

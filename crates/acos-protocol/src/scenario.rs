@@ -748,6 +748,16 @@ pub struct ServiceCtlStep {
     /// Control-op arguments (`{sensor: "accelerometer", values: [0,0,9.81]}`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub args: Option<Value>,
+    /// What the reply must contain, as a JSON **subset**.
+    ///
+    /// Objects match key by key (an expected key the reply lacks is a
+    /// failure), arrays match element by element with the same length, and
+    /// every other value must be equal. Absent = the reply is evidence only.
+    /// This is what makes a control op an *assertion*: `list` can require the
+    /// posted notification's title/channel/actions, `tap` the fired sender's
+    /// `start_result`, `dismiss` an empty `posted`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect: Option<Value>,
 }
 
 

@@ -1795,20 +1795,128 @@ pub static SPECS: &[ParcelableSpec] = &[
     },
     ParcelableSpec {
         class: "android.media.AudioAttributes",
+        // The real `AudioAttributes.writeToParcel` branches (below), so the
+        // linear `FieldOp` list cannot express it; `read_audio_attributes` /
+        // `write_audio_attributes` are the codec. The spec exists only so
+        // `spec_for` resolves the class for the scanner/verification tools, and
+        // its fields describe the **non-flattened** path (what `Notification`
+        // and a `NotificationChannel` write).
         fields: &[
-            FieldOp::Int,         // content type
-            FieldOp::Int,         // flags
             FieldOp::Int,         // usage
-            FieldOp::Int,         // capture preset
-            FieldOp::Int,         // ? (image classes2.dex)
-            FieldOp::StringArray, // tags (image writes StringArray before the string)
-            FieldOp::Str16,       // formatted tags (nullable: -1)
-            FieldOp::Int,         // bundle presence
-            FieldOp::Bundle,
+            FieldOp::Int,         // contentType
+            FieldOp::Int,         // source
+            FieldOp::Int,         // flags
+            FieldOp::Int,         // parcel flags (FLATTEN_TAGS)
+            FieldOp::StringArray, // tags (FLATTEN_TAGS clear: String[])
+            FieldOp::Str16,       // formatted tags (FLATTEN_TAGS set: String)
+            FieldOp::Int,         // ATTR_PARCEL_IS_NULL_BUNDLE / VALID_BUNDLE
+            FieldOp::Bundle,      // only when VALID_BUNDLE
         ],
         verification: Verification::Prefix,
     },
 ];
+
+/// `android.media.AudioAttributes` — `writeToParcel` switches on the parcel
+/// flags (`FLATTEN_TAGS`), so it is a curated codec like [`read_icon`].
+pub const AUDIO_ATTRIBUTES_CLASS: &str = "android.media.AudioAttributes";
+/// `AudioAttributes.FLATTEN_TAGS` (`base/media/java/android/media/AudioAttributes.java:1339`).
+const AUDIO_ATTR_FLATTEN_TAGS: i32 = 0x1;
+/// `AudioAttributes.ATTR_PARCEL_IS_NULL_BUNDLE` (`:1341`) — no bundle body follows.
+const AUDIO_ATTR_NULL_BUNDLE: i32 = -1977;
+/// `AudioAttributes.ATTR_PARCEL_IS_VALID_BUNDLE` (`:1342`).
+const AUDIO_ATTR_VALID_BUNDLE: i32 = 1980;
+
+/// `AudioAttributes.writeToParcel` (`AudioAttributes.java:1349-1368`).
+///
+/// The MODNOTIF3 transcription assumed a fixed `StringArray` + `String` + bundle
+/// pair; the real writer emits **one** of the tag forms (chosen by
+/// `FLATTEN_TAGS`) and the bundle only after a `VALID_BUNDLE` sentinel. A real
+/// `Notification.Builder` notification (MODNOTIF5's ART run) carries the
+/// non-flattened form with a null bundle, which the fixed list over-read by 8
+/// bytes and desynchronised every field after it.
+fn read_audio_attributes(parcel: &mut Parcel) -> Result<Parcelable> {
+    let usage = parcel.read_int32()?;
+    let content_type = parcel.read_int32()?;
+    let source = parcel.read_int32()?;
+    let flags = parcel.read_int32()?;
+    let parcel_flags = parcel.read_int32()?;
+    let tags = if parcel_flags & AUDIO_ATTR_FLATTEN_TAGS != 0 {
+        Value::Str(parcel.read_string16()?)
+    } else {
+        Value::StringArray(parcel.read_string16_array()?)
+    };
+    let mut values = vec![
+        Value::Int(usage),
+        Value::Int(content_type),
+        Value::Int(source),
+        Value::Int(flags),
+        Value::Int(parcel_flags),
+        tags,
+    ];
+    match parcel.read_int32()? {
+        AUDIO_ATTR_NULL_BUNDLE => {
+            values.push(Value::Cond {
+                present: false,
+                values: Vec::new(),
+            });
+        }
+        AUDIO_ATTR_VALID_BUNDLE => {
+            values.push(Value::Cond {
+                present: true,
+                values: vec![Value::Bundle(read_bundle(parcel)?)],
+            });
+        }
+        other => {
+            return Err(bad(format!(
+                "AudioAttributes bundle marker {other} (expected {AUDIO_ATTR_NULL_BUNDLE} or {AUDIO_ATTR_VALID_BUNDLE})"
+            )))
+        }
+    }
+    Ok(Parcelable::ordered(AUDIO_ATTRIBUTES_CLASS, values))
+}
+
+/// The writer for [`read_audio_attributes`]'s value shape.
+fn write_audio_attributes(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
+    let Parcelable::Ordered { class, values } = value else {
+        return Err(bad("AudioAttributes payload is not an ordered parcelable"));
+    };
+    if class != AUDIO_ATTRIBUTES_CLASS || values.len() != 7 {
+        return Err(bad(format!(
+            "expected {AUDIO_ATTRIBUTES_CLASS} with 7 fields, got {class} with {}",
+            values.len()
+        )));
+    }
+    parcel.write_int32(expect_int(&values[0])?); // usage
+    parcel.write_int32(expect_int(&values[1])?); // contentType
+    parcel.write_int32(expect_int(&values[2])?); // source
+    parcel.write_int32(expect_int(&values[3])?); // flags
+    let parcel_flags = expect_int(&values[4])?;
+    parcel.write_int32(parcel_flags);
+    if parcel_flags & AUDIO_ATTR_FLATTEN_TAGS != 0 {
+        parcel.write_string16_opt(expect_str(&values[5])?)?;
+    } else {
+        let tags = expect_string_array(&values[5])?;
+        let tags: Option<Vec<&str>> = tags.map(|items| {
+            items.iter().map(|item| item.as_deref().unwrap_or_default()).collect()
+        });
+        parcel.write_string16_array(tags.as_deref())?;
+    }
+    match &values[6] {
+        Value::Cond { present: false, .. } => {
+            parcel.write_int32(AUDIO_ATTR_NULL_BUNDLE);
+            Ok(())
+        }
+        Value::Cond { present: true, values } => {
+            parcel.write_int32(AUDIO_ATTR_VALID_BUNDLE);
+            let Value::Bundle(bundle) = values.first().ok_or_else(|| bad("AudioAttributes bundle"))?
+            else {
+                return Err(bad("AudioAttributes bundle field is not a Bundle"));
+            };
+            write_bundle(parcel, bundle.as_ref())
+        }
+        _ => Err(bad("AudioAttributes bundle field is not Cond")),
+    }
+}
 
 /// Look up a spec by dotted class name.
 #[must_use]
@@ -1848,10 +1956,26 @@ pub fn read_payload(class: &str, parcel: &mut Parcel) -> Result<Parcelable> {
     if class == ICON_CLASS {
         return read_icon(parcel);
     }
+    if class == AUDIO_ATTRIBUTES_CLASS {
+        return read_audio_attributes(parcel);
+    }
     let spec = spec_for(class).ok_or_else(|| unsupported(class))?;
     let mut values = Vec::with_capacity(spec.fields.len());
-    for field in spec.fields {
-        values.push(read_field(*field, parcel)?);
+    // `ACOS_PARCEL_TRACE=1` prints one line per field with the parcel offset, so
+    // a desynchronised codec names the field that over/under-read instead of
+    // only the crash it caused much later. Off in every normal run.
+    let trace = std::env::var_os("ACOS_PARCEL_TRACE").is_some();
+    for (index, field) in spec.fields.iter().enumerate() {
+        let offset = parcel.data_position();
+        let value = read_field(*field, parcel);
+        if trace {
+            eprintln!(
+                "parcel-trace: {class} field {index} {field:?} at {offset} (now {}) -> {:?}",
+                parcel.data_position(),
+                value
+            );
+        }
+        values.push(value?);
     }
     Ok(Parcelable::Ordered {
         class: class.to_string(),
@@ -1876,6 +2000,9 @@ pub fn write_payload(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
     }
     if class == ICON_CLASS {
         return write_icon(parcel, value);
+    }
+    if class == AUDIO_ATTRIBUTES_CLASS {
+        return write_audio_attributes(parcel, value);
     }
     let spec = spec_for(class).ok_or_else(|| unsupported(class))?;
     if values.len() != spec.fields.len() {
@@ -3206,12 +3333,28 @@ fn read_value_length(parcel: &mut Parcel, tag: i32) -> Result<(usize, usize)> {
 /// desynchronised parcel must never be handed to the next field reader.
 fn check_value_length(parcel: &Parcel, declared: usize, start: usize, tag: i32) -> Result<()> {
     let actual = parcel.data_position().saturating_sub(start);
-    if actual != declared {
-        return Err(bad(format!(
-            "VAL_{tag} body consumed {actual} bytes but declared {declared}"
-        )));
+    if actual == declared {
+        return Ok(());
     }
-    Ok(())
+    // A parcel imported from the guest wire has had the 4-byte libbinder
+    // stability record stripped after every flat object (`peer::import_parcel`),
+    // but a length prefix the *framework* wrote still counts those records. The
+    // import records every object offset, so the only accepted difference is
+    // exactly 4 bytes per object inside this body — anything else is a real
+    // desync and is refused.
+    let end = start + actual;
+    let stripped = parcel
+        .objects()
+        .iter()
+        .filter(|&&offset| offset >= start && offset < end)
+        .count()
+        * 4;
+    if actual + stripped == declared {
+        return Ok(());
+    }
+    Err(bad(format!(
+        "VAL_{tag} body consumed {actual} bytes but declared {declared}          ({stripped} bytes of binder stability records were stripped on import)"
+    )))
 }
 
 /// Write a length-prefixed `writeValue` body exactly as `Parcel.writeValue`

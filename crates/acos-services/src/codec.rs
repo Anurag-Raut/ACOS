@@ -36,9 +36,21 @@ pub fn read_args(
 ) -> Result<Vec<Value>> {
     let mut out = Vec::with_capacity(ops.len());
     for (index, op) in ops.iter().enumerate() {
+        let start = parcel.data_position();
         match read_op(parcel, op) {
             Ok(v) => out.push(v),
             Err(e) => {
+                // `ACOS_PARCEL_DUMP=<dir>` writes the undecodable argument's raw
+                // bytes, so a codec desync can be turned into a byte-exact test
+                // instead of being debugged from an offset in a crash line.
+                if let Some(dir) = std::env::var_os("ACOS_PARCEL_DUMP") {
+                    let len = parcel.data_size().saturating_sub(start);
+                    parcel.set_data_position(start);
+                    let bytes = parcel.read_raw_bytes(len).unwrap_or_default();
+                    let path = std::path::PathBuf::from(dir)
+                        .join(format!("{method}-arg{index}.bin"));
+                    let _ = std::fs::write(path, &bytes);
+                }
                 return Err(ServiceError::BadRequest {
                     interface: interface.to_string(),
                     method: method.to_string(),

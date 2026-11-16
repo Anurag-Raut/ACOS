@@ -32,12 +32,17 @@
 //!
 //! ## What is not modelled, and is reported instead
 //!
-//! A *mutable* intent's fill-in arguments are not merged into the stored intent
-//! (the guest's `PendingIntent.send(context, code, intent)` fill-in). The
-//! `IIntentSender.send` node therefore records `fill_in_ignored: true` on the
-//! evidence. That is an honest gap: applying a fill-in needs the send parcel's
-//! `Intent` merged per `Intent.fillIn`, and no consumer needs it yet (a
-//! notification tap passes no fill-in).
+//! A fill-in `Intent` (`PendingIntent.send(context, code, intent)`) is not
+//! merged into the stored intent. Applying one needs `Intent.fillIn` over the
+//! reduced [`IntentFacts`], and that is out of scope (MODNOTIF5 decision), so
+//! the node is explicit about the two cases instead of pretending:
+//!
+//! * **mutable sender** (no `FLAG_IMMUTABLE`) + non-null fill-in → the send is
+//!   refused with `UNSUPPORTED_ANDROID_API` naming `Intent.fillIn`. Sending the
+//!   stored intent anyway would silently drop caller data.
+//! * **immutable sender** (the case a notification tap uses) → the fill-in
+//!   cannot alter a stored intent by definition, so it is ignored and the
+//!   evidence records `fill_in_ignored: true`.
 
 use std::collections::BTreeMap;
 
@@ -90,6 +95,11 @@ pub struct SendEvidence {
     pub intent: IntentFacts,
     /// `true` when the record was cancelled (AOSP logs and returns).
     pub refused_cancelled: bool,
+    /// `true` when the send carried a non-null fill-in `Intent` and the sender
+    /// is immutable: the fill-in cannot alter a stored intent by definition, so
+    /// it is dropped and named here. A *mutable* sender with a fill-in is
+    /// refused with `UNSUPPORTED_ANDROID_API` instead (MODNOTIF5 decision).
+    pub fill_in_ignored: bool,
 }
 
 /// One `PendingIntent` the system owns.
@@ -158,6 +168,7 @@ impl PendingIntentRecord {
             "sends": self.sends.iter().map(|s| serde_json::json!({
                 "code": s.code,
                 "refused_cancelled": s.refused_cancelled,
+                "fill_in_ignored": s.fill_in_ignored,
                 "outcome": match &s.outcome {
                     Ok(code) => serde_json::json!({"start_result": code}),
                     Err(error) => serde_json::json!({"error": error}),
@@ -462,10 +473,16 @@ impl crate::host::ServiceObject for IntentSenderService {
         }
         // `send(int code, in Intent intent, String resolvedType, in IBinder
         // whitelistToken, IIntentReceiver finishedReceiver, String
-        // requiredPermission, in Bundle options)`. The first argument is what
-        // the evidence reports; the fill-in intent is not merged (see the
-        // module docs).
+        // requiredPermission, in Bundle options)`. The `code` argument is what
+        // the evidence reports.
         let code_arg = data.read_int32().unwrap_or(0);
+        // The fill-in is a nullable parcelable (`writeTypedObject`): a `1`
+        // marker means an `Intent` body follows. Merging it needs
+        // `Intent.fillIn` over the reduced [`IntentFacts`], which is
+        // deliberately out of scope (orchestrator decision, MODNOTIF5): a
+        // *mutable* sender whose caller supplies one is refused with the
+        // structured `UNSUPPORTED_ANDROID_API`, never silently sent without it.
+        let has_fill_in = data.read_parcelable_marker().unwrap_or(false);
         let mut state = self
             .atms
             .lock()
@@ -477,7 +494,24 @@ impl crate::host::ServiceObject for IntentSenderService {
             .get(self.slot)
             .copied()
             .unwrap_or(0);
-        let _ = state.ams.send_pending_intent(binder, code_arg);
+        let mutable = state
+            .ams
+            .intent_senders
+            .record(binder)
+            .map(|record| record.flags & FLAG_IMMUTABLE == 0)
+            .unwrap_or(false);
+        if has_fill_in && mutable {
+            return Err(ServiceError::UnsupportedAndroidApi {
+                interface: DESCRIPTOR.to_string(),
+                code,
+                method: "send with a fill-in Intent on a mutable sender (Intent.fillIn is not modelled; create the PendingIntent with FLAG_IMMUTABLE)"
+                    .to_string(),
+            });
+        }
+        let evidence = state
+            .ams
+            .send_pending_intent_with_fill_in(binder, code_arg, has_fill_in);
+        let _ = evidence;
         Ok(true)
     }
 }
@@ -485,6 +519,7 @@ impl crate::host::ServiceObject for IntentSenderService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::host::ServiceObject as _;
 
     fn activity(package: &str, class: &str) -> IntentFacts {
         IntentFacts::explicit(package, class)
@@ -646,6 +681,7 @@ mod tests {
                 outcome: Ok(0),
                 intent,
                 refused_cancelled: false,
+                fill_in_ignored: false,
             },
         );
         let record = table.record(binder).expect("record");
@@ -683,5 +719,89 @@ mod tests {
             )
             .expect_err("the pool is full");
         assert_eq!(error.code(), crate::codes::ART_RESOURCE_LIMIT);
+    }
+
+    /// `send`'s request body: `code` then the nullable fill-in marker.
+    fn send_request(code: i32, fill_in: bool) -> acos_parcel::Parcel {
+        let mut parcel = acos_parcel::Parcel::new();
+        parcel.write_int32(code);
+        parcel.write_parcelable_marker(fill_in);
+        if fill_in {
+            // A stand-in Intent body: the node must decide *before* reading it.
+            parcel.write_int32(0);
+        }
+        // A request parcel arrives at position 0; `write_*` leaves the cursor at
+        // the end.
+        parcel.set_data_position(0);
+        parcel
+    }
+
+    fn sender_node(flags: i32) -> (IntentSenderService, u64) {
+        let mut state = crate::atms::AtmsState::new();
+        let mut table = SenderTable::default();
+        table.bind_nodes(vec![500]);
+        let binder = table
+            .get_intent_sender(
+                TYPE_ACTIVITY,
+                "dev.acos.fixtures.notif",
+                0,
+                flags,
+                vec![activity("dev.acos.fixtures.notif", "Target")],
+                vec![None],
+                None,
+            )
+            .expect("getIntentSender")
+            .expect("a binder");
+        state.ams.intent_senders = table;
+        let state = std::sync::Arc::new(std::sync::Mutex::new(state));
+        (IntentSenderService::new(state, 0), binder)
+    }
+
+    /// MODNOTIF5 decision: a non-null fill-in on a **mutable** sender is an
+    /// honest `UNSUPPORTED_ANDROID_API` (merging needs `Intent.fillIn`), and
+    /// nothing is delivered or recorded as if it had been.
+    #[test]
+    fn a_fill_in_on_a_mutable_sender_is_refused_not_silently_dropped() {
+        let (mut node, binder) = sender_node(FLAG_MUTABLE);
+        let mut data = send_request(0, true);
+        let mut reply = acos_parcel::Parcel::new();
+        let error = node
+            .raw_transact(DESCRIPTOR, TRANSACTION_SEND, &mut data, &mut reply)
+            .expect_err("a mutable fill-in is refused");
+        match &error {
+            ServiceError::UnsupportedAndroidApi { code, method, .. } => {
+                assert_eq!(*code, TRANSACTION_SEND);
+                assert!(method.contains("fill-in"), "the refusal names it: {method}");
+            }
+            other => panic!("expected UNSUPPORTED_ANDROID_API, got {other:?}"),
+        }
+        assert_eq!(error.code(), crate::codes::UNSUPPORTED_ANDROID_API);
+        let state = node.atms.lock().expect("state");
+        let record = state.ams.intent_senders.record(binder).expect("record");
+        assert!(
+            record.sends.is_empty(),
+            "a refused send is not evidence of a delivery: {:?}",
+            record.sends
+        );
+        assert!(
+            state.ams.pending_launches.is_empty() && state.ams.new_intents.is_empty(),
+            "nothing was started"
+        );
+    }
+
+    /// The immutable case the notification tap uses: a fill-in cannot alter the
+    /// stored intent, so it is dropped and named on the evidence.
+    #[test]
+    fn a_fill_in_on_an_immutable_sender_is_ignored_and_named() {
+        let (mut node, binder) = sender_node(FLAG_IMMUTABLE);
+        let mut data = send_request(0, true);
+        let mut reply = acos_parcel::Parcel::new();
+        node.raw_transact(DESCRIPTOR, TRANSACTION_SEND, &mut data, &mut reply)
+            .expect("an immutable sender still sends");
+        let state = node.atms.lock().expect("state");
+        let record = state.ams.intent_senders.record(binder).expect("record");
+        assert_eq!(record.sends.len(), 1);
+        assert!(record.sends[0].fill_in_ignored, "the fill-in is named on the evidence");
+        assert_eq!(record.sends[0].code, 0);
     }
 }

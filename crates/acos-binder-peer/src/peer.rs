@@ -984,6 +984,10 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
     let mut out = Vec::with_capacity(frame.data.len());
     let mut cursor = 0usize;
     let mut fds = frame.fds.iter().copied();
+    // Offsets of the rewritten flat objects in `out`: the imported parcel has no
+    // object table (`unmarshall` does not rebuild one), and both the reply
+    // marshaller and the `writeValue` length accounting need it.
+    let mut objects: Vec<usize> = Vec::new();
     for off in frame.object_offsets() {
         if off < cursor || off + 24 > frame.data.len() {
             continue;
@@ -1017,6 +1021,7 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
         let mut obj = [0u8; 24];
         obj.copy_from_slice(&frame.data[off..off + 24]);
         obj[8..16].copy_from_slice(&new_id.to_le_bytes());
+        objects.push(out.len());
         out.extend_from_slice(&obj);
         let mut next = off + 24;
         let binder = matches!(
@@ -1034,6 +1039,9 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
     out.extend_from_slice(&frame.data[cursor..]);
     let mut parcel = Parcel::new();
     parcel.unmarshall(&out);
+    for offset in objects {
+        parcel.note_flat_object(offset);
+    }
     parcel.set_data_position(0);
     // The guest's libbinder wrote this parcel: a null binder carries the 4-byte
     // stability record but no object-table entry (L1 §3.6).
