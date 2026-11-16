@@ -113,14 +113,17 @@ steps:
   - key:
       key: back
       settle: content
-  - assert_text:
-      selector: {id: status}
-      text: {exact: "ImeDown"}
+  # The hide's guest log line belongs to the key step, so it is asserted before
+  # any other step consumes the log cursor: `since_previous_step: true` here is
+  # exactly the lines this press produced.
   - assert_log:
       tag: AcosBack
       since_previous_step: true
       patterns:
         - 'insets_ime visible=false'
+  - assert_text:
+      selector: {id: status}
+      text: {exact: "ImeDown"}
   - assert_text:
       selector: {id: dialog}
       text: {exact: "Show dialog"}

@@ -1,0 +1,7 @@
+{
+  "request_id": "req_2a2010_18e877f91e6eabaf",
+  "started_at": "2026-11-16T08:06:03.348Z",
+  "scenario": "scenarios/gaten-backstack.yaml",
+  "apk": "",
+  "acos_version": "0.2.3"
+}
