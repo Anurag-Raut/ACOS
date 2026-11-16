@@ -397,6 +397,13 @@ pub struct AtmsState {
     /// The authorities backed by Rust providers (`settings`, …), with the
     /// reference counts `getContentProvider` maintains.
     pub provider_registry: crate::provider::ProviderRegistry,
+    /// Registered `IIntentReceiver` callbacks as host-held strong references.
+    /// `registerReceiver` takes one, `unregisterReceiver` drops it, and the
+    /// module detach / session teardown releases whatever is left
+    /// (`crate::refs`): without it the guest's receiver node would be
+    /// unrooted the moment the app's own reference goes away, and
+    /// `performReceive` would answer `DEAD_OBJECT`.
+    pub refs: crate::refs::GuestRefs,
 }
 
 impl AtmsState {
@@ -419,6 +426,7 @@ impl AtmsState {
             ams: crate::ams::AmsState::new(),
             receiver_registrations: Vec::new(),
             provider_registry: crate::provider::ProviderRegistry::new(),
+            refs: crate::refs::GuestRefs::new(),
         }
     }
 
@@ -472,6 +480,12 @@ impl AtmsState {
         );
         self.receiver_registrations.retain(|r| r.receiver != receiver);
         self.receiver_registrations.push(registration);
+        if receiver != 0 {
+            // A registration *is* a strong reference on the guest's
+            // `IIntentReceiver` (a re-registration of the same binder is not a
+            // second one).
+            self.refs.hold(acos_parcel::BinderId(receiver));
+        }
         self.log_event(
             "ActivityManagerReceiver",
             acos_protocol::LogLevel::Debug,
@@ -487,6 +501,9 @@ impl AtmsState {
         let before = self.receiver_registrations.len();
         self.receiver_registrations.retain(|r| r.receiver != receiver);
         self.ams.unregister_receiver(receiver);
+        if receiver != 0 {
+            self.refs.release(acos_parcel::BinderId(receiver));
+        }
         let removed = self.receiver_registrations.len() != before;
         if removed {
             self.log_event(
@@ -1421,6 +1438,18 @@ impl ServiceObject for AtmsService {
     fn drain_events(&mut self) -> Vec<Event> {
         let mut state = self.state.lock().unwrap();
         std::mem::take(&mut state.protocol_events)
+    }
+
+    fn drain_retained(&mut self) -> Vec<acos_parcel::BinderId> {
+        self.state.lock().unwrap().refs.drain_retained()
+    }
+
+    fn drain_released(&mut self) -> Vec<acos_parcel::BinderId> {
+        self.state.lock().unwrap().refs.drain_released()
+    }
+
+    fn release_all_refs(&mut self) -> Vec<acos_parcel::BinderId> {
+        self.state.lock().unwrap().refs.release_all()
     }
 
     fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {

@@ -193,6 +193,10 @@ pub struct BluetoothState {
     pub bonded_calls: u32,
     /// `registerAdapter`/state-change callbacks (binders).
     pub callbacks: Vec<u64>,
+    /// Those callbacks as host-held strong references (`crate::refs`): an
+    /// `IBluetoothManagerCallback` registration is what keeps the guest's node
+    /// rooted for the service up/down calls, and the module detach releases it.
+    pub refs: crate::refs::GuestRefs,
     /// Calls answered with the structured unsupported error.
     pub unsupported: Vec<String>,
 }
@@ -218,6 +222,7 @@ impl Default for BluetoothState {
             cancel_discovery_calls: 0,
             bonded_calls: 0,
             callbacks: Vec::new(),
+            refs: crate::refs::GuestRefs::new(),
             unsupported: Vec::new(),
         }
     }
@@ -460,6 +465,20 @@ struct ManagerService {
 }
 
 impl ServiceObject for ManagerService {
+    /// `registerAdapter`/`registerStateChangeCallback` are registrations: the
+    /// host roots the guest's callback node until the module detaches.
+    fn drain_retained(&mut self) -> Vec<acos_parcel::BinderId> {
+        state_of(&self.state).refs.drain_retained()
+    }
+
+    fn drain_released(&mut self) -> Vec<acos_parcel::BinderId> {
+        state_of(&self.state).refs.drain_released()
+    }
+
+    fn release_all_refs(&mut self) -> Vec<acos_parcel::BinderId> {
+        state_of(&self.state).refs.release_all()
+    }
+
     fn call(
         &mut self,
         interface: &str,
@@ -491,6 +510,7 @@ impl ServiceObject for ManagerService {
                 // adapter is null (AOSP's no-Bluetooth path) never gets here.
                 if let Ok(Some(callback)) = data.read_strong_binder() {
                     state.callbacks.push(callback.0);
+                    state.refs.hold(callback);
                 }
                 write_no_exception(reply);
                 reply.write_strong_binder(acos_parcel::BinderId(self.adapter_binder));
@@ -499,6 +519,7 @@ impl ServiceObject for ManagerService {
             MANAGER_REGISTER_STATE_CHANGE_CALLBACK => {
                 if let Ok(Some(callback)) = data.read_strong_binder() {
                     state.callbacks.push(callback.0);
+                    state.refs.hold(callback);
                 }
                 write_no_exception(reply);
                 Ok(true)

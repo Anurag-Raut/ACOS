@@ -103,7 +103,17 @@ fn serve(peer: &mut Peer, fd: RawFd) -> std::io::Result<()> {
         }
         let frame = match read_frame(fd) {
             Ok(f) => f,
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                // The guest is gone: nothing keeps its nodes rooted any more.
+                let released = peer.release_all_refs();
+                if !released.is_empty() {
+                    eprintln!(
+                        "acos-binder-peer: guest gone, released {} host-held binder reference(s)",
+                        released.len()
+                    );
+                }
+                return Ok(());
+            }
             Err(e) => return Err(e),
         };
         let outs = peer.handle(frame);

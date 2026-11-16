@@ -778,6 +778,50 @@ fn a_dropped_registration_releases_the_guest_node_over_the_wire() {
     assert_eq!(peer.held_refs_of(id), 0);
 }
 
+/// Frame order inside one turn: a delivery is written **before** the release of
+/// the reference that made the delivery possible. The driver unroots a node on
+/// `BR_RELEASE`/`BR_DECREFS`, so a release that came first would turn a callback
+/// that was queued while its registration was still live into `DEAD_OBJECT`.
+#[test]
+fn a_delivery_is_written_before_the_reference_release_of_the_same_turn() {
+    let mut peer = Peer::new();
+    let out = peer.handle(Frame::plain(F_HELLO, PROTOCOL_VERSION, 0, 0, 0, Vec::new()));
+    assert!(out.is_empty());
+    let id = java(0x55);
+    peer.host_mut()
+        .binder_registry()
+        .register_at(id.0, "test.listener", acos_parcel::BinderKind::Local);
+    assert_eq!(peer.retain_binder(id), 1);
+
+    let mut data = Parcel::new();
+    data.write_interface_token("test.listener").expect("token");
+    peer.host_mut().queue_delivery(acos_services::host::PendingDelivery {
+        target: id,
+        interface: "test.listener".into(),
+        code: 1,
+        method: "onEvent".into(),
+        data,
+    });
+    // The registration goes away in the same turn the delivery was queued.
+    assert_eq!(peer.release_binder(id), 0);
+
+    let ping = Frame::plain(F_REQ, 11, acos_binder_peer::PING_TRANSACTION, 0, 0, Vec::new());
+    let out = peer.handle(ping);
+    let kinds: Vec<u32> = out.iter().map(|f| f.ty).collect();
+    let delivery = kinds
+        .iter()
+        .position(|ty| *ty == F_TXN)
+        .expect("the queued delivery is in this batch");
+    let release = kinds
+        .iter()
+        .position(|ty| *ty == F_REF)
+        .expect("the released reference is in this batch");
+    assert!(
+        delivery < release,
+        "delivery frames must precede release frames, got {kinds:?}"
+    );
+}
+
 /// An older driver (no `F_HELLO`) must never receive `F_REF`: the frame would
 /// be answered with "unexpected frame type" and the release would look like a
 /// driver bug. The peer keeps the node alive for the session instead, and counts

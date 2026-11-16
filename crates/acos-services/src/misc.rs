@@ -206,6 +206,13 @@ pub struct A11yState {
     /// every later query from the cache and never sees a window added after
     /// its first query. Bounded like `events`.
     pub windows_changed: Vec<A11yWindowChange>,
+    /// Guest callbacks this service holds strong references on: the
+    /// `IAccessibilityManagerClient` of every connected app, the
+    /// `IAccessibilityInteractionConnection` of every window, and the bound
+    /// accessibility service's `IAccessibilityServiceClient` (`crate::refs`).
+    /// The host's reference is what keeps a client's node rooted between
+    /// `addClient` and `removeClient`; a detach releases whatever is left.
+    pub refs: crate::refs::GuestRefs,
 }
 
 /// One pending `TYPE_WINDOWS_CHANGED` event, as the window manager produced it.
@@ -227,6 +234,7 @@ impl A11yState {
     pub fn new() -> Self {
         Self {
             clients: Vec::new(),
+            refs: crate::refs::GuestRefs::new(),
             next_client_id: 1,
             settings: None,
             enabled_services: Vec::new(),
@@ -360,7 +368,9 @@ impl A11yState {
         if let Some(token) = self.bound_service.as_ref().map(|bound| bound.window_token) {
             self.release_overlay_token(token);
         }
-        self.bound_service = None;
+        if let Some(bound) = self.bound_service.take() {
+            self.refs.release(acos_parcel::BinderId(bound.binder));
+        }
     }
 
     /// `IWindowManager.addWindowToken(token, TYPE_ACCESSIBILITY_OVERLAY)`:
@@ -815,6 +825,12 @@ impl A11yState {
         connection: u64,
         window_token: u64,
     ) {
+        if binder != 0 {
+            // The system calls into the bound service's
+            // `IAccessibilityServiceClient` for every event; the host holds the
+            // reference for as long as the service is bound.
+            self.refs.hold(acos_parcel::BinderId(binder));
+        }
         self.bound_service = Some(A11yBoundService {
             component: pending.component.clone(),
             package: pending.package.clone(),
@@ -961,6 +977,35 @@ impl A11yService {
 }
 
 impl ServiceObject for A11yService {
+    /// The a11y manager's registrations (`addClient`,
+    /// `addAccessibilityInteractionConnection`, the bound service) are host-held
+    /// strong references: `A11yState::refs` is the one ledger, and this object
+    /// (or the service-connection node, whichever serves the transaction) is
+    /// what reports it to the host.
+    fn drain_retained(&mut self) -> Vec<acos_parcel::BinderId> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .refs
+            .drain_retained()
+    }
+
+    fn drain_released(&mut self) -> Vec<acos_parcel::BinderId> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .refs
+            .drain_released()
+    }
+
+    fn release_all_refs(&mut self) -> Vec<acos_parcel::BinderId> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .refs
+            .release_all()
+    }
+
     fn call(&mut self, interface: &str, method: &MethodInfo, args: &[Value]) -> Result<CallResult> {
         if interface != "android.view.accessibility.IAccessibilityManager" {
             return Err(ServiceError::UnsupportedAndroidApi {
@@ -987,6 +1032,9 @@ impl ServiceObject for A11yService {
                     if !state.clients.contains(&client.0) {
                         state.clients.push(client.0);
                     }
+                    // `AccessibilityManager.addClient` is a registration: the
+                    // host keeps the client node alive until `removeClient`.
+                    state.refs.hold(client);
                 }
                 let id = state.next_client_id;
                 state.next_client_id += 1;
@@ -1074,6 +1122,13 @@ impl ServiceObject for A11yService {
                     connection,
                     package,
                 });
+                if connection != 0 {
+                    // The window's node tree is reachable only through this
+                    // connection; the host holds it for as long as the app keeps
+                    // it registered (`removeAccessibilityInteractionConnection`
+                    // releases it).
+                    state.refs.hold(acos_parcel::BinderId(connection));
+                }
                 // `AccessibilityWindowId`: one id per `IWindow`, assigned on
                 // first use and stable for the session. The same id is what
                 // `AccessibilityWindowInfo.getId()` reports, so a service that
@@ -1087,6 +1142,15 @@ impl ServiceObject for A11yService {
             "removeAccessibilityInteractionConnection" => {
                 let window = args.first().and_then(Value::as_binder).map(|b| b.0);
                 if let Some(window) = window {
+                    let gone: Vec<u64> = state
+                        .connections
+                        .iter()
+                        .filter(|c| c.window == window)
+                        .map(|c| c.connection)
+                        .collect();
+                    for connection in gone {
+                        state.refs.release(acos_parcel::BinderId(connection));
+                    }
                     state.connections.retain(|c| c.window != window);
                     state.forget_window(window);
                 }
@@ -1118,10 +1182,27 @@ impl ServiceObject for A11yService {
                 reply: vec![Value::Bool(false)],
                 deliveries: Vec::new(),
             }),
-            "removeClient" => Ok(CallResult {
-                reply: vec![Value::Bool(true)],
-                deliveries: Vec::new(),
-            }),
+            "removeClient" => {
+                // `removeClient(IAccessibilityManagerClient)`: the decoded table
+                // loses the client argument, so every client this service holds
+                // is released (there is one per process).
+                let named = args.first().and_then(Value::as_binder);
+                match named {
+                    Some(client) => {
+                        state.clients.retain(|held| *held != client.0);
+                        state.refs.release(client);
+                    }
+                    None => {
+                        for client in std::mem::take(&mut state.clients) {
+                            state.refs.release(acos_parcel::BinderId(client));
+                        }
+                    }
+                }
+                Ok(CallResult {
+                    reply: vec![Value::Bool(true)],
+                    deliveries: Vec::new(),
+                })
+            }
             _ => {
                 state.unsupported.push(method.name.clone());
                 Err(ServiceError::UnsupportedAndroidApi {

@@ -609,13 +609,12 @@ impl ServiceObject for PhoneSubInfoService {
 struct TelephonyRegistryService {
     state: Arc<Mutex<TelephonyState>>,
     queued: Vec<PendingDelivery>,
-    /// Callbacks this service started holding a strong reference to (one per
-    /// live registration) and callbacks it dropped. A registration *is* a
-    /// reference: the host keeps the guest's node alive while it exists, and
-    /// releasing it is what tells the driver to unroot the node
-    /// (`F_REF` release -> `BR_RELEASE` + `BR_DECREFS`).
-    retained: Vec<BinderId>,
-    released: Vec<BinderId>,
+    /// The live registrations, as host-held strong references. A registration
+    /// *is* a reference: the host keeps the guest's node alive while it exists,
+    /// and releasing it is what tells the driver to unroot the node
+    /// (`F_REF` release -> `BR_RELEASE` + `BR_DECREFS`). One ledger for every
+    /// module, so re-registering a listener cannot double-count.
+    refs: crate::refs::GuestRefs,
 }
 
 impl TelephonyRegistryService {
@@ -683,20 +682,18 @@ impl ServiceObject for TelephonyRegistryService {
                         // `LISTEN_NONE` (an empty event list) is the unregister
                         // path: the registration goes away, and so does the
                         // reference the host held for it.
-                        let previous = state.listeners.iter().any(|l| l.binder == binder);
                         state.listeners.retain(|listener| listener.binder != binder);
-                        if previous {
-                            self.released.push(BinderId(binder));
-                        }
                         if events.is_empty() {
-                            self.released.push(BinderId(binder));
+                            // `LISTEN_NONE`: the registration goes away, and so
+                            // does the reference the host held for it.
+                            self.refs.release(BinderId(binder));
                         } else {
                             state.listeners.push(StateListener {
                                 binder,
                                 events: events.clone(),
                                 package,
                             });
-                            self.retained.push(BinderId(binder));
+                            self.refs.hold(BinderId(binder));
                         }
                     }
                     (state.call_state, state.incoming_number.clone())
@@ -723,15 +720,11 @@ impl ServiceObject for TelephonyRegistryService {
                     .map_err(|e| self.bad("removeOnSubscriptionsChangedListener", e.to_string()))?
                     .map(|id| id.0)
                     .unwrap_or(0);
-                let dropped = state_of(&self.state)
-                    .listeners
-                    .iter()
-                    .any(|listener| listener.binder == binder);
                 state_of(&self.state)
                     .listeners
                     .retain(|listener| listener.binder != binder);
-                if dropped && binder != 0 {
-                    self.released.push(BinderId(binder));
+                if binder != 0 {
+                    self.refs.release(BinderId(binder));
                 }
                 write_no_exception(reply);
                 Ok(true)
@@ -744,12 +737,16 @@ impl ServiceObject for TelephonyRegistryService {
         std::mem::take(&mut self.queued)
     }
 
-    fn drain_raw_retained(&mut self) -> Vec<BinderId> {
-        std::mem::take(&mut self.retained)
+    fn drain_retained(&mut self) -> Vec<BinderId> {
+        self.refs.drain_retained()
     }
 
-    fn drain_raw_released(&mut self) -> Vec<BinderId> {
-        std::mem::take(&mut self.released)
+    fn drain_released(&mut self) -> Vec<BinderId> {
+        self.refs.drain_released()
+    }
+
+    fn release_all_refs(&mut self) -> Vec<BinderId> {
+        self.refs.release_all()
     }
 }
 
@@ -1351,8 +1348,7 @@ impl Module for TelephonyModule {
             Box::new(TelephonyRegistryService {
                 state: Arc::clone(&state),
                 queued: Vec::new(),
-                retained: Vec::new(),
-                released: Vec::new(),
+                refs: crate::refs::GuestRefs::new(),
             }),
         );
         host.register_dynamic_named(

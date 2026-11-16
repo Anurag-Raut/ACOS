@@ -75,6 +75,7 @@ pub mod pending_intent; // MODNOTIF4: PendingIntent sender records + the IIntent
 pub mod permissions; // MODNOTIF2: the one runtime-permission table
 pub mod pms;
 pub mod provider;
+pub mod refs; // BINDERREF2: the guest-binder registration ledger (host strong refs)
 pub mod registry;
 pub mod sensors; // MODSENS: native sensorservice (SensorManager/SensorEventConnection)
 pub mod surface_client;

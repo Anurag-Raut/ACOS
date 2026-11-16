@@ -397,6 +397,18 @@ impl Peer {
             .collect()
     }
 
+    /// The guest process is gone (its socket closed, or the runtime is being
+    /// torn down): release every strong reference the host still holds.
+    ///
+    /// The driver dies with the guest in the current model, so the frames this
+    /// would send have nowhere to go; the point is that the host does not keep a
+    /// reference table for a process that no longer exists (a long-lived peer —
+    /// the `MPROC` death path — sends `F_REF` releases here instead of leaking
+    /// the nodes). What was released is returned for the caller's log.
+    pub fn release_all_refs(&mut self) -> Vec<BinderId> {
+        self.host.release_all_refs()
+    }
+
     /// Handle one incoming frame and return the frames to send back.
     pub fn handle(&mut self, frame: Frame) -> Vec<Frame> {
         let mut out = Vec::new();
@@ -494,8 +506,13 @@ impl Peer {
                 eprintln!("acos-binder-peer: ignoring frame type {other}");
             }
         }
-        out.extend(self.take_ref_frames());
+        // Deliveries first, then reference frames. A release must never
+        // overtake a delivery to the same node: the driver unroots the node on
+        // `BR_RELEASE` + `BR_DECREFS`, so a `F_TXN` sent after it would answer
+        // `DEAD_OBJECT` even though the callback was queued while the
+        // registration (and its reference) still existed.
         out.extend(self.take_delivery_frames());
+        out.extend(self.take_ref_frames());
         if let Some(frame) = self.take_launch_delivery() {
             out.push(frame);
         }
