@@ -1446,6 +1446,14 @@ pub fn dispatch(
             let binder = state.bind_service(connection, &intent, flags)?;
             vec![Value::Int(i32::try_from(binder & 0x7fff_ffff).unwrap_or(0))]
         }
+        "serviceDoneExecuting" => {
+            // `ActivityThread` reports the end of a service lifecycle call
+            // (`SERVICE_DONE_EXECUTING_*`) here; AOSP's AMS has nothing left to
+            // do for a service it started, so the call is a no-op with a void
+            // reply. A system-initiated accessibility bind runs it right after
+            // `Service.onCreate`.
+            Vec::new()
+        }
         "unbindService" => {
             let connection = value(0)
                 .and_then(Value::as_binder)

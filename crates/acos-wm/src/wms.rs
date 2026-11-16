@@ -11,7 +11,7 @@
 //! ten `InsetsSource` rows from `display.txt` (status bar 128 px, nav bar
 //! 63 px, IME `[0,2274][1080,2400]`, cutout 128 px).
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use acos_parcel::binder::BinderId;
 
@@ -248,6 +248,17 @@ pub struct WindowManager {
     next_session: u64,
     /// Window creation-order allocator (a same-policy-layer tie-breaker).
     next_window_seq: u64,
+    /// `TYPE_ACCESSIBILITY_OVERLAY` window tokens the accessibility manager
+    /// service created (`WindowManagerService.addWindowToken(token,
+    /// TYPE_ACCESSIBILITY_OVERLAY, ...)`).
+    ///
+    /// AOSP `sanitizeWindowType` (`WindowManagerService.java:9914-9928`) only
+    /// assigns `TYPE_ACCESSIBILITY_OVERLAY` to a client whose token *is* such a
+    /// token, and `addWindow` answers `ADD_BAD_APP_TOKEN` for an
+    /// accessibility-overlay window added with a token of another type
+    /// (`WindowManagerService.java:1630-1640`). Without this set any app could
+    /// stack a window above the accessibility overlay layer.
+    overlay_tokens: BTreeSet<u64>,
 }
 
 impl WindowManager {
@@ -265,6 +276,7 @@ impl WindowManager {
             next_layer: 0x1000,
             next_session: 0,
             next_window_seq: 0,
+            overlay_tokens: BTreeSet::new(),
         }
     }
 
@@ -318,6 +330,25 @@ impl WindowManager {
                 out_frame: RectI::default(),
                 out_float: vec![],
                 window: window.0,
+            });
+        }
+        // AOSP `addWindow`/`sanitizeWindowType`: an accessibility overlay is
+        // only accepted on the accessibility manager's own overlay token. Any
+        // other type keeps the previous behaviour (the add path has no token
+        // policy for it yet).
+        if params.type_ == crate::layers::TYPE_ACCESSIBILITY_OVERLAY
+            && !params
+                .token
+                .is_some_and(|token| self.overlay_tokens.contains(&token.0))
+        {
+            return Ok(AddWindowResult {
+                result: ADD_BAD_APP_TOKEN,
+                input_channel: crate::codec::InputChannelParcel::absent(),
+                insets_state: empty_insets_state(&self.display),
+                insets_controls: InsetsSourceControlArray(vec![]),
+                out_frame: RectI::default(),
+                out_float: vec![],
+                window: 0,
             });
         }
 
@@ -810,6 +841,25 @@ impl WindowManager {
     #[must_use]
     pub fn merged_configuration(&self) -> MergedConfiguration {
         reference_merged_configuration(&self.display)
+    }
+
+    /// `WindowManagerService.addWindowToken(token, TYPE_ACCESSIBILITY_OVERLAY,
+    /// displayId)`: the accessibility manager service created an overlay window
+    /// token, and a `TYPE_ACCESSIBILITY_OVERLAY` window may now be added on it.
+    pub fn add_overlay_token(&mut self, token: BinderId) {
+        self.overlay_tokens.insert(token.0);
+    }
+
+    /// `WindowManagerService.removeWindowToken`: the service is gone, so the
+    /// token stops authorising overlays.
+    pub fn remove_overlay_token(&mut self, token: BinderId) {
+        self.overlay_tokens.remove(&token.0);
+    }
+
+    /// True when `token` is an accessibility overlay token this state created.
+    #[must_use]
+    pub fn is_overlay_token(&self, token: BinderId) -> bool {
+        self.overlay_tokens.contains(&token.0)
     }
 
     fn alloc_layer(&mut self) -> u64 {
@@ -1471,6 +1521,64 @@ mod tests {
         assert_eq!(screen_layout_for_dp(400, 300) & 0x0f, 0x01); // SMALL
         assert_eq!(screen_layout_for_dp(700, 500) & 0x0f, 0x03); // LARGE
         assert_eq!(screen_layout_for_dp(1000, 800) & 0x0f, 0x04); // XLARGE
+    }
+
+    /// MODA11Y5: AOSP `WindowManagerService.addWindow` accepts a
+    /// `TYPE_ACCESSIBILITY_OVERLAY` window only on the accessibility manager's
+    /// own overlay window token (`addWindow` 1630-1640, `sanitizeWindowType`
+    /// 9914-9928). Without the token check any app could add a window into the
+    /// accessibility overlay layer, above every activity.
+    #[test]
+    fn accessibility_overlay_needs_the_accessibility_overlay_token() {
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        let token = BinderId(0x0A11_0000_0000_7001);
+        let mut params = LayoutParams::application("dev.acos.fixtures.a11yprobe", "overlay");
+        params.type_ = crate::layers::TYPE_ACCESSIBILITY_OVERLAY;
+        params.token = Some(token);
+
+        // No token was created: the add is refused, exactly like AOSP's
+        // `ADD_BAD_APP_TOKEN`, and no window is created.
+        let refused = wm
+            .add_to_display_as_user(sess, BinderId(0x7001), params.clone(), 0)
+            .expect("the add path answers, it does not error");
+        assert_eq!(refused.result, ADD_BAD_APP_TOKEN);
+        assert!(wm.windows.is_empty(), "a refused add creates no window");
+
+        // A foreign token is still refused (the token is the authority, not the
+        // window type alone).
+        let mut foreign = params.clone();
+        foreign.token = Some(BinderId(0xBAD0_0000));
+        let refused = wm
+            .add_to_display_as_user(sess, BinderId(0x7002), foreign, 0)
+            .expect("the add path answers");
+        assert_eq!(refused.result, ADD_BAD_APP_TOKEN);
+
+        // `addWindowToken`: now the add is accepted and lands in the
+        // accessibility overlay policy layer (31).
+        wm.add_overlay_token(token);
+        assert!(wm.is_overlay_token(token));
+        let added = wm
+            .add_to_display_as_user(sess, BinderId(0x7003), params, 0)
+            .expect("the add path answers");
+        assert_eq!(added.result, ADD_OKAY);
+        let record = wm.windows.get(&0x7003).expect("the overlay window");
+        assert_eq!(record.kind, crate::layers::WindowKind::AccessibilityOverlay);
+        assert_eq!(
+            crate::layers::policy_layer(crate::layers::TYPE_ACCESSIBILITY_OVERLAY, false),
+            31,
+            "the overlay's LAYER1 policy layer"
+        );
+
+        // `removeWindowToken` (the service went away) revokes the authority.
+        wm.remove_overlay_token(token);
+        let mut again = LayoutParams::application("dev.acos.fixtures.a11yprobe", "overlay");
+        again.type_ = crate::layers::TYPE_ACCESSIBILITY_OVERLAY;
+        again.token = Some(token);
+        let refused = wm
+            .add_to_display_as_user(sess, BinderId(0x7004), again, 0)
+            .expect("the add path answers");
+        assert_eq!(refused.result, ADD_BAD_APP_TOKEN);
     }
 
     #[test]

@@ -228,6 +228,11 @@ for app in counter todo-list multi-activity form-validation settle-lab thread-he
     build_apk "$app"
 done
 
+# a11y-probe is the ADR-0029 accessibility-module fixture: reads the real
+# AccessibilityManager state (enabled + installed/enabled lists) and sends a
+# real event through IAccessibilityManager.sendAccessibilityEvent.
+build_apk a11y-probe
+
 # tail-probe is the long-tail module fixture (ADR-0029): one tab per module
 # (telephony, biometric, bluetooth, vibrator) printing what the framework's own
 # clients answered. Built at targetSdk 34 like the module scenario corpus.

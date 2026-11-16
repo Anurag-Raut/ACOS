@@ -10,7 +10,7 @@
 use acos_aidl::WireOp;
 use acos_parcel::Parcel;
 
-use crate::error::{ServiceError, Result};
+use crate::error::{Result, ServiceError};
 use crate::parcelable;
 use crate::value::{Bundle, DynamicValue, Parcelable, RawFdValue, Value};
 
@@ -73,6 +73,17 @@ pub fn read_args_override(
     match (interface, code) {
         ("android.content.pm.IPackageManager", IPACKAGE_MANAGER_NOTIFY_DEX_LOAD) => {
             Ok(Some(read_notify_dex_load(parcel)?))
+        }
+        // ADR-0029: `sendAccessibilityEvent(AccessibilityEvent, int)` is
+        // oneway. The event parcel has no codec (it nests a record list), and
+        // the module only needs the type: `isSealed` then `eventType` are the
+        // first two ints of `AccessibilityEvent.writeToParcel`. Consume the
+        // rest opaquely so the event is recorded instead of rejected.
+        ("android.view.accessibility.IAccessibilityManager", 2) => {
+            let _sealed = parcel.read_int32()?;
+            let event_type = parcel.read_int32()?;
+            skip_remaining(parcel);
+            Ok(Some(vec![Value::Int(event_type), Value::Long(0)]))
         }
         // K2: `ParceledListSlice<NotificationChannel>` is the last argument of
         // the notification create calls. Decode it with the real
@@ -256,7 +267,11 @@ pub fn write_reply(
         return Err(ServiceError::BadReply {
             interface: interface.to_string(),
             method: method.to_string(),
-            detail: format!("layout has {} ops, handler returned {} values", ops.len(), values.len()),
+            detail: format!(
+                "layout has {} ops, handler returned {} values",
+                ops.len(),
+                values.len()
+            ),
         });
     }
     for (index, (op, value)) in ops.iter().zip(values).enumerate() {
@@ -377,7 +392,9 @@ pub fn read_op(parcel: &mut Parcel, op: &WireOp) -> Result<Value> {
                 if present == 0 {
                     out.push(Value::Parcelable(Parcelable::Null));
                 } else {
-                    out.push(Value::Parcelable(parcelable::read_payload(&element, parcel)?));
+                    out.push(Value::Parcelable(parcelable::read_payload(
+                        &element, parcel,
+                    )?));
                 }
             }
             Value::List(Some(out))
@@ -434,13 +451,17 @@ pub fn write_op(parcel: &mut Parcel, op: &WireOp, value: &Value) -> Result<()> {
             let p: &Parcelable = match value {
                 Value::Parcelable(p) | Value::TypedObject(p) | Value::NamedParcelable(p) => p,
                 Value::Skipped | Value::Unit => {
-                    return Err(bad("null is not representable for a direct writeToParcel argument"))
+                    return Err(bad(
+                        "null is not representable for a direct writeToParcel argument",
+                    ))
                 }
                 other => return Err(bad(format!("expected parcelable, got {other:?}"))),
             };
             match p {
                 Parcelable::Null => {
-                    return Err(bad("null is not representable for a direct writeToParcel argument"))
+                    return Err(bad(
+                        "null is not representable for a direct writeToParcel argument",
+                    ))
                 }
                 Parcelable::Ordered { .. } => parcelable::write_payload(parcel, p)?,
                 Parcelable::Fd(_) => return Err(bad("fd is not a parcelable argument")),
@@ -595,13 +616,16 @@ fn bad(detail: impl Into<String>) -> ServiceError {
 }
 
 fn expect_int(v: &Value) -> Result<i32> {
-    v.as_int().ok_or_else(|| bad(format!("expected int, got {v:?}")))
+    v.as_int()
+        .ok_or_else(|| bad(format!("expected int, got {v:?}")))
 }
 fn expect_long(v: &Value) -> Result<i64> {
-    v.as_long().ok_or_else(|| bad(format!("expected long, got {v:?}")))
+    v.as_long()
+        .ok_or_else(|| bad(format!("expected long, got {v:?}")))
 }
 fn expect_float(v: &Value) -> Result<f32> {
-    v.as_float().ok_or_else(|| bad(format!("expected float, got {v:?}")))
+    v.as_float()
+        .ok_or_else(|| bad(format!("expected float, got {v:?}")))
 }
 fn expect_double(v: &Value) -> Result<f64> {
     match v {
@@ -610,7 +634,8 @@ fn expect_double(v: &Value) -> Result<f64> {
     }
 }
 fn expect_bool(v: &Value) -> Result<bool> {
-    v.as_bool().ok_or_else(|| bad(format!("expected bool, got {v:?}")))
+    v.as_bool()
+        .ok_or_else(|| bad(format!("expected bool, got {v:?}")))
 }
 fn expect_byte(v: &Value) -> Result<i8> {
     match v {
@@ -713,8 +738,7 @@ pub fn write_args_override(
                 None => parcel.write_int32(-1),
                 Some(entries) => {
                     parcel.write_int32(
-                        i32::try_from(entries.len())
-                            .map_err(|_| bad("map too large".into()))?,
+                        i32::try_from(entries.len()).map_err(|_| bad("map too large".into()))?,
                     );
                     for (key, value) in entries {
                         for side in [key, value] {
