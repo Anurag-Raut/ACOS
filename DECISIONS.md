@@ -1219,6 +1219,13 @@ relay netns and every session netns, and plain CLI use has no broker. Host-port 
 `-t <port>` plus a per-session DROP for sessions that did not opt in (simpler than an fd-passing
 REDIRECT proxy). Attach cost 15–49 ms (exec-based) is accepted for v0.4.0; rtnetlink (~2 ms) moves to
 the v0.5.0 density work.
+ADR-0030 correction (NET3, measured on the pinned pasta): the `-t <port>` + DROP shape above is
+superseded. `pasta -T <port>` serves only the target netns, never a relay-joined session, and pasta
+rejects address-qualified `-T` (`Listening address not allowed`). Host-port opt-in is therefore the
+gated `--map-host-loopback` address plus a per-session `ACCEPT` for an opted-in port, with a small
+`acos-netd forward` binding the session's own `127.0.0.1:<port>`; sessions that did not opt in get a
+tcp-reset (that is what "refused" means), not a `DROP` (a DROP stalled guest boot ~4.5 s). Evidence:
+`results/handoff/NET3.md`, branch `net3`.
 
 **ADR-0029 amendment (owner, 2026-11-16, after MODNOTIF): system UI comes from system apps in the
 guest.** The permission dialog and the notification shade are provided by small ACOS system apps
