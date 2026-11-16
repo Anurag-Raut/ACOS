@@ -3730,25 +3730,30 @@ fn boot_scanner() -> Option<&'static scan::DexSet> {
 /// Lazily cached boot DEX, used by [`verify_prefix`] tests.
 static BOOT_DEX: OnceLock<Option<Vec<acos_dex::DexFile>>> = OnceLock::new();
 
-/// Load `.cache/boot/android-34/dex/framework` if present.
+/// Load every boot-classpath DEX file of the image if present.
+///
+/// The `dex/framework`-only version of this helper is what made the
+/// `android.net` codecs unverifiable; it now returns the same set
+/// [`boot_classpath_dex_dirs`] describes.
 #[must_use]
 pub fn boot_dex() -> Option<&'static [acos_dex::DexFile]> {
     BOOT_DEX
         .get_or_init(|| {
-            let dir = crate::workspace_path(".cache/boot/android-34/dex/framework")?;
-            let dir = dir.as_path();
-            let mut paths: Vec<_> = std::fs::read_dir(dir)
-                .ok()?
-                .filter_map(|e| e.ok())
-                .map(|e| e.path())
-                .filter(|p| p.extension().map(|x| x == "dex").unwrap_or(false))
-                .collect();
-            paths.sort();
+            let dirs = boot_classpath_dex_dirs()?;
             let mut out = Vec::new();
-            for p in paths {
-                let bytes = std::fs::read(p).ok()?;
-                if let Ok(dex) = acos_dex::DexFile::parse(bytes) {
-                    out.push(dex);
+            for dir in dirs {
+                let mut paths: Vec<_> = std::fs::read_dir(&dir)
+                    .ok()?
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.path())
+                    .filter(|p| p.extension().map(|x| x == "dex").unwrap_or(false))
+                    .collect();
+                paths.sort();
+                for p in paths {
+                    let bytes = std::fs::read(p).ok()?;
+                    if let Ok(dex) = acos_dex::DexFile::parse(bytes) {
+                        out.push(dex);
+                    }
                 }
             }
             Some(out)
