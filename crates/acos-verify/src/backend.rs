@@ -46,6 +46,8 @@ pub enum Capability {
     Environment,
     /// Crash/ANR reports distinct from ordinary logs.
     CrashReports,
+    /// Service-module operations (`service_ctl`: attach/detach/control).
+    Services,
 }
 
 impl Capability {
@@ -61,6 +63,7 @@ impl Capability {
             Capability::Reset => "reset",
             Capability::Environment => "environment",
             Capability::CrashReports => "crash-reports",
+            Capability::Services => "services",
         }
     }
 }
@@ -101,6 +104,8 @@ pub struct Capabilities {
     pub environment: bool,
     /// Crash/ANR reports.
     pub crash_reports: bool,
+    /// Service-module operations (`service_ctl`).
+    pub services: bool,
 }
 
 impl Capabilities {
@@ -116,6 +121,7 @@ impl Capabilities {
             Capability::Reset => self.reset,
             Capability::Environment => self.environment,
             Capability::CrashReports => self.crash_reports,
+            Capability::Services => self.services,
         }
     }
 
@@ -131,6 +137,7 @@ impl Capabilities {
             Capability::Reset,
             Capability::Environment,
             Capability::CrashReports,
+            Capability::Services,
         ]
         .into_iter()
         .filter(|c| self.has(*c))
@@ -513,6 +520,53 @@ pub enum EnvironmentChange {
     Time(TimeSetup),
 }
 
+/// One `service_ctl` step's request, as the backend receives it.
+///
+/// The shape is the agent API's: `acos_services` for `attach`/`detach` and
+/// `acos_service_ctl` for a module's own control ops.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ServiceCtlRequest {
+    /// Module id (`sensors`).
+    pub module: String,
+    /// `attach`, `detach`, or a module control op (`set_value`, `play`).
+    pub op: String,
+    /// Profile for `attach`.
+    pub profile: Option<String>,
+    /// Module config for `attach`.
+    pub config: Option<serde_json::Value>,
+    /// Control-op arguments.
+    pub args: Option<serde_json::Value>,
+}
+
+impl ServiceCtlRequest {
+    /// Stable kind string (`attach`, `set_value`, ...).
+    #[must_use]
+    pub fn kind(&self) -> &str {
+        &self.op
+    }
+
+    /// The JSON command a serve-mode backend forwards.
+    #[must_use]
+    pub fn to_json(&self) -> serde_json::Value {
+        let mut request = serde_json::json!({
+            "op": if matches!(self.op.as_str(), "attach" | "detach") { self.op.clone() } else { "ctl".to_string() },
+            "id": self.module,
+        });
+        if self.op != "attach" && self.op != "detach" {
+            request["ctl_op"] = serde_json::json!(self.op);
+            request["args"] = self.args.clone().unwrap_or(serde_json::json!({}));
+            return request;
+        }
+        if let Some(profile) = &self.profile {
+            request["profile"] = serde_json::json!(profile);
+        }
+        if let Some(config) = &self.config {
+            request["config"] = config.clone();
+        }
+        request
+    }
+}
+
 impl EnvironmentChange {
     /// Stable kind string.
     pub const fn kind(&self) -> &'static str {
@@ -754,6 +808,23 @@ pub trait Backend {
         Err(BackendError::unsupported(
             Capability::Environment,
             format!("this backend cannot apply `{}`", change.kind()),
+        ))
+    }
+
+    /// One service-module operation (ADR-0029 item 4): attach/detach a module or
+    /// drive its scripted state. The default is a structured
+    /// `unsupported` — never a no-op that a scenario could read as a pass.
+    fn service_ctl(
+        &mut self,
+        request: &ServiceCtlRequest,
+    ) -> Result<serde_json::Value, BackendError> {
+        Err(BackendError::unsupported(
+            Capability::Services,
+            format!(
+                "this backend cannot run `{}.{}`",
+                request.module,
+                request.kind()
+            ),
         ))
     }
 

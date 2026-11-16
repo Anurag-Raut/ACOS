@@ -72,6 +72,7 @@ pub mod permissions; // MODNOTIF2: the one runtime-permission table
 pub mod pms;
 pub mod provider;
 pub mod registry;
+pub mod sensors; // MODSENS: native sensorservice (SensorManager/SensorEventConnection)
 pub mod surface_client;
 pub mod trace;
 pub mod value;

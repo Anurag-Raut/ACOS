@@ -813,6 +813,23 @@ impl ServiceHost {
             .expect("service object was just constructed"))
     }
 
+    /// The service object of a **dynamic** node, for a module that configures a
+    /// node another module (`core`) published.
+    ///
+    /// ADR-0029's `as_any_mut` seam is "the host configures a specific service".
+    /// `ensure` only walks the lazy `entries` table; a `raw_transact`-served node
+    /// (`android.gui.*`, e.g. `sensorservice`) lives in `dynamic`. The `sensors`
+    /// module takes the node `core` published and installs its feed into it, so
+    /// the binder an app already holds keeps working (a hot attach must not
+    /// invalidate a proxy).
+    pub fn dynamic_object_mut(
+        &mut self,
+        descriptor: &str,
+    ) -> Option<&mut (dyn ServiceObject + 'static)> {
+        let binder = self.binder_for_descriptor(descriptor)?;
+        self.dynamic.get_mut(&binder.0).map(Box::as_mut)
+    }
+
     /// The ATMS attach record, if the activity service has one (T-43 re-seed).
     #[must_use]
     pub fn attached_process(&mut self) -> Option<(u64, i64, String)> {

@@ -1077,6 +1077,38 @@
       },
       "type": "object"
     },
+    "ServiceCtlStep": {
+      "additionalProperties": false,
+      "description": "`service_ctl`: one service-module operation between assertions (ADR-0029 item 4).\n\n`op` is `attach` (with `profile`/`config`), `detach`, or one of the module's own control ops (`sensors.set_value`, `sensors.play`, ...). The step is the scenario spelling of `acos_services`/`acos_service_ctl`, so a scripted module can be driven mid-run: set a sensor value, assert the view, play a shake, detach and assert the honest empty answer.",
+      "properties": {
+        "args": {
+          "description": "Control-op arguments (`{sensor: \"accelerometer\", values: [0,0,9.81]}`)."
+        },
+        "config": {
+          "description": "Module config for `attach`."
+        },
+        "module": {
+          "description": "Module id (`sensors`, `feedback.vibrator`).",
+          "type": "string"
+        },
+        "op": {
+          "description": "`attach`, `detach`, or a module control op (`set_value`, `play`, ...).",
+          "type": "string"
+        },
+        "profile": {
+          "description": "Profile for `attach` (`off`/`stub`/`scripted`/`real`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "module",
+        "op"
+      ],
+      "type": "object"
+    },
     "ServiceRequest": {
       "additionalProperties": false,
       "description": "One `services:` entry (`{id, profile, config}`), the scenario spelling of a launch request (ADR-0029 item 4).",
@@ -1361,6 +1393,17 @@
             }
           ],
           "description": "Rotate the display."
+        },
+        "service_ctl": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ServiceCtlStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ADR-0029 item 4: one service-module operation in the middle of a run (`attach`/`detach` a module, or a module control op such as `sensors.set_value`).\n\nThis is the scenario spelling of `acos_services`/`acos_service_ctl`, so a scripted module can be driven between assertions instead of only at launch."
         },
         "set_density": {
           "anyOf": [

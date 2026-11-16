@@ -112,6 +112,27 @@ fn allow_fds_gates_writes() {
     assert!(!p.is_for_rpc());
 }
 
+/// `write_raw_bytes`/`read_raw_bytes` are the native-`Flattenable` seam: an
+/// exact byte count with no length word and no padding, which is what a
+/// `Parcel::write(Flattenable&)` payload needs (`Sensor::flatten` in
+/// `libs/sensor/Sensor.cpp` mixes 4-aligned `String8`s with a 1-byte `bool`, so
+/// its payload is not a multiple of four).
+#[test]
+fn raw_bytes_are_exact_and_unpadded() {
+    let mut p = Parcel::new();
+    p.write_int32(7);
+    p.write_raw_bytes(&[0xAA, 0xBB, 0xCC]); // 3 bytes: no pad, no length word
+    p.write_int32(0x1122_3344);
+    assert_eq!(p.data_size(), 4 + 3 + 4);
+
+    p.set_data_position(0);
+    assert_eq!(p.read_int32().unwrap(), 7);
+    assert_eq!(p.read_raw_bytes(3).unwrap(), vec![0xAA, 0xBB, 0xCC]);
+    assert_eq!(p.read_int32().unwrap(), 0x1122_3344);
+    assert_eq!(p.data_avail(), 0);
+    assert!(p.read_raw_bytes(1).is_err(), "a short read is an error, not zeros");
+}
+
 #[test]
 fn scalar_and_array_round_trips() {
     let mut p = Parcel::new();

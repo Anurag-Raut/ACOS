@@ -17,6 +17,7 @@
 #   fixtures/build/apps/svg-viewbox.apk
 #   fixtures/build/apps/offscreen-pager.apk
 #   fixtures/build/apps/insets-probe.apk
+#   fixtures/build/apps/sensor-probe.apk   (MODSENS: native sensorservice feed)
 # Installation on a device is attempted only if one is already attached; no
 # emulator is ever started here.
 set -euo pipefail
@@ -213,7 +214,7 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # offscreen-pager is the tree-visibility fixture (GR2 W4): a two-page
 # HorizontalScrollView whose second page is warm-mounted one display width off
 # screen, with text that must be reported `visible:false` until you scroll.
-for app in counter todo-list multi-activity form-validation settle-lab thread-heavy svg-viewbox offscreen-pager; do
+for app in counter todo-list multi-activity form-validation settle-lab thread-heavy svg-viewbox offscreen-pager sensor-probe; do
     build_apk "$app"
 done
 

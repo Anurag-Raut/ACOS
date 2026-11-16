@@ -1,0 +1,31 @@
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:656:7
+    |
+656 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-services` (lib) generated 1 warning
+    Finished `test` profile [unoptimized] target(s) in 0.03s
+     Running tests/sensors_module.rs (.cache/modules-target/debug/deps/sensors_module-67a6345350c1fed5)
+
+running 15 tests
+test a_step_counter_event_carries_a_u64_not_a_float ... ok
+test quiet_kit_child ... ok
+test the_event_packet_is_the_image_s_asensor_event ... ok
+test the_off_state_is_the_stock_device_without_sensors ... ok
+test there_is_no_real_profile_and_the_report_is_honest ... ok
+test flush_delivers_the_flush_complete_meta_event ... ok
+test stub_refuses_every_scripted_control ... ok
+test the_scripted_list_is_the_framework_sensor_table ... ok
+test a_scripted_value_arrives_over_the_real_event_channel_at_the_requested_rate ... ok
+test detach_returns_the_honest_empty_sensor_list ... ok
+test the_launch_config_selects_sensors_and_values ... ok
+test the_sensors_module_passes_the_conformance_kit ... ok
+test an_on_change_sensor_reports_on_change_only ... ok
+test disabling_stops_the_stream_and_destroy_ends_the_connection ... ok
+test play_delivers_the_timeline_and_shake_alternates ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
