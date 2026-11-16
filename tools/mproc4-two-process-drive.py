@@ -69,6 +69,13 @@ STEP3B = {
     "second-process-is-proc-b",
     "proc-b-resumed-in-its-own-process",
     "process-table-still-has-b",
+    # MPROC5 step 1: the top-of-task rule. These were OPEN_3C while nothing
+    # paused proc-a; the host now delivers PauseActivityItem+StopActivityItem to
+    # A's own IApplicationThread and the served tree comes from the top
+    # process's probe sample, so they are part of the gate.
+    "proc-b-window-on-top",
+    "proc-a-paused-or-stopped-under-b",
+    "back-from-b-returns-to-a",
 }
 
 
