@@ -55,6 +55,9 @@ steps:
   # old tree read TextView.getText() (the characters) where
   # AccessibilityNodeInfo carries the mask.
   - assert_text: {selector: {content_desc: {exact: "WaniKani personal access token"}}, text: {regex: "^[\u2022*]{16}$"}}
+  # v0.3.0 (REL3I): the keyboard is a real bound IME, so the first Back hides
+  # the soft input (as on a phone) and the second Back leaves the screen.
+  - back: {}
   - back: {}
   - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
   - capture: {name: lesson-back-home, format: png, fresh: true}
