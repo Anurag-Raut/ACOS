@@ -911,8 +911,8 @@ impl AtmsState {
 
     /// ROT8b: does the host ATMS prove the task is finished?
     ///
-    /// True only when no activity record is live (every record is
-    /// `Destroyed`/`Uncreated`), no `startActivity` is pending (AMS
+    /// True only when no activity record is live (every record is finished or
+    /// `Destroyed`), no `startActivity` is pending (AMS
     /// `pending_launches` is empty: a `finish()` + `startActivity(Home)` leaves
     /// Home's launch queued here until the guest materialises it), and no
     /// record is unnamed (a record with no class cannot be judged, so the
@@ -925,7 +925,13 @@ impl AtmsState {
         }
         self.activities
             .iter()
-            .all(|a| !a.activity.is_empty() && !a.lifecycle.is_alive())
+            .all(|a| {
+                // `finished` (the framework's finishActivity) or a reported
+                // destroy ends a record; anything else, including a record that
+                // never left `Uncreated`, is treated as live (fail closed).
+                !a.activity.is_empty()
+                    && (a.finished || a.lifecycle == ActivityLifecycle::Destroyed)
+            })
     }
 
     /// The lifecycle state of an activity.

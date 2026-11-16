@@ -52,9 +52,6 @@ fn pending_start_blocks_the_proof_even_with_every_record_destroyed() {
         .start_activity(&IntentFacts::explicit(PACKAGE, SECOND), 0, 0, 0)
         .unwrap();
     atms.finish_activity(main).unwrap();
-    atms.activity_paused(main).unwrap();
-    atms.activity_stopped(main, None).unwrap();
-    atms.activity_destroyed(main).unwrap();
     assert!(
         !atms.task_finished_proof(),
         "a pending start means the task is not finished"
@@ -73,15 +70,12 @@ fn all_records_destroyed_and_nothing_pending_is_finished() {
     let main = GUEST_TAG | 1;
     atms.activity_resumed(main, true).unwrap();
     atms.finish_activity(main).unwrap();
-    atms.activity_paused(main).unwrap();
-    atms.activity_stopped(main, None).unwrap();
-    atms.activity_destroyed(main).unwrap();
     assert!(atms.task_finished_proof());
 }
 
 #[test]
 fn an_unnamed_record_fails_closed() {
     let mut atms = seeded();
-    atms.ensure_activity(GUEST_TAG | 9, "");
+    atms.ensure_activity(GUEST_TAG | 9, "").finished = true;
     assert!(!atms.task_finished_proof(), "a record with no class is not judged finished");
 }
