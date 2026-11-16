@@ -42,6 +42,16 @@
 //      memory to two live transactions.
 //   8. a session with many registrations (more listeners than one page of the
 //      node table) still reaches every one of them.
+//   9. `BC_FREE_BUFFER` returns the buffer to the allocator (the next
+//      transaction that fits reuses it).
+//  10. a long session does not exhaust the 1 MB transaction-buffer map: 4000
+//      registration-shaped rounds (a delivered buffer + a reply buffer, both
+//      freed) stay inside it. Before this, the bump pointer only moved forward
+//      and a session with 100 callbacks dropped every later transaction.
+//  11. the host's last reference releases the node: `BR_RELEASE` +
+//      `BR_DECREFS` for that object, `DEAD_OBJECT` for a later transaction to
+//      the wire, and a new node (rooted again) when the object is exported
+//      again (`F_REF` -> the kernel's `binder_dec_node`).
 //
 // Every check prints `ok N - name` or `not ok N - name: detail`; the last line
 // is `RESULT failures=<n>`.
@@ -165,6 +175,12 @@ static void* peer_main(void* arg) {
         }
     }
     return NULL;
+}
+
+// One F_REF frame: the host took (`REF_ACQUIRE`) or dropped (`REF_RELEASE`) a
+// strong reference on the node behind `wire`.
+static int peer_ref(uint32_t wire, uint32_t op) {
+    return peer_write_frame(F_REF, 0, op, 0, (uint64_t)wire, NULL, 0, NULL, 0);
 }
 
 // The host side of a callback: one F_TXN frame addressed at `wire`.
@@ -752,6 +768,79 @@ int main(void) {
                  high_water, g.map_size);
         check(failed == 0 && high_water <= start + 8192,
               "4000 transaction rounds reuse the 1 MB transaction-buffer map", detail);
+    }
+
+    // 11. the host's last reference releases the node: the guest is told to
+    //     drop its object (BR_RELEASE + BR_DECREFS), the wire stops naming
+    //     anything (a transaction to it answers DEAD_OBJECT instead of reaching
+    //     a stale object), and a re-export creates a fresh node and roots the
+    //     object that carries it then. This is the kernel's reference model:
+    //     `binder_dec_node` -> BINDER_WORK_NODE -> BR_RELEASE/BR_DECREFS.
+    {
+        static int rel_wref, rel_bb;
+        uint32_t rel_wire = 0;
+        guest_transact_with_binder(fd, (uint64_t)(uintptr_t)&rel_wref,
+                                   (uint64_t)(uintptr_t)&rel_bb, &rel_wire);
+        seen_flush(0);
+        msleep(50);
+        peer_txn(rel_wire, 400, 400);
+        wait_for_txns(1, 3000);
+        free_all_txn_buffers();
+        int delivered_before = seen_flush(BR_TRANSACTION);
+
+        peer_ref(rel_wire, REF_RELEASE);
+        int released = 0;
+        for (int waited = 0; waited < 3000 && !released; waited += 10) {
+            if (seen_count(BR_RELEASE) > 0 && seen_count(BR_DECREFS) > 0) released = 1;
+            else msleep(10);
+        }
+        struct seen rel[8], dec[8];
+        int nrel = seen_copy(BR_RELEASE, rel, 8);
+        int ndec = seen_copy(BR_DECREFS, dec, 8);
+        int addressed_back = nrel == 1 && ndec == 1 &&
+                             rel[0].ptr == (uint64_t)(uintptr_t)&rel_wref &&
+                             rel[0].cookie == (uint64_t)(uintptr_t)&rel_bb &&
+                             dec[0].ptr == rel[0].ptr && dec[0].cookie == rel[0].cookie;
+        snprintf(detail, sizeof(detail),
+                 "delivered_before=%d BR_RELEASE=%d BR_DECREFS=%d addressed=%d",
+                 delivered_before, nrel, ndec, addressed_back);
+        check(released && addressed_back,
+              "the host's last reference sends BR_RELEASE + BR_DECREFS for that node", detail);
+        seen_flush(0);
+
+        // The released wire must not reach the (now unrooted) object any more.
+        uint32_t dead_before = g_peer.dead_replies;
+        peer_txn(rel_wire, 401, 401);
+        int dead = 0;
+        for (int waited = 0; waited < 3000; waited += 10) {
+            if (g_peer.dead_replies > dead_before) {
+                dead = 1;
+                break;
+            }
+            msleep(10);
+        }
+        snprintf(detail, sizeof(detail), "dead_object replies +%u",
+                 g_peer.dead_replies - dead_before);
+        check(dead, "a transaction to a released node answers DEAD_OBJECT", detail);
+        seen_flush(0);
+
+        // Re-exporting the same object after the release is a *new* node: the
+        // wire handle must not be reused for a different object, and the object
+        // must be rooted again.
+        uint32_t rel_wire2 = 0;
+        guest_transact_with_binder(fd, (uint64_t)(uintptr_t)&rel_wref,
+                                   (uint64_t)(uintptr_t)&rel_bb, &rel_wire2);
+        int rerooted = seen_count(BR_ACQUIRE) == 1;
+        snprintf(detail, sizeof(detail), "wire=%u -> %u, re-rooted=%d", rel_wire, rel_wire2,
+                 rerooted);
+        check(rel_wire2 != 0 && rel_wire2 != rel_wire && rerooted,
+              "a released object that is exported again gets a new node and is rooted", detail);
+        peer_txn(rel_wire2, 402, 402);
+        got = wait_for_txns(1, 3000);
+        snprintf(detail, sizeof(detail), "delivered=%d", got);
+        check(got == 1, "the re-exported node receives callbacks", detail);
+        free_all_txn_buffers();
+        seen_flush(0);
     }
 
     // ---- teardown ----------------------------------------------------------

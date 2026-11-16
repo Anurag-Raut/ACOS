@@ -1,8 +1,8 @@
 //! The peer acceptance tests: a `Frame` in, `Frame`s out, no socket needed.
 
 use acos_binder_peer::{
-    frame_from_parcel, import_parcel, Frame, Peer, F_REQ, F_RSP, F_TXN, JAVA_TAG, NODE_TAG,
-    TF_ONE_WAY,
+    frame_from_parcel, import_parcel, Frame, Peer, F_HELLO, F_REF, F_REQ, F_RSP, F_TXN, JAVA_TAG,
+    NODE_TAG, PROTOCOL_VERSION, REF_RELEASE, TF_ONE_WAY,
 };
 use acos_parcel::{BinderId, Parcel};
 use acos_services::codec;
@@ -501,4 +501,69 @@ fn wire_form_round_trips_a_null_binder_and_a_real_one() {
         assert_eq!(back.read_int32().expect("int after the binder"), 42);
         assert_eq!(back.data_avail(), 0);
     }
+}
+
+/// The reference model, host side: a registration is a strong reference on a
+/// guest binder, and dropping the last one is a message to the driver (`F_REF`
+/// release) -- never a silent leak of a node that nobody references any more.
+#[test]
+fn a_dropped_registration_releases_the_guest_node_over_the_wire() {
+    let mut peer = Peer::new();
+    // The handshake decides whether the driver can be told at all.
+    let out = peer.handle(Frame::plain(
+        F_HELLO,
+        PROTOCOL_VERSION,
+        0,
+        0,
+        0,
+        Vec::new(),
+    ));
+    assert!(out.is_empty(), "hello is answered with nothing");
+    assert_eq!(peer.driver_protocol(), Some(PROTOCOL_VERSION));
+
+    let id = java(0x99);
+    peer.host_mut()
+        .binder_registry()
+        .register_at(id.0, "test.listener", acos_parcel::BinderKind::Local);
+    assert_eq!(peer.retain_binder(id), 1, "a registration takes one reference");
+    assert_eq!(peer.retain_binder(id), 2);
+    assert_eq!(peer.release_binder(id), 1);
+    // Still referenced: nothing to tell the driver.
+    let ping = Frame::plain(F_REQ, 7, acos_binder_peer::PING_TRANSACTION, 0, 0, Vec::new());
+    let out = peer.handle(ping.clone());
+    assert!(
+        !out.iter().any(|f| f.ty == F_REF),
+        "a binder that is still registered must not be released"
+    );
+
+    assert_eq!(peer.release_binder(id), 0);
+    let out = peer.handle(ping);
+    let refs: Vec<&Frame> = out.iter().filter(|f| f.ty == F_REF).collect();
+    assert_eq!(refs.len(), 1, "the last reference release is one F_REF frame");
+    assert_eq!(refs[0].code, REF_RELEASE);
+    assert_eq!(refs[0].target, 0x99, "the driver sees its own wire handle");
+    assert_eq!(peer.held_refs_of(id), 0);
+}
+
+/// An older driver (no `F_HELLO`) must never receive `F_REF`: the frame would
+/// be answered with "unexpected frame type" and the release would look like a
+/// driver bug. The peer keeps the node alive for the session instead, and counts
+/// what it suppressed.
+#[test]
+fn a_driver_without_the_handshake_never_gets_a_reference_frame() {
+    let mut peer = Peer::new();
+    assert_eq!(peer.driver_protocol(), None);
+    let id = java(0x42);
+    peer.host_mut()
+        .binder_registry()
+        .register_at(id.0, "test.listener", acos_parcel::BinderKind::Local);
+    assert_eq!(peer.retain_binder(id), 1);
+    assert_eq!(peer.release_binder(id), 0);
+    let ping = Frame::plain(F_REQ, 9, acos_binder_peer::PING_TRANSACTION, 0, 0, Vec::new());
+    let out = peer.handle(ping);
+    assert!(
+        !out.iter().any(|f| f.ty == F_REF),
+        "an old driver must not be sent a frame it does not know"
+    );
+    assert_eq!(peer.ref_frames_suppressed(), 1);
 }

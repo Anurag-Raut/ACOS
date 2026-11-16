@@ -14,8 +14,11 @@
 //! is gone answers `DEAD_OBJECT` instead of being dropped silently, a node whose
 //! object was re-created (a Java `Binder` only keeps a *weak* pointer to its
 //! `JavaBBinder`) follows the object that is registered now, the shared
-//! transaction-buffer heap never hands one live transaction's memory to another,
-//! and a session with many registered callbacks reaches every one of them.
+//! transaction-buffer heap never hands one live transaction's memory to another
+//! and returns freed space to the next transaction, a session with many
+//! registered callbacks reaches every one of them, and the host's last
+//! reference on a node releases it (`BR_RELEASE` + `BR_DECREFS`, `DEAD_OBJECT`
+//! afterwards, a fresh node when the object is exported again).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -89,8 +92,8 @@ fn driver_delivers_callbacks_and_answers_dead_nodes() {
     // Guard against a harness that reports success without running its checks.
     let checks = stdout.lines().filter(|line| line.starts_with("ok ")).count();
     assert!(
-        checks >= 12,
-        "driver test ran {checks} checks, expected at least 12:\n{stdout}"
+        checks >= 18,
+        "driver test ran {checks} checks, expected at least 18:\n{stdout}"
     );
     assert!(
         stdout.lines().any(|line| line == "RESULT failures=0"),

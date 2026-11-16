@@ -288,7 +288,14 @@ __attribute__((constructor)) static void e3g_load_runtime(void) {
 }
 
 // ------------------------------------------------------------- (3) transport
-enum { F_REQ = 1, F_RSP = 2, F_TXN = 3, F_REP = 4 };
+// Wire protocol (see crates/acos-binder-peer/src/protocol.rs). F_HELLO is sent
+// once by the driver right after it connects: `seq` = protocol version, `code` =
+// capability bits. F_REF is the peer's reference-count operation on a node the
+// guest exported (the `F_REL`-style message: without it a node lives for the
+// whole session even after the host dropped its last reference).
+enum { F_REQ = 1, F_RSP = 2, F_TXN = 3, F_REP = 4, F_HELLO = 5, F_REF = 6 };
+enum { REF_ACQUIRE = 1, REF_RELEASE = 2 };
+#define ACOS_WIRE_VERSION 2
 
 struct fhdr {
     uint32_t type;
@@ -337,6 +344,28 @@ struct node {          // a local binder node we exported
     uint64_t binder;   // obj.binder == weakref ptr
     uint64_t cookie;   // obj.cookie == BBinder*
     uint32_t wire;     // handle number used on the wire
+    // References to this node that the *remote* side holds, as reported by
+    // F_REF. The kernel keeps the same two counters per node
+    // (`internal_strong_refs` / `local_strong_refs`) and drops the node when the
+    // last one goes away, sending BR_RELEASE + BR_DECREFS to the owner in the
+    // process of doing it (`binder_dec_node` -> BINDER_WORK_NODE). The
+    // transaction that first carried the object transfers one reference, so a
+    // fresh node starts at one.
+    int strong;
+    // Set while the guest object is rooted by us (BR_INCREFS + BR_ACQUIRE
+    // handed out) and the release commands have not been queued yet.
+    int rooted;
+};
+
+// A BR_RELEASE + BR_DECREFS pair owed to the guest for a node whose last
+// reference the host dropped. Node work belongs to the *process*, not to a
+// thread (the kernel queues it on `proc->todo`), so whichever thread next reads
+// from the driver delivers it: the object's owner is the process that exported
+// it, and any of its threads can run the deref.
+struct nodework {
+    uint64_t binder;
+    uint64_t cookie;
+    uint32_t wire;
 };
 
 struct handle {        // a handle to a peer node
@@ -355,6 +384,10 @@ struct drv {
     pthread_cond_t cv_txn;   // incoming transaction queued
     pthread_cond_t cv_rsp;   // any reply slot filled
     struct inq *in_head, *in_tail;
+    // BR_RELEASE + BR_DECREFS owed to the guest: node work is per process (the
+    // kernel queues it on `proc->todo`), so any reading thread delivers it.
+    struct nodework node_work[256];
+    int n_node_work;
     struct slot slots[E3G_MAX_SLOT];
     struct node nodes[E3G_MAX_NODE];
     int n_nodes;
@@ -382,6 +415,10 @@ static struct drv g;
 // get wrong: they are always taken and released inside one function.
 static pthread_mutex_t g_obj_mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t g_slab_mu = PTHREAD_MUTEX_INITIALIZER;
+// Set while node work (BR_RELEASE/BR_DECREFS) is queued, so a looper thread
+// that is parked waiting for an incoming transaction still wakes up for it: the
+// kernel's `binder_wakeup_proc_ilocked` does the same for BINDER_WORK_NODE.
+static volatile int g_node_pending;
 
 struct tstate {
     int is_looper;
@@ -451,6 +488,26 @@ static void node_ref_cmds(uint64_t weakref, uint64_t cookie) {
           (unsigned long long)cookie);
 }
 
+// The kernel's last-release half of the same handshake: BR_RELEASE makes
+// libbinder drop the strong reference it took for BR_ACQUIRE (`decStrong`), and
+// BR_DECREFS drops the weak one. libbinder queues both until its next write
+// (`mPendingStrongDerefs`/`mPendingWeakDerefs`), so a node that is released and
+// immediately re-exported still sees the release before the new acquire.
+static void node_unref_cmds(uint64_t weakref, uint64_t cookie) {
+    struct binder_ptr_cookie pc;
+    pc.ptr = (binder_uintptr_t)weakref;
+    pc.cookie = (binder_uintptr_t)cookie;
+    uint32_t cmd = BR_RELEASE;
+    pend_append(&cmd, 4);
+    pend_append(&pc, sizeof(pc));
+    cmd = BR_DECREFS;
+    pend_append(&cmd, 4);
+    pend_append(&pc, sizeof(pc));
+    TRACE("tid=%d node unref: BR_RELEASE+BR_DECREFS weakref=%llx cookie=%llx",
+          (int)syscall(__NR_gettid), (unsigned long long)weakref,
+          (unsigned long long)cookie);
+}
+
 // ----------------------------------------------------------- (2) object table
 static uint32_t node_wire_for(uint64_t binder, uint64_t cookie) {
     // libbinder dispatches with `cookie` (the BBinder*), so that is the
@@ -483,6 +540,7 @@ static uint32_t node_wire_for(uint64_t binder, uint64_t cookie) {
                      (unsigned long long)n->binder, (unsigned long long)binder);
                 n->binder = binder;
                 n->cookie = cookie;
+                n->rooted = 1;
                 node_ref_cmds(binder, cookie);
             }
             uint32_t wire = g.nodes[i].wire;
@@ -498,6 +556,8 @@ static uint32_t node_wire_for(uint64_t binder, uint64_t cookie) {
     n->binder = binder;
     n->cookie = cookie;
     n->wire = g.next_wire++;
+    n->strong = 1;   // the transaction that carries the object transfers one ref
+    n->rooted = 1;
     uint32_t wire = n->wire;
     pthread_mutex_unlock(&g_obj_mu);
     TRACE("tid=%d node: local binder=%llx cookie=%llx -> wire=%u (nodes=%d)",
@@ -512,6 +572,68 @@ static uint32_t node_wire_for(uint64_t binder, uint64_t cookie) {
 // another thread can refresh the node (see `node_wire_for`) between the lookup
 // and the delivery, and a delivery must use the object that is current when it
 // is built.
+// One F_REF operation from the host: the remote side took (`REF_ACQUIRE`) or
+// dropped (`REF_RELEASE`) a strong reference on the node behind `wire`. On the
+// last drop the node is released exactly like the kernel releases one: the
+// owner is told to drop its object (`BR_RELEASE` + `BR_DECREFS`) and the node's
+// wire handle stops naming anything, so a transaction that is already in flight
+// answers DEAD_OBJECT instead of reaching a stale object, and a later
+// re-export creates a fresh node and roots the object that carries it then.
+static void node_apply_ref(uint32_t wire, uint32_t op) {
+    struct nodework work;
+    int have_work = 0;
+    pthread_mutex_lock(&g_obj_mu);
+    for (int i = 0; i < g.n_nodes; i++) {
+        struct node* n = &g.nodes[i];
+        if (n->wire != wire) continue;
+        if (op == REF_ACQUIRE) {
+            n->strong++;
+        } else if (op == REF_RELEASE) {
+            if (n->strong > 0) n->strong--;
+            if (n->strong == 0 && n->rooted) {
+                work.binder = n->binder;
+                work.cookie = n->cookie;
+                work.wire = n->wire;
+                have_work = 1;
+                n->rooted = 0;
+                // Drop the node: the wire no longer names an object.
+                g.nodes[i] = g.nodes[--g.n_nodes];
+            }
+        }
+        break;
+    }
+    if (have_work && g.n_node_work < (int)(sizeof(g.node_work) / sizeof(g.node_work[0])))
+        g.node_work[g.n_node_work++] = work;
+    else if (have_work)
+        WARN("node release queue full (%d entries); wire %u not unrooted",
+             g.n_node_work, wire);
+    pthread_mutex_unlock(&g_obj_mu);
+    if (have_work) {
+        TRACE("tid=%d node release wire=%u weakref=%llx cookie=%llx", (int)syscall(__NR_gettid),
+              work.wire, (unsigned long long)work.binder, (unsigned long long)work.cookie);
+        // Wake a parked reader (the looper that owns the object).
+        g_node_pending = 1;
+        pthread_mutex_lock(&g.mu);
+        pthread_cond_broadcast(&g.cv_txn);
+        pthread_mutex_unlock(&g.mu);
+    }
+}
+
+// Move every owed BR_RELEASE/BR_DECREFS into this thread's pending output.
+static void drain_node_work(void) {
+    struct nodework local[256];
+    int n = 0;
+    pthread_mutex_lock(&g_obj_mu);
+    n = g.n_node_work;
+    if (n > 0) {
+        memcpy(local, g.node_work, sizeof(local[0]) * (size_t)n);
+        g.n_node_work = 0;
+        g_node_pending = 0;
+    }
+    pthread_mutex_unlock(&g_obj_mu);
+    for (int i = 0; i < n; i++) node_unref_cmds(local[i].binder, local[i].cookie);
+}
+
 static int node_for_wire(uint32_t wire, struct node* out) {
     int found = 0;
     pthread_mutex_lock(&g_obj_mu);
@@ -984,6 +1106,18 @@ static void dispatch_frame(uint32_t type, struct fhdr* h, uint8_t* payload, int*
             pthread_cond_broadcast(&g.cv_txn);
             break;
         }
+        case F_REF:
+            // `target` is the driver wire handle, `code` the operation.
+            pthread_mutex_unlock(&g.mu);
+            node_apply_ref((uint32_t)h->target, h->code);
+            pthread_mutex_lock(&g.mu);
+            break;
+        case F_HELLO:
+            // The peer answered our hello; the version negotiation happened at
+            // connect time (see connect_peer), so this is informational.
+            WARN("unexpected hello from peer (version %u, driver speaks %d)", h->seq,
+                 ACOS_WIRE_VERSION);
+            break;
         default:
             WARN("unexpected frame type %u", type);
             break;
@@ -1012,6 +1146,16 @@ static int connect_peer(void) {
         return -1;
     }
     g.sock = s;
+    // Version handshake before any other frame: the peer must not send an
+    // `F_REF` (or use any later frame meaning) to a driver that does not speak
+    // it, and this driver refuses to guess what an older peer means either.
+    if (send_frame(F_HELLO, ACOS_WIRE_VERSION, 0 /* caps */, 0, 0, NULL, 0, NULL, 0, NULL, 0) != 0) {
+        WARN("hello to peer failed; the connection is unusable");
+        close(s);
+        g.sock = -1;
+        return -1;
+    }
+    TRACE("tid=%d hello: wire protocol v%d", (int)syscall(__NR_gettid), ACOS_WIRE_VERSION);
     pthread_create(&g.reader, NULL, reader_main, NULL);
     g.reader_started = 1;
     DBG("connected to peer at %s", path);
@@ -1551,6 +1695,10 @@ static int e3g_write_read(struct binder_write_read* bwr) {
     }
     if (bwr->read_size == 0) return 0;
 
+    // Node work comes first, like `binder_thread_read` (which serves
+    // `proc->todo` node work before it parks the thread): a released node's
+    // BR_RELEASE/BR_DECREFS must reach the guest even if nothing else happens.
+    drain_node_work();
     if (T.pend_len) {
         flush_pend(bwr);
         return 0;
@@ -1607,8 +1755,15 @@ static int e3g_write_read(struct binder_write_read* bwr) {
     // an F_TXN frame is queued, so an untimed wait cannot miss it and adds no
     // latency; process teardown ends the thread. Non-loopers already returned
     // above and never park here.
-    while (g.in_head == NULL) {
+    while (g.in_head == NULL && !g_node_pending) {
         pthread_cond_wait(&g.cv_txn, &g.mu);
+    }
+    if (g.in_head == NULL) {
+        // Only node work woke us: hand the release commands out and park again.
+        pthread_mutex_unlock(&g.mu);
+        drain_node_work();
+        if (T.pend_len) flush_pend(bwr);
+        return 0;
     }
     // Peer-initiated transactions are delivered only to a thread that has
     // entered the binder looper.  A thread that is merely transacting must

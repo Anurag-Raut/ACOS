@@ -316,10 +316,16 @@ def main():
                 failures.append(
                     f"only {dispatched} of {expected} registered PhoneStateListeners were "
                     "dispatched the scripted ringing event (logd count)")
-            if after - before < expected:
+            # The per-line UI count is a *lower bound* once the app's log view
+            # holds more lines than the tree dumper emits for one TextView (a
+            # single `TextView` is capped: at 101 listeners the dump carries 82
+            # of the 202 CALL lines). The authoritative UI-visible number is the
+            # `CALLTOTAL` line the app prints from its own counter.
+            evidence["ui_ringing_lines"] = after - before
+            if after - before > expected:
                 failures.append(
-                    f"only {after - before} of {expected} registered PhoneStateListeners "
-                    "printed the scripted ringing event (UI text count)")
+                    f"{after - before} ringing lines for {expected} listeners (duplicate "
+                    "delivery?)")
         else:
             if after != before:
                 failures.append(

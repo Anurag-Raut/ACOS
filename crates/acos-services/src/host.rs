@@ -126,6 +126,23 @@ pub trait ServiceObject: Send {
     fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
         Vec::new()
     }
+
+    /// Binders a `raw_transact` handler started holding a strong reference to
+    /// during this call (a registered callback, a stored `IIntentReceiver`, ...).
+    ///
+    /// A registration *is* a reference: the framework's `Parcel` took one when
+    /// the binder was flattened, and the service that stored the handle owns it
+    /// until it drops the registration. Reporting it here is what lets the host
+    /// keep the guest's node alive for as long as the registration exists and
+    /// release it (→ `BR_RELEASE` + `BR_DECREFS`) when it does not.
+    fn drain_raw_retained(&mut self) -> Vec<BinderId> {
+        Vec::new()
+    }
+
+    /// Binders the handler dropped its registration (strong reference) for.
+    fn drain_raw_released(&mut self) -> Vec<BinderId> {
+        Vec::new()
+    }
 }
 
 /// Wiring handed to a lazily-constructed service.
@@ -194,6 +211,14 @@ pub struct ServiceHost {
     /// `query` hands back), keyed by binder id.
     dynamic: HashMap<u64, Box<dyn ServiceObject>>,
     deliveries: Vec<PendingDelivery>,
+    /// Host-held strong references per binder: one per live registration
+    /// (telephony listener, `IIntentReceiver`, `IAccessibilityManagerClient`,
+    /// PendingIntent sender, ...). The count is what the peer reports to the
+    /// driver as `F_REF`, so a node exists exactly while the host references it.
+    refs: HashMap<u64, u32>,
+    /// Binders whose last host reference was dropped and that the peer still has
+    /// to tell the driver about (`F_REF` release).
+    released_binders: Vec<BinderId>,
     trace: Option<Box<dyn TraceSink>>,
     seq: AtomicU64,
     constructions: u64,
@@ -236,6 +261,8 @@ impl ServiceHost {
             aux: HashMap::new(),
             dynamic: HashMap::new(),
             deliveries: Vec::new(),
+            refs: HashMap::new(),
+            released_binders: Vec::new(),
             trace: None,
             seq: AtomicU64::new(1),
             constructions: 0,
@@ -748,6 +775,52 @@ impl ServiceHost {
         self.deliveries.push(delivery);
     }
 
+    /// Take one strong reference on `id` (a service stored the binder).
+    ///
+    /// Returns the new count. An id that is not registered is refused (`0`):
+    /// a reference to a handle the host does not know would be a reference to
+    /// nothing, and the driver would have no node to keep alive.
+    pub fn retain_binder(&mut self, id: BinderId) -> u32 {
+        if !self.registry.contains(id) {
+            return 0;
+        }
+        let count = self.refs.entry(id.0).or_insert(0);
+        *count = count.saturating_add(1);
+        *count
+    }
+
+    /// Drop one strong reference. At zero the binder is queued for release, so
+    /// the peer tells the driver to unroot the node (`F_REF` release →
+    /// `BR_RELEASE` + `BR_DECREFS`). Returns the remaining count.
+    pub fn release_binder(&mut self, id: BinderId) -> u32 {
+        let remaining = match self.refs.get_mut(&id.0) {
+            Some(count) => {
+                *count = count.saturating_sub(1);
+                *count
+            }
+            None => 0,
+        };
+        if remaining == 0 {
+            self.refs.remove(&id.0);
+            if !self.released_binders.contains(&id) {
+                self.released_binders.push(id);
+            }
+        }
+        remaining
+    }
+
+    /// Host-held reference count of `id` (diagnostics and tests).
+    #[must_use]
+    pub fn held_refs(&self, id: BinderId) -> u32 {
+        self.refs.get(&id.0).copied().unwrap_or(0)
+    }
+
+    /// Binders whose last host reference was dropped since the last call.
+    #[must_use]
+    pub fn take_released_binders(&mut self) -> Vec<BinderId> {
+        std::mem::take(&mut self.released_binders)
+    }
+
     /// Deliver a broadcast the **host** originates (a module's control op).
     ///
     /// Goes through the session's own `IActivityManager` state, so the same
@@ -912,10 +985,18 @@ impl ServiceHost {
             let handled = object.raw_transact(&descriptor, code, data, reply)?;
             let finished = object.finished();
             let mut raw_deliveries = object.drain_raw_deliveries();
+            let mut raw_retained = object.drain_raw_retained();
+            let mut raw_released = object.drain_raw_released();
             if finished {
                 self.dynamic.remove(&binder.0);
             }
             self.deliveries.append(&mut raw_deliveries);
+            for id in raw_retained.drain(..) {
+                self.retain_binder(id);
+            }
+            for id in raw_released.drain(..) {
+                self.release_binder(id);
+            }
             if !handled {
                 return Err(ServiceError::UnsupportedAndroidApi {
                     interface: descriptor,

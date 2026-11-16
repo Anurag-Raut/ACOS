@@ -50,6 +50,8 @@ use std::sync::{Arc, Mutex};
 
 use serde_json::{json, Value};
 
+use acos_parcel::BinderId;
+
 use crate::ams::IntentFacts;
 use crate::error::{Result, ServiceError};
 use crate::exception::write_no_exception;
@@ -594,6 +596,13 @@ impl ServiceObject for PhoneSubInfoService {
 struct TelephonyRegistryService {
     state: Arc<Mutex<TelephonyState>>,
     queued: Vec<PendingDelivery>,
+    /// Callbacks this service started holding a strong reference to (one per
+    /// live registration) and callbacks it dropped. A registration *is* a
+    /// reference: the host keeps the guest's node alive while it exists, and
+    /// releasing it is what tells the driver to unroot the node
+    /// (`F_REF` release -> `BR_RELEASE` + `BR_DECREFS`).
+    retained: Vec<BinderId>,
+    released: Vec<BinderId>,
 }
 
 impl TelephonyRegistryService {
@@ -658,12 +667,24 @@ impl ServiceObject for TelephonyRegistryService {
                 let (call_state, number) = {
                     let mut state = state_of(&self.state);
                     if binder != 0 {
+                        // `LISTEN_NONE` (an empty event list) is the unregister
+                        // path: the registration goes away, and so does the
+                        // reference the host held for it.
+                        let previous = state.listeners.iter().any(|l| l.binder == binder);
                         state.listeners.retain(|listener| listener.binder != binder);
-                        state.listeners.push(StateListener {
-                            binder,
-                            events: events.clone(),
-                            package,
-                        });
+                        if previous {
+                            self.released.push(BinderId(binder));
+                        }
+                        if events.is_empty() {
+                            self.released.push(BinderId(binder));
+                        } else {
+                            state.listeners.push(StateListener {
+                                binder,
+                                events: events.clone(),
+                                package,
+                            });
+                            self.retained.push(BinderId(binder));
+                        }
                     }
                     (state.call_state, state.incoming_number.clone())
                 };
@@ -689,9 +710,16 @@ impl ServiceObject for TelephonyRegistryService {
                     .map_err(|e| self.bad("removeOnSubscriptionsChangedListener", e.to_string()))?
                     .map(|id| id.0)
                     .unwrap_or(0);
+                let dropped = state_of(&self.state)
+                    .listeners
+                    .iter()
+                    .any(|listener| listener.binder == binder);
                 state_of(&self.state)
                     .listeners
                     .retain(|listener| listener.binder != binder);
+                if dropped && binder != 0 {
+                    self.released.push(BinderId(binder));
+                }
                 write_no_exception(reply);
                 Ok(true)
             }
@@ -701,6 +729,14 @@ impl ServiceObject for TelephonyRegistryService {
 
     fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
         std::mem::take(&mut self.queued)
+    }
+
+    fn drain_raw_retained(&mut self) -> Vec<BinderId> {
+        std::mem::take(&mut self.retained)
+    }
+
+    fn drain_raw_released(&mut self) -> Vec<BinderId> {
+        std::mem::take(&mut self.released)
     }
 }
 
@@ -1302,6 +1338,8 @@ impl Module for TelephonyModule {
             Box::new(TelephonyRegistryService {
                 state: Arc::clone(&state),
                 queued: Vec::new(),
+                retained: Vec::new(),
+                released: Vec::new(),
             }),
         );
         host.register_dynamic_named(
