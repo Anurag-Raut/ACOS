@@ -463,6 +463,19 @@ impl WmsState {
         self.wm.update_requested_visible_types(window, types)
     }
 
+    /// The in-process IME showed/hid the soft input on the focused window.
+    ///
+    /// This is the IMMS side of `showSoftInput`/`hideSoftInput`: the IME bit of
+    /// the window's requested-visible types follows the IME and the
+    /// app-visible `IWindow` insets callbacks are queued for the focused
+    /// window (the change an app sees on a phone).
+    pub fn set_ime_visible(&mut self, visible: bool) -> WmResult<()> {
+        let Some(window) = self.wm.focused_window().map(|w| w.id) else {
+            return Ok(());
+        };
+        self.wm.set_ime_visible(window, visible)
+    }
+
     /// `IWindowSession.reportSystemGestureExclusionChanged` (oneway; recorded by
     /// validating that the window exists).
     pub fn report_system_gesture_exclusion_changed(&mut self, window: WindowId) -> WmResult<()> {

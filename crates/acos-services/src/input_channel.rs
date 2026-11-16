@@ -1495,17 +1495,62 @@ pub struct InputChannelPair {
 /// The descriptors are left **blocking** (as in AOSP): the guest's looper
 /// blocks on its end, while both sides pass `MSG_DONTWAIT` per call.
 pub fn open_input_channel_pair(name: &str) -> Result<InputChannelPair> {
-    let (server, client) = rustix::net::socketpair(
+    let (server, client) = open_channel_fds()?;
+    Ok(InputChannelPair {
+        publisher: InputPublisher::new(server, format!("{name} (server)")),
+        client_fd: Some(client),
+    })
+}
+
+/// Create the raw `socketpair(AF_UNIX, SOCK_SEQPACKET, 0, ...)` pair, without
+/// wrapping either end in a producer.
+///
+/// [`open_input_channel_pair`] is the window-shaped caller (server end = the
+/// dispatcher's [`InputPublisher`]). The IME bind result needs the opposite
+/// direction: the **app** is the producer (`ImeInputEventSender` sends the key
+/// into its end, exactly like `InputMethodManager.mCurChannel`) and ACOS's IME
+/// service is the consumer, so it keeps this pair's server end in a
+/// [`LoopbackConsumer`] and hands the client end to the app.
+///
+/// Both descriptors are left blocking (AOSP's `InputChannel` contract); every
+/// call passes `MSG_DONTWAIT` explicitly.
+pub fn open_channel_fds() -> Result<(OwnedFd, OwnedFd)> {
+    rustix::net::socketpair(
         rustix::net::AddressFamily::UNIX,
         SocketType::SEQPACKET,
         SocketFlags::CLOEXEC,
         None,
     )
-    .map_err(|e| io_err("socketpair", e))?;
-    Ok(InputChannelPair {
-        publisher: InputPublisher::new(server, format!("{name} (server)")),
-        client_fd: Some(client),
-    })
+    .map_err(|e| io_err("socketpair", e))
+}
+
+/// Write one `InputChannel` body exactly as the image's
+/// `InputChannel.nativeWriteToParcel` does, **without** a `writeTypedObject`
+/// presence word:
+///
+/// ```text
+/// int32 isInitialized   1 with an fd, 0 for an unknown token
+/// strong binder token
+/// String16 name         "<window> (client)"
+/// fd                    dup of the client end
+/// ```
+///
+/// One encoder for both callers: `addToDisplayAsUser`'s `out InputChannel`
+/// (which prefixes the AIDL presence word) and `InputBindResult.channel`
+/// (whose `writeToParcel` writes the non-null `int32 1` itself).
+pub fn write_channel_body(
+    p: &mut Parcel,
+    token: BinderId,
+    name: &str,
+    fd: BorrowedFd<'_>,
+) -> Result<()> {
+    p.write_int32(1);
+    p.write_strong_binder_opt(Some(token));
+    p.write_string16_opt(Some(name))
+        .map_err(|e| ChannelError::Parcel(e.to_string()))?;
+    p.write_file_descriptor(fd)
+        .map_err(|e| ChannelError::Parcel(e.to_string()))?;
+    Ok(())
 }
 
 /// One live input channel, keyed by the window token the session layer has.
@@ -1626,15 +1671,7 @@ impl InputChannelRegistry {
             reply.write_int32(0);
             return Ok(());
         };
-        reply.write_int32(1);
-        reply.write_strong_binder_opt(Some(entry.token));
-        reply
-            .write_string16_opt(Some(&entry.name))
-            .map_err(|e| ChannelError::Parcel(e.to_string()))?;
-        reply
-            .write_file_descriptor(client_fd.as_fd())
-            .map_err(|e| ChannelError::Parcel(e.to_string()))?;
-        Ok(())
+        write_channel_body(reply, entry.token, &entry.name, client_fd.as_fd())
     }
 
     /// Release a channel (window removed). Dropping the server end makes the
@@ -1665,13 +1702,20 @@ impl InputChannelRegistry {
 // test consumer (loopback proof)
 // ---------------------------------------------------------------------------
 
-/// A minimal `InputConsumer` over the client end: decode messages and answer
-/// `FINISHED`.
+/// A minimal `InputConsumer`: decode messages and answer `FINISHED`.
 ///
-/// This is the test-side proof that the bytes are readable and that the ack
-/// path works. It is deliberately not a second dispatcher: it decodes the same
-/// bytes the image's `InputChannel::receiveMessage` would, using only this
-/// module's decoder.
+/// The direction inverts depending on which end it wraps:
+///
+/// * over a window channel's client end it is the test-side proof that the
+///   bytes are readable and that the ack path works;
+/// * over the **server** end of the IME `InputBindResult` channel it is the
+///   real consumer: the app's `ImeInputEventSender` is the producer there, and
+///   ACOS's IME service reads the `KEY` messages and answers
+///   `FINISHED(handled)` (see `crate::ime`).
+///
+/// It is deliberately not a second dispatcher: it decodes the same bytes the
+/// image's `InputChannel::receiveMessage` would, using only this module's
+/// decoder.
 #[derive(Debug)]
 pub struct LoopbackConsumer {
     fd: OwnedFd,

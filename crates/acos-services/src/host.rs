@@ -911,6 +911,26 @@ impl ServiceHost {
         Ok((info, reply_values))
     }
 
+    /// Drain the raw (`raw_transact`-owned) deliveries of **every** live
+    /// service object.
+    ///
+    /// The binder peer calls this on its idle tick so a delivery that was not
+    /// caused by a transaction still reaches the guest — the in-process IME's
+    /// hide is driven by a key on the input channel, and its `IWindow` insets
+    /// callbacks are what make the app relayout for that key.
+    pub fn drain_raw_deliveries_all(&mut self) -> Vec<PendingDelivery> {
+        let mut out = Vec::new();
+        for entry in self.entries.values_mut() {
+            if let Some(object) = entry.object.as_mut() {
+                out.extend(object.drain_raw_deliveries());
+            }
+        }
+        for object in self.dynamic.values_mut() {
+            out.extend(object.drain_raw_deliveries());
+        }
+        out
+    }
+
     /// Drain `system -> app` deliveries queued by service handlers.
     pub fn take_deliveries(&mut self) -> Vec<PendingDelivery> {
         std::mem::take(&mut self.deliveries)

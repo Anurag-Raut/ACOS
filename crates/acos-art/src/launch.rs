@@ -5595,6 +5595,7 @@ fn interactive_serve(
                         let reply = serde_json::json!({
                             "ok": false, "cmd": cmd, "code": "INPUT_UNAVAILABLE",
                             "error": format!("the real InputChannel accepted no gesture: {error}"),
+                            "live_tokens": live.input.live_tokens(),
                         });
                         protocol_write(&reply);
                         evidence.push(reply);
@@ -6518,6 +6519,7 @@ struct PeerSummary {
 }
 
 fn serve(peer: &mut Peer, fd: RawFd, stop: &AtomicBool) -> std::io::Result<()> {
+    let dbg = std::env::var_os("ACOS_PEER_DEBUG").is_some();
     loop {
         let frame: Frame = match read_frame(fd) {
             Ok(f) => f,
@@ -6535,6 +6537,19 @@ fn serve(peer: &mut Peer, fd: RawFd, stop: &AtomicBool) -> std::io::Result<()> {
                 if e.kind() == std::io::ErrorKind::WouldBlock
                     || e.kind() == std::io::ErrorKind::TimedOut =>
             {
+                // REL3I: the IME's show/hide is driven by a key on the input
+                // channel, so its `IWindow` insets callbacks have no incoming
+                // transaction to ride on. Flush them on the idle tick; the
+                // app's relayout (which they trigger) is what the key's settle
+                // then waits for.
+                for out in peer.flush_deliveries() {
+                    if let Err(e) = write_frame(fd, &out) {
+                        eprintln!("peer-trace: idle flush write_frame FAILED: {e}");
+                        close_frame_fds(&out);
+                        return Err(e);
+                    }
+                    close_frame_fds(&out);
+                }
                 continue
             }
             Err(e) => return Err(e),
@@ -6543,7 +6558,6 @@ fn serve(peer: &mut Peer, fd: RawFd, stop: &AtomicBool) -> std::io::Result<()> {
         // reply/`write_frame` failure line is *not* gated: a reply the peer
         // cannot send is the difference between a structured guest error and a
         // main thread blocked in `transact`, so it must always be visible.
-        let dbg = std::env::var_os("ACOS_PEER_DEBUG").is_some();
         if dbg {
             eprintln!(
                 "peer-trace: in ty={} seq={} code={} flags={:#x} target={:#x} data={} offs={} fds={}",

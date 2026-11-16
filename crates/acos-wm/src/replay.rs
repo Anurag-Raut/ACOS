@@ -301,6 +301,7 @@ impl ReplayHarness {
                 Ok(self.callback_shape(crate::WmCallback::InsetsControlChanged {
                     state: Box::new(state),
                     controls: Box::new(InsetsSourceControlArray(vec![])),
+                    ime: false,
                 })?)
             }
             ("android.view.IWindow", "resized") => {

@@ -882,6 +882,18 @@ impl Peer {
         seq
     }
 
+    /// Drain queued `system -> app` deliveries without an incoming frame.
+    ///
+    /// The IME's show/hide is driven by a **key** on the input channel, not by
+    /// a binder transaction, so its `IWindow` insets callbacks would otherwise
+    /// wait for the next guest transaction — which is itself waiting on those
+    /// insets. The interactive server calls this on its idle timeout.
+    pub fn flush_deliveries(&mut self) -> Vec<Frame> {
+        let raw = self.host.drain_raw_deliveries_all();
+        self.local_deliveries.extend(raw);
+        self.take_delivery_frames()
+    }
+
     fn take_delivery_frames(&mut self) -> Vec<Frame> {
         let mut pending = std::mem::take(&mut self.local_deliveries);
         pending.extend(self.host.take_deliveries());

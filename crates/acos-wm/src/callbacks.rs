@@ -65,6 +65,10 @@ pub enum WmCallback {
         state: Box<InsetsState>,
         /// The controls.
         controls: Box<InsetsSourceControlArray>,
+        /// REL3I: this state change is the in-process IME showing/hiding (the
+        /// only `insetsControlChanged` the service host delivers today). Not
+        /// on the wire; the launch-time ones stay deferred (W5 §5.1).
+        ime: bool,
     },
     /// `showInsets(int, boolean, ImeTracker.Token)` (code 4).
     ShowInsets {
@@ -179,7 +183,7 @@ impl WmCallback {
                 p.write_bool(*drag_resizing);
                 Ok(())
             }
-            WmCallback::InsetsControlChanged { state, controls } => {
+            WmCallback::InsetsControlChanged { state, controls, .. } => {
                 write_typed_object(p, Some(state.as_ref()))?;
                 write_typed_array(p, Some(controls.0.as_slice()))?;
                 Ok(())
@@ -331,6 +335,7 @@ mod tests {
         let c = WmCallback::InsetsControlChanged {
             state: Box::new(state.clone()),
             controls: Box::new(InsetsSourceControlArray(vec![])),
+            ime: true,
         };
         let mut p = c.to_parcel().unwrap();
         p.enforce_interface(IWINDOW_DESCRIPTOR).unwrap();

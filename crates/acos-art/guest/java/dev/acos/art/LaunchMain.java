@@ -3491,6 +3491,14 @@ public final class LaunchMain {
                 // native implementation (W3's wall). The InputChannel it is
                 // handed is the real socketpair from `addToDisplayAsUser`.
                 "register_android_view_InputEventReceiver",
+                // REL3I: the bound IME turns the other way round — the app is the
+                // sender. `InputMethodManager.sendInputEventOnMainLooperLocked`
+                // constructs `ImeInputEventSender` (an `InputEventSender`), whose
+                // constructor calls `nativeInit(..., InputChannel, MessageQueue)`.
+                // The image exports the registration; without it the first key
+                // offered to the IME aborts the looper with
+                // `UnsatisfiedLinkError: InputEventSender.nativeInit`.
+                "register_android_view_InputEventSender",
                 // I2: the receiver's native `dispatchInputEvent` builds the
                 // Java event with the framework's own static factories
                 // (`MotionEvent.obtain` / `KeyEvent.obtain`). Those method ids

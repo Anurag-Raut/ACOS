@@ -398,9 +398,53 @@ impl InputDispatch {
         self.publish_key(token, key_code)
     }
 
+    /// Publish on the newest live window, skipping channels whose guest end is
+    /// gone.
+    ///
+    /// The app re-adds a window (`IWindow` handle churn) and a dismissed
+    /// dialog's channel entry can outlive its `InputEventReceiver`; the
+    /// dispatcher must not deliver into a dead channel, and it must not treat
+    /// one dead entry as "input is broken". AOSP's dispatcher holds the live
+    /// focus connection, so asking the next token is the same policy with
+    /// ACOS's token-set bookkeeping.
+    pub fn publish_on_live(
+        &mut self,
+        mut publish: impl FnMut(&mut InputDispatch, BinderId) -> Result<Gesture>,
+    ) -> Result<(BinderId, Gesture)> {
+        let mut last: Option<ChannelError> = None;
+        loop {
+            let Some(token) = self.newest_token() else {
+                return Err(last.unwrap_or(ChannelError::Malformed(
+                    "no live window input channel yet",
+                )));
+            };
+            match publish(self, token) {
+                Ok(gesture) => return Ok((token, gesture)),
+                Err(ChannelError::PeerClosed) => {
+                    let message = format!(
+                        "input channel {:#x} peer is closed; forgetting it",
+                        token.0
+                    );
+                    self.events.push(InputEvent::Error { token, message });
+                    self.registry.remove(token);
+                    self.tokens.remove(&token.0);
+                    last = Some(ChannelError::PeerClosed);
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
     fn publish_key(&mut self, token: BinderId, key_code: i32) -> Result<Gesture> {
         let Some(publisher) = self.registry.publisher_mut(token) else {
-            let message = format!("inject_key: no input channel for token {:#x}", token.0);
+            let message = format!(
+                "inject_key: no input channel for token {:#x} (live: {:?})",
+                token.0,
+                self.tokens
+                    .iter()
+                    .map(|t| format!("{t:#x}"))
+                    .collect::<Vec<_>>()
+            );
             self.events.push(InputEvent::Error {
                 token,
                 message: message.clone(),
@@ -412,7 +456,7 @@ impl InputDispatch {
             Err(e) => {
                 self.events.push(InputEvent::Error {
                     token,
-                    message: format!("inject_key: {e}"),
+                    message: format!("inject_key token={:#x}: {e}", token.0),
                 });
                 return Err(e);
             }
@@ -491,6 +535,12 @@ impl InputDispatch {
                 }
                 Ok(None) => break,
                 Err(ChannelError::PeerClosed) => {
+                    // The guest disposed its `InputEventReceiver` (a removed
+                    // window, or an APP that closed the channel). Forget the
+                    // token so it can never be picked as the newest target
+                    // again; this call still reports the lost channel.
+                    self.registry.remove(token);
+                    self.tokens.remove(&token.0);
                     self.events.push(InputEvent::Closed { token });
                     return Err(ChannelError::PeerClosed);
                 }
@@ -592,6 +642,13 @@ impl InputHost {
         }
     }
 
+    /// The live window tokens (`{:#x}` strings), for diagnostics.
+    #[must_use]
+    pub fn live_tokens(&self) -> Vec<String> {
+        let state = lock(&self.state);
+        state.tokens.iter().map(|t| format!("{t:#x}")).collect()
+    }
+
     /// Shared producer state.
     #[must_use]
     pub fn state(&self) -> &Arc<Mutex<InputDispatch>> {
@@ -633,10 +690,8 @@ impl InputHost {
     /// coordinates on the real `InputChannel`), with the wait for the guest's
     /// acks instead of a fire-and-forget log.
     pub fn tap(&self, x: f32, y: f32, ack_wait: Duration) -> Result<InjectedGesture> {
-        let token = self
-            .newest_token()
-            .ok_or(ChannelError::Malformed("no live window input channel yet"))?;
-        let gesture = lock(&self.state).inject_tap(token, x, y)?;
+        let (token, gesture) = lock(&self.state)
+            .publish_on_live(|dispatch, token| dispatch.inject_tap(token, x, y))?;
         self.collect(&token, &gesture, ack_wait)
     }
 
@@ -654,10 +709,9 @@ impl InputHost {
         duration: Duration,
         ack_wait: Duration,
     ) -> Result<InjectedGesture> {
-        let token = self
-            .newest_token()
-            .ok_or(ChannelError::Malformed("no live window input channel yet"))?;
-        let gesture = lock(&self.state).inject_swipe(token, from, to, duration)?;
+        let (token, gesture) = lock(&self.state).publish_on_live(|dispatch, token| {
+            dispatch.inject_swipe(token, from, to, duration)
+        })?;
         self.collect(&token, &gesture, ack_wait)
     }
 
@@ -665,10 +719,8 @@ impl InputHost {
     /// focus still needs the IME `EditorInfo` codec, so the app may drop it —
     /// the ack's `handled` field reports exactly that).
     pub fn key(&self, code: i32, ack_wait: Duration) -> Result<InjectedGesture> {
-        let token = self
-            .newest_token()
-            .ok_or(ChannelError::Malformed("no live window input channel yet"))?;
-        let gesture = lock(&self.state).inject_key(token, code)?;
+        let (token, gesture) = lock(&self.state)
+            .publish_on_live(|dispatch, token| dispatch.inject_key(token, code))?;
         self.collect(&token, &gesture, ack_wait)
     }
 
@@ -680,10 +732,8 @@ impl InputHost {
     /// for a physical keyboard. It is not an IME `commitText` (ACOS runs a null
     /// IME; see `crate::ime`).
     pub fn type_text(&self, text: &str, ack_wait: Duration) -> Result<InjectedGesture> {
-        let token = self
-            .newest_token()
-            .ok_or(ChannelError::Malformed("no live window input channel yet"))?;
-        let gesture = lock(&self.state).inject_text(token, text)?;
+        let (token, gesture) = lock(&self.state)
+            .publish_on_live(|dispatch, token| dispatch.inject_text(token, text))?;
         self.collect(&token, &gesture, ack_wait)
     }
 
@@ -697,7 +747,23 @@ impl InputHost {
         let mut acks: Vec<InjectedAck> = Vec::new();
         let deadline = Instant::now() + ack_wait;
         while Instant::now() < deadline && acks.len() < seqs.len() {
-            let responses = lock(&self.state).drain_acks(*token)?;
+            // REL3I: when the soft input is shown, the app's `ImeInputStage`
+            // offers this key to its `InputMethodManager`, which writes it into
+            // the IME channel and blocks on our `FINISHED`. Answer it here, on
+            // the same wait that collects the window's own ack.
+            let _ = crate::ime::service_pending_keys();
+            let responses = match lock(&self.state).drain_acks(*token) {
+                Ok(responses) => responses,
+                Err(ChannelError::PeerClosed) => {
+                    // The target's guest end went away while we waited. The
+                    // publish went somewhere, but nothing can acknowledge it:
+                    // report the acks we do have (possibly none) instead of
+                    // failing the whole action. The dead token was already
+                    // forgotten by `drain_acks`.
+                    break;
+                }
+                Err(e) => return Err(e),
+            };
             for response in responses {
                 if let ConsumerResponse::Finished(ack) = response {
                     // P1/W59: the framework's `NativeInputEventReceiver`

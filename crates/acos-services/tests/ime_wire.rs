@@ -17,9 +17,11 @@
 //! the `EditorInfo` is a structured error, never a panic or a partial success;
 //! the legacy tag layout for `ImeTracker$Token` ([int, string16]) is rejected.
 
+use std::sync::{Arc, Mutex};
+
 use acos_parcel::{BinderId, Parcel};
 use acos_services::exception::NO_EXCEPTION;
-use acos_services::ime::shared;
+use acos_services::ime::{install, shared, ImeState, BIND_NO_IME, BIND_SUCCESS, KEYCODE_BACK};
 use acos_services::ime_wire::{
     read_editor_info, read_ime_tracker_token, write_ime_tracker_token, EditorInfo, ImeTrackerToken,
     ImeWireService, InputBindResult, EDITOR_INFO_CLASS, IME_DESCRIPTOR, IME_TRACKER_TOKEN_CLASS,
@@ -44,6 +46,27 @@ fn captured_parcel() -> Parcel {
     captured_parcel_of(CAPTURED)
 }
 
+/// The tests below drive one process-wide `ImeState` (that is what the service
+/// host installs), so the stateful ones take this lock instead of racing.
+fn state_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: Mutex<()> = Mutex::new(());
+    LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Install a fresh IME state; `bind` attaches the transport's session binder,
+/// which is what selects the bound-IME mode (the ART transport does this in
+/// `registry::install`).
+fn fresh_ime(bind: bool) -> Arc<Mutex<ImeState>> {
+    let state = Arc::new(Mutex::new(ImeState::new()));
+    if bind {
+        state.lock().unwrap().attach_session(SESSION);
+    }
+    install(Arc::clone(&state));
+    state
+}
+
+const SESSION: BinderId = BinderId(0x5e55_10);
+
 fn host_with_input_method() -> (ServiceHost, BinderId) {
     let mut host = ServiceHost::new();
     host.install_standard();
@@ -54,9 +77,27 @@ fn host_with_input_method() -> (ServiceHost, BinderId) {
     (host, binder)
 }
 
+/// The ART transport: `install_with_handles` attaches the session binder and
+/// the WMS state, so `startInput` binds a real session + channel.
+fn art_host() -> (ServiceHost, BinderId, BinderId) {
+    install(Arc::new(Mutex::new(ImeState::new())));
+    let mut host = ServiceHost::new();
+    acos_services::registry::install_with_handles(&mut host);
+    let binder = host
+        .check_service("input_method")
+        .expect("lookup")
+        .expect("the IME manager is registered");
+    let session = host
+        .aux("com.android.internal.inputmethod.IInputMethodSession")
+        .expect("the transport attached a session binder");
+    (host, binder, session)
+}
+
 #[test]
-fn the_captured_live_start_input_request_is_consumed_and_answered_with_no_ime() {
-    let (mut host, binder) = host_with_input_method();
+fn the_captured_live_start_input_request_is_answered_with_a_bound_ime_and_channel() {
+    let _guard = state_lock();
+    let (mut host, binder, session) = art_host();
+    let state = shared();
     let mut data = captured_parcel();
     let mut reply = Parcel::new();
     host.transact(binder, START_INPUT, &mut data, &mut reply, 0)
@@ -73,18 +114,131 @@ fn the_captured_live_start_input_request_is_consumed_and_answered_with_no_ime() 
     assert_eq!(reply.read_int32().expect("typed presence"), 1);
     assert_eq!(
         reply.read_int32().expect("result"),
-        acos_services::ime::BIND_NO_IME,
+        BIND_SUCCESS,
+        "a bound IME answers InputBindResult.SUCCESS"
+    );
+    assert_eq!(
+        reply.read_strong_binder().expect("method"),
+        Some(session),
+        "the session binder the app keys mCurBindState on"
+    );
+    assert_eq!(reply.read_int32().expect("accessibility sessions"), -1);
+    assert_eq!(reply.read_int32().expect("channel presence"), 1);
+    assert_eq!(reply.read_int32().expect("isInitialized"), 1);
+    assert_eq!(
+        reply.read_strong_binder().expect("channel token"),
+        Some(session),
+        "the InputChannel token is the session binder"
+    );
+    let name = reply.read_string16().expect("channel name").expect("name");
+    assert!(name.ends_with("(client)"), "channel name {name}");
+    let fd = reply.read_file_descriptor().expect("client fd");
+    assert!(fd.is_some(), "the bind result carries the real client end");
+    let id = reply.read_string16().expect("id").expect("session id");
+    assert!(id.starts_with("acos-ime-"), "{id}");
+    let sequence = reply.read_int32().expect("sequence");
+    assert_eq!(sequence, 1, "the request's sequence is echoed");
+    assert_eq!(reply.read_float_array().expect("matrix"), None);
+    assert!(!reply.read_bool().expect("suppressing"));
+    assert_eq!(reply.remaining(), 0, "the reply has no trailing bytes");
+
+    let recorded = state.lock().unwrap();
+    assert_eq!(recorded.start_inputs.last().map(|e| e.2), Some(BIND_SUCCESS));
+    assert!(recorded.ime_visible == false, "startInput does not show the IME");
+}
+
+#[test]
+fn without_an_attached_session_the_manager_stays_the_null_ime() {
+    let _guard = state_lock();
+    fresh_ime(false);
+    let (mut host, binder) = host_with_input_method();
+    let mut data = captured_parcel();
+    let mut reply = Parcel::new();
+    host.transact(binder, START_INPUT, &mut data, &mut reply, 0)
+        .expect("the real request is accepted");
+    reply.set_data_position(0);
+    assert_eq!(reply.read_int32().expect("exception"), NO_EXCEPTION);
+    assert_eq!(reply.read_int32().expect("typed presence"), 1);
+    assert_eq!(
+        reply.read_int32().expect("result"),
+        BIND_NO_IME,
         "the image's InputBindResult.NO_IME is error(6)"
     );
     assert_eq!(reply.read_strong_binder().expect("method"), None);
     assert_eq!(reply.read_int32().expect("accessibility sessions"), -1);
     assert_eq!(reply.read_int32().expect("channel presence"), 0);
     assert_eq!(reply.read_string16().expect("id"), None);
-    let sequence = reply.read_int32().expect("sequence");
-    assert_eq!(sequence, 1, "the request's sequence is echoed");
+    assert_eq!(reply.read_int32().expect("sequence"), 1);
     assert_eq!(reply.read_float_array().expect("matrix"), None);
     assert!(!reply.read_bool().expect("suppressing"));
-    assert_eq!(reply.remaining(), 0, "the reply has no trailing bytes");
+    assert_eq!(reply.remaining(), 0);
+}
+
+/// REL3I: AOSP's IME key path. `InputMethodManager.dispatchInputEvent` writes
+/// the key into `mCurChannel`; the IME reads it, and BACK while the soft input
+/// is shown hides it and answers `FINISHED(handled=true)`. Every other key is
+/// answered `handled=false` and is then forwarded to the view tree.
+#[test]
+fn back_with_the_soft_input_shown_hides_it_and_finishes_handled() {
+    let _guard = state_lock();
+    let state = fresh_ime(true);
+    let (result, id, session) = state.lock().unwrap().start_input(None, 7, None);
+    assert_eq!(result, BIND_SUCCESS);
+    assert_eq!(session, Some(SESSION));
+    assert!(id.is_some());
+    let (_token, _name, client) = state
+        .lock()
+        .unwrap()
+        .take_bind_channel()
+        .expect("the bind result carries a channel");
+    assert!(state.lock().unwrap().show_soft_input(BinderId(0), 0));
+    assert!(state.lock().unwrap().ime_visible);
+
+    let send = |seq: u32, action: i32, code: i32| {
+        let bytes = acos_services::input_channel::InputMessage::Key {
+            seq,
+            event: acos_services::input_channel::KeyEvent::new(9, action, code, 1, 1),
+        }
+        .encode()
+        .expect("encode");
+        // SAFETY: `client` owns the descriptor for as long as this closure's
+        // captured state does, and `send` does not close it.
+        let fd = unsafe {
+            rustix::fd::BorrowedFd::borrow_raw(std::os::fd::AsRawFd::as_raw_fd(&client))
+        };
+        let sent = rustix::net::send(&fd, &bytes, rustix::net::SendFlags::empty())
+            .expect("write the key into the IME channel");
+        assert_eq!(sent, bytes.len());
+    };
+
+    send(11, 0, KEYCODE_BACK);
+    assert_eq!(acos_services::ime::service_pending_keys(), 1);
+    {
+        let s = state.lock().unwrap();
+        assert!(!s.ime_visible, "BACK hid the soft input");
+        assert_eq!(s.channel_replies, vec![(11, true)]);
+        assert_eq!(s.channel_keys.len(), 1);
+        assert_eq!(s.channel_keys[0].key_code, KEYCODE_BACK);
+        assert!(s.channel_keys[0].hid_ime);
+    }
+    // The UP half of the same press is handled too (AOSP's tracking rule).
+    send(12, 1, KEYCODE_BACK);
+    assert_eq!(acos_services::ime::service_pending_keys(), 1);
+    assert_eq!(state.lock().unwrap().channel_replies, vec![(11, true), (12, true)]);
+
+    // With the IME hidden the next BACK belongs to the view tree.
+    send(13, 0, KEYCODE_BACK);
+    assert_eq!(acos_services::ime::service_pending_keys(), 1);
+    {
+        let s = state.lock().unwrap();
+        assert_eq!(s.channel_replies.last(), Some(&(13, false)));
+        assert!(!s.channel_keys.last().unwrap().hid_ime);
+    }
+
+    // A typed key is never consumed by the IME: it follows the typing path.
+    send(14, 0, 29); // KEYCODE_A
+    assert_eq!(acos_services::ime::service_pending_keys(), 1);
+    assert_eq!(state.lock().unwrap().channel_replies.last(), Some(&(14, false)));
 }
 
 #[test]
@@ -138,11 +292,12 @@ fn every_truncation_inside_the_editor_info_is_a_structured_error() {
 
 #[test]
 fn a_text_field_editor_info_with_spanned_surrounding_text_is_consumed_in_full() {
+    let _guard = state_lock();
+    let (mut host, binder, _session) = art_host();
     // `text-input.apk` focuses an `EditText`: `mInitialSurroundingText.mText`
     // is a `SpannableStringBuilder` (zero spans in the capture) and the hint is
     // a plain `CharSequence`. This is the request that used to kill the
     // guest's main looper with `no parcelable codec for android.text.Spanned`.
-    let (mut host, binder) = host_with_input_method();
     let mut data = captured_parcel_of(CAPTURED_TEXT_INPUT);
     let mut reply = Parcel::new();
     host.transact(binder, START_INPUT, &mut data, &mut reply, 0)
@@ -155,7 +310,7 @@ fn a_text_field_editor_info_with_spanned_surrounding_text_is_consumed_in_full() 
     reply.set_data_position(0);
     assert_eq!(reply.read_int32().expect("exception"), NO_EXCEPTION);
     assert_eq!(reply.read_int32().expect("presence"), 1);
-    assert_eq!(reply.read_int32().expect("result"), 6);
+    assert_eq!(reply.read_int32().expect("result"), BIND_SUCCESS);
 
     // The same capture decodes to the live text-field fields.
     let mut probe = captured_parcel_of(CAPTURED_TEXT_INPUT);
@@ -245,6 +400,9 @@ fn the_image_ime_tracker_token_is_binder_then_string8_not_int_then_string16() {
 
 #[test]
 fn show_soft_input_with_the_image_token_and_result_receiver_is_answered_false() {
+    let _guard = state_lock();
+    // No `startInput` bound this client, so the IME must not claim it is shown.
+    let state = fresh_ime(true);
     let mut data = Parcel::new();
     // IInputMethodManager.showSoftInput request (code 7) in image order:
     // client, window token, ImeTracker.Token, flags, windowFlags, receiver, id.
@@ -275,6 +433,7 @@ fn show_soft_input_with_the_image_token_and_result_receiver_is_answered_false() 
     assert_eq!(reply.read_int32().expect("exception"), NO_EXCEPTION);
     assert!(!reply.read_bool().expect("shown"));
     assert_eq!(reply.remaining(), 0);
+    assert!(!state.lock().unwrap().ime_visible);
 }
 
 #[test]
