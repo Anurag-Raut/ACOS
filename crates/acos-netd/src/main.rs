@@ -10,6 +10,7 @@
 //! acos-netd offline NAME | online NAME
 //! acos-netd delay NAME --ms N [--jitter N] [--loss PCT] | clear NAME
 //! acos-netd hostport add PORT [--session NAME] | hostport del PORT
+//! acos-netd forward --listen 127.0.0.1:P --target ADDR:P   (inside a netns)
 //! acos-netd kill-pasta             fail-closed proof hook
 //! acos-netd shutdown               stop the supervisor and the relay netns
 //! acos-netd serve | fabric --socket P   internal
@@ -49,6 +50,14 @@ fn run(args: &[String]) -> Result<i32, ProtoError> {
                 .map(|()| 0)
                 .map_err(io)
         }
+        // The loopback forwarder of a host-port opt-in. Started by the
+        // supervisor inside the session's netns (`unshare --net=…`), never by a
+        // user: it binds the session's own `127.0.0.1`.
+        "forward" => {
+            let listen = flag_value(rest, "--listen").ok_or_else(|| invalid("--listen"))?;
+            let target = flag_value(rest, "--target").ok_or_else(|| invalid("--target"))?;
+            acos_netd::forward::serve(&listen, &target).map(|()| 0).map_err(io)
+        }
         "up" => {
             let pasta = flag_value(rest, "--pasta");
             let mut c = Client::ensure_up()?;
@@ -59,6 +68,11 @@ fn run(args: &[String]) -> Result<i32, ProtoError> {
                 c.status()?
             };
             println!("{}", pretty(&status)?);
+            Ok(0)
+        }
+        "identity" => {
+            let mut c = Client::connect()?;
+            println!("{}", pretty(&c.identity()?)?);
             Ok(0)
         }
         "status" => {
@@ -76,15 +90,28 @@ fn run(args: &[String]) -> Result<i32, ProtoError> {
             // network unavailable instead of restarting the relay.
             let mut c = Client::attach_client()?;
             let fds = stdio_fds();
-            let (s, ms) = c.spawn_stdio(&name, argv, &fds, Some(std::process::id()))?;
+            // The run's own cgroup scope rides along: the guest is charged to
+            // the scope `guarded.sh` created, so `--mem` bounds the guest on the
+            // relay arm exactly as it does on the direct path.
+            let cgroup = acos_netd::client::own_cgroup();
+            let (s, ms) = c.spawn_stdio(&name, argv, &fds, Some(std::process::id()), cgroup)?;
             eprintln!(
                 "acos-netd: session {name} attached idx={} addr={} gw={} pid={:?} attach_ms={ms:.1}",
                 s.index, s.address, s.gateway, s.pid
             );
-            let code = c.wait_exit(&name, Duration::from_millis(20))?;
-            // The proxy owns the session's end: veth, rules, guest.
-            let _ = c.detach(&name);
-            Ok(code.unwrap_or(136))
+            // The guest's status is the only status this proxy may report. A
+            // control-plane hiccup is not the guest exiting: re-connect and ask
+            // again, and if the session is really gone say so instead of
+            // pretending the guest died with the proxy's own failure code. (A
+            // launcher reads this process's exit status as the guest's, so a
+            // proxy error used to surface as `GUEST_EXITED … status 1`.)
+            let code = wait_exit(&name, &mut c);
+            // The proxy owns the session's end: veth, rules, guest. Best effort:
+            // the supervisor detaches a session whose owner died anyway.
+            if let Err(e) = c.detach(&name) {
+                eprintln!("acos-netd: detach {name}: {}", e.message);
+            }
+            Ok(code)
         }
         "spawn" => {
             let (name, argv) = name_and_argv(rest)?;
@@ -180,6 +207,39 @@ fn stdio_fds() -> Vec<std::os::unix::io::RawFd> {
     fds
 }
 
+/// The guest's exit code, asked over a connection that is re-established when
+/// the control plane hiccups. `136` (128 + `SIGKILL`) when the session is gone
+/// without a recorded status: a proxy that cannot answer must not invent a
+/// guest status, and it must not turn its own failure into one.
+fn wait_exit(name: &str, c: &mut Client) -> i32 {
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    let mut last = String::new();
+    while std::time::Instant::now() < deadline {
+        match c.wait_exit(name, Duration::from_millis(20)) {
+            Ok(Some(code)) => return code,
+            Ok(None) => {
+                eprintln!("acos-netd: session {name} ended without a recorded status");
+                return 136;
+            }
+            Err(e) => {
+                last = e.message;
+                // Reconnect: the supervisor may still be alive with this
+                // session attached (a dropped connection is not a dead guest).
+                std::thread::sleep(Duration::from_millis(50));
+                match Client::connect_raw() {
+                    Ok(fresh) => *c = fresh,
+                    Err(e) => {
+                        last = e.message;
+                        std::thread::sleep(Duration::from_millis(100));
+                    }
+                }
+            }
+        }
+    }
+    eprintln!("acos-netd: session {name}: no exit status ({last})");
+    136
+}
+
 fn pretty<T: serde::Serialize>(v: &T) -> Result<String, ProtoError> {
     serde_json::to_string_pretty(v).map_err(|e| ProtoError { code: ErrorCode::Io, message: e.to_string() })
 }
@@ -194,7 +254,7 @@ fn invalid(msg: &str) -> ProtoError {
 
 fn usage() {
     eprintln!(
-        "usage: acos-netd <up|status|spawn|run|detach|offline|online|delay|clear|hostport|kill-pasta|shutdown|serve|fabric> [args]"
+        "usage: acos-netd <up|status|identity|spawn|run|detach|offline|online|delay|clear|hostport|kill-pasta|shutdown|serve|fabric|forward> [args]"
     );
 }
 

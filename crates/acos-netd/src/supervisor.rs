@@ -31,7 +31,7 @@ use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use crate::plan::{self, SessionNet};
-use crate::proto::{ErrorCode, ProtoError, Request, SessionInfo, StatusInfo};
+use crate::proto::{ErrorCode, ProtoError, Request, SessionInfo, StatusInfo, SupervisorInfo};
 
 /// How long the supervisor waits for `pasta` to configure `tap0` in the relay
 /// netns. Measured 60–200 ms; a second is already pathological.
@@ -64,6 +64,11 @@ struct Session {
     /// died from a signal — then `signal` carries the signal).
     exit: Option<i32>,
     signal: Option<i32>,
+    /// The guest's cgroup scope (`Request::Spawn::cgroup`), for the report.
+    cgroup: Option<String>,
+    /// The loopback forwarders this session opted in to (one per port): a
+    /// process inside the session netns binding `127.0.0.1:<port>`.
+    forwards: Vec<(u16, Child)>,
 }
 
 impl Session {
@@ -111,6 +116,8 @@ pub struct Relay {
     /// The relay is deliberately held down (fail-closed proof); [`Relay::ensure_up`]
     /// clears it.
     hold_down: bool,
+    /// This supervisor's own identity (binary path + content build id).
+    identity: SupervisorInfo,
 }
 
 impl Relay {
@@ -129,7 +136,15 @@ impl Relay {
             sessions: BTreeMap::new(),
             attach_ms_last: None,
             hold_down: false,
+            identity: crate::client::self_identity(),
         }
+    }
+
+    /// This supervisor's identity (`Status` reports it; clients compare it with
+    /// the binary they would have started).
+    #[must_use]
+    pub fn identity(&self) -> &SupervisorInfo {
+        &self.identity
     }
 
     fn log(&self, msg: &str) {
@@ -276,7 +291,7 @@ impl Relay {
         let mut cmd = Command::new(&bin);
         cmd.arg("--netns")
             .arg(format!("/proc/{fabric_pid}/ns/net"))
-            .args(plan::relay_pasta_args(&ports))
+            .args(plan::relay_pasta_args())
             .stdin(Stdio::null())
             .stdout(log.try_clone().map_err(io_err)?)
             .stderr(log);
@@ -477,6 +492,7 @@ impl Relay {
             die_with_relay,
             fds: fd_count,
             owner_pid,
+            cgroup,
         } = req
         else {
             unreachable!("spawn() is called with Request::Spawn");
@@ -542,11 +558,27 @@ impl Relay {
             // in `shutdown`; a lost supervisor is still fail-closed because the
             // session's only route is the relay's tap).
         }
-        let child = cmd.spawn().map_err(|e| ProtoError {
+        let mut child = cmd.spawn().map_err(|e| ProtoError {
             code: ErrorCode::Io,
             message: format!("cannot start the session netns: {e}"),
         })?;
         let pid = i32::try_from(child.id()).unwrap_or(-1);
+        // The run's memory/pids ceiling follows the guest onto the relay arm:
+        // the supervisor is not inside the caller's scope, so the guest would
+        // otherwise be charged to the host's root cgroup. Fail closed: a session
+        // that cannot be put inside its own scope is not started (an unbounded
+        // guest is exactly what `--mem` exists to prevent).
+        if let Some(path) = cgroup {
+            if let Err(e) = move_to_cgroup(u32::try_from(pid).unwrap_or(0), path) {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(ProtoError {
+                    code: ErrorCode::Io,
+                    message: format!("cannot place the guest in cgroup {path}: {e}"),
+                });
+            }
+            self.log(&format!("session {session} guest pid={pid} cgroup={path}"));
+        }
         let mut session_state = Session {
             net: net.clone(),
             name: session.clone(),
@@ -560,6 +592,8 @@ impl Relay {
             owner_pid: owner_pid.map(|p| i32::try_from(p).unwrap_or(-1)),
             exit: None,
             signal: None,
+            cgroup: cgroup.clone(),
+            forwards: Vec::new(),
         };
         // The attach itself: create the pair in the relay netns and move the
         // session end into the new netns.
@@ -634,6 +668,8 @@ impl Relay {
             owner_pid: None,
             exit: None,
             signal: None,
+            cgroup: None,
+            forwards: Vec::new(),
         };
         let info = s.info();
         self.sessions.insert(session.to_string(), s);
@@ -644,12 +680,9 @@ impl Relay {
     /// them for teardown.
     fn attach_veth(&mut self, net: &SessionNet, netns_pid: u32) -> Result<Vec<String>, ProtoError> {
         self.fabric_run_all(&plan::veth_attach_rules(net, netns_pid))?;
-        // Host ports named before this session existed do not belong to it.
-        let gates: Vec<String> = self
-            .host_ports
-            .iter()
-            .map(|p| plan::hostport_gate_rule(net, *p, false))
-            .collect();
+        // Default deny: this session reaches none of the host's loopback until
+        // it opts a port in (which inserts an ACCEPT above this DROP).
+        let gates: Vec<String> = vec![plan::hostport_default_rule(net)];
         if let Err(e) = self.fabric_run_all(&gates) {
             let _ = self.fabric_run_all(&plan::veth_detach_rules(net));
             return Err(e);
@@ -674,7 +707,11 @@ impl Relay {
             cmds.push(plan::netem_clear_rule(&s.net));
         }
         for p in &s.host_ports {
-            cmds.push(plan::hostport_gate_rule(&s.net, *p, true));
+            cmds.push(plan::hostport_allow_rule(&s.net, *p, false));
+        }
+        for (_, mut fwd) in s.forwards.drain(..) {
+            let _ = fwd.kill();
+            let _ = fwd.wait();
         }
         for r in std::mem::take(&mut s.rules) {
             let inverse = invert_rule(&r);
@@ -798,12 +835,29 @@ impl Relay {
         };
         for t in &targets {
             let net = self.session_mut(t)?.net.clone();
-            self.fabric_run(&plan::hostport_gate_rule(&net, port, !on))?;
+            // Open (or close) exactly this port of the host's loopback for this
+            // session. Rows land above the session's default-deny DROP.
+            self.fabric_run(&plan::hostport_allow_rule(&net, port, on))?;
             let s = self.session_mut(t)?;
             if on {
                 s.host_ports.insert(port);
             } else {
                 s.host_ports.remove(&port);
+            }
+            // The session's own loopback listener: bind 127.0.0.1:port inside
+            // the session netns (a separate borrow: `start_forwarder` needs
+            // `&self.state_dir` too).
+            let exe = std::env::current_exe().map_err(io_err)?;
+            let log = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(self.state_dir.join("forwarder.log"))
+                .map_err(io_err)?;
+            let s = self.session_mut(t)?;
+            if on {
+                start_forwarder(s, port, &exe, log)?;
+            } else {
+                stop_forwarder(s, port);
             }
         }
         if on {
@@ -811,9 +865,53 @@ impl Relay {
         } else {
             self.host_ports.remove(&port);
         }
-        // pasta's forwards are startup arguments: restart it with the new set.
-        self.restart_pasta()?;
+        self.log(&format!(
+            "hostport {port} on={on} sessions={:?}",
+            targets
+        ));
         Ok(self.status())
+    }
+
+    /// Start the session's loopback forwarder for `port` (idempotent).
+    ///
+    /// The forwarder is a child of the supervisor that joins the **session's**
+    /// netns and binds `127.0.0.1:<port>` there, then dials the relay's
+    /// host-loopback map address (the only path to the host's loopback). It lives
+    /// and dies with the session, and it exists only for ports the session
+    /// opted in to.
+    fn start_forwarder(&mut self, s: &mut Session, port: u16) -> Result<(), ProtoError> {
+        if s.forwards.iter().any(|(p, _)| *p == port) {
+            return Ok(());
+        }
+        let pid = s.pid.filter(|p| pid_alive(*p)).ok_or_else(|| ProtoError {
+            code: ErrorCode::NetworkUnavailable,
+            message: format!("session {} has no running guest to join", s.name),
+        })?;
+        let exe = std::env::current_exe().map_err(io_err)?;
+        let log = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(self.state_dir.join("forwarder.log"))
+            .map_err(io_err)?;
+        let mut cmd = Command::new("unshare");
+        cmd.arg(format!("--net=/proc/{pid}/ns/net"))
+            .arg(exe)
+            .args(plan::forwarder_args(port, &plan::forwarder_target(port)))
+            .stdin(Stdio::null())
+            .stdout(log.try_clone().map_err(io_err)?)
+            .stderr(log);
+        let child = cmd.spawn().map_err(|e| ProtoError {
+            code: ErrorCode::Io,
+            message: format!("cannot start the loopback forwarder for {port}: {e}"),
+        })?;
+        self.log(&format!(
+            "session {} forward 127.0.0.1:{port} -> {} pid={}",
+            s.name,
+            plan::forwarder_target(port),
+            child.id()
+        ));
+        s.forwards.push((port, child));
+        Ok(())
     }
 
     fn restart_pasta(&mut self) -> Result<(), ProtoError> {
@@ -874,6 +972,7 @@ impl Relay {
         let (relay_veths, session_rules) = self.relay_footprint();
         StatusInfo {
             up: self.up && alive,
+            supervisor: self.identity.clone(),
             down_reason: if self.up && alive { None } else { self.down_reason.clone() },
             fabric_pid: self.fabric_pid,
             pasta_pid: self.pasta.as_ref().map(|c| i32::try_from(c.id()).unwrap_or(-1)),
@@ -905,6 +1004,114 @@ impl Relay {
         self.up = false;
         self.log("supervisor shutdown");
     }
+}
+
+/// Start the session's loopback forwarder for `port` (idempotent).
+///
+/// The forwarder is a child of the supervisor that joins the **session's** netns
+/// (`unshare --net=/proc/<guest>/ns/net`) and binds `127.0.0.1:<port>` there,
+/// then dials the relay's host-loopback map address (the only path from a session
+/// to the host's loopback). It lives and dies with the session, and it exists
+/// only for ports the session opted in to, so a connection to any other host
+/// loopback port is refused rather than proxied.
+fn start_forwarder(
+    s: &mut Session,
+    port: u16,
+    exe: &Path,
+    log: std::fs::File,
+) -> Result<(), ProtoError> {
+    if s.forwards.iter().any(|(p, _)| *p == port) {
+        return Ok(());
+    }
+    let pid = s.pid.filter(|p| pid_alive(*p)).ok_or_else(|| ProtoError {
+        code: ErrorCode::NetworkUnavailable,
+        message: format!("session {} has no running guest to join", s.name),
+    })?;
+    // Join the session's netns with `setns` in the child, before exec: the
+    // descriptor is opened here (async-signal-safe in the forked child, unlike a
+    // path lookup), and `unshare --net=<file>` is not usable — util-linux
+    // bind-mounts over `/proc/self/ns/net`, which is EPERM in a user namespace.
+    use std::os::unix::io::AsRawFd;
+    let ns = std::fs::File::open(format!("/proc/{pid}/ns/net")).map_err(|e| ProtoError {
+        code: ErrorCode::NetworkUnavailable,
+        message: format!("session {}: /proc/{pid}/ns/net: {e}", s.name),
+    })?;
+    let ns_fd = ns.as_raw_fd();
+    let mut cmd = Command::new(exe);
+    cmd.args(plan::forwarder_args(port, &plan::forwarder_target(port)))
+        .stdin(Stdio::null())
+        .stdout(log.try_clone().map_err(io_err)?)
+        .stderr(log);
+    unsafe {
+        use std::os::unix::process::CommandExt;
+        cmd.pre_exec(move || {
+            if libc::setns(ns_fd, libc::CLONE_NEWNET) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut child = cmd.spawn().map_err(|e| ProtoError {
+        code: ErrorCode::Io,
+        message: format!("cannot start the loopback forwarder for {port}: {e}"),
+    })?;
+    // The bind happens in the forwarded process; a forwarder that exits at once
+    // (`unshare` refusing the netns) must not look like a successful opt-in.
+    std::thread::sleep(Duration::from_millis(30));
+    if let Ok(Some(status)) = child.try_wait() {
+        return Err(ProtoError {
+            code: ErrorCode::Io,
+            message: format!("the loopback forwarder for {port} exited: {status}"),
+        });
+    }
+    s.forwards.push((port, child));
+    Ok(())
+}
+
+/// Kill one session's forwarder for `port` (absent = nothing to do).
+fn stop_forwarder(s: &mut Session, port: u16) {
+    if let Some(pos) = s.forwards.iter().position(|(p, _)| *p == port) {
+        let (_, mut child) = s.forwards.remove(pos);
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+
+/// Move `pid` into the cgroup v2 scope named by `path` (the `0::…` line of
+/// `/proc/<launcher>/cgroup`) and verify it landed there.
+///
+/// A `cgroup.procs` write is how a process joins a cgroup; the guest's own
+/// children inherit it, and `memory.max`/`pids.max` of the caller's run scope
+/// then bound the guest on the relay arm exactly as they bound a directly
+/// spawned guest.
+fn move_to_cgroup(pid: u32, path: &str) -> Result<(), String> {
+    let rel = path.trim();
+    let rel = rel.strip_prefix('/').unwrap_or(rel);
+    let mut dir = PathBuf::new();
+    for mount in ["/sys/fs/cgroup"] {
+        let cand = Path::new(mount).join(rel);
+        if cand.is_dir() {
+            dir = cand;
+            break;
+        }
+    }
+    if dir.as_os_str().is_empty() {
+        return Err(format!("cgroup {path} is not visible"));
+    }
+    std::fs::write(dir.join("cgroup.procs"), pid.to_string())
+        .map_err(|e| format!("{}: {e}", dir.join("cgroup.procs").display()))?;
+    // Verify: a silent no-op would leave the guest unbounded.
+    let actual = std::fs::read_to_string(format!("/proc/{pid}/cgroup"))
+        .map_err(|e| format!("/proc/{pid}/cgroup: {e}"))?;
+    let got = actual
+        .lines()
+        .find_map(|l| l.strip_prefix("0::"))
+        .unwrap_or("")
+        .trim();
+    if got != path.trim() {
+        return Err(format!("guest landed in {got:?}, wanted {path:?}"));
+    }
+    Ok(())
 }
 
 fn self_log(dir: &Path, msg: &str) {

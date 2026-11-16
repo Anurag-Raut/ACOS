@@ -106,6 +106,20 @@ pub fn session(idx: u32) -> Option<SessionNet> {
     })
 }
 
+/// The address pasta rewrites to the host's `127.0.0.1` (and back), and therefore
+/// the address a session names when it wants a host loopback service.
+///
+/// It is the relay's own gateway ([`acos_services::connectivity::NET_GUEST_GATEWAY`]),
+/// the one address every session already routes to: the relay forwards it out of
+/// `tap0`, and pasta's inbound NAT turns `MAP:PORT` into `127.0.0.1:PORT` on the
+/// host. Nothing else on the host's loopback is reachable: every session gets a
+/// default-deny DROP for this address at attach ([`hostport_default_rule`]) and a
+/// named port is opened only by an explicit opt-in ([`hostport_allow_rule`]).
+#[must_use]
+pub fn host_loopback_map() -> String {
+    ip(connectivity::NET_GUEST_GATEWAY)
+}
+
 /// The hardened `pasta` argument list for the relay netns, up to and including
 /// `--`.
 ///
@@ -115,23 +129,23 @@ pub fn session(idx: u32) -> Option<SessionNet> {
 /// * `-t none -u none -T none -U none` — every port-mirroring direction is off.
 ///   `-T/-U none` alone is not enough: `-t auto`/`-u auto` still scan the host's
 ///   loopback listeners in `--netns` mode (measured leak, SPIKE-NET attempt 3).
-///
-/// `-t` and `-T` are **opposite directions** (pasta `--help`): `-t SPEC` forwards
-/// *to the namespace* (host → guest), `-T SPEC` forwards *to the init namespace*
-/// (guest → host). An opt-in host port (Metro's 8081) is guest → host, so it is
-/// `-T <port>`; `-t <port>` would open a host listener the guest never reaches
-/// (measured in NET2: guest → gateway:18081 refused with `-t 18081`).
+///   `-T <port>` is **not** a way to open a host port for a relay session: on the
+///   pinned tag a `-T` rule is served by a listening socket that pasta binds
+///   inside *its own* target namespace (the relay netns) and only for
+///   loopback → loopback flows — `fwd_nat_from_splice()` refuses anything else
+///   with `PIF_NONE` (`fwd.c`), and a session cannot reach the relay netns'
+///   `127.0.0.1` at all. NET2 measured the consequence; NET3 §host-port measures
+///   every `-T` form of the pinned tag and uses [`host_loopback_map`] instead.
+/// * `--map-host-loopback <MAP>` — the *only* host-loopback path there is: pasta
+///   rewrites the relay's `MAP` destination to the host's `127.0.0.1`. It is
+///   gated per session per port in the relay netns (see [`hostport_default_rule`]
+///   and [`hostport_allow_rule`]); `--no-map-gw` keeps pasta from choosing that
+///   address by itself.
 /// * `--no-splice` — no layer-4 splice between guest and host sockets.
-/// * `--map-host-loopback none --no-map-gw` — the gateway address is not
-///   rewritten to the host.
 /// * `-a/-g/-D` come from [`acos_services::connectivity`], the same numbers
 ///   `LinkProperties` reports.
-///
-/// `ports` are the explicitly named host ports (Metro 8081). Each one becomes a
-/// pasta forward, i.e. reachable from the relay; per-session access is gated by
-/// [`hostport_gate_rule`].
 #[must_use]
-pub fn relay_pasta_args(ports: &[u16]) -> Vec<String> {
+pub fn relay_pasta_args() -> Vec<String> {
     let mut args: Vec<String> = vec![
         "--config-net".into(),
         "-I".into(),
@@ -146,27 +160,17 @@ pub fn relay_pasta_args(ports: &[u16]) -> Vec<String> {
         ip(connectivity::NET_GUEST_GATEWAY),
         "--no-map-gw".into(),
         "--map-host-loopback".into(),
-        "none".into(),
+        host_loopback_map(),
         "--no-splice".into(),
         "-D".into(),
         ip(connectivity::NET_DNS_SERVER),
     ];
-    // Every direction starts closed; named host ports are added as `-T`, i.e.
-    // guest -> host (see the doc comment above).
-    args.push("-t".into());
-    args.push("none".into());
-    args.push("-u".into());
-    args.push("none".into());
-    for p in ports {
-        args.push("-T".into());
-        args.push(p.to_string());
-    }
-    if ports.is_empty() {
-        args.push("-T".into());
+    // Every direction starts closed, and stays closed: host ports are opened by
+    // the per-session gate below, not by a pasta forward.
+    for flag in ["-t", "-u", "-T", "-U"] {
+        args.push(flag.into());
         args.push("none".into());
     }
-    args.push("-U".into());
-    args.push("none".into());
     args.push("-f".into());
     args.push("-q".into());
     args.push("--".into());
@@ -256,15 +260,57 @@ pub fn netem_clear_rule(net: &SessionNet) -> String {
     format!("tc qdisc del dev {} root", net.veth)
 }
 
-/// Host-port opt-in: a session that has not asked for `port` must not reach it,
-/// even when the relay forwards it for another session.
+/// Host-port opt-in, part 1: **every** session starts with the host's loopback
+/// unreachable. The rule is appended at attach, so it is below any later
+/// [`hostport_allow_rule`] insert (netfilter evaluates a chain top to bottom, and
+/// an `ACCEPT` in this chain ends the packet's traversal — it never reaches the
+/// relay's own link-local/CGNAT drops below it).
 #[must_use]
-pub fn hostport_gate_rule(net: &SessionNet, port: u16, allow: bool) -> String {
-    if allow {
-        format!("iptables -w -D {SESSION_CHAIN} -i {} -p tcp --dport {port} -j DROP", net.veth)
-    } else {
-        format!("iptables -w -I {SESSION_CHAIN} -i {} -p tcp --dport {port} -j DROP", net.veth)
-    }
+pub fn hostport_default_rule(net: &SessionNet) -> String {
+    format!(
+        "iptables -w -A {SESSION_CHAIN} -i {} -d {}/32 -j DROP",
+        net.veth,
+        host_loopback_map()
+    )
+}
+
+/// Host-port opt-in, part 2: open exactly one port of the host's loopback for
+/// exactly one session (`on = false` closes it again).
+#[must_use]
+pub fn hostport_allow_rule(net: &SessionNet, port: u16, on: bool) -> String {
+    let flag = if on { "-I" } else { "-D" };
+    format!(
+        "iptables -w {flag} {SESSION_CHAIN} -i {} -d {}/32 -p tcp --dport {port} -j ACCEPT",
+        net.veth,
+        host_loopback_map()
+    )
+}
+
+/// The per-session forwarder that binds `127.0.0.1:<port>` **inside the session
+/// netns** and dials the relay's host-loopback map address.
+///
+/// This is what makes an opt-in host port usable by an app that does what an
+/// Android app does: connect to `localhost` (`Metro`'s `ws://localhost:8081`, an
+/// `adb reverse` target). The guest's own `lo` cannot be made to reach the host,
+/// so the forwarder terminates the loopback connection in the session netns and
+/// opens the gated path out. It is opt-in only: no forwarder, no listener, so a
+/// connection to `127.0.0.1:<port>` is refused exactly as on a phone without
+/// `adb reverse`.
+#[must_use]
+pub fn forwarder_args(port: u16, target: &str) -> Vec<String> {
+    vec![
+        "forward".to_string(),
+        "--listen".to_string(),
+        format!("127.0.0.1:{port}"),
+        "--target".to_string(),
+        target.to_string(),
+    ]
+}
+
+/// The default dial target of the forwarder for a named port.
+#[must_use]
+pub fn forwarder_target(port: u16) -> String {
+    format!("{}:{port}", host_loopback_map())
 }
 
 /// The session-side shim: run **inside the session netns**, root in the
@@ -299,7 +345,7 @@ while [ "$i" -lt 3000 ]; do
 done
 [ -n "$found" ] || fail no-veth
 # One exec configures the interface: link up, address, default route.
-printf 'link set {peer} up\naddr add {cidr} dev {peer}\nroute add default via {gw}\n' \
+printf 'link set lo up\nlink set {peer} up\naddr add {cidr} dev {peer}\nroute add default via {gw}\n' \
   | ip -batch - >/dev/null || fail ip-batch
 # The default route is verified, not assumed: a session that cannot route is a
 # failed session, not a silent offline one.

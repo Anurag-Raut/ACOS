@@ -1,0 +1,3 @@
+cgroup=/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1538458-i1597806.scope
+memory_max=1073741824
+unguarded-ok 1572864000

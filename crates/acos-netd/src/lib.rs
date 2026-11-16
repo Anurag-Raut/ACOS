@@ -10,6 +10,7 @@
 //! lands [`crate::spike_flag`]; the default stays **off**.
 
 pub mod client;
+pub mod forward;
 pub mod plan;
 pub mod proto;
 pub mod supervisor;
@@ -36,13 +37,27 @@ pub fn serve() -> std::io::Result<()> {
     let dir = client::state_dir();
     let sock = client::socket_path();
     // Never clobber a live supervisor's socket: two supervisors would mean two
-    // relay netns and two NAT processes on one host.
+    // relay netns and two NAT processes on one host. The flock closes the race
+    // two clients starting a supervisor at the same time would otherwise lose
+    // (the loser used to unlink the winner's socket and bind its own).
+    let lock_path = dir.join("supervisor.lock");
+    let lock = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .open(&lock_path)?;
+    use std::os::unix::io::AsRawFd;
+    if unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+        eprintln!("acos-netd: a supervisor is already running on {}", sock.display());
+        return Ok(());
+    }
     if std::os::unix::net::UnixStream::connect(&sock).is_ok() {
         eprintln!("acos-netd: a supervisor is already running on {}", sock.display());
         return Ok(());
     }
     let _ = std::fs::remove_file(&sock);
     let listener = UnixListener::bind(&sock)?;
+    // The lock is held for the life of the process (dropped with `lock`).
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&sock, std::fs::Permissions::from_mode(0o600))?;
@@ -72,6 +87,8 @@ pub fn serve() -> std::io::Result<()> {
     for conn in listener.incoming() {
         let Ok(mut conn) = conn else { continue };
         let relay = Arc::clone(&relay);
+        let dir = dir.clone();
+        let sock = sock.clone();
         std::thread::spawn(move || {
             // One connection carries any number of requests: a client keeps its
             // handle for the life of a session (`Client` is the session API's
@@ -88,17 +105,39 @@ pub fn serve() -> std::io::Result<()> {
                 // the `spawn` line (a plain read would silently drop them).
                 let (line, fds) = match read_request(&reader, &mut pending) {
                     Ok(Some(v)) => v,
-                    _ => return,
+                    Ok(None) => {
+                        log_line(&dir, "connection closed by the client");
+                        return;
+                    }
+                    Err(e) => {
+                        // Never silent: a connection a client still holds must
+                        // only ever end on its own close (a relay that drops it
+                        // shows up as `Broken pipe` in the caller).
+                        log_line(&dir, &format!("connection read failed: {e}"));
+                        return;
+                    }
                 };
-                let reply = match proto::decode_request(&line) {
+                let req = proto::decode_request(&line);
+                let exit = matches!(req, Ok(Request::Shutdown));
+                let reply = match req {
                     Err(e) => Reply::fail(e.code, e.message),
                     Ok(req) => handle_with_fds(&relay, req, &fds),
                 };
                 for fd in fds {
                     unsafe { libc::close(fd) };
                 }
-                if writer.write_all(proto::encode(&reply).as_bytes()).is_err() {
+                if let Err(e) = writer.write_all(proto::encode(&reply).as_bytes()) {
+                    log_line(&dir, &format!("connection write failed: {e}"));
                     return;
+                }
+                if exit {
+                    // `shutdown` means shutdown: the relay is gone, so leaving a
+                    // live socket behind would let the next client resurrect the
+                    // relay in a supervisor whose identity the caller may no
+                    // longer match (and `acos-netd shutdown` must leave nothing).
+                    log_line(&dir, "supervisor exit (shutdown)");
+                    let _ = std::fs::remove_file(&sock);
+                    std::process::exit(0);
                 }
             }
         });
@@ -133,7 +172,15 @@ fn read_request(
         msg.msg_control = cmsg_space.as_mut_ptr().cast();
         msg.msg_controllen = cmsg_space.len();
         let n = unsafe { libc::recvmsg(sock.as_raw_fd(), &mut msg, 0) };
-        if n <= 0 {
+        if n < 0 {
+            let e = std::io::Error::last_os_error();
+            if e.kind() == std::io::ErrorKind::Interrupted {
+                // A signal is not a client disconnect.
+                continue;
+            }
+            return Err(e);
+        }
+        if n == 0 {
             return Ok(None);
         }
         pending.extend_from_slice(&buf[..n as usize]);
@@ -172,6 +219,7 @@ fn handle_with_fds(
     };
     let r = &mut *guard;
     match &req {
+        Request::Identity => Reply { identity: Some(r.identity().clone()), ..Reply::ok() },
         Request::Status => Reply::status(r.status()),
         Request::Up { pasta } => match r.ensure_up(pasta.clone()) {
             Ok(()) => Reply::status(r.status()),
@@ -184,6 +232,7 @@ fn handle_with_fds(
                 status: None,
                 session: Some(s),
                 attach_ms: Some(ms),
+                identity: None,
             },
             Err(e) => Reply::fail(e.code, e.message),
         },
@@ -227,6 +276,18 @@ fn handle_with_fds(
             r.shutdown();
             Reply::ok()
         }
+    }
+}
+
+/// Append one line to the supervisor's log (`netd.log`), best effort.
+fn log_line(dir: &std::path::Path, msg: &str) {
+    use std::io::Write as _;
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("netd.log"))
+    {
+        let _ = writeln!(f, "{}", msg);
     }
 }
 

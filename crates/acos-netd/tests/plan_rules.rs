@@ -22,14 +22,20 @@ fn pair(args: &[String], flag: &str) -> String {
     args[at + 1].clone()
 }
 
-/// ADR-0030 amendment 2: every port-mirroring direction off, no splice, no
-/// host-loopback mapping, and the addresses `LinkProperties` reports.
+/// ADR-0030 amendment 2 + 3: every port-mirroring direction off, no splice, the
+/// host loopback reachable only through the *gated* map address, and the
+/// addresses `LinkProperties` reports.
 #[test]
 fn relay_pasta_args_keep_the_host_boundary_and_match_link_properties() {
-    let args = plan::relay_pasta_args(&[]);
+    let args = plan::relay_pasta_args();
     assert!(args.iter().any(|a| a == "--no-splice"), "no splice: {args:?}");
-    assert!(args.iter().any(|a| a == "--no-map-gw"), "no gateway mapping");
-    assert_eq!(pair(&args, "--map-host-loopback"), "none");
+    assert!(args.iter().any(|a| a == "--no-map-gw"), "no gateway mapping by itself");
+    // The map address is the relay's own gateway, and it is the *only* way to
+    // the host's loopback: NET3 measured that a `-T` forward cannot serve a
+    // relay session (see the plan's doc comment), so the map is the path and the
+    // per-session gate is what makes it safe.
+    assert_eq!(pair(&args, "--map-host-loopback"), plan::host_loopback_map());
+    assert_eq!(plan::host_loopback_map(), plan::ip(connectivity::NET_GUEST_GATEWAY));
     assert_eq!(pair(&args, "-t"), "none", "host ports are never auto-forwarded");
     assert_eq!(pair(&args, "-u"), "none");
     assert_eq!(pair(&args, "-T"), "none");
@@ -49,18 +55,23 @@ fn relay_pasta_args_keep_the_host_boundary_and_match_link_properties() {
     assert_eq!(args.last().map(String::as_str), Some("--"), "argv ends at --");
 }
 
-/// A named host port is the *only* forward the relay ever has.
+/// No host port is a pasta forward, ever.
+///
+/// The pinned tag's `-T` rule is served by a listening socket pasta binds in its
+/// own target namespace and only for loopback → loopback flows
+/// (`fwd_nat_from_splice` returns `PIF_NONE` otherwise), so no `-T` form can open
+/// a host port for a session in a *different* netns. Host ports are the gated map
+/// address instead; the relay's argv must never grow a forward again.
 #[test]
-fn relay_pasta_args_forward_only_the_named_host_port() {
-    let args = plan::relay_pasta_args(&[8081]);
-    // `-T` is guest -> host (pasta `--help`): the direction an opt-in host
-    // listener (Metro) must be reached in. `-t` is the opposite direction.
-    assert!(args.windows(2).any(|w| w[0] == "-T" && w[1] == "8081"), "{args:?}");
+fn relay_pasta_args_never_forward_a_host_port() {
+    let args = plan::relay_pasta_args();
+    for flag in ["-t", "-u", "-T", "-U"] {
+        assert_eq!(pair(&args, flag), "none", "{flag} must be `none`: {args:?}");
+    }
     assert!(
-        !args.windows(2).any(|w| w[0] == "-T" && w[1] == "none"),
-        "a named port must not also be `-T none`: {args:?}"
+        !args.iter().any(|a| a.chars().all(|c| c.is_ascii_digit())),
+        "no bare port in the relay's argv: {args:?}"
     );
-    assert_eq!(pair(&args, "-u"), "none", "UDP is never forwarded");
 }
 
 /// The LAN boundary is installed in the relay netns, in the right order, and it
@@ -147,10 +158,38 @@ fn controls_are_per_session() {
     assert!(plan::netem_rule(&b, 0, 0, 0).contains("dev acosv2 root netem"));
     assert_eq!(plan::netem_clear_rule(&b), "tc qdisc del dev acosv2 root");
 
-    let gate = plan::hostport_gate_rule(&b, 8081, false);
-    assert!(gate.contains("-I ACOS-SESS -i acosv2 -p tcp --dport 8081 -j DROP"), "{gate}");
-    let ungate = plan::hostport_gate_rule(&b, 8081, true);
-    assert!(ungate.contains("-D ACOS-SESS -i acosv2 -p tcp --dport 8081 -j DROP"), "{ungate}");
+    // Host ports: default deny the whole host loopback at attach, then one
+    // ACCEPT per opted-in port, inserted above that DROP.
+    let deny = plan::hostport_default_rule(&b);
+    assert_eq!(
+        deny,
+        format!(
+            "iptables -w -A ACOS-SESS -i acosv2 -d {}/32 -j DROP",
+            plan::host_loopback_map()
+        ),
+        "{deny}"
+    );
+    let allow = plan::hostport_allow_rule(&b, 8081, true);
+    assert_eq!(
+        allow,
+        format!(
+            "iptables -w -I ACOS-SESS -i acosv2 -d {}/32 -p tcp --dport 8081 -j ACCEPT",
+            plan::host_loopback_map()
+        ),
+        "{allow}"
+    );
+    assert!(plan::hostport_allow_rule(&b, 8081, false).starts_with("iptables -w -D ACOS-SESS"));
+    // The forwarder's two ends: the session's loopback, and the gated map address.
+    assert_eq!(
+        plan::forwarder_args(8081, &plan::forwarder_target(8081)),
+        vec![
+            "forward".to_string(),
+            "--listen".to_string(),
+            "127.0.0.1:8081".to_string(),
+            "--target".to_string(),
+            format!("{}:8081", plan::host_loopback_map()),
+        ]
+    );
 }
 
 /// The shim configures the session from the plan, records the attach timestamp
@@ -161,6 +200,7 @@ fn session_shim_configures_then_execs_and_fails_closed() {
     let shim = plan::session_shim(&n, "/run/x/ready-3.txt");
     assert!(shim.contains("/proc/self/net/dev"), "waits for the veth in its own netns, without an exec per poll");
     assert!(shim.contains("addr add 10.163.3.2/30 dev acoss3"), "one `ip -batch` exec, not four: {shim}");
+    assert!(shim.contains("link set lo up"), "the session's own loopback is up (a forwarder binds it): {shim}");
     assert!(shim.contains("route add default via 10.163.3.1"));
     assert!(shim.contains("via 10.163.3.1"), "the default route is verified, not assumed");
     assert!(shim.contains("/run/x/ready-3.txt"));

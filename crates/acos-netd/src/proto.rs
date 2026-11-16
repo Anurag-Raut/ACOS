@@ -34,6 +34,10 @@ pub enum ErrorCode {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "kebab-case")]
 pub enum Request {
+    /// The supervisor's own identity (binary path + content build id). Cheap:
+    /// no relay probes. A client uses it to notice a supervisor left over from
+    /// another build and replace it cleanly.
+    Identity,
     /// Relay state: up/down, pasta pid, named host ports, sessions.
     Status,
     /// Ensure the relay exists (idempotent); creates fabric + pasta on first use.
@@ -80,6 +84,13 @@ pub enum Request {
         /// `SIGKILL`ed launcher cannot leak a guest, a veth or a rule.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         owner_pid: Option<u32>,
+        /// The cgroup v2 path of the run's own scope (`/proc/self/cgroup`'s
+        /// `0::…` line): the guest is moved into it before the session counts as
+        /// attached, so the run's `memory.max`/`pids.max` bound the guest on the
+        /// relay arm too (the supervisor is not inside the scope, so inheriting
+        /// it is not automatic). Absent = the caller has no scope to lend.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cgroup: Option<String>,
     },
     /// One session's state, without the relay-wide probes `Status` runs (this is
     /// what a waiting launcher polls).
@@ -157,10 +168,32 @@ pub struct SessionInfo {
     pub signal: Option<i32>,
 }
 
+/// Who the supervisor is: its binary path and a content build id.
+///
+/// The build id is a hash of the executable's bytes, so a rebuilt binary at the
+/// same path is a *different* identity: a stale supervisor that can no longer
+/// exec its own fabric (its `/proc/self/exe` was replaced) is detectable, and
+/// `acos-netd` can be replaced without a manual `kill`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SupervisorInfo {
+    pub pid: i32,
+    /// `/proc/self/exe` of the supervisor (the `acos-netd` binary).
+    pub exe: String,
+    /// Hex FNV-1a 64 of the executable's bytes (`None` when it could not be read).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub build_id: Option<String>,
+    /// `CARGO_PKG_VERSION` of the supervisor build.
+    pub version: String,
+    /// Wall-clock start of the supervisor (Unix ms).
+    pub started_ms: u64,
+}
+
 /// Relay state.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StatusInfo {
     pub up: bool,
+    /// The supervisor itself (identity + build id).
+    pub supervisor: SupervisorInfo,
     /// Why the relay is down, when it is.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub down_reason: Option<String>,
@@ -191,6 +224,8 @@ pub struct Reply {
     pub session: Option<SessionInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attach_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity: Option<SupervisorInfo>,
 }
 
 /// The failure payload.
@@ -203,7 +238,7 @@ pub struct ProtoError {
 impl Reply {
     #[must_use]
     pub fn ok() -> Self {
-        Self { ok: true, error: None, status: None, session: None, attach_ms: None }
+        Self { ok: true, error: None, status: None, session: None, attach_ms: None, identity: None }
     }
 
     #[must_use]
@@ -214,6 +249,7 @@ impl Reply {
             status: None,
             session: None,
             attach_ms: None,
+            identity: None,
         }
     }
 
