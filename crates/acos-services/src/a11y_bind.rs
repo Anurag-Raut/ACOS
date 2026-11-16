@@ -802,7 +802,9 @@ impl ServiceObject for A11yConnectionNode {
                 self.relay_action(data, reply, &mut state)?;
             }
             "getWindows" => {
+                crate::trace::line("ACOSA11Y getWindows enter");
                 let windows = state.window_snapshot();
+                crate::trace::line(format!("ACOSA11Y getWindows snapshot={}", windows.len()));
                 let connection_id = state
                     .bound_service
                     .as_ref()

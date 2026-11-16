@@ -439,7 +439,7 @@ struct RawTransactTrace {
 impl Drop for RawTransactTrace {
     fn drop(&mut self) {
         if self.enabled {
-            eprintln!("ACOSWMS exit code={}", self.code);
+            crate::trace::line(format!("ACOSWMS exit code={}", self.code));
         }
     }
 }
@@ -573,24 +573,25 @@ impl ServiceObject for WindowSessionService {
         // blocked the guest main thread: the last `enter` with no `exit` is the
         // transaction that never completed, which no probe sample can show
         // (the guest stops sampling and `WindowManagerGlobal.mLock` hides why).
-        let trace = std::env::var_os("ACOS_WMS_TRACE").is_some();
+        let trace = std::env::var_os("ACOS_WMS_TRACE").is_some()
+            || std::env::var_os("ACOS_TRACE_FILE").is_some();
         let _trace_guard = RawTransactTrace { enabled: trace, code };
         if trace {
-            eprintln!(
+            crate::trace::line(format!(
                 "ACOSWMS enter code={code} ({}) avail={}",
                 method_name(code).unwrap_or_else(|| "?".into()),
                 data.data_avail()
-            );
+            ));
         }
         if interface != DESCRIPTOR {
             return Ok(false);
         }
         if trace {
-            eprintln!("ACOSWMS lock-wait code={code}");
+            crate::trace::line(format!("ACOSWMS lock-wait code={code}"));
         }
         let mut state = self.lock();
         if trace {
-            eprintln!("ACOSWMS locked code={code}");
+            crate::trace::line(format!("ACOSWMS locked code={code}"));
         }
         let window_id = self.window_id_binder;
         match code {

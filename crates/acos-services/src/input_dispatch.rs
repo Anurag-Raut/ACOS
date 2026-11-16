@@ -628,6 +628,15 @@ impl InputHost {
         ack_wait: Duration,
     ) -> Result<InjectedGesture> {
         let seqs: Vec<u32> = gesture.dispatches.iter().map(|d| d.seq).collect();
+        let traced = std::env::var_os("ACOS_TRACE_FILE").is_some()
+            || std::env::var_os("ACOS_INPUT_TRACE").is_some();
+        if traced {
+            crate::trace::line(format!(
+                "ACOSINPUT collect-wait token={:#x} seqs={seqs:?} budget_ms={}",
+                token.0,
+                ack_wait.as_millis()
+            ));
+        }
         let mut acks: Vec<InjectedAck> = Vec::new();
         let deadline = Instant::now() + ack_wait;
         while Instant::now() < deadline && acks.len() < seqs.len() {

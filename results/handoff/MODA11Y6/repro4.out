@@ -1,0 +1,6 @@
+verify: fail (ok=false, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real, accessibility:real attached; off: system.permissions, system.notifications, sensors, feedback.vibrator, net.telephony, hw.bluetooth, hw.biometric, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  error: ASSERTION_FAILED: log assertion did not hold
+  artifacts: results/handoff/MODA11Y6/repro4
+  steps: 9
