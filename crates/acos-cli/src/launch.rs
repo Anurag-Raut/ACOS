@@ -72,6 +72,12 @@ pub struct LaunchArgs {
     #[arg(long)]
     pub keep: bool,
 
+    /// Optional agent label for the session (the MCP `acos_launch {label}`).
+    /// `acos session list` / `acos_status` print it, so a parked session is
+    /// recognisable without remembering its id.
+    #[arg(long)]
+    pub label: Option<String>,
+
     /// Override the display density (dpi) the client sees. `--density 400`
     /// lays ACOS out at 1080x2400 @ 400 dpi (the moto g35 under test) instead
     /// of the API-34 emulator's 420 dpi, so geometry can be compared on the
@@ -282,6 +288,7 @@ fn run_keep(
         "insets": args.insets.clone(),
         "animations": args.animations.clone(),
         "timeout_ms": args.timeout.saturating_mul(1000),
+        "label": args.label.clone(),
     });
     // The engine is forwarded verbatim: the daemon must answer with the engine
     // that actually ran and must never fall back to another one.

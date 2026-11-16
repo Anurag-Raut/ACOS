@@ -11,6 +11,7 @@ mod engine;
 mod bench_sessions;
 mod failure;
 mod frame_diff;
+mod guide;
 mod launch;
 mod live_registry;
 mod native_inventory;
@@ -48,7 +49,14 @@ use serde_json::{json, Value};
 
 /// ACOS — agent-native Android execution OS (static analysis front-end).
 #[derive(Debug, Parser)]
-#[command(name = "acos", version, about, long_about = None)]
+#[command(
+    name = "acos",
+    version,
+    about,
+    long_about = None,
+    after_help = "Run `acos guide [topic]` for the agent guide — the same text as the MCP `acos_help` tool \
+                  (`workflow`, `cli`, `scenarios`, `errors`, `limits`, `mcp`, or `all`)."
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -101,6 +109,8 @@ enum Command {
     Bench(bench::BenchArgs),
     /// Probe confinement capabilities and report which layers are active (JSON).
     SandboxProbe,
+    /// Print the agent guide (same text as the MCP `acos_help` tool).
+    Guide(guide::GuideArgs),
     /// Preflight the host toolchain (SDK, JDK, helper, memory) before building.
     Doctor(doctor::DoctorArgs),
     /// Serve a 127.0.0.1-only, token-gated, view-only live view of live sessions.
@@ -217,6 +227,7 @@ fn main() -> ExitCode {
             Command::Bench(args) => bench::run(args),
             Command::NativeInventory(args) => native_inventory::run(args),
             Command::SandboxProbe => sandbox_probe::run(),
+            Command::Guide(args) => guide::run(args),
             Command::Doctor(args) => doctor::run(args),
             Command::View(args) => view::run(args),
         }

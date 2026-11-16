@@ -299,3 +299,75 @@ fn a_rerun_into_the_default_artifacts_dir_replaces_the_previous_run() {
     assert_eq!(verdict["artifacts_overwrote_run"], first_run.as_str());
     let _ = std::fs::remove_dir_all(&cwd);
 }
+
+/// A `wait_for` timeout must name the selector in the human form
+/// (`text=="Nonexistent"`), never the Rust `Debug` dump
+/// (`Selector { id: None, text: Some(TextMatch { ... }) }`) that an agent first
+/// read as an internal object it could not act on. The same message is in the
+/// envelope's `error.message`, so stdout and stderr agree.
+#[test]
+fn a_wait_for_timeout_names_the_selector_humanly() {
+    let scratch = scratch("wait-for-human-selector");
+    std::fs::create_dir_all(&scratch).expect("scratch");
+    let scenario = scratch.join("wait-for-human-selector.yaml");
+    std::fs::write(
+        &scenario,
+        "version: 1\n\
+         name: wait-for-human-selector\n\
+         description: wait_for on a text the fixture never renders\n\
+         app: fixtures/build/apps/hello-views.apk\n\
+         engine: reference-only\n\
+         fallback: forbid\n\
+         api_level: 34\n\
+         isolation: process\n\
+         display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}\n\
+         steps:\n\
+         \x20 - launch:\n\
+         \x20     activity: dev.acos.fixtures.helloviews/.MainActivity\n\
+         \x20     clear_state: true\n\
+         \x20 - wait_for:\n\
+         \x20     selector: {text: {exact: Nonexistent}}\n\
+         \x20     timeout_ms: 50\n",
+    )
+    .expect("write scenario");
+    let artifacts = scratch.join("artifacts");
+    let output = Command::cargo_bin("acos")
+        .unwrap()
+        .current_dir(workspace())
+        .arg("verify")
+        .arg(&scenario)
+        .arg("--apk")
+        .arg(require_hello_views_apk())
+        .arg("--reference")
+        .arg(workspace().join("fixtures/reference/hello-views/art-api34-x86_64"))
+        .arg("--artifacts")
+        .arg(&artifacts)
+        .arg("--json")
+        .output()
+        .expect("run acos verify");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let envelope: Value = serde_json::from_str(stdout.trim()).expect("stdout is exactly JSON");
+    assert_ne!(envelope["status"], "pass", "{envelope:#?}");
+    let message = envelope
+        .pointer("/error/message")
+        .and_then(Value::as_str)
+        .expect("a wait_for timeout carries an error message");
+    assert!(
+        message.contains("text==\"Nonexistent\""),
+        "the selector must be human: {message}"
+    );
+    assert!(
+        !message.contains("Selector {") && !message.contains("TextMatch {"),
+        "no Rust Debug dump in the error: {message}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("text==\"Nonexistent\""),
+        "the human summary names the selector: {stderr}"
+    );
+    assert!(
+        !stderr.contains("Selector {") && !stderr.contains("TextMatch {"),
+        "no Rust Debug dump on stderr: {stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&scratch);
+}

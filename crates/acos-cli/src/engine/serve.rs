@@ -68,6 +68,12 @@ struct HeldArtSession {
     /// classify a lost guest (W55).
     artifacts: PathBuf,
     trust: Trust,
+    /// The agent's `acos_launch {label}` (empty when unset): the human handle
+    /// `session list` / `acos_status` print beside the session id.
+    label: Mutex<String>,
+    /// When the current launch started (ms since the epoch), for the `age_s`
+    /// column of `session list`.
+    started_ms: Mutex<u64>,
     /// SERVELEAK2/F3: the identity of the **launch** that currently owns this
     /// session id. Every `acos_launch` renews it, `session_list` reports it and a
     /// client that launched the session records it, so a client whose launch was
@@ -80,6 +86,32 @@ struct HeldArtSession {
 }
 
 impl HeldArtSession {
+    /// Record a (re)launch: its agent label and its start time. A launch on a
+    /// live session is a new launch, so age restarts (the same rule
+    /// `acos_status` uses for its owned sessions).
+    fn note_launch(&self, label: &str) {
+        *self.label.lock().unwrap_or_else(|e| e.into_inner()) = label.to_string();
+        *self
+            .started_ms
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = crate::live_registry::now_ms();
+    }
+
+    fn label(&self) -> String {
+        self.label
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    fn age_s(&self) -> u64 {
+        let started = *self
+            .started_ms
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        crate::live_registry::now_ms().saturating_sub(started) / 1000
+    }
+
     /// Renew and return this session's launch token (SERVELEAK2/F3).
     fn renew_launch_token(&self) -> String {
         let token = new_launch_token();
@@ -109,6 +141,20 @@ fn new_launch_token() -> String {
         bytes.copy_from_slice(&nanos.to_le_bytes());
     }
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+/// `/proc/<pid>/status` `VmRSS`, in KiB, for a live guest (`None` when the pid
+/// is gone). `session_list` reports it so an agent sees what a parked session
+/// costs; it is the guest's own RSS, not the whole tree's.
+fn guest_rss_kb(pid: u32) -> Option<u64> {
+    let status = std::fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
+    for line in status.lines() {
+        let Some(rest) = line.strip_prefix("VmRSS:") else {
+            continue;
+        };
+        return rest.split_whitespace().next()?.parse().ok();
+    }
+    None
 }
 
 /// Session routing for the daemon: which engine owns a session id.
@@ -253,6 +299,12 @@ impl ServeEngine {
                 // guest RSS read from `/proc/<pid>/status`.
                 "activity": session.activity(),
                 "guest_pid": session.guest_pid(),
+                // FB5 hygiene, now also on the daemon's own list: the agent's
+                // label, how long this launch has been up, and what the guest
+                // costs. `acos session list` (text) prints exactly these.
+                "label": held.label(),
+                "age_s": held.age_s(),
+                "guest_rss_kb": session.guest_pid().and_then(guest_rss_kb),
                 "apk": held.apk.display().to_string(),
                 "stage_reached": "first_frame",
                 "frame_seq": if exit.is_some() {
@@ -484,6 +536,11 @@ impl ServeEngine {
         ctx: &CallContext,
     ) -> Envelope {
         let trust = trust_arg(args);
+        let agent_label = args
+            .get("label")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
         let verb_started = std::time::Instant::now();
         // P9: launch consumes P1/P3b's settle vocabulary. `strict` is the
         // default and unchanged; `fast` binds the first traversal's probe sample
@@ -649,6 +706,7 @@ impl ServeEngine {
                     // Re-launch on the live session = hand back its bound live
                     // frame (the daemon's whole point); never boot a second
                     // guest.
+                    held.note_launch(&agent_label);
                     let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
                     return match session.ensure_launch_tree(settle, pixels) {
                         Ok(tree) => launch_reply(
@@ -723,9 +781,12 @@ impl ServeEngine {
                     apk: apk.clone(),
                     artifacts: artifacts.clone(),
                     trust,
+                    label: Mutex::new(String::new()),
+                    started_ms: Mutex::new(0),
                     launch_token: Mutex::new(String::new()),
                     session: Mutex::new(session),
                 });
+                held.note_launch(&agent_label);
                 self.art
                     .lock()
                     .unwrap_or_else(|e| e.into_inner())

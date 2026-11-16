@@ -1016,7 +1016,7 @@ fn execute_step(
                         ProtocolError::new(
                             ErrorCode::Timeout,
                             format!(
-                                "wait_for timed out after {} ms: selector {:?} did not satisfy the condition (require_visible={}){}",
+                                "wait_for timed out after {} ms: selector {} did not satisfy the condition (require_visible={}){}",
                                 wait.timeout_ms, wait.selector, wait.require_visible,
                                 offscreen.as_ref().map_or_else(String::new, |node| format!(
                                     "; it DID match a node that is not visible to the user (bounds {}, visible_bounds {}) — scroll it into view first",

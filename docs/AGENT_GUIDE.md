@@ -249,10 +249,13 @@ search flow no longer has to become a scenario. In four calls:
 ## CLI reference (runnable examples)
 
 ```
+acos guide                                    # the agent guide (same text as MCP acos_help)
+acos guide workflow                           # one topic: workflow|cli|scenarios|errors|limits|mcp
+acos guide all                                # the whole guide
 acos doctor --json
 acos inspect fixtures/build/apps/counter.apk --json
 acos launch fixtures/build/apps/counter.apk --engine art --json
-acos launch fixtures/build/apps/counter.apk --engine art --keep --json   # session survives in the daemon
+acos launch fixtures/build/apps/counter.apk --engine art --keep --label counter --json  # session survives in the daemon
 acos observe --tree --json                        # the daemon's live session
 acos observe --tree --apk fixtures/build/apps/counter.apk --json         # one-shot: launch then observe
 acos observe --screenshot out/counter.png --json
@@ -293,11 +296,16 @@ Notes that save a run:
   MCP tools `acos_reset` / `acos_destroy`. There is no top-level `acos reset`.
 * `acos run-dex <path> --main Main` executes a DEX `main` on the Rust
   interpreter: console-tier checks only, not UI evidence.
+* `acos guide [topic]` prints the agent guide from the same source as the MCP
+  `acos_help` tool (`docs/AGENT_GUIDE.md`); `acos guide all` is the whole text.
+  A CLI-only agent does not need the checkout to read the scenario schema.
+* **Human output contract:** with `--json`, stdout is the JSON document and
+  nothing else; the human summary (status line, warnings, the next action) goes
+  to stderr. In text mode the human summary is stdout. Never parse text mode to
+  get a verdict, and never mix the streams (`2>&1`) when the output is JSON.
 * Every command takes `--json` and prints the same envelope the MCP tools
-  return. With `--json`, **stdout carries only the JSON document**; progress,
-  warnings and the one-line failure summary go to **stderr**. So
-  `acos verify … --json > out.json 2>&1` is *not* JSON — send stderr elsewhere
-  (`2>err.txt`). Text mode prints the human summary on stdout.
+  return. So `acos verify … --json > out.json 2>&1` is *not* JSON — send stderr
+  elsewhere (`2>err.txt`).
 * `acos verify --artifacts <dir>` gives one run ownership of that directory. A
   non-empty dir written by another run is refused (`INVALID_ARGUMENT` naming the
   previous run id); use a fresh dir, or `--overwrite` to replace that evidence
