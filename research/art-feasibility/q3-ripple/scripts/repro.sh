@@ -27,6 +27,18 @@ $2
 EOF
 }
 
+# The dalvikvm64 process renames itself to "main" (ART's main thread), so the
+# only reliable handle is /proc/<pid>/cmdline.
+find_guest_pid() {
+    local pid
+    pid=$(for d in /proc/[0-9]*; do
+              [ -r "$d/cmdline" ] || continue
+              tr '\0' ' ' <"$d/cmdline" 2>/dev/null | grep -q "dev.acos.e4h.Main" || continue
+              grep -q "^main$" "$d/comm" 2>/dev/null && echo "${d#/proc/}"
+          done | sort -n | tail -1)
+    [ -n "$pid" ] && echo "$pid"
+}
+
 wait_for() { # $1 = log, $2 = grep pattern, $3 = timeout s
     for _ in $(seq 1 $((3 * $3))); do
         grep -q -- "$2" "$1" && return 0
@@ -70,7 +82,7 @@ printf "==== END ====\n"'
     if wait_for "$A/q3-segv-crashtrace.log" "WAIT pid=" 40; then
         local pid
         pid=$(sed -n 's/.*WAIT pid=\([0-9]*\).*/\1/p' "$A/q3-segv-crashtrace.log")
-        echo "  attaching gdb to $pid"
+        echo "  attaching gdb to $pid (comm=$(cat /proc/$pid/comm 2>/dev/null))"
         timeout 120 gdb -p "$pid" -x "$ACOS_ROOT/.cache/art-exp-q3/segv.gdb" -batch \
             2>&1 | grep -v "^warning: section" >"$A/q3-segv-gdb.txt"
         # the inferior is left stopped at the fault; let the run finish normally
@@ -93,7 +105,7 @@ bt 40'
     if wait_for "$A/q3-hang.log" "inc pressed=true" 60; then
         sleep 2
         local pid
-        pid=$(pgrep -x dalvikvm64 | head -1)
+        pid=$(find_guest_pid)
         echo "  attaching gdb to $pid"
         timeout 120 gdb -p "$pid" -x "$ACOS_ROOT/.cache/art-exp-q3/hang.gdb" -batch \
             2>&1 | grep -v "^warning: section" >"$A/q3-hang-gdb.txt"
