@@ -35,3 +35,29 @@ tag change and diff the output against the transcribed table).
   start. `Location.writeToParcel` in this image has no mock bit (bit 4 is
   vertical accuracy), and `ActivityManager$PendingIntentInfo.writeToParcel` is
   `(String, int, boolean, int)` — the reply `getInfoForIntentSender` must carry.
+
+## Where the per-process mainline bootstrap runs (image authority, GATENBOOT)
+
+`ActivityThread.initializeMainlineModules()` is called from **`ActivityThread.main(String[])`**, not
+from `handleBindApplication`. Source and image agree:
+
+* `base/core/java/android/app/ActivityThread.java:8558-8561` — `main()` calls it after
+  `Environment.initForCurrentUser()` / `TrustedCertificateStore.setDefaultUserDirectory(...)` and
+  **before** `Process.setArgV0("<pre-initialized>")` and `Looper.prepareMainLooper()`;
+  the body is `:8601-8610`.
+* Image dex: `framework/classes.dex`, `ActivityThread.main` at `1c37c0`, insn `001c`
+  `invoke-static {}, Landroid/app/ActivityThread;.initializeMainlineModules:()V` (the only call site
+  in `classes.dex`; `handleBindApplication` does not call it).
+* The **image's** list is shorter than r75's: `TelephonyServiceManager`, `StatsServiceManager`,
+  `MediaServiceManager` ×2 (`MediaFrameworkPlatformInitializer` **and** `MediaFrameworkInitializer`),
+  `BluetoothServiceManager` + `setBinderCallsStatsInitializer`, `NfcServiceManager`,
+  `DeviceConfigServiceManager`. r75 also has `SeFrameworkInitializer`,
+  `ProfilingFrameworkInitializer` (behind `android.server.Flags.telemetryApisService()`) and a
+  `ConnectivityFrameworkInitializer` call exists in other builds — none of the three is in this
+  image's body, so the image is what a guest may rely on. `android/server/Flags` is not in this
+  image's dexes at all.
+* Consequence for ACOS: any process that builds the `ActivityThread` itself (ACOS's guest
+  launcher does, instead of running `ActivityThread.main`) must call the same framework method once,
+  before app code. `ModuleManifest::process_initializers` is only for a manager that call does not
+  install — telephony and Bluetooth are already covered, and both setters throw
+  `IllegalStateException` on a second call.

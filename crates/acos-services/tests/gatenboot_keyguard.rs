@@ -39,7 +39,12 @@ fn host() -> (ServiceHost, acos_parcel::BinderId) {
     (host, binder)
 }
 
-fn transact(host: &mut ServiceHost, binder: acos_parcel::BinderId, code: u32, data: &mut Parcel) -> Parcel {
+fn transact(
+    host: &mut ServiceHost,
+    binder: acos_parcel::BinderId,
+    code: u32,
+    data: &mut Parcel,
+) -> Parcel {
     let mut reply = Parcel::new();
     host.transact(binder, code, data, &mut reply, 0)
         .expect("the window service answers every request with a reply");
@@ -66,7 +71,11 @@ fn is_keyguard_locked_answers_false() {
         NO_EXCEPTION,
         "isKeyguardLocked must not answer UNSUPPORTED_ANDROID_API"
     );
-    assert_eq!(reply.read_int32().expect("boolean"), 0, "no keyguard is showing");
+    assert_eq!(
+        reply.read_int32().expect("boolean"),
+        0,
+        "no keyguard is showing"
+    );
 }
 
 /// `KeyguardManager.isKeyguardSecure()` / `isDeviceSecure()`: `false` for the
@@ -79,7 +88,11 @@ fn is_keyguard_secure_answers_false() {
     data.set_data_position(0);
     let mut reply = transact(&mut host, binder, IS_KEYGUARD_SECURE, &mut data);
     assert_eq!(reply.read_int32().expect("exception header"), NO_EXCEPTION);
-    assert_eq!(reply.read_int32().expect("boolean"), 0, "no secure lock screen");
+    assert_eq!(
+        reply.read_int32().expect("boolean"),
+        0,
+        "no secure lock screen"
+    );
 }
 
 /// An `IWindowManager` method ACOS does not answer still fails with the

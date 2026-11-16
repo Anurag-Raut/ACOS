@@ -178,7 +178,9 @@ fn an_unusable_initializer_fails_manifest_validation() {
         manager: "android.os.TestManager",
         evidence: "frameworks/base/test/TestFrameworkInitializer.java",
     }];
-    base(good).validate().expect("a complete initializer is valid");
+    base(good)
+        .validate()
+        .expect("a complete initializer is valid");
 
     let no_evidence: &'static [ProcessInitializer] = &[ProcessInitializer {
         class: "android.test.FrameworkInitializer",

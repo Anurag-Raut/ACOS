@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "fixtures/build/apps/net-check.apk",
+  "apk_sha256": "c02202ecba79c70b704b92df31d5bef7ae4fe9af6a54949e940f376c12914a80",
+  "scenario_path": "scenarios/net-network-off.yaml",
+  "scenario_sha256": "f0a27c46a503a2423704b45f4e7c2431acd5e29af6fc592821ce6557a06933ed",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}
