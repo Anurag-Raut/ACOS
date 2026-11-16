@@ -1308,17 +1308,38 @@ impl AmsState {
         binder: u64,
         code: i32,
     ) -> Result<crate::pending_intent::SendEvidence> {
-        self.send_pending_intent_with_fill_in(binder, code, false)
+        self.send_pending_intent_with_fill_in(
+            binder,
+            code,
+            crate::pending_intent::FillIn::None,
+        )
     }
 
-    /// [`Self::send_pending_intent`] for a caller that read the request's
-    /// fill-in marker: `fill_in_ignored` is the evidence bit (the intent is
-    /// never merged — `Intent.fillIn` is not modelled).
+    /// [`Self::send_pending_intent`] with the caller's fill-in `Intent`, the
+    /// way `PendingIntent.send(context, code, intent)` delivers it.
+    ///
+    /// The system side is `PendingIntentRecord.sendInner`
+    /// (`services.dex`, disassembled in `results/handoff/PIFILLIN`):
+    ///
+    /// ```text
+    /// finalIntent = new Intent(key.requestIntent)      // or new Intent()
+    /// if ((key.flags & FLAG_IMMUTABLE) == 0) {         // 0x04000000 test
+    ///     if (intent != null) finalIntent.fillIn(intent, key.flags);
+    /// }
+    /// ```
+    ///
+    /// so a **mutable** sender merges the fill-in through
+    /// [`crate::fill_in::fill_in_value`] (with the record's flags as the
+    /// `FILL_IN_*` mask, which — like AOSP — is 0 for every real
+    /// `PendingIntent` flag, because those live above bit 8) and delivers the
+    /// merged intent; an **immutable** sender ignores the fill-in entirely and
+    /// the evidence records `fill_in_ignored`. Nothing is ever sent twice or
+    /// half-merged.
     pub fn send_pending_intent_with_fill_in(
         &mut self,
         binder: u64,
         code: i32,
-        fill_in_ignored: bool,
+        fill_in: crate::pending_intent::FillIn<'_>,
     ) -> Result<crate::pending_intent::SendEvidence> {
         let Some(record) = self.intent_senders.record_cloned(binder) else {
             return Err(ServiceError::BadRequest {
@@ -1328,23 +1349,35 @@ impl AmsState {
             });
         };
         let cancelled = record.cancelled;
+        let immutable = record.flags & crate::pending_intent::FLAG_IMMUTABLE != 0;
         // `FLAG_UPDATE_CURRENT` stored extras are applied to every intent the
         // record replays (`PendingIntentRecord.sendInner` sets them on the
-        // intent before the start).
-        let intents: Vec<IntentFacts> = record
-            .intents
-            .iter()
-            .map(|intent| {
-                let mut intent = intent.clone();
-                if let Some(extras) = &record.extras {
-                    for (key, value) in crate::pending_intent::bundle_extras(extras) {
-                        intent.extras.insert(key, value);
-                    }
+        // intent before the start); the fill-in merges *after* them, so a
+        // fill-in key the stored intent also has still loses to the stored
+        // value (AOSP's `newb.putAll(mExtras)`).
+        let mut merged: Vec<(IntentFacts, i32)> = Vec::with_capacity(record.intents.len());
+        for stored in &record.intents {
+            let mut intent = stored.clone();
+            for (key, value) in record
+                .extras
+                .as_ref()
+                .map(crate::pending_intent::bundle_extras)
+                .unwrap_or_default()
+            {
+                intent.extras.insert(key, value);
+            }
+            let mut changes = 0;
+            if !immutable {
+                if let Some(fill_in) = fill_in.intent() {
+                    changes = intent.fill_in(fill_in, record.flags);
                 }
-                intent
-            })
-            .collect();
-        let intent = intents.first().cloned().unwrap_or_default();
+            }
+            merged.push((intent, changes));
+        }
+        let (intent, fill_in_changes) = merged
+            .first()
+            .cloned()
+            .unwrap_or_else(|| (IntentFacts::default(), 0));
         let outcome = if cancelled {
             Err("the pending intent was cancelled".to_string())
         } else {
@@ -1368,7 +1401,9 @@ impl AmsState {
             outcome: outcome.clone(),
             intent,
             refused_cancelled: cancelled,
-            fill_in_ignored,
+            fill_in_ignored: fill_in.is_some() && immutable,
+            fill_in: fill_in.intent().cloned(),
+            fill_in_changes,
         };
         self.intent_senders.record_send(binder, evidence.clone());
         Ok(evidence)

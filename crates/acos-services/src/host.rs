@@ -234,14 +234,25 @@ impl Default for Wiring {
 
 type Factory = Arc<dyn Fn(Wiring) -> Box<dyn ServiceObject> + Send + Sync>;
 
-/// `(sender binder, code) -> evidence` for one `IIntentSender.send`.
+/// `(sender binder, code, fill-in) -> evidence` for one `IIntentSender.send`.
 ///
-/// The delivery is `AmsState::send_pending_intent`, which owns the sender table
-/// and the activity/broadcast/service start paths; publishing a closure keeps
-/// that state out of the module API while still letting `notifications` `tap`
-/// really fire the intent.
+/// The delivery is `AmsState::send_pending_intent_with_fill_in`, which owns the
+/// sender table, the `Intent.fillIn` merge and the activity/broadcast/service
+/// start paths; publishing a closure keeps that state out of the module API
+/// while still letting a module fire a sender for real:
+///
+/// * `notifications` `tap`/`action` pass `None` (a notification action carries
+///   no fill-in),
+/// * `location` passes a fill-in whose extras carry the fix, exactly like
+///   `LocationProviderManager$LocationPendingIntentTransport`.
 pub type FireSender = Arc<
-    dyn Fn(u64, i32) -> crate::error::Result<crate::pending_intent::SendEvidence> + Send + Sync,
+    dyn Fn(
+            u64,
+            i32,
+            Option<crate::ams::IntentFacts>,
+        ) -> crate::error::Result<crate::pending_intent::SendEvidence>
+        + Send
+        + Sync,
 >;
 
 /// The registration tables as they were at [`ServiceHost::begin_scope`].
@@ -1681,7 +1692,28 @@ impl ServiceHost {
 
     /// Drain `system -> app` deliveries queued by service handlers.
     pub fn take_deliveries(&mut self) -> Vec<PendingDelivery> {
-        std::mem::take(&mut self.deliveries)
+        let mut out = std::mem::take(&mut self.deliveries);
+        out.extend(self.take_ams_receiver_deliveries());
+        out
+    }
+
+    /// The `IIntentReceiver.performReceive` deliveries the session's AMS state
+    /// queued but no AMS transaction drained.
+    ///
+    /// `IIntentSender.send` is served by a **dynamic** object, so a fired
+    /// `getBroadcast` sender's matches never pass through
+    /// [`crate::atms::AtmsService::call`]. The peer drains the host after every
+    /// transaction and control op, so the same drain carries them — one
+    /// delivery path for host-originated broadcasts, module broadcasts and a
+    /// fired `PendingIntent`.
+    fn take_ams_receiver_deliveries(&mut self) -> Vec<PendingDelivery> {
+        self.entries
+            .get_mut("android.app.IActivityManager")
+            .and_then(|entry| entry.object.as_mut())
+            .and_then(|object| object.as_any_mut())
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .map(crate::atms::AtmsService::take_receiver_deliveries)
+            .unwrap_or_default()
     }
 
     /// Drain the deliveries a **dynamic** object produced from its own thread
@@ -1702,6 +1734,7 @@ impl ServiceHost {
         for object in self.dynamic.values_mut() {
             out.append(&mut object.drain_raw_deliveries());
         }
+        out.extend(self.take_ams_receiver_deliveries());
         out
     }
 

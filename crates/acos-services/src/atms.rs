@@ -1039,29 +1039,59 @@ impl AtmsService {
     ) -> Result<(i32, Vec<crate::host::PendingDelivery>)> {
         let mut state = self.state.lock().unwrap();
         let matched = state.ams.broadcast(intent, 0, 0, None)?;
-        let queued = state.ams.take_pending_receivers();
-        let mut deliveries = Vec::new();
-        for receiver in queued {
-            if receiver.is_manifest() {
-                state.log_event(
-                    "ActivityManagerBroadcast",
-                    acos_protocol::LogLevel::Debug,
-                    "manifest receiver not delivered: an ACOS session has no separate process to instantiate it"
-                        .to_string(),
-                );
-                continue;
-            }
-            match receiver.receiver_delivery() {
-                Ok(delivery) => deliveries.push(delivery),
-                Err(error) => state.log_event(
-                    "ActivityManagerBroadcast",
-                    acos_protocol::LogLevel::Warn,
-                    format!("receiver delivery not encodable: {error}"),
-                ),
-            }
-        }
+        let deliveries = take_receiver_deliveries(&mut state);
         Ok((matched, deliveries))
     }
+
+    /// Drain the `IIntentReceiver.performReceive` deliveries the AMS state
+    /// queued, whoever queued them.
+    ///
+    /// `PendingIntent` firing is the second producer: `IIntentSender.send`
+    /// replays a `getBroadcast` sender through [`crate::ams::AmsState::broadcast`],
+    /// which lands in the same queue a guest `broadcastIntent` uses. The peer's
+    /// delivery drain calls this after every transaction and control op, so a
+    /// fired sender reaches the app's dynamic receivers exactly like a
+    /// host-originated broadcast ([`Self::inject_broadcast`]) does. A *manifest*
+    /// receiver has no receiver binder in an ACOS session (there is no process
+    /// to instantiate), so it is logged, never fabricated.
+    pub fn take_receiver_deliveries(&mut self) -> Vec<crate::host::PendingDelivery> {
+        let mut state = self.state.lock().unwrap();
+        take_receiver_deliveries(&mut state)
+    }
+}
+
+/// Convert the AMS state's queued receiver matches into `system -> app`
+/// deliveries, logging the ones that cannot be delivered.
+fn take_receiver_deliveries(state: &mut AtmsState) -> Vec<crate::host::PendingDelivery> {
+    let queued = state.ams.take_pending_receivers();
+    let mut deliveries = Vec::new();
+    for receiver in queued {
+        if receiver.is_manifest() {
+            state.log_event(
+                "ActivityManagerBroadcast",
+                acos_protocol::LogLevel::Debug,
+                format!(
+                    "manifest receiver for {} not delivered: an ACOS session has no separate process to instantiate it",
+                    receiver
+                        .intent
+                        .component
+                        .as_ref()
+                        .map(|(p, c)| format!("{p}/{c}"))
+                        .unwrap_or_else(|| "(implicit)".to_string())
+                ),
+            );
+            continue;
+        }
+        match receiver.receiver_delivery() {
+            Ok(delivery) => deliveries.push(delivery),
+            Err(error) => state.log_event(
+                "ActivityManagerBroadcast",
+                acos_protocol::LogLevel::Warn,
+                format!("receiver delivery not encodable: {error}"),
+            ),
+        }
+    }
+    deliveries
 }
 
 impl ServiceObject for AtmsService {
@@ -1351,36 +1381,9 @@ impl ServiceObject for AtmsService {
                 // `broadcastIntent` reaches the app's dynamic receivers: the
                 // host materialises each `IIntentReceiver.performReceive` from
                 // the queued match (ADR-0029 late modules need this for
-                // `SMS_RECEIVED`). A *manifest* receiver has no receiver binder
-                // in an ACOS session (there is no process to instantiate), so
-                // it is reported, never fabricated.
-                let undelivered = state.ams.take_pending_receivers();
-                for receiver in undelivered {
-                    if receiver.is_manifest() {
-                        state.log_event(
-                            "ActivityManagerBroadcast",
-                            acos_protocol::LogLevel::Debug,
-                            format!(
-                                "manifest receiver for {} not delivered: an ACOS session has no separate process to instantiate it",
-                                receiver
-                                    .intent
-                                    .component
-                                    .as_ref()
-                                    .map(|(p, c)| format!("{p}/{c}"))
-                                    .unwrap_or_else(|| "(implicit)".to_string())
-                            ),
-                        );
-                        continue;
-                    }
-                    match receiver.receiver_delivery() {
-                        Ok(delivery) => deliveries.push(delivery),
-                        Err(error) => state.log_event(
-                            "ActivityManagerBroadcast",
-                            acos_protocol::LogLevel::Warn,
-                            format!("receiver delivery not encodable: {error}"),
-                        ),
-                    }
-                }
+                // `SMS_RECEIVED`). The conversion is shared with the
+                // `IIntentSender` fire path ([`take_receiver_deliveries`]).
+                deliveries.extend(take_receiver_deliveries(&mut state));
                 return Ok(CallResult {
                     reply: result.reply,
                     deliveries,
