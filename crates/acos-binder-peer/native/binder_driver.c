@@ -781,149 +781,28 @@ static int xform_objects(uint8_t* data, size_t dsize, uint8_t* offs, size_t osiz
 
 // ------------------------------------------------- (3) transaction-buffer heap
 //
-// This is the driver's half of the transaction buffer space: the memfd that
-// stands in for `/dev/binder` is `BINDER_VM_SIZE` bytes, exactly the process's
-// binder mapping, and libbinder hands the pointers `mm_alloc` returns straight
-// to the receiver (`BR_TRANSACTION`/`BR_REPLY` -> `Parcel::ipcSetDataReference`).
+// FLAKEWIN: the heap is `txn_heap.c`, the one transaction-buffer heap for the
+// driver *and* the host tests. It takes a leaf mutex because two binder threads
+// allocate concurrently by design (the reply to a synchronous transaction is
+// built on the thread blocked in `transact` and a peer-initiated
+// `BR_TRANSACTION` on the receiving looper thread -- in a launch that is
+// `addToDisplayAsUser`'s reply and `IWindow.dispatchAppVisibility`), and the
+// lock-free bump allocator that used to live here handed both the same offset,
+// so the second `memcpy` overwrote the first parcel in place
+// (`ipcSetDataReference: unsupported type object ...`, `Adding window failed`).
 //
-// One heap, many threads: the caller's reply path (`build_reply`, and the copy
-// `e3g_write_read` makes of an F_RSP) runs on whatever thread transacted, while
-// `deliver_incoming` runs on a looper thread.  Every mutation of the block table
-// is under `g_slab_mu`; without it two threads read the same bump pointer, get
-// the *same* offset, and the second writer overwrites a parcel libbinder is
-// still decoding (the `parcel underflow` / stalled `transactNative` seen once a
-// session has enough traffic to keep both paths busy).
+// BINDERREF: that heap also *reclaims*. `BC_FREE_BUFFER` is the receiver's
+// release of the buffer (`IPCThreadState::freeBuffer`, run from the received
+// `Parcel`'s destructor), so from that point the bytes are free and the next
+// transaction that fits takes them, as `binder_alloc_new_buf` does over
+// `alloc->free_buffers`. Without it a session died once the bump pointer reached
+// the 1 MB mapping (the 60-of-101 registration wall: every registered callback
+// costs a transaction, and nothing was ever given back).
 //
-// Space is *reclaimed*: `BC_FREE_BUFFER` is the receiver's release of the
-// buffer (`IPCThreadState::freeBuffer`, run from the received Parcel's
-// destructor), so from that point the bytes are free, exactly as in the
-// kernel's `binder_alloc_free_buf`.  Two revisions of this file got that wrong
-// in opposite directions: E3G's original bump allocator reused nothing (a
-// session that registers 100 listeners exhausted the 1 MB map and the driver
-// then dropped every later transaction and reply), and the intermediate fix
-// allocated monotonically on purpose (safe, but still never reclaimed, so the
-// same wall arrived after ~3000 transactions).  Allocation is first-fit over
-// freed blocks, split on use and coalesced on free, with the high-water mark as
-// the last resort.
-struct blk { size_t off, size; int used; };
-static struct blk* g_blk;
-static int g_nblk, g_blk_cap;
-static size_t g_bump;
-
-// Grow the block table to hold `want` entries.  A full table means a free can no
-// longer be matched (leaking that block); it never blocks an allocation.  The
-// cap keeps the table proportional to the 1 MB mapping (8-byte minimum block).
-static int blk_reserve_locked(int want) {
-    if (want <= g_blk_cap) return 1;
-    int cap = g_blk_cap ? g_blk_cap * 2 : 256;
-    while (cap < want) cap *= 2;
-    if (cap > 262144) cap = 262144;
-    if (cap < want) return 0;
-    struct blk* p = realloc(g_blk, sizeof(*p) * (size_t)cap);
-    if (p == NULL) return 0;
-    g_blk = p;
-    g_blk_cap = cap;
-    return 1;
-}
-
-// Insert an entry at index `at` (the table is kept sorted by offset).
-static void blk_insert_locked(int at, size_t off, size_t size, int used) {
-    if (!blk_reserve_locked(g_nblk + 1)) {
-        static int warned;
-        if (!warned) {
-            warned = 1;
-            WARN("transaction block table full (%d entries); frees of older buffers will be "
-                 "unmatched", g_blk_cap);
-        }
-        return;
-    }
-    memmove(&g_blk[at + 1], &g_blk[at], sizeof(g_blk[0]) * (size_t)(g_nblk - at));
-    g_blk[at].off = off;
-    g_blk[at].size = size;
-    g_blk[at].used = used;
-    g_nblk++;
-}
-
-// Index of the block starting at `off`, or -1.
-static int blk_index_locked(size_t off) {
-    int lo = 0, hi = g_nblk - 1;
-    while (lo <= hi) {
-        int mid = (lo + hi) / 2;
-        if (g_blk[mid].off == off) return mid;
-        if (g_blk[mid].off < off) lo = mid + 1;
-        else hi = mid - 1;
-    }
-    return -1;
-}
-
-static size_t mm_in_use_locked(void) {
-    size_t used = 0;
-    for (int i = 0; i < g_nblk; i++)
-        if (g_blk[i].used) used += g_blk[i].size;
-    return used;
-}
-
-static void* mm_alloc(size_t n) {
-    n = (n + 7) & ~(size_t)7;
-    if (n == 0) n = 8;
-    pthread_mutex_lock(&g_slab_mu);
-    // First fit: a freed buffer is reused by the next transaction that fits
-    // (`binder_alloc_new_buf_locked` walks its free list the same way).
-    for (int i = 0; i < g_nblk; i++) {
-        if (g_blk[i].used || g_blk[i].size < n) continue;
-        size_t off = g_blk[i].off;
-        if (g_blk[i].size == n) {
-            g_blk[i].used = 1;
-        } else {
-            size_t rest = g_blk[i].size - n;
-            g_blk[i].size = n;
-            g_blk[i].used = 1;
-            blk_insert_locked(i + 1, off + n, rest, 0);
-        }
-        pthread_mutex_unlock(&g_slab_mu);
-        return g.map + off;
-    }
-    if (g_bump + n > g.map_size) {
-        size_t in_use = mm_in_use_locked();
-        pthread_mutex_unlock(&g_slab_mu);
-        WARN("transaction buffer exhausted (need %zu, high-water %zu/%zu, in use %zu, %d blocks) "
-             "- this transaction is dropped",
-             n, g_bump, g.map_size, in_use, g_nblk);
-        return NULL;
-    }
-    size_t off = g_bump;
-    g_bump += n;
-    blk_insert_locked(g_nblk, off, n, 1);
-    pthread_mutex_unlock(&g_slab_mu);
-    return g.map + off;
-}
-
-static void mm_free(void* p) {
-    if (p == NULL) return;
-    size_t off = (size_t)((uint8_t*)p - g.map);
-    pthread_mutex_lock(&g_slab_mu);
-    int i = blk_index_locked(off);
-    if (i < 0 || !g_blk[i].used) {
-        pthread_mutex_unlock(&g_slab_mu);
-        DBG("free of unknown buffer %p", p);
-        return;
-    }
-    g_blk[i].used = 0;
-    // Coalesce with the next block, then with the previous one: the table stays
-    // sorted, non-overlapping and fully covering the high-water mark, so a long
-    // session has a handful of entries, not one per transaction.
-    if (i + 1 < g_nblk && !g_blk[i + 1].used) {
-        g_blk[i].size += g_blk[i + 1].size;
-        memmove(&g_blk[i + 1], &g_blk[i + 2], sizeof(g_blk[0]) * (size_t)(g_nblk - i - 2));
-        g_nblk--;
-    }
-    if (i > 0 && !g_blk[i - 1].used) {
-        g_blk[i - 1].size += g_blk[i].size;
-        memmove(&g_blk[i], &g_blk[i + 1], sizeof(g_blk[0]) * (size_t)(g_nblk - i - 1));
-        g_nblk--;
-    }
-    pthread_mutex_unlock(&g_slab_mu);
-}
+// Lock order: `txn_heap.c`'s mutex is a leaf. `g.mu` is never held across a
+// `txn_alloc`/`txn_free` call (callers reach the heap after unlocking, or before
+// taking it), so the two can never deadlock.
+#include "txn_heap.h"
 
 // -------------------------------------------------------------- socket frames
 static int send_frame(uint32_t type, uint32_t seq, uint32_t code, uint32_t flags, uint64_t target,
@@ -1173,7 +1052,6 @@ static void driver_init(int fd) {
         g.fd = fd;
         g.next_wire = 1;
         g.next_handle = 1;
-        g_bump = 4096;
         pthread_mutex_init(&g.mu, NULL);
         pthread_cond_init(&g.cv_txn, NULL);
         pthread_cond_init(&g.cv_rsp, NULL);
@@ -1185,6 +1063,10 @@ static void driver_init(int fd) {
         } else {
             g.map_size = BINDER_VM_SIZE;
         }
+        // The first page is never handed out (offset 0 is also what libbinder's
+        // `mObjects`/`data.ptr.buffer` report for "no buffer").
+        txn_heap_init(g.map == NULL ? NULL : g.map + 4096,
+                      g.map_size > 4096 ? g.map_size - 4096 : 0);
         connect_peer();
     }
     pthread_mutex_unlock(&g_start_mu);
@@ -1288,9 +1170,14 @@ static int deliver_incoming(void) {
     uint8_t* offs = q->data + dsize;
     pthread_mutex_unlock(&g.mu);
     xform_objects(q->data, dsize, offs, osize, 1, fds, &nfds);
-    void* buf = mm_alloc(dsize + 8 + osize + 8);
+    void* buf = txn_alloc(dsize + 8 + osize + 8);
     if (buf == NULL) {
         uint32_t seq = q->seq;
+        // ART_RESOURCE_LIMIT: named, not silent. The oneway delivery is dropped
+        // (the kernel driver fails `binder_alloc_new_buf` the same way) and the
+        // caller's frame counter records it.
+        WARN("ART_RESOURCE_LIMIT: transaction buffer exhausted (need %zu of %zu)",
+             dsize + 8 + osize + 8, txn_heap_capacity());
         free(q->data);
         free(q);
         pthread_mutex_lock(&g.mu);
@@ -1412,7 +1299,7 @@ static int build_reply(struct slot* s) {
     }
     int keep = s->nfds;
     s->nfds = 0;
-    void* buf = mm_alloc(dsize + 8 + osize + 8);
+    void* buf = txn_alloc(dsize + 8 + osize + 8);
     if (buf == NULL) {
         for (int i = 0; i < keep; i++) close(s->fds[i]);
         return -1;
@@ -1554,7 +1441,7 @@ static void handle_commands(const uint8_t* wbuf, size_t wsize) {
                 int owned = 0;
                 for (int i = 0; i < T.n_txn_buf; i++) {
                     if (T.txn_buf[i] == (uint8_t*)(uintptr_t)p) {
-                        mm_free((void*)(uintptr_t)p);
+                        txn_free((void*)(uintptr_t)p);
                         T.txn_buf[i] = T.txn_buf[--T.n_txn_buf];
                         owned = 1;
                         break;
@@ -1727,8 +1614,12 @@ static int e3g_write_read(struct binder_write_read* bwr) {
             uint32_t cmd = BR_FAILED_REPLY;
             pend_append(&cmd, 4);
         } else if (build_reply(&done) != 0) {
-            // No buffer for the reply: the caller must not be left waiting for
-            // a BR_REPLY that can never come (that is a wedged `transact`).
+            // FLAKEWIN: the reply could not be allocated (transaction buffer
+            // exhausted, named by the `ART_RESOURCE_LIMIT` warning inside
+            // `build_reply`). libbinder turns `BR_FAILED_REPLY` into
+            // `RemoteException("Transaction failed")` on the caller's side; a
+            // reply that never comes would leave the guest blocked in
+            // `waitForResponse` (that is a wedged `transact`).
             uint32_t cmd = BR_FAILED_REPLY;
             pend_append(&cmd, 4);
         }

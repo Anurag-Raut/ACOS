@@ -27,31 +27,32 @@ Target dir `.cache/binderref-target`.
      holding its listeners (the normal app pattern — `r25k.json`,
      `v2-repeat*.json`), every listener gets its callback.
 3. Also fixed: the 60-of-101 wall was real and is the **transaction buffer**:
-   `mm_alloc` was a monotonic bump pointer, so `BC_FREE_BUFFER` returned
-   nothing to the 1 MB map and a session died after ~3000 transactions. It is
-   now a first-fit allocator with splitting and coalescing
-   (`binder_alloc` semantics); 101 of 101 registrations and 101 of 101 callbacks
-   follow from it.
+   the heap never reclaimed, so `BC_FREE_BUFFER` returned nothing to the 1 MB map
+   and a session died after ~3000 transactions. The heap that reclaims is
+   `native/txn_heap.c` — FLAKEWIN's heap (the one heap for the driver and the
+   host tests) plus this branch's free list (§3a); 101 of 101 registrations and
+   101 of 101 callbacks follow from it.
 
-## 1. The acceptance table (final build, `results/handoff/BINDERREF/v2-*.json`)
+## 1. The acceptance table (final build, `results/handoff/BINDERREF/m-*.json`)
 
 | run | executed | dispatched (logd, app counter) | verdict | file |
 |---|---|---|---|---|
-| 26 registered listeners, one injected ring | 26 | **26** | pass | `v2-repeat25.json` |
-| 46 registered listeners | 46 | **46** | pass | `v-repeat45.json` |
-| 101 registered listeners | 101 | **101** | pass | `v2-repeat100.json` |
-| long-lived listener, 65 s idle | 1 | **1** | pass | `v2-longlived.json` |
-| unregister (`LISTEN_NONE`), 65 s, inject | 0 | **0** | pass | `v2-unregister.json` |
-| unregister with `E3G_DEBUG=1`: the node is released | 0 | 0 | pass | `v-unregister-ref.json` |
+| 26 registered listeners, one injected ring | 26 | **26** | pass | `m-repeat25.json` |
+| 46 registered listeners | 46 | **46** | pass | `m-repeat45.json` |
+| 101 registered listeners | 101 | **101** | pass | `m-repeat100.json` |
+| long-lived listener, 65 s idle | 1 | **1** | pass | `m-longlived.json` |
+| unregister (`LISTEN_NONE`), 65 s, inject | 0 | **0** | pass | `m-unregister.json` |
+| unregister with `E3G_DEBUG=1`: the node is released | 0 | 0 | pass | `m-unregister.json` (trace) |
 
-`v2-repeat100.json` reports `app_ringing=101`, `dispatched_ringing=101`,
+`m-repeat100.json` reports `app_ringing=101`, `dispatched_ringing=101`,
 `app_state_lines=202` (101 initial-state + 101 ring) and
 `ui_ringing_lines=52`: a single `TextView` holding 202 lines is **truncated by
 the UI-tree dumper**, so the per-line UI count is a lower bound at that size.
 The authoritative UI-visible evidence is the `CALLTOTAL` line the app prints
 from its own counter (`CALLTOTAL state_lines=202 ringing=101 listeners=101
-held=101`), plus the logd count. `drive.py` asserts both and fails on any
-over-count (a duplicate delivery).
+held=101`), plus the logd count, and it carries **no**
+`ART_RESOURCE_LIMIT` warning: nothing was dropped for lack of a buffer. `drive.py`
+asserts both and fails on any over-count (a duplicate delivery).
 
 ## 2. The measured sequence (why the previous diagnosis was wrong)
 
@@ -159,6 +160,49 @@ after the fix.
   used, -198541192 blocks)`), which is why BINDERCB/BINDERCB2 evidence could not
   tell what those numbers were.
 
+### The one heap (`native/txn_heap.{c,h}`) — merged from FLAKEWIN, reuse added here
+
+`flakewin` (HEAD `5eb6c44c`) fixed the *same* heap from the other end: no lock,
+so two binder threads got the same offset and one parcel overwrote the other
+(`Adding window failed`). Its heap is a separate translation unit
+(`native/txn_heap.c`), host-testable without bionic/JNI, and the driver, both
+build paths (`build.rs`, `acos-art`'s `build_driver`, cache key
+`binder-driver/v3`) and the tests hash it. That is the one heap now:
+
+* this branch's `mm_alloc`/`mm_free` and `g_blk` table are **gone** from
+  `binder_driver.c`, which now calls `txn_alloc`/`txn_free` and
+  `txn_heap_init(g.map + 4096, g.map_size - 4096)`;
+* `txn_heap.c` keeps FLAKEWIN's leaf mutex (that is the race fix) and gains this
+  branch's **free list**: first fit over freed blocks, split on use, coalesce on
+  free, high-water as fallback (`binder_alloc_new_buf` over
+  `alloc->free_buffers`), the block table grown on demand instead of the fixed
+  512 entries that silently stopped tracking;
+* `txn_heap_used()` stays the high-water mark (what FLAKEWIN's tests print) and
+  `txn_heap_in_use()` is new (live bytes), so the tests can show both "the map
+  came back" and "nothing leaked";
+* bindercb2's growing node/handle tables stay where they were (driver, untouched
+  by this merge).
+
+Lock order is documented in both files: the heap mutex is a leaf, `g.mu` is
+never held across a `txn_alloc`/`txn_free`. Reuse is safe for the reason the
+driver already had: `BC_FREE_BUFFER` is honoured only for a buffer the
+*receiving* thread owns (`T.txn_buf`, the kernel's `binder_get_txn_from_and_acq_inner`),
+so a stale or replayed free cannot hand a live buffer to a second owner.
+
+**Merge scope, stated plainly:** a full `git merge flakewin` was attempted and
+conflicts in **13 files that are not this track's** (`crates/acos-verify/*`,
+`crates/acos-mcp/tests/guide.rs`, `crates/acos-cli/src/{engine,launch,verify}.rs`,
+`crates/acos-art/src/launch.rs`, `crates/acos-protocol/schema/*.json`,
+`docs/AGENT_GUIDE.md`, `tools/build-apps.sh`, `DECISIONS.md` — bindercb2's base
+vs rel-030, 83 commits and 1853 files). Resolving those would mean integrating
+BINDERCB into rel-030, which is the integration track's job, so this branch
+took FLAKEWIN's heap commit (`a8bf0f42`) instead: `txn_heap.{c,h}`,
+`build.rs`, `acos-art`'s `build_driver`/cache key, `tests/txn_heap.rs` and the
+FLAKEWIN evidence are all in as-is, and the driver resolution keeps this
+branch's node model. Also of note: `tools/build-apps.sh` cannot build
+`keystore-probe` on this branch at all (`dev.acos.art.SoftwareKeyStore` comes
+from rel-030), which is the same integration gap from the other side.
+
 ### Wire (`protocol.rs`, `peer.rs`)
 
 * `F_HELLO` (`PROTOCOL_VERSION = 2`) is the first frame of a connection; the peer
@@ -210,6 +254,21 @@ New checks, each failing before the change it covers:
 | 16 | a transaction to a released node answers `DEAD_OBJECT` | node release |
 | 17 | a released object exported again gets a new node and is rooted | node release + re-root |
 | 18 | the re-exported node receives callbacks | node release + re-root |
+
+`driver-test-heap-before.txt` / `driver-test-heap-after.txt` isolate the heap:
+the *same* driver, linked against FLAKEWIN's monotonic `txn_heap.c` and against
+this branch's:
+
+```
+not ok 13 … again=0x7f7f70d838d8 (a fresh block each time)  -> ok 13 (again == b)
+not ok 14 … failed=1 high-water 534744 -> 1036248 of 1036288 -> ok 14 (… 3816 of 1036288)
+not ok 18 … delivered=0                                     -> ok 18
+RESULT failures=3                                           -> RESULT failures=0
+```
+
+`tests/txn_heap.rs` runs the same comparison under load (4 threads, 200k
+allocations, 64 MB of traffic) and gets `high-water=3816, in_use=0, reused=1`
+against `high-water=64564696, reused=0` for the monotonic heap.
 
 `driver-test-before.txt` / `driver-test-after.txt` are the *same* test binary
 against the driver from `aebe0009` and this branch:
@@ -267,8 +326,12 @@ and the injected ring after the unregister produces no callback (verdict pass).
 
 ## 7. Files
 
-* `crates/acos-binder-peer/native/binder_driver.c` — allocator, node ref model,
-  `F_HELLO`/`F_REF`, node-work wakeup, honest logd format, ref trace.
+* `crates/acos-binder-peer/native/binder_driver.c` — node ref model,
+  `F_HELLO`/`F_REF`, node-work wakeup, honest logd format, ref trace, and the
+  heap call sites (`txn_alloc`/`txn_free`, `ART_RESOURCE_LIMIT`).
+* `crates/acos-binder-peer/native/txn_heap.{c,h}` — FLAKEWIN's locked heap (from
+  `flakewin`/`a8bf0f42`) with this branch's free list, split/coalesce and
+  `txn_heap_in_use`; `tests/txn_heap.rs` races it and checks reuse.
 * `crates/acos-binder-peer/native/driver_test.c`, `tests/driver.rs` — checks
   13–18.
 * `crates/acos-binder-peer/src/protocol.rs`, `src/peer.rs` — wire v2, hello,
@@ -279,10 +342,11 @@ and the injected ring after the unregister produces no callback (verdict pass).
   append, `Report callbacks`, listener ids, held list.
 * `results/handoff/BINDERREF/drive.py` — the MCP driver: logd (`tailprobe`) and
   driver-trace capture, `Report callbacks`, the assertions above.
-* Evidence: `v2-repeat25.json`, `v-repeat45.json`, `v2-repeat100.json`,
-  `v2-longlived.json`, `v2-unregister.json`, `v-unregister-ref.json` (final
-  build); `r1.json`, `r1b.json`, `r3c.json`, `r10w.json`, `r25.json`,
-  `r25k.json`, `r5-debug.json` (the calibration sequence in §2).
+* Evidence: `m-repeat25.json`, `m-repeat45.json`, `m-repeat100.json`,
+  `m-longlived.json`, `m-unregister.json` (final build, merged heap),
+  `v2-*.json` (the build before the merge), `driver-test-heap-before/after.txt`,
+  `r1.json`, `r1b.json`, `r3c.json`, `r10w.json`, `r25.json`, `r25k.json`,
+  `r5-debug.json` (the calibration sequence in §2).
 
 ## 8. Commands
 

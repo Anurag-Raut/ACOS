@@ -57,6 +57,10 @@
 // is `RESULT failures=<n>`.
 #define _GNU_SOURCE
 #include "binder_driver.c"
+// The heap is its own translation unit (`txn_heap.c`) so the host can race it on
+// its own (crates/acos-binder-peer/tests/txn_heap.rs). Here the driver is part of
+// this unit already, so the heap is too.
+#include "txn_heap.c"
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -490,7 +494,8 @@ static int wait_for_txns(int want, int timeout_ms) {
 }
 
 // ------------------------------------------------- concurrent heap pressure --
-// The transaction-buffer heap (`mm_alloc`/`mm_free`) is shared by every thread:
+// The transaction-buffer heap (`txn_alloc`/`txn_free`, `native/txn_heap.c`) is
+// shared by every thread:
 // the caller's reply path (`build_reply`) allocates while the looper thread's
 // delivery path (`deliver_incoming`) allocates. Two live transaction buffers
 // must never be the same memory, because the second writer would corrupt the
@@ -508,7 +513,7 @@ static struct alloc_rec g_allocs[ALLOC_THREADS][ALLOC_PER_THREAD];
 static void* alloc_main(void* arg) {
     struct alloc_rec* rec = arg;
     for (int i = 0; i < ALLOC_PER_THREAD; i++) {
-        void* p = mm_alloc(ALLOC_SIZE);
+        void* p = txn_alloc(ALLOC_SIZE);
         rec[i].off = p == NULL ? (size_t)-1 : (size_t)((uint8_t*)p - g.map);
     }
     return NULL;
@@ -726,21 +731,25 @@ int main(void) {
     //    `binder_alloc_free_buf` + free-list reuse), and it is never handed out
     //    while it is still live.
     {
-        void* a = mm_alloc(4096);
-        void* b = mm_alloc(4096);
-        void* c = mm_alloc(4096);
+        size_t in_use_before = txn_heap_in_use();
+        void* a = txn_alloc(4096);
+        void* b = txn_alloc(4096);
+        void* c = txn_alloc(4096);
         int distinct = a && b && c && a != b && b != c && a != c;
-        mm_free(b);
+        txn_free(b);
         // First fit over the freed list: with `a` and `c` live, the only block
         // that can serve a 4096-byte request is `b`'s.
-        void* again = mm_alloc(4096);
+        void* again = txn_alloc(4096);
         int reused = again == b;
-        mm_free(a);
-        mm_free(c);
-        mm_free(again);
-        snprintf(detail, sizeof(detail), "a=%p b=%p c=%p again=%p", a, b, c, again);
-        check(distinct && reused, "a freed transaction buffer is reused by the next transaction",
-              detail);
+        // The live set is back to three blocks: the freed one was not leaked.
+        int accounted = txn_heap_in_use() == in_use_before + 3 * 4096;
+        txn_free(a);
+        txn_free(c);
+        txn_free(again);
+        snprintf(detail, sizeof(detail), "a=%p b=%p c=%p again=%p in_use %zu -> %zu", a, b, c, again,
+                 in_use_before, txn_heap_in_use());
+        check(distinct && reused && accounted,
+              "a freed transaction buffer is reused by the next transaction", detail);
     }
 
     // 10. a long session does not run out of transaction-buffer space: the 1 MB
@@ -749,31 +758,26 @@ int main(void) {
     //     the map after ~3000 transactions and the driver then dropped every
     //     later transaction *and* reply (measured: `transaction buffer exhausted`).
     {
-        size_t high_water = 0;
+        size_t start = txn_heap_used();
+        size_t high_water = start;
         int failed = 0;
-        pthread_mutex_lock(&g_slab_mu);
-        high_water = g_bump;
-        pthread_mutex_unlock(&g_slab_mu);
-        size_t start = high_water;
         for (int i = 0; i < 4000; i++) {
             // One registration-shaped round: a delivered transaction buffer and
             // the reply buffer, both freed by their receiver.
-            void* delivery = mm_alloc(1024);
-            void* reply = mm_alloc(256);
+            void* delivery = txn_alloc(1024);
+            void* reply = txn_alloc(256);
             if (delivery == NULL || reply == NULL) {
                 failed++;
-                if (delivery) mm_free(delivery);
-                if (reply) mm_free(reply);
+                if (delivery) txn_free(delivery);
+                if (reply) txn_free(reply);
                 break;
             }
-            mm_free(delivery);
-            mm_free(reply);
+            txn_free(delivery);
+            txn_free(reply);
         }
-        pthread_mutex_lock(&g_slab_mu);
-        high_water = g_bump;
-        pthread_mutex_unlock(&g_slab_mu);
-        snprintf(detail, sizeof(detail), "failed=%d high-water %zu -> %zu of %zu", failed, start,
-                 high_water, g.map_size);
+        high_water = txn_heap_used();
+        snprintf(detail, sizeof(detail), "failed=%d high-water %zu -> %zu of %zu (in use %zu)",
+                 failed, start, high_water, txn_heap_capacity(), txn_heap_in_use());
         check(failed == 0 && high_water <= start + 8192,
               "4000 transaction rounds reuse the 1 MB transaction-buffer map", detail);
     }
