@@ -84,6 +84,22 @@ public class MainActivity extends Activity {
         append("WebView.getCurrentWebViewPackage()=" + WebView.getCurrentWebViewPackage());
         append("myUid=" + Process.myUid());
 
+        // SPIKE-WV diagnostic: `WebViewFactory` resolves the provider package
+        // with `getPackageInfo(pkg, GET_SIGNATURES|GET_META_DATA|
+        // GET_SHARED_LIBRARY_FILES|MATCH_UNINSTALLED_PACKAGES|0x10000000)`.
+        // Ask for the *app's own* package with the same flags: it isolates
+        // "the PMS reply for these flags is broken" from "the provider record
+        // is broken".
+        try {
+            android.content.pm.PackageInfo own = getPackageManager().getPackageInfo(
+                    getPackageName(),
+                    (int) 0x100024c0);
+            append("own getPackageInfo(0x100024c0) -> " + own.packageName
+                    + " sigs=" + (own.signatures == null ? "null" : own.signatures.length));
+        } catch (Throwable t) {
+            append("own getPackageInfo(0x100024c0) FAILED: " + t);
+        }
+
         try {
             WebView wv = new WebView(this);
             append("WebView created: " + wv);

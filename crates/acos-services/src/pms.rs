@@ -1491,6 +1491,7 @@ impl PmsService {
     fn lookup<'a>(state: &'a PmsState, package: Option<&str>) -> Result<&'a PackageInfo> {
         match package {
             Some(p) if p == state.package.package_name => Ok(&state.package),
+            Some("") => Ok(&state.package),
             // SPIKE-WV: the second package (the WebView provider). A real
             // foundation looks this up in the package table; here it is the one
             // extra record the spike installs.
@@ -1500,7 +1501,6 @@ impl PmsService {
                     name: p.to_string(),
                 }),
             },
-            Some("") => Ok(&state.package),
             None => Ok(&state.package),
         }
     }
@@ -1558,6 +1558,7 @@ impl ServiceObject for PmsService {
             "getPackageInfo" => {
                 let package = args.first().and_then(Value::as_str);
                 let flags = flags_arg(args, 1);
+                trace_query("getPackageInfo", package.unwrap_or(""), flags, state.package.requested_permissions.len());
                 let info = match Self::lookup(&state, package) {
                     Ok(p) => p.to_parcelable_with_flags(flags),
                     Err(ServiceError::UnknownService { .. }) => Parcelable::Null,

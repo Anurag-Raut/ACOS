@@ -115,3 +115,31 @@ Full run: `python3 wv_broker.py --selfcheck --out ../evidence` →
 * `docs/AOSP_REFERENCE.md` should gain the
   `frameworks/base/core/java/android/webkit` sparse path (it is missing today
   and forced the dex route).
+
+## 6. Session 2 (2026-11-16, worktree `t3-d32c64fc-e7f05ac278bb63c2`)
+
+Session 1's worktree held the `spike-wv` branch checkout, so this worktree took
+it with `git checkout --ignore-other-worktrees spike-wv` (no other worktree was
+modified). Session 1's `.cache/spike-wv{,-target}` were hardlink-copied
+(`cp -al`) so the built binaries and the pinned engine were reused.
+
+| # | attempt | result |
+|---|---|---|
+| 6.1 | `df -h /` at start | **84 %/85 % used** (141 G free). Session 1 measured the same disk as 87 %; the gate is 87 %, so the spike proceeded and was re-checked before every run. End of session: 83 % (155 G free). |
+| 6.2 | worktree env (boot/art/gaten symlinks, `cp -al fixtures/build`), `ACOS_FONT_DIR` exported for every ART run | ok |
+| 6.3 | `ACOS_APP_ONLY=webview-probe tools/build-apps.sh` | 12 691-byte probe APK |
+| 6.4 | wall 2: `android.software.webview` → `true` under `ACOS_SPIKE_WV=1` | **PASS.** `probe-run-flag`: `hasSystemFeature(android.software.webview)=true`, then `WebView FAILED: android.util.AndroidRuntimeException: java.lang.NullPointerException: … IWebViewUpdateService.waitForAndGetProvider() … on a null object reference`. Exactly the predicted next wall (the image's `getWebViewContextAndSetProvider` has no null-service check). |
+| 6.5 | `webviewupdate` peer as a `raw_transact` node; transaction codes read from the image's `IWebViewUpdateService$Stub$Proxy` (each proxy method's `transact` const): 1 notifyRelroCreationCompleted, 2 waitForAndGetProvider, 3 changeProviderAndSetting, 4 getValidWebViewPackages, 5 getAllWebViewPackages, 6 getCurrentWebViewPackageName, 7 getCurrentWebViewPackage, 8 isMultiProcessEnabled, 9 enableMultiProcess | **first attempt wrong**: I had assumed code 1 = getCurrentWebViewPackageName. The run crashed the guest (`GUEST_EXITED` before the first frame) on `UNSUPPORTED_ANDROID_API: android.webkit.IWebViewUpdateService code 7` (`probe-run-webviewupdate` before the fix, `art-frames/unsupported.jsonl`). Root cause: the probe calls `WebView.getCurrentWebViewPackage()` **before** creating the WebView, and that is code 7. Fixed by extracting all nine codes from the dump instead of assuming. |
+| 6.6 | `WebViewProviderResponse` reply shape | from `WebViewProviderResponse.writeToParcel` in the same dump: `writeTypedObject(packageInfo, flags)` then `writeInt(status)`; status 0 and 3 are accepted. Second attempt: **PASS** — `WebView.getCurrentWebViewPackage()=PackageInfo{… com.android.webview}` (`probe-run-webviewupdate/logs/logcat.txt` line 80). Wall 3 done. |
+| 6.7 | wall 4: `PackageManager.getPackageInfo(com.android.webview, 0x100024c0)` → `verifyPackageInfo` → `createApplicationContext` | **BLOCKED, measured**: `java.lang.OutOfMemoryError: Failed to allocate a 7676737936 byte allocation`, stack `Parcel.createString8Array ← PackageInfo.<init> ← PackageInfo$1.createFromParcel` (`probe-run-webviewupdate` logcat 81–87). |
+| 6.8 | `ACOS_PMS_TRACE` on the spike run | `getApplicationInfo` is never queried; one `getPackageInfo key=dev.acos.fixtures.webview flags=0x10000000`. The provider query is therefore `getPackageInfoAsUser` (same reply path, untraced until 6.9). |
+| 6.9 | extended `ACOS_PMS_TRACE` to `getPackageInfo` (it only covered `getApplicationInfo`) | trace now shows the launch-time query; the provider query still does not appear, so it goes through `getPackageInfoAsUser` and the desync is in the section of the reply it returns. |
+| 6.10 | isolation: probe asks for **its own** package with `WebViewFactory`'s flags `0x100024c0` | **PASS (finding).** `own getPackageInfo(0x100024c0) -> dev.acos.fixtures.webview sigs=7209071` (`probe-run-flags-isolation` logcat 82). A signature array length of 7 209 071 is a desynchronised parcel and it is a **pre-existing PMS defect**: AOSP `PackageInfo.writeToParcel` writes `writeString8Array` for `splitNames` (line 585) and `requestedPermissions` (line 608), while `crates/acos-services/src/parcelable.rs` encodes `FieldOp::StringArray` with `Parcel::write_string16_array`. Every field after a non-empty `requestedPermissions` is misread. |
+| 6.11 | AOSP reference: `core/java/android/webkit` | fetched into the shared cache (`git -C .cache/aosp/base sparse-checkout add core/java/android/webkit`, 94 MB total) and **added to `tools/fetch-aosp-reference.sh`** + `docs/AOSP_REFERENCE.md`, so the provider load path is readable instead of disassembled. This confirms every session-1 dex finding (`WebViewFactory` provider load path) and gives the exact `PackageInfo` write/read order used in 6.10. |
+| 6.12 | gates a–e in a session | **NOT RUN.** No provider loads, so no page, no bridge, no tap, no frame and no per-session memory figure exists in-session. The broker's `--serve` Unix-socket mode exists but was not exercised from a session (nothing to connect to it). |
+
+Still open after session 2 (in order): fix the `StringArray`/`String8Array`
+encoding; byte-diff one `getPackageInfo(com.android.webview, 0x100024c0)` reply to
+close the head desync; then the real multi-package PMS + provider mount +
+`createApplicationContext`; then the provider Java (105 methods) and the socket;
+then (a)–(e) in-session.

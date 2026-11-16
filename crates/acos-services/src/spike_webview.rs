@@ -169,3 +169,105 @@ impl ServiceObject for WebViewUpdateService {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use acos_parcel::Parcel;
+
+    /// `1` = the object is present (the `writeTypedObject` presence word).
+    const PRESENT: i32 = 1;
+    /// `0` = no exception header (`Parcel.readException()` sees no throwable).
+    const NO_EXCEPTION: i32 = 0;
+
+    /// Rewind to the start of the reply and return its data length.
+    fn rewind(p: &mut Parcel) -> usize {
+        let end = p.data_position();
+        p.set_data_position(0);
+        end
+    }
+
+    #[test]
+    fn wait_for_and_get_provider_writes_the_frameworks_expected_shape() {
+        let mut service = WebViewUpdateService::new();
+        let mut request = Parcel::new();
+        let mut reply = Parcel::new();
+        assert!(service
+            .raw_transact(DESCRIPTOR, TRANSACTION_WAIT_FOR_AND_GET_PROVIDER, &mut request, &mut reply)
+            .expect("raw_transact is infallible for this code"));
+
+        let end = rewind(&mut reply);
+        // `WebViewProviderResponse.writeToParcel`: presence, payload, status.
+        assert_eq!(reply.read_int32().unwrap(), NO_EXCEPTION);
+        assert_eq!(reply.read_int32().unwrap(), PRESENT);
+        // The payload is a `PackageInfo`, whose first field is `packageName`
+        // (`Parcel.writeString8` = byte length + UTF-8 + pad).
+        assert_eq!(
+            reply.read_string8().unwrap().as_deref(),
+            Some(PROVIDER_PACKAGE)
+        );
+        // The reply ends with `status`; `STATUS_OK` is the only value that keeps
+        // `WebViewFactory` on the success path.
+        let mut tail = Vec::new();
+        while reply.data_position() < end {
+            tail.push(reply.read_int32().unwrap());
+        }
+        assert_eq!(tail.last().copied(), Some(STATUS_OK));
+    }
+
+    #[test]
+    fn current_package_and_multi_process_answers_are_typed_and_honest() {
+        let mut service = WebViewUpdateService::new();
+        let mut request = Parcel::new();
+
+        let mut reply = Parcel::new();
+        assert!(service
+            .raw_transact(DESCRIPTOR, TRANSACTION_GET_CURRENT_WEBVIEW_PACKAGE, &mut request, &mut reply)
+            .unwrap());
+        let _ = rewind(&mut reply);
+        assert_eq!(reply.read_int32().unwrap(), NO_EXCEPTION);
+        assert_eq!(reply.read_int32().unwrap(), PRESENT);
+        assert_eq!(
+            reply.read_string8().unwrap().as_deref(),
+            Some(PROVIDER_PACKAGE)
+        );
+
+        // `isMultiProcessEnabled` is `false`: the provider runs in the app's own
+        // process, so this is the true answer, not a stub.
+        let mut reply = Parcel::new();
+        assert!(service
+            .raw_transact(DESCRIPTOR, TRANSACTION_IS_MULTIPROCESS_ENABLED, &mut request, &mut reply)
+            .unwrap());
+        let _ = rewind(&mut reply);
+        assert_eq!(reply.read_int32().unwrap(), NO_EXCEPTION);
+        assert_eq!(reply.read_int32().unwrap(), 0);
+    }
+
+    #[test]
+    fn unimplemented_methods_are_structured_unsupported_never_a_silent_success() {
+        let mut service = WebViewUpdateService::new();
+        let mut request = Parcel::new();
+        for code in [3u32, 4, 5, 9, 42] {
+            let mut reply = Parcel::new();
+            // `Ok(false)` = "this object does not serve that code"; the
+            // dispatcher then writes the structured `UNSUPPORTED_ANDROID_API`.
+            // Answering `Ok(true)` with an empty parcel would be a fake success.
+            assert!(
+                !service
+                    .raw_transact(DESCRIPTOR, code, &mut request, &mut reply)
+                    .unwrap(),
+                "code {code} must not be answered"
+            );
+            assert_eq!(
+                reply.data_position(),
+                0,
+                "code {code} must not write a reply"
+            );
+        }
+        // A different interface is not ours either.
+        let mut reply = Parcel::new();
+        assert!(!service
+            .raw_transact("android.content.pm.IPackageManager", 2, &mut request, &mut reply)
+            .unwrap());
+    }
+}

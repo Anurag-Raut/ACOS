@@ -6,7 +6,7 @@ Use them to understand behaviour and wire formats BEFORE guessing or disassembli
 | Dir | Contents | Use for |
 |---|---|---|
 | `native/` | libs/binder (IPCThreadState, ProcessState, Parcel, BpBinder, ndk), include/binder, libs/ui, libs/gui | Binder driver protocol (BC_*/BR_*), node refcounting, flat_binder_object, stability |
-| `base/` | core/jni (AndroidRuntime.cpp, android_os_*, registration order), libs/hwui (+ jni/), libs/androidfw, core/java/android/os, com/android/internal/os | libandroid_runtime registration, graphics JNI, AssetManager/overlays, zygote/RuntimeInit |
+| `base/` | core/jni (AndroidRuntime.cpp, android_os_*, registration order), libs/hwui (+ jni/), libs/androidfw, core/java/android/os, com/android/internal/os, core/java/android/webkit | libandroid_runtime registration, graphics JNI, AssetManager/overlays, zygote/RuntimeInit, the WebView provider load path (`WebViewFactory`) and `WebView`/`WebSettings`/`WebViewClient` — read these before reverse-engineering `framework.jar` (`core/java/android/webkit`, added for the ADR-0031 spike) |
 | `art/` | runtime, libartbase, libnativeloader, libnativebridge | boot image/classpath logic (e.g. mainline CHECK), linker namespaces, runtime flags |
 | `bionic/` | linker, libc/bionic, libc/include | linker namespaces, property area, sysconf |
 | `libbase/`, `core/` | libbase, libutils, libcutils, liblog, property_service | RefBase, logging, properties |
