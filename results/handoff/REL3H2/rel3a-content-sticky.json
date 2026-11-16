@@ -1,0 +1,127 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "screenshot",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "infra_timeout",
+    "code": "TIMEOUT",
+    "details": {
+      "animating": false,
+      "backend": "acos-art-session",
+      "context": "assert_region",
+      "frame_seq": 48,
+      "reason": "traversal",
+      "settle": {
+        "animating": false,
+        "bound": "timeout",
+        "mode": "strict",
+        "probe_seq": 234,
+        "reason": "traversal",
+        "settled": false,
+        "strict_rule": "event",
+        "tree_age_ms": 11,
+        "warning": "strict settle timed out: the tree and frame identity are the latest observed state, not a settled one; this is not assertion evidence"
+      }
+    },
+    "hint": "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT failure and never a pass. For a screen that animates forever in pixels (React Nati… [ACOS: result.error.hint bounded for size — 668 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …rt_*` fall back to it by default. The latest tree/frame is kept in the step evidence.",
+    "message": "capture: strict settle timed out (traversal); the step is a non-pass because the screen was still changing when the deadline elapsed",
+    "retryable": true
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 16437248,
+    "wall_ms": 5552
+  },
+  "ok": false,
+  "request_id": "req_287bb8_18e877297f79451f",
+  "result": {
+    "artifacts_dir": "results/handoff/REL3H2/rel3a-content-sticky",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "failure_index": 4,
+      "index": 4,
+      "kind": "assert_region",
+      "message": "capture: strict settle timed out (traversal); the step is a non-pass because the screen was still changing when the deadline elapsed",
+      "status": "timeout"
+    },
+    "failure": {
+      "code": "TIMEOUT",
+      "error": {
+        "class": "infra_timeout",
+        "code": "TIMEOUT",
+        "details": {
+          "animating": false,
+          "backend": "acos-art-session",
+          "context": "assert_region",
+          "frame_seq": 48,
+          "reason": "traversal",
+          "settle": {
+            "animating": false,
+            "bound": "timeout",
+            "mode": "strict",
+            "probe_seq": 234,
+            "reason": "traversal",
+            "settled": false,
+            "strict_rule": "event",
+            "tree_age_ms": 11,
+            "warning": "strict settle timed out: the tree and frame identity are the latest observed state, not a settled one; this is not assertion evidence"
+          }
+        },
+        "hint": "… [ACOS: identical to result.error.hint (537 bytes), not repeated; it begins: settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT fa… [ACOS: result.result.verdict.failure.error.hint bounded for size — 597 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …and `wait_for`/`assert_*` fall back to it by default. The latest tree/frame is k] …",
+        "message": "capture: strict settle timed out (traversal); the step is a non-pass because the screen was still changing when the deadline elapsed",
+        "retryable": true
+      },
+      "step_index": 4,
+      "summary": "step 4 (assert_region) timeout"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794521211436188681,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f60da836-954ca1c9bc8aad24/fixtures/build/apps/settle-lab.apk",
+        "sha256": "3ea3d28b33ba3bd842e82e61c962633b88ef7406bb24291f8ef89c7e8df778c4",
+        "sha256_12": "3ea3d28b33ba",
+        "size_bytes": 21082
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794812558692072199,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f60da836-954ca1c9bc8aad24/scenarios/rel3a-content-sticky.yaml",
+        "sha256": "77064e2def5ca813d932eabacc23261175e3c09c8fb5ee8c7ad8f4230b3c9379",
+        "sha256_12": "77064e2def5c",
+        "size_bytes": 2619
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "results/handoff/REL3H2/rel3a-content-sticky/verdict.json",
+    "verdict_status": "timeout"
+  },
+  "session_id": "s_art_settle-lab",
+  "status": "timeout"
+}

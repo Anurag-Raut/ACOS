@@ -1,0 +1,7 @@
+{
+  "request_id": "req_2879e2_18e87726c4a1012c",
+  "started_at": "2026-11-16T07:50:59.898Z",
+  "scenario": "scenarios/rel3h2-expect-handled-true.yaml",
+  "apk": "fixtures/build/apps/tap-targets.apk",
+  "acos_version": "0.2.3"
+}

@@ -1,0 +1,64 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 16498688,
+    "wall_ms": 7291
+  },
+  "ok": true,
+  "request_id": "req_287ad3_18e877270c4bc203",
+  "result": {
+    "artifacts_dir": "results/handoff/REL3H2/rel3a-content-settle",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794521211436188681,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f60da836-954ca1c9bc8aad24/fixtures/build/apps/settle-lab.apk",
+        "sha256": "3ea3d28b33ba3bd842e82e61c962633b88ef7406bb24291f8ef89c7e8df778c4",
+        "sha256_12": "3ea3d28b33ba",
+        "size_bytes": 21082
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794812558692072199,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f60da836-954ca1c9bc8aad24/scenarios/rel3a-content-settle.yaml",
+        "sha256": "0378b2fdaf98f0a527cf1e67a5974047e92230522d40cf979e4c3bc96476c8af",
+        "sha256_12": "0378b2fdaf98",
+        "size_bytes": 2664
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "results/handoff/REL3H2/rel3a-content-settle/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_settle-lab",
+  "status": "pass"
+}
