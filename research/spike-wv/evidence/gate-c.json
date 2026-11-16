@@ -1,0 +1,56 @@
+{
+  "ax_node": {
+    "ax_id": "12",
+    "backend_dom_node_id": 12,
+    "name": "Tap me",
+    "role": "button",
+    "value": null
+  },
+  "gate": "c",
+  "item": "tap on web button by text (a11y tree)",
+  "passed": true,
+  "real_page_link_tap": {
+    "bounds": {
+      "h": 45.796875,
+      "w": 156.0,
+      "x": 329.40625,
+      "y": 137.65625
+    },
+    "found": true,
+    "navigated": true,
+    "role": "link",
+    "url_after": "https://en.wikipedia.org/wiki/Main_Page"
+  },
+  "state": {
+    "after": "tapped",
+    "before": "not tapped"
+  },
+  "tap": {
+    "bounds": {
+      "h": 70.0,
+      "w": 260,
+      "x": 54,
+      "y": 173.421875
+    },
+    "found": true,
+    "input": {
+      "acks": {
+        "down": "acked",
+        "up": "acked"
+      },
+      "frame_ms": [
+        9.82,
+        10.24
+      ]
+    },
+    "role": "button",
+    "role_path": {
+      "ax_id": "12",
+      "backend_dom_node_id": 12,
+      "name": "Tap me",
+      "role": "button",
+      "value": null
+    },
+    "text": "Tap me"
+  }
+}

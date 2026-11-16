@@ -1,0 +1,35 @@
+# SPIKE-WV probe (research only, not a gate): what does the guest do today when
+# an app creates an android.webkit.WebView? The activity reports its uid,
+# hasSystemFeature("android.software.webview"), the provider lookup and the
+# exact throwable into TextView id=status and logcat tag WVProbe.
+version: 1
+name: webview-probe
+description: >-
+  Launch webview-probe, which constructs a real WebView in onCreate, and capture
+  the exact failure (or success) from the ACOS UI tree and the WVProbe log.
+app: fixtures/build/apps/webview-probe.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.webview/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: status}
+      timeout_ms: 5000
