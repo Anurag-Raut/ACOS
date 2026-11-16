@@ -1184,3 +1184,12 @@ ADR-0030 note (SPIKE-NET2): the guest has no path to netfilter at all: `AF_NETLI
 and `SO_MARK` are denied by seccomp, CapEff is 0, and the guest userns is not the netns owner; a
 session whose drop rules cannot be installed fails closed. Session 1's AF_INET seccomp branch was dead
 code; the fixed program has an interpreter test.
+
+**ADR-0030 amendment 2 (owner, 2026-11-16, after SPIKE-NET3).** Real internet is proven in-app
+(HTTP 200 via dnsproxyd, validated network, LinkProperties parity; host loopback and LAN blocked).
+A per-session pasta costs ~28 MiB RSS, so the default is `off` (owner rule: on only if metrics do not
+worsen). Owner decision: use **one shared network relay** for all sessions instead of one pasta per
+session. The shared design must keep per-session isolation (no session can see or reach another's
+traffic, per-session online/offline, latency and HAR controls), keep the host-loopback/LAN boundary and
+fail-closed behaviour, and cost near zero per session; it needs its own design note and a security
+review before implementation. Per-session pasta remains the proven fallback.
