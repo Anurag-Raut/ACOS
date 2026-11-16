@@ -1,0 +1,11 @@
+package=dev.acos.fixtures.locationprobe
+activity=dev.acos.fixtures.locationprobe.MainActivity
+lifecycle=onCreate,onStart,onResume
+resumed=true
+called=true
+stopped=false
+window=com.android.internal.policy.PhoneWindow@a25be84
+timeout_ms=12000
+first_traversal=traversed=true app_visible=false skip=traversal:view_not_visible
+draw_skip=traversal:view_not_visible
+resume_ready=first-traversal

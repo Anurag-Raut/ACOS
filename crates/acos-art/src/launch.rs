@@ -790,6 +790,8 @@ pub(crate) fn launch_session(
     };
     let (peer_host, live, peer_registry) = live_handles;
     let service_control = Arc::new(ServiceControl::default());
+    // A live module request wakes the peer's idle wait (see `ServiceControl`).
+    service_control.set_wake(peer_wakeup.write);
     let peer_control = Arc::clone(&service_control);
     let interactive = std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some();
     crate::stage("peer-setup");
@@ -6417,6 +6419,17 @@ struct ServiceControl {
     replies: Mutex<HashMap<u64, serde_json::Value>>,
     next_id: AtomicU64,
     reply_cv: Condvar,
+    /// The peer's wake-pipe write end (`-1` until the launcher installs it). A
+    /// request must wake the peer's idle `poll(2)`: with no timed module the peer
+    /// sleeps until the guest speaks, so a queued request would otherwise wait
+    /// for a frame that never comes.
+    wake: std::sync::atomic::AtomicI32,
+}
+
+impl ServiceControl {
+    fn set_wake(&self, fd: RawFd) {
+        self.wake.store(fd, Ordering::Release);
+    }
 }
 
 impl ServiceControl {
@@ -6426,6 +6439,13 @@ impl ServiceControl {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .push((id, request));
+        let wake = self.wake.load(Ordering::Acquire);
+        if wake >= 0 {
+            let byte = 1u8;
+            unsafe {
+                libc::write(wake, (&byte as *const u8).cast::<libc::c_void>(), 1);
+            }
+        }
         let deadline = Instant::now() + timeout;
         let mut replies = self.replies.lock().unwrap_or_else(|e| e.into_inner());
         loop {
@@ -6734,8 +6754,9 @@ fn serve(
             .next_timed_deadline()
             .map(|due| due.saturating_duration_since(Instant::now()));
         match wait_for_idle(fd, wake, deadline)? {
-            IdleWake::Stop => {
-                // Drain the wakeup byte; `stop` is the decision.
+            IdleWake::Wake => {
+                // Drain the wakeup byte; `stop` is the decision, and a queued
+                // module request is served at the top of the next turn.
                 let mut byte = 0u8;
                 unsafe {
                     libc::read(wake, (&mut byte as *mut u8).cast::<libc::c_void>(), 1);

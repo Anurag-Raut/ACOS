@@ -611,7 +611,7 @@ fn an_idle_peer_with_no_timed_module_has_no_tick_wakeups() {
                 ticks += 1;
                 let _ = peer.tick();
             }
-            IdleWake::Frame | IdleWake::Stop => break,
+            IdleWake::Frame | IdleWake::Wake => break,
         }
         waits += 1;
         assert!(waits < 8, "the peer must not poll: {waits} wait(s) in {ticks} tick(s)");

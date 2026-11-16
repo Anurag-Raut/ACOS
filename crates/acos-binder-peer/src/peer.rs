@@ -1250,12 +1250,14 @@ pub enum IdleWake {
     Frame,
     /// A module's scheduled delivery is due: call [`Peer::tick`].
     Deadline,
-    /// The launcher asked the peer to stop (`stop` pipe).
-    Stop,
+    /// The launcher woke the peer (`stop` pipe): it is stopping the session, or
+    /// it queued a module request (attach/detach/control) that the idle turn
+    /// must pick up.
+    Wake,
 }
 
 /// Sleep until the guest has a frame to read (`fd`), the module `deadline`
-/// elapses, or the stop pipe (`stop_fd`) fires.
+/// elapses, or the launcher's wake pipe (`stop_fd`) fires.
 ///
 /// `deadline` is the **remaining** time (see [`Peer::next_timed_deadline`]);
 /// `None` sleeps until a frame or the stop wake, i.e. forever when neither
@@ -1301,7 +1303,7 @@ pub fn wait_for_idle(
             return Err(error);
         }
         if fds[1].revents != 0 {
-            return Ok(IdleWake::Stop);
+            return Ok(IdleWake::Wake);
         }
         if fds[0].revents != 0 {
             return Ok(IdleWake::Frame);
