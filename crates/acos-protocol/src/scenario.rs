@@ -435,6 +435,9 @@ pub struct BackStep {
     /// SE1: fail the step when the settled frame's pixels are unchanged.
     #[serde(default, skip_serializing_if = "is_false")]
     pub expect_change: bool,
+    /// REL3H2: see [`TapStep::expect_handled`]. `- back: {}` keeps parsing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect_handled: Option<bool>,
 }
 
 /// `launch`.
@@ -544,6 +547,16 @@ pub struct TapStep {
     /// mid-animation and can never back a claim.
     #[serde(default, skip_serializing_if = "is_false")]
     pub expect_change: bool,
+    /// REL3H2: the scenario's own claim about the app's handling of this input.
+    ///
+    /// `true` fails the step with `INPUT_NOT_HANDLED` when the app window
+    /// acknowledged every event `finishInputEvent(handled) = false` (the gesture
+    /// was delivered and nothing consumed it). `false` says "this press is
+    /// expected to be a no-op" and silences the `INPUT_UNHANDLED` warning that
+    /// REL3H2 attaches to every unhandled input. Unset: the step passes as
+    /// measured and carries the warning.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect_handled: Option<bool>,
 }
 
 /// The direction of a swipe gesture (the direction the **finger** travels).
@@ -631,6 +644,11 @@ pub struct SwipeStep {
     /// SE1: fail the step when the settled frame's pixels are unchanged.
     #[serde(default, skip_serializing_if = "is_false")]
     pub expect_change: bool,
+    /// REL3H2: `true` fails the step with `INPUT_NOT_HANDLED` when nothing
+    /// consumed the gesture; `false` silences the `INPUT_UNHANDLED` warning (see
+    /// [`TapStep::expect_handled`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect_handled: Option<bool>,
 }
 
 /// `scroll_until`.
@@ -691,6 +709,11 @@ pub struct TypeStep {
     /// SE1: fail the step when the settled frame's pixels are unchanged.
     #[serde(default, skip_serializing_if = "is_false")]
     pub expect_change: bool,
+    /// REL3H2: `true` fails the step with `INPUT_NOT_HANDLED` when nothing
+    /// consumed the input; `false` silences the `INPUT_UNHANDLED` warning (see
+    /// [`TapStep::expect_handled`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect_handled: Option<bool>,
 }
 
 /// `key`.
@@ -707,6 +730,11 @@ pub struct KeyStep {
     /// SE1: fail the step when the settled frame's pixels are unchanged.
     #[serde(default, skip_serializing_if = "is_false")]
     pub expect_change: bool,
+    /// REL3H2: `true` fails the step with `INPUT_NOT_HANDLED` when nothing
+    /// consumed the key; `false` silences the `INPUT_UNHANDLED` warning (see
+    /// [`TapStep::expect_handled`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect_handled: Option<bool>,
 }
 
 /// `rotate`.
@@ -1931,6 +1959,78 @@ steps:
         assert!(!plain.steps[1].back.as_ref().unwrap().expect_change);
         // A false flag is not written back: the wire form is unchanged.
         assert!(!plain.to_yaml_string().unwrap().contains("expect_change"));
+    }
+
+    const EXPECT_HANDLED: &str = r#"
+version: 1
+name: expect-handled
+app: fixtures/build/apps/counter.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+steps:
+  - launch: {activity: .MainActivity}
+  - tap: {selector: {id: title}, expect_handled: false}
+  - tap: {selector: {id: inc}, expect_handled: true}
+  - key: {key: back, expect_handled: false}
+  - back: {expect_handled: true}
+  - swipe: {direction: up, expect_handled: false}
+"#;
+
+    /// REL3H2: `expect_handled` is an optional tri-state on every input step -
+    /// unset (the step passes as measured, with the warning), `true` (the claim
+    /// that is enforced) and `false` (the annotation that silences the warning).
+    #[test]
+    fn expect_handled_parses_and_defaults_to_unset() {
+        let scenario = Scenario::from_yaml_str(EXPECT_HANDLED).expect("valid scenario");
+        assert!(scenario.validate().is_ok(), "{:?}", scenario.validate());
+        assert_eq!(
+            scenario.steps[1].tap.as_ref().unwrap().expect_handled,
+            Some(false)
+        );
+        assert_eq!(
+            scenario.steps[2].tap.as_ref().unwrap().expect_handled,
+            Some(true)
+        );
+        assert_eq!(
+            scenario.steps[3].key.as_ref().unwrap().expect_handled,
+            Some(false)
+        );
+        assert_eq!(
+            scenario.steps[4].back.as_ref().unwrap().expect_handled,
+            Some(true)
+        );
+        assert_eq!(
+            scenario.steps[5].swipe.as_ref().unwrap().expect_handled,
+            Some(false)
+        );
+
+        let plain = Scenario::from_yaml_str(
+            "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {mode: offscreen, width: 8, height: 8, density_dpi: 420}\nsteps:\n  - tap: {x: 1, y: 2}\n  - back: {}\n",
+        )
+        .expect("valid scenario");
+        assert_eq!(plain.steps[0].tap.as_ref().unwrap().expect_handled, None);
+        assert_eq!(plain.steps[1].back.as_ref().unwrap().expect_handled, None);
+        // Unset is not written back: the wire form of an existing scenario is
+        // byte-identical (the same rule `expect_change: false` follows).
+        assert!(!plain.to_yaml_string().unwrap().contains("expect_handled"));
+    }
+
+    /// REL3H2: a non-bool `expect_handled` is a parse error, never a silently
+    /// ignored field that would turn the claim into a no-op.
+    #[test]
+    fn expect_handled_rejects_a_non_bool() {
+        for value in ["yes", "1", "\"true\"", "[true]"] {
+            let yaml = format!(
+                "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {{mode: offscreen, width: 8, height: 8, density_dpi: 420}}\nsteps:\n  - tap: {{x: 1, y: 2, expect_handled: {value}}}\n"
+            );
+            let error = Scenario::from_yaml_str(&yaml)
+                .err()
+                .unwrap_or_else(|| panic!("expect_handled: {value} must not parse"));
+            assert!(error
+                .errors
+                .iter()
+                .all(|e| e.code == ErrorCode::InvalidScenario));
+        }
     }
 
     /// SE1: a non-bool is a parse error, never a silently ignored field.

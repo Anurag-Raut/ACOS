@@ -50,6 +50,19 @@ pub const WARN_SCENARIO_ENGINE_MISMATCH: &str = "SCENARIO_ENGINE_MISMATCH";
 /// A warning code: an input's size/mtime changed while the run was in flight.
 pub const WARN_INPUT_CHANGED: &str = "INPUT_CHANGED_DURING_RUN";
 
+/// A warning code: an input step's gesture was delivered and the app window
+/// acknowledged it `finishInputEvent(handled) = false`, so nothing consumed it.
+///
+/// REL3H made that a *settled* observation (`settle.reason: "unhandled_input"`)
+/// instead of a timeout, and REL3H2 adds this warning because the new pass was
+/// silent: an agent that reads only `status` could not tell "the tap worked"
+/// from "nothing was there to tap". The step stays exactly as measured (a pass
+/// when the step made no change claim), and the warning names the step and the
+/// next action. A scenario that *knows* an input is a no-op can opt out with
+/// `expect_handled: false`; `expect_handled: true` turns it into a step failure
+/// (`INPUT_NOT_HANDLED`).
+pub const WARN_INPUT_UNHANDLED: &str = "INPUT_UNHANDLED";
+
 /// The absolute form of `path`.
 ///
 /// Canonicalizes when the path exists (symlinks and `..` resolved, so two

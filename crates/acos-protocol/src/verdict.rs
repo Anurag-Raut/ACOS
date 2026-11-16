@@ -73,6 +73,14 @@ pub struct StepResult {
     /// for the scenario's explicit flag. `None` for steps that inject no input.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<serde_json::Value>,
+    /// REL3H2: structured, non-fatal facts about this step (for example
+    /// `INPUT_UNHANDLED`: the gesture was delivered and nothing consumed it).
+    /// The step's status is exactly as measured; a warning never changes it, and
+    /// the same records are copied into the verdict's `provenance.warnings[]` so
+    /// a reader of either file sees them. Empty (and absent on the wire) when
+    /// there is nothing to say.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<serde_json::Value>,
     /// Evidence backing this step. A passing step must have at least one entry.
     #[serde(default)]
     pub evidence: Vec<ArtifactRef>,
@@ -94,6 +102,7 @@ impl StepResult {
             assertions: Vec::new(),
             settle: None,
             input: None,
+            warnings: Vec::new(),
             evidence: Vec::new(),
             error: None,
         }

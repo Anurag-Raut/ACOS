@@ -352,6 +352,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 settle_timeout_ms: None,
             settle: None,
                 expect_change: false,
+                expect_handled: None,
             }),
             ..Step::default()
         }),
@@ -367,6 +368,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 settle_timeout_ms: None,
             settle: None,
                 expect_change: false,
+                expect_handled: None,
             }),
             ..Step::default()
         }),
@@ -382,6 +384,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 settle_timeout_ms: None,
             settle: None,
                 expect_change: false,
+                expect_handled: None,
             }),
             ..Step::default()
         }),
@@ -397,6 +400,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 settle_timeout_ms: None,
             settle: None,
                 expect_change: false,
+                expect_handled: None,
             }),
             ..Step::default()
         }),
@@ -411,6 +415,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 settle_timeout_ms: None,
             settle: None,
                 expect_change: false,
+                expect_handled: None,
             }),
             ..Step::default()
         }),
@@ -425,6 +430,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 settle_timeout_ms: None,
             settle: None,
                 expect_change: false,
+                expect_handled: None,
             }),
             ..Step::default()
         }),
@@ -777,6 +783,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 settle_timeout_ms: None,
             settle: None,
                 expect_change: false,
+                expect_handled: None,
             }),
             // A key step is valid; make it invalid by adding a second kind.
             reset: Some(ResetStep {

@@ -110,6 +110,9 @@ struct StepExec {
     /// the settled `frame_seq`). `None` for every other step; `found: false`
     /// with the miss's attempts when the search exhausted its budget.
     until: Option<serde_json::Value>,
+    /// REL3H2: structured step-level warnings (copied into the step JSON and the
+    /// verdict's `provenance.warnings[]`). Empty for a step with nothing to say.
+    warnings: Vec<serde_json::Value>,
 }
 
 impl StepExec {
@@ -124,6 +127,7 @@ impl StepExec {
             settle: None,
             delivery: None,
             until: None,
+            warnings: Vec::new(),
         }
     }
 
@@ -148,6 +152,7 @@ impl StepExec {
             settle: None,
             delivery: None,
             until: None,
+            warnings: Vec::new(),
         }
     }
 
@@ -169,6 +174,7 @@ impl StepExec {
             settle: None,
             delivery: None,
             until: None,
+            warnings: Vec::new(),
         }
     }
 
@@ -201,6 +207,7 @@ impl StepExec {
             settle: None,
             delivery: None,
             until: None,
+            warnings: Vec::new(),
         }
     }
 
@@ -218,6 +225,7 @@ impl StepExec {
             settle: None,
             delivery: None,
             until: None,
+            warnings: Vec::new(),
         }
     }
 
@@ -232,6 +240,7 @@ impl StepExec {
             settle: None,
             delivery: None,
             until: None,
+            warnings: Vec::new(),
         }
     }
 }
@@ -269,6 +278,9 @@ pub fn run_scenario(
     let mut status = Status::Pass;
     let mut failure: Option<FailureClassification> = None;
     let mut notes: Vec<String> = Vec::new();
+    // REL3H2: step-level warnings promoted to the verdict's
+    // `provenance.warnings[]` (an unhandled input must not be a silent pass).
+    let mut step_warnings: Vec<serde_json::Value> = Vec::new();
     // `capture` step names -> the PNG that step wrote. Written into the verdict
     // so the scenario's own label answers "the screenshot for X".
     let mut captures: BTreeMap<String, String> = BTreeMap::new();
@@ -414,6 +426,20 @@ pub fn run_scenario(
             Some(failure) => failure,
             None => exec,
         };
+        // ---- REL3H2: `expect_handled` is a claim, and an unhandled step says so
+        // ---- A gesture nothing consumed must not be a silent plain pass: the
+        // claim side (`expect_handled: true`) fails closed, the default side
+        // carries `INPUT_UNHANDLED` in the step JSON and the verdict's
+        // `provenance.warnings[]`, and `expect_handled: false` is the scenario's
+        // "this no-op is intended".
+        let mut exec = match expect_handled_failure(step, &exec) {
+            Some(failure) => failure,
+            None => exec,
+        };
+        if let Some(warning) = input_unhandled_warning(step, index, &exec) {
+            exec.warnings.push(warning.clone());
+            step_warnings.push(warning);
+        }
         let duration_ms = clock.now_unix_ms().saturating_sub(step_started);
 
         // ---- W58: complete the frame evidence at the verifier's boundary ----
@@ -443,6 +469,9 @@ pub fn run_scenario(
         let mut step_result = StepResult::new(index, step.kind(), exec.status, duration_ms);
         step_result.assertions = exec.assertions.clone();
         step_result.error = exec.error.clone();
+        // REL3H2: the step's own structured warnings (also in the verdict's
+        // provenance block, so either file tells the same story).
+        step_result.warnings = exec.warnings.clone();
         // P12: a tap/type/key reply's settle block (including pixels_changed)
         // is step evidence. It is never the pass/fail rule by itself.
         // SE2b: prefer the per-action record. `observation.settle` is the
@@ -725,6 +754,12 @@ pub fn run_scenario(
         );
     }
     for warning in &options.warnings {
+        acos_protocol::provenance::push_warning(&mut provenance, warning.clone());
+    }
+    // REL3H2: the same `INPUT_UNHANDLED` records the step JSONs carry, so a
+    // reader of `verdict.json` alone sees that an input was not handled. They
+    // are facts about the run, never a status: the step's own result decides.
+    for warning in &step_warnings {
         acos_protocol::provenance::push_warning(&mut provenance, warning.clone());
     }
     // LOW review finding: an input rewritten while the run was in flight is
@@ -2214,6 +2249,7 @@ fn observation_binding_error(backend: &str, observation: &SessionObservation) ->
         settle: None,
         delivery: None,
         until: None,
+        warnings: Vec::new(),
     })
 }
 
@@ -2258,6 +2294,7 @@ fn meaningful_error(observation: &SessionObservation) -> Option<StepExec> {
         settle: None,
         delivery: None,
         until: None,
+        warnings: Vec::new(),
     })
 }
 
@@ -2286,6 +2323,183 @@ fn expect_change_requested(step: &Step) -> bool {
         Some(StepRef::Back(back)) => back.expect_change,
         _ => false,
     }
+}
+
+/// REL3H2: the scenario's own `expect_handled` claim for an input step.
+///
+/// `Some(true)` means "the app must consume this gesture", `Some(false)` means
+/// "this press is expected to be a no-op" (it silences the warning), and `None`
+/// (the default) means the step passes as measured and carries
+/// `INPUT_UNHANDLED`. Steps that inject no input have no claim.
+fn expect_handled_requested(step: &Step) -> Option<bool> {
+    match step.as_step() {
+        Some(StepRef::Tap(tap)) => tap.expect_handled,
+        Some(StepRef::Swipe(swipe)) => swipe.expect_handled,
+        Some(StepRef::Type(ty)) => ty.expect_handled,
+        Some(StepRef::Key(key)) => key.expect_handled,
+        Some(StepRef::Back(back)) => back.expect_handled,
+        _ => None,
+    }
+}
+
+/// REL3H2: the app window's own `finishInputEvent(handled)` answer for a step.
+///
+/// `Some(false)` is the app's proof that nothing consumed the gesture;
+/// `Some(true)` the proof that something did; `None` means the guest did not ack
+/// every event (unknown, never a guess - REL3E's rule).
+fn step_handled(exec: &StepExec) -> Option<bool> {
+    exec.delivery.as_ref().and_then(|delivery| delivery.handled)
+}
+
+/// REL3H2: `expect_handled: true` on a gesture nothing consumed is a failed
+/// claim, never a pass.
+///
+/// REL3H turned a delivered-but-unhandled input into a *settled* observation
+/// (instead of a `TIMEOUT`), which is honest about the settle and silent about
+/// the flow: a scenario whose tap missed the control passed. `expect_handled:
+/// true` is the opt-in that says "this press must reach something", and an
+/// unhandled ack then fails with `INPUT_NOT_HANDLED` (error class `assertion`),
+/// naming what the point hit. `handled: null` (no complete ack) cannot verify
+/// the claim either, so it is `UNSUPPORTED_ASSERTION` - fail closed, never a
+/// silent pass.
+fn expect_handled_failure(step: &Step, exec: &StepExec) -> Option<StepExec> {
+    if expect_handled_requested(step) != Some(true) || exec.status != Status::Pass {
+        return None;
+    }
+    let handled = step_handled(exec);
+    if handled == Some(true) {
+        return None;
+    }
+    let delivery = exec.delivery.as_ref();
+    let target = delivery.and_then(|delivery| delivery.target.clone());
+    let settle = delivery.and_then(|delivery| delivery.settle.clone());
+    let (published, acked) = delivery
+        .map(|delivery| (delivery.published, delivery.acks.len()))
+        .unwrap_or((0, 0));
+    let error = if handled == Some(false) {
+        BackendError::Protocol {
+            code: ErrorCode::InputNotHandled,
+            detail: format!(
+                "{}: `expect_handled: true` and the app window acknowledged the gesture \
+                 `finishInputEvent(handled) = false` ({acked}/{published} event(s) acked, every \
+                 one unhandled) - the input was delivered and nothing consumed it",
+                step.kind()
+            ),
+            hint: Some(ErrorCode::InputNotHandled.hint().to_string()),
+            details: Some(serde_json::json!({
+                "reason": "expect_handled",
+                "handled": false,
+                "step_kind": step.kind(),
+                "published": published,
+                "acked": acked,
+                "target": target,
+                "settle": settle,
+            })),
+        }
+    } else {
+        BackendError::Protocol {
+            code: ErrorCode::UnsupportedAssertion,
+            detail: format!(
+                "{}: `expect_handled: true` cannot be verified - the guest did not ack every \
+                 published event, so the app's handling of this gesture is unknown",
+                step.kind()
+            ),
+            hint: Some(
+                "An unverifiable handling claim never passes. Run the step on the ART engine \
+                 (which reports the window's own `finishInputEvent(handled)` acks), or drop \
+                 `expect_handled`."
+                    .to_string(),
+            ),
+            details: Some(serde_json::json!({
+                "reason": "expect_handled_unverified",
+                "handled": serde_json::Value::Null,
+                "step_kind": step.kind(),
+                "published": published,
+                "acked": acked,
+                "target": target,
+                "settle": settle,
+            })),
+        }
+    };
+    let mut failure = StepExec::failed(Evaluated {
+        result: AssertionResult {
+            kind: "expect_handled".to_string(),
+            passed: false,
+            expected: Some(serde_json::json!({"handled": true})),
+            actual: Some(serde_json::json!({"handled": handled})),
+            diff: Some(AssertionDiff {
+                expected: serde_json::json!({"handled": true}),
+                actual: serde_json::json!({"handled": handled}),
+                path: Some("input.handled".to_string()),
+                detail: Some(
+                    "the app window's own finishInputEvent(handled) answer for this gesture"
+                        .to_string(),
+                ),
+            }),
+            matched_node_ids: Vec::new(),
+            message: None,
+        },
+        error: Some(error),
+    });
+    // The failing step's tree/frame and delivery are still evidence.
+    failure.observation = exec.observation.clone();
+    failure.delivery = exec.delivery.clone();
+    failure.settle = exec.settle.clone();
+    Some(failure)
+}
+
+/// REL3H2: an unhandled input is never a silent plain pass.
+///
+/// A gesture the app window acknowledged `finishInputEvent(handled) = false` did
+/// nothing, and REL3H lets that step pass (a delivered no-op on an honest,
+/// stable screen is a settled observation, not a timeout). Passing silently is
+/// the false-green half: an agent that reads only `status` cannot tell "the tap
+/// worked" from "nothing was there to tap". The step stays exactly as measured
+/// and carries a structured `INPUT_UNHANDLED` warning - in the step JSON and in
+/// the verdict's `provenance.warnings[]` - unless the scenario says the no-op
+/// was intended (`expect_handled: false`).
+fn input_unhandled_warning(step: &Step, index: usize, exec: &StepExec) -> Option<serde_json::Value> {
+    if exec.status != Status::Pass || expect_handled_requested(step).is_some() {
+        return None;
+    }
+    if step_handled(exec) != Some(false) {
+        return None;
+    }
+    let delivery = exec.delivery.as_ref()?;
+    let unhandled: Vec<u64> = delivery
+        .acks
+        .iter()
+        .filter(|ack| !ack.handled)
+        .map(|ack| ack.seq)
+        .collect();
+    let target = delivery.target.clone();
+    let hint = acos_protocol::ui::handling_hint(
+        target.as_ref(),
+        Some(false),
+        delivery.visual_change,
+    );
+    Some(serde_json::json!({
+        "code": acos_protocol::provenance::WARN_INPUT_UNHANDLED,
+        "step": index,
+        "step_kind": step.kind(),
+        "message": format!(
+            "step {index} ({}): the gesture was delivered and the app window acknowledged every \
+             event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` \
+             because it made no change claim; it is not evidence that the input reached a control.",
+            step.kind()
+        ),
+        "hint": hint.unwrap_or_else(|| {
+            "Set `expect_handled: true` on this step to make the app's handling a hard \
+             requirement (it then fails with INPUT_NOT_HANDLED), or `expect_handled: false` when \
+             the no-op press is intended and this warning should not be reported."
+                .to_string()
+        }),
+        "handled": false,
+        "published": delivery.published,
+        "acked": delivery.acks.len(),
+        "unhandled": unhandled,
+        "target": target,
+    }))
 }
 
 /// REL3E: the `input` block of a step JSON.
@@ -3083,6 +3297,7 @@ fn no_fresh_frame_failure(
         settle: None,
         delivery: None,
         until: None,
+        warnings: Vec::new(),
     }
 }
 
@@ -3531,6 +3746,7 @@ fn static_launch_assertion(
                 settle: None,
                 delivery: None,
                 until: None,
+                warnings: Vec::new(),
             });
         }
     } else if launch.intent_action.is_none() && manifest.launcher_activity.is_none() {
@@ -3553,6 +3769,7 @@ fn static_launch_assertion(
             settle: None,
             delivery: None,
             until: None,
+            warnings: Vec::new(),
         });
     }
     None
@@ -3978,6 +4195,180 @@ mod region_tests {
         let input = step_input(step, current.input.as_ref(), None).expect("input evidence");
         assert_eq!(input["handled"], serde_json::Value::Null);
         assert_eq!(input["handled_evidence"]["source"], serde_json::json!("none"));
+    }
+
+    // ---- REL3H2: an unhandled input is never a silent plain pass -----------
+
+    fn unhandled_delivery(handled: Option<bool>) -> InputDelivery {
+        InputDelivery {
+            delivered: true,
+            visual_change: false,
+            handled,
+            published: 2,
+            acks: vec![
+                crate::backend::InputAck {
+                    seq: 1,
+                    handled: handled.unwrap_or(false),
+                    latency_us: Some(900),
+                },
+                crate::backend::InputAck {
+                    seq: 2,
+                    handled: handled.unwrap_or(false),
+                    latency_us: Some(950),
+                },
+            ],
+            target: Some(serde_json::json!({
+                "selector": {"id": "title"},
+                "hit": {"node": {"class": "android.widget.TextView"},
+                        "suggest": {"class": "android.widget.Switch"}},
+            })),
+            settle: Some(serde_json::json!({
+                "mode": "strict",
+                "settled": true,
+                "reason": "unhandled_input",
+                "bound": "unhandled-input",
+                "pixels_changed": false,
+            })),
+        }
+    }
+
+    fn tap_exec(delivery: Option<InputDelivery>) -> StepExec {
+        let mut exec = StepExec::pass();
+        exec.delivery = delivery;
+        exec
+    }
+
+    /// The default (no `expect_handled`): the step is still a pass, and it says
+    /// so with a structured `INPUT_UNHANDLED` warning that names the step, the
+    /// acks and the clickable neighbour - in the step JSON and, via the run
+    /// loop, in `provenance.warnings[]`.
+    #[test]
+    fn rel3h2_an_unhandled_pass_carries_input_unhandled() {
+        const HEAD: &str = "version: 1\nname: rel3h2\napp: dev.acos.fixtures.taptargets\n\
+             isolation: process\ndisplay: {mode: offscreen, width: 100, height: 100, \
+             density_dpi: 420}\n";
+        let scenario = Scenario::from_yaml_str(&format!(
+            "{HEAD}steps:\n  - tap:\n      selector: {{id: title}}\n"
+        ))
+        .expect("a one-tap scenario");
+        let step = scenario.steps.first().expect("the tap step");
+        let exec = tap_exec(Some(unhandled_delivery(Some(false))));
+
+        let warning = input_unhandled_warning(step, 0, &exec).expect("an unhandled pass warns");
+        assert_eq!(
+            warning["code"],
+            serde_json::json!(acos_protocol::provenance::WARN_INPUT_UNHANDLED)
+        );
+        assert_eq!(warning["step"], serde_json::json!(0));
+        assert_eq!(warning["step_kind"], serde_json::json!("tap"));
+        assert_eq!(warning["handled"], serde_json::json!(false));
+        assert_eq!(warning["published"], serde_json::json!(2));
+        assert_eq!(warning["acked"], serde_json::json!(2));
+        assert_eq!(warning["unhandled"], serde_json::json!([1, 2]));
+        let message = warning["message"].as_str().unwrap_or_default();
+        assert!(message.contains("nothing consumed it"), "{message}");
+        // REL3E's neighbour hint is reused, not re-invented.
+        assert!(
+            warning["hint"].as_str().unwrap_or_default().contains("Switch"),
+            "the hint names the clickable sibling: {warning:#?}"
+        );
+        // The step's own status is untouched: a warning is a fact, not a verdict.
+        assert_eq!(exec.status, Status::Pass);
+    }
+
+    /// A handled input, an unknown ack and a step with no delivery never warn -
+    /// the warning is the app's own answer, never a guess.
+    #[test]
+    fn rel3h2_only_a_proven_unhandled_pass_warns() {
+        const HEAD: &str = "version: 1\nname: rel3h2\napp: dev.acos.fixtures.taptargets\n\
+             isolation: process\ndisplay: {mode: offscreen, width: 100, height: 100, \
+             density_dpi: 420}\n";
+        let scenario = Scenario::from_yaml_str(&format!(
+            "{HEAD}steps:\n  - tap:\n      selector: {{id: inc}}\n"
+        ))
+        .expect("a one-tap scenario");
+        let step = scenario.steps.first().expect("the tap step");
+        assert!(input_unhandled_warning(step, 0, &tap_exec(Some(unhandled_delivery(Some(true))))).is_none());
+        assert!(input_unhandled_warning(step, 0, &tap_exec(Some(unhandled_delivery(None)))).is_none());
+        assert!(input_unhandled_warning(step, 0, &tap_exec(None)).is_none());
+
+        // A step that failed for its own reason keeps that error; the warning
+        // would only obscure it.
+        let mut failed = tap_exec(Some(unhandled_delivery(Some(false))));
+        failed.status = Status::Timeout;
+        assert!(input_unhandled_warning(step, 0, &failed).is_none());
+    }
+
+    /// `expect_handled: false` is the scenario's "this no-op press is intended":
+    /// it silences the warning and changes nothing else.
+    #[test]
+    fn rel3h2_expect_handled_false_silences_the_warning() {
+        const HEAD: &str = "version: 1\nname: rel3h2\napp: dev.acos.fixtures.taptargets\n\
+             isolation: process\ndisplay: {mode: offscreen, width: 100, height: 100, \
+             density_dpi: 420}\n";
+        let scenario = Scenario::from_yaml_str(&format!(
+            "{HEAD}steps:\n  - tap:\n      selector: {{id: title}}\n      expect_handled: false\n"
+        ))
+        .expect("a one-tap scenario");
+        let step = scenario.steps.first().expect("the tap step");
+        let exec = tap_exec(Some(unhandled_delivery(Some(false))));
+        assert!(
+            input_unhandled_warning(step, 0, &exec).is_none(),
+            "expect_handled: false says the no-op is intended"
+        );
+        assert!(expect_handled_failure(step, &exec).is_none(), "and it is not a claim");
+    }
+
+    /// `expect_handled: true` makes the app's handling a hard requirement: the
+    /// same unhandled delivery is now a step failure with `INPUT_NOT_HANDLED`
+    /// (error class `assertion`), naming the injected target and the settle
+    /// record. A handled delivery passes the claim.
+    #[test]
+    fn rel3h2_expect_handled_true_fails_with_input_not_handled() {
+        const HEAD: &str = "version: 1\nname: rel3h2\napp: dev.acos.fixtures.taptargets\n\
+             isolation: process\ndisplay: {mode: offscreen, width: 100, height: 100, \
+             density_dpi: 420}\n";
+        let scenario = Scenario::from_yaml_str(&format!(
+            "{HEAD}steps:\n  - tap:\n      selector: {{id: title}}\n      expect_handled: true\n"
+        ))
+        .expect("a one-tap scenario");
+        let step = scenario.steps.first().expect("the tap step");
+
+        let failed = expect_handled_failure(step, &tap_exec(Some(unhandled_delivery(Some(false)))))
+            .expect("an unhandled gesture fails the claim");
+        assert_eq!(failed.status, Status::Fail);
+        let error = failed.error.expect("a structured error");
+        assert_eq!(error.code, ErrorCode::InputNotHandled);
+        assert_eq!(
+            error.code.class(),
+            acos_protocol::error::ErrorClass::Assertion
+        );
+        let details = error.details.expect("details");
+        assert_eq!(details["reason"], serde_json::json!("expect_handled"));
+        assert_eq!(details["handled"], serde_json::json!(false));
+        assert_eq!(details["published"], serde_json::json!(2));
+        assert_eq!(details["acked"], serde_json::json!(2));
+        assert_eq!(details["target"]["selector"]["id"], serde_json::json!("title"));
+        assert_eq!(
+            details["settle"]["reason"],
+            serde_json::json!("unhandled_input"),
+            "the settle record travels with the failure"
+        );
+        // The failing step's frame is still evidence.
+        assert!(failed.delivery.is_some());
+
+        // Handled: the claim holds and nothing is reported.
+        assert!(expect_handled_failure(step, &tap_exec(Some(unhandled_delivery(Some(true)))))
+            .is_none());
+
+        // Unknown (no complete ack): the claim cannot be verified - unsupported,
+        // never a silent pass.
+        let unverified = expect_handled_failure(step, &tap_exec(Some(unhandled_delivery(None))))
+            .expect("an unverifiable claim never passes");
+        assert_eq!(
+            unverified.error.as_ref().map(|error| error.code),
+            Some(ErrorCode::UnsupportedAssertion)
+        );
     }
 
     #[test]

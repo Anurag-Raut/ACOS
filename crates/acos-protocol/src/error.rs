@@ -195,6 +195,15 @@ pub enum ErrorCode {
     /// remaining attempt and reported `ELEMENT_NOT_FOUND`, which an agent could
     /// not tell from "the selector names a node that never renders".
     EndOfList,
+    /// REL3H2: an input step declared `expect_handled: true` (the scenario
+    /// claims the app must consume this gesture) and the app window
+    /// acknowledged every event `finishInputEvent(handled) = false`.
+    ///
+    /// The gesture was delivered; nothing consumed it. That is a failed claim
+    /// about the flow - the press missed the control, or the control is not
+    /// pressable - never a pass and never "unknown": the app's own window said
+    /// so. `details` names the injected target, the acks and the settle record.
+    InputNotHandled,
     /// A UI node reference is no longer valid.
     StaleRef,
     /// A tree-only assertion ran on an untrusted APK run, where the tree is
@@ -431,6 +440,7 @@ impl ErrorCode {
             ErrorCode::AmbiguousSelector => "AMBIGUOUS_SELECTOR",
             ErrorCode::TreeTruncated => "TREE_TRUNCATED",
             ErrorCode::EndOfList => "END_OF_LIST",
+            ErrorCode::InputNotHandled => "INPUT_NOT_HANDLED",
             ErrorCode::StaleRef => "STALE_REF",
             ErrorCode::InsufficientHostEvidence => "INSUFFICIENT_HOST_EVIDENCE",
             ErrorCode::UnsupportedAssertion => "UNSUPPORTED_ASSERTION",
@@ -622,7 +632,10 @@ impl ErrorCode {
                 "The tree was truncated at the node budget (2000 nodes per window by default), so the node may exist beyond the sampled prefix. Raise the probe node budget or narrow the selector (id/class/bounds); this is not proof the node is absent."
             }
             ErrorCode::EndOfList => {
-                "The scroll_until search reached the end of the list: the last swipe moved nothing, so the selector is not below the current position. Read `details.last_tree_texts` for what the last settled tree showed. If the node is genuinely on the screen, scroll the other way (`direction: down`) or fix the selector; the list really has no more content in this direction."
+                "The scroll_until search stopped at the end of the list: two gestures in a row moved nothing, so the selector is not below the current position. Read `details.last_tree_texts` for what the last settled tree showed. If the node is genuinely on the screen, scroll the other way (`direction: down`) or fix the selector. A list that is still loading also moves nothing for a gesture, so rule out a slow feed before concluding the list ended."
+            }
+            ErrorCode::InputNotHandled => {
+                "An input step declared `expect_handled: true` and the app window answered `finishInputEvent(handled) = false`: the gesture was delivered and nothing consumed it. Read `input.target` (what the point hit) and `input.handled_hint` (the clickable neighbour, when there is one): tap the pressable control, or drop `expect_handled` when a no-op press is intended."
             }
             ErrorCode::StaleRef => {
                 "Re-run observe/assert to obtain fresh node ids; never reuse node refs across a mutation."
@@ -783,6 +796,7 @@ impl ErrorCode {
             | ErrorCode::AmbiguousSelector
             | ErrorCode::TreeTruncated
             | ErrorCode::EndOfList
+            | ErrorCode::InputNotHandled
             | ErrorCode::InsufficientHostEvidence => ErrorClass::Assertion,
 
             // Deadlines.
@@ -824,6 +838,7 @@ impl ErrorCode {
             | ErrorCode::AmbiguousSelector
             | ErrorCode::TreeTruncated
             | ErrorCode::EndOfList
+            | ErrorCode::InputNotHandled
             | ErrorCode::InsufficientHostEvidence => Status::Fail,
             ErrorCode::AppCrashed => Status::Crash,
             ErrorCode::AppNotResponding | ErrorCode::Timeout => Status::Timeout,
@@ -1044,6 +1059,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::AmbiguousSelector,
     ErrorCode::TreeTruncated,
     ErrorCode::EndOfList,
+    ErrorCode::InputNotHandled,
     ErrorCode::StaleRef,
     ErrorCode::InsufficientHostEvidence,
     ErrorCode::UnsupportedAssertion,

@@ -413,8 +413,11 @@ fling with their own physics instead of jumping.
 * `until: <selector>` is a bounded `scroll_until`: swipe, take a fresh **settled**
   traversal, look for the node, repeat (`max_attempts`, 1..50). The reply carries
   `until: {selector, found: true, attempts, frame_seq}`. A miss is
-  `ELEMENT_NOT_FOUND` (every attempt used), or `END_OF_LIST` when a swipe moved
-  nothing — the list ended, `details.end_of_list: true` — with `details.attempts`,
+  `ELEMENT_NOT_FOUND` (every attempt used, or the swipe was not consumed:
+  `details.gesture_consumed: false` with the hint "gesture not consumed (swipe
+  missed the scroller?)"), or `END_OF_LIST` when **two consumed** swipes in a row
+  moved nothing — the list ended, `details.end_of_list: true`,
+  `details.unchanged_gestures: 2` — with `details.attempts`,
   `details.max_attempts`, `details.last_frame_seq` and
   `details.last_tree_texts`. `until` refuses `settle: fast`/`content` because
   neither can prove a settled observation.

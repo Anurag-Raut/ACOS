@@ -501,6 +501,13 @@
           "type": "string"
         },
         {
+          "description": "REL3H2: an input step declared `expect_handled: true` (the scenario claims the app must consume this gesture) and the app window acknowledged every event `finishInputEvent(handled) = false`.\n\nThe gesture was delivered; nothing consumed it. That is a failed claim about the flow - the press missed the control, or the control is not pressable - never a pass and never \"unknown\": the app's own window said so. `details` names the injected target, the acks and the settle record.",
+          "enum": [
+            "INPUT_NOT_HANDLED"
+          ],
+          "type": "string"
+        },
+        {
           "description": "A UI node reference is no longer valid.",
           "enum": [
             "STALE_REF"

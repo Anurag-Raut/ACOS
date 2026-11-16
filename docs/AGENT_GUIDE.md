@@ -208,15 +208,21 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    (bounded by `max_attempts`, default 6, 10 with `fling`) and after **every**
    swipe takes a fresh **settled** traversal and looks for the node. `until.found`
    is only ever reported from such a traversal (`until.attempts`,
-   `until.frame_seq` name it). **A swipe that moved nothing ends the search:**
-   when the settled tree before and after a gesture is identical the list has
-   reached its end, and the call fails with `END_OF_LIST`
-   (`error.details.end_of_list: true`, `attempts`, `max_attempts`,
-   `last_tree_texts`) instead of spending the remaining attempts. Otherwise a
-   node that never appears fails with `ELEMENT_NOT_FOUND`,
-   `error.details.attempts`, `error.details.max_attempts` and
-   `error.details.last_tree_texts` (what the list actually showed at the end) —
-   never a pass, and never a guess from a cached tree. `until` requires the
+   `until.frame_seq` name it). **Two consumed swipes that move nothing end the
+   search** (REL3H2): when the settled tree before and after two *consumed*
+   gestures in a row is identical, the list has reached its end and the call
+   fails with `END_OF_LIST` (`error.details.end_of_list: true`, `attempts`,
+   `max_attempts`, `unchanged_gestures`, `last_tree_texts`) instead of spending
+   the remaining attempts. One unchanged gesture is deliberately not enough: a
+   list that is still loading is unchanged for a gesture too. **A swipe the app
+   did not consume** (`finishInputEvent(handled) = false`, or a settle with
+   `reason: unhandled_input`) moved nothing because it missed the scroller — that
+   is `ELEMENT_NOT_FOUND` with the hint "gesture not consumed (swipe missed the
+   scroller?)", never `END_OF_LIST`. Otherwise a node that never appears fails
+   with `ELEMENT_NOT_FOUND`, `error.details.attempts`,
+   `error.details.max_attempts` and `error.details.last_tree_texts` (what the
+   list actually showed at the end) — never a pass, and never a guess from a
+   cached tree. `until` requires the
    strict settle; `settle: fast`/`content` is refused because neither can prove a
    settled observation.
 
@@ -240,10 +246,10 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    to find and `max_attempts` (1..50); it always runs strict. Both report REL3E's
    `input` block (`handled`, `handled_evidence`, `target`), and `scroll_until`
    also reports `input.until {selector, found, end_of_list, attempts, frame_seq}`;
-   a miss fails the step with `ELEMENT_NOT_FOUND` (every attempt used) or
-   `END_OF_LIST` (a swipe moved nothing: the list ended) plus `details.attempts`
-   / `details.last_tree_texts`. The next `assert_*` binds to the swipe/search's
-   own settled frame.
+   a miss fails the step with `ELEMENT_NOT_FOUND` (every attempt used, or the
+   swipe was not consumed) or `END_OF_LIST` (two consumed swipes moved nothing:
+   the list ended) plus `details.attempts` / `details.last_tree_texts`. The next
+   `assert_*` binds to the swipe/search's own settled frame.
    Identity rule, compared fields and the 40-entry cap: `docs/MCP.md` §1c.
    **`handled` is the app's own answer, and it is the one you branch on.**
    Every `acos_tap`/`acos_key`/`acos_text`/`acos_swipe` reply (and every
@@ -457,10 +463,10 @@ A step is a **one-key map**. Valid keys:
 |---|---|
 | `launch` | `activity` / `intent_action` / `data` / `extras` / `clear_state`, `settle`, `settle_timeout_ms` |
 | `wait_for` | `selector`, `timeout_ms`, `require_visible`, `settle`, `settle_timeout_ms` |
-| `tap` | `selector` or `x`+`y`, optional `timeout_ms`, `settle`, `settle_timeout_ms`, `expect_change` |
-| `type` | optional `selector`, `text`, `clear`, `settle`, `settle_timeout_ms`, `expect_change` |
-| `key` | `key` (`back`, `home`, `enter`, `tab`, `delete`, `escape`, `menu`, `dpad_*`), `settle`, `settle_timeout_ms`, `expect_change` |
-| `back` | `{}` or `{expect_change: true}` |
+| `tap` | `selector` or `x`+`y`, optional `timeout_ms`, `settle`, `settle_timeout_ms`, `expect_change`, `expect_handled` |
+| `type` | optional `selector`, `text`, `clear`, `settle`, `settle_timeout_ms`, `expect_change`, `expect_handled` |
+| `key` | `key` (`back`, `home`, `enter`, `tab`, `delete`, `escape`, `menu`, `dpad_*`), `settle`, `settle_timeout_ms`, `expect_change`, `expect_handled` |
+| `back` | `{}`, `{expect_change: true}` or `{expect_handled: false}` |
 | `rotate` | `orientation: portrait\|landscape` — **unsupported on the ART session channel** (see Limits) |
 | `assert_text` | `selector`, `text` matcher, optional `bounds`, `timeout_ms`, `settle` |
 | `assert_visible` / `assert_not_visible` | `selector`, optional `bounds`, `timeout_ms`, `settle` |
@@ -617,7 +623,28 @@ frame), so a `bounds` claim — an assertion's own `bounds` **or**
   *is* the outcome - a pass for the delivery rule only: an assertion after it
   still sees the unchanged screen, and `expect_change: true` fails on
   `pixels_changed: false`. If any event was handled, or the ack list is short
-  (unknown, never "not handled"), the normal settle applies.
+  (unknown, never "not handled"), the normal settle applies. The shortcut binds
+  only a sample taken *after* the gesture's last ack (so the handler had
+  finished) that stays on the same draw for one confirmation window, so a
+  handler's posted side effect (`post()` + `setText`) is caught by the normal
+  rule instead of settling on the pre-change screen (REL3H2).
+* **An unhandled input is never a *silent* pass (REL3H2).** A step that
+  passes with `input.handled: false` also carries a structured warning -
+  `INPUT_UNHANDLED` in the step JSON's `warnings[]` **and** in the verdict's
+  `provenance.warnings[]` - naming the step, the acked events and (when there is
+  one) the clickable neighbour. The status stays `pass`: the warning says the
+  step made no change claim, not that it failed. Two scenario fields decide what
+  you get instead:
+  * `expect_handled: true` - a claim: the app must consume this gesture. An
+    unhandled ack fails the step with `INPUT_NOT_HANDLED` (error class
+    `assertion`, `details.reason: "expect_handled"`, plus the target and the
+    settle record). Use it on every tap whose point is that a control reacts; a
+    green `pass` then means the control really took the press. If the guest acks
+    no complete set of events the claim cannot be verified and the step is
+    `unsupported` (`UNSUPPORTED_ASSERTION`), never a silent pass.
+  * `expect_handled: false` - the annotation "this press is a no-op on purpose":
+    it silences `INPUT_UNHANDLED` and changes nothing else (a handled event is
+    still fine).
 * A step that provokes no draw at all *and was handled* (or whose acks are
   unknown) cannot settle and ends as `TIMEOUT`
   (`reason: "no-draw-after-action"`). A content settle whose signature keeps

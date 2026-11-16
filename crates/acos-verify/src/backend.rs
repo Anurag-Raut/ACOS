@@ -572,29 +572,199 @@ pub fn scroll_until_end_of_list(
     max_attempts: usize,
     frame_seq: u64,
     last_tree_texts: &[String],
+    unchanged_gestures: usize,
 ) -> BackendError {
     BackendError::Protocol {
         code: ErrorCode::EndOfList,
         detail: format!(
-            "scroll_until: the list ended after {attempts} swipe(s) - the last one moved \
-             nothing, so {selector:?} cannot be reached by scrolling further; the last \
-             settled tree (frame {frame_seq}) does not contain it"
+            "scroll_until: {attempts} swipe(s) used and the last {unchanged_gestures} consumed \
+             gestures in a row left the settled tree unchanged, so {selector:?} was not revealed \
+             by scrolling further; the last settled tree (frame {frame_seq}) does not contain it"
         ),
+        // REL3H2: a softened hint. REL3H asserted "the list is at its end"; a
+        // list that is still loading (or a scroller that re-lays-out without
+        // moving) also leaves the tree unchanged for a gesture, so the evidence
+        // is stated as what it is - two consumed gestures moved nothing - and the
+        // reader is pointed at the last tree before concluding anything.
         hint: Some(
-            "The list is at its end in this direction, so the node is either above the current \
-             position (scroll `direction: down`) or not rendered at all. Read \
-             `details.last_tree_texts` for what the last settled tree showed; raising \
-             `max_attempts` cannot help here."
+            "Two consumed gestures moved nothing, which is what the end of a list looks like \
+             (and also what a list that is still loading looks like for one gesture). Read \
+             `details.last_tree_texts` for what the last settled tree showed; if the node is on \
+             the screen, scroll the other way (`direction: down`) or fix the selector, and if the \
+             list may still be loading, retry. Raising `max_attempts` alone cannot help here."
                 .to_string(),
         ),
         details: Some(serde_json::json!({
             "end_of_list": true,
+            "gesture_consumed": true,
+            "attempts": attempts,
+            "max_attempts": max_attempts,
+            "unchanged_gestures": unchanged_gestures,
+            "last_frame_seq": frame_seq,
+            "selector": selector.human(),
+            "last_tree_texts": last_tree_texts,
+        })),
+    }
+}
+
+/// REL3H2: was this `scroll_until` gesture **not** consumed by the app?
+///
+/// The REL3H end-of-list rule inferred "the list ended" from "the settled tree
+/// did not change". A swipe the app never consumed - the gesture missed the
+/// scroller, or landed on a non-scrollable view - also changes nothing, but for
+/// a different reason: nothing received it. Reporting `END_OF_LIST` there tells
+/// an agent "there is no more content in this direction" when the truth is "your
+/// gesture went nowhere", so the search refuses to infer the end of the list and
+/// reports the miss with the delivery evidence instead.
+///
+/// Two facts prove it, both the app's own: the settle record says
+/// `reason: "unhandled_input"` (REL3H: the window acked every event
+/// `finishInputEvent(handled) = false`), or the delivery says
+/// `handled: Some(false)`. `None` (no record, or an unknown ack) is *not* proof
+/// of the opposite; it keeps the existing behaviour.
+pub fn scroll_until_unconsumed_reason(
+    settle: Option<&serde_json::Value>,
+    delivery: Option<&InputDelivery>,
+) -> Option<&'static str> {
+    if settle
+        .and_then(|settle| settle.get("reason"))
+        .and_then(serde_json::Value::as_str)
+        == Some(acos_protocol::SETTLE_UNHANDLED_INPUT_REASON)
+    {
+        return Some("unhandled_input");
+    }
+    match delivery.and_then(|delivery| delivery.handled) {
+        Some(false) => Some("not_handled"),
+        _ => None,
+    }
+}
+
+/// REL3H2: the structured miss of a search whose gesture the app never consumed.
+///
+/// This is `ELEMENT_NOT_FOUND` (the selector was not observed in a settled tree
+/// and the search cannot get further by scrolling), with a hint that names the
+/// real cause: the gesture missed the scroller. It is never `END_OF_LIST`
+/// (nothing was learned about the end of the list) and never a pass.
+pub fn scroll_until_gesture_not_consumed(
+    selector: &Selector,
+    attempts: usize,
+    max_attempts: usize,
+    frame_seq: u64,
+    last_tree_texts: &[String],
+    reason: &str,
+    settle: Option<serde_json::Value>,
+    handled: Option<bool>,
+) -> BackendError {
+    BackendError::Protocol {
+        code: ErrorCode::ElementNotFound,
+        detail: format!(
+            "scroll_until: the app window did not consume the swipe on attempt {attempts} \
+             ({reason}: `finishInputEvent(handled) = {handled:?}`), so the gesture moved nothing \
+             and {selector:?} could not be searched for further; the last settled tree (frame \
+             {frame_seq}) does not contain it"
+        ),
+        hint: Some(
+            "gesture not consumed (swipe missed the scroller?): the swipe was delivered but \
+             nothing handled it - it started outside the scrollable area, the view under the \
+             points does not scroll, or the list is already fully visible. Aim the gesture inside \
+             the list's bounds (read them from the previous tree), or assert the node directly if \
+             it is on screen."
+                .to_string(),
+        ),
+        details: Some(serde_json::json!({
+            "end_of_list": false,
+            "gesture_consumed": false,
+            "reason": reason,
+            "handled": handled,
+            "settle": settle,
             "attempts": attempts,
             "max_attempts": max_attempts,
             "last_frame_seq": frame_seq,
             "selector": selector.human(),
             "last_tree_texts": last_tree_texts,
         })),
+    }
+}
+
+/// REL3H2: the refusal for a traversal that reported **no** settle record at all.
+///
+/// An engine that cannot say how the observation was bound (no `settle` block)
+/// has not proven it settled, and a `scroll_until` hit may only come from a
+/// settled observation. REL3S treated an absent record as "not a timeout" and
+/// let it through; the ART engine's own search now fails closed instead, because
+/// ART always reports a record - an absent one means the reply was truncated or
+/// came from a guest that did not answer, and the search must not guess.
+pub fn scroll_until_no_settle_record(
+    selector: &Selector,
+    attempts: usize,
+    frame_seq: u64,
+) -> BackendError {
+    BackendError::Protocol {
+        code: ErrorCode::Timeout,
+        detail: format!(
+            "scroll_until: attempt {attempts} returned a tree with no settle record, so nothing \
+             proves the traversal settled; {selector:?} was not looked for"
+        ),
+        hint: Some(
+            "A found node must come from a settled observation and this engine reports no settle \
+             evidence for its traversals. Report this as an engine bug (the ART engine always \
+             reports a `settle` block) rather than trusting the tree."
+                .to_string(),
+        ),
+        details: Some(serde_json::json!({
+            "reason": "no_settle_record",
+            "attempts": attempts,
+            "frame_seq": frame_seq,
+            "selector": selector.human(),
+        })),
+    }
+}
+
+/// REL3H2: the movement rule of a `scroll_until` search.
+///
+/// One unchanged settled tree does not prove the end of a list: a list that is
+/// still loading (an async feed appends rows a moment later) is unchanged for a
+/// gesture too. Two **consumed** gestures that each left the tree unchanged do -
+/// and only then is `END_OF_LIST` honest. The tracker is shared by both search
+/// loops (the ART engine's own command and the default `Backend::scroll_until`),
+/// so the two front doors cannot disagree about where a list ends.
+#[derive(Debug, Clone)]
+pub struct ScrollUntilMovement {
+    before: UiTree,
+    /// Consecutive consumed gestures that left the settled tree identical.
+    unchanged: usize,
+    /// The count that means "the list ended".
+    needed: usize,
+}
+
+impl ScrollUntilMovement {
+    /// Start from the settled tree **before** the first gesture, so the very
+    /// first swipe (which may already be at the end) is measurable.
+    #[must_use]
+    pub fn new(before: UiTree) -> Self {
+        ScrollUntilMovement {
+            before,
+            unchanged: 0,
+            needed: 2,
+        }
+    }
+
+    /// Record one consumed gesture's settled tree: `true` when this gesture and
+    /// the previous `needed - 1` ones all left it unchanged (the list ended).
+    pub fn observe(&mut self, tree: &UiTree) -> bool {
+        if tree.nodes == self.before.nodes {
+            self.unchanged += 1;
+        } else {
+            self.unchanged = 0;
+            self.before = tree.clone();
+        }
+        self.unchanged >= self.needed
+    }
+
+    /// How many consecutive unchanged gestures have been seen.
+    #[must_use]
+    pub fn unchanged(&self) -> usize {
+        self.unchanged
     }
 }
 
@@ -945,12 +1115,27 @@ pub trait Backend {
     /// over [`Self::input`]; an engine with its own search command (ART) overrides
     /// it and reports the same facts.
     ///
-    /// REL3H: a gesture that moved nothing (the settled tree before and after it
-    /// is identical) has reached the end of the list, so the search stops there
-    /// with a structured `END_OF_LIST` instead of spending the remaining
-    /// attempts on gestures that cannot reveal anything. A search that used
-    /// every attempt without reaching the end is `ELEMENT_NOT_FOUND`. Both are
-    /// non-passes naming the attempts and the last tree's texts.
+    /// REL3H: two gestures that each moved nothing (the settled tree before and
+    /// after them is identical) have reached the end of the list, so the search
+    /// stops there with a structured `END_OF_LIST` instead of spending the
+    /// remaining attempts on gestures that cannot reveal anything. A search that
+    /// used every attempt without reaching the end is `ELEMENT_NOT_FOUND`.
+    ///
+    /// REL3H2 tightens *when* that inference is allowed, because one unchanged
+    /// tree is not proof of an end:
+    ///
+    /// * the gesture must have been **consumed** by the app. A swipe the window
+    ///   acknowledged `finishInputEvent(handled) = false` (or a settle with
+    ///   `reason: unhandled_input`) moved nothing because it missed the
+    ///   scroller, and the search reports `ELEMENT_NOT_FOUND` with "gesture not
+    ///   consumed" instead of claiming the list ended;
+    /// * the tree must be unchanged across **two** consumed gestures, so a list
+    ///   that is still loading (its rows arrive a moment later) is not mistaken
+    ///   for an end.
+    ///
+    /// Both rules live in the shared [`ScrollUntilMovement`] /
+    /// [`scroll_until_unconsumed_reason`], so the ART engine's own search applies
+    /// exactly the same test.
     fn scroll_until(
         &mut self,
         selector: &Selector,
@@ -963,7 +1148,7 @@ pub trait Backend {
         let attempts = max_attempts.max(1);
         // The baseline is the settled tree *before* the first gesture: the very
         // first swipe may already be at the end, and that has to be measurable.
-        let mut before = self.refresh()?.tree;
+        let mut movement = ScrollUntilMovement::new(self.refresh()?.tree);
         let mut last: Option<(u64, usize, Vec<String>)> = None;
         for attempt in 1..=attempts {
             let observation = self.input(&InputAction::Swipe {
@@ -996,12 +1181,33 @@ pub trait Backend {
                     observation,
                 ));
             }
-            if observation.tree.nodes == before.nodes {
-                return Err(scroll_until_end_of_list(
-                    selector, attempt, attempts, frame_seq, &seen,
+            // REL3H2: a gesture nothing consumed teaches us nothing about the
+            // end of the list - report the miss with the delivery evidence.
+            if let Some(reason) = scroll_until_unconsumed_reason(
+                observation.settle.as_ref(),
+                observation.input.as_ref(),
+            ) {
+                return Err(scroll_until_gesture_not_consumed(
+                    selector,
+                    attempt,
+                    attempts,
+                    frame_seq,
+                    &seen,
+                    reason,
+                    observation.settle.clone(),
+                    observation.input.as_ref().and_then(|input| input.handled),
                 ));
             }
-            before = observation.tree.clone();
+            if movement.observe(&observation.tree) {
+                return Err(scroll_until_end_of_list(
+                    selector,
+                    attempt,
+                    attempts,
+                    frame_seq,
+                    &seen,
+                    movement.unchanged(),
+                ));
+            }
         }
         let (frame_seq, attempt, seen) = last.unwrap_or((0, 0, Vec::new()));
         Err(scroll_until_not_found(
@@ -1136,14 +1342,35 @@ mod tests {
 
     /// A list that either keeps moving (a row counter changes with every
     /// gesture) or is already at its end (the settled tree never changes).
+    ///
+    /// REL3H2 adds the two ways that "the tree did not change" is *not* an end:
+    /// `handled: Some(false)` / settle `reason: unhandled_input` (the swipe
+    /// missed the scroller) and a list that is unchanged for the first gesture
+    /// and only then loads its rows (an async feed).
     struct ListBackend {
         frame: u64,
         at_end: bool,
+        /// REL3H2: the swipe's own delivery record (`handled`), when the scripted
+        /// guest would report one.
+        handled: Option<bool>,
+        /// REL3H2: the settle record the swipe's observation carries.
+        settle: Option<serde_json::Value>,
+        /// REL3H2: how many leading gestures leave the tree unchanged before the
+        /// rows arrive (`0` = every gesture moves the list, or `at_end`).
+        unchanged_gestures: usize,
     }
 
     impl ListBackend {
-        fn observation(&self) -> SessionObservation {
-            let row = if self.at_end { 0 } else { self.frame };
+        fn observation(&mut self) -> SessionObservation {
+            // REL3H2: an async list that loads after `unchanged_gestures`
+            // gestures; every gesture before that leaves the tree identical.
+            let row = if self.at_end {
+                0
+            } else if self.frame <= self.unchanged_gestures as u64 {
+                0
+            } else {
+                self.frame
+            };
             let mut list = UiNode::new("list", "android.widget.ListView", Bounds::new(0, 0, 1080, 2400))
                 .clickable(false);
             list.scrollable = true;
@@ -1160,6 +1387,33 @@ mod tests {
             )
             .with_text("Row 99");
             list.children = vec![first, last];
+            // REL3H2: the async feed's rows arrive *after* the first gesture;
+            // until then the list is mounted but unchanged.
+            if self.unchanged_gestures > 0 && self.frame > self.unchanged_gestures as u64 {
+                list.children.push(
+                    UiNode::new(
+                        "loaded",
+                        "android.widget.TextView",
+                        Bounds::new(0, 1200, 1080, 1440),
+                    )
+                    .with_text("Loaded"),
+                );
+            }
+            let delivery = self.handled.map(|handled| InputDelivery {
+                delivered: true,
+                visual_change: false,
+                handled: Some(handled),
+                published: 5,
+                acks: (0..5)
+                    .map(|seq| InputAck {
+                        seq,
+                        handled,
+                        latency_us: Some(1_000),
+                    })
+                    .collect(),
+                target: None,
+                settle: self.settle.clone(),
+            });
             SessionObservation {
                 session_id: "s_rel3h".to_string(),
                 package: "dev.acos.fixtures.scrolllist".to_string(),
@@ -1189,8 +1443,8 @@ mod tests {
                 ),
                 screenshot_png: None,
                 crashed: None,
-                input: None,
-                settle: None,
+                input: delivery,
+                settle: self.settle.clone(),
             }
         }
     }
@@ -1254,14 +1508,20 @@ mod tests {
         Selector::by_text("Row 9999")
     }
 
-    /// A gesture that moved nothing ends the search with `END_OF_LIST` after one
-    /// attempt - not with a full run of identical gestures and
-    /// `ELEMENT_NOT_FOUND`.
+    /// A gesture that moved nothing ends the search with `END_OF_LIST` - not
+    /// with a full run of identical gestures and `ELEMENT_NOT_FOUND`.
+    ///
+    /// REL3H2: one unchanged gesture is not enough (a loading list is unchanged
+    /// too), so the end is reported after the second consumed gesture that moved
+    /// nothing.
     #[test]
     fn a_swipe_that_moves_nothing_ends_the_search() {
         let mut backend = ListBackend {
             frame: 7,
             at_end: true,
+            handled: Some(true),
+            settle: None,
+            unchanged_gestures: 0,
         };
         let error = backend
             .scroll_until(&missing(), (540.0, 1800.0), (540.0, 600.0), 200, true, 6)
@@ -1270,11 +1530,145 @@ mod tests {
         assert_eq!(error.status(), Status::Fail, "END_OF_LIST is never a pass");
         let details = error.to_protocol_error().details.expect("details");
         assert_eq!(details["end_of_list"], serde_json::json!(true));
-        assert_eq!(details["attempts"], serde_json::json!(1));
+        assert_eq!(
+            details["attempts"],
+            serde_json::json!(2),
+            "one unchanged gesture is not an end (REL3H2)"
+        );
+        assert_eq!(details["unchanged_gestures"], serde_json::json!(2));
+        assert_eq!(details["gesture_consumed"], serde_json::json!(true));
         assert_eq!(details["max_attempts"], serde_json::json!(6));
         assert_eq!(details["selector"], serde_json::json!("text==\"Row 9999\""));
         let texts = details["last_tree_texts"].as_array().expect("texts");
         assert!(texts.iter().any(|text| text == "Row 99"), "{details}");
+    }
+
+    /// REL3H2 case 1: the swipe was delivered and the app window did not consume
+    /// it (`handled: false`, the gesture missed the scroller). The tree is
+    /// unchanged for the same reason an end would be, but the search must not
+    /// claim the list ended: that would tell an agent "there is no more content"
+    /// when the truth is "your gesture went nowhere".
+    #[test]
+    fn an_unconsumed_swipe_is_never_an_end_of_list() {
+        let mut backend = ListBackend {
+            frame: 3,
+            at_end: true,
+            handled: Some(false),
+            settle: Some(serde_json::json!({
+                "mode": "strict",
+                "settled": true,
+                "reason": "unhandled_input",
+                "bound": "unhandled-input",
+                "pixels_changed": false,
+            })),
+            unchanged_gestures: 0,
+        };
+        let error = backend
+            .scroll_until(&missing(), (540.0, 1800.0), (540.0, 600.0), 200, true, 6)
+            .expect_err("an unconsumed swipe never finds the node");
+        assert_eq!(
+            error.code(),
+            ErrorCode::ElementNotFound,
+            "an unconsumed gesture is a miss, never END_OF_LIST"
+        );
+        let protocol = error.to_protocol_error();
+        let hint = protocol.hint.clone();
+        assert!(
+            hint.contains("gesture not consumed (swipe missed the scroller?)"),
+            "the hint must name the real cause, got {hint:?}"
+        );
+        let details = protocol.details.expect("details");
+        assert_eq!(details["end_of_list"], serde_json::json!(false));
+        assert_eq!(details["gesture_consumed"], serde_json::json!(false));
+        assert_eq!(details["handled"], serde_json::json!(false));
+        assert_eq!(details["reason"], serde_json::json!("unhandled_input"));
+        assert_eq!(
+            details["attempts"],
+            serde_json::json!(1),
+            "there is no point repeating a gesture the app never consumed"
+        );
+        assert_eq!(details["max_attempts"], serde_json::json!(6));
+    }
+
+    /// REL3H2 case 1b: `handled: false` without the settle reason refuses just
+    /// the same - the delivery record alone proves nothing consumed the gesture.
+    #[test]
+    fn a_not_handled_delivery_alone_refuses_the_end_of_list() {
+        let mut backend = ListBackend {
+            frame: 1,
+            at_end: true,
+            handled: Some(false),
+            settle: None,
+            unchanged_gestures: 0,
+        };
+        let error = backend
+            .scroll_until(&missing(), (540.0, 1800.0), (540.0, 600.0), 200, true, 6)
+            .expect_err("an unconsumed swipe never finds the node");
+        assert_eq!(error.code(), ErrorCode::ElementNotFound);
+        let details = error.to_protocol_error().details.expect("details");
+        assert_eq!(details["reason"], serde_json::json!("not_handled"));
+        assert_eq!(details["end_of_list"], serde_json::json!(false));
+    }
+
+    /// REL3H2 case 2: an async list that is unchanged for the first gesture and
+    /// only then loads its rows. REL3H would have declared the end of the list
+    /// after that first unchanged observation; the search must keep going and
+    /// find the row that arrives.
+    #[test]
+    fn a_list_that_loads_after_the_first_unchanged_observation_is_not_an_end() {
+        // Frames 1..=2 leave the tree unchanged (the feed has not arrived), then
+        // the list moves and finally contains `Row 80`.
+        let mut backend = ListBackend {
+            frame: 0,
+            at_end: false,
+            handled: Some(true),
+            settle: None,
+            unchanged_gestures: 1,
+        };
+        let (report, observation) = backend
+            .scroll_until(
+                &Selector::by_text("Loaded"),
+                (540.0, 1800.0),
+                (540.0, 600.0),
+                200,
+                true,
+                6,
+            )
+            .expect("the rows arrive after the feed loads");
+        assert_eq!(
+            report.attempts, 2,
+            "the first unchanged gesture must not end the search: {report:?}"
+        );
+        assert_eq!(report.frame_seq, observation.frame.frame_seq);
+        assert!(observation
+            .tree
+            .find_one(&Selector::by_text("Loaded"))
+            .is_some());
+    }
+
+    /// REL3H2 case 3: a real end. Two consumed gestures moved nothing, so the
+    /// search stops there - in fewer attempts than the budget.
+    #[test]
+    fn a_real_end_of_list_is_reported_after_two_consumed_gestures() {
+        let mut backend = ListBackend {
+            frame: 5,
+            at_end: true,
+            handled: Some(true),
+            settle: Some(serde_json::json!({
+                "mode": "strict",
+                "settled": true,
+                "bound": "strict-event",
+                "pixels_changed": false,
+            })),
+            unchanged_gestures: 0,
+        };
+        let error = backend
+            .scroll_until(&missing(), (540.0, 1800.0), (540.0, 600.0), 200, true, 12)
+            .expect_err("the node is not in the list");
+        assert_eq!(error.code(), ErrorCode::EndOfList);
+        let details = error.to_protocol_error().details.expect("details");
+        assert_eq!(details["attempts"], serde_json::json!(2));
+        assert_eq!(details["unchanged_gestures"], serde_json::json!(2));
     }
 
     /// A list that keeps moving is not "at its end": all attempts are used and
@@ -1284,6 +1678,9 @@ mod tests {
         let mut backend = ListBackend {
             frame: 0,
             at_end: false,
+            handled: Some(true),
+            settle: None,
+            unchanged_gestures: 0,
         };
         let error = backend
             .scroll_until(&missing(), (540.0, 1800.0), (540.0, 600.0), 200, true, 3)
@@ -1301,6 +1698,9 @@ mod tests {
         let mut backend = ListBackend {
             frame: 2,
             at_end: true,
+            handled: Some(true),
+            settle: None,
+            unchanged_gestures: 0,
         };
         let (report, observation) = backend
             .scroll_until(

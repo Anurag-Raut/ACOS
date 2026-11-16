@@ -5425,6 +5425,13 @@ impl SessionBackend for ArtSession {
     fn tree_settle_timeout(&self) -> Option<serde_json::Value> {
         timed_out_settle(self.last_tree_settle.as_ref())
     }
+
+    /// REL3H2: the guest's own settle record for the most recent traversal,
+    /// settled or not. `None` means the reply carried no `settle` block at all,
+    /// which a `scroll_until` hit must not treat as settled.
+    fn tree_settle_record(&self) -> Option<serde_json::Value> {
+        self.last_tree_settle.clone()
+    }
 }
 /// P12b: did this reply's settle block time out?
 ///
@@ -5987,6 +5994,20 @@ fn processes_mentioning(dir: &Path) -> Vec<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// REL3H2: the guest and the verifier must name the same settle reason. The
+    /// verifier reads it to refuse an end-of-list inference from a gesture the
+    /// app never consumed; `acos-art` cannot depend on `acos-protocol` (it is the
+    /// guest side of the wire), so the two literals are pinned equal here - in
+    /// the one crate that sees both.
+    #[test]
+    fn the_unhandled_input_settle_reason_is_one_string() {
+        assert_eq!(
+            acos_art::launch::SETTLE_UNHANDLED_INPUT,
+            acos_protocol::SETTLE_UNHANDLED_INPUT_REASON,
+            "a renamed settle reason would silently stop the end-of-list refusal"
+        );
+    }
 
     /// REL3A: a capture is pixel evidence and may never be bound by a content
     /// settle record. The refusal is the same fail-closed reason the pixel

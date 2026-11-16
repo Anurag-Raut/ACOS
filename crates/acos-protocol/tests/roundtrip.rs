@@ -924,6 +924,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
             settle_timeout_ms: None,
             settle: None,
             expect_change: false,
+            expect_handled: None,
         }),
         ..Step::default()
     });
@@ -935,6 +936,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
             settle_timeout_ms: None,
             settle: None,
             expect_change: false,
+            expect_handled: None,
         }),
         ..Step::default()
     });
@@ -944,6 +946,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
             settle_timeout_ms: None,
             settle: None,
             expect_change: false,
+            expect_handled: None,
         }),
         ..Step::default()
     });

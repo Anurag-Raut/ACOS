@@ -3487,6 +3487,11 @@ struct SettleTiming {
 /// Before this the same input was a `TIMEOUT` (`reason: no-draw-after-action`),
 /// which charged a delivered no-op the whole settle deadline and reported an
 /// honest, stable screen as a failure (REL3E left it open for REL3A's track).
+/// The wire string is shared with the verifier, which refuses to infer the end of
+/// a list from a gesture nothing consumed (REL3H2): see
+/// `acos_protocol::SETTLE_UNHANDLED_INPUT_REASON`. `acos-art` does not depend on
+/// `acos-protocol` (it is the guest side of the wire), so the two literals are
+/// pinned equal by a test in `acos-cli` (the crate that sees both).
 pub const SETTLE_UNHANDLED_INPUT: &str = "unhandled_input";
 
 /// REL3H: did the framework acknowledge **every** published event of this
@@ -3509,6 +3514,106 @@ fn every_event_acked_unhandled(
             .iter()
             .all(|seq| acks.iter().any(|ack| ack.seq == *seq))
 }
+
+/// REL3H2: the gate that decides whether a "nothing drew" sample may settle an
+/// unhandled input.
+///
+/// REL3H bound the shortcut to whatever the probe had seen by the time the
+/// gesture's acks came back, and that sample can be older than the app's own
+/// handling of the gesture: the probe is event-driven, so a sample is taken on
+/// every dirty draw and on every wake, and the newest one at that moment may
+/// have been taken **between the publish and the UI thread running the
+/// handler** (or before the handler's posted side effect - a `post()`ed
+/// `setText` - ran and drew). Binding it reported "nothing happened" for a
+/// gesture that was about to change the screen, and the next assertion then
+/// read a state the app had already left. The `expect_change: false`-shaped
+/// pass was a false green for exactly the case the shortcut exists for.
+///
+/// Two rules make the bind honest, and they are the same two the normal strict
+/// path already applies:
+///
+/// * **after the last ack** - the sample must be newer than the probe sequence
+///   at the moment the gesture's own acks had all arrived (`ack_floor_seq`).
+///   The handler that answered `finishInputEvent(handled=false)` had provably
+///   finished before that point, so a sample after it describes the state the
+///   handler left behind, not the one it was still working on.
+/// * **one confirmation window** - the same `draw_seq` must stay the newest
+///   draw for `confirm` (`ACOS_STRICT_SETTLE_CONFIRM_MS`, the strict rule's own
+///   window). A side effect that draws inside the window restarts the wait, so
+///   the gesture falls through to the normal strict rule and captures the
+///   change instead of settling on the pre-change sample.
+///
+/// A sample can still miss a side effect that draws later than the window; that
+/// is the same limit the normal event rule has, and it is why the shortcut
+/// never *claims* stillness - it reports what it measured
+/// (`pixels_changed` against the caller's pre-action capture), so
+/// `expect_change: true` still has to earn its pass.
+#[derive(Debug)]
+struct UnhandledSettleGate {
+    /// The newest probe sequence when the gesture's last ack had arrived.
+    ack_floor_seq: u64,
+    /// How long the candidate draw must stay the newest one.
+    confirm: Duration,
+    /// The draw the current window is measured on, and when it started.
+    candidate: Option<(u64, Instant)>,
+}
+
+/// What [`UnhandledSettleGate`] decided about one probe sample.
+#[derive(Debug, PartialEq, Eq)]
+enum UnhandledGateOutcome {
+    /// Bind this sample: it is after the last ack and its draw stayed newest.
+    Bind,
+    /// Keep waiting; the string is the settle's `last_reason` (and the guest
+    /// trace line), never a user-visible reason on its own.
+    Wait(&'static str),
+}
+
+impl UnhandledSettleGate {
+    fn new(ack_floor_seq: u64, confirm: Duration) -> Self {
+        UnhandledSettleGate {
+            ack_floor_seq,
+            confirm,
+            candidate: None,
+        }
+    }
+
+    /// Forget the current window: a pending signal or a different draw means
+    /// the screen is not quiet, so the timer starts again on the next sample.
+    fn reset(&mut self) {
+        self.candidate = None;
+    }
+
+    /// Judge one sample: `Bind` only when it is strictly newer than the last ack
+    /// and its draw has stayed the newest for the confirmation window.
+    fn observe(&mut self, sample_seq: u64, draw_seq: u64, now: Instant) -> UnhandledGateOutcome {
+        if sample_seq <= self.ack_floor_seq {
+            // Taken before (or while) the handler that acked the gesture ran:
+            // it cannot describe what the handler left behind.
+            self.candidate = None;
+            return UnhandledGateOutcome::Wait(UNHANDLED_ACK_FLOOR_REASON);
+        }
+        let restart = match self.candidate {
+            Some((draw, _)) => draw != draw_seq,
+            None => true,
+        };
+        if restart {
+            self.candidate = Some((draw_seq, now));
+        }
+        match self.candidate {
+            Some((draw, since))
+                if draw == draw_seq && now.saturating_duration_since(since) >= self.confirm =>
+            {
+                UnhandledGateOutcome::Bind
+            }
+            _ => UnhandledGateOutcome::Wait(UNHANDLED_CONFIRM_REASON),
+        }
+    }
+}
+
+/// REL3H2: settle trace reason - the sample predates the gesture's last ack.
+const UNHANDLED_ACK_FLOOR_REASON: &str = "unhandled-ack-floor";
+/// REL3H2: settle trace reason - the confirmation window has not elapsed.
+const UNHANDLED_CONFIRM_REASON: &str = "unhandled-confirm";
 
 impl SettleTiming {
     fn to_json(&self, settled: bool, ack_ms: u64) -> serde_json::Value {
@@ -3627,10 +3732,14 @@ fn wait_for_event_settled(
     await_tree: Option<&serde_json::Value>,
     // REL3H: every event of this gesture came back
     // `finishInputEvent(handled=false)` (see [`every_event_acked_unhandled`]).
-    // An input nothing consumed has no state to settle into: a fresh sample
-    // whose newest draw predates the publish and that reports no pending work
-    // is the settled observation "the app did not handle this", not a timeout.
-    unhandled_input: bool,
+    // An input nothing consumed has no state to settle into: a sample whose
+    // newest draw predates the publish and that reports no pending work is the
+    // settled observation "the app did not handle this", not a timeout.
+    // REL3H2: the value is the newest probe sequence **when the gesture's last
+    // ack had arrived**; only samples strictly newer than it may settle the
+    // shortcut (see [`UnhandledSettleGate`]), so a sample taken before the UI
+    // thread ran the handler can never bind. `None` = not an unhandled input.
+    unhandled_ack_floor: Option<u64>,
     // REL3H: the newest C1 capture's pixel hash **at publish**, used only when
     // the caller has no pre-action capture of its own (`previous_fnv: None`,
     // e.g. after a `pixels:false` launch). The unhandled-input branch measures
@@ -3700,6 +3809,10 @@ fn wait_for_event_settled(
         .unwrap_or(false);
     let mut candidate: Option<ProbeSample> = None;
     let mut candidate_since = Instant::now();
+    // REL3H2: the unhandled-input shortcut's own window. It is created once, at
+    // entry, so the ack floor is a fixed point: samples older than it are never
+    // eligible, however long the wait runs.
+    let mut unhandled_gate = unhandled_ack_floor.map(|floor| UnhandledSettleGate::new(floor, confirm));
     let mut first_change_ms: Option<u64> = None;
     let mut last_reason = String::from("no-probe");
     let mut last_pixels_changed: Option<bool> = None;
@@ -3833,7 +3946,16 @@ fn wait_for_event_settled(
                     // pre-REL3H rule) charged a delivered, provably-unhandled
                     // tap the whole settle deadline and called an honest, stable
                     // screen a failure.
-                    if unhandled_input {
+                    // REL3H2: the shortcut binds only a sample that is newer
+                    // than the gesture's last ack (so the handler had finished)
+                    // and whose draw then stayed newest for one confirmation
+                    // window (so a side effect that draws is caught and the
+                    // gesture falls through to the normal rule below). Anything
+                    // else keeps waiting and the strict rule applies.
+                    let gate_outcome = unhandled_gate.as_mut().map(|gate| {
+                        gate.observe(sample.seq, sample.draw_seq, Instant::now())
+                    });
+                    if gate_outcome == Some(UnhandledGateOutcome::Bind) {
                         // `pixels_changed` is measured exactly like the normal
                         // strict path measures it (newest C1 capture against the
                         // caller's pre-action one), never assumed: it is what
@@ -3879,7 +4001,12 @@ fn wait_for_event_settled(
                             timing,
                         });
                     }
-                    last_reason = "no-draw-after-action".to_string();
+                    last_reason = match gate_outcome {
+                        Some(UnhandledGateOutcome::Wait(reason)) => reason.to_string(),
+                        // No gate at all: this input was consumed (or its acks
+                        // are incomplete), so a missing draw is a timeout.
+                        _ => "no-draw-after-action".to_string(),
+                    };
                 } else if sample.generation < generation {
                     last_reason = "newer-store".to_string();
                 } else {
@@ -3972,6 +4099,13 @@ fn wait_for_event_settled(
                     candidate = None;
                 }
             }
+            // REL3H2: the same for the unhandled-input shortcut: pending work
+            // (a posted side effect waiting to run) or a new draw restarts it.
+            if let Some(gate) = unhandled_gate.as_mut() {
+                if !sample.settled || sample.draw_seq != gate.candidate.map(|(draw, _)| draw).unwrap_or(sample.draw_seq) {
+                    gate.reset();
+                }
+            }
         }
         // An idle screen emits nothing, so a bounded wake keeps it observable;
         // a drawing screen's own dirty events are the request. Never re-ask for
@@ -4057,10 +4191,11 @@ fn wait_for_settled_observation(
     // for the *next* state instead of polling; `None` keeps every existing
     // caller byte-identical.
     await_tree: Option<&serde_json::Value>,
-    // REL3H: the gesture's own acks said nothing consumed it (input verbs only;
-    // every tree/launch caller passes `false`), and the pixel hash the unhandled
-    // branch measures against when the caller has no capture of its own.
-    unhandled_input: bool,
+    // REL3H/REL3H2: the gesture's own acks said nothing consumed it (input
+    // verbs only; every tree/launch caller passes `None`), with the probe
+    // sequence that was current when the last ack arrived, and the pixel hash the
+    // unhandled branch measures against when the caller has no capture of its own.
+    unhandled_ack_floor: Option<u64>,
     entry_fnv: Option<u64>,
 ) -> SettleEnd {
     if mode == SettleMode::Strict {
@@ -4076,7 +4211,7 @@ fn wait_for_settled_observation(
             previous_fnv,
             publish_epoch_ms,
             await_tree,
-            unhandled_input,
+            unhandled_ack_floor,
             entry_fnv,
         );
     }
@@ -5127,7 +5262,7 @@ fn interactive_serve(
                         baseline_tree.as_ref(),
                         // A tree request publishes no input, so no gesture's
                         // acks can make it an unhandled-input settle (REL3H).
-                        false,
+                        None,
                         None,
                     );
                     match settled {
@@ -5734,8 +5869,17 @@ fn interactive_serve(
                 let settle_timeout = request_settle_timeout(&request, frame_wait);
                 // REL3H: only a strict input whose *every* event came back
                 // acknowledged unhandled can settle as "unhandled input".
-                let unhandled_input = mode == SettleMode::Strict
-                    && every_event_acked_unhandled(&injected.seqs, &injected.acks);
+                // REL3H2: the floor of that rule is the newest probe sample at
+                // this moment - *after* every ack of this gesture had arrived -
+                // because a sample taken earlier may have been taken before the
+                // UI thread ran the handler (see [`UnhandledSettleGate`]).
+                let unhandled_ack_floor = (mode == SettleMode::Strict
+                    && every_event_acked_unhandled(&injected.seqs, &injected.acks))
+                .then(|| {
+                    latest_probe(probe_state)
+                        .map(|sample| sample.seq)
+                        .unwrap_or(p0)
+                });
                 let settled = wait_for_settled_observation(
                     child,
                     cgroup,
@@ -5750,7 +5894,7 @@ fn interactive_serve(
                     baseline_probe,
                     publish_epoch_ms,
                     None,
-                    unhandled_input,
+                    unhandled_ack_floor,
                     entry_fnv,
                 );
                 let (settled_probe, g1, p1, settle_timing) = match settled {
@@ -7636,6 +7780,109 @@ mod rel3h_unhandled_input_tests {
             &[3, 4],
             &[ack(3, false), ack(9, false)]
         ));
+    }
+
+    /// REL3H2: the shortcut binds only what the handler provably left behind.
+    ///
+    /// A sample taken before the gesture's last ack can be the pre-handler state
+    /// (the probe is event-driven, so it also samples on the touch feedback's
+    /// draw), and binding it reported "nothing happened" for a gesture whose
+    /// handler had actually queued a `setText`. It must never bind, however long
+    /// the wait runs.
+    mod gate {
+        use super::super::*;
+
+        /// A sample at or below the ack floor is always `Wait`, never `Bind`.
+        #[test]
+        fn a_sample_at_or_before_the_last_ack_never_binds() {
+            let mut gate = UnhandledSettleGate::new(10, Duration::ZERO);
+            assert_eq!(
+                gate.observe(10, 4, Instant::now()),
+                UnhandledGateOutcome::Wait(UNHANDLED_ACK_FLOOR_REASON),
+                "the sample is the one the acks returned with: it may predate the handler"
+            );
+            let later = Instant::now() + Duration::from_secs(5);
+            assert_eq!(
+                gate.observe(7, 4, later),
+                UnhandledGateOutcome::Wait(UNHANDLED_ACK_FLOOR_REASON),
+                "no amount of waiting makes an old sample older than itself"
+            );
+        }
+
+        /// A sample strictly after the last ack still needs one confirmation
+        /// window on an unchanged draw - the same rule as the normal path.
+        #[test]
+        fn a_sample_after_the_ack_binds_only_after_the_window() {
+            let confirm = Duration::from_millis(20);
+            let mut gate = UnhandledSettleGate::new(10, confirm);
+            let start = Instant::now();
+            assert_eq!(
+                gate.observe(11, 4, start),
+                UnhandledGateOutcome::Wait(UNHANDLED_CONFIRM_REASON),
+                "the window starts with this sample"
+            );
+            assert_eq!(
+                gate.observe(11, 4, start + Duration::from_millis(19)),
+                UnhandledGateOutcome::Wait(UNHANDLED_CONFIRM_REASON)
+            );
+            assert_eq!(
+                gate.observe(12, 4, start + Duration::from_millis(21)),
+                UnhandledGateOutcome::Bind,
+                "the same draw stayed newest for the whole window"
+            );
+        }
+
+        /// The handler's posted side effect: `finishInputEvent(handled=false)`
+        /// with a `post()`ed `setText`. The samples before that draw are
+        /// pre-change; the new draw restarts the window, so the shortcut never
+        /// binds them and the gesture goes the normal path (which captures it).
+        #[test]
+        fn a_draw_inside_the_window_restarts_it_instead_of_binding() {
+            let confirm = Duration::from_millis(20);
+            let mut gate = UnhandledSettleGate::new(10, confirm);
+            let start = Instant::now();
+            assert_eq!(
+                gate.observe(11, 4, start),
+                UnhandledGateOutcome::Wait(UNHANDLED_CONFIRM_REASON)
+            );
+            // The posted setText ran and drew: draw 4 -> 5.
+            assert_eq!(
+                gate.observe(12, 5, start + Duration::from_millis(21)),
+                UnhandledGateOutcome::Wait(UNHANDLED_CONFIRM_REASON),
+                "a new draw restarts the window; it must not settle on the pre-change sample"
+            );
+            assert_eq!(
+                gate.observe(13, 5, start + Duration::from_millis(30)),
+                UnhandledGateOutcome::Wait(UNHANDLED_CONFIRM_REASON)
+            );
+            // ... and only the unchanged draw after the *new* window binds.
+            assert_eq!(
+                gate.observe(14, 5, start + Duration::from_millis(41)),
+                UnhandledGateOutcome::Bind
+            );
+        }
+
+        /// A pending framework signal (the guest reported work it still has to
+        /// run) resets the window: no sample it took can be the settled one.
+        #[test]
+        fn a_reset_forgets_the_window() {
+            let mut gate = UnhandledSettleGate::new(10, Duration::from_millis(20));
+            let start = Instant::now();
+            assert_eq!(
+                gate.observe(11, 4, start),
+                UnhandledGateOutcome::Wait(UNHANDLED_CONFIRM_REASON)
+            );
+            gate.reset();
+            assert_eq!(
+                gate.observe(11, 4, start + Duration::from_millis(30)),
+                UnhandledGateOutcome::Wait(UNHANDLED_CONFIRM_REASON),
+                "the window restarts after pending work was reported"
+            );
+            assert_eq!(
+                gate.observe(11, 4, start + Duration::from_millis(51)),
+                UnhandledGateOutcome::Bind
+            );
+        }
     }
 
     /// The reply's settle block is the REL3A record shape with this rule's own

@@ -740,6 +740,13 @@
           "type": "string"
         },
         {
+          "description": "REL3H2: an input step declared `expect_handled: true` (the scenario claims the app must consume this gesture) and the app window acknowledged every event `finishInputEvent(handled) = false`.\n\nThe gesture was delivered; nothing consumed it. That is a failed claim about the flow - the press missed the control, or the control is not pressable - never a pass and never \"unknown\": the app's own window said so. `details` names the injected target, the acks and the settle record.",
+          "enum": [
+            "INPUT_NOT_HANDLED"
+          ],
+          "type": "string"
+        },
+        {
           "description": "A UI node reference is no longer valid.",
           "enum": [
             "STALE_REF"
@@ -1454,6 +1461,11 @@
         "step": {
           "description": "Step kind (`launch`, `assert_text`, ...).",
           "type": "string"
+        },
+        "warnings": {
+          "description": "REL3H2: structured, non-fatal facts about this step (for example `INPUT_UNHANDLED`: the gesture was delivered and nothing consumed it). The step's status is exactly as measured; a warning never changes it, and the same records are copied into the verdict's `provenance.warnings[]` so a reader of either file sees them. Empty (and absent on the wire) when there is nothing to say.",
+          "items": true,
+          "type": "array"
         }
       },
       "required": [

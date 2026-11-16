@@ -457,6 +457,17 @@ pub trait SessionBackend {
         None
     }
 
+    /// REL3H2: the settle record of the most recent traversal, **settled or
+    /// not** (`settle: {settled, bound, reason, ...}`).
+    ///
+    /// `None` means the engine reported no record at all - not "settled". A
+    /// `scroll_until` hit may only come from a settled observation, so a search
+    /// on an engine that stays silent here fails closed
+    /// (`scroll_until_no_settle_record`) instead of trusting the tree.
+    fn tree_settle_record(&self) -> Option<serde_json::Value> {
+        None
+    }
+
     /// The highest completed frame sequence this session has seen (0 when none).
     ///
     /// A tree-less reply (a pure screenshot) can advance the sequence past the
@@ -551,6 +562,15 @@ pub trait SessionBackend {
     /// every attempt without reaching the end stays `ELEMENT_NOT_FOUND`. Both
     /// name the attempts and the last settled tree's texts, and neither is ever
     /// a pass.
+    ///
+    /// REL3H2: the inference needs a **consumed** gesture, the tree unchanged
+    /// across **two** such gestures, and a traversal that actually settled. A
+    /// swipe the app window did not consume (`finishInputEvent(handled) = false`,
+    /// settle `reason: unhandled_input`) missed the scroller: that is
+    /// `ELEMENT_NOT_FOUND` with "gesture not consumed", never `END_OF_LIST`. A
+    /// tree reply with no settle record is not evidence of anything and fails
+    /// closed. All three rules are the shared ones from `acos_verify::backend`,
+    /// so this engine and the verifier's default search cannot disagree.
     fn scroll_until(
         &mut self,
         selector: &acos_protocol::Selector,
@@ -564,10 +584,13 @@ pub trait SessionBackend {
         // The baseline is a settled traversal *before* the first gesture: without
         // it the very first swipe (which may already be at the end) could not be
         // recognised as having moved nothing.
-        let mut before = self.tree()?;
+        let mut movement = acos_verify::backend::ScrollUntilMovement::new(self.tree()?);
         let mut last: Option<(u64, usize, Vec<String>)> = None;
         for attempt in 1..=attempts {
             self.swipe(from, to, duration_ms, fling)?;
+            // REL3H2: the swipe's own delivery (`handled`) is read before the
+            // traversal, which overwrites the engine's last-input record.
+            let delivery = self.last_input_delivery();
             let tree = self.tree()?;
             // REL3H: `found` may only come from a *settled* observation. A tree
             // request that timed out still answers with the latest tree (P12b),
@@ -580,6 +603,25 @@ pub trait SessionBackend {
                     self.last_frame_seq(),
                 ));
             }
+            // REL3H2: no settle record at all is *not* "settled" (fail closed).
+            let settle = match self.tree_settle_record() {
+                Some(record) => record,
+                None => {
+                    return Err(acos_verify::backend::scroll_until_no_settle_record(
+                        selector,
+                        attempt,
+                        self.last_frame_seq(),
+                    ))
+                }
+            };
+            if settle.get("settled").and_then(serde_json::Value::as_bool) == Some(false) {
+                return Err(acos_verify::backend::scroll_until_not_settled(
+                    selector,
+                    attempt,
+                    self.last_frame_seq(),
+                    &settle,
+                ));
+            }
             let seen = acos_verify::backend::scroll_until_seen_texts(&tree);
             let frame_seq = tree.frame.frame_seq;
             let hit = tree.find_one(selector).is_some_and(|node| node.visible);
@@ -590,12 +632,33 @@ pub trait SessionBackend {
                     frame_seq,
                 });
             }
-            if tree.nodes == before.nodes {
-                return Err(acos_verify::backend::scroll_until_end_of_list(
-                    selector, attempt, attempts, frame_seq, &seen,
+            // REL3H2: a gesture the app never consumed moved nothing because it
+            // missed the scroller - never evidence that the list ended.
+            if let Some(reason) = acos_verify::backend::scroll_until_unconsumed_reason(
+                Some(&settle),
+                delivery.as_ref(),
+            ) {
+                return Err(acos_verify::backend::scroll_until_gesture_not_consumed(
+                    selector,
+                    attempt,
+                    attempts,
+                    frame_seq,
+                    &seen,
+                    reason,
+                    Some(settle),
+                    delivery.as_ref().and_then(|delivery| delivery.handled),
                 ));
             }
-            before = tree;
+            if movement.observe(&tree) {
+                return Err(acos_verify::backend::scroll_until_end_of_list(
+                    selector,
+                    attempt,
+                    attempts,
+                    frame_seq,
+                    &seen,
+                    movement.unchanged(),
+                ));
+            }
         }
         let (frame_seq, attempt, seen) = last.unwrap_or((0, 0, Vec::new()));
         Err(acos_verify::backend::scroll_until_not_found(
@@ -1317,6 +1380,7 @@ impl Backend for EngineBackend {
             EngineBackend::Session { session, .. } => session.display_size(),
         }
     }
+
 
     fn scroll_until(
         &mut self,

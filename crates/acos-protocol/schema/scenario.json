@@ -7,6 +7,13 @@
         "expect_change": {
           "description": "SE1: fail the step when the settled frame's pixels are unchanged.",
           "type": "boolean"
+        },
+        "expect_handled": {
+          "description": "REL3H2: see [`TapStep::expect_handled`]. `- back: {}` keeps parsing.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -404,6 +411,13 @@
         "expect_change": {
           "description": "SE1: fail the step when the settled frame's pixels are unchanged.",
           "type": "boolean"
+        },
+        "expect_handled": {
+          "description": "REL3H2: `true` fails the step with `INPUT_NOT_HANDLED` when nothing consumed the key; `false` silences the `INPUT_UNHANDLED` warning (see [`TapStep::expect_handled`]).",
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "key": {
           "allOf": [
@@ -1653,6 +1667,13 @@
           "description": "SE1: fail the step when the settled frame's pixels are unchanged.",
           "type": "boolean"
         },
+        "expect_handled": {
+          "description": "REL3H2: `true` fails the step with `INPUT_NOT_HANDLED` when nothing consumed the gesture; `false` silences the `INPUT_UNHANDLED` warning (see [`TapStep::expect_handled`]).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "fling": {
           "description": "A quick gesture: default duration 120 ms (the framework's own velocity tracker decides the fling; this only changes the timing).",
           "type": "boolean"
@@ -1708,6 +1729,13 @@
         "expect_change": {
           "description": "SE1: fail the step when the settled frame's pixels are unchanged.\n\nOpt-in and strict-only: `expect_change: true` with `settle: fast` is rejected at scenario-validation time, because a fast frame may be mid-animation and can never back a claim.",
           "type": "boolean"
+        },
+        "expect_handled": {
+          "description": "REL3H2: the scenario's own claim about the app's handling of this input.\n\n`true` fails the step with `INPUT_NOT_HANDLED` when the app window acknowledged every event `finishInputEvent(handled) = false` (the gesture was delivered and nothing consumed it). `false` says \"this press is expected to be a no-op\" and silences the `INPUT_UNHANDLED` warning that REL3H2 attaches to every unhandled input. Unset: the step passes as measured and carries the warning.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "selector": {
           "anyOf": [
@@ -1926,6 +1954,13 @@
         "expect_change": {
           "description": "SE1: fail the step when the settled frame's pixels are unchanged.",
           "type": "boolean"
+        },
+        "expect_handled": {
+          "description": "REL3H2: `true` fails the step with `INPUT_NOT_HANDLED` when nothing consumed the input; `false` silences the `INPUT_UNHANDLED` warning (see [`TapStep::expect_handled`]).",
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "selector": {
           "anyOf": [
