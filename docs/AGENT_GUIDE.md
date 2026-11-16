@@ -109,6 +109,7 @@ the next call on an expired one returns `SESSION_NOT_FOUND` with
 `assert_visible` / `assert_not_visible` (collapsed content stays in the tree with
 `visible: false`, so assert visibility, never presence) and `assert_log` turn a
 visual claim into a machine check with a diff.
+A step settles on the screen its action produced; a change the app makes **later** (a delayed post, a worker thread, a timer) may land after the step settled. Check such an effect with `assert_text` + `timeout_ms` (a real wait), not with the action step's result.
 
 ## The loop
 

@@ -5005,6 +5005,8 @@ deliver. Evidence in `results/handoff/TOUCHDISP/`.
 
 ## REL3H2 — can a fixture produce "unhandled ack, but the screen changes a moment later"?
 
+> **Superseded by TOUCHDISP** (entry above): the "emulation gap" below was a fixture that posted its side effect from `ACTION_UP`, which AOSP never offers to a view that did not consume the `DOWN`. The real view chain runs on ART.
+
 **Question.** MEDIUM review finding #1 says REL3H's unhandled-input shortcut could
 bind a probe sample taken after the publish but before the UI thread ran the
 handler (or before the handler's posted side effect ran and drew). To pin the fix
