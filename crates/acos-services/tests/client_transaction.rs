@@ -57,12 +57,19 @@ fn decoded(bytes: &[u8], class: &str) -> Parcelable {
     ctx::decode(class, bytes).expect("decode")
 }
 
-/// The `Value::List` of callbacks of a decoded `ClientTransaction`.
+/// The callbacks of a decoded `ClientTransaction` (the list the presence flag
+/// guards; empty when the transaction is lifecycle-only).
 fn callbacks(tx: &Parcelable) -> Vec<Parcelable> {
     let Parcelable::Ordered { values, .. } = tx else {
         panic!("not an ordered parcelable");
     };
-    let Some(Value::List(Some(items))) = values.last() else {
+    let Some(Value::Cond { present, values }) = values.last() else {
+        panic!("no callbacks-presence flag");
+    };
+    if !present {
+        return Vec::new();
+    }
+    let Some(Value::List(Some(items))) = values.first() else {
         panic!("no callback list");
     };
     items
@@ -78,7 +85,7 @@ fn callbacks(tx: &Parcelable) -> Vec<Parcelable> {
 fn every_item_round_trips_through_the_codec() {
     let items = vec![
         ("launch", plain_launch(intent(&intent_with_extras()).unwrap()).to_parcelable()),
-        ("resume", resume_item(2, false, false, false)),
+        ("resume", resume_item(2, true, false, false)),
         ("pause", pause_item(false, true, 0, false, false)),
         ("stop", stop_item(0x0400)),
         ("destroy", destroy_item(true, 0)),
@@ -121,26 +128,32 @@ fn a_client_transaction_carries_its_lifecycle_request_and_callbacks() {
     let tx = launch_transaction(
         &launch,
         BinderId(0x1234),
-        resume_item(2, false, false, false),
+        resume_item(2, true, false, false),
     );
     let bytes = encode(&tx).expect("encode transaction");
     let back = decoded(&bytes, ctx::CLIENT_TRANSACTION);
     let Parcelable::Ordered { values, .. } = &back else {
         panic!("not a ClientTransaction");
     };
-    // mIsGlobal, mActivityToken, mLifecycleStateRequest, mIsReady, mCallbacks.
-    assert_eq!(values[0], Value::Bool(false), "mIsGlobal");
+    // The image's shape: activity-token presence + binder, the named lifecycle
+    // request, the callbacks-presence flag (+ list when non-empty).
     assert_eq!(
-        values[1],
-        Value::Binder(Some(BinderId(0x1234))),
+        values[0],
+        Value::Cond {
+            present: true,
+            values: vec![Value::Binder(Some(BinderId(0x1234)))],
+        },
         "mActivityToken"
     );
     assert_eq!(
-        values[2],
-        Value::NamedParcelable(resume_item(2, false, false, false)),
+        values[1],
+        Value::NamedParcelable(resume_item(2, true, false, false)),
         "mLifecycleStateRequest"
     );
-    assert_eq!(values[3], Value::Bool(true), "mIsReady");
+    let Value::Cond { present, .. } = &values[2] else {
+        panic!("the callbacks-presence flag is not a conditional");
+    };
+    assert!(*present, "a transaction with a callback writes the list");
     let callbacks = callbacks(&back);
     assert_eq!(callbacks.len(), 1);
     assert_eq!(callbacks[0].class(), Some(ctx::LAUNCH_ACTIVITY_ITEM));
@@ -248,10 +261,16 @@ fn a_launch_for_a_running_process_is_delivered_as_a_client_transaction() {
     let Parcelable::Ordered { values, .. } = &tx else {
         panic!("not a ClientTransaction");
     };
-    assert_eq!(values[1], Value::Binder(Some(BinderId(0xabc))));
     assert_eq!(
-        values[2],
-        Value::NamedParcelable(resume_item(2, false, false, false)),
+        values[0],
+        Value::Cond {
+            present: true,
+            values: vec![Value::Binder(Some(BinderId(0xabc)))],
+        }
+    );
+    assert_eq!(
+        values[1],
+        Value::NamedParcelable(resume_item(2, true, false, false)),
         "a launch with andResume=true resumes in the same transaction"
     );
     let callbacks = callbacks(&tx);

@@ -59,10 +59,21 @@ fn encoded(call: &(u32, String, Vec<Value>)) -> (String, u64) {
     };
     assert_eq!(class, "android.app.servertransaction.ClientTransaction");
     assert_eq!(*tag, 0, "the pause/stop belongs to the process that lost the top");
-    let token = values[1].as_binder().expect("mActivityToken binder").0;
-    let Value::NamedParcelable(Parcelable::Ordered { class, .. }) = &values[2] else {
-        panic!("expected a named lifecycle request, got {:?}", values[2]);
+    // `writeToParcel`: the activity-token presence flag + binder, the named
+    // lifecycle request, then the callbacks-presence flag (false, and no list,
+    // for a lifecycle-only transaction — MPROC6 / the image's bytecode).
+    let Value::Cond { present: true, values: token_fields } = &values[0] else {
+        panic!("expected the activity-token presence flag, got {:?}", values[0]);
     };
+    let token = token_fields[0].as_binder().expect("mActivityToken binder").0;
+    let Value::NamedParcelable(Parcelable::Ordered { class, .. }) = &values[1] else {
+        panic!("expected a named lifecycle request, got {:?}", values[1]);
+    };
+    assert_eq!(
+        values[2],
+        Value::Cond { present: false, values: Vec::new() },
+        "a lifecycle-only transaction writes no callback list at all"
+    );
     let item = class
         .rsplit('.')
         .next()
@@ -150,9 +161,12 @@ fn finishing_the_new_top_resumes_the_activity_below_in_the_other_process() {
     let Value::TypedObject(Parcelable::Ordered { values, .. }) = &args[0] else {
         panic!("expected an encoded ClientTransaction");
     };
-    let token_of = values[1].as_binder().expect("mActivityToken").0;
+    let Value::Cond { present: true, values: token_fields } = &values[0] else {
+        panic!("expected the activity-token presence flag");
+    };
+    let token_of = token_fields[0].as_binder().expect("mActivityToken").0;
     assert_eq!(token_of, a, "the resume is keyed on A's own token");
-    let Value::NamedParcelable(Parcelable::Ordered { class, .. }) = &values[2] else {
+    let Value::NamedParcelable(Parcelable::Ordered { class, .. }) = &values[1] else {
         panic!("expected a named lifecycle request");
     };
     assert!(

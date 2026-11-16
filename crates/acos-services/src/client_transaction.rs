@@ -35,6 +35,10 @@
 //! `ActivityInfo` from the PMS, `Configuration`), so the bytes come from one
 //! wire-format implementation, checked byte-for-byte against real Java by
 //! `tests/client_transaction_java.rs`.
+//!
+//! `CompatibilityInfo` is **not** one of the item's fields on this image (the
+//! item stops at `mTaskFragmentToken`); the compatibility information a launch
+//! needs travels in `bindApplication`, which already carries it.
 
 use acos_parcel::{BinderId, Parcel};
 
@@ -70,8 +74,6 @@ pub const REFERRER_INTENT: &str = "com.android.internal.content.ReferrerIntent";
 pub const INTENT: &str = parcelable::INTENT_CLASS;
 /// `android.content.res.Configuration`.
 pub const CONFIGURATION: &str = "android.content.res.Configuration";
-/// `android.content.res.CompatibilityInfo`.
-pub const COMPATIBILITY_INFO: &str = "android.content.res.CompatibilityInfo";
 
 /// `ActivityManager.PROCESS_STATE_TOP` — the process state a launch and a
 /// resume carry (`ATMS` reports the top state for the process it launches).
@@ -267,7 +269,12 @@ pub fn referrer_intent(intent: Parcelable, referrer: Option<&str>) -> Parcelable
 // ---------------------------------------------------------------------------
 
 /// `ResumeActivityItem.obtain(procState, updateProcState, isForward,
-/// shouldSendCompatFakeFocus)`.
+/// shouldSendCompatFakeFocus)` — the four wire fields.
+///
+/// The image's own factory is `obtain(procState, isForward,
+/// shouldSendCompatFakeFocus)`, which always sets `mUpdateProcState = true`
+/// (dexdump of the image's `ResumeActivityItem.obtain(IZZ)`); `ATMS` uses that
+/// form, so a host-built resume passes `update_proc_state = true`.
 #[must_use]
 pub fn resume_item(
     proc_state: i32,
@@ -425,14 +432,21 @@ impl LaunchActivity {
     /// The `LaunchActivityItem` payload, in the image's write order.
     #[must_use]
     pub fn to_parcelable(&self) -> Parcelable {
+        // A null list (not an empty one) is what `LaunchActivityItem.obtain`
+        // stores when there is nothing pending, and `writeTypedList` writes the
+        // `-1` for it.
         let list = |items: &[Parcelable]| {
-            Value::List(Some(
-                items
-                    .iter()
-                    .cloned()
-                    .map(Value::Parcelable)
-                    .collect::<Vec<_>>(),
-            ))
+            if items.is_empty() {
+                Value::List(None)
+            } else {
+                Value::List(Some(
+                    items
+                        .iter()
+                        .cloned()
+                        .map(Value::Parcelable)
+                        .collect::<Vec<_>>(),
+                ))
+            }
         };
         Parcelable::ordered(
             LAUNCH_ACTIVITY_ITEM,
@@ -469,28 +483,59 @@ impl LaunchActivity {
 
 /// A `ClientTransaction`: one lifecycle request plus its callback items.
 ///
-/// `mIsGlobal` is false and `mIsReady` true — the values ATMS writes for a
-/// transaction it sends to one app process (a transaction that is not part of a
-/// global ordering group and may execute immediately).
+/// The image's `writeToParcel` writes **two presence flags**, not the
+/// `mIsGlobal`/`mIsReady` pair an older AOSP source suggests (this build has no
+/// such fields — see the `ClientTransaction` spec in [`crate::parcelable`]):
+///
+/// ```text
+///   writeBoolean(mActivityToken != null); writeStrongBinder(mActivityToken)
+///   writeParcelable(mLifecycleStateRequest)
+///   writeBoolean(mActivityCallbacks != null)
+///   if (non-null) writeParcelableList(mActivityCallbacks)
+/// ```
+///
+/// So a **lifecycle-only** transaction (no callbacks — what ATMS sends for
+/// `PauseActivityItem`/`StopActivityItem`/`ResumeActivityItem`) writes the
+/// `false` and then *nothing at all*: not a null list and not an empty one.
+/// That is the answer to the "empty list or null" question MPROC5 left open, and
+/// the real-Java differential pins it (`tests/client_transaction_java.rs`,
+/// case `client_transaction_lifecycle_only`).
 #[must_use]
 pub fn client_transaction(
-    activity_token: BinderId,
+    activity_token: Option<BinderId>,
     lifecycle_state_request: Option<Parcelable>,
     callbacks: Vec<Parcelable>,
 ) -> Parcelable {
     Parcelable::ordered(
         CLIENT_TRANSACTION,
         vec![
-            Value::Bool(false), // mIsGlobal
-            Value::Binder(Some(activity_token)),
+            match activity_token {
+                Some(token) if token != BinderId::NULL => Value::Cond {
+                    present: true,
+                    values: vec![Value::Binder(Some(token))],
+                },
+                _ => Value::Cond {
+                    present: false,
+                    values: Vec::new(),
+                },
+            },
             match lifecycle_state_request {
                 Some(item) => Value::NamedParcelable(item),
                 None => Value::NamedParcelable(Parcelable::Null),
             },
-            Value::Bool(true), // mIsReady
-            Value::List(Some(
-                callbacks.into_iter().map(Value::Parcelable).collect(),
-            )),
+            if callbacks.is_empty() {
+                Value::Cond {
+                    present: false,
+                    values: Vec::new(),
+                }
+            } else {
+                Value::Cond {
+                    present: true,
+                    values: vec![Value::List(Some(
+                        callbacks.into_iter().map(Value::Parcelable).collect(),
+                    ))],
+                }
+            },
         ],
     )
 }
@@ -500,37 +545,44 @@ pub fn client_transaction(
 // ---------------------------------------------------------------------------
 
 /// The process `Configuration` a launch carries — the same logical value
-/// `bindApplication` delivers (`bind_app::build_config`: locale `en-US`,
-/// density and dp bounds from the active display override, portrait,
-/// `fontScale` 1.0), in `Configuration.writeToParcel` order.
+/// `bindApplication` delivers (`bind_app::build_config`: locale `en-US`, the
+/// active display's density and dp bounds, `fontScale` 1.0, portrait), in
+/// `Configuration.writeToParcel` order.
 ///
-/// `mWindowConfiguration` is the display's bounds (the unfilled dp bounds are
-/// the compatibility bounds the framework derives for a full-screen activity).
+/// Every other field keeps the framework's own default, because
+/// `bind_app::build_config` sets nothing else: the values below are read off the
+/// real `new Configuration()` through the differential
+/// (`tests/client_transaction_java.rs`), not guessed — e.g. `setLocales` leaves
+/// `userSetLocale` false but sets the `LAYOUTDIR_LTR` bits in `screenLayout`,
+/// `mWindowConfiguration` stays empty, `mRotation`/`mDisplayRotation` are
+/// `ROTATION_UNDEFINED` (`-1`) and `fontWeightAdjustment` is
+/// `FONT_WEIGHT_ADJUSTMENT_UNDEFINED` (`i32::MAX`).
+///
+/// The launch `Configuration` must stay byte-identical to the one
+/// `bindApplication` sends: the guest merges it into the activity's
+/// `ActivityClientRecord` and an unknown difference shows up as a spurious
+/// `onConfigurationChanged`. (Carrying the display bounds instead is a change
+/// for *both* paths, not a launch-only one.)
 #[must_use]
 pub fn process_configuration() -> Parcelable {
-    let (density_dpi, width_dp, height_dp, width_px, height_px) =
-        match crate::display::display_override() {
-            Some(o) => (
-                o.density_dpi,
-                o.screen_width_dp(),
-                o.screen_height_dp(),
-                o.width,
-                o.height,
-            ),
-            None => (420, 411, 842, 1080, 2400),
-        };
+    let (density_dpi, width_dp, height_dp) = match crate::display::display_override() {
+        Some(o) => (o.density_dpi, o.screen_width_dp(), o.screen_height_dp()),
+        None => (420, 411, 842),
+    };
+    // `new Configuration()` + `setLocales` — the framework's empty
+    // `WindowConfiguration` (all-zero bounds, no app bounds, undefined modes).
     let window = Parcelable::ordered(
         "android.app.WindowConfiguration",
         vec![
-            rect(0, 0, width_px, height_px), // mBounds
+            rect(0, 0, 0, 0),                     // mBounds
             Value::TypedObject(Parcelable::Null), // mAppBounds
-            rect(0, 0, width_px, height_px), // mMaxBounds
-            Value::Int(1),                   // mWindowingMode (fullscreen)
-            Value::Int(1),                   // mActivityType (standard)
-            Value::Int(0),                   // mAlwaysOnTop
-            Value::Int(0),                   // mRotation
-            Value::Int(1),                   // mDisplayWindowingMode (fullscreen)
-            Value::Int(0),                   // mDisplayRotation
+            rect(0, 0, 0, 0),                     // mMaxBounds
+            Value::Int(0),                        // mWindowingMode
+            Value::Int(0),                        // mActivityType
+            Value::Int(0),                        // mAlwaysOnTop
+            Value::Int(-1),                       // mRotation (undefined)
+            Value::Int(0),                        // mDisplayWindowingMode
+            Value::Int(-1),                       // mDisplayRotation (undefined)
         ],
     );
     let locales = Value::TypedObject(Parcelable::ordered(
@@ -544,29 +596,29 @@ pub fn process_configuration() -> Parcelable {
             Value::Int(0),     // mcc
             Value::Int(0),     // mnc
             locales,           // mLocaleList
-            Value::Int(1),     // userSetLocale (setLocales sets it)
-            Value::Int(1),     // touchscreen (finger)
-            Value::Int(1),     // keyboard (nokeys)
-            Value::Int(1),     // keyboardHidden
-            Value::Int(1),     // hardKeyboardHidden
-            Value::Int(1),     // navigation (nonav)
-            Value::Int(2),     // navigationHidden
-            Value::Int(1),     // orientation (portrait)
-            Value::Int(0),     // screenLayout
+            Value::Int(0),     // userSetLocale (setLocales does not set it)
+            Value::Int(0),     // touchscreen (undefined: the ctor default)
+            Value::Int(0),     // keyboard (undefined)
+            Value::Int(0),     // keyboardHidden (undefined)
+            Value::Int(0),     // hardKeyboardHidden (undefined)
+            Value::Int(0),     // navigation (undefined)
+            Value::Int(0),     // navigationHidden (undefined)
+            Value::Int(1),     // orientation (PORTRAIT — bind_app sets it)
+            Value::Int(0x40),  // screenLayout: LAYOUTDIR_LTR, set by setLocales
             Value::Int(0),     // colorMode
-            Value::Int(0x11),  // uiMode (normal + no night mode)
-            Value::Int(width_dp),        // screenWidthDp
-            Value::Int(height_dp),       // screenHeightDp
-            Value::Int(width_dp),        // smallestScreenWidthDp
-            Value::Int(density_dpi),     // densityDpi
-            Value::Int(0),               // compatScreenWidthDp
-            Value::Int(0),               // compatScreenHeightDp
-            Value::Int(0),               // compatSmallestScreenWidthDp
-            Value::Parcelable(window),   // mWindowConfiguration
-            Value::Int(0),               // assetsSeq
-            Value::Int(0),               // seq
-            Value::Int(0),               // fontWeightAdjustment
-            Value::Int(0),               // mGrammaticalGender
+            Value::Int(0),     // uiMode
+            Value::Int(width_dp),    // screenWidthDp
+            Value::Int(height_dp),   // screenHeightDp
+            Value::Int(width_dp),    // smallestScreenWidthDp
+            Value::Int(density_dpi), // densityDpi
+            Value::Int(0),           // compatScreenWidthDp
+            Value::Int(0),           // compatScreenHeightDp
+            Value::Int(0),           // compatSmallestScreenWidthDp
+            Value::Parcelable(window), // mWindowConfiguration
+            Value::Int(0),           // assetsSeq
+            Value::Int(0),           // seq
+            Value::Int(i32::MAX),    // fontWeightAdjustment (undefined)
+            Value::Int(0),           // mGrammaticalGender
         ],
     )
 }
@@ -581,26 +633,6 @@ fn rect(left: i32, top: i32, right: i32, bottom: i32) -> Value {
             Value::Int(bottom),
         ],
     ))
-}
-
-/// The `CompatibilityInfo` for a non-compat, non-scaling app: no compat flags,
-/// the display density, scale 1.0 (`CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO`
-/// is what ATMS hands `LaunchActivityItem`).
-#[must_use]
-pub fn compatibility_info() -> Parcelable {
-    let density_dpi = match crate::display::display_override() {
-        Some(o) => o.density_dpi,
-        None => 420,
-    };
-    Parcelable::ordered(
-        COMPATIBILITY_INFO,
-        vec![
-            Value::Int(0),        // mCompatibilityFlags
-            Value::Int(density_dpi), // applicationDensity
-            Value::Float(1.0),    // applicationScale
-            Value::Float(1.0),    // applicationInvertedScale
-        ],
-    )
 }
 
 // ---------------------------------------------------------------------------
@@ -625,7 +657,7 @@ pub fn launch_transaction(
     activity_token: BinderId,
     resume: Parcelable,
 ) -> Parcelable {
-    client_transaction(activity_token, Some(resume), vec![launch.to_parcelable()])
+    client_transaction(Some(activity_token), Some(resume), vec![launch.to_parcelable()])
 }
 
 /// A `scheduleTransaction` delivery: the method to call on the process's
@@ -726,7 +758,9 @@ impl AtmsState {
             config,
             Some(launch.intent_package()),
         );
-        let resume = resume_item(PROCESS_STATE_TOP, false, false, false);
+        // `ResumeActivityItem.obtain(PROCESS_STATE_TOP, false, false)`: the
+        // image's factory re-evaluates the process state.
+        let resume = resume_item(PROCESS_STATE_TOP, true, false, false);
         encode(&launch_transaction(&item, activity_token, resume))
     }
 }

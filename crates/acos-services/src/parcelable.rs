@@ -110,6 +110,12 @@ pub enum FieldOp {
     /// field as `writeByte(0|1)` and only then the payload. Same body rule as
     /// [`FieldOp::Cond`].
     ByteCond(&'static [FieldOp]),
+    /// A conditional group whose presence marker is `writeBoolean` — the same
+    /// four-byte `0`/`1` int on the wire as [`FieldOp::Cond`], but a distinct
+    /// dex call, so the image scan tells them apart. The image's
+    /// `ClientTransaction.writeToParcel` guards its binder and its callback
+    /// list this way (MPROC6).
+    BoolCond(&'static [FieldOp]),
     /// `Parcel.writePersistableBundle`: the same wire shape as [`FieldOp::Bundle`]
     /// (an int length, `-1` for null, then the `BaseBundle` map).
     PersistableBundle,
@@ -986,20 +992,33 @@ pub static SPECS: &[ParcelableSpec] = &[
         fields: &[FieldOp::Int, FieldOp::Str16],
         verification: Verification::Curated,
     },
-    // `android.app.servertransaction.ClientTransaction.writeToParcel`:
-    //   writeBoolean(mIsGlobal)
-    //   writeStrongBinder(mActivityToken)
-    //   writeParcelable(mLifecycleStateRequest)
-    //   writeBoolean(mIsReady)
-    //   writeParcelableList(mCallbacks)
+    // `android.app.servertransaction.ClientTransaction.writeToParcel`, from the
+    // **image's** bytecode (MPROC6, `dexdump -d` of
+    // `.cache/boot/android-34/dex/framework/classes.dex`):
+    //
+    // ```text
+    //   0x0000 iget-object v0, mActivityToken
+    //   0x0009 writeBoolean(v0 != null)              // writeActivityToken
+    //   0x000c if (v0 != null) writeStrongBinder(mActivityToken)
+    //   0x0015 writeParcelable(mLifecycleStateRequest, flags)
+    //   0x0018 iget-object v3, mActivityCallbacks
+    //   0x001e writeBoolean(v3 != null)              // writeActivityCallbacks
+    //   0x0021 if (v3 != null) writeParcelableList(mActivityCallbacks, flags)
+    // ```
+    //
+    // Both booleans are **presence flags**: this build has no `mIsGlobal` and no
+    // `mIsReady` field at all, and a null `mActivityCallbacks` (what the
+    // framework's own `obtain` leaves, and what ATMS sends for a
+    // lifecycle-only transaction) writes the `false` and then *nothing* — not a
+    // null list and not an empty one.
     ParcelableSpec {
         class: "android.app.servertransaction.ClientTransaction",
         fields: &[
-            FieldOp::Bool,
-            FieldOp::Binder,
+            FieldOp::BoolCond(&[FieldOp::Binder]), // mActivityToken != null
             FieldOp::Named("android.app.servertransaction.ActivityLifecycleItem"),
-            FieldOp::Bool,
-            FieldOp::ParcelableList("android.app.servertransaction.ClientTransactionItem"),
+            FieldOp::BoolCond(&[
+                FieldOp::ParcelableList("android.app.servertransaction.ClientTransactionItem"),
+            ]), // mActivityCallbacks != null
         ],
         verification: Verification::Full,
     },
@@ -1216,26 +1235,8 @@ pub static SPECS: &[ParcelableSpec] = &[
     },
     // MPROC6: the rest of the `ClientTransactionItem` / `ActivityLifecycleItem`
     // family, in the image's `writeToParcel` order (the scanner's call list for
-    // each class is in `results/handoff/MPROC6/`).
-    //   PauseActivityItem: mFinished, mUserLeaving, mConfigChanges,
-    //     mDontReport, mAutoEnteringPip
-    ParcelableSpec {
-        class: "android.app.servertransaction.PauseActivityItem",
-        fields: &[
-            FieldOp::Bool,
-            FieldOp::Bool,
-            FieldOp::Int,
-            FieldOp::Bool,
-            FieldOp::Bool,
-        ],
-        verification: Verification::Full,
-    },
-    //   StopActivityItem: mConfigChanges only (`showWindow` is gone in API 34).
-    ParcelableSpec {
-        class: "android.app.servertransaction.StopActivityItem",
-        fields: &[FieldOp::Int],
-        verification: Verification::Full,
-    },
+    // each class is in `results/handoff/MPROC6/`). `PauseActivityItem` and
+    // `StopActivityItem` are above (MPROC5 added them; one spec per class).
     //   DestroyActivityItem: mFinished, mConfigChanges.
     ParcelableSpec {
         class: "android.app.servertransaction.DestroyActivityItem",
@@ -1972,6 +1973,16 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
             }
             Value::Cond { present, values }
         }
+        FieldOp::BoolCond(fields) => {
+            let present = parcel.read_bool()?;
+            let mut values = Vec::new();
+            if present {
+                for field in fields {
+                    values.push(read_field(*field, parcel)?);
+                }
+            }
+            Value::Cond { present, values }
+        }
         FieldOp::ByteCond(fields) => {
             let present = parcel.read_byte()? != 0;
             let mut values = Vec::new();
@@ -2246,6 +2257,25 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
             _ => return Err(bad(format!("expected parcelable list, got {value:?}"))),
         },
         FieldOp::Dynamic => write_dynamic(parcel, expect_dynamic(value)?)?,
+        FieldOp::BoolCond(fields) => {
+            let Value::Cond { present, values } = value else {
+                return Err(bad(format!("expected boolean conditional, got {value:?}")));
+            };
+            parcel.write_bool(*present);
+            if *present {
+                if values.len() != fields.len() {
+                    return Err(bad(format!(
+                        "boolean conditional expects {} fields, got {}",
+                        fields.len(),
+                        values.len()
+                    )));
+                }
+                for (field, value) in fields.iter().zip(values) {
+                    write_field(*field, parcel, value)?;
+                }
+            }
+            return Ok(());
+        }
         FieldOp::ByteCond(fields) => {
             let Value::Cond { present, values } = value else {
                 return Err(bad(format!("expected byte conditional, got {value:?}")));
@@ -3672,6 +3702,7 @@ pub fn verify_prefix(spec: &ParcelableSpec, scanned: &ScannedWrite) -> (usize, u
 
 fn field_matches(field: FieldOp, call: &str) -> bool {
     match field {
+        FieldOp::BoolCond(_) => call == "writeBoolean",
         FieldOp::Int => call == "writeInt",
         FieldOp::Long => call == "writeLong",
         FieldOp::Float => call == "writeFloat",
@@ -3752,6 +3783,20 @@ fn field_consumes(field: FieldOp, calls: &[String]) -> usize {
         return 0;
     };
     match field {
+        FieldOp::BoolCond(inner) => {
+            if first != "writeBoolean" {
+                return 0;
+            }
+            let mut n = 1;
+            for f in inner {
+                let c = field_consumes(*f, &calls[n..]);
+                if c == 0 {
+                    return n;
+                }
+                n += c;
+            }
+            n
+        }
         FieldOp::Cond(inner) => {
             if first != "writeInt" {
                 return 0;

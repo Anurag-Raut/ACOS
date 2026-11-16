@@ -303,14 +303,27 @@ fn sample_for(class: &str) -> Option<Parcelable> {
                 Value::IntArray(Some(vec![914])),
             ],
         ),
+        // The image's shape: two `writeBoolean` presence flags guarding the
+        // binder and the callback list (MPROC6).
         "android.app.servertransaction.ClientTransaction" => Parcelable::ordered(
             class,
             vec![
-                Value::Bool(false),
-                Value::Binder(None),
+                Value::Cond { present: true, values: vec![Value::Binder(None)] },
                 Value::NamedParcelable(Parcelable::Null),
-                Value::Bool(false),
-                Value::List(None),
+                Value::Cond {
+                    present: true,
+                    values: vec![Value::List(Some(vec![Value::Parcelable(
+                        Parcelable::ordered(
+                            "android.app.servertransaction.ResumeActivityItem",
+                            vec![
+                                Value::Int(2),
+                                Value::Bool(false),
+                                Value::Bool(false),
+                                Value::Bool(false),
+                            ],
+                        ),
+                    )]))],
+                },
             ],
         ),
         "android.os.LocaleList" => Parcelable::ordered(
