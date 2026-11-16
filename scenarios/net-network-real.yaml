@@ -1,0 +1,74 @@
+# `network:real` — the relay arm, as a module attach.
+#
+# The only difference from `net-network-off.yaml` is the `services:` block: the
+# `network` module is attached at launch, which is what drops `--unshare-net`,
+# allows AF_INET in the guest's seccomp program, serves dnsproxyd and makes
+# ConnectivityManager report the interface the session netns really has. No
+# environment variable is set by the caller.
+version: 1
+name: net-network-real
+description: >-
+  `network:real` on ART: ConnectivityManager reports a validated internet
+  network describing the real interface (address, DNS, default route), the
+  resolver proxy is there, and an in-app HTTPS GET returns HTTP 200.
+app: fixtures/build/apps/net-check.apk
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+services:
+  - id: network
+    profile: real
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.netcheck/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: status}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: url}
+      text: {exact: https://example.com}
+
+  # The real fetch: event driven, no fixed sleep.
+  - assert_text:
+      selector: {id: status}
+      text: {exact: HTTP 200}
+      timeout_ms: 60000
+
+  - assert_text:
+      selector: {id: connectivity}
+      text: {contains: "internet=true validated=true"}
+      timeout_ms: 5000
+  - assert_text:
+      selector: {id: connectivity}
+      text: {contains: "addrs=1 dns=1 dnsList=1.1.1.1 routes=1"}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: dnsprobe}
+      text: {contains: "exists=true"}
+      timeout_ms: 5000
+
+  - assert_log:
+      tag: NetCheck
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^fetch result=HTTP 200$'
+
+  - assert_no_crash: {}

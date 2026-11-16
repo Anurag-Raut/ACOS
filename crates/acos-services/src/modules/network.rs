@@ -49,7 +49,7 @@ use crate::error::{Result, ServiceError};
 use crate::host::ServiceHost;
 use crate::module::{
     AttachMode, Budget, ControlOp, Module, ModuleConfig, ModuleManifest, ModuleReport, Profile,
-    SecurityClass,
+    SecurityClass, ServiceProvide,
 };
 use crate::netd::client::Client;
 use crate::netd::net_ctl::NetAction;
@@ -62,6 +62,12 @@ pub const MODULE_ID: &str = "network";
 /// the relay session is `acos-<id>`). The module reads it at attach so a control
 /// op addresses **this** session's network, never "whatever the relay has".
 pub const SESSION_ID_ENV: &str = "ACOS_ART_SESSION_ID";
+
+/// The `ServiceManager` name this module owns (and `core` answers while it is
+/// off): `ConnectivityManager`'s own service.
+const CONNECTIVITY_NAME: &str = "connectivity";
+/// Its AIDL descriptor (`android.net.IConnectivityManager`).
+const CONNECTIVITY_DESCRIPTOR: &str = "android.net.IConnectivityManager";
 
 /// `ModuleConfig` key that names the session when a caller (a test, the Rust VM)
 /// has no launcher environment to read.
@@ -105,13 +111,20 @@ fn manifest_ref() -> &'static ModuleManifest {
                   per session, dnsproxyd in the guest); hot online/offline/latency/loss controls and \
                   the explicit host-port opt-in; no `stub`/`scripted` profile (a fake network would \
                   be a fake success)",
-        // Nothing in the `ServiceManager` table: the transport is host-side (the
-        // relay) and the framework's network services (`connectivity`, `wifi`)
-        // are `core`'s. This module changes *what those services report* through
-        // `crate::network`, which is why the manifest has no `services` row — and
-        // why the conformance kit's name checks are empty for it.
-        services: &[],
-        replaces: &[],
+        // The module owns the *answer* `ConnectivityManager` gives: `real` is a
+        // validated internet network with the interface the session netns really
+        // has, and while the module is off `core` answers the honest offline
+        // device ACOS has always presented (ADR-0029's `replaces`: `core` serves
+        // the name only while the module is off, and detach puts core's
+        // registration back). The transport itself is host-side (the relay), so
+        // there is no second name to claim: `netd`/`dnsresolver` are not services
+        // this build has, and inventing them would be the fake this framework
+        // forbids.
+        services: &[ServiceProvide {
+            name: CONNECTIVITY_NAME,
+            descriptor: CONNECTIVITY_DESCRIPTOR,
+        }],
+        replaces: &["connectivity"],
         process_initializers: &[],
         features: &["android.hardware.wifi"],
         providers: &[],
@@ -139,6 +152,13 @@ pub struct NetworkModule {
     profile: Profile,
     /// `acos-<session id>`: the relay session every control addresses.
     relay_session: Option<String>,
+    /// The `IConnectivityManager` state this module's registration serves.
+    ///
+    /// The module replaces `core`'s registration (the manifest's `replaces`), so
+    /// the requests/callbacks an app makes after the attach are this module's. A
+    /// module attached at launch swaps it before the app can call, which is why
+    /// `at-launch` is the honest attach mode here.
+    connectivity: Option<std::sync::Arc<std::sync::Mutex<crate::connectivity::ConnectivityState>>>,
 }
 
 impl NetworkModule {
@@ -148,6 +168,7 @@ impl NetworkModule {
         Self {
             profile: Profile::Off,
             relay_session: None,
+            connectivity: None,
         }
     }
 
@@ -319,6 +340,18 @@ impl Module for NetworkModule {
         // `ConnectivityManager` describes a real interface.
         crate::network::set_profile(profile);
         self.profile = profile;
+        // The name this module owns: registered inside the attach scope, so a
+        // failed attach registers nothing and a detach restores `core`'s.
+        let state = std::sync::Arc::new(std::sync::Mutex::new(
+            crate::connectivity::ConnectivityState::new(),
+        ));
+        let factory_state = std::sync::Arc::clone(&state);
+        _host.register(CONNECTIVITY_NAME, CONNECTIVITY_DESCRIPTOR, move |_wiring| {
+            Box::new(crate::connectivity::ConnectivityService::new(std::sync::Arc::clone(
+                &factory_state,
+            ))) as Box<dyn crate::host::ServiceObject>
+        });
+        self.connectivity = Some(state);
         Ok(())
     }
 
@@ -326,6 +359,7 @@ impl Module for NetworkModule {
         crate::network::clear();
         self.profile = Profile::Off;
         self.relay_session = None;
+        self.connectivity = None;
         Ok(())
     }
 

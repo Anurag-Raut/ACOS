@@ -53,6 +53,19 @@ public class MainActivity extends Activity {
         String dns = probeDnsProxy();
         ((TextView) findViewById(R.id.dnsprobe)).setText(dns);
         Log.i(TAG, "dnsprobe " + dns);
+        // NET5: `retry` re-runs the same real fetch in the SAME guest process, so
+        // a mid-session control (the network module's `offline`/`online`) can be
+        // observed the way an app observes it: the status line changes to the
+        // exception class and comes back to `HTTP 200`. Nothing else about the
+        // screen changes; the URL is the same.
+        findViewById(R.id.retry).setOnClickListener(new android.view.View.OnClickListener() {
+            @Override
+            public void onClick(android.view.View view) {
+                status.setText(R.string.pending);
+                Log.i(TAG, "retry tapped");
+                fetch();
+            }
+        });
         fetch();
     }
 

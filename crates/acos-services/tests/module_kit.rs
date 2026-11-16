@@ -57,6 +57,12 @@ fn run_in_quiet_process(module: &str) {
             "--test-threads=1",
         ])
         .env("ACOS_KIT_CHILD", module)
+        // NET5: `network`'s `real` profile names its relay session after the
+        // session, and a session without an id is refused at attach (a network
+        // no client could address). The kit attaches at the module's default
+        // profile, so the id a launcher always publishes is part of the
+        // environment the kit runs in.
+        .env("ACOS_ART_SESSION_ID", "kit")
         .output()
         .expect("spawn the kit child");
     assert!(
@@ -111,6 +117,16 @@ fn the_vibrator_module_passes_the_conformance_kit() {
 /// answer **core's** answer again, not be absent (a bare host has no core, so
 /// the kit sees it absent there — `modnotif2_permissions.rs` covers the session
 /// case with core attached).
+/// NET5: the network module. Its `off` state is the absence of the module, so
+/// the kit's name checks are empty for it — the properties it owes are the
+/// attach/detach cycle (the process-wide gate is set and cleared) and the honest
+/// refusal of every control while detached (`tests/network_module.rs` proves the
+/// framework view of both).
+#[test]
+fn the_network_module_passes_the_conformance_kit() {
+    run_in_quiet_process("network");
+}
+
 #[test]
 fn the_permissions_module_passes_the_conformance_kit() {
     run_in_quiet_process("system.permissions");

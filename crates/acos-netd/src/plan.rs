@@ -230,6 +230,16 @@ pub fn veth_detach_rules(net: &SessionNet) -> Vec<String> {
 
 /// Offline: drop every packet the session sends (and, because the reply path
 /// has no session to return to, everything it would have received).
+///
+/// NET5 open finding (`results/handoff/NET5/FINDING-offline.md`): a silent drop
+/// is not an "offline" an app can observe directly — after `offline`, a second
+/// `HttpURLConnection` fetch in the same guest process never completed (60 s, no
+/// exception, no dnsproxyd request), while the same retry with the module
+/// attached and online returns HTTP 200 instantly. `REJECT --reject-with
+/// tcp-reset` and bringing the veth *down* produced the identical hang, so the
+/// rule shape is not the cause; the behaviour is left exactly as NET3/NET4
+/// shipped it until the cause is isolated. `status` still reports `offline: true`
+/// for the session.
 #[must_use]
 pub fn offline_rule(net: &SessionNet, on: bool) -> String {
     let flag = if on { "-I" } else { "-D" };

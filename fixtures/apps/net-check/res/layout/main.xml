@@ -29,6 +29,12 @@
         android:layout_height="wrap_content"
         android:text="@string/pending" />
 
+    <Button
+        android:id="@+id/retry"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/retry" />
+
     <TextView
         android:id="@+id/status"
         android:layout_width="wrap_content"
