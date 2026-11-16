@@ -317,11 +317,6 @@ pub fn install_with_handles_and_insets(
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .ams
         .intents = Some(Arc::clone(&intents));
-    let display = Arc::new(Mutex::new(crate::display::DisplayState::new(
-        crate::display::DisplayInfo::hello_views_with(insets.unwrap_or_else(|| {
-            crate::wms::InsetsMode::from_env(crate::wms::DEFAULT_INSETS_MODE)
-        })),
-    )));
     // MODNOTIF4: the `IIntentSender` node pool. A `PendingIntent` is only a
     // strong binder to one of these (`PendingIntent.writeToParcel`), so the
     // binders exist before any app asks for one; `getIntentSender` fills a slot

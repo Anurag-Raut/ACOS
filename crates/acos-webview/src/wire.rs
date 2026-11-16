@@ -1,4 +1,4 @@
-//! The guest ⇄ host wire protocol (v1.1), framed as specified in
+//! The guest ⇄ host wire protocol (v2), framed as specified in
 //! `results/handoff/WVB/WIRE.md` §1–§3.
 //!
 //! Every message is `u32be length` + `body[length]`, `body[0]` selects the kind:
@@ -14,10 +14,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 /// Wire protocol version. Additive changes do not bump it; layout or semantic
-/// changes do (WIRE.md §7). v1.1 added `view.setVisibility`, `view.settings`,
-/// `view.scrollTo`, the scroll/content fields of the `render` response and the
-/// `view.focusChanged` event (WV6).
-pub const PROTO: f64 = 1.1;
+/// changes do (WIRE.md §7). v2 is an **integer** (WV7: a version is a number,
+/// never a float): WV6's `1.1` additions — `view.setVisibility`,
+/// `view.settings`, `view.scrollTo`, the scroll/content fields of the `render`
+/// response and the `view.focusChanged` event — are part of it, plus the
+/// viewport contract of §4.2 (`wideViewport`/`overviewMode`). A guest that
+/// still says `1`/`1.1` is answered `PROTO_VERSION`.
+pub const PROTO: u32 = 2;
 
 /// Largest legal frame body, in bytes. A frame bigger than this is a protocol
 /// error on both sides (a frame is a message, not a stream).

@@ -130,7 +130,7 @@ impl WireGuest {
 
     /// `hello` (WIRE.md §4.1).
     pub fn hello(&self) -> Value {
-        self.call("hello", json!({"proto": 1.1, "client": "acos-webview-test/0"}))
+        self.call("hello", json!({"proto": 2, "client": "acos-webview-test/0"}))
             .expect("hello")
     }
 

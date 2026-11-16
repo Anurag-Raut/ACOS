@@ -50,6 +50,7 @@ fn installed_pms() -> PmsState {
 /// The resource id the given service declares for `android.accessibilityservice`.
 fn declared_resource(pms: &PmsState, service: &str) -> u32 {
     let record = pms
+        .primary()
         .services
         .iter()
         .find(|s| s.name == service)

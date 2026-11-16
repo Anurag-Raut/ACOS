@@ -165,6 +165,16 @@ pub enum FieldOp {
     /// marker (`-1` null, `0` `NO_CUTOUT`, `1` full cutout) and, for variant
     /// `1`, the full geometry. See [`read_cutout`]/[`write_cutout`].
     Cutout,
+    /// `Parcel.writeArraySet`: an `int` count (`-1` for null) followed by that
+    /// many `writeValue` payloads (`Parcel.java:1387-1393`). The one user is
+    /// `Notification.writeToParcel`'s trailing `allPendingIntents`, whose
+    /// elements are `PendingIntent`s (`VAL_PARCELABLE`).
+    ArraySet,
+    /// `android.graphics.drawable.Icon`: an `int` type tag and then the fields
+    /// of that branch (`Icon.writeToParcel` switches on `mType`), followed by
+    /// the nullable `ColorStateList` tint and the `BlendMode` value. See
+    /// [`read_icon`]/[`write_icon`].
+    Icon,
     /// A payload ACOS cannot model. Reading or writing it raises a structured
     /// `UnsupportedParcelable` rather than silently desynchronising the parcel.
     Unsupported(&'static str),
@@ -1715,6 +1725,224 @@ pub static SPECS: &[ParcelableSpec] = &[
     // booleans-as-int, the max file size long, the owner UserHandle written by
     // `writeParcelable` (class name + int), the nullable UUID (int presence +
     // string8), then the fsUuid and state string8s.
+    // `LinkAddress.writeToParcel`: the raw address bytes, prefix length, flags,
+    // scope, then the two lifetimes (`LIFETIME_UNKNOWN` = -1 when unset).
+    ParcelableSpec {
+        class: "android.net.LinkAddress",
+        fields: &[
+            FieldOp::ByteArray, // address.getAddress()
+            FieldOp::Int,       // prefixLength
+            FieldOp::Int,       // flags (OsConstants.IFA_F_*)
+            FieldOp::Int,       // scope (RT_SCOPE_*)
+            FieldOp::Long,      // deprecationTime
+            FieldOp::Long,      // expirationTime
+        ],
+        verification: Verification::Full,
+    },
+    // `RouteInfo.writeToParcel`: destination `IpPrefix` (writeParcelable),
+    // gateway bytes, interface, type, MTU.
+    ParcelableSpec {
+        class: "android.net.RouteInfo",
+        fields: &[
+            FieldOp::Named("android.net.IpPrefix"), // destination
+            FieldOp::ByteArray, // gateway (null for an on-link route)
+            FieldOp::Str16,     // mInterface
+            FieldOp::Int,       // mType (RTN_UNICAST = 1)
+            FieldOp::Int,       // mMtu
+        ],
+        verification: Verification::Full,
+    },
+    // `IpPrefix.writeToParcel`: address bytes + prefix length.
+    ParcelableSpec {
+        class: "android.net.IpPrefix",
+        fields: &[FieldOp::ByteArray, FieldOp::Int],
+        verification: Verification::Full,
+    },
+    // ---- MODNOTIF3: the posted notification and its action -----------------
+    //
+    // `Notification.writeToParcel` installs a `PendingIntent` marshaling
+    // listener, calls `writeToParcelImpl` and then writes the collected
+    // `allPendingIntents` ArraySet **last**
+    // (`base/core/java/android/app/Notification.java:3156-3190`). Every
+    // nullable member of `writeToParcelImpl` (`:3193-3360`) is an `int`
+    // presence marker followed by the payload; a `PendingIntent` writes only a
+    // strong binder (`PendingIntent.java:1500`), so the five intent fields are
+    // `Cond(&[Binder])`.
+    //
+    // The trailing `writeArraySet` is modelled as [`FieldOp::ArraySet`]: a
+    // count (`-1` for null) plus one `writeValue` per collected
+    // `PendingIntent`, which is exactly what the framework writes when the
+    // notification carries a `PendingIntent`.
+    ParcelableSpec {
+        class: "android.app.Notification",
+        fields: &[
+            FieldOp::Int,    // version (1)
+            FieldOp::Binder, // mAllowlistToken
+            FieldOp::Long,   // when
+            FieldOp::Long,   // creationTime
+            FieldOp::Cond(&[FieldOp::Icon]), // mSmallIcon
+            FieldOp::Int,    // number
+            FieldOp::Cond(&[FieldOp::Nested("android.app.PendingIntent")]), // contentIntent
+            FieldOp::Cond(&[FieldOp::Nested("android.app.PendingIntent")]), // deleteIntent
+            FieldOp::Cond(&[FieldOp::CharSequence]), // tickerText
+            FieldOp::Cond(&[FieldOp::Nested("android.widget.RemoteViews")]), // tickerView
+            FieldOp::Cond(&[FieldOp::Nested("android.widget.RemoteViews")]), // contentView
+            FieldOp::Cond(&[FieldOp::Icon]), // mLargeIcon
+            FieldOp::Int,    // defaults
+            FieldOp::Int,    // flags
+            FieldOp::Cond(&[FieldOp::Nested("android.net.Uri")]), // sound
+            FieldOp::Int,    // audioStreamType
+            FieldOp::Cond(&[FieldOp::Nested("android.media.AudioAttributes")]), // audioAttributes
+            FieldOp::LongArray, // vibrate
+            FieldOp::Int,       // ledARGB
+            FieldOp::Int,       // ledOnMS
+            FieldOp::Int,       // ledOffMS
+            FieldOp::Int,       // iconLevel
+            FieldOp::Cond(&[FieldOp::Nested("android.app.PendingIntent")]), // fullScreenIntent
+            FieldOp::Int,       // priority
+            FieldOp::Str8,      // category
+            FieldOp::Str8,      // mGroupKey
+            FieldOp::Str8,      // mSortKey
+            FieldOp::Bundle,    // extras (android.title / android.text / ...)
+            FieldOp::TypedArray("android.app.Notification$Action"), // actions
+            FieldOp::Cond(&[FieldOp::Nested("android.widget.RemoteViews")]), // bigContentView
+            FieldOp::Cond(&[FieldOp::Nested("android.widget.RemoteViews")]), // headsUpContentView
+            FieldOp::Int, // visibility
+            FieldOp::Cond(&[FieldOp::Nested("android.app.Notification")]), // publicVersion
+            FieldOp::Int, // color
+            FieldOp::Cond(&[FieldOp::Str8]), // mChannelId
+            FieldOp::Long, // mTimeout
+            FieldOp::Cond(&[FieldOp::Str8]), // mShortcutId
+            FieldOp::Cond(&[FieldOp::Nested("android.os.LocusId")]), // mLocusId
+            FieldOp::Int, // mBadgeIcon
+            FieldOp::Cond(&[FieldOp::CharSequence]), // mSettingsText
+            FieldOp::Int, // mGroupAlertBehavior
+            FieldOp::Cond(&[FieldOp::Nested(
+                "android.app.Notification$BubbleMetadata",
+            )]), // mBubbleMetadata
+            FieldOp::Bool, // mAllowSystemGeneratedContextualActions
+            FieldOp::Int,  // mFgsDeferBehavior
+            FieldOp::ArraySet, // allPendingIntents (ArraySet<PendingIntent>)
+        ],
+        verification: Verification::Full,
+    },
+    // `Notification$Action.writeToParcel` (`Notification.java:2444-2466`): the
+    // optional icon, the title (TextUtils), the optional `actionIntent`, the
+    // extras bundle, the typed `RemoteInput` array and four flags.
+    ParcelableSpec {
+        class: "android.app.Notification$Action",
+        fields: &[
+            FieldOp::Cond(&[FieldOp::Icon]), // icon
+            FieldOp::CharSequence,           // title
+            FieldOp::Cond(&[FieldOp::Nested("android.app.PendingIntent")]), // actionIntent
+            FieldOp::Bundle,                 // mExtras
+            FieldOp::TypedArray("android.app.RemoteInput"), // mRemoteInputs
+            FieldOp::Int,                    // mAllowGeneratedReplies
+            FieldOp::Int,                    // mSemanticAction
+            FieldOp::Int,                    // mIsContextual
+            FieldOp::Int,                    // mAuthenticationRequired
+        ],
+        verification: Verification::Full,
+    },
+    // `PendingIntent.writeToParcel` writes **only** a strong binder
+    // (`PendingIntent.java:1500`): the `IIntentSender` the system service
+    // returned from `getIntentSender`. It is the codec `Cond[Nested(..)]`
+    // needs for the notification's intent fields.
+    ParcelableSpec {
+        class: "android.app.PendingIntent",
+        fields: &[FieldOp::Binder],
+        verification: Verification::Full,
+    },
+    // `Icon.writeToParcel` switches on `mType`, so it has no single field list:
+    // the type tag selects the branch. [`read_icon`]/[`write_icon`] cover the
+    // resource, URI and data branches; a bitmap icon is a structured
+    // `UnsupportedParcelable` (a `Bitmap` payload is not modelled).
+    ParcelableSpec {
+        class: "android.graphics.drawable.Icon",
+        fields: &[],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
+        // `BluetoothDevice.writeToParcel` (image dex `BluetoothDevice.writeToParcel`:
+        // `writeString(mAddress)` then `writeInt(mAddressType)`; the image's
+        // `BluetoothDevice(Parcel)` reads `readString()` + `readInt()`).
+        // `writeString` is the **UTF-16** string (`Parcel.writeString`), not
+        // `writeString8`: a `Str8` here made the client read the address as
+        // UTF-16 and abandon the whole `Result`, so
+        // `BluetoothAdapter.getBondedDevices()` logged a `TimeoutException` and
+        // returned null (MODTAIL2 `BONDED null`). The bonded-device list and the
+        // `ACTION_FOUND` extra both carry this payload.
+        // `real_java_write_to_parcel_matches_the_rust_codec` byte-compares it.
+        class: "android.bluetooth.BluetoothDevice",
+        fields: &[FieldOp::Str16, FieldOp::Int],
+        verification: Verification::Full,
+    },
+    // `AccessibilityServiceInfo.writeToParcel`, read off the *image's* own
+    // framework dex (`.cache/boot/android-34/dex/framework/classes.dex`,
+    // method `writeToParcel(Parcel;I)V`): 22 `Parcel.write*` calls, ending with
+    // `mMotionEventSources` and `return-void`.
+    //
+    // The AOSP tag in `.cache/aosp` (`android-14.0.0_r75`,
+    // `AccessibilityServiceInfo.java:1392-1393`) writes one more int,
+    // `mObservedMotionEventSources`, at the end. The image's framework does not:
+    // its `writeToParcel` and its `initFromParcel` both stop after
+    // `mMotionEventSources`, so a parcel that carries a 23rd int leaves 4 stray
+    // bytes for the reader. The image dex is authoritative for the wire format
+    // (ADR-0031), so the spec (and the module's encoder) stop at 22.
+    ParcelableSpec {
+        class: "android.accessibilityservice.AccessibilityServiceInfo",
+        fields: &[
+            FieldOp::Int,                                     // eventTypes
+            FieldOp::StringArray,                             // packageNames
+            FieldOp::Int,                                     // feedbackType
+            FieldOp::Long,                                    // notificationTimeout
+            FieldOp::Int,                                     // mNonInteractiveUiTimeout
+            FieldOp::Int,                                     // mInteractiveUiTimeout
+            FieldOp::Int,                                     // flags
+            FieldOp::Int,                                     // crashed
+            FieldOp::Named("android.content.ComponentName"),  // mComponentName
+            FieldOp::Named("android.content.pm.ResolveInfo"), // mResolveInfo
+            FieldOp::Str16,                                   // mSettingsActivityName
+            FieldOp::Int,                                     // mCapabilities
+            FieldOp::Int,                                     // mSummaryResId
+            FieldOp::Str16,                                   // mNonLocalizedSummary
+            FieldOp::Int,                                     // mDescriptionResId
+            FieldOp::Int,                                     // mAnimatedImageRes
+            FieldOp::Int,                                     // mHtmlDescriptionRes
+            FieldOp::Str16,                                   // mNonLocalizedDescription
+            FieldOp::Bool,                                    // mIsAccessibilityTool
+            FieldOp::Str16,                                   // mTileServiceName
+            FieldOp::Int,                                     // mIntroResId
+            FieldOp::Int,                                     // mMotionEventSources
+        ],
+        verification: Verification::Full,
+    },
+    // `android.view.accessibility.AccessibilityWindowAttributes.writeToParcel`
+    // (API 34), read off the image dex (`classes.dex`, 2 calls): the window
+    // title as a `CharSequence` (span marker + nullable string) and the
+    // `LocaleList` as a parcelable. The WMS->a11y
+    // `IAccessibilityManager.setAccessibilityWindowAttributes` oneway
+    // (`acos-aidl` table code 31) carries this type as its
+    // `writeTypedObject` argument.
+    ParcelableSpec {
+        class: "android.view.accessibility.AccessibilityWindowAttributes",
+        fields: &[
+            FieldOp::CharSequence,              // mWindowTitle
+            FieldOp::Named("android.os.LocaleList"), // mLocales
+        ],
+        verification: Verification::Full,
+    },
+    // `android.app.ActivityManager$PendingIntentInfo.writeToParcel` (image dex
+    // `framework/classes.dex`): `writeString(mCreatorPackage)`,
+    // `writeInt(mCreatorUid)`, `writeBoolean(mImmutable)`,
+    // `writeInt(mIntentSenderType)`. `IActivityManager.getInfoForIntentSender`
+    // answers one, and the framework reads it on the `PendingIntent` path
+    // (PIFILLIN).
+    ParcelableSpec {
+        class: "android.app.ActivityManager$PendingIntentInfo",
+        fields: &[FieldOp::Str16, FieldOp::Int, FieldOp::Bool, FieldOp::Int],
+        verification: Verification::Full,
+    },
     ParcelableSpec {
         class: "android.os.storage.StorageVolume",
         fields: &[
@@ -2049,6 +2277,38 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
             }
         }
         FieldOp::Unsupported(class) => return Err(unsupported(class)),
+
+        FieldOp::Icon => Value::Parcelable(read_icon(parcel)?),
+        FieldOp::ArraySet => {
+            let n = parcel.read_int32()?;
+            if n < 0 {
+                Value::List(None)
+            } else {
+                let n = n as usize;
+                if n > parcel.remaining() {
+                    return Err(ParcelError::BadLength {
+                        len: n,
+                        max: parcel.remaining(),
+                    }
+                    .into());
+                }
+                let mut out = Vec::with_capacity(n);
+                for _ in 0..n {
+                    match read_dynamic(parcel)? {
+                        crate::value::DynamicValue::Parcelable(p) => {
+                            out.push(Value::Parcelable(p));
+                        }
+                        crate::value::DynamicValue::Null => out.push(Value::Skipped),
+                        other => {
+                            return Err(bad(format!(
+                                "writeArraySet element {other:?} is not a parcelable"
+                            )))
+                        }
+                    }
+                }
+                Value::List(Some(out))
+            }
+        }
         FieldOp::Cutout => read_cutout(parcel)?,
         FieldOp::CountedNested(class) => {
             let n = parcel.read_int32()?;
@@ -2405,6 +2665,46 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
             _ => return Err(bad(format!("expected counted typed list, got {value:?}"))),
         },
         FieldOp::Unsupported(class) => return Err(unsupported(class)),
+        FieldOp::Icon => {
+            let payload = expect_parcelable(value)?;
+            write_icon(parcel, payload)?;
+        }
+        FieldOp::ArraySet => match value {
+            Value::List(None) | Value::Skipped => parcel.write_int32(-1),
+            Value::List(Some(items)) => {
+                parcel.write_int32(
+                    i32::try_from(items.len()).map_err(|_| bad("ArraySet too large"))?,
+                );
+                for item in items {
+                    let p = expect_parcelable(item)?;
+                    write_dynamic(
+                        parcel,
+                        &crate::value::DynamicValue::Parcelable(p.clone()),
+                    )?;
+                }
+            }
+            _ => return Err(bad(format!("expected an ArraySet value, got {value:?}"))),
+        },
+        FieldOp::Icon => {
+            let payload = expect_parcelable(value)?;
+            write_icon(parcel, payload)?;
+        }
+        FieldOp::ArraySet => match value {
+            Value::List(None) | Value::Skipped => parcel.write_int32(-1),
+            Value::List(Some(items)) => {
+                parcel.write_int32(
+                    i32::try_from(items.len()).map_err(|_| bad("ArraySet too large"))?,
+                );
+                for item in items {
+                    let p = expect_parcelable(item)?;
+                    write_dynamic(
+                        parcel,
+                        &crate::value::DynamicValue::Parcelable(p.clone()),
+                    )?;
+                }
+            }
+            _ => return Err(bad(format!("expected an ArraySet value, got {value:?}"))),
+        },
         FieldOp::Cutout => write_cutout(parcel, value)?,
         FieldOp::CountedNested(_class) => match value {
             Value::List(None) | Value::Skipped => parcel.write_int32(-1),
@@ -3729,6 +4029,104 @@ fn write_typed_value(parcel: &mut Parcel, value: &Value) -> Result<()> {
     }
 }
 
+const ICON_TYPE_BITMAP: i32 = 1;
+const ICON_TYPE_RESOURCE: i32 = 2;
+const ICON_TYPE_DATA: i32 = 3;
+const ICON_TYPE_URI: i32 = 4;
+const ICON_TYPE_ADAPTIVE_BITMAP: i32 = 5;
+const ICON_TYPE_URI_ADAPTIVE_BITMAP: i32 = 6;
+
+/// The trailing tint/`BlendMode` fields every `Icon` writes.
+fn read_icon_tail(parcel: &mut Parcel, values: &mut Vec<Value>) -> Result<()> {
+    let present = parcel.read_int32()? != 0;
+    // `ColorStateList.writeToParcel` is not modelled; a tinted icon is refused
+    // rather than mis-read.
+    if present {
+        return Err(unsupported("android.content.res.ColorStateList"));
+    }
+    values.push(Value::Cond {
+        present: false,
+        values: Vec::new(),
+    });
+    values.push(Value::Int(parcel.read_int32()?)); // BlendMode.toValue
+    Ok(())
+}
+
+/// `android.graphics.drawable.Icon.writeToParcel` (`Icon.java:1224-1260`).
+///
+/// The type tag selects the branch; the resource, URI and data branches are
+/// modelled (a notification's `setSmallIcon(resId)` becomes a resource icon),
+/// a bitmap icon is a structured `UnsupportedParcelable`. The value keeps the
+/// read order so `write_icon` re-emits the same bytes.
+fn read_icon(parcel: &mut Parcel) -> Result<Parcelable> {
+    let kind = parcel.read_int32()?;
+    let mut values = vec![Value::Int(kind)];
+    match kind {
+        ICON_TYPE_RESOURCE => {
+            // The image's `Icon.writeToParcel` writes the package and the id and
+            // nothing else for a resource icon (no `useMonochrome`/`insetScale`:
+            // those are newer than android-34's `Icon`; the boot DEX scan is
+            // `writeString`, `writeInt`, then the tint marker).
+            values.push(Value::Str(parcel.read_string16()?)); // resPackage
+            values.push(Value::Int(parcel.read_int32()?)); // resId
+        }
+        ICON_TYPE_URI | ICON_TYPE_URI_ADAPTIVE_BITMAP => {
+            values.push(Value::Str(parcel.read_string16()?)); // uriString
+        }
+        ICON_TYPE_DATA => {
+            values.push(Value::ByteArray(parcel.read_byte_array()?));
+        }
+        ICON_TYPE_BITMAP | ICON_TYPE_ADAPTIVE_BITMAP => {
+            return Err(unsupported("android.graphics.Bitmap"));
+        }
+        other => return Err(bad(format!("unmodelled Icon type {other}"))),
+    }
+    read_icon_tail(parcel, &mut values)?;
+    Ok(Parcelable::ordered(ICON_CLASS, values))
+}
+
+/// The writer for [`read_icon`]'s value shape.
+fn write_icon(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
+    let Parcelable::Ordered { class, values } = value else {
+        return Err(bad("Icon payload is not an ordered parcelable"));
+    };
+    if class != ICON_CLASS {
+        return Err(bad(format!("expected {ICON_CLASS}, got {class}")));
+    }
+    let kind = expect_int(values.first().ok_or_else(|| bad("Icon without a type"))?)?;
+    parcel.write_int32(kind);
+    match kind {
+        ICON_TYPE_RESOURCE => {
+            parcel.write_string16_opt(expect_str(&values[1])?)?;
+            parcel.write_int32(expect_int(&values[2])?);
+        }
+        ICON_TYPE_URI | ICON_TYPE_URI_ADAPTIVE_BITMAP => {
+            parcel.write_string16_opt(expect_str(&values[1])?)?;
+        }
+        ICON_TYPE_DATA => parcel.write_byte_array(expect_byte_array(&values[1])?)?,
+        ICON_TYPE_BITMAP | ICON_TYPE_ADAPTIVE_BITMAP => {
+            return Err(unsupported("android.graphics.Bitmap"));
+        }
+        other => return Err(bad(format!("unmodelled Icon type {other}"))),
+    }
+    let tint_index = match kind {
+        ICON_TYPE_RESOURCE => 3,
+        ICON_TYPE_DATA | ICON_TYPE_URI | ICON_TYPE_URI_ADAPTIVE_BITMAP => 2,
+        _ => unreachable!(),
+    };
+    match values.get(tint_index) {
+        Some(Value::Cond { present: false, .. }) => parcel.write_int32(0),
+        _ => return Err(unsupported("android.content.res.ColorStateList")),
+    }
+    let blend = values
+        .get(tint_index + 1)
+        .ok_or_else(|| bad("Icon without a BlendMode value"))?;
+    parcel.write_int32(expect_int(blend)?);
+    Ok(())
+}
+
+pub const ICON_CLASS: &str = "android.graphics.drawable.Icon";
+
 fn read_cutout(parcel: &mut Parcel) -> Result<Value> {
     let variant = parcel.read_int32()?;
     let mut values = vec![Value::Int(variant)];
@@ -4033,6 +4431,8 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         FieldOp::CountedTyped(_) => call == "writeInt",
         // `DisplayCutout$ParcelableWrapper.writeCutoutToParcel` is a static
         // helper, which the scanner records as a nested `writeToParcel` call.
+        FieldOp::ArraySet => call == "writeArraySet",
+        FieldOp::Icon => call == "writeParcelable",
         FieldOp::Cutout => call == "writeParcelable",
         FieldOp::CountedNested(_) | FieldOp::Counted(_) => call == "writeInt",
         FieldOp::ValueList => call == "writeList",

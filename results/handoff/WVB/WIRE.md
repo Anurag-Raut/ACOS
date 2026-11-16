@@ -1,15 +1,18 @@
 # WVB/WV2 wire protocol (guest WebView provider ⇄ host WebView broker)
 
-Version **1.1** (WV6). Owner: WVB (host broker, `crates/acos-webview`). Consumer: WV2
-(guest provider). This file is normative: the broker's `wire` module in
+Version **2** (WV7). Owner: WVB (host broker, `crates/acos-webview`). Consumer:
+WV2 (guest provider). This file is normative: the broker's `wire` module in
 `crates/acos-webview/src/wire.rs` implements exactly this and its unit tests are
 the executable copy of §1–§3. Changes bump `proto` and are additive otherwise
 (unknown ops answer `UNSUPPORTED`, never a silent success).
 
-### v1.1 (WV6, additive except the version number)
+### v2 (WV7: the version is an integer)
 
-`proto` is now the number **1.1** on both sides (a `1`/`1.0` guest is answered
-`PROTO_VERSION`). Added, and implemented by both the broker and the provider:
+`proto` is the **integer** `2` on both sides. A version is a number, never a
+float: a guest that says `1`, `1.0`, WV6's `1.1` or anything else is answered
+`PROTO_VERSION`, whose message names `2` (never a silent coercion). Everything
+WV6 added under its `1.1` label is part of v2, and the provider/broker
+implementations are unchanged for it:
 
 * `view.setVisibility` (`{view, visible, windowVisible}`) — a hidden View tells
   the engine (`Page.setWebLifecycleState`: frozen/active) so the renderer stops.
@@ -137,7 +140,7 @@ DevTools taps `density` times too far right and down).
 | `view.addJavascriptInterface` | `{view, name, methods:[string]}` | `{view, name, methods}` |
 | `view.removeJavascriptInterface` | `{view, name}` | `{view, name}` |
 | `view.history` | `{view, action:"back"\|"forward"\|"clear"}` | `{view, canGoBack, canGoForward}` |
-| `render` | `{view, format:"png"\|"rgba", timeoutMs?, ack?:bool}` | JSON `{view, seq, width, height, density, format, bytes, damage:{x,y,w,h}, engineMs, hasDamage, contentWidth, contentHeight, scrollX, scrollY}` **then** the BLOB (§1); the four scroll/content fields are v1.1 |
+| `render` | `{view, format:"png"\|"rgba", timeoutMs?, ack?:bool}` | JSON `{view, seq, width, height, density, format, bytes, damage:{x,y,w,h}, engineMs, hasDamage, contentWidth, contentHeight, scrollX, scrollY}` **then** the BLOB (§1); the four scroll/content fields are v1.1. **v2 pixels:** `width`/`height` are the frame's real pixel size as the engine produced it, and the BLOB is exactly that. Measured (WV7): this pinned `chrome-headless-shell` cannot emit a device-resolution frame under `--enable-begin-frame-control` — `HeadlessExperimental.beginFrame`'s own `screenshot` captures at the CSS size and ignores `deviceScaleFactor` (a 900x560 device-pixel View came back 343x213 = /density), `Page.captureScreenshot` never answers (every variant times out), and `Page.screencastFrame` reports/carries the CSS size too. The broker therefore takes frames from the view's screencast (device-*surface* pixels, one `beginFrame` per `render`) and reports their real size; the guest scales them into the View (letterboxing, `FILTER_BITMAP`). A device-resolution PNG needs an engine that honours `deviceScaleFactor` in a capture path, which this one does not. |
 | `ax` | `{view, maxNodes?, includeIgnored?}` | `{view, count, truncated, nodes:[…]}` (§4.4) |
 | `input.touch` | `{view, action:"down"\|"move"\|"up"\|"cancel", points:[{id,x,y,radiusX?,radiusY?,force?}], holdMs?}` | `{view, delivered:true}` |
 | `input.tap` | `{view, x, y, holdMs?}` | `{view, delivered:true}` (convenience: down→frame→up) |
@@ -259,7 +262,7 @@ the page (Android's `@JavascriptInterface` rule, enforced host-side).
 
 ## 7. Versioning
 
-`proto:1.1`. The broker rejects any other `proto` with `PROTO_VERSION`; the
-message names `1.1`. Additive v1.1 ops/fields are listed at the top of this
-file. Additive ops/fields do not bump the version; a
-changed frame layout, id scheme, or an op whose semantics change does.
+`proto:2` (an integer). The broker rejects any other `proto` with
+`PROTO_VERSION`; the message names `2`. Additive v1.1 ops/fields are listed at
+the top of this file. Additive ops/fields do not bump the version; a changed
+frame layout, id scheme, or an op whose semantics change does.

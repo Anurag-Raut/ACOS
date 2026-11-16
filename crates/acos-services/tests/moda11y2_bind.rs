@@ -44,9 +44,9 @@ fn install_probe(host: &mut ServiceHost) {
         .clone()
         .expect("package manager is wired");
     let mut pms = pms.lock().unwrap();
-    pms.app.package_name = PACKAGE.to_string();
-    pms.package.package_name = PACKAGE.to_string();
-    pms.services.push(ServiceInfo {
+    pms.primary_mut().app.package_name = PACKAGE.to_string();
+    pms.primary_mut().package.package_name = PACKAGE.to_string();
+    pms.primary_mut().services.push(ServiceInfo {
         name: SERVICE.to_string(),
         package_name: PACKAGE.to_string(),
         process_name: PACKAGE.to_string(),

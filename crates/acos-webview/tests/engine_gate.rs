@@ -352,8 +352,8 @@ fn engine_gate() {
     let guest = Guest::connect(&socket, handler);
 
     // --- hello ------------------------------------------------------------
-    let hello = guest.call("hello", json!({"proto": 1.1, "client": "gate/1"}));
-    assert_eq!(hello["proto"], json!(1.1));
+    let hello = guest.call("hello", json!({"proto": 2, "client": "gate/1"}));
+    assert_eq!(hello["proto"], json!(2));
     assert_eq!(
         hello["engine"]["version"].as_str(),
         Some(engine::ENGINE_VERSION),
@@ -533,7 +533,7 @@ fn engine_gate() {
             _ => json!({"action": "continue"}),
         });
         let g = Guest::connect(&sock, handler2);
-        g.call("hello", json!({"proto": 1.1, "client": "gate/2"}));
+        g.call("hello", json!({"proto": 2, "client": "gate/2"}));
         g.call(
             "view.create",
             json!({"view": view_id, "width": 1080, "height": 2400, "density": 2.625, "url": url}),
@@ -596,7 +596,7 @@ fn engine_gate() {
     );
     eprintln!("idle shutdown ok (pid {pid_before} gone)");
     // A fresh hello re-creates the session on a new engine generation.
-    let hello2 = guest.call("hello", json!({"proto": 1.1, "client": "gate/3"}));
+    let hello2 = guest.call("hello", json!({"proto": 2, "client": "gate/3"}));
     assert_eq!(hello2["engine"]["version"], json!(engine::ENGINE_VERSION));
     guest.call(
         "view.create",

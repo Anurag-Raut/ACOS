@@ -464,9 +464,9 @@ mod tests {
             // so the test installs the component in the in-process PMS.
             let pms = state.pms.clone().expect("package manager wired");
             let mut pms = pms.lock().unwrap();
-            pms.app.package_name = "com.gaten".into();
-            pms.package.package_name = "com.gaten".into();
-            pms.services.push(crate::pms::ServiceInfo {
+            pms.primary_mut().app.package_name = "com.gaten".into();
+            pms.primary_mut().package.package_name = "com.gaten".into();
+            pms.primary_mut().services.push(crate::pms::ServiceInfo {
                 name: "com.gaten.GatenAccessibilityService".into(),
                 package_name: "com.gaten".into(),
                 process_name: "com.gaten".into(),

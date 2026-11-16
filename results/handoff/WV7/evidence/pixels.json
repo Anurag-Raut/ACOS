@@ -1,0 +1,17 @@
+{
+  "purpose": "Pixel check of the ACOS C1 capture in the WebView bounds (WV7 (c)).",
+  "method": "ACOS capture steps of scenarios/webview-probe.yaml -> frames/<seq>.png (1080x2400 RGBA). WebView A display bounds rows 700..1260, B rows 1260..1820, x 21..921 (900x560 device px each, display origin 21).",
+  "before_fix": {
+    "frame": "results/handoff/WV6/evidence/pass/ev/frames/3.png (WV6)",
+    "region_dark_fraction": 0.959,
+    "colours_in_region": 2,
+    "verdict": "flat black: nothing the provider drew reached the captured window buffer"
+  },
+  "after_background_paint_fix": {
+    "frame": "results/handoff/WV7/evidence/capture-after-black-fix.png",
+    "region_A": {"dark": 0.0, "white": 1.0, "colours": 2},
+    "region_B": {"dark": 0.0, "white": 1.0, "colours": 2},
+    "verdict": "the region is now the provider's own pixels (page background, opaque white): the black rectangle was the provider's background Paint, whose default colour (opaque black) was never initialised from mBackgroundColor (0xFFFFFFFF).",
+    "page_text": "not visible yet: the decoded engine frame is never painted, see no-draw-after-frame in this directory"
+  }
+}

@@ -134,7 +134,7 @@ public final class AcosWebViewTransport {
         public JSONObject hello(String client) throws IOException {
             JSONObject params = new JSONObject();
             try {
-                params.put("proto", 1.1);
+                params.put("proto", 2);
                 params.put("client", client);
             } catch (org.json.JSONException e) {
                 throw new TransportException("BAD_REQUEST", e.toString());

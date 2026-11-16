@@ -641,11 +641,14 @@ impl Conn {
         let sid = req["session"].as_str().unwrap_or("");
         match op {
             "hello" => {
-                if req["proto"].as_f64().unwrap_or(0.0) != PROTO {
+                // A version is an integer (`proto: 2`). A guest that spells a
+                // float (WV6's `1.1`) or an older number is refused with
+                // `PROTO_VERSION` naming this broker's version — never coerced.
+                if req["proto"].as_u64().map(|v| v as u32) != Some(PROTO) {
                     return Err(Error::proto(
                         crate::wire::code::PROTO_VERSION,
                         format!(
-                            "proto {:?} unsupported; this broker speaks 1.1",
+                            "proto {:?} unsupported; this broker speaks {PROTO}",
                             req["proto"]
                         ),
                     ));

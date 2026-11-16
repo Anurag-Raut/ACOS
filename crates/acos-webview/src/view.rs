@@ -47,6 +47,74 @@ impl Viewport {
     }
 }
 
+/// The newest compositor frame the engine pushed, in the View's **device**
+/// pixels (`Page.screencastFrame`).
+///
+/// Why not the obvious CDP calls: `HeadlessExperimental.beginFrame`'s own
+/// `screenshot` captures at the *CSS* size and ignores `deviceScaleFactor`
+/// (measured: a 900x560 device-pixel View came back 343x213 = /density), and
+/// `Page.captureScreenshot` never answers while `--enable-begin-frame-control`
+/// is on (measured: every variant times out; it waits for a frame the
+/// begin-frame controller will not produce). `Page.startScreencast` does
+/// deliver the compositor surface at the device size (measured: 900x559 for a
+/// 900x560 View — the engine rounds the scaled height down by one pixel), so
+/// the broker pulls frames from it: `beginFrame` renders exactly one frame and
+/// the screencast pushes those pixels.
+#[derive(Default)]
+pub struct Screencast {
+    inner: Mutex<ScreencastInner>,
+    cv: Condvar,
+}
+
+#[derive(Default)]
+struct ScreencastInner {
+    /// Monotone count of frames received. A `render` waits for it to advance.
+    seq: u64,
+    /// Newest PNG and its real pixel size.
+    last: Option<(Vec<u8>, u32, u32)>,
+    /// `Page.screencastFrameAck` is per-frame; a frame is acked by the pump as
+    /// soon as it is stored (an unacked frame stops the stream).
+    acks: u64,
+}
+
+impl Screencast {
+    fn store(&self, png: Vec<u8>, width: u32, height: u32) -> u64 {
+        let mut g = self.inner.lock().expect("screencast");
+        g.seq += 1;
+        g.last = Some((png, width, height));
+        g.acks += 1;
+        let seq = g.seq;
+        self.cv.notify_all();
+        seq
+    }
+
+    fn seq(&self) -> u64 {
+        self.inner.lock().expect("screencast").seq
+    }
+
+    /// Wait until a frame newer than `after` arrives; the newest pixels are
+    /// returned even when an *older* frame is the one that unblocked the wait.
+    fn wait_after(&self, after: u64, timeout: Duration) -> Option<(Vec<u8>, u32, u32)> {
+        let deadline = Instant::now() + timeout;
+        let mut g = self.inner.lock().expect("screencast");
+        loop {
+            if g.seq > after {
+                return g.last.clone();
+            }
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return g.last.clone();
+            }
+            let (next, _) = self.cv.wait_timeout(g, left).expect("screencast wait");
+            g = next;
+        }
+    }
+
+    fn has_frame(&self) -> bool {
+        self.inner.lock().expect("screencast").last.is_some()
+    }
+}
+
 /// Navigation bookkeeping shared with the pump thread. `load_url` waits on it,
 /// the pump advances it; there is exactly one event consumer per view.
 #[derive(Default)]
@@ -246,6 +314,8 @@ pub struct View {
     /// its JS but `window.acosBridge.report(...)` was gone after the load).
     pub interfaces: Mutex<HashMap<String, Vec<String>>>,
     pub main_frame: Mutex<Option<String>>,
+    /// The newest device-resolution compositor frame (see [`Screencast`]).
+    pub screencast: Screencast,
     pub closed: AtomicBool,
     pub created: Instant,
 }
@@ -295,6 +365,7 @@ impl View {
             bindings: Mutex::new(Vec::new()),
             interfaces: Mutex::new(HashMap::new()),
             main_frame: Mutex::new(None),
+            screencast: Screencast::default(),
             closed: AtomicBool::new(false),
             created: Instant::now(),
         });
@@ -394,6 +465,20 @@ impl View {
             json!({"enabled": true, "maxTouchPoints": 5}),
             self.browser.call_timeout,
         )?;
+        // The pixels come from the screencast (see [`Screencast`]): restart it
+        // so `maxWidth`/`maxHeight` are the new device size. A stopped stream is
+        // not an error here (the first `set_viewport` runs before it starts).
+        let _ = self.call("Page.stopScreencast", json!({}), self.browser.call_timeout);
+        self.call(
+            "Page.startScreencast",
+            json!({
+                "format": "png",
+                "maxWidth": vp.width,
+                "maxHeight": vp.height,
+                "everyNthFrame": 1,
+            }),
+            self.browser.call_timeout,
+        )?;
         Ok(())
     }
 
@@ -479,8 +564,6 @@ impl View {
     /// `view.settings`: apply the fields the pinned engine can honour and name
     /// every field it cannot. A field is never silently dropped.
     pub fn apply_settings(&self, settings: &Value) -> Result<(Vec<String>, Vec<String>)> {
-        let mut applied: Vec<String> = Vec::new();
-        let mut rejected: Vec<String> = Vec::new();
         let Some(map) = settings.as_object() else {
             return Err(Error::proto(code::BAD_REQUEST, "settings must be an object"));
         };
@@ -791,7 +874,9 @@ impl View {
     // --- frames ------------------------------------------------------------
 
     /// Deterministic frame: `HeadlessExperimental.beginFrame` renders exactly one
-    /// compositor frame and screenshots it. PNG only in v1 (`WIRE.md` §4.2).
+    /// compositor frame, and the pixels are captured at the View's **device**
+    /// resolution (`Page.captureScreenshot` honours `deviceScaleFactor`;
+    /// `beginFrame`'s own screenshot does not). PNG only (`WIRE.md` §4.2).
     pub fn render(&self, format: &str, timeout: Duration) -> Result<FrameData> {
         if format != "png" {
             return Err(Error::proto(
@@ -807,29 +892,26 @@ impl View {
         // compositor produced no new frame. Both are transient: retry a few
         // times (bounded, no invented pixels) rather than hand the guest a
         // frame-less response or block it for the whole call timeout.
-        let mut b64 = None;
+        let mut produced = false;
         let mut has_damage = true;
         let mut last_error = String::new();
         let attempt_timeout = timeout.min(Duration::from_secs(2));
+        let after = self.screencast.seq();
         for attempt in 0..3 {
             if attempt > 0 {
                 std::thread::sleep(Duration::from_millis(25));
             }
-            match self.call(
-                "HeadlessExperimental.beginFrame",
-                json!({"screenshot": {"format": "png", "optimizeForSpeed": true}}),
-                attempt_timeout,
-            ) {
+            // `beginFrame` renders exactly one compositor frame. Its own
+            // `screenshot` option is not used: it captures at the CSS size and
+            // ignores `deviceScaleFactor` (measured: a 900x560 device-pixel
+            // View came back 343x213 = /density), so the pixels come from the
+            // view's screencast, which delivers the compositor surface at the
+            // View's device resolution.
+            match self.call("HeadlessExperimental.beginFrame", json!({}), attempt_timeout) {
                 Ok(res) => {
                     has_damage = res["hasDamage"].as_bool().unwrap_or(true);
-                    if let Some(data) = res["screenshotData"].as_str() {
-                        b64 = Some(data.to_string());
-                        break;
-                    }
-                    last_error = format!(
-                        "beginFrame returned no screenshotData (hasDamage={})",
-                        res["hasDamage"].as_bool().unwrap_or(false)
-                    );
+                    produced = true;
+                    break;
                 }
                 Err(e) => {
                     last_error = e.to_string();
@@ -839,16 +921,33 @@ impl View {
                 }
             }
         }
+        if !produced {
+            return Err(Error::proto(code::FRAME_FAILED, last_error));
+        }
+        // A frame is produced asynchronously; wait for the one this
+        // `beginFrame` caused (bounded). With no new frame, the surface still
+        // holds the last one and that is what is returned (`has_damage:false`).
+        let wait = timeout.min(Duration::from_secs(3));
+        let (png, png_w, png_h) = self
+            .screencast
+            .wait_after(after, wait)
+            .ok_or_else(|| {
+                Error::proto(
+                    code::FRAME_FAILED,
+                    "the engine produced no compositor frame (screencast is empty)",
+                )
+            })?;
         let engine_ms = t0.elapsed().as_secs_f64() * 1000.0;
-        let b64 = b64.ok_or_else(|| Error::proto(code::FRAME_FAILED, last_error))?;
-        let bytes = base64_decode(&b64)
-            .ok_or_else(|| Error::proto(code::FRAME_FAILED, "frame is not valid base64"))?;
+        let bytes = png;
         let vp = self.viewport();
         let seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
         Ok(FrameData {
             seq,
-            width: vp.width,
-            height: vp.height,
+            // The frame's real pixel size: the engine rounds the scaled size
+            // down (900x559 for a 900x560 View), so the wire never claims more
+            // pixels than the PNG has.
+            width: png_w.min(vp.width).max(1),
+            height: png_h.min(vp.height).max(1),
             density: vp.density,
             format: FMT_PNG,
             stride: bytes.len() as u32,
@@ -1092,6 +1191,31 @@ impl View {
         let p = ev.get("params").cloned().unwrap_or(Value::Null);
         match method {
             "__pipe_closed__" => None,
+            "Page.screencastFrame" => {
+                // The compositor surface at the View's device resolution. Stored
+                // for the `render` that asked for it and acked immediately: an
+                // unacked frame stops the stream (`Page.screencastFrameAck`).
+                let data = p["data"].as_str().unwrap_or("");
+                if let Some(png) = base64_decode(data) {
+                    let meta = &p["metadata"];
+                    let w = meta["deviceWidth"].as_u64().unwrap_or(0) as u32;
+                    let h = meta["deviceHeight"].as_u64().unwrap_or(0) as u32;
+                    let (w, h) = if w > 0 && h > 0 {
+                        (w, h)
+                    } else {
+                        png_dimensions(&png).unwrap_or((0, 0))
+                    };
+                    self.screencast.store(png, w, h);
+                }
+                if let Some(sid) = p["sessionId"].as_i64() {
+                    let _ = self.call(
+                        "Page.screencastFrameAck",
+                        json!({"sessionId": sid}),
+                        self.browser.call_timeout,
+                    );
+                }
+                None
+            }
             "Page.frameRequestedNavigation" => {
                 let url = p["url"].as_str().unwrap_or("").to_string();
                 let is_redirect = p["reason"].as_str() == Some("redirect");
@@ -1277,7 +1401,19 @@ pub fn base64_encode(input: &[u8]) -> String {
     out
 }
 
-pub fn base64_decode(input: &str) -> Option<Vec<u8>> {
+/// The pixel size of a PNG, from its IHDR (bytes 16..24). Used only when the
+/// screencast metadata omits the device size; a value that is not a PNG is
+/// `None`, never a guess.
+fn png_dimensions(png: &[u8]) -> Option<(u32, u32)> {
+    if png.len() < 24 || &png[..8] != b"\x89PNG\r\n\x1a\n" {
+        return None;
+    }
+    let w = u32::from_be_bytes([png[16], png[17], png[18], png[19]]);
+    let h = u32::from_be_bytes([png[20], png[21], png[22], png[23]]);
+    Some((w, h))
+}
+
+pub(crate) fn base64_decode(input: &str) -> Option<Vec<u8>> {
     let mut rev = [255u8; 256];
     for (i, c) in B64.iter().enumerate() {
         rev[*c as usize] = i as u8;

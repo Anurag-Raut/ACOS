@@ -81,6 +81,10 @@ public final class WebViewChromiumCore {
     private final Handler mUi = new Handler(Looper.getMainLooper());
     private final Paint mPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Paint mBackgroundPaint = new Paint();
+    private final java.util.concurrent.atomic.AtomicInteger mFrameDraws =
+            new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger mFrameDrawLogs =
+            new java.util.concurrent.atomic.AtomicInteger();
     private final Map<String, JavascriptInterfaceBridge> mInterfaces = new ConcurrentHashMap<>();
 
     private volatile WebView mWebView;
@@ -119,6 +123,12 @@ public final class WebViewChromiumCore {
     private volatile Paint mLayerPaint;
     // A WebView paints white before its first page frame, like Android's.
     private volatile int mBackgroundColor = 0xFFFFFFFF;
+    {
+        // `Paint`'s default colour is opaque black, so the field's white default
+        // has to be pushed into the paint: without this the View painted a black
+        // rectangle over everything it drew (the "black WebView region" bug).
+        mBackgroundPaint.setColor(mBackgroundColor);
+    }
     private volatile int mScrollBarStyle;
     private volatile ViewGroup.LayoutParams mLayoutParams;
     private volatile int mVisibility = View.VISIBLE;
@@ -371,7 +381,20 @@ public final class WebViewChromiumCore {
     private void invalidate() {
         WebView view = mWebView;
         if (view != null) {
+            // `postInvalidateOnAnimation` dispatches through the guest's
+            // Choreographer animation callback; `postInvalidate` posts an
+            // ordinary UI-thread invalidate. Both must end in the same
+            // traversal, and a frame the guest asked for must be painted, so
+            // the provider asks for both (idempotent; one draw).
+            final WebView target = view;
+            view.post(new Runnable() {
+                @Override
+                public void run() {
+                    target.invalidate();
+                }
+            });
             view.postInvalidateOnAnimation();
+            view.postInvalidate();
         }
     }
 
@@ -999,6 +1022,7 @@ public final class WebViewChromiumCore {
     // -- painting -----------------------------------------------------------
 
     void setFrame(byte[] png, long seq) {
+        mFrameDraws.incrementAndGet();
         Bitmap decoded = BitmapFactory.decodeByteArray(png, 0, png.length);
         if (decoded == null) {
             Log.w(TAG, "frame did not decode as an image (" + png.length + " bytes)");
@@ -1014,8 +1038,11 @@ public final class WebViewChromiumCore {
             mFrameDirtyDuringFlight = false;
             mFrameDirty = true;
         }
-        Log.i(TAG, "frame decoded " + decoded.getWidth() + "x" + decoded.getHeight()
-                + " seq=" + seq + " bytes=" + png.length);
+        WebView target = mWebView;
+        Log.i(TAG, "frame decoded view=" + mView + " " + decoded.getWidth() + "x"
+                + decoded.getHeight() + " seq=" + seq + " bytes=" + png.length
+                + " attached=" + (target != null && target.isAttachedToWindow())
+                + " handler=" + (target == null ? "null" : String.valueOf(target.getHandler())));
         invalidate();
     }
 
@@ -1097,18 +1124,35 @@ public final class WebViewChromiumCore {
             return;
         }
         if (mDraws.getAndIncrement() < 3) {
-            Log.i(TAG, "onDraw " + w + "x" + h + " dirty=" + mFrameDirty
+            Log.i(TAG, "onDraw view=" + mView + " " + w + "x" + h + " dirty=" + mFrameDirty
                     + " frame=" + (mFrame == null ? "none" : "present")
-                    + " renderable=" + renderable());
+                    + " renderable=" + renderable()
+                    + " attached=" + (view != null && view.isAttachedToWindow()));
         }
         if (mBackgroundColor != 0) {
             canvas.drawRect(0, 0, w, h, mBackgroundPaint);
+        }
+        if (mFrameDraws.get() < 3) {
+            android.graphics.Rect clip = new android.graphics.Rect();
+            canvas.getClipBounds(clip);
+            Log.i(TAG, "onDraw canvas=" + canvas.getClass().getName() + " clip=" + clip
+                    + " bg=" + Integer.toHexString(mBackgroundColor));
         }
         Bitmap frame = mFrame;
         if (frame != null) {
             Rect src = new Rect(0, 0, frame.getWidth(), frame.getHeight());
             Rect dst = new Rect(0, 0, w, h);
-            canvas.drawBitmap(frame, src, dst, mPaint);
+            try {
+                canvas.drawBitmap(frame, src, dst, mPaint);
+                if (mFrameDrawLogs.getAndIncrement() < 5) {
+                    Log.i(TAG, "drawBitmap " + frame.getWidth() + "x" + frame.getHeight()
+                            + " -> " + w + "x" + h + " config=" + frame.getConfig()
+                            + " hw=" + canvas.isHardwareAccelerated()
+                            + " recycled=" + frame.isRecycled());
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "drawBitmap failed: " + t, t);
+            }
         }
         requestFrame();
     }
@@ -1125,7 +1169,7 @@ public final class WebViewChromiumCore {
             mFrameInFlight = true;
         }
         mFrameRequests++;
-        Log.i(TAG, "onDraw " + mWidth + "x" + mHeight + " frame="
+        Log.i(TAG, "requestFrame view=" + mView + " " + mWidth + "x" + mHeight + " frame="
                 + (mFrame == null ? "none" : mFrame.getWidth() + "x" + mFrame.getHeight())
                 + " -> render #" + mFrameRequests);
         Thread pull = new Thread(() -> {
