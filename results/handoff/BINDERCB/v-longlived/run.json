@@ -1,0 +1,7 @@
+{
+  "request_id": "req_1bbacf_18e871da74543052",
+  "started_at": "2026-11-16T06:13:54.575Z",
+  "scenario": "results/handoff/BINDERCB/tail-telephony-longlived.yaml",
+  "apk": "",
+  "acos_version": "0.2.2"
+}

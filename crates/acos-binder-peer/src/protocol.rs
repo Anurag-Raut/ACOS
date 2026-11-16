@@ -28,6 +28,24 @@ pub const F_RSP: u32 = 2;
 pub const F_TXN: u32 = 3;
 /// Driver -> peer: the reply to the peer-initiated transaction with that `seq`.
 pub const F_REP: u32 = 4;
+/// Driver -> peer: the first frame of a connection. `seq` carries the wire
+/// protocol version, `code` the driver's capability bits. A peer must not use a
+/// message the driver did not advertise, and a driver must not assume the peer
+/// knows one.
+pub const F_HELLO: u32 = 5;
+/// Peer -> driver: one reference-count operation on a node the guest exported
+/// (the `F_REL`/refcount message the design called for). `target` is the driver
+/// wire handle, `code` is [`REF_ACQUIRE`] or [`REF_RELEASE`].
+pub const F_REF: u32 = 6;
+
+/// The wire protocol this build speaks. Bump it for every change to the frame
+/// meanings (v2: `F_HELLO` + `F_REF`).
+pub const PROTOCOL_VERSION: u32 = 2;
+/// The host took one more strong reference on the node.
+pub const REF_ACQUIRE: u32 = 1;
+/// The host dropped one strong reference; at zero the node is released and the
+/// guest gets `BR_RELEASE` + `BR_DECREFS` (the kernel's last-release path).
+pub const REF_RELEASE: u32 = 2;
 
 /// Size of the fixed frame header (`struct fhdr`).
 pub const HEADER_SIZE: usize = 48;
