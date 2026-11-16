@@ -128,4 +128,7 @@ path honours `deviceScaleFactor`.
   the C1 frame holds both pages' text (0.46 % black glyph pixels, 257 colours,
   55 851 px changed between the two captures) — `evidence/pixels.json`.
 * Host: 32 cores, load average 10–20 from other agents during the runs; peak RAM
-  observed 16 GiB used of 60; disk 73–75 % used (247 GiB free), target 2.0 GiB.
+  observed ~16 GiB used of 60; disk 70–75 % used during the runs. Cleaned up:
+  the target (2.6 GiB), the `fixtures/build` copy (645 MiB), the run scratch and
+  this worktree's `.cache/webview` engine copy are deleted; no broker is running
+  (checked `ps -eo pid,args`). Disk after cleanup: 70 % used, 271 GiB free.
