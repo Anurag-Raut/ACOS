@@ -92,6 +92,23 @@ Facts from `evidence-1/logcat.txt`:
   lookup) and the guest-side materialiser writes the reply from that cache. With
   two packages in one session the slot is package-agnostic.
 
+Two more measured facts (second run, `ACOS_PMS_TRACE`):
+
+* The trace shows **no** `getPackageInfo` for `com.android.webview` at all — only
+  the primary package's (`getApplicationInfo`/`getPackageInfo`, flags
+  `0x80`/`0x10000000`/`0x100024c0`). So the desynced reply is decoded **before**
+  any provider `getPackageInfo` reaches PMS: it is the `webviewupdate`
+  `waitForAndGetProvider` reply (`WebViewProviderResponse.writeToParcel`:
+  presence int + `PackageInfo.writeToParcel` + `writeInt(status)`), which is the
+  first `PackageInfo` this provider path decodes.
+* In the image's reader order
+  (`.cache/aosp/base/core/java/android/content/pm/PackageInfo.java:659-689`) the
+  two `createString8Array` calls are `splitNames` (2nd field) and
+  `requestedPermissions` (after the six typed arrays). A desync at the *second*
+  field points at the reply head, a desync at `requestedPermissions` at the
+  typed arrays before it (`getPackageInfo(primary, 0x100024c0)` now decodes, so
+  the head is right for that record).
+
 That is the hypothesis to test first (and it would be a root-cause fix, not a
 WebView patch): dump the bytes of `getPackageInfo(<provider>, 0x100024c0)` and of
 `getPackageInfo(<primary>, 0x100024c0)` with an `ACOS_PARCEL_DUMP=<path>` hook
