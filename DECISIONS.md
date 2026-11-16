@@ -1201,3 +1201,15 @@ beyond correctness (sessions must not disturb each other's results or controls).
 stay: no default guest route to host localhost services (it also protects the MCP daemon and
 `acos view`), explicit host-port opt-in (Metro), and fail-closed where it costs nothing. Any hardening
 that costs RAM or latency is out. Verdict honesty (0 false passes) is unaffected.
+
+**ADR-0030 amendment 3 (owner, 2026-11-16, after NETSHARE).** Owner chose design **B2**: one relay
+netns per host served by one pasta (26 MiB once), each session keeps its own netns joined to it by a
+veth pair (~0 MiB per session, 2 ms attach floor); per-session online/offline and latency/loss are
+rules/netem on that session's veth. Measured: BASE 24 MiB per session (494 MiB at N=20, 887 ms
+attach), B2 flat 26 MiB from N=1 to 20; aggregate ~15–18 MB/s through one pasta (accepted for a dev
+tool). Orchestrator decisions on the open questions: the LAN/host-loopback drop rules live in the relay
+netns (guest has no capability there); a dead relay is fail-closed (every session reports the network
+unavailable, never a silent offline) and the supervisor restarts it; host ports (Metro) are opened per
+session on request by a REDIRECT on that session's veth; the relay supervisor and `acos-netd`
+(dnsproxyd) live in the existing host broker; per-session pasta (BASE) stays as a fallback arm for
+one release. Option A (own userspace stack) remains the upgrade path if the throughput ceiling bites.
