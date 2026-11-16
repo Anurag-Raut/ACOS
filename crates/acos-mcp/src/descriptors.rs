@@ -227,9 +227,9 @@ pub fn tool_infos(caps: &Capabilities) -> Vec<ToolInfo> {
             };
             let input_schema =
                 if SESSION_ADDRESSED_PROTOCOL_TOOLS.contains(&descriptor.name.as_str()) {
-                    with_session_id(descriptor.input_schema)
+                    with_reply_paging(&descriptor.name, with_session_id(descriptor.input_schema))
                 } else {
-                    descriptor.input_schema
+                    with_reply_paging(&descriptor.name, descriptor.input_schema)
                 };
             ToolInfo {
                 tool_name: descriptor.name,
@@ -272,6 +272,37 @@ fn session_id_property() -> Value {
                         \"mcp-1234\", \"screenshot\": true}`). Omit it for this server \
                         process's default session."
     })
+}
+
+/// Reply-shaping arguments every tool whose reply can carry a tree reads.
+///
+/// `tool_result` shapes `result.tree` for **every** tool (`shape_reply_tree`),
+/// so `full`/`cursor` are real arguments of a tool whose typed request predates
+/// the reply rule. `acos_verify` and `acos_observe` are exactly that case: their
+/// replies page with `cursor`/`full` (REL3C), and the CLI's own `session
+/// observe` sends both, so a schema that omitted them rejected the server's own
+/// documented paging call. One helper for `tool_infos` and `tool_schema`, so the
+/// advertised and enforced schemas cannot drift.
+fn with_reply_paging(tool_name: &str, mut schema: Value) -> Value {
+    if !matches!(tool_name, "acos_verify" | "acos_observe") {
+        return schema;
+    }
+    if let Some(properties) = schema.get_mut("properties").and_then(Value::as_object_mut) {
+        properties.entry("full".to_string()).or_insert_with(|| {
+            json!({
+                "type": "boolean",
+                "description": "Include the full tree inline instead of the compact screen (default false). \
+                                The full tree is always written to `tree_path`."
+            })
+        });
+        properties.entry("cursor".to_string()).or_insert_with(|| {
+            json!({
+                "type": "integer", "minimum": 0,
+                "description": "Compact-screen page cursor from a previous reply's `tree_next_cursor`."
+            })
+        });
+    }
+    schema
 }
 
 /// Add the top-level `session_id` to a closed schema (idempotent).
@@ -360,9 +391,9 @@ pub fn tool_schema(tool_name: &str) -> Option<Value> {
         .find(|tool| tool.name == tool_name)
         .map(|tool| {
             if SESSION_ADDRESSED_PROTOCOL_TOOLS.contains(&tool_name) {
-                with_session_id(tool.input_schema)
+                with_reply_paging(tool_name, with_session_id(tool.input_schema))
             } else {
-                tool.input_schema
+                with_reply_paging(tool_name, tool.input_schema)
             }
         })
 }
