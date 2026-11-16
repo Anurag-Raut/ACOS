@@ -278,10 +278,32 @@ impl SessionBackend {
     ///
     /// Used by the MCP server when `ACOS_SESSION_DAEMON` is set, so a CLI-driven
     /// daemon can own the session while MCP tools operate on it.
+    ///
+    /// REL3D: the external daemon is identity-checked at connect time. An older
+    /// daemon (the MODA11Y breakage: stale behaviour answering a newer client)
+    /// is **not** attached: the server prints the structured
+    /// `DAEMON_VERSION_MISMATCH` warning and keeps its own private ART daemon as
+    /// the route, rather than mixing two builds in one session.
     #[must_use]
     pub fn with_daemon_socket(mut self, path: PathBuf) -> Self {
         match DaemonClient::connect(&path) {
-            Ok(client) => self.daemon = Some(Mutex::new(client)),
+            Ok(client) => match client.mismatch() {
+                None => self.daemon = Some(Mutex::new(client)),
+                Some(mismatch) => {
+                    let mut warning = mismatch.to_json();
+                    if let Some(object) = warning.as_object_mut() {
+                        object.insert(
+                            "action".to_string(),
+                            Value::String("private ART daemon (this server's own)".to_string()),
+                        );
+                        object.insert(
+                            "socket".to_string(),
+                            Value::String(path.display().to_string()),
+                        );
+                    }
+                    eprintln!("acos-mcp: {warning}");
+                }
+            },
             Err(e) => eprintln!(
                 "acos-mcp: session daemon at {} unavailable: {e}",
                 path.display()
