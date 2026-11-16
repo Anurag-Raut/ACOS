@@ -159,22 +159,42 @@ impl InputDispatcher {
 
     /// Register (or update) a window from its WMS record and channel writer.
     ///
-    /// `touchable` defaults to `focusable || visible`; an application window is
-    /// a touch target. The first focusable window becomes the focus, matching
-    /// `WindowManager`'s launch order.
+    /// `touchable` is the window's **own** `FLAG_NOT_TOUCHABLE` answer (LAYER0):
+    /// a decorative overlay must let the touch below it through even though it is
+    /// drawn and visible. `z` is the layer-stack index, so "topmost touchable"
+    /// means the same thing here as it does in the compositor and the tree.
+    /// The first focusable window becomes the focus, matching `WindowManager`'s
+    /// launch order.
     pub fn register_window(&mut self, record: &WindowRecord, writer: Arc<dyn FrameWriter>) {
         let target = WindowTarget {
             frame: record.frame,
             z: record.z,
             visible: record.visible,
             focusable: record.focusable,
-            touchable: record.visible,
+            touchable: record.visible && acos_wm::layers::touchable(record.params.flags),
             writer,
         };
         if target.focusable && self.focus.is_none() {
             self.focus = Some(record.id);
         }
         self.windows.insert(record.id, target);
+    }
+
+    /// Refresh everything routing depends on after a relayout or after another
+    /// window was added/removed: frame, layer-stack `z`, visibility, focusability
+    /// and touchability. The writer is kept.
+    ///
+    /// Needed because `z` is a *relative* stack position: removing the window
+    /// below an overlay moves the overlay down, and a stale `z` would keep
+    /// routing touches to it as if it were still on top.
+    pub fn refresh_window(&mut self, record: &WindowRecord) {
+        if let Some(w) = self.windows.get_mut(&record.id) {
+            w.frame = record.frame;
+            w.z = record.z;
+            w.visible = record.visible;
+            w.focusable = record.focusable;
+            w.touchable = record.visible && acos_wm::layers::touchable(record.params.flags);
+        }
     }
 
     /// Remove a window and drop its pending routes.
@@ -484,6 +504,77 @@ mod tests {
             .unwrap();
         assert_eq!(add.result, ADD_OKAY);
         wm.windows.get(&add.window).unwrap().clone()
+    }
+
+    /// LAYER0 (criterion 2): with an application overlay above the activity,
+    /// a touch inside the overlay goes to the overlay, a touch beside it goes to
+    /// the activity, and an overlay that sets `FLAG_NOT_TOUCHABLE` passes both
+    /// points to the activity while staying drawn above it.
+    #[test]
+    fn the_topmost_touchable_window_at_the_point_gets_the_touch() {
+        use acos_wm::layers::{TYPE_APPLICATION, TYPE_APPLICATION_OVERLAY};
+        let mut wm = acos_wm::wms::WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (session, _) = wm.open_session(None);
+        let activity = wm
+            .add_to_display_as_user(
+                session,
+                acos_parcel::binder::BinderId(0x11),
+                LayoutParams::application("dev.acos.fixtures.overlaystack", "MainActivity"),
+                0,
+            )
+            .unwrap()
+            .window;
+        // The overlay: a 300x300 window at the display's top-left corner.
+        let mut overlay = LayoutParams::application("dev.acos.fixtures.overlaystack", "Overlay");
+        overlay.type_ = TYPE_APPLICATION_OVERLAY;
+        overlay.width = 300;
+        overlay.height = 300;
+        overlay.x = 0;
+        overlay.y = 0;
+        let overlay = wm
+            .add_to_display_as_user(
+                session,
+                acos_parcel::binder::BinderId(0x12),
+                overlay,
+                0,
+            )
+            .unwrap()
+            .window;
+        assert_eq!(
+            wm.windows[&activity].params.type_, TYPE_APPLICATION,
+            "the activity is a plain application window"
+        );
+        let frame = wm.windows[&overlay].frame;
+        assert!(frame.width() > 0 && frame.height() > 0);
+        let inside = (frame.left as f32 + 5.0, frame.top as f32 + 5.0);
+
+        let mut d = InputDispatcher::new();
+        let act_writer = Arc::new(RecordingWriter::default());
+        let ovl_writer = Arc::new(RecordingWriter::default());
+        d.register_window(&wm.windows[&activity].clone(), act_writer.clone());
+        d.register_window(&wm.windows[&overlay].clone(), ovl_writer.clone());
+
+        // Inside the overlay: the overlay. Beside it: the activity.
+        assert_eq!(d.hit_test(inside.0, inside.1), Some(overlay));
+        assert_eq!(d.hit_test(900.0, 2000.0), Some(activity));
+        d.inject_tap(inside.0, inside.1).unwrap();
+        assert_eq!(ovl_writer.frames.lock().unwrap().len(), 2);
+        assert!(act_writer.frames.lock().unwrap().is_empty());
+
+        // FLAG_NOT_TOUCHABLE: the same point is the activity's.
+        wm.windows.get_mut(&overlay).unwrap().params.flags =
+            acos_wm::layers::FLAG_NOT_TOUCHABLE | acos_wm::layers::FLAG_NOT_FOCUSABLE;
+        d.refresh_window(&wm.windows[&overlay]);
+        assert_eq!(d.hit_test(inside.0, inside.1), Some(activity));
+        d.inject_tap(inside.0, inside.1).unwrap();
+        assert_eq!(act_writer.frames.lock().unwrap().len(), 2);
+        assert_eq!(
+            ovl_writer.frames.lock().unwrap().len(),
+            2,
+            "the overlay received nothing new"
+        );
+        // ...and it is still above the activity in the layer stack.
+        assert!(wm.windows[&overlay].z > wm.windows[&activity].z);
     }
 
     #[test]

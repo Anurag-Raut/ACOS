@@ -195,16 +195,22 @@ to `focus_target()` (topmost focusable) instead of the newest window. New:
 
 Tests: 13 new unit tests, 70 lib + 27 integration tests green (`cargo test -p acos-wm`).
 
-### Step 2 — composition + input hit-testing (next)
+### Step 2 — composition + input hit-testing (input half ✅ committed, C1 assertion pending)
 
-* `input_dispatch.rs`: replace `newest_token()`-only routing with
-  `WindowManager::hit_test(point)` → that window's channel. `default_token()` stays for the
-  point-less callers (`key`, `type_text`). A `FLAG_NOT_TOUCHABLE` overlay therefore passes taps
-  through (test: tap on the overlay → its channel; tap beside it → the activity's).
-* `focus`: on add/remove, publish `WindowFocusChanged` per `focus_target()`.
-* C1: no code change needed in `capture_composite` — it already takes `z`/`alpha`/`dim` from
-  `LayerPlacement`. The step is the assertion: a `w35`-style test with three layers
-  (activity / dialog / application overlay) at the stack's z.
+Committed: `InputDispatcher::register_window` no longer treats "visible" as "touchable" — it asks the
+window's own `FLAG_NOT_TOUCHABLE` (`acos_wm::layers::touchable(record.params.flags)`), and a new
+`refresh_window(&WindowRecord)` keeps frame / layer-stack `z` / visibility / focusability /
+touchability consistent after a `relayout` and after another window is removed (a removed window
+below an overlay shifts the overlay's `z`, and a stale `z` would keep routing touches to it as if it
+were still on top). `WmsState::relayout_with_requested` and `WmsState::remove` call it.
+Test: `crates/acos-services/src/input.rs`
+`the_topmost_touchable_window_at_the_point_gets_the_touch` — overlay above the activity: a touch
+inside the overlay goes to the overlay, a touch beside it goes to the activity, and with
+`FLAG_NOT_TOUCHABLE` both go to the activity while the overlay stays above it in the stack.
+
+Still to do: `focus` publication on add/remove per `focus_target()`; a `w35`-style three-layer C1
+test (activity / dialog / application overlay) asserting the composite order from the stack's `z`;
+and the ART end-to-end half of criterion 2 (needs the fixture of step 5).
 
 ### Step 3 — tree and screenshots carry the window (id, type, z)
 
