@@ -1,6 +1,15 @@
 # MODSENS — the `sensors` service module (v0.4.0), evidence
 
-Branch `modsens` (from `modules` = `ec1724cf`, MOD0+MOD1), 2026-11-16.
+Branch `modsens`, based on `modules` at `ec1724cf` (MOD0+MOD1, the module
+framework tip when this track was dispatched), 2026-11-16. `modules` has since
+advanced (`d5170146`, the layer1 merge); a trial merge into that tip conflicts
+only in two append-only files (`EXPERIMENTS.md`, `tools/fetch-aosp-reference.sh`)
+— resolve by keeping both sides.
+
+**No architectural wall was hit.** The native sensor path needs exactly what this
+build already has: an in-process `ServiceHost` that can hand a real descriptor to
+the guest (the `BitTube`/`SOCK_SEQPACKET` pair `display_events.rs` already uses
+for the frame clock) and a node `core` can publish before the guest boots.
 
 ## What landed
 
