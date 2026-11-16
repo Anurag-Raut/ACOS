@@ -6,7 +6,7 @@
 //! | name | descriptor | what answers |
 //! |---|---|---|
 //! | `bluetooth_manager` | `android.bluetooth.IBluetoothManager` | `registerAdapter` (hands the adapter binder), `getState`, `getAddress`, `getName`, `enable`/`disable`, `isBleScanAlwaysAvailable`, `enableBle`/`disableBle`, `registerStateChangeCallback` |
-//! | `bluetooth` | `android.bluetooth.IBluetooth` | `getState`, `getAddress`, `getName`, `getScanMode`, `startDiscovery`/`cancelDiscovery`/`isDiscovering`, `getBondedDevices` — all of them oneway and answered through the client's `ISynchronousResultReceiver` (the image's AIDL shape; `getBondedDevices` carries a real `List<BluetoothDevice>`) |
+//! | `bluetooth` | `android.bluetooth.IBluetooth` | `getState`, `getAddress`, `getName`, `getScanMode`, `startDiscovery`/`cancelDiscovery`/`isDiscovering`, `getBondedDevices`, `getRemoteName` — all of them oneway and answered through the client's `ISynchronousResultReceiver` (the image's AIDL shape; `getBondedDevices` carries a real `List<BluetoothDevice>`, `getRemoteName` is `BluetoothDevice.getName()`) |
 //!
 //! Transaction codes come from the image (`framework-bluetooth/classes.dex`).
 //! The two client paths that carry a binder to call back (`getBondedDevices`,
@@ -127,6 +127,13 @@ const ADAPTER_CANCEL_DISCOVERY: u32 = 18;
 const ADAPTER_IS_DISCOVERING: u32 = 19;
 /// `IBluetooth.getBondedDevices(AttributionSource, SynchronousResultReceiver)`.
 const ADAPTER_GET_BONDED_DEVICES: u32 = 23;
+/// `IBluetooth.getRemoteName(BluetoothDevice, AttributionSource,
+/// SynchronousResultReceiver)` — `BluetoothDevice.getName()` (image dex
+/// `BluetoothDevice.getName`, and the AIDL declaration order in
+/// `packages/modules/Bluetooth/android/app/aidl/android/bluetooth/IBluetooth.aidl`:
+/// `getState` 1 … `getBondedDevices` 23, `cancelBondProcess` 25, `removeBond`
+/// 26, `getBondState` 27, `getConnectionState` 30, `getRemoteName` 32).
+const ADAPTER_GET_REMOTE_NAME: u32 = 32;
 
 /// `IBluetoothManagerCallback.onBluetoothServiceUp(IBluetooth)`.
 const CALLBACK_SERVICE_UP: u32 = 1;
@@ -366,6 +373,36 @@ fn device_parcelable(device: &ScriptedDevice) -> Parcelable {
     )
 }
 
+/// The `BluetoothDevice` an `IBluetooth` request carries as its first argument.
+///
+/// AIDL writes an `in BluetoothDevice` as a typed object: a presence word, then
+/// the parcelable body with **no class name** (the client already knows the
+/// type), i.e. `writeString(mAddress)` + `writeInt(mAddressType)` (image dex
+/// `BluetoothDevice.writeToParcel` / `BluetoothDevice(Parcel)`). The address is
+/// all the scripted module needs to answer a per-device question.
+fn request_device(data: &acos_parcel::Parcel) -> Option<String> {
+    // The host has already consumed the interface token, so the current
+    // position is the first argument.
+    let mut probe = data.clone();
+    if probe.read_int32().ok()? != 1 {
+        return None;
+    }
+    probe.read_string16().ok().flatten()
+}
+
+/// The scripted display name for one address (bonded devices first, then the
+/// `scan` set). `None` means "this device has no name", which the client shows
+/// as a null name — the same answer AOSP's `BluetoothService.getRemoteName`
+/// gives for a device it knows nothing about.
+fn scripted_name(state: &BluetoothState, address: &str) -> Option<String> {
+    state
+        .bonded
+        .iter()
+        .chain(state.scan.iter())
+        .find(|device| device.address.eq_ignore_ascii_case(address))
+        .map(|device| device.name.clone())
+}
+
 /// Find the client's `ISynchronousResultReceiver` in a oneway request.
 ///
 /// `IBluetooth.startDiscovery`/`isDiscovering`/`getBondedDevices` write
@@ -555,6 +592,31 @@ impl ServiceObject for AdapterService {
             // giving up (ART-observed: `BluetoothAdapter.getState()` blocked the
             // UI thread ~5 s and then threw `TimeoutException`, which cost the
             // scenario its tap settle).
+            // `getRemoteName(BluetoothDevice, AttributionSource, receiver)`: the
+            // same oneway+receiver shape as the adapter-wide answers, but the
+            // question is about one device (`BluetoothDevice.getName()`).
+            ADAPTER_GET_REMOTE_NAME => {
+                let Some(target) = result_receiver(data) else {
+                    let detail = format!(
+                        "code {code}: no ISynchronousResultReceiver binder in the request ({} object(s), {} byte(s))",
+                        data.objects().len(),
+                        data.data_size()
+                    );
+                    state.unsupported.push(detail.clone());
+                    return Err(ServiceError::BadRequest {
+                        interface: BLUETOOTH_DESCRIPTOR.to_string(),
+                        method: format!("code {code}"),
+                        detail,
+                    });
+                };
+                let name = request_device(data)
+                    .as_deref()
+                    .and_then(|address| scripted_name(&state, address));
+                if let Some(delivery) = result_delivery(target, DynamicValue::String(name)) {
+                    self.queued.push(delivery);
+                }
+                Ok(true)
+            }
             ADAPTER_GET_STATE
             | ADAPTER_GET_ADDRESS
             | ADAPTER_GET_NAME
@@ -916,9 +978,19 @@ impl Module for BluetoothModule {
                         EXTRA_NAME.to_string(),
                         crate::ams::Extra::String(device.name.clone()),
                     );
-                    intent
-                        .extras
-                        .insert(EXTRA_RSSI.to_string(), crate::ams::Extra::Int(device.rssi));
+                    // `BluetoothDevice.EXTRA_RSSI` is a **short** extra
+                    // (`BluetoothDevice.EXTRA_RSSI` is documented as
+                    // `EXTRA_SHORT`; the probe reads it with
+                    // `Intent.getShortExtra`), so it must travel as
+                    // `VAL_SHORT` — an `Integer` value makes the client's
+                    // `getShort` return the default (0) after a
+                    // `ClassCastException` warning.
+                    intent.extras.insert(
+                        EXTRA_RSSI.to_string(),
+                        crate::ams::Extra::Short(
+                            i16::try_from(device.rssi).unwrap_or(i16::MAX),
+                        ),
+                    );
                     matched += host.broadcast_intent(&intent)?;
                 }
                 matched += host.broadcast_intent(&IntentFacts::action(ACTION_DISCOVERY_FINISHED))?;

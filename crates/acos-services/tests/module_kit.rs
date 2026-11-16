@@ -50,7 +50,12 @@ fn transact(host: &mut ServiceHost, name: &str, code: u32) -> Result<Vec<i32>, S
 fn run_in_quiet_process(module: &str) {
     let exe = std::env::current_exe().expect("test executable");
     let output = std::process::Command::new(exe)
-        .args(["--exact", "quiet_process_child", "--nocapture", "--test-threads=1"])
+        .args([
+            "--exact",
+            "quiet_process_child",
+            "--nocapture",
+            "--test-threads=1",
+        ])
         .env("ACOS_KIT_CHILD", module)
         .output()
         .expect("spawn the kit child");
@@ -71,7 +76,12 @@ fn quiet_process_child() {
     };
     let report = conformance::run(&module);
     for check in &report.checks {
-        println!("{}: {} {}", check.name, if check.pass { "PASS" } else { "FAIL" }, check.detail);
+        println!(
+            "{}: {} {}",
+            check.name,
+            if check.pass { "PASS" } else { "FAIL" },
+            check.detail
+        );
     }
     assert!(
         report.pass(),
@@ -84,6 +94,11 @@ fn quiet_process_child() {
 #[test]
 fn core_passes_the_conformance_kit() {
     run_in_quiet_process("core");
+}
+
+#[test]
+fn the_accessibility_module_passes_the_conformance_kit() {
+    run_in_quiet_process("accessibility");
 }
 
 #[test]
@@ -204,7 +219,12 @@ fn attaching_the_vibrator_serves_the_name_and_the_report_says_which_profile() {
 
     // Attaching over a tombstone replaces it (the name is the module's own).
     registry
-        .attach(&mut host, "feedback.vibrator", Profile::Scripted, &ModuleConfig::default())
+        .attach(
+            &mut host,
+            "feedback.vibrator",
+            Profile::Scripted,
+            &ModuleConfig::default(),
+        )
         .expect("vibrator attaches");
 
     let reply = transact(&mut host, "vibrator_manager", 1).expect("getVibratorIds answers");

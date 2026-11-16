@@ -816,6 +816,15 @@ pub fn materialize_intent(vm: &mut Vm, facts: &IntentFacts) -> JResult<Handle> {
                 )
                 .map_err(err)?;
             }
+            Extra::Short(v) => {
+                vm.call_method(
+                    intent,
+                    "putExtra",
+                    "(Ljava/lang/String;S)Landroid/content/Intent;",
+                    &[JavaValue::Object(k), JavaValue::Short(*v)],
+                )
+                .map_err(err)?;
+            }
             Extra::Bool(v) => {
                 vm.call_method(
                     intent,

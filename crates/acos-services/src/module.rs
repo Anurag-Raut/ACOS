@@ -60,7 +60,12 @@ pub enum Profile {
 
 impl Profile {
     /// Every profile, weakest first.
-    pub const ALL: [Profile; 4] = [Profile::Off, Profile::Stub, Profile::Scripted, Profile::Real];
+    pub const ALL: [Profile; 4] = [
+        Profile::Off,
+        Profile::Stub,
+        Profile::Scripted,
+        Profile::Real,
+    ];
 
     /// The wire/CLI spelling.
     #[must_use]
@@ -511,15 +516,14 @@ impl ModuleSpec {
         };
         let mut spec = Self::new(id, profile);
         if let Some(config) = config {
-            let value: Value = serde_json::from_str(config).map_err(|error| {
-                ServiceError::ModuleRejected {
+            let value: Value =
+                serde_json::from_str(config).map_err(|error| ServiceError::ModuleRejected {
                     module: "<launch>",
                     detail: format!(
                         "service spec {text:?} has a config that is not JSON: {error}; use \
                          `id[:profile][,{{\"key\": value}}]`"
                     ),
-                }
-            })?;
+                })?;
             spec.config = ModuleConfig::from_json("<launch>", &value)?;
         }
         Ok(spec)
@@ -703,6 +707,9 @@ pub struct ModuleReport {
     pub requires: &'static [&'static str],
     /// The control operations it accepts.
     pub controls: Vec<&'static str>,
+    /// Module-specific honest state (enabled services, connection and event
+    /// counts). `None` for a module with nothing extra to say.
+    pub details: Option<Value>,
 }
 
 impl ModuleReport {
@@ -728,6 +735,7 @@ impl ModuleReport {
             attach: manifest.attach,
             requires: manifest.requires,
             controls: manifest.controls.iter().map(|op| op.name).collect(),
+            details: None,
         }
     }
 
@@ -744,6 +752,7 @@ impl ModuleReport {
             "services": self.services,
             "requires": self.requires,
             "controls": self.controls,
+            "details": self.details,
             "budget": {
                 "ram_mib": self.budget.ram_mib,
                 "startup_ms": self.budget.startup_ms,
@@ -1194,6 +1203,7 @@ impl ModuleRegistry {
         let mut registry = Self::new();
         for module in [
             Box::new(crate::core_module::CoreModule::new()) as Box<dyn Module>,
+            Box::new(crate::modules::accessibility::AccessibilityModule::new()),
             Box::new(crate::modules::sensors::SensorsModule::new()),
             Box::new(crate::modules::vibrator::VibratorModule::new()),
             Box::new(crate::modules::location::LocationModule::new()),
@@ -1496,10 +1506,15 @@ impl ModuleRegistry {
         profile: Profile,
         config: &ModuleConfig,
     ) -> Result<()> {
-        let manifest = self.manifest(id).ok_or_else(|| ServiceError::ModuleRejected {
-            module: "<live>",
-            detail: format!("unknown module {id:?}; known modules: {}", self.ids().join(", ")),
-        })?;
+        let manifest = self
+            .manifest(id)
+            .ok_or_else(|| ServiceError::ModuleRejected {
+                module: "<live>",
+                detail: format!(
+                    "unknown module {id:?}; known modules: {}",
+                    self.ids().join(", ")
+                ),
+            })?;
         if manifest.attach != AttachMode::Hot {
             return Err(ServiceError::ModuleRejected {
                 module: manifest.id,
@@ -1514,10 +1529,12 @@ impl ModuleRegistry {
 
     /// Detach a module from a **live** session, with the same `hot` rule.
     pub fn detach_live(&mut self, host: &mut ServiceHost, id: &str) -> Result<()> {
-        let manifest = self.manifest(id).ok_or_else(|| ServiceError::ModuleRejected {
-            module: "<live>",
-            detail: format!("unknown module {id:?}"),
-        })?;
+        let manifest = self
+            .manifest(id)
+            .ok_or_else(|| ServiceError::ModuleRejected {
+                module: "<live>",
+                detail: format!("unknown module {id:?}"),
+            })?;
         if manifest.attach != AttachMode::Hot {
             return Err(ServiceError::ModuleRejected {
                 module: manifest.id,
@@ -1663,6 +1680,7 @@ impl ModuleRegistry {
                     "state": if report.attached { "attached" } else { "off" },
                     "fidelity": profile.map(Profile::as_str).unwrap_or(Profile::Off.as_str()),
                     "reason": report.reason,
+                    "details": report.details,
                 })
             })
             .collect()
@@ -1722,13 +1740,9 @@ impl ModuleRegistry {
             if self.tombstoned.contains(&tombstone.name) {
                 continue;
             }
-            let attached = self
-                .entries
-                .iter()
-                .any(|entry| {
-                    entry.module.manifest().id == tombstone.module
-                        && entry.profile.is_attached()
-                });
+            let attached = self.entries.iter().any(|entry| {
+                entry.module.manifest().id == tombstone.module && entry.profile.is_attached()
+            });
             if attached {
                 continue;
             }
@@ -1815,6 +1829,9 @@ impl ModuleRegistry {
                         "attach_call".into(),
                         json!(attach_call(manifest.id, default_profile(manifest))),
                     );
+                    if let Some(details) = entry.module.report().details {
+                        map.insert("details".into(), details);
+                    }
                 }
                 value
             })
@@ -2060,13 +2077,9 @@ impl SessionModules {
     }
 
     /// Attach a `hot` module to the live session.
-    pub fn attach_live(
-        &mut self,
-        id: &str,
-        profile: Profile,
-        config: &ModuleConfig,
-    ) -> Result<()> {
-        self.registry.attach_live(&mut self.host, id, profile, config)?;
+    pub fn attach_live(&mut self, id: &str, profile: Profile, config: &ModuleConfig) -> Result<()> {
+        self.registry
+            .attach_live(&mut self.host, id, profile, config)?;
         self.registry.install_tombstones(&mut self.host);
         Ok(())
     }
@@ -2318,9 +2331,12 @@ pub mod conformance {
         let mut attach_ok = true;
         let mut attach_detail = String::new();
         for cycle in 0..2 {
-            if let Err(error) =
-                registry.attach(&mut host, module_id, default_profile, &ModuleConfig::default())
-            {
+            if let Err(error) = registry.attach(
+                &mut host,
+                module_id,
+                default_profile,
+                &ModuleConfig::default(),
+            ) {
                 attach_ok = false;
                 attach_detail = format!("attach #{cycle} failed: {error}");
                 break;
@@ -2442,7 +2458,12 @@ pub mod conformance {
         }
         if negative {
             if registry
-                .attach(&mut host, module_id, default_profile, &ModuleConfig::default())
+                .attach(
+                    &mut host,
+                    module_id,
+                    default_profile,
+                    &ModuleConfig::default(),
+                )
                 .is_ok()
             {
                 match registry.control(&mut host, module_id, "no-such-op", &Value::Null) {
@@ -2589,9 +2610,8 @@ mod tests {
         session
             .attach(&[
                 ModuleSpec::parse("feedback.vibrator:stub").unwrap(),
-                ModuleSpec::parse("feedback.vibrator:stub").unwrap_or_else(|_| {
-                    ModuleSpec::new("feedback.vibrator", Profile::Stub)
-                }),
+                ModuleSpec::parse("feedback.vibrator:stub")
+                    .unwrap_or_else(|_| ModuleSpec::new("feedback.vibrator", Profile::Stub)),
             ])
             .expect("the standard modules attach");
         let rows = session.verdict_modules();
@@ -2623,19 +2643,20 @@ mod tests {
         // A live attach/detach is the same path `acos_services` uses, and an
         // `at-launch` module refuses instead of pretending to change.
         session
-            .attach_live(
-                "feedback.vibrator",
-                Profile::Stub,
-                &ModuleConfig::default(),
-            )
+            .attach_live("feedback.vibrator", Profile::Stub, &ModuleConfig::default())
             .expect("hot module attaches live");
         let error = session
             .attach_live("core", Profile::Real, &ModuleConfig::default())
             .expect_err("at-launch module refuses a live attach");
         assert!(error.to_string().contains("at-launch"));
-        session.detach_live("feedback.vibrator").expect("hot detach");
+        session
+            .detach_live("feedback.vibrator")
+            .expect("hot detach");
         assert!(session.detach_live("feedback.vibrator").is_ok());
-        assert!(session.take_session_handles().is_some(), "core published handles");
+        assert!(
+            session.take_session_handles().is_some(),
+            "core published handles"
+        );
     }
 
     #[test]

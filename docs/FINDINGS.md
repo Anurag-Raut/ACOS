@@ -368,3 +368,36 @@ divergence is only `O_DIRECT` and `O_NOFOLLOW`.
 work and close the 9 pending sandbox-safe natives (`inet_pton`, `getnameinfo`,
 `android_getaddrinfo`, `getsockoptByte`, `mkfifo`, `getpwnam`, the
 `android_fdsan_get_*` getters).
+
+### F-0015 — Two intentional ServiceManager deviations, and why they stay — 2026-11-16
+
+**Finding.** ACOS's `android.os.IServiceManager` (the host-side servicemanager)
+follows AOSP's `frameworks/native/cmds/servicemanager/ServiceManager.cpp` for
+`getService`/`checkService` (every registered name, always `Status::ok` with a
+possibly-null binder), for `unregisterForNotifications` (`EX_ILLEGAL_STATE` when
+nothing is pending) and for `isDeclared`. Two behaviours are **deliberately not
+AOSP's**, and the orchestrator decided to keep both:
+
+1. **`registerForNotifications` for an undeclarable name is refused with
+   `EX_ILLEGAL_ARGUMENT` naming the service.** AOSP accepts any name and simply
+   never fires the callback. ACOS has no VINTF manifest and no lazy service
+   start, so a name that is neither registered nor declared by a shipped module
+   can never appear: accepting it converts a clear error into an endless
+   `ServiceManager.waitForService` sleep on the caller's UI thread (observed:
+   `hw.bluetooth`'s `bluetooth_manager` before the module existed).
+2. **`isDeclared` answers from the loaded module manifests**, not from a VINTF
+   device manifest (which ACOS does not have). A module's `provided_names` is
+   what `waitForDeclaredService` waits on, so the answer is the session's own
+   declaration set rather than a device build artifact.
+
+**Evidence.** `crates/acos-services/src/host.rs` (`service_manager`:
+`registerForNotifications` / `isDeclared` arms, `declare_service_name`,
+`notify_registered`); tests
+`crates/acos-services/tests/service_manager_notifications.rs` (7 cases, incl. the
+refusal); ART evidence `results/handoff/MODTAIL2/README.md` §2 and
+`results/handoff/MODTAIL3/README.md`.
+
+**Design impact.** Both deviations are part of the module contract, not bugs:
+a module that wants `waitForService("name")` to work must list `name` in its
+manifest's provided names. A future VINTF/manifest source would replace
+deviation 2 without touching the binder surface.

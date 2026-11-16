@@ -1,0 +1,5 @@
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real, accessibility:real attached; off: feedback.vibrator
+  artifacts: results/handoff/MODA11Y2/artifacts
+  steps: 6

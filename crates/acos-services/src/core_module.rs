@@ -59,6 +59,11 @@ impl CoreModule {
                 crate::registry::NAMES
                     .iter()
                     .filter(|(name, _)| !crate::registry::AUX_BACKED_NAMES.contains(name))
+                    // ADR-0029: `accessibility` is owned by the `accessibility`
+                    // module, which configures the same shared state. `core`
+                    // still installs the disabled fallback service so a session
+                    // that does not attach the module keeps the boot behaviour
+                    // (see `FILLED_BY_MODULE`).
                     .filter(|(name, _)| !FILLED_BY_MODULE.contains(name))
                     .map(|(name, descriptor)| ServiceProvide {
                         name,
@@ -110,7 +115,10 @@ const CONTROLS: [ControlOp; 0] = [];
 ///   attach must reuse the same binder. The `sensors` module installs a feed into
 ///   that node and owns the name in the registry/capabilities, which is why it is
 ///   filtered out of this manifest (the registry refuses two owners).
-pub const FILLED_BY_MODULE: &[&str] = &["sensorservice"];
+/// * `accessibility` — `core` installs the disabled fallback service (a session
+///   that does not attach the module keeps the boot behaviour); the
+///   `accessibility` module configures the same shared state and owns the name.
+pub const FILLED_BY_MODULE: &[&str] = &["sensorservice", "accessibility"];
 
 impl Default for CoreModule {
     fn default() -> Self {

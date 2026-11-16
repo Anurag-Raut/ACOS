@@ -63,10 +63,7 @@ pub const NAMES: &[(&str, &str)] = &[
     ),
     ("audio", "android.media.IAudioService"),
     ("graphicsstats", "android.view.IGraphicsStats"),
-    (
-        "network_management",
-        "android.os.INetworkManagementService",
-    ),
+    ("network_management", "android.os.INetworkManagementService"),
     ("game", "android.app.IGameManagerService"),
     (
         "virtualdevice",
@@ -113,10 +110,7 @@ pub const NAMES: &[(&str, &str)] = &[
     ("permission", "android.permission.IPermissionManager"),
     ("appops", "com.android.internal.app.IAppOpsService"),
     ("connectivity", "android.net.IConnectivityManager"),
-    (
-        "androidfuture",
-        "com.android.internal.infra.IAndroidFuture",
-    ),
+    ("androidfuture", "com.android.internal.infra.IAndroidFuture"),
     // W-R T2: the compositor's client surface. `ComposerServiceAIDL` looks the
     // compositor up as `getService("SurfaceFlinger")`, so the name must resolve
     // to the `android.gui.ISurfaceComposer` node `compositor_client` installs.
@@ -180,7 +174,10 @@ pub fn descriptor_for(name: &str) -> Option<&'static str> {
 /// `ServiceManager` name for a descriptor.
 #[must_use]
 pub fn name_for(descriptor: &str) -> Option<&'static str> {
-    NAMES.iter().find(|(_, d)| *d == descriptor).map(|(n, _)| *n)
+    NAMES
+        .iter()
+        .find(|(_, d)| *d == descriptor)
+        .map(|(n, _)| *n)
 }
 
 /// Live host-side handles for one interactive session.
@@ -255,6 +252,10 @@ pub fn install_with_handles_and_insets(
     let window_id = host.register_aux("android.view.IWindowId");
     let session_state = Arc::clone(&wms_state);
     let input_host = crate::window_session::input_dispatch::InputHost::from_env();
+    // MODA11Y4: `performGlobalAction(GLOBAL_ACTION_BACK)` goes through the same
+    // InputChannel as a scenario `back`, so keep a handle before the session
+    // service takes the original.
+    let a11y_input = input_host.clone();
     let live = LiveHandles {
         input: input_host.clone(),
         compositor: Arc::clone(&compositor),
@@ -281,12 +282,32 @@ pub fn install_with_handles_and_insets(
     // installing the host touches no package data.
     let atms = Arc::new(Mutex::new(crate::atms::AtmsState::new()));
     let settings = Arc::new(Mutex::new(crate::provider::SettingsState::new()));
-    let display = Arc::new(Mutex::new(crate::display::DisplayState::new(
-        crate::display::DisplayInfo::hello_views_with(insets.unwrap_or_else(|| {
-            crate::wms::InsetsMode::from_env(crate::wms::DEFAULT_INSETS_MODE)
-        })),
+    let display =
+        Arc::new(Mutex::new(crate::display::DisplayState::new(
+            crate::display::DisplayInfo::hello_views_with(insets.unwrap_or_else(|| {
+                crate::wms::InsetsMode::from_env(crate::wms::DEFAULT_INSETS_MODE)
+            })),
+        )));
+    let a11y = Arc::new(Mutex::new(crate::misc::A11yState::with_settings(
+        Arc::clone(&settings),
     )));
-    let a11y = Arc::new(Mutex::new(crate::misc::A11yState::new()));
+    // MODA11Y2: the accessibility module reads the **installed** service list
+    // from the package manager (lazily, after the APK is installed) instead of
+    // trusting the launch config, and the dispatcher needs the state for the
+    // system -> app bind (`attachApplication` / `publishService`).
+    let pms_shared = Arc::new(Mutex::new(crate::pms::PmsState::hello_views()));
+    {
+        let mut a11y_state = a11y
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        a11y_state.pms = Some(Arc::clone(&pms_shared));
+        // MODA11Y3: `getWindows`/`getWindow` answer from the LAYER1 window
+        // stack, which is also what composition, the UI tree and input read.
+        a11y_state.windows = Some(Arc::clone(&wms_state));
+        // MODA11Y4: the same input channels the session's Back uses.
+        a11y_state.input = Some(a11y_input);
+    }
+    host.set_accessibility_state(Arc::clone(&a11y));
     let input = Arc::new(Mutex::new(crate::misc::InputState::new()));
     let textservices = Arc::new(Mutex::new(crate::misc::TextServicesState::new()));
     let autofill = Arc::new(Mutex::new(crate::misc::AutofillState::new()));
@@ -334,9 +355,12 @@ pub fn install_with_handles_and_insets(
             )) as Box<dyn ServiceObject>
         },
     );
-    host.register("package", "android.content.pm.IPackageManager", move |w| {
-        let pms = Arc::new(Mutex::new(crate::pms::PmsState::hello_views()));
-        Box::new(crate::pms::PmsService::new(pms, w)) as Box<dyn ServiceObject>
+    host.register("package", "android.content.pm.IPackageManager", {
+        let pms_state = Arc::clone(&pms_shared);
+        move |w| {
+            let pms = Arc::clone(&pms_state);
+            Box::new(crate::pms::PmsService::new(pms, w)) as Box<dyn ServiceObject>
+        }
     });
     host.register(
         "display",
@@ -373,14 +397,9 @@ pub fn install_with_handles_and_insets(
     host.register("audio", "android.media.IAudioService", move |_w| {
         Box::new(crate::misc::AudioService::new(Arc::clone(&audio))) as Box<dyn ServiceObject>
     });
-    host.register(
-        "graphicsstats",
-        "android.view.IGraphicsStats",
-        move |_w| {
-            Box::new(crate::misc::GraphicsStatsService::new(Arc::clone(&gfx)))
-                as Box<dyn ServiceObject>
-        },
-    );
+    host.register("graphicsstats", "android.view.IGraphicsStats", move |_w| {
+        Box::new(crate::misc::GraphicsStatsService::new(Arc::clone(&gfx))) as Box<dyn ServiceObject>
+    });
     host.register(
         "network_management",
         "android.os.INetworkManagementService",
@@ -413,8 +432,7 @@ pub fn install_with_handles_and_insets(
         "voiceinteraction",
         "com.android.internal.app.IVoiceInteractionManagerService",
         move |_w| {
-            Box::new(crate::misc::VoiceService::new(Arc::clone(&voice)))
-                as Box<dyn ServiceObject>
+            Box::new(crate::misc::VoiceService::new(Arc::clone(&voice))) as Box<dyn ServiceObject>
         },
     );
     let future_service = Arc::clone(&future);
@@ -459,15 +477,11 @@ pub fn install_with_handles_and_insets(
         Box::new(crate::extras::RestrictionsService::new()),
     );
     let contentservice = Arc::clone(&settings);
-    host.register(
-        "content",
-        "android.content.IContentService",
-        move |_w| {
-            Box::new(crate::provider::ContentServiceService::new(Arc::clone(
-                &contentservice,
-            ))) as Box<dyn ServiceObject>
-        },
-    );
+    host.register("content", "android.content.IContentService", move |_w| {
+        Box::new(crate::provider::ContentServiceService::new(Arc::clone(
+            &contentservice,
+        ))) as Box<dyn ServiceObject>
+    });
     host.register("input", "android.hardware.input.IInputManager", move |_w| {
         Box::new(crate::misc::InputService::new(Arc::clone(&input))) as Box<dyn ServiceObject>
     });
@@ -509,8 +523,9 @@ pub fn install_with_handles_and_insets(
 
     // T-39: clipboard + the declared service set.
     host.register("clipboard", "android.content.IClipboard", move |_w| {
-        Box::new(crate::clipboard::ClipboardService::new(Arc::clone(&clipboard)))
-            as Box<dyn ServiceObject>
+        Box::new(crate::clipboard::ClipboardService::new(Arc::clone(
+            &clipboard,
+        ))) as Box<dyn ServiceObject>
     });
     host.register(
         "appops",
@@ -530,12 +545,10 @@ pub fn install_with_handles_and_insets(
         },
     );
     host.register("user", "android.os.IUserManager", move |_w| {
-        Box::new(crate::declared::UserService::new(Arc::clone(&users)))
-            as Box<dyn ServiceObject>
+        Box::new(crate::declared::UserService::new(Arc::clone(&users))) as Box<dyn ServiceObject>
     });
     host.register("uimode", "android.app.IUiModeManager", move |_w| {
-        Box::new(crate::declared::UiModeService::new(Arc::clone(&uimode)))
-            as Box<dyn ServiceObject>
+        Box::new(crate::declared::UiModeService::new(Arc::clone(&uimode))) as Box<dyn ServiceObject>
     });
     // The runtime plays the system-UI role for toasts, so it needs the state.
     host.set_notification_state(Arc::clone(&notification));
@@ -566,11 +579,9 @@ pub fn install_with_handles_and_insets(
             ))) as Box<dyn ServiceObject>
         },
     );
-    host.register(
-        "mount",
-        "android.os.storage.IStorageManager",
-        move |_w| Box::new(crate::extras::StorageService::new()) as Box<dyn ServiceObject>,
-    );
+    host.register("mount", "android.os.storage.IStorageManager", move |_w| {
+        Box::new(crate::extras::StorageService::new()) as Box<dyn ServiceObject>
+    });
     host.register(
         "shortcut",
         "android.content.pm.IShortcutService",
@@ -579,27 +590,19 @@ pub fn install_with_handles_and_insets(
                 as Box<dyn ServiceObject>
         },
     );
-    host.register(
-        "jobscheduler",
-        "android.app.job.IJobScheduler",
-        move |_w| {
-            Box::new(crate::extras::JobSchedulerService::new(Arc::clone(&jobs)))
-                as Box<dyn ServiceObject>
-        },
-    );
+    host.register("jobscheduler", "android.app.job.IJobScheduler", move |_w| {
+        Box::new(crate::extras::JobSchedulerService::new(Arc::clone(&jobs)))
+            as Box<dyn ServiceObject>
+    });
     host.register("power", "android.os.IPowerManager", move |_w| {
         Box::new(crate::extras::PowerService::new(Arc::clone(&power))) as Box<dyn ServiceObject>
     });
-    host.register(
-        "account",
-        "android.accounts.IAccountManager",
-        move |_w| Box::new(crate::extras::AccountService::new()) as Box<dyn ServiceObject>,
-    );
-    host.register(
-        "thermalservice",
-        "android.os.IThermalService",
-        move |_w| Box::new(crate::extras::ThermalService::new()) as Box<dyn ServiceObject>,
-    );
+    host.register("account", "android.accounts.IAccountManager", move |_w| {
+        Box::new(crate::extras::AccountService::new()) as Box<dyn ServiceObject>
+    });
+    host.register("thermalservice", "android.os.IThermalService", move |_w| {
+        Box::new(crate::extras::ThermalService::new()) as Box<dyn ServiceObject>
+    });
     host.register("alarm", "android.app.IAlarmManager", move |_w| {
         Box::new(crate::extras::AlarmService::new(Arc::clone(&alarm))) as Box<dyn ServiceObject>
     });
@@ -626,15 +629,12 @@ pub fn install_with_handles_and_insets(
     // handle the dispatcher routes. Record the binder for the runtime AMS
     // bridge, which materialises the `ContentProviderHolder` reply.
     let settings_provider = Arc::clone(&settings);
-    let settings_binder = host.register(
-        "settings",
-        "android.content.IContentProvider",
-        move |_w| {
+    let settings_binder =
+        host.register("settings", "android.content.IContentProvider", move |_w| {
             Box::new(crate::provider::ProviderService::new(Arc::clone(
                 &settings_provider,
             ))) as Box<dyn ServiceObject>
-        },
-    );
+        });
     crate::provider::set_settings_provider_binder(settings_binder.0);
     // The `ContentProviderConnection` token a `getContentProvider` holder
     // carries; the framework writes it back to `removeContentProvider` /
@@ -694,7 +694,10 @@ mod t21_tests {
             descriptor_for("package"),
             Some("android.content.pm.IPackageManager")
         );
-        assert_eq!(descriptor_for("activity"), Some("android.app.IActivityManager"));
+        assert_eq!(
+            descriptor_for("activity"),
+            Some("android.app.IActivityManager")
+        );
         assert_eq!(name_for("android.app.IActivityManager"), Some("activity"));
         assert_eq!(descriptor_for("definitely.not.a.service"), None);
         assert_eq!(name_for("android.os.IBinder"), None);

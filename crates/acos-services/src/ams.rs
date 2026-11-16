@@ -90,6 +90,10 @@ pub enum Extra {
     String(String),
     /// `putExtra(int)`.
     Int(i32),
+    /// `putExtra(String, short)`: a `VAL_SHORT` bundle value, which
+    /// `Bundle.getShort` casts to `java.lang.Short` (`BluetoothDevice`'s
+    /// `EXTRA_RSSI` is read with `getShortExtra`).
+    Short(i16),
     /// `putExtra(boolean)`.
     Bool(bool),
     /// `putExtra(String, byte[])` (a `VAL_BYTEARRAY` bundle value).
@@ -230,6 +234,7 @@ fn reduce_extras(bundle: &Bundle) -> BTreeMap<String, Extra> {
         let extra = match value {
             Value::Str(Some(s)) | Value::Str8(Some(s)) => Extra::String(s.clone()),
             Value::Int(i) => Extra::Int(*i),
+            Value::Short(s) => Extra::Short(*s),
             Value::Bool(b) => Extra::Bool(*b),
             Value::ByteArray(Some(bytes)) => Extra::Bytes(bytes.clone()),
             Value::Parcelable(parcelable) => Extra::Parcelable(parcelable.clone()),
@@ -259,6 +264,7 @@ fn encode_extras(extras: &BTreeMap<String, Extra>) -> Bundle {
         match value {
             Extra::String(s) => bundle.put(key, Value::Str(Some(s.clone()))),
             Extra::Int(i) => bundle.put(key, Value::Int(*i)),
+            Extra::Short(s) => bundle.put(key, Value::Short(*s)),
             Extra::Bool(b) => bundle.put(key, Value::Bool(*b)),
             Extra::Bytes(bytes) => bundle.put(key, Value::ByteArray(Some(bytes.clone()))),
             Extra::Parcelable(parcelable) => {
@@ -1439,6 +1445,14 @@ pub fn dispatch(
             let flags = value(5).and_then(Value::as_long).unwrap_or(0);
             let binder = state.bind_service(connection, &intent, flags)?;
             vec![Value::Int(i32::try_from(binder & 0x7fff_ffff).unwrap_or(0))]
+        }
+        "serviceDoneExecuting" => {
+            // `ActivityThread` reports the end of a service lifecycle call
+            // (`SERVICE_DONE_EXECUTING_*`) here; AOSP's AMS has nothing left to
+            // do for a service it started, so the call is a no-op with a void
+            // reply. A system-initiated accessibility bind runs it right after
+            // `Service.onCreate`.
+            Vec::new()
         }
         "unbindService" => {
             let connection = value(0)

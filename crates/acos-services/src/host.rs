@@ -12,6 +12,24 @@
 //! constructed service state machine, and writes the exception header plus the
 //! decoded reply layout. Unknown pairs are a structured
 //! `UNSUPPORTED_ANDROID_API`, never a default success.
+//!
+//! ## Intentional deviations from AOSP (keep both; `docs/FINDINGS.md` F-0015)
+//!
+//! The `android.os.IServiceManager` surface follows AOSP's
+//! `frameworks/native/cmds/servicemanager/ServiceManager.cpp` (registered names
+//! answer `Status::ok` with a possibly-null binder; `unregisterForNotifications`
+//! answers `EX_ILLEGAL_STATE` when nothing is pending) with two deliberate
+//! differences:
+//!
+//! * `registerForNotifications` for a name that is **neither registered nor
+//!   declared by a shipped module** is refused with `EX_ILLEGAL_ARGUMENT`
+//!   naming it. AOSP accepts it and never fires the callback; ACOS has no VINTF
+//!   manifest and no lazy service start, so such a name can never appear and
+//!   waiting for it would hang the caller forever.
+//! * `isDeclared` answers from the **loaded module manifests**
+//!   (`ModuleManifest::provided_names`), not a VINTF device manifest, which ACOS
+//!   does not have. This is what gives `waitForDeclaredService`/`waitForService`
+//!   something real to wait on.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -276,6 +294,21 @@ pub struct ServiceHost {
     /// a text toast from `NotificationManagerService` in the system process;
     /// ACOS has one process, so the runtime renders the recorded request.
     notification: Option<std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>>,
+    /// The accessibility module's state, when a session installed it. The
+    /// dispatcher needs it for the two system -> app steps that are not an
+    /// `IAccessibilityManager` call: capturing the app thread from
+    /// `attachApplication` and answering `IActivityManager.publishService`
+    /// (MODA11Y2).
+    /// Held **weakly**: the accessibility state's lifetime must end with the
+    /// registration that owns it (ADR-0029 detach), and a strong handle here
+    /// would keep the settings provider's generation memfd alive after detach
+    /// (the conformance kit's `detach-restores` baseline).
+    a11y: Option<std::sync::Weak<std::sync::Mutex<crate::misc::A11yState>>>,
+    /// The `IAccessibilityServiceConnection` node handed to a bound service.
+    a11y_connection: Option<BinderId>,
+    /// The display's accessibility-overlay window token (`init`'s third
+    /// argument; `getOverlayWindowToken` answers it).
+    a11y_window_token: Option<BinderId>,
 }
 
 impl core::fmt::Debug for ServiceHost {
@@ -317,6 +350,9 @@ impl ServiceHost {
             seq: AtomicU64::new(1),
             constructions: 0,
             notification: None,
+            a11y: None,
+            a11y_connection: None,
+            a11y_window_token: None,
         }
     }
 
@@ -634,6 +670,56 @@ impl ServiceHost {
         self.notification = Some(state);
     }
 
+    /// Install the accessibility state the dispatcher hooks into (called by
+    /// [`crate::registry::install`]).
+    pub fn set_accessibility_state(
+        &mut self,
+        state: std::sync::Arc<std::sync::Mutex<crate::misc::A11yState>>,
+    ) {
+        self.a11y = Some(std::sync::Arc::downgrade(&state));
+    }
+
+    /// The accessibility state, when the session installed it.
+    #[must_use]
+    pub fn accessibility_state(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<crate::misc::A11yState>>> {
+        self.a11y.as_ref().and_then(std::sync::Weak::upgrade)
+    }
+
+    /// The `IAccessibilityServiceConnection` node a bound service receives.
+    ///
+    /// Registered once, lazily: the node is a dynamic (`raw_transact`-style)
+    /// object, and `IAccessibilityServiceConnection` has no `acos-aidl` table
+    /// (the service-side accessibility AIDL is not in the decoded set), so it
+    /// answers through [`ServiceObject::call`] with the method names it knows
+    /// and a structured refusal otherwise.
+    pub fn accessibility_connection_node(&mut self) -> BinderId {
+        if let Some(binder) = self.a11y_connection {
+            return binder;
+        }
+        let Some(state) = self.a11y.as_ref().and_then(std::sync::Weak::upgrade) else {
+            return BinderId(0);
+        };
+        let binder = self.register_dynamic(
+            crate::a11y_bind::SERVICE_CONNECTION,
+            Box::new(crate::a11y_bind::A11yConnectionNode::new(state)),
+        );
+        self.a11y_connection = Some(binder);
+        binder
+    }
+
+    /// The display's accessibility-overlay window token (`init`'s third
+    /// argument). One per session, like one display.
+    pub fn accessibility_window_token(&mut self) -> BinderId {
+        if let Some(binder) = self.a11y_window_token {
+            return binder;
+        }
+        let binder = self.register_aux("dev.acos.a11y.OverlayWindowToken");
+        self.a11y_window_token = Some(binder);
+        binder
+    }
+
     /// The `INotificationManager` state, when the standard set is installed.
     #[must_use]
     pub fn notification_state(
@@ -683,7 +769,8 @@ impl ServiceHost {
     /// running. ACOS's equivalent declaration is a module manifest's
     /// `services` list, registered here by [`Self::declare_service_name`], so
     /// `ServiceManager.isDeclared`/`waitForDeclaredService` agree with the
-    /// modules the build can attach.
+    /// modules the build can attach. **Intentional ACOS deviation** (no VINTF
+    /// manifest exists); see the module docs and `docs/FINDINGS.md` F-0015.
     #[must_use]
     pub fn is_declared(&self, name: &str) -> bool {
         self.names.contains_key(name) || self.declared.iter().any(|declared| *declared == name)
@@ -1172,6 +1259,41 @@ impl ServiceHost {
         // Advance past the interface token now that dispatch is chosen.
         data.enforce_interface(&descriptor)?;
 
+        // MODA11Y2: `publishService` is the reply to a **system-initiated**
+        // bind. The answer is the accessibility module's (it owns the bind
+        // token and the service's connection), not the activity service's, so
+        // it is answered here before the decoded dispatch. Every other
+        // `IActivityManager` call keeps going to `AtmsService`.
+        if descriptor == "android.app.IActivityManager"
+            && method.name == "publishService"
+            && self.a11y.is_some()
+        {
+            let args = codec::read_args(data, &method.args, &descriptor, &method.name)?;
+            let connection = self.accessibility_connection_node();
+            let window_token = self.accessibility_window_token();
+            let a11y = self.a11y.as_ref().and_then(std::sync::Weak::upgrade).expect("checked above");
+            let mut state = a11y
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let delivery =
+                crate::a11y_bind::on_publish_service(&mut state, connection, window_token, &args)?;
+            drop(state);
+            if let Some(delivery) = delivery {
+                self.deliveries.push(delivery);
+            }
+            if !oneway {
+                reply.reset();
+                write_no_exception(reply);
+                codec::write_reply(reply, &method.reply, &[], &descriptor, &method.name)?;
+            }
+            return Ok(CallInfo {
+                interface: descriptor,
+                method: method.name.clone(),
+                args: "<publishService>".into(),
+                reply: "<accessibility bind>".into(),
+            });
+        }
+
         // `IContentProvider.query` is the one decoded reply the generic codec
         // cannot express: `ContentProviderNative` writes a hand-rolled
         // `BulkCursorDescriptor` + `CursorWindow`, and the proxy writes the
@@ -1226,6 +1348,31 @@ impl ServiceHost {
         let mut call = object.call(&descriptor, method, &args)?;
         self.deliveries.append(&mut call.deliveries);
 
+        // MODA11Y2: two system services are wired here rather than inside a
+        // `ServiceObject`, because the state they need is cross-service:
+        //
+        // * `attachApplication` names the app's `IApplicationThread`, which is
+        //   the target of every `system -> app` delivery (the accessibility
+        //   bind has no target before it);
+        // * `publishService` is the reply to a system-initiated bind: the app
+        //   reports the binder its `Service.onBind` returned arm, and the
+        //   accessibility module answers with `IAccessibilityServiceClient.init`.
+        if let Some(a11y) = self.a11y.as_ref().and_then(std::sync::Weak::upgrade) {
+            if descriptor == "android.app.IActivityManager" {
+                match method.name.as_str() {
+                    "attachApplication" => {
+                        if let Some(thread) = args.first().and_then(crate::value::Value::as_binder)
+                        {
+                            a11y.lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                                .set_app_thread(thread.0);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         if oneway {
             return Ok(CallInfo {
                 interface: descriptor,
@@ -1247,8 +1394,7 @@ impl ServiceHost {
         })
     }
 
-    fn ensure_for_binder(
-        &mut self,
+    fn ensure_for_binder(        &mut self,
         binder: BinderId,
         _descriptor: &str,
     ) -> Result<&mut dyn ServiceObject> {
@@ -1299,8 +1445,9 @@ impl ServiceHost {
             // the callback and calls it at once when the service already exists
             // (`servicemanager/ServiceManager.cpp:527-570`, including the
             // `mNameToService.find(name) != end` immediate `onRegistration`).
-            // ACOS adds one deliberate difference: a name that is neither
-            // registered nor declared by a shipped module can never appear here
+            // **Intentional ACOS deviation** (keep it; `docs/FINDINGS.md`
+            // F-0015): a name that is neither registered nor declared by a
+            // shipped module can never appear here
             // (there is no VINTF manifest and no lazy service start), so the
             // registration is refused with `EX_ILLEGAL_ARGUMENT` and the reason.
             // AOSP would accept it and never fire, which is exactly the endless
