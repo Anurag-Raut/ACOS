@@ -34,6 +34,7 @@
 //! (`executor::content_settle_geometry_failure`) - the same fail-closed shape as
 //! the pixel rule.
 
+use acos_protocol::scenario::StepSettle;
 use acos_protocol::ui::{UiNode, UiTree};
 
 /// The documented content-stable window: a tree signature must be unchanged
@@ -52,6 +53,158 @@ pub const MIN_CONTENT_WINDOW_MS: u64 = DEFAULT_CONTENT_WINDOW_MS;
 /// The configured window, never below the floor.
 pub fn content_window_ms(requested: Option<u64>) -> u64 {
     requested.unwrap_or(DEFAULT_CONTENT_WINDOW_MS).max(MIN_CONTENT_WINDOW_MS)
+}
+
+/// REL3A: the settle rule an **observation** (a `wait_for`, an assertion, a
+/// `capture`) asks a backend to bind its tree/frame with.
+///
+/// It is the observation-side counterpart of the input settle modes, and it is
+/// deliberately narrower than [`StepSettle`]: `fast` is navigation-only and can
+/// never back an assertion or a wait, so it is not representable here. The
+/// scenario validator rejects `settle: fast` on those steps; this type makes the
+/// executor's own request unambiguous.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObservationSettle {
+    /// The event/pixel settle rule (the default everywhere).
+    Strict,
+    /// The content-stable rule (ADR-0026 decision 3): usable by text/tree
+    /// observations, never by a pixel or geometry claim.
+    Content,
+}
+
+impl ObservationSettle {
+    /// The stable wire string (`strict`/`content`).
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            ObservationSettle::Strict => "strict",
+            ObservationSettle::Content => "content",
+        }
+    }
+
+    /// The rule a scenario step asked for. `None`/`fast` mean "not requested":
+    /// the executor decides the default per step kind (REL3A §1) and never asks
+    /// a backend for `fast` on an observation.
+    pub fn from_step(settle: Option<StepSettle>) -> Option<Self> {
+        match settle {
+            Some(StepSettle::Strict) => Some(ObservationSettle::Strict),
+            Some(StepSettle::Content) => Some(ObservationSettle::Content),
+            Some(StepSettle::Fast) | None => None,
+        }
+    }
+}
+
+impl std::fmt::Display for ObservationSettle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// The `reason` a settled record carries when the backend named none.
+pub const SETTLE_REASON_SETTLED: &str = "settled";
+
+/// The `reason` of a record whose settle never completed.
+pub const SETTLE_REASON_UNSETTLED: &str = "unsettled";
+
+/// The `reason` of an observation that fell back from strict to content
+/// (REL3A §1: the default for text/tree steps).
+pub const SETTLE_REASON_STRICT_FELL_BACK: &str = "strict-did-not-settle";
+
+/// The `reason` of an auto-fallback observation whose backend reported no settle
+/// record at all. REL3A §2: the executor asked for content, but nothing confirmed
+/// it; the record is labelled `mode: strict` with `fallback_unconfirmed: true`
+/// rather than claiming a content-stable observation the backend never measured.
+pub const SETTLE_REASON_FALLBACK_UNCONFIRMED: &str = "fallback-unconfirmed";
+
+/// REL3A §2: the uniform settle record every step and reply publishes.
+///
+/// `{mode, settled, waited_ms, reason}` are always present; the mode-specific
+/// evidence of the backend record (`bound`, `pixels_changed`, `window_ms`,
+/// `traversals`, `signature`, `frame_seq`, ...) is carried through unchanged.
+/// `waited_ms` is the settle's own wall time when the backend separated it
+/// (`waited_ms`/`elapsed_ms`), otherwise the caller's `fallback_ms` (the step's
+/// wall time) so the field is never a guess presented as a measurement.
+#[must_use]
+pub fn settle_record(
+    record: &serde_json::Value,
+    fallback_ms: u64,
+) -> serde_json::Value {
+    let mut out = record.clone();
+    let Some(object) = out.as_object_mut() else {
+        return serde_json::json!({
+            "mode": "unknown",
+            "settled": false,
+            "waited_ms": fallback_ms,
+            "reason": "unreadable-settle-record",
+            "raw": record.clone(),
+        });
+    };
+    let settled = object
+        .get("settled")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    let waited = object
+        .get("waited_ms")
+        .or_else(|| object.get("elapsed_ms"))
+        .and_then(serde_json::Value::as_u64);
+    let reason = object
+        .get("reason")
+        .and_then(serde_json::Value::as_str)
+        .map(|reason| reason.to_string())
+        .or_else(|| {
+            object
+                .get("bound")
+                .and_then(serde_json::Value::as_str)
+                .filter(|bound| *bound != "timeout")
+                .map(|bound| bound.to_string())
+        })
+        .unwrap_or_else(|| {
+            if settled {
+                SETTLE_REASON_SETTLED.to_string()
+            } else {
+                SETTLE_REASON_UNSETTLED.to_string()
+            }
+        });
+    // A timeout with no named reason is still a timeout, and every caller must
+    // be able to branch on `reason`.
+    let reason = if !settled && reason == SETTLE_REASON_SETTLED {
+        SETTLE_REASON_UNSETTLED.to_string()
+    } else {
+        reason
+    };
+    match waited {
+        Some(waited_ms) => {
+            object.insert("waited_ms".into(), serde_json::json!(waited_ms));
+        }
+        None => {
+            object.insert("waited_ms".into(), serde_json::json!(fallback_ms));
+            object.insert("waited_ms_source".into(), serde_json::json!("step"));
+        }
+    }
+    if !object.get("mode").is_some_and(serde_json::Value::is_string) {
+        object.insert("mode".into(), serde_json::json!("unknown"));
+    }
+    object.insert("settled".into(), serde_json::json!(settled));
+    object.insert("reason".into(), serde_json::json!(reason));
+    out
+}
+
+/// REL3A §2: the settle record an observation the executor made itself publishes
+/// when the backend reported no record of its own. A backend that reports its
+/// own rule always wins ([`settle_record`]) because it knows what it measured.
+#[must_use]
+pub fn observation_settle_record(
+    mode: ObservationSettle,
+    settled: bool,
+    waited_ms: u64,
+    reason: &str,
+) -> serde_json::Value {
+    serde_json::json!({
+        "mode": mode.as_str(),
+        "settled": settled,
+        "waited_ms": waited_ms,
+        "reason": reason,
+        "source": "executor",
+    })
 }
 
 /// Every node field [`content_signature`] hashes: exactly the fields a

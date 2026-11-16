@@ -4,6 +4,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::scenario::StepSettle;
 use crate::ui::{Bounds, Selector, TextMatch};
 
 /// A rectangle excluded from screenshot comparison (clock, status bar, ...).
@@ -84,9 +85,16 @@ pub struct TextAssertion {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bounds: Option<Bounds>,
     /// Event-driven timeout; the runtime waits for a matching frame/tree, never
-    /// for a fixed sleep.
+    /// for a fixed sleep. REL3A: honoured by `acos verify` (it polls fresh
+    /// settled observations until the deadline).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<u64>,
+    /// REL3A: settle rule for the observation that backs this assertion.
+    /// Absent = auto (strict, then content when strict never settles);
+    /// `content` = content-stable only; `strict` = event settle only. `fast` is
+    /// rejected at validation time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle: Option<StepSettle>,
 }
 
 /// Assert a node is visible.
@@ -100,6 +108,9 @@ pub struct VisibilityAssertion {
     /// Event-driven timeout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<u64>,
+    /// REL3A: settle rule for the backing observation (see [`TextAssertion`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle: Option<StepSettle>,
 }
 
 /// Assert node state flags.
@@ -131,6 +142,9 @@ pub struct StateAssertion {
     /// Event-driven timeout.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<u64>,
+    /// REL3A: settle rule for the backing observation (see [`TextAssertion`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle: Option<StepSettle>,
 }
 
 /// Assert a logcat-style line sequence.

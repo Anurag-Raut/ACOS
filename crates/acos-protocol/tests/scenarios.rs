@@ -322,6 +322,8 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 selector: Selector::default(),
                 timeout_ms: 5000,
                 require_visible: true,
+                settle: None,
+                settle_timeout_ms: None,
             }),
             ..Step::default()
         }),
@@ -333,6 +335,8 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 selector: selector(),
                 timeout_ms: 0,
                 require_visible: true,
+                settle: None,
+                settle_timeout_ms: None,
             }),
             ..Step::default()
         }),
@@ -435,6 +439,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 text: TextMatch::exact("x"),
                 bounds: None,
                 timeout_ms: None,
+                settle: None,
             }),
             ..Step::default()
         }),
@@ -447,6 +452,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 text: TextMatch::default(),
                 bounds: None,
                 timeout_ms: None,
+                settle: None,
             }),
             ..Step::default()
         }),
@@ -459,6 +465,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 text: TextMatch::regex("("),
                 bounds: None,
                 timeout_ms: None,
+                settle: None,
             }),
             ..Step::default()
         }),
@@ -471,6 +478,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 text: TextMatch::exact("x"),
                 bounds: Some(Bounds::new(10, 0, 5, 1)),
                 timeout_ms: None,
+                settle: None,
             }),
             ..Step::default()
         }),
@@ -483,6 +491,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 text: TextMatch::exact("x"),
                 bounds: None,
                 timeout_ms: Some(0),
+                settle: None,
             }),
             ..Step::default()
         }),
@@ -494,6 +503,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 selector: Selector::default(),
                 bounds: None,
                 timeout_ms: None,
+                settle: None,
             }),
             ..Step::default()
         }),
@@ -505,6 +515,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 selector: selector(),
                 bounds: Some(Bounds::new(10, 0, 5, 1)),
                 timeout_ms: None,
+                settle: None,
             }),
             ..Step::default()
         }),
@@ -522,6 +533,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 checked: None,
                 selected: None,
                 timeout_ms: None,
+                settle: None,
             }),
             ..Step::default()
         }),
@@ -781,6 +793,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 selector: Selector::default(),
                 bounds: None,
                 timeout_ms: None,
+                settle: None,
             }),
             ..Step::default()
         }),

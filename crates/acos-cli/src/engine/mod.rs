@@ -415,6 +415,15 @@ pub trait SessionBackend {
     /// [`Self::set_input_settle_mode`].
     fn set_input_content_settle(&mut self, _content: bool) {}
 
+    /// REL3A: the settle rule the next **observation** binds its tree/frame with
+    /// (`strict` default, `content` for a screen that animates forever in
+    /// pixels). Distinct from the input settle mode: the verifier asks for it on
+    /// every `wait_for`/`assert_*` it makes, and a `settle: content` tap must not
+    /// leak into the next observation (or the reverse). A session engine without
+    /// the rule keeps the default no-op and reports no content record, so a step
+    /// that asked for content fails closed.
+    fn set_observation_settle(&mut self, _mode: acos_verify::settle::ObservationSettle) {}
+
     /// SE2b: the settle rule the next input action will apply (`strict`,
     /// `fast` or `content`). Target resolution reads it so a content action
     /// resolves against the content-settled tree instead of a strict wait.
@@ -1043,6 +1052,12 @@ impl Backend for EngineBackend {
         }
     }
 
+    fn set_observation_settle(&mut self, mode: acos_verify::settle::ObservationSettle) {
+        if let EngineBackend::Session { session, .. } = self {
+            session.set_observation_settle(mode);
+        }
+    }
+
     fn refresh(&mut self) -> Result<SessionObservation, BackendError> {
         match self {
             EngineBackend::Native(backend) => backend.refresh(),
@@ -1452,8 +1467,12 @@ fn settle_timeout_error(
         ),
         hint: Some(
             "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a \
-             TIMEOUT failure; use wait_for for a later event, or `animations:off` for a \
-             functional check. The latest tree/frame is kept in the step evidence."
+             TIMEOUT failure and never a pass. For a screen that animates forever in pixels \
+             (React Native `Animated`, a custom `ValueAnimator`), `animations:off` does not \
+             help: use `settle: content` on the step (content-stable: the UI tree's text, \
+             nodes and state stop changing even while the pixels keep moving). Tree/text \
+             assertions and `wait_for` accept it too, and `wait_for`/`assert_*` fall back to it \
+             by default. The latest tree/frame is kept in the step evidence."
                 .to_string(),
         ),
         details: Some(serde_json::json!({
@@ -2160,6 +2179,8 @@ mod engine_tests {
             required_fidelity: None,
             engine: acos_protocol::VerifyEngine::Art,
             flags: Vec::new(),
+            animations: None,
+            native: false,
         }
     }
 

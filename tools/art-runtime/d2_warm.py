@@ -140,6 +140,10 @@ def _record_daemon(pid):
     pids recorded here, after re-verifying `ACOS_BENCH_RUN_ID` in
     `/proc/<pid>/environ` and the start time (a recycled pid fails). Without the
     file (a bare `d2_warm` run) recording is a no-op, not an error.
+
+    REL3A found this call written but the helper undefined: `NameError` aborted
+    the whole latency phase at the first daemon spawn. The implementation is
+    SERVELEAK2/F2's (same contract, field 22 read after the last `)`).
     """
     path = os.environ.get("ACOS_BENCH_PIDFILE")
     if not path:
@@ -166,6 +170,10 @@ def _environ_has(pid, needle):
     command-line or scratch-path match (two runs share both). A caller that
     cannot read the environment (another user's process, a race on exit) is not
     ours.
+
+    REL3A found this call written but the helper undefined (`NameError` aborted
+    the latency phase whenever a survivor existed); SERVELEAK2/F2/F1 is the
+    implementation, contract unchanged.
     """
     try:
         env = Path("/proc/%d/environ" % int(pid)).read_bytes()

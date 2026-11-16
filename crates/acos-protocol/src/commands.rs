@@ -1274,6 +1274,22 @@ pub struct VerifyRequest {
     /// malformed flag is `INVALID_ARGUMENT` (`details.index` names it).
     #[serde(default)]
     pub flags: Vec<String>,
+    /// REL3A: framework animation scales for the ART session (`on`/`off`).
+    ///
+    /// The same option `acos verify --animations` has. `off` sets Android's
+    /// three animation scales to 0 for functional checks; it is never for
+    /// animation/transition testing, and it cannot make an app that animates in
+    /// its own code (React Native `Animated`, a custom `ValueAnimator`) stop -
+    /// use a `settle: content` step for that. Overrides a scenario's top-level
+    /// `animations`. Launch-time only; the Rust VM has no framework animators and
+    /// refuses `off`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub animations: Option<String>,
+    /// REL3A: enable the APK's `lib/<abi>/` natives under confinement (the same
+    /// option `acos verify --native` has). The confinement is entered before the
+    /// session worker (and therefore before guest code) starts.
+    #[serde(default)]
+    pub native: bool,
 }
 
 /// `verify` result.

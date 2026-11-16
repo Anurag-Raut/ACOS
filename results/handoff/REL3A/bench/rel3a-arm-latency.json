@@ -1,0 +1,58 @@
+{
+  "acos": "/home/Qui/.t3/worktrees/acos/t3-99d9d785-a6c8ebb98266ad76/.cache/rel3a-target/release/acos",
+  "binary_sha256": "2a80f9ddf260d2180029a11476c1f82104059732295a4b4ee83f60da9795ce8e",
+  "bundle_wall_s": 4.17,
+  "checks": {
+    "failed_by_code": {},
+    "failed_steps": 0
+  },
+  "env": {
+    "ACOS_STRICT_SETTLE": "default",
+    "animations": "on"
+  },
+  "errors": [
+    "RuntimeError: two consecutive settled captures differ: [None, None]"
+  ],
+  "failures": {
+    "failed_by_code": {},
+    "failed_steps": 0,
+    "rows": []
+  },
+  "host_after": {
+    "loadavg1": 6.11,
+    "loadavg15": 8.79,
+    "loadavg5": 5.86,
+    "mem_available_gib": 49.52,
+    "mem_available_mib": 50703.7,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [],
+    "runnable": "1/1847",
+    "used_mib": 11205.0,
+    "used_pct": 18.1,
+    "utc": "2026-11-16T03:28:01+00:00"
+  },
+  "host_before": {
+    "loadavg1": 6.11,
+    "loadavg15": 8.79,
+    "loadavg5": 5.86,
+    "mem_available_gib": 49.52,
+    "mem_available_mib": 50703.7,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [],
+    "runnable": "1/1847",
+    "used_mib": 11205.0,
+    "used_pct": 18.1,
+    "utc": "2026-11-16T03:28:01+00:00"
+  },
+  "ok": false,
+  "phase": "latency",
+  "samples": {},
+  "schema": "acos-bench-phase/2",
+  "survivors": [],
+  "teardowns": [],
+  "utc": "2026-11-16T03:28:01+00:00"
+}

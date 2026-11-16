@@ -215,8 +215,33 @@ fn tap_on_a_label_is_reported_not_handled_and_names_the_switch() {
     assert_eq!(launch["result"]["engine"], json!("art"));
 
     // ---- the feedback case: a tap on the non-clickable label ----------------
+    // REL3E: the app window itself says `handled=false` and the hit-test names
+    // the clickable switch instead of the label. REL3A: the tap drew nothing, so
+    // the strict settle times out - and a settle that timed out is never a plain
+    // pass (F-06). The reply is therefore a structured non-pass (`status:
+    // timeout`, `ok: false`, `error.code: TIMEOUT`) whose delivered facts are
+    // still carried in `result` and in `error.details.delivery`, so nothing the
+    // app told us is lost and the caller never sees a green light on a frame
+    // nothing can be asserted about.
     let label = conn.call("acos_tap", json!({"base": b, "id": "title"}));
-    assert_eq!(label["ok"], json!(true), "{label:#?}");
+    assert_eq!(label["ok"], json!(false), "{label:#?}");
+    assert_eq!(label["status"], json!("timeout"), "{label:#?}");
+    assert_eq!(label["error"]["code"], json!("TIMEOUT"), "{label:#?}");
+    assert_eq!(
+        label["error"]["details"]["reason"],
+        json!("settle_timeout"),
+        "a timed-out settle says so in the error: {label:#?}"
+    );
+    assert_eq!(
+        label["error"]["details"]["settle"]["settled"],
+        json!(false),
+        "the settle that timed out is reported: {label:#?}"
+    );
+    assert_eq!(
+        label["error"]["details"]["delivery"]["handled"],
+        json!(false),
+        "the delivered facts stay in the error's delivery block: {label:#?}"
+    );
     let result = &label["result"];
     assert_eq!(
         result["handled"],

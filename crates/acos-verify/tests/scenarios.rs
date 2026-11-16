@@ -292,6 +292,8 @@ fn verify_envelope_satisfies_protocol_invariants() {
         required_fidelity: None,
         engine: acos_protocol::VerifyEngine::RustVm,
         flags: vec!["--reference".to_string()],
+        animations: None,
+        native: false,
     };
     let mut backend = ReferenceBackend::new(reference_dir("hello-views"));
     let clock = FixedClock::new(1_794_318_674_000);
@@ -1092,7 +1094,13 @@ fn wait_for_keeps_polling_through_unsettled_polls() {
         "two unsettled polls, match on poll 3: {:?}",
         outcome.verdict.failure
     );
-    assert_eq!(polls, 3);
+    // REL3A §2: the match appears on poll 3, but a content-stable verdict needs
+    // a second content-settled observation at least one window later, so the
+    // wait confirms it on a later poll instead of passing on the first sample.
+    assert!(
+        polls >= 4,
+        "the content verdict must be confirmed on a later settled poll, got {polls}"
+    );
 }
 
 /// ...and a screen that never settles is still a TIMEOUT at the wait_for
@@ -1512,6 +1520,8 @@ steps:
         required_fidelity: None,
         engine: acos_protocol::VerifyEngine::Art,
         flags: Vec::new(),
+        animations: None,
+        native: false,
     };
     let mut backend = ReferenceBackend::new(reference_dir("hello-views"));
     let clock = FixedClock::new(1_794_318_674_000);
@@ -1593,6 +1603,8 @@ steps:
         required_fidelity: None,
         engine: acos_protocol::VerifyEngine::RustVm,
         flags: Vec::new(),
+        animations: None,
+        native: false,
     };
     let mut backend = ReferenceBackend::new(reference_dir("hello-views"));
     let clock = FixedClock::new(1_794_318_674_000);
@@ -1671,6 +1683,8 @@ steps:
         // The engine that runs; the scenario does not select it.
         engine: acos_protocol::VerifyEngine::Art,
         flags: Vec::new(),
+        animations: None,
+        native: false,
     };
     let mut backend = ReferenceBackend::new(reference_dir("hello-views"));
     let clock = FixedClock::new(1_794_318_674_000);
@@ -1739,6 +1753,8 @@ steps:
         required_fidelity: None,
         engine: acos_protocol::VerifyEngine::Art,
         flags: Vec::new(),
+        animations: None,
+        native: false,
     };
     let mut backend = ReferenceBackend::new(reference_dir("hello-views"));
     let clock = FixedClock::new(1_794_318_674_000);
@@ -1842,6 +1858,8 @@ steps:
         required_fidelity: None,
         engine: acos_protocol::VerifyEngine::Art,
         flags: Vec::new(),
+        animations: None,
+        native: false,
     };
     let backend = RewritingApk {
         inner: ReferenceBackend::new(reference_dir("hello-views")),
@@ -1925,6 +1943,8 @@ steps:
         required_fidelity: None,
         engine: acos_protocol::VerifyEngine::Art,
         flags: Vec::new(),
+        animations: None,
+        native: false,
     };
     let mut backend = ReferenceBackend::new(reference_dir("hello-views"));
     let clock = FixedClock::new(1_794_318_674_000);

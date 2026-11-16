@@ -1233,6 +1233,17 @@
           ],
           "description": "Which node to inspect."
         },
+        "settle": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StepSettle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "REL3A: settle rule for the backing observation (see [`TextAssertion`])."
+        },
         "timeout_ms": {
           "description": "Event-driven timeout.",
           "format": "uint64",
@@ -1779,6 +1790,17 @@
           ],
           "description": "Which node to inspect."
         },
+        "settle": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StepSettle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "REL3A: settle rule for the observation that backs this assertion. Absent = auto (strict, then content when strict never settles); `content` = content-stable only; `strict` = event settle only. `fast` is rejected at validation time."
+        },
         "text": {
           "allOf": [
             {
@@ -1788,7 +1810,7 @@
           "description": "Expected text matcher."
         },
         "timeout_ms": {
-          "description": "Event-driven timeout; the runtime waits for a matching frame/tree, never for a fixed sleep.",
+          "description": "Event-driven timeout; the runtime waits for a matching frame/tree, never for a fixed sleep. REL3A: honoured by `acos verify` (it polls fresh settled observations until the deadline).",
           "format": "uint64",
           "minimum": 0.0,
           "type": [
@@ -1968,6 +1990,17 @@
           ],
           "description": "Which node to inspect."
         },
+        "settle": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StepSettle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "REL3A: settle rule for the backing observation (see [`TextAssertion`])."
+        },
         "timeout_ms": {
           "description": "Event-driven timeout.",
           "format": "uint64",
@@ -1984,7 +2017,7 @@
       "type": "object"
     },
     "WaitForStep": {
-      "description": "`wait_for`.",
+      "description": "`wait_for`.\n\nREL3A: `wait_for` accepts a settle rule like every other observation step. Its default (no `settle`) is *auto*: strict first, then the content-stable rule when strict never settles but the tree is stable (the always-animating RN/Gaten screen). A `wait_for` that passed on a content-settled tree says so in its `settle` record.",
       "properties": {
         "require_visible": {
           "default": true,
@@ -1998,6 +2031,26 @@
             }
           ],
           "description": "Selector to wait for."
+        },
+        "settle": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StepSettle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Settle rule for the observation this wait binds (REL3A). Absent = auto (strict, then content); `content` = content-stable only; `strict` = event settle only. `fast` is rejected: it is navigation-only and can never back a wait or an assertion."
+        },
+        "settle_timeout_ms": {
+          "description": "P12b: settle deadline for each observation attempt (milliseconds).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "timeout_ms": {
           "default": 5000,

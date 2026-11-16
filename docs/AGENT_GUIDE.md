@@ -449,16 +449,16 @@ A step is a **one-key map**. Valid keys:
 
 | step key | payload |
 |---|---|
-| `launch` | `activity` / `intent_action` / `data` / `extras` / `clear_state` |
-| `wait_for` | `selector`, `timeout_ms`, `require_visible` |
+| `launch` | `activity` / `intent_action` / `data` / `extras` / `clear_state`, `settle`, `settle_timeout_ms` |
+| `wait_for` | `selector`, `timeout_ms`, `require_visible`, `settle`, `settle_timeout_ms` |
 | `tap` | `selector` or `x`+`y`, optional `timeout_ms`, `settle`, `settle_timeout_ms`, `expect_change` |
 | `type` | optional `selector`, `text`, `clear`, `settle`, `settle_timeout_ms`, `expect_change` |
 | `key` | `key` (`back`, `home`, `enter`, `tab`, `delete`, `escape`, `menu`, `dpad_*`), `settle`, `settle_timeout_ms`, `expect_change` |
 | `back` | `{}` or `{expect_change: true}` |
 | `rotate` | `orientation: portrait\|landscape` — **unsupported on the ART session channel** (see Limits) |
-| `assert_text` | `selector`, `text` matcher, optional `bounds`, `timeout_ms` |
-| `assert_visible` / `assert_not_visible` | `selector`, optional `bounds`, `timeout_ms` |
-| `assert_state` | `selector` + at least one of `visible/enabled/focused/clickable/scrollable/checked` |
+| `assert_text` | `selector`, `text` matcher, optional `bounds`, `timeout_ms`, `settle` |
+| `assert_visible` / `assert_not_visible` | `selector`, optional `bounds`, `timeout_ms`, `settle` |
+| `assert_state` | `selector` + at least one of `visible/enabled/focused/clickable/scrollable/checked`, `timeout_ms`, `settle` |
 | `assert_log` | `tag`, `patterns` (regex list), `ordered`, `since_previous_step`, `timeout_ms`, `min_matches` |
 | `assert_no_crash` | optional `since_seq` |
 | `assert_screenshot` | `baseline`, `tolerance` (0..1), `region_masks` (display pixels) |
@@ -521,13 +521,69 @@ A scenario step is a fixed document: it keeps first-match-plus-`index`.)
 
 **Settle modes (the part that decides whether a pass is real).**
 
-* `settle: "strict"` (the default) waits for a *settled* observation after the
-  action — a frame/tree that satisfied the strict rule — and every assertion
-  runs on it. Timeout is `TIMEOUT`, never a pass.
+There are four settle rules. Every step's JSON states the rule it used and how it
+ended: `settle: {mode, settled, waited_ms, reason}` (`bound`, `window_ms`,
+`traversals`, `pixels_changed` and `fallback_from` join it when they apply).
+
+* `settle: "strict"` waits for a *settled* observation — a frame/tree where the
+guest reports no pending framework UI work. Timeout is `TIMEOUT`, never a pass.
+* `settle: "content"` is the **content-stable** rule: settled when the UI tree's
+content signature (text, classes, ids, content-desc, state flags, window and
+node structure/order — every field a selector or assertion reads, except
+geometry) is unchanged across at least two *fresh, distinct* traversals spanning
+at least 300 ms, **whether or not the pixels keep animating**. That is the rule
+for a screen that animates forever: a React Native `Animated` timeline, a
+spinner, an indefinite `ProgressBar`, a splash that never stops drawing.
 * `settle: "fast"` returns the first fresh sample immediately. It is for
   latency-sensitive probing only: it may be mid-animation, it is **never**
-  assertion evidence, and `acos_assert` rejects it with `INVALID_ARGUMENT`.
-  Scenarios cannot request fast for an assertion step at all.
+  assertion evidence, and `acos_assert`, `wait_for` and every `assert_*` reject it
+  with `INVALID_SCENARIO` (scenario) / `INVALID_ARGUMENT` (live channel).
+* **No `settle:` at all** is the documented default per step kind:
+  * `wait_for` and `assert_text`/`assert_visible`/`assert_not_visible`/`assert_state`
+    are **auto**: strict first, then content-stable when strict proves it cannot
+    settle. So a text wait/assertion on an animating screen passes on the stable
+    tree instead of spending its whole timeout on a rule that can never win, and
+    the step's `settle` record says `mode: content` with `fallback_from: strict`,
+    `pixels_evidence: false`.
+  * `tap`/`type`/`key`/`back`/`swipe`/`launch`/`reset` are **strict** (an action's frame
+    is evidence; an endless animation there is a real `TIMEOUT`). Pass
+    `settle: content` on the action when you only need the tree to be stable.
+    `scroll_until` takes no `settle` option: every attempt is one real gesture
+    followed by its own fresh settled traversal.
+  * `capture`, `assert_screenshot` and `assert_region` are **pixels**: they take
+    their own fresh capture and need pixel settle. They never accept content
+    stability as evidence.
+
+Never weakened: an assertion still requires its condition on a *settled*
+observation, of the mode it reports.
+
+* **A content pass needs two observations.** Under `settle: content` — explicit
+  or the automatic fallback — the condition must hold on **two consecutive
+  content-settled observations at least one content window apart** (>= 300 ms)
+  before the step passes. One stable-looking sample is not a verdict. A poll
+  that is not satisfied (or never settles) resets the confirmation, so an
+  intermittent condition cannot slip through on unrelated stable samples.
+* **The residual hazard.** Content stability is *not* proof that the app
+  finished loading. A stalled JS thread, a paused renderer or a loading state
+  that simply has not updated the tree yet can look perfectly stable for a whole
+  window. `settle: content` answers "the readable content is not changing", not
+  "the app is ready". For a screen whose text arrives in a later phase, wait for
+  a **post-transition marker** (the destination screen's unique id/text, or a
+  ready flag the app sets) instead of the start button or the spinner, and only
+  then assert. Two observations reduce this window; they cannot eliminate it.
+* **The rule never leaks.** A content observation is scoped to the step that
+  asked for it. `capture`, `assert_screenshot` and `assert_region` always take
+  their own strict pixel capture; a capture whose frame is somehow bound by a
+  content record is refused with `details.reason: "content_settle_pixel"` rather
+  than reported as pixel evidence.
+
+* **Content settle backs UI/text/state claims only.** The content signature does
+not hash geometry (a view translated by an animation changes its `bounds` every
+frame), so a `bounds` claim — an assertion's own `bounds` **or**
+`selector.bounds` — on a content-settled frame fails closed with
+`details.reason: "content_settle_geometry"`, and a pixel claim
+(`assert_region`/`assert_screenshot`/`capture`) fails with
+`"content_settle_pixel"`. Assert the text/state instead, or settle strictly.
 * **A `tap` step always runs its own state-change check**
   (`expect_change: "auto"`). The step JSON's `input` block says
   `expect_change: "auto"` for every tap, so this is no longer hidden: when the
@@ -543,15 +599,35 @@ A scenario step is a fixed document: it keeps first-match-plus-`index`.)
 * Strict settle does *not* require pixels to change. `expect_change: true` on a
   `tap`/`type`/`key`/`back` step is the opt-in that does: `pixels_changed:false`
   then fails with `ASSERTION_FAILED` / `details.reason: "expect_change"`.
-  `expect_change: true` + `settle: fast` is rejected at parse time. Use it for
-  any flow whose point is that a control did something.
+  `expect_change: true` + `settle: fast`/`content` is rejected at parse time. Use
+  it for any flow whose point is that a control did something.
 * A step that provokes no draw at all cannot settle and ends as `TIMEOUT`
-  (`reason: "no-draw-after-action"`). Both are non-passes.
+  (`reason: "no-draw-after-action"`). A content settle whose signature keeps
+  changing ends as `TIMEOUT` (`reason: "content-not-stable"`). Both are
+  non-passes.
+* **A settle that timed out is never a pass.** In a scenario the step is
+  `status: timeout` with `error.code: TIMEOUT` (error class `infra_timeout`);
+  on the live channel (`acos_tap` & co.) the reply is `status: timeout` with
+  `details.reason: "settle_timeout"`, `details.settle` and the delivered facts in
+  `details.delivery`. `settle_timeout_ms` moves the deadline; it never turns a
+  still-changing screen into a pass.
+* `animations: off` is *not* the answer for an app that animates in its own code
+  (RN `Animated`, a custom `ValueAnimator`, a spinner). It only zeroes Android's
+  three framework animation scales. Use `settle: content` for those screens.
 
-**Assertions are always strict.** `assert_text`, `assert_visible`,
-`assert_state`, `assert_log`, `assert_no_crash`, `assert_screenshot` and
-`assert_region` never take a settle option; a scenario that cannot prove its
-claim this way must fail.
+**Assertions and `timeout_ms`.** `assert_text`, `assert_visible`,
+`assert_not_visible` and `assert_state` honour `timeout_ms`: with it they poll
+fresh settled observations until the condition holds or the deadline passes;
+without it they evaluate the frame the previous step bound (one observation, no
+extra traversal). A scenario that cannot prove its claim must fail.
+
+`settle` on an assertion therefore takes effect **only together with
+`timeout_ms`**: without a timeout there is no second observation to make, so the
+assertion reads the already-bound frame exactly as before (its `settle` record
+reports the rule that frame was bound with, not the one the step named). We keep
+that shape because it adds no default latency to the common case; spell out
+`timeout_ms` whenever you need `settle: content` (or want the assertion to wait
+at all).
 
 **Two coordinate spaces.** Tree bounds, `tap` `x`/`y`, `assert_region` and
 `region_masks` are **display** pixels (1080x2400 on the API-34 profile). A

@@ -224,6 +224,13 @@ pub struct ArtSession {
     /// P1: `"fast"` or `"strict"` for the next input command. Serve sets it per
     /// verb; the default is strict.
     settle_mode: &'static str,
+    /// REL3A: the settle rule the next **observation** (`frame()`) binds with.
+    /// `"strict"` (default) or `"content"` (ADR-0026 decision 3). The verifier
+    /// sets it per step (`set_observation_settle`); the rule is one-shot - `frame()`
+    /// consumes it and restores `strict`, so a content observation can never leak
+    /// into a later capture/pixel claim. Serve's own verbs never ask for content
+    /// observations and reset this to `strict` at the start of every call.
+    observation_settle: &'static str,
     /// P3b: the guest's `settle` block for the most recent tree request
     /// (`mode`, `settled`, `probe_seq`, `tree_age_ms`, `bound`). Copied into
     /// the `acos_observe_tree` result; never synthesised.
@@ -1941,6 +1948,7 @@ impl ArtSession {
             last_phase: None,
             last_input_settle: None,
             settle_mode: "strict",
+            observation_settle: "strict",
             last_tree_settle: None,
             last_tree_json: None,
             first_frame_report: None,
@@ -2287,6 +2295,24 @@ impl ArtSession {
     /// SE2: the settle rule the bound frame was proven by, as reported.
     pub fn bound_settle(&self) -> Option<&serde_json::Value> {
         self.bound_settle.as_ref()
+    }
+
+    /// REL3A: the settle rule the next observation binds with
+    /// (`"strict"` default, `"content"` for a screen that animates forever).
+    ///
+    /// It is deliberately separate from [`Self::settle_mode`]: an input's rule
+    /// (`strict`/`fast`/`content`) and an observation's rule are chosen per step
+    /// by the caller, and a `settle: content` tap must not silently make every
+    /// later `frame()` content-settled (or the reverse). Only `strict` and
+    /// `content` are observation rules; `fast` is navigation-only and never
+    /// backs an observation, so anything else falls back to `strict`.
+    pub fn set_observation_settle(&mut self, mode: &str) {
+        self.observation_settle = if mode == "content" { "content" } else { "strict" };
+    }
+
+    /// The observation settle rule in force (`"strict"`/`"content"`).
+    pub fn observation_settle(&self) -> &'static str {
+        self.observation_settle
     }
 
     /// SE2: ask the next input action for the content-stable rule instead of
@@ -4653,6 +4679,40 @@ impl ArtSession {
     }
 }
 
+/// REL3A: refuse a capture whose bound frame was only content-settled.
+///
+/// `settle: content` proves the UI tree's text/nodes/state stopped changing; it
+/// says nothing about the pixels, which may still be animating. A capture is
+/// pixel evidence, so it may never be bound by a content record. The executor
+/// resets the observation rule to strict before a capture and `frame()` is
+/// one-shot; this refuses the remaining case (a caller that asked for content
+/// and then captured) with the same `content_settle_pixel` reason the pixel
+/// assertions use.
+fn content_capture_refusal(settle: Option<&serde_json::Value>) -> Option<BackendError> {
+    let settle = settle?;
+    if settle.get("mode").and_then(serde_json::Value::as_str) != Some("content") {
+        return None;
+    }
+    Some(BackendError::Protocol {
+        code: ErrorCode::UnsupportedAssertion,
+        detail: "capture: the frame was bound by `settle: content` (UI tree content stable), \
+                 which is not pixel evidence - the pixels may still be animating"
+            .to_string(),
+        hint: Some(
+            "A capture needs a pixel-settled frame: use `settle: strict` (the default) and let \
+             the screen stop animating, or assert on the UI tree (assert_text/assert_visible/\
+             assert_state) which content settle may back."
+                .to_string(),
+        ),
+        details: Some(serde_json::json!({
+            "reason": "content_settle_pixel",
+            "step_kind": "capture",
+            "settle": settle,
+            "pixel_evidence": false,
+        })),
+    })
+}
+
 impl SessionBackend for ArtSession {
     fn engine(&self) -> Engine {
         Engine::Art
@@ -4836,6 +4896,10 @@ impl SessionBackend for ArtSession {
         self.settle_mode = mode;
     }
 
+    fn set_observation_settle(&mut self, mode: acos_verify::settle::ObservationSettle) {
+        ArtSession::set_observation_settle(self, mode.as_str());
+    }
+
     fn bound_settle(&self) -> Option<&serde_json::Value> {
         self.bound_settle.as_ref()
     }
@@ -4845,14 +4909,47 @@ impl SessionBackend for ArtSession {
         // the tree and the PNG of that frame. The PNG bytes are loaded from the
         // artifact now (and hash-verified); the session retains only the
         // descriptor between calls.
+        //
+        // REL3A: an observation asked for the content-stable rule binds the
+        // content window's own pixel-bound traversal (a strict capture of the
+        // frame the stable content was proven on), so `refresh()`/`capture()`
+        // report the rule they actually applied. A content settle that cannot
+        // prove stability is a structured TIMEOUT, never an observation.
+        //
+        // The rule is **one-shot**: it is consumed here and restored to strict
+        // before any command runs, so an error or an early return cannot leave
+        // the session content-sticky for the next step's capture/pixel claim.
+        let content = self.observation_settle == "content";
+        self.observation_settle = "strict";
         let previous = self.seen_seq;
-        self.request_tree()?;
+        if content {
+            self.content_settle()?;
+        } else {
+            self.request_tree()?;
+        }
         let cached = self.require_cached_frame()?;
         let observed = cached.observed(previous)?;
         if observed.png().is_empty() {
             return Err(live_frame_unavailable(
                 "the ART tree reply carried no PNG; refusing to bind a tree to absent pixels",
             ));
+        }
+        Ok(observed)
+    }
+
+    /// REL3A: a fresh capture is pixel evidence; it may never be bound by the
+    /// content-stable rule. The executor resets the observation rule to strict
+    /// before a capture, and `frame()` is one-shot, so this refuses the remaining
+    /// case (a caller that asked for content and then captured): a content
+    /// record says the *tree* was stable while the pixels may still animate.
+    fn capture(&mut self) -> Result<ObservedFrame, BackendError> {
+        let previous = self.last_frame_seq();
+        let observed = self.frame()?;
+        if let Some(error) = content_capture_refusal(self.bound_settle.as_ref()) {
+            return Err(error);
+        }
+        if observed.frame_seq() <= previous {
+            return Err(stale_frame(previous, observed.frame_seq(), "capture"));
         }
         Ok(observed)
     }
@@ -5890,6 +5987,32 @@ fn processes_mentioning(dir: &Path) -> Vec<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// REL3A: a capture is pixel evidence and may never be bound by a content
+    /// settle record. The refusal is the same fail-closed reason the pixel
+    /// assertions use (`content_settle_pixel`), with no frame handed back.
+    #[test]
+    fn a_content_settled_frame_is_refused_as_capture_evidence() {
+        let content = serde_json::json!({
+            "mode": "content",
+            "settled": true,
+            "window_ms": 300,
+            "traversals": 3,
+            "pixel_evidence": false,
+        });
+        let error = content_capture_refusal(Some(&content)).expect("content is refused");
+        let protocol = error.to_protocol_error();
+        assert_eq!(protocol.code, ErrorCode::UnsupportedAssertion);
+        let details = protocol.details.expect("details");
+        assert_eq!(details["reason"], "content_settle_pixel");
+        assert_eq!(details["pixel_evidence"], false);
+        assert_eq!(details["settle"]["mode"], "content");
+
+        // Strict and absent records are not refused.
+        let strict = serde_json::json!({"mode": "strict", "settled": true});
+        assert!(content_capture_refusal(Some(&strict)).is_none());
+        assert!(content_capture_refusal(None).is_none());
+    }
 
     /// G3c: the launch first-frame predicate must reject the *window skeleton*
     /// (decor + `action_bar_root` + `content` + an empty app root, no text) and

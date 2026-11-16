@@ -921,6 +921,16 @@ pub trait Backend {
     /// default no-op and reports no content settle record, so a step that
     /// asked for it can never be mistaken for one that was bound by it.
     fn set_input_content_settle(&mut self, _content: bool) {}
+
+    /// REL3A: the settle rule the next **observation** (`wait_for`, an
+    /// `assert_*`, a `capture`) must bind its tree/frame with.
+    ///
+    /// The executor calls this before every observation it makes; a backend with
+    /// a content-stable rule applies it to the next traversal. A backend without
+    /// one keeps the default no-op and reports no content record, so a step that
+    /// asked for content fails closed (`content_settle_unhonored`) instead of
+    /// running under a different rule than it reports.
+    fn set_observation_settle(&mut self, _mode: crate::settle::ObservationSettle) {}
 }
 
 #[cfg(test)]
