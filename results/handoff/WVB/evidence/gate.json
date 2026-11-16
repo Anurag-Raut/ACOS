@@ -1,0 +1,157 @@
+{
+  "asset_interception": {
+    "intercepts": 2,
+    "title": "\"asset-js-ok\"",
+    "url": "file:///android_asset/index.html"
+  },
+  "engine": {
+    "binaryBytes": 211094864,
+    "binarySha256": "8e4c5db8c070059cb570a05c171dfcaec022d46334722ec3a16376614d687a96",
+    "identity": {
+      "product": "HeadlessChrome/157.0.8103.78",
+      "protocolVersion": "1.3",
+      "revision": "@4b3d0dabb8250b6f152d2d85d79e7706e309d087",
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.8103.78 Safari/537.36",
+      "version": "157.0.8103.78"
+    },
+    "path": "/home/Qui/.t3/worktrees/acos/t3-6a26bf67-b1f35236b245d8b7/.cache/webview/engine/157.0.8103.78/chrome-headless-shell-linux64/chrome-headless-shell",
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.8103.78 Safari/537.36",
+    "version": "157.0.8103.78",
+    "zipSha256": "f90329720fb61e5a76da9b6b509b6ad12a484c9c5df0359403e935177c6d153a"
+  },
+  "finishedAt": 1794812951,
+  "gate_a_load": {
+    "loadMs": 15.8,
+    "result": {
+      "loadMs": 8.3,
+      "title": "acos-wv-test",
+      "url": "http://127.0.0.1:36283/",
+      "view": 1
+    },
+    "title": "acos-wv-test",
+    "url": "http://127.0.0.1:36283/"
+  },
+  "gate_b_host_to_page": {
+    "type": "string",
+    "valueJson": "\"hello-page\"",
+    "view": 1
+  },
+  "gate_b_page_to_host": {
+    "errorPropagation": "\"rejected:JS_EXCEPTION: asked to fail\"",
+    "jsCall": {
+      "argsJson": "[\"ping\"]",
+      "callId": "1",
+      "id": "h1",
+      "method": "echo",
+      "name": "acosEcho",
+      "op": "js.call",
+      "view": 1
+    },
+    "value": "\"ping\""
+  },
+  "gate_c_ax_tap": {
+    "axCount": 11,
+    "centre": {
+      "x": 315.0,
+      "y": 314.7
+    },
+    "node": {
+      "backend_dom_node_id": 12,
+      "bounds": [
+        0.0,
+        209.7,
+        630.0,
+        210.0
+      ],
+      "checked": null,
+      "clickable": true,
+      "description": null,
+      "disabled": false,
+      "editable": false,
+      "focused": false,
+      "has_bounds": true,
+      "name": "Tap me",
+      "node_id": 0,
+      "parent_id": null,
+      "role": "button",
+      "value": null
+    },
+    "statusAfterTap": "\"tapped\""
+  },
+  "gate_d_frames": {
+    "gateMs": 50,
+    "maxMs": 15.6,
+    "n": 20,
+    "p50Ms": 11.7,
+    "p95Ms": 15.6,
+    "pass": true,
+    "pngBytes": 57241,
+    "viewport": {
+      "density": 2.625,
+      "height": 2400,
+      "width": 1080
+    }
+  },
+  "gate_e_memory": {
+    "contexts": 3,
+    "fixedEngineMiB": 130.3,
+    "gateMiB": 60,
+    "pass": true,
+    "perExtraContextMiB": 3.9,
+    "processes": 11,
+    "pss1MiB": 211.2,
+    "pss3MiB": 218.9,
+    "targets": 3
+  },
+  "hello": {
+    "engine": {
+      "product": "HeadlessChrome/157.0.8103.78",
+      "protocolVersion": "1.3",
+      "revision": "@4b3d0dabb8250b6f152d2d85d79e7706e309d087",
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.8103.78 Safari/537.36",
+      "version": "157.0.8103.78"
+    },
+    "limits": {
+      "maxFrameBytes": 67108864,
+      "maxViews": 8
+    },
+    "proto": 1,
+    "session": "gate"
+  },
+  "lifecycle": {
+    "idleShutdown": "down",
+    "pidReaped": 2294052,
+    "restart": {
+      "engine": {
+        "product": "HeadlessChrome/157.0.8103.78",
+        "protocolVersion": "1.3",
+        "revision": "@4b3d0dabb8250b6f152d2d85d79e7706e309d087",
+        "uptimeMs": 32,
+        "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.8103.78 Safari/537.36",
+        "version": "157.0.8103.78"
+      },
+      "generation": 2,
+      "idleShutdownInMs": 2999,
+      "openViews": 1,
+      "restarts": 0,
+      "state": "up",
+      "unanswered": 0
+    },
+    "restarts": 0
+  },
+  "memory": {
+    "fixed": {
+      "processes": 8,
+      "pssMiB": 130.3,
+      "rssMiB": 331.7
+    }
+  },
+  "startedAt": 1794812945,
+  "status": "PASS",
+  "structured_errors": [
+    "NO_VIEW",
+    "UNSUPPORTED",
+    "INVALID_VIEWPORT"
+  ],
+  "test": "engine_gate"
+}

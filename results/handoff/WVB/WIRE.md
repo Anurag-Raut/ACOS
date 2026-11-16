@@ -80,8 +80,12 @@ An unsupported behaviour is an error, never a fabricated success.
 ## 4. Guest → host requests
 
 `view` is a small integer chosen by the guest provider, unique per session
-(one View instance = one target/page). All geometry is in **device pixels**,
-`density` is the Android density (`1080x2400 @ 2.625 dpr`).
+(one View instance = one target/page). All geometry is in **device pixels**
+(display coordinates), `density` is the Android density (`1080x2400 @ 2.625
+dpr`). The broker converts to the CSS pixels DevTools input expects by dividing
+by `density`; the guest never does that conversion, and the AX bounds it gets
+back are already in the same space (measured: passing display pixels straight to
+DevTools taps `density` times too far right and down).
 
 ### 4.1 Session
 
