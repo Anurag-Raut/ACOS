@@ -234,7 +234,7 @@ launcher's own clock, in `prep_ms`.
 
 | criterion | verdict | evidence |
 |---|---|---|
-| `cargo test -p acos-netd -p acos-mcp -p acos-cli` green | **PASS** | §9 command output |
+| `cargo test -p acos-netd -p acos-mcp -p acos-cli` green | **PASS except one environment-bound test** | `acos-netd` 6+13+10, `acos-mcp` 82 + 20 integration + the new parity suite, `acos-cli` 179 unit + every integration target except `fb1_live_input::ambiguous_assertion_is_refused_with_candidates`. That one binds `<worktree>/.cache/fb1-test-ambiguous-assert-<pid>/serve.sock` = **109 bytes**, over `sun_path`'s 108 (`bind: path must be shorter than SUN_LEN`), because this worktree's path is 58 characters; its three sibling tests with shorter tags pass in the same run. Not NET4 code, and unfixable from here without an unrelated test change. Also green: `cargo test -p acos-art --lib` (boot_image, spike_net, launch) and `cargo test -p acos-verify` (89 + 29). |
 | NET3's `proof.log` checks still pass | **PASS** | `run/proof/proof.log`: `hostport_opted_in localhost=200 map=200`, `hostport_not_opted_in_refused`, `other_host_loopback_ports_refused`, `hostport_revoke`, `stale_supervisor_replaced old_pid=2601363 new_pid=2603969`, `guest_cgroup_enforced … python_exit=137`, `no_leak relay_veths=[] session_rules=0 forwarders=0` |
 | n5x3 (5/5 × 3) still passes | **PARTIAL** | `run/n5relay/boot.log`: rep1 **5/5** (10/10 steps, boot 325–508 ms), rep2 2/5, rep3 1/5 — the failing runs are `TIMEOUT: strict settle timed out (probe-floor)`, not network (§7.2); the fetch itself succeeds in 5/5 |
 | boot timing table before/after under `results/handoff/NET4/` | **PASS** | §1 tables + `run/bootn1c/boot.log`, `run/n5relay/boot.log`, NET3's `engine.json` files |
@@ -269,5 +269,8 @@ BIN=$PWD/.cache/net4-target/release/acos-netd bash results/handoff/NET3/proof-ho
 NET1–NET3) into `.cache/net4/passt-src`; no downloads beyond that source tree, no sudo,
 no kernel change. Private `ACOS_NETD_STATE`/`ACOS_RUNTIME_DIR`/`ACOS_SESSION_SOCKET`
 for every run; nothing outside the worktree except the ART runs' own scratch. Disk 77 %
-→ 79 % and back; the build target is deleted at the end of the turn. Peak RAM during
-the N=5 runs: five ART guests inside a 20 GiB guard (host under ~22 GiB used).
+→ 79 % → **74 %** after the target was deleted; peak RAM observed during this session
+was **17 GiB used** (five ART guests inside a 20 GiB guard, host total 60 GiB), well
+under the 90 % rule.
+`ACOS_VIEW_TEST_DIR=/tmp/net4lv` is needed for the `acos-cli` view tests in this
+worktree (their scratch dir is also over `sun_path` otherwise).
