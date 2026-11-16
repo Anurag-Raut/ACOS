@@ -22,11 +22,11 @@
   },
   "engine": "art",
   "evidence": {
-    "artifacts": ".cache/wv7-run/ev6",
-    "engine_report": ".cache/wv7-run/ev6/engine.json",
+    "artifacts": ".cache/wv7-run/ev15",
+    "engine_report": ".cache/wv7-run/ev15/engine.json",
     "pruned_session_captures": 3,
-    "retention": ".cache/wv7-run/ev6/retention.json",
-    "verdict": ".cache/wv7-run/ev6/verdict.json"
+    "retention": ".cache/wv7-run/ev15/retention.json",
+    "verdict": ".cache/wv7-run/ev15/verdict.json"
   },
   "evidence_provenance": {
     "binder_transactions": "host-observed",
@@ -44,7 +44,7 @@
     "fixtures/build/apps/webview-provider.apk"
   ],
   "fidelity": "art-reference",
-  "finished_at": "2026-11-16T09:30:52.528Z",
+  "finished_at": "2026-11-16T10:08:33.572Z",
   "insets": "report",
   "isolation": "process",
   "mode": "live",
@@ -241,7 +241,7 @@
   ],
   "notes": [
     "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
-    "artifacts: referenced (prune-unreferenced): 33 file(s) / 2.2 MiB kept, 3 file(s) / 0.7 MiB pruned; see retention.json",
+    "artifacts: referenced (prune-unreferenced): 33 file(s) / 2.7 MiB kept, 3 file(s) / 0.9 MiB pruned; see retention.json",
     "fidelity: module `accessibility` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `system.permissions` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
     "fidelity: module `system.notifications` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
@@ -279,29 +279,29 @@
     "flags": [],
     "isolation": "process",
     "scenario_path": "scenarios/webview-probe.yaml",
-    "scenario_sha256": "0e27ede43e6e19c24f92613ff9c7fc2a9a38d9855c6ae26c2046f9c328a75e52"
+    "scenario_sha256": "85f1a3067c58e8f793d3fd4f0b6f4edcebcd08791690c1736e4d55229d590be5"
   },
-  "request_id": "req_351f87_18e87c9809956782",
+  "request_id": "req_39bdf4_18e87ea7f89d9047",
   "resources": {
-    "events": 151,
+    "events": 160,
     "frames_captured": 13,
-    "memory_mib": 15,
-    "peak_rss_bytes": 16736256,
+    "memory_mib": 16,
+    "peak_rss_bytes": 17367040,
     "sessions": 1,
     "steps": 14,
-    "wall_ms": 8294
+    "wall_ms": 1986
   },
   "scenario": {
     "name": "webview-probe",
     "path": "scenarios/webview-probe.yaml",
-    "sha256": "0e27ede43e6e19c24f92613ff9c7fc2a9a38d9855c6ae26c2046f9c328a75e52"
+    "sha256": "85f1a3067c58e8f793d3fd4f0b6f4edcebcd08791690c1736e4d55229d590be5"
   },
   "schema_version": 1,
   "session_exit": {
     "abi": null,
-    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=62MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3481492-i3527196.scope)",
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=69MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3784194-i3799525.scope)",
     "code": null,
-    "disk_free_bytes": 228575420416,
+    "disk_free_bytes": 282620772352,
     "guest_crash": null,
     "guest_exit": 0,
     "guest_signal": null,
@@ -309,17 +309,17 @@
     "native_crash_path": null,
     "outcome": "ok",
     "panic": null,
-    "path": ".cache/wv7-run/ev6/art-frames/session-exit.json",
+    "path": ".cache/wv7-run/ev15/art-frames/session-exit.json",
     "retryable": false,
     "stage": "teardown-evidence"
   },
   "session_id": "s_art_webview-probe",
-  "started_at": "2026-11-16T09:30:44.234Z",
+  "started_at": "2026-11-16T10:08:31.586Z",
   "status": "pass",
   "steps": [
     {
       "assertions": [],
-      "duration_ms": 109,
+      "duration_ms": 106,
       "evidence": [
         {
           "kind": "step",
@@ -338,7 +338,7 @@
     },
     {
       "assertions": [],
-      "duration_ms": 59,
+      "duration_ms": 54,
       "evidence": [
         {
           "kind": "tree",
@@ -365,7 +365,7 @@
         "probe_seq": 5,
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 39
+        "tree_age_ms": 40
       },
       "status": "pass",
       "step": "wait_for"
@@ -382,7 +382,7 @@
             ],
             "hint": "",
             "node": "n5_dev.acos.fixtures.webview:id/status",
-            "text": "hasSystemFeature(android.software.webview)=true\nWebView.getCurrentWebViewPackage()=PackageInfo{f866941 com.android.webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{a705c27 VFED..... ......I. 0,0-0,0 #7f010001 app:id/webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{b2cf372 VFED..... ......I. 0,0-0,0 #7f010002 app:id/webview2}\nA laid out 900x560\nB laid out 900x560\nA loadUrl issued\nB loadUrl issued\nB onPageFinished data:text/html;base64,…\nA onPageFinished file:///android_asset/test.html\nB evaluateJavascript -> \"acos data page\"\nA evaluateJavascript -> \"acos asset page\"\n",
+            "text": "hasSystemFeature(android.software.webview)=true\nWebView.getCurrentWebViewPackage()=PackageInfo{95b10c com.android.webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{f5aec6a VFED..... ......I. 0,0-0,0 #7f010001 app:id/webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{7ad26d1 VFED..... ......I. 0,0-0,0 #7f010002 app:id/webview2}\nA laid out 900x560\nB laid out 900x560\nA loadUrl issued\nB loadUrl issued\nB onPageFinished data:text/html;base64,…\nA onPageFinished file:///android_asset/test.html\nB evaluateJavascript -> \"acos data page\"\nA evaluateJavascript -> \"acos asset page\"\n",
             "visible": true
           },
           "expected": {
@@ -428,7 +428,7 @@
         "probe_seq": 5,
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 39
+        "tree_age_ms": 40
       },
       "status": "pass",
       "step": "assert_text"
@@ -445,7 +445,7 @@
             ],
             "hint": "",
             "node": "n5_dev.acos.fixtures.webview:id/status",
-            "text": "hasSystemFeature(android.software.webview)=true\nWebView.getCurrentWebViewPackage()=PackageInfo{f866941 com.android.webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{a705c27 VFED..... ......I. 0,0-0,0 #7f010001 app:id/webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{b2cf372 VFED..... ......I. 0,0-0,0 #7f010002 app:id/webview2}\nA laid out 900x560\nB laid out 900x560\nA loadUrl issued\nB loadUrl issued\nB onPageFinished data:text/html;base64,…\nA onPageFinished file:///android_asset/test.html\nB evaluateJavascript -> \"acos data page\"\nA evaluateJavascript -> \"acos asset page\"\n",
+            "text": "hasSystemFeature(android.software.webview)=true\nWebView.getCurrentWebViewPackage()=PackageInfo{95b10c com.android.webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{f5aec6a VFED..... ......I. 0,0-0,0 #7f010001 app:id/webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{7ad26d1 VFED..... ......I. 0,0-0,0 #7f010002 app:id/webview2}\nA laid out 900x560\nB laid out 900x560\nA loadUrl issued\nB loadUrl issued\nB onPageFinished data:text/html;base64,…\nA onPageFinished file:///android_asset/test.html\nB evaluateJavascript -> \"acos data page\"\nA evaluateJavascript -> \"acos asset page\"\n",
             "visible": true
           },
           "expected": {
@@ -464,7 +464,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 0,
+      "duration_ms": 1,
       "evidence": [
         {
           "kind": "tree",
@@ -491,7 +491,7 @@
         "probe_seq": 5,
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 39
+        "tree_age_ms": 40
       },
       "status": "pass",
       "step": "assert_text"
@@ -508,7 +508,7 @@
             ],
             "hint": "",
             "node": "n5_dev.acos.fixtures.webview:id/status",
-            "text": "hasSystemFeature(android.software.webview)=true\nWebView.getCurrentWebViewPackage()=PackageInfo{f866941 com.android.webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{a705c27 VFED..... ......I. 0,0-0,0 #7f010001 app:id/webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{b2cf372 VFED..... ......I. 0,0-0,0 #7f010002 app:id/webview2}\nA laid out 900x560\nB laid out 900x560\nA loadUrl issued\nB loadUrl issued\nB onPageFinished data:text/html;base64,…\nA onPageFinished file:///android_asset/test.html\nB evaluateJavascript -> \"acos data page\"\nA evaluateJavascript -> \"acos asset page\"\n",
+            "text": "hasSystemFeature(android.software.webview)=true\nWebView.getCurrentWebViewPackage()=PackageInfo{95b10c com.android.webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{f5aec6a VFED..... ......I. 0,0-0,0 #7f010001 app:id/webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{7ad26d1 VFED..... ......I. 0,0-0,0 #7f010002 app:id/webview2}\nA laid out 900x560\nB laid out 900x560\nA loadUrl issued\nB loadUrl issued\nB onPageFinished data:text/html;base64,…\nA onPageFinished file:///android_asset/test.html\nB evaluateJavascript -> \"acos data page\"\nA evaluateJavascript -> \"acos asset page\"\n",
             "visible": true
           },
           "expected": {
@@ -554,7 +554,7 @@
         "probe_seq": 5,
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 39
+        "tree_age_ms": 40
       },
       "status": "pass",
       "step": "assert_text"
@@ -571,7 +571,7 @@
             ],
             "hint": "",
             "node": "n5_dev.acos.fixtures.webview:id/status",
-            "text": "hasSystemFeature(android.software.webview)=true\nWebView.getCurrentWebViewPackage()=PackageInfo{f866941 com.android.webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{a705c27 VFED..... ......I. 0,0-0,0 #7f010001 app:id/webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{b2cf372 VFED..... ......I. 0,0-0,0 #7f010002 app:id/webview2}\nA laid out 900x560\nB laid out 900x560\nA loadUrl issued\nB loadUrl issued\nB onPageFinished data:text/html;base64,…\nA onPageFinished file:///android_asset/test.html\nB evaluateJavascript -> \"acos data page\"\nA evaluateJavascript -> \"acos asset page\"\n",
+            "text": "hasSystemFeature(android.software.webview)=true\nWebView.getCurrentWebViewPackage()=PackageInfo{95b10c com.android.webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{f5aec6a VFED..... ......I. 0,0-0,0 #7f010001 app:id/webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{7ad26d1 VFED..... ......I. 0,0-0,0 #7f010002 app:id/webview2}\nA laid out 900x560\nB laid out 900x560\nA loadUrl issued\nB loadUrl issued\nB onPageFinished data:text/html;base64,…\nA onPageFinished file:///android_asset/test.html\nB evaluateJavascript -> \"acos data page\"\nA evaluateJavascript -> \"acos asset page\"\n",
             "visible": true
           },
           "expected": {
@@ -617,7 +617,7 @@
         "probe_seq": 5,
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 39
+        "tree_age_ms": 40
       },
       "status": "pass",
       "step": "assert_text"
@@ -655,7 +655,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 1,
+      "duration_ms": 0,
       "evidence": [
         {
           "kind": "tree",
@@ -682,7 +682,7 @@
         "probe_seq": 5,
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 39
+        "tree_age_ms": 40
       },
       "status": "pass",
       "step": "assert_text"
@@ -720,7 +720,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 1,
+      "duration_ms": 0,
       "evidence": [
         {
           "kind": "tree",
@@ -747,14 +747,14 @@
         "probe_seq": 5,
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 39
+        "tree_age_ms": 40
       },
       "status": "pass",
       "step": "assert_text"
     },
     {
       "assertions": [],
-      "duration_ms": 57,
+      "duration_ms": 54,
       "evidence": [
         {
           "kind": "tree",
@@ -786,7 +786,7 @@
         "probe_seq": 6,
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 39
+        "tree_age_ms": 40
       },
       "status": "pass",
       "step": "capture"
@@ -795,16 +795,19 @@
       "assertions": [
         {
           "actual": {
-            "matched_lines": 1,
+            "matched_lines": 4,
             "sample": [
-              "ACOSWvProvider: frame decoded 343x213 seq=1 bytes=7764"
+              "ACOSWvProvider: frame decoded view=1 343x213 seq=1 bytes=8536 attached=true handler=Handler (android.view.ViewRootImpl$ViewRootHandler) {56e4d3}",
+              "ACOSWvProvider: frame decoded view=2 343x213 seq=1 bytes=7764 attached=true handler=Handler (android.view.ViewRootImpl$ViewRootHandler) {56e4d3}",
+              "ACOSWvProvider: frame decoded view=1 343x213 seq=2 bytes=8536 attached=true handler=Handler (android.view.ViewRootImpl$ViewRootHandler) {56e4d3}",
+              "ACOSWvProvider: frame decoded view=2 343x213 seq=2 bytes=7764 attached=true handler=Handler (android.view.ViewRootImpl$ViewRootHandler) {56e4d3}"
             ]
           },
           "expected": {
             "min_matches": 1,
             "ordered": true,
             "patterns": [
-              "frame decoded [0-9]+x[0-9]+ seq=[0-9]+ bytes=[0-9]+"
+              "frame decoded (view=[0-9]+ )?[0-9]+x[0-9]+ seq=[0-9]+ bytes=[0-9]+"
             ],
             "since_previous_step": false,
             "tag": "ACOSWvProvider"
@@ -814,7 +817,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 2867,
+      "duration_ms": 1458,
       "evidence": [
         {
           "kind": "log",
@@ -836,20 +839,20 @@
       "assertions": [
         {
           "actual": {
-            "acks": 1,
-            "delivered": true,
-            "visual_change": false
+            "screenshot_changed": true,
+            "tree_changed": true
           },
           "expected": {
-            "delivered": true
+            "screenshot_changed": true,
+            "tree_changed": true
           },
-          "kind": "input_delivery",
+          "kind": "state_change",
           "matched_node_ids": [],
-          "message": "host-observed input delivery (1 guest ack(s)); no visual change; no state change claimed",
+          "message": "UI tree and screenshot both changed",
           "passed": true
         }
       ],
-      "duration_ms": 5138,
+      "duration_ms": 250,
       "evidence": [
         {
           "kind": "tree",
@@ -873,13 +876,13 @@
         "tree": "guest-asserted"
       },
       "settle": {
-        "ack_ms": 2007,
+        "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 5085,
-        "frame_ms": 5125,
+        "first_change_ms": 197,
+        "frame_ms": 236,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
-        "pixels_changed": false,
+        "pixels_changed": true,
         "settled": true,
         "state_changed": null,
         "strict_rule": "event"
@@ -941,13 +944,13 @@
         "tree": "guest-asserted"
       },
       "settle": {
-        "ack_ms": 2007,
+        "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 5085,
-        "frame_ms": 5125,
+        "first_change_ms": 197,
+        "frame_ms": 236,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
-        "pixels_changed": false,
+        "pixels_changed": true,
         "settled": true,
         "state_changed": null,
         "strict_rule": "event"
@@ -967,7 +970,7 @@
             ],
             "hint": "",
             "node": "n5_dev.acos.fixtures.webview:id/status",
-            "text": "hasSystemFeature(android.software.webview)=true\nWebView.getCurrentWebViewPackage()=PackageInfo{f866941 com.android.webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{a705c27 VFED..... ......I. 0,0-0,0 #7f010001 app:id/webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{b2cf372 VFED..... ......I. 0,0-0,0 #7f010002 app:id/webview2}\nA laid out 900x560\nB laid out 900x560\nA loadUrl issued\nB loadUrl issued\nB onPageFinished data:text/html;base64,…\nA onPageFinished file:///android_asset/test.html\nB evaluateJavascript -> \"acos data page\"\nA evaluateJavascript -> \"acos asset page\"\nJS->Java: tapped\n",
+            "text": "hasSystemFeature(android.software.webview)=true\nWebView.getCurrentWebViewPackage()=PackageInfo{95b10c com.android.webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{f5aec6a VFED..... ......I. 0,0-0,0 #7f010001 app:id/webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{7ad26d1 VFED..... ......I. 0,0-0,0 #7f010002 app:id/webview2}\nA laid out 900x560\nB laid out 900x560\nA loadUrl issued\nB loadUrl issued\nB onPageFinished data:text/html;base64,…\nA onPageFinished file:///android_asset/test.html\nB evaluateJavascript -> \"acos data page\"\nA evaluateJavascript -> \"acos asset page\"\nJS->Java: tapped\n",
             "visible": true
           },
           "expected": {
@@ -986,7 +989,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 1,
+      "duration_ms": 0,
       "evidence": [
         {
           "kind": "tree",
@@ -1007,13 +1010,13 @@
         "tree": "guest-asserted"
       },
       "settle": {
-        "ack_ms": 2007,
+        "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 5085,
-        "frame_ms": 5125,
+        "first_change_ms": 197,
+        "frame_ms": 236,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
-        "pixels_changed": false,
+        "pixels_changed": true,
         "settled": true,
         "state_changed": null,
         "strict_rule": "event"
@@ -1023,7 +1026,7 @@
     },
     {
       "assertions": [],
-      "duration_ms": 54,
+      "duration_ms": 55,
       "evidence": [
         {
           "kind": "tree",
@@ -1052,10 +1055,10 @@
         "bound": "strict-event",
         "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
         "mode": "strict",
-        "probe_seq": 21,
+        "probe_seq": 19,
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 39
+        "tree_age_ms": 40
       },
       "status": "pass",
       "step": "capture"

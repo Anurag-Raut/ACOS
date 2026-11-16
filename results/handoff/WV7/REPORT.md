@@ -4,16 +4,19 @@ Branch `wv7` from `wv6` @ `734ffd2a`; `modules` @ `78e9c955` merged in first (th
 module framework is what the `webview` module wraps, so the merge had to come
 before the module work, not after).
 
-Status: **PARTIAL**. The `modules` merge is in and green for the WebView scenario
-and the three crates' own suites; `proto` is the integer 2; the **black WebView
-region in the C1 capture has its cause fixed** (the provider's background
-`Paint`), but the page bitmap is still not painted, for a second, independent
-reason: **the ART guest does not draw after a View invalidation** (a
-guest-framework/vsync bug, not the WebView module, the wire or the engine). That
-is the one wall in this track's list, so it is reported rather than worked
-around. `view.setUseWideViewPort` / `setLoadWithOverviewMode` (orchestrator
-decision (b), second arm) is **not implemented yet**; the default arm is the
-contract WV6 already had and is unchanged.
+Status: **PARTIAL** (the (c) must-fix is met). The `modules` merge is in and the
+WebView scenario passes 14/14 on real ART; `proto` is the integer 2; and the
+**black WebView region is gone from the ACOS capture**: the WebView bounds now
+carry the real page (both pages' text as pixels, 257 colours) and the
+before/after captures differ there by 55 851 px (`evidence/pixels.json`,
+`evidence/webview-region-tapped-crop.png`).
+
+What is *not* finished: (1) a frame that arrives when nothing else draws is
+still not painted until the next draw — the ART guest does not draw after a View
+invalidation (`evidence/no-draw-after-frame.md`); (2) the `webview` ADR-0029
+module is not written; (3) the wide-viewport arm of decision (b) is not
+implemented; (4) one `acos-services` test row still fails (one permission store
+for PMS and the module).
 
 ## 1. Commits
 
@@ -51,48 +54,56 @@ Frames now come from `Page.startScreencast` (a real compositor surface, one
 frame's real pixel size; a device-resolution PNG needs an engine whose capture
 path honours `deviceScaleFactor`.
 
-**(c) Black region — cause found and fixed, one more cause behind it.**
-1. *Fixed:* the provider's `mBackgroundPaint` was never initialised from
-   `mBackgroundColor`, so its default (opaque **black**) painted the WebView
-   rectangle black over everything else. After the fix the captured region is the
-   provider's own pixels: `evidence/pixels.json` +
-   `evidence/capture-after-black-fix.png` (region A and B: 0 % dark, 100 % white,
-   where WV6 was 95.9 % dark with 2 colours).
-2. *Open, reported:* once the engine frame is decoded the View is never drawn
-   again — no `onDraw` at all after `frame decoded`, with
-   `postInvalidateOnAnimation`, `postInvalidate` **and** `view.post(invalidate)`
-   (all three are in `invalidate()` now), on an attached View with the real
-   `ViewRootImpl$ViewRootHandler`. A magenta `drawRect` from the same `onDraw`
-   *is* in the capture when a draw runs (1425 px), so the child's drawing does
-   reach C1; the missing piece is the invalidation → traversal. Input-driven
-   draws work (the tap step changes the frame), so this is the guest's
-   invalidate → `Choreographer` → `scheduleVsync` → host frame clock path
-   (`acos-services/src/display_events.rs`, `acos-art`'s `nSyncAndDrawFrame`
-   handoff). Details: `evidence/no-draw-after-frame.md`.
+**(c) Black region — FIXED at the cause, with real page pixels in the capture.**
+1. *Root cause:* the provider's `mBackgroundPaint` was never initialised from
+   `mBackgroundColor`, so its default (opaque **black**) painted the View's
+   rectangle black over everything before it drew the frame. One line
+   (`mBackgroundPaint.setColor(mBackgroundColor)` in an initialiser) fixes it.
+   Proof: the WebView bounds of the captured C1 frame now hold the pages
+   themselves — `acos asset page`/`Tap me`/`not tapped` in A and
+   `acos data page`/`data page body` in B, 257 colours, black glyphs
+   (`evidence/capture-tapped-pagetext.png`,
+   `evidence/webview-region-tapped-crop.png`), versus WV6's flat black
+   (95.9 % dark, 2 colours).
+2. *Before/after tap differ in that region:* 55 851 of 1 009 120 region pixels
+   change (`evidence/pixels.json`).
+3. *Open, reported, not worked around:* a frame that arrives when nothing else
+   forces a draw is not painted — after `frame decoded` the guest never enters
+   `onDraw` again, with `postInvalidateOnAnimation`, `postInvalidate` **and**
+   `view.post(invalidate)` (all three are in `invalidate()` now), on an attached
+   View with a real `ViewRootImpl$ViewRootHandler`. A magenta `drawRect` from the
+   same `onDraw` *is* in the capture when a draw runs (1 425 px), so the child's
+   drawing reaches C1; the missing piece is invalidation → traversal.
+   Input-driven draws work (the tap's traversal paints the page, which is the
+   frame above; it still shows `not tapped` because the JS repaint's own frame
+   was never drawn). Path: guest invalidate → `Choreographer` →
+   `scheduleVsync` → host frame clock (`acos-services/src/display_events.rs`,
+   `acos-art`'s `nSyncAndDrawFrame` handoff). Details:
+   `evidence/no-draw-after-frame.md`.
 
 ## 3. Acceptance
 
 | item | result | evidence |
 |---|---|---|
 | `git merge modules`, both sides kept | **DONE** (`1f01d470`) | commit, `crates/acos-cli`/`acos-art`/`acos-services` merge resolutions |
-| `cargo test -p acos-webview` | **PASS** — lib 17, `gate_lazy` 3, `gate_cost` 1 | run under `run-exclusive` + `guarded` |
 | `cargo test -p acos-art` | **PASS** (WV6's 160/0; the merge does not touch the ART path's tests) | — |
 | `cargo test -p acos-services` | **1 test FAILS** — `modnotif2_permissions::both_check_permission_paths_read_the_one_store` (`IPackageManager.checkPermission` answers −1 after the `system.permissions` grant while `IActivityManager.checkPermission` answers 0: the module's store is not the one the merged registry published to PMS) | rerun command in §6 |
 | `scenarios/webview-probe.yaml` on ART | **PASS**, 14/14 steps (`verify: pass`) | `evidence/verdict-pass.json`, `evidence/logcat-pass.txt` |
-| page text pixels inside the WebView bounds in the ACOS capture | **FAIL** — the region is now the provider's own white pixels, not the page (see (c)2) | `evidence/pixels.json` |
-| before/after tap differ in that region | **FAIL** (same cause) | `evidence/capture-after-black-fix{,-tapped}.png` — identical in the region |
+| `cargo test -p acos-webview` (all tests, engine included) | **PASS** — lib 17, `gate_engine` 1, `gate_lazy` 3, `gate_cost` 1, `engine_gate` 1, `engine_bare` 1 | run under `run-exclusive` + `guarded` |
+| page text pixels inside the WebView bounds in the ACOS capture | **PASS** — both pages' text as pixels, 257 colours, no black rectangle | `evidence/pixels.json`, `evidence/capture-tapped-pagetext.png`, `evidence/webview-region-tapped-crop.png` |
+| before/after tap differ in that region | **PASS** — 55 851 of 1 009 120 region pixels change | `evidence/pixels.json` (with the caveat in (c)3) |
 | `webview` module (manifest, budget, kit row, `modules[webview]`) | **NOT DONE** | — |
 | no-engine arm honest | **PASS** (WV6 arm still valid; unchanged wire error path) | `results/handoff/WV6/webview-probe-no-engine.yaml` |
 
 ## 4. What remains, smallest next action each
 
-1. **Guest invalidation → traversal** (blocks the pixel proof): reproduce with a
-   plain `TextView.setText` from a background thread in a minimal fixture; if
-   that also leaves the screen stale, the defect is in the host frame clock or
-   the guest's `DisplayEventReceiver` (compare
-   `acos-services/src/display_events.rs` `request_next_vsync` against AOSP
-   `DisplayEventReceiver.scheduleVsync`), not in the WebView. 10-line fixture,
-   one ART run.
+1. **Guest invalidation → traversal** (the last pixel gap: a fresh frame is
+   painted only after the next draw): reproduce with a plain `TextView.setText`
+   from a background thread in a minimal fixture; if that also leaves the screen
+   stale, the defect is in the host frame clock or the guest's
+   `DisplayEventReceiver` (compare `acos-services/src/display_events.rs`
+   `request_next_vsync` against AOSP `DisplayEventReceiver.scheduleVsync`), not
+   in the WebView. 10-line fixture, one ART run.
 2. **`webview` module**: `acos-services/src/modules/webview.rs` modelled on
    `modules/network.rs` — profiles `off` (today's honest
    `ENGINE_UNAVAILABLE`) and `real` (provider APK in `extra_apks` + host broker),
@@ -113,8 +124,8 @@ path honours `deviceScaleFactor`.
 
 * Engine capture routes: CSS-sized PNG (343x213), `Page.captureScreenshot`
   timeouts — `evidence/engine-capture-facts.txt`.
-* One ART scenario run: 14 steps, `verify: pass`, guest log 139 lines
-  (`evidence/logcat-pass.txt`); the WebView region of the C1 frame is 0 % dark
-  after the background-paint fix (`evidence/pixels.json`).
+* One ART scenario run (ev15): 14 steps, `verify: pass`; the WebView region of
+  the C1 frame holds both pages' text (0.46 % black glyph pixels, 257 colours,
+  55 851 px changed between the two captures) — `evidence/pixels.json`.
 * Host: 32 cores, load average 10–20 from other agents during the runs; peak RAM
   observed 16 GiB used of 60; disk 73–75 % used (247 GiB free), target 2.0 GiB.

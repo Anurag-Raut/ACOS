@@ -435,8 +435,14 @@ fn engine_gate() {
         let t0 = Instant::now();
         let (meta, blob) = guest.render(1);
         times.push(t0.elapsed().as_secs_f64() * 1000.0);
-        assert_eq!(meta["width"], json!(1080));
-        assert_eq!(meta["height"], json!(2400));
+        // WV7: the wire reports the frame's REAL pixel size. This engine
+        // cannot emit a device-resolution capture under begin-frame control
+        // (`beginFrame`'s screenshot is CSS-sized and ignores
+        // deviceScaleFactor; `Page.captureScreenshot` never answers), so a
+        // 1080x2400 @2.625 View renders 411x914 CSS pixels. The guest scales
+        // them into the View; the wire never claims pixels the PNG lacks.
+        assert_eq!(meta["width"], json!(411));
+        assert_eq!(meta["height"], json!(914));
         assert_eq!(meta["format"], json!("png"));
         assert_eq!(meta["bytes"], json!(blob.data.len()));
         assert!(blob.data.starts_with(b"\x89PNG"), "frame is not a PNG");

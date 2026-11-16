@@ -28,6 +28,12 @@ when a draw ran (1425 magenta pixels at display (21,700) in run ev5), so the
 child's drawing does reach the C1 window buffer; the missing piece is the
 traversal, not the compositing.
 
+Consequence, visible in run ev15: the `capture` right after the page loads is
+blank (the decoded frame arrived after the last draw), and after the **tap** —
+which does force a traversal — the capture holds both pages' text
+(`evidence/capture-tapped-pagetext.png`), still showing the *pre-tap* DOM text
+(`not tapped`) because the JS change's own frame was never painted.
+
 Where it lives: the guest's invalidate -> `Choreographer` -> `scheduleVsync` ->
 host frame clock -> `doTraversal` path (`acos-services/src/display_events.rs`
 request-driven clock; `acos-art`'s session draws on `nSyncAndDrawFrame`). That is

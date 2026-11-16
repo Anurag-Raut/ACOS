@@ -131,10 +131,15 @@ fn two_sessions_get_their_own_context_and_a_real_png_frame_through_the_gate() {
     assert_eq!(loaded["view"], json!(1));
     let (meta, blob) = a.render(1);
     assert_eq!(meta["format"], json!("png"));
-    assert_eq!(meta["width"], json!(1080));
-    assert_eq!(meta["height"], json!(2400));
-    assert_eq!(blob.width, 1080);
-    assert_eq!(blob.height, 2400);
+    // WV7: the frame's real pixel size. This engine has no device-resolution
+    // capture path under begin-frame control (WIRE.md §4.2), so 1080x2400 @2.625
+    // renders 411x914; 720 wide renders 274. The guest scales into the View.
+    assert_eq!(meta["width"], json!(411));
+    assert_eq!(meta["height"], json!(914));
+    // The BLOB header carries the same real size as the JSON (WIRE.md §1: the
+    // blob's id is the JSON response's, and its width/height are the frame's).
+    assert_eq!(blob.width, 411);
+    assert_eq!(blob.height, 914);
     assert_eq!(blob.data.len(), meta["bytes"].as_u64().unwrap_or(0) as usize);
     assert_png(&blob.data);
     println!(
@@ -174,7 +179,8 @@ fn two_sessions_get_their_own_context_and_a_real_png_frame_through_the_gate() {
     )
     .expect("view.loadData B");
     let (meta_b, blob_b) = b.render(7);
-    assert_eq!(meta_b["width"], json!(720));
+    // 720 @2.0 = 360 CSS px (same rule as session A's 411).
+    assert_eq!(meta_b["width"], json!(360));
     assert_png(&blob_b.data);
     // Sessions are isolated: each browser context holds only its own target.
     let mem = b.call("memory", json!({})).expect("memory");
