@@ -1,0 +1,72 @@
+# MODLOC evidence: the location module on real ART, driven by scenario steps.
+# The app shows what it received on screen; every assertion is a UI text read.
+version: 1
+name: location-probe
+description: location:scripted feeds a fix and a 3-point track; the app shows last known + live updates.
+app: fixtures/build/apps/location-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+services:
+  - id: location
+    profile: scripted
+    config:
+      permissions: fine
+steps:
+  - launch:
+      activity: dev.acos.fixtures.locationprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: state}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: state}
+      text: {contains: "state=ready"}
+  - assert_text:
+      selector: {id: state}
+      text: {contains: "providers=fused,gps,network,passive"}
+  - assert_text:
+      selector: {id: last}
+      text: {exact: "last=none"}
+  - service_ctl:
+      module: location
+      op: set_location
+      args: {lat: 37.4220, lng: -122.0841, accuracy: 4.0, provider: gps}
+  - wait_for:
+      selector: {id: last, text: {contains: "37.4220"}}
+      timeout_ms: 10000
+  - assert_text:
+      selector: {id: last}
+      text: {contains: "last=37.4220,-122.0841"}
+  - service_ctl:
+      module: location
+      op: play_track
+      args:
+        interval_ms: 250
+        points:
+          - {lat: 37.4230, lng: -122.0850}
+          - {lat: 37.4240, lng: -122.0860}
+          - {lat: 37.4250, lng: -122.0870}
+  - wait_for:
+      selector: {id: fix, text: {contains: "37.4250"}}
+      timeout_ms: 15000
+  - assert_text:
+      selector: {id: fix}
+      text: {contains: "fix=37.4250,-122.0870 provider=gps"}
+  # `set_location` delivered the first live fix, then the three track points:
+  # four delivered updates, at real timing (the logcat lines are ~250 ms apart).
+  - assert_text:
+      selector: {id: fix}
+      text: {contains: "count=4"}

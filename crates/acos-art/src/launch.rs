@@ -811,13 +811,16 @@ pub(crate) fn launch_session(
             };
             unsafe {
                 libc::close(listener);
-                // H4: the receive timeout only exists to notice `stop` after a
-                // guest death. Process exit closes this socket, which is the
-                // real wake; a 1 s bound keeps a wedged peer from parking the
-                // launcher forever without a 10/s idle timer.
+                // H4: the receive timeout notices `stop` after a guest death.
+                // Process exit closes this socket, which is the real wake.
+                // ADR-0029: it is also the idle tick that carries a module's
+                // *timed* delivery (a scripted location track, a sensor feed) to
+                // an idle guest: `Peer::tick` drains the host's
+                // `system -> app` queue on every turn, so 20 ms bounds how stale
+                // a scripted fix can be (50 wakeups/s on an idle session).
                 let tv = libc::timeval {
-                    tv_sec: 1,
-                    tv_usec: 0,
+                    tv_sec: 0,
+                    tv_usec: 20_000,
                 };
                 libc::setsockopt(
                     client,
@@ -6662,12 +6665,28 @@ fn serve(
             {
                 return Ok(())
             }
-            // A live guest may be idle; the timeout only exists to observe
-            // `stop`, not to end the session.
+            // A live guest may be idle. Deliver what a module produced from its
+            // own thread (a scripted location track) and keep waiting: the
+            // timeout only exists to observe `stop`, not to end the session.
             Err(e)
                 if e.kind() == std::io::ErrorKind::WouldBlock
                     || e.kind() == std::io::ErrorKind::TimedOut =>
             {
+                for out in peer.tick() {
+                    if let Err(error) = write_frame(fd, &out) {
+                        eprintln!(
+                            "peer-trace: idle write_frame FAILED: {error} (ty={} seq={} code={} data={})",
+                            out.ty,
+                            out.seq,
+                            out.code,
+                            out.data.len()
+                        );
+                        close_frame_fds(&out);
+                        return Err(error);
+                    }
+                    close_frame_fds(&out);
+                }
+                let _ = std::io::stderr().flush();
                 continue
             }
             Err(e) => return Err(e),

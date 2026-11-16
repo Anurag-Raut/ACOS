@@ -602,6 +602,10 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     // ADR-0029 item 4: the attached set as the *launcher* reported it, captured
     // before the session is torn down (the rows are the verdict's evidence).
     let session_modules = backend.modules();
+    // ADR-0029: the rows a verdict cites must be the session's *final* module
+    // state (every delivered fix is recorded in them), so keep the live handle
+    // and read it after the teardown asked the launcher once more.
+    let live_module_rows = backend.module_rows();
     let mut guarded = crate::trust::TrustGuard::new(Box::new(backend), trust);
     let mut envelope = acos_verify::verify(&request, &mut guarded);
     // W46: tear the session down *before* annotating, so the launcher's own
@@ -609,6 +613,10 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     // record is evidence for a pass as well as for a failure (a clean run ends
     // with guest_exit=0), and a caller that keeps only the artifacts keeps it.
     drop(guarded);
+    let session_modules = live_module_rows
+        .and_then(|rows| rows.lock().ok().map(|rows| rows.clone()))
+        .filter(|rows| !rows.is_empty())
+        .unwrap_or(session_modules);
     annotate(
         &mut envelope,
         &args,

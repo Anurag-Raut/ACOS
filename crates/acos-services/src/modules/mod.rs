@@ -2,6 +2,7 @@
 
 pub mod biometric;
 pub mod bluetooth;
+pub mod location;
 pub mod sensors;
 pub mod tail_stubs;
 pub mod telephony;

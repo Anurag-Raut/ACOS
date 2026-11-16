@@ -1,0 +1,186 @@
+{
+  "engine": {
+    "animations": "on",
+    "commands": {
+      "missing": [
+        "environment"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "type_text",
+        "key",
+        "rotate",
+        "reset",
+        "close",
+        "logs",
+        "service_module",
+        "crash_reports"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/handoff/MODLOC/artifacts",
+      "engine_report": "results/handoff/MODLOC/artifacts/engine.json",
+      "pruned_session_captures": 7,
+      "retention": "results/handoff/MODLOC/artifacts/retention.json",
+      "verdict": "results/handoff/MODLOC/artifacts/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": true,
+    "insets": "report",
+    "mode": "live",
+    "modules": [
+      {
+        "attach": "at-launch",
+        "fidelity": "real",
+        "id": "core",
+        "profile": "real",
+        "reason": null,
+        "state": "attached"
+      },
+      {
+        "attach": "hot",
+        "fidelity": "off",
+        "id": "feedback.vibrator",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "fidelity": "scripted",
+        "id": "location",
+        "profile": "scripted",
+        "reason": "scripted profile: scripted providers (gps=true,network=true,fused=true,passive=true), location setting on, permission fine, 1 register(s), 5 fix(es) delivered to the app (last gps lat 37.425 lng -122.087); geocoder not present (framework no-geocoder path)",
+        "state": "attached"
+      }
+    ],
+    "session_exit": {
+      "abi": null,
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=81MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2287653-i2339314.scope)",
+      "code": null,
+      "disk_free_bytes": 209654935552,
+      "guest_crash": null,
+      "guest_exit": 0,
+      "guest_signal": null,
+      "native_crash": null,
+      "native_crash_path": null,
+      "outcome": "ok",
+      "panic": null,
+      "path": "results/handoff/MODLOC/artifacts/art-frames/session-exit.json",
+      "retryable": false,
+      "stage": "teardown-evidence"
+    },
+    "timing": {
+      "attributed_ms": 1431,
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "built",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-198de3b4e875c5c1",
+        "input_hash": "198de3b4e875c5c1",
+        "mode": "shared-fixed",
+        "prep_ms": 8026,
+        "reason": "no usable manifest at /home/Qui/.cache/acos/art/boot-images/fixed-198de3b4e875c5c1/manifest.json: No such file or directory (os error 2)"
+      },
+      "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
+      "session_start_ms": 9479,
+      "steps": [
+        {
+          "index": 0,
+          "status": "pass",
+          "step": "launch",
+          "wall_ms": 156
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 55
+        },
+        {
+          "index": 2,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        },
+        {
+          "index": 3,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 1
+        },
+        {
+          "index": 4,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        },
+        {
+          "index": 5,
+          "status": "pass",
+          "step": "service_ctl",
+          "wall_ms": 16
+        },
+        {
+          "index": 6,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 96
+        },
+        {
+          "index": 7,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        },
+        {
+          "index": 8,
+          "status": "pass",
+          "step": "service_ctl",
+          "wall_ms": 2
+        },
+        {
+          "index": 9,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 1105
+        },
+        {
+          "index": 10,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        },
+        {
+          "index": 11,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        }
+      ],
+      "unattributed_ms": 3,
+      "unit": "ms",
+      "verdict_wall_ms": 1434
+    },
+    "trust": "trusted",
+    "unsupported_steps": []
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "request_id": "req_22e6e6_18e874d1df83e20e",
+  "verdict_status": "pass"
+}

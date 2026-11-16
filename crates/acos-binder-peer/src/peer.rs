@@ -915,6 +915,26 @@ impl Peer {
     pub fn take_delivery_frames(&mut self) -> Vec<Frame> {
         let mut pending = std::mem::take(&mut self.local_deliveries);
         pending.extend(self.host.take_deliveries());
+        self.frames_for_deliveries(pending)
+    }
+
+    /// Deliveries that became ready while the guest was idle.
+    ///
+    /// A scripted/timed module (`location`'s `play_track`, a sensor or camera
+    /// feed) queues a `system -> app` delivery from its own thread. Without a
+    /// tick the peer only drains deliveries after a guest transaction, so the
+    /// app would see the feed only when it happened to call something. The peer
+    /// loop asks [`Self::next_timed_deadline`] how long it may sleep and calls
+    /// this when that deadline (or a guest frame) arrives.
+    pub fn tick(&mut self) -> Vec<Frame> {
+        // `take_timed_deliveries` (not the plain queue): a module's feed lives in
+        // the module's own object, which only this idle turn may lock.
+        let mut pending = std::mem::take(&mut self.local_deliveries);
+        pending.extend(self.host.take_timed_deliveries());
+        self.frames_for_deliveries(pending)
+    }
+
+    fn frames_for_deliveries(&mut self, mut pending: Vec<acos_services::PendingDelivery>) -> Vec<Frame> {
         // Defence in depth: even the frames produced in one turn are bounded, so a
         // single transaction that fans out into thousands of reverse deliveries
         // cannot grow this turn's `out` without limit.

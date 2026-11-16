@@ -1,0 +1,129 @@
+{
+  "engine": {
+    "animations": "on",
+    "commands": {
+      "missing": [
+        "environment"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "type_text",
+        "key",
+        "rotate",
+        "reset",
+        "close",
+        "logs",
+        "service_module",
+        "crash_reports"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/handoff/MODLOC/artifacts-geocoder",
+      "engine_report": "results/handoff/MODLOC/artifacts-geocoder/engine.json",
+      "retention": "results/handoff/MODLOC/artifacts-geocoder/retention.json",
+      "verdict": "results/handoff/MODLOC/artifacts-geocoder/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": true,
+    "insets": "report",
+    "mode": "live",
+    "modules": [
+      {
+        "attach": "at-launch",
+        "fidelity": "real",
+        "id": "core",
+        "profile": "real",
+        "reason": null,
+        "state": "attached"
+      },
+      {
+        "attach": "hot",
+        "fidelity": "off",
+        "id": "feedback.vibrator",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "fidelity": "scripted",
+        "id": "location",
+        "profile": "scripted",
+        "reason": "scripted profile: scripted providers (gps=true,network=true,fused=true,passive=true), location setting on, permission fine, 1 register(s), 0 fix(es) delivered to the app (no fix delivered yet); geocoder scripted",
+        "state": "attached"
+      }
+    ],
+    "session_exit": {
+      "abi": null,
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=89MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2287967-i2276033.scope)",
+      "code": null,
+      "disk_free_bytes": 209651658752,
+      "guest_crash": null,
+      "guest_exit": 0,
+      "guest_signal": null,
+      "native_crash": null,
+      "native_crash_path": null,
+      "outcome": "ok",
+      "panic": null,
+      "path": "results/handoff/MODLOC/artifacts-geocoder/art-frames/session-exit.json",
+      "retryable": false,
+      "stage": "teardown-evidence"
+    },
+    "timing": {
+      "attributed_ms": 211,
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "hit",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-198de3b4e875c5c1",
+        "input_hash": "198de3b4e875c5c1",
+        "mode": "shared-fixed"
+      },
+      "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
+      "session_start_ms": 256,
+      "steps": [
+        {
+          "index": 0,
+          "status": "pass",
+          "step": "launch",
+          "wall_ms": 156
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 54
+        },
+        {
+          "index": 2,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 1
+        }
+      ],
+      "unattributed_ms": 0,
+      "unit": "ms",
+      "verdict_wall_ms": 211
+    },
+    "trust": "trusted",
+    "unsupported_steps": []
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "request_id": "req_22e954_18e874d5f9e68890",
+  "verdict_status": "pass"
+}

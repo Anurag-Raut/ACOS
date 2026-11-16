@@ -361,6 +361,15 @@ pub trait SessionBackend {
         ))
     }
 
+    /// The live module rows, when the engine can publish them after the run
+    /// (the verdict cites the final state, not the launch snapshot).
+    fn module_rows_handle(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>> {
+        None
+    }
+
+
     /// Start the app and return the first completed frame.
     fn launch(&mut self, apk: &Path) -> Result<LaunchOutcome, BackendError>;
 
@@ -612,6 +621,17 @@ impl EngineBackend {
         match self {
             EngineBackend::Native(_) => Some(Mode::Live),
             EngineBackend::Session { session, .. } => Some(session.mode()),
+        }
+    }
+
+    /// The live module rows' shared handle, so a verdict can read the final set.
+    #[must_use]
+    pub fn module_rows(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>> {
+        match self {
+            EngineBackend::Native(_) => None,
+            EngineBackend::Session { session, .. } => session.module_rows_handle(),
         }
     }
 
