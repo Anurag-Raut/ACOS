@@ -148,7 +148,37 @@ Wire `Request::Spawn` into the ART launcher (`crates/acos-art/src/session.rs` /
 `results/handoff/NET1/proof.sh` with a real `net-check` session and hand
 `ab-driver.sh` to the bench owner.
 
-## 8. Environment / cleanliness
+## 8. Reproduce
+
+```sh
+# 1. pinned pasta (static), sha256 must be 314c37e878bd6ffe…0edf60
+git clone --depth 1 --branch 2026_10_02.cba3570 https://passt.top/passt .cache/net1/passt-src
+(cd .cache/net1/passt-src && make clean && make -j8 static VERSION=2026_10_02.cba3570)
+
+# 2. the supervisor
+CARGO_TARGET_DIR=$PWD/.cache/net1-target cargo build --release --offline -p acos-netd
+CARGO_TARGET_DIR=$PWD/.cache/net1-target cargo test  --release --offline -p acos-netd   # 10 tests
+
+# 3. the live transport proof (≈90 s, no sudo, no kernel change)
+ACOS_NET_PASTA=$PWD/.cache/net1/passt-src/pasta \
+  BIN=$PWD/.cache/net1-target/release/acos-netd \
+  results/handoff/NET1/proof.sh results/handoff/NET1/run
+
+# 4. the control surface by hand
+export ACOS_NET_PASTA=$PWD/.cache/net1/passt-src/pasta
+.cache/net1-target/release/acos-netd up
+.cache/net1-target/release/acos-netd spawn s1 -- /bin/sh -c 'curl -sS -o /dev/null -w "%{http_code}\n" https://example.com'
+.cache/net1-target/release/acos-netd offline s1     # then `online s1`
+.cache/net1-target/release/acos-netd delay s1 --ms 400
+.cache/net1-target/release/acos-netd detach s1
+.cache/net1-target/release/acos-netd shutdown
+```
+
+The supervisor keeps its socket and logs in `/run/user/<uid>/acos-netd/`
+(`netd.log`, `fabric.log`, `pasta.log`); `shutdown` removes the relay netns and
+`pasta`.
+
+## 9. Environment / cleanliness
 
 No sudo, no kernel change, no writes outside the worktree except
 `/run/user/<uid>/acos-netd/` (the supervisor's socket + logs; removed on
