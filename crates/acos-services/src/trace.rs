@@ -110,6 +110,31 @@ pub fn elapsed_ns(start: Instant) -> u64 {
     u64::try_from(start.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
+/// Emit one diagnostic line to stderr **and**, when `ACOS_TRACE_FILE` is set,
+/// to that file.
+///
+/// The host's stderr is not part of a verify run's artifacts, so a deadlock
+/// hunt needs a sink the run leaves behind. One `write` + `flush` per line
+/// keeps it usable while another thread is wedged: whatever was written before
+/// the hang is on disk.
+///
+pub fn line(message: impl AsRef<str>) {
+    let message = message.as_ref();
+    eprintln!("{message}");
+    let Some(path) = std::env::var_os("ACOS_TRACE_FILE") else {
+        return;
+    };
+    use std::io::Write as _;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{stamp} {message}");
+        let _ = file.flush();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

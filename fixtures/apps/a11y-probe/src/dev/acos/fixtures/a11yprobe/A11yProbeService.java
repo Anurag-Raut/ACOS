@@ -59,9 +59,14 @@ public class A11yProbeService extends AccessibilityService {
     protected void onServiceConnected() {
         AccessibilityServiceInfo info = getServiceInfo();
         String component = info == null || info.getId() == null ? "?" : info.getId();
+        // MODA11Y6: capabilities and event types come from the
+        // `<accessibility-service>` meta-data block the module parsed out of
+        // the APK, which is also what gates the interaction surface.
+        // MODA11Y6: capabilities come from the `<accessibility-service>` block
+        // the module parsed out of the APK, which is also what gates the
+        // interaction surface.
         Log.i(TAG, "service_connected id=" + component
-                + " eventTypes=" + (info == null ? -999 : info.getCapabilities() * 0)
-                + " flags=" + (info == null ? -999 : info.getCapabilities()));
+                + " capabilities=" + (info == null ? -999 : info.getCapabilities()));
         sInstance = this;
         Thread probe = new Thread(this::probe, "a11y-probe");
         probe.setDaemon(true);
@@ -138,15 +143,45 @@ public class A11yProbeService extends AccessibilityService {
         // (AccessibilityService.java:2660-2670, 2803-2812), and the WMS accepts
         // an accessibility overlay only on that token
         // (WindowManagerService.java:1630-1640, sanitizeWindowType 9914-9928).
-        // MODA11Y5: the overlay add itself is the assertion the guest can make
-        // here. A second `getWindows()` from this session deadlocks (the
-        // window-session thread holds the window-manager state while the
-        // overlay's own `relayout`/`finishDrawing` is in flight, and the
-        // accessibility `getWindows` handler wants the same lock), so the
-        // overlay's presence, type and kind are asserted from the host's own
-        // window stack (`assert_windows` in scenarios/a11y-probe.yaml), not
-        // from a guest re-query. See results/handoff/MODA11Y5/README.md.
         addOverlay();
+        // MODA11Y5: a second `getWindows()` from this session never returned
+        // (the window-session thread held the window-manager state while the
+        // overlay's own `relayout`/`finishDrawing` was in flight, and this
+        // handler wants the same state). MODA11Y6: the guest re-query is back —
+        // it is the assertion that the overlay is a real window of type
+        // TYPE_ACCESSIBILITY_OVERLAY as the *service* sees it, not only in the
+        // host's stack.
+        Log.i(TAG, "windows2_start");
+        List<AccessibilityWindowInfo> again = null;
+        boolean overlay = false;
+        int attempts2 = 0;
+        for (; attempts2 < 25; attempts2++) {
+            again = getWindows();
+            overlay = false;
+            if (again != null) {
+                for (int i = 0; i < again.size(); i++) {
+                    overlay |= again.get(i).getType()
+                            == AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY;
+                }
+            }
+            if (overlay) {
+                break;
+            }
+            SystemClock.sleep(200);
+        }
+        int count2 = again == null ? -1 : again.size();
+        Log.i(TAG, "windows2 count=" + count2 + " attempts=" + (attempts2 + 1));
+        if (again != null) {
+            for (int i = 0; i < again.size(); i++) {
+                AccessibilityWindowInfo window = again.get(i);
+                Log.i(TAG, "window2[" + i + "] id=" + window.getId()
+                        + " type=" + window.getType()
+                        + " layer=" + window.getLayer()
+                        + " active=" + window.isActive()
+                        + " focused=" + window.isFocused());
+            }
+        }
+        Log.i(TAG, "windows2 overlay=" + overlay);
         Log.i(TAG, "overlay_probe_done");
     }
 

@@ -190,6 +190,32 @@ pub struct A11yState {
     pub next_window_id: i32,
     /// Interaction requests relayed to an app connection (bounded).
     pub interactions: Vec<A11yInteraction>,
+    /// The bound service's `<accessibility-service>` meta-data
+    /// (`AccessibilityServiceInfo.parseServiceInfo`): the capabilities and
+    /// flags `AccessibilitySecurityPolicy` gates the interaction surface on.
+    /// `None` while nothing is bound, and for a service that declares no
+    /// meta-data — which is the AOSP answer an unprivileged service gets.
+    pub service_config: Option<crate::a11y_config::A11yServiceConfig>,
+    /// Window-stack changes the bound service has not been told about yet.
+    ///
+    /// AOSP's `AccessibilityWindowManager` emits one
+    /// `AccessibilityEvent.TYPE_WINDOWS_CHANGED` per added/removed/changed
+    /// window, and that event is what clears a service's
+    /// `AccessibilityCache` (`AccessibilityCache.onAccessibilityEvent`).
+    /// Without it a bound service that already asked `getWindows()` answers
+    /// every later query from the cache and never sees a window added after
+    /// its first query. Bounded like `events`.
+    pub windows_changed: Vec<A11yWindowChange>,
+}
+
+/// One pending `TYPE_WINDOWS_CHANGED` event, as the window manager produced it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct A11yWindowChange {
+    /// The changed window's `IWindow` binder id (the accessibility window id
+    /// is assigned when the event is built).
+    pub window: u64,
+    /// `AccessibilityEvent.WINDOWS_CHANGE_*` mask.
+    pub changes: i32,
 }
 
 /// Keep the event log bounded; an always-on UI sends thousands of events.
@@ -219,6 +245,8 @@ impl A11yState {
             window_ids: Vec::new(),
             next_window_id: 1,
             interactions: Vec::new(),
+            service_config: None,
+            windows_changed: Vec::new(),
         }
     }
 
@@ -380,6 +408,23 @@ impl A11yState {
         bits
     }
 
+    /// `AccessibilitySecurityPolicy.canRetrieveWindowContentLocked`: may the
+    /// bound service read window content at all?
+    #[must_use]
+    pub fn can_retrieve_window_content(&self) -> bool {
+        self.service_config
+            .is_some_and(|config| config.can_retrieve_window_content())
+    }
+
+    /// `AccessibilitySecurityPolicy.canRetrieveWindowsLocked`: the window
+    /// **list** (`getWindows`/`getWindow`) needs the content capability *and*
+    /// `FLAG_RETRIEVE_INTERACTIVE_WINDOWS`.
+    #[must_use]
+    pub fn can_retrieve_windows(&self) -> bool {
+        self.service_config
+            .is_some_and(|config| config.can_retrieve_windows())
+    }
+
     /// Record one event (bounded).
     pub fn record_event(&mut self, event_type: i32, event_time: i64) {
         if self.events.len() >= MAX_EVENTS {
@@ -389,6 +434,26 @@ impl A11yState {
             event_type,
             event_time,
         });
+    }
+
+    /// Queue one `TYPE_WINDOWS_CHANGED` event for the bound service.
+    ///
+    /// Called by the window session when a window leaves the stack; AOSP's
+    /// `AccessibilityWindowManager` queues exactly one event per change and
+    /// `AbstractAccessibilityServiceConnection.notifyAccessibilityEvent`
+    /// delivers it even to a service whose `eventTypes` do not include it,
+    /// because `TYPE_WINDOWS_CHANGED` is cache-critical
+    /// (`AccessibilityCache.CACHE_CRITICAL_EVENTS_MASK`).
+    pub fn record_window_change(&mut self, window: u64, changes: i32) {
+        if self.windows_changed.len() >= MAX_EVENTS {
+            self.windows_changed.remove(0);
+        }
+        self.windows_changed.push(A11yWindowChange { window, changes });
+    }
+
+    /// Take the queued window changes (the caller builds the events).
+    pub fn take_window_changes(&mut self) -> Vec<A11yWindowChange> {
+        std::mem::take(&mut self.windows_changed)
     }
 
     /// Event counts by type, for the report.
@@ -452,6 +517,20 @@ impl A11yState {
             })),
             "app_thread": self.app_thread.map(|t| format!("{t:#x}")),
             "self_disabled": self.self_disabled,
+            // MODA11Y6: what the bound service declared in its
+            // `<accessibility-service>` block, and what that allows it to do
+            // (`AccessibilitySecurityPolicy`).
+            "service_config": self.service_config.as_ref().map(|config| serde_json::json!({
+                "event_types": config.event_types,
+                "feedback_type": config.feedback_type,
+                "notification_timeout": config.notification_timeout,
+                "flags": config.flags,
+                "capabilities": config.capabilities,
+                "can_retrieve_window_content": config.can_retrieve_window_content(),
+                "can_retrieve_windows": config.can_retrieve_windows(),
+                "can_perform_gestures": config.can_perform_gestures(),
+                "can_take_screenshot": config.can_take_screenshot(),
+            })),
             "unsupported": self.unsupported,
         })
     }

@@ -96,6 +96,17 @@ fn service_transact(host: &mut ServiceHost, code: u32, args: impl FnOnce(&mut Pa
     let connection = {
         let state = a11y_state(host);
         let mut state = state.lock().unwrap();
+        // MODA11Y6: the interaction surface is gated on the service's
+        // `<accessibility-service>` meta-data
+        // (`AccessibilitySecurityPolicy.canRetrieveWindowsLocked`), so a
+        // fixture that expects windows declares the capability the way a real
+        // service does. The parse itself is proven against the real APK in
+        // tests/moda11y6_gate.rs.
+        state.service_config = Some(acos_services::a11y_config::A11yServiceConfig {
+            capabilities: acos_services::a11y_config::CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT,
+            flags: acos_services::a11y_config::FLAG_RETRIEVE_INTERACTIVE_WINDOWS,
+            ..Default::default()
+        });
         state.bind_service(
             &acos_services::misc::A11yPendingBind {
                 component: format!("{PACKAGE}/.ProbeService"),
@@ -367,6 +378,14 @@ fn a_direct_state_without_a_window_source_reports_no_windows() {
     // inventing a list; `getWindows` still returns an empty WindowListSparseArray.
     let state = Arc::new(Mutex::new(A11yState::new()));
     assert!(state.lock().unwrap().window_snapshot().is_empty());
+    // MODA11Y6: a service with no declared capability is refused the list
+    // (`getWindows` -> null), so this fixture declares it — the claim here is
+    // about an empty window *source*, not about the gate.
+    state.lock().unwrap().service_config = Some(acos_services::a11y_config::A11yServiceConfig {
+        capabilities: acos_services::a11y_config::CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT,
+        flags: acos_services::a11y_config::FLAG_RETRIEVE_INTERACTIVE_WINDOWS,
+        ..Default::default()
+    });
     let mut host = ServiceHost::standard();
     host.set_accessibility_state(Arc::clone(&state));
     let mut reply = service_transact(&mut host, 10, |_| {});
