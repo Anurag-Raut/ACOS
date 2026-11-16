@@ -1227,6 +1227,14 @@ gated `--map-host-loopback` address plus a per-session `ACCEPT` for an opted-in 
 tcp-reset (that is what "refused" means), not a `DROP` (a DROP stalled guest boot ~4.5 s). Evidence:
 `results/handoff/NET3.md`, branch `net3`.
 
+ADR-0029 amendment (owner, 2026-11-16, after MPROC4): **the host builds launch transactions.** A
+launch into an already-running process (and every later launch flavour: extras, results, flags,
+singleTop/onNewIntent) is a `ClientTransaction` with `LaunchActivityItem` (+ lifecycle items) encoded by
+the ACOS activity manager from the image dex shape and delivered on the existing host transport, the
+way system_server does; no ACOS helper inside the app builds launches (option B rejected). Codecs are
+checked byte-for-byte against real Java (the MODNOTIF4 differential). MPROC4's guest-marshalled first
+launch of a freshly spawned process is migrated onto the same encoder.
+
 **ADR-0029 amendment (owner, 2026-11-16, after MODNOTIF): system UI comes from system apps in the
 guest.** The permission dialog and the notification shade are provided by small ACOS system apps
 installed in the session image and run as their own ART process (multi-process foundation): a
