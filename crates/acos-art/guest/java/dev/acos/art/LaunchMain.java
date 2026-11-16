@@ -329,6 +329,53 @@ public final class LaunchMain {
         int runtime = initAndroidRuntime(sPkg);
         if (runtime < 0) throw new IllegalStateException("initAndroidRuntime -> " + runtime);
         System.out.println("ACOSLAUNCH MARK android-runtime ready rc=" + runtime);
+        // ADR-0029: on a phone the telephony mainline module's process (the Phone
+        // app) calls `TelephonyFrameworkInitializer.setTelephonyServiceManager`
+        // before any app runs; every `TelephonyManager.getITelephony()` and
+        // `SmsManager` send needs it. ACOS has no such process, so the session
+        // that attached the `net.telephony` module installs the manager here,
+        // exactly once, before the app boots. Without the module the field stays
+        // null and the framework takes its honest missing path (NPE-free callers
+        // return their documented defaults).
+        // ADR-0029: same for Bluetooth. `BluetoothAdapter.createAdapter` reads
+        // `BluetoothFrameworkInitializer.getBluetoothServiceManager()`, which on
+        // a device the Bluetooth mainline module installs. A session with the
+        // `hw.bluetooth` module attached installs it here so the adapter binder
+        // the module serves is reachable from the app process.
+        if (System.getenv("ACOSLAUNCH_BLUETOOTH") != null) {
+            try {
+                Class<?> initializer =
+                        Class.forName("android.bluetooth.BluetoothFrameworkInitializer");
+                Class<?> managerClass = Class.forName("android.os.BluetoothServiceManager");
+                Object manager = managerClass.getConstructor().newInstance();
+                java.lang.reflect.Method set = initializer.getDeclaredMethod(
+                        "setBluetoothServiceManager", managerClass);
+                set.setAccessible(true);
+                set.invoke(null, manager);
+                System.out.println("ACOSLAUNCH MARK bluetooth-service-manager installed");
+            } catch (Throwable t) {
+                System.out.println("ACOSLAUNCH WARN bluetooth init: " + unwrap(t));
+            }
+        }
+        if (System.getenv("ACOSLAUNCH_TELEPHONY") != null) {
+            try {
+                // Both classes are hidden framework API (not in the SDK jar this
+                // guest source compiles against), so they are reached by
+                // reflection, the same way AppMain reaches `ActivityThread` and
+                // the platform font internals.
+                Class<?> initializer =
+                        Class.forName("android.telephony.TelephonyFrameworkInitializer");
+                Class<?> managerClass = Class.forName("android.os.TelephonyServiceManager");
+                Object manager = managerClass.getConstructor().newInstance();
+                java.lang.reflect.Method set = initializer.getDeclaredMethod(
+                        "setTelephonyServiceManager", managerClass);
+                set.setAccessible(true);
+                set.invoke(null, manager);
+                System.out.println("ACOSLAUNCH MARK telephony-service-manager installed");
+            } catch (Throwable t) {
+                System.out.println("ACOSLAUNCH WARN telephony init: " + unwrap(t));
+            }
+        }
         // R3: the runtime is up, so libsigchain exists with ART's own fault
         // handlers already in the chain. Installing ours now appends it *after*
         // them: it runs only on a fault ART declined, prints the fault address,

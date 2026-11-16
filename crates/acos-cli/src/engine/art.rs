@@ -4660,6 +4660,12 @@ impl SessionBackend for ArtSession {
     /// to the launcher's peer thread that owns the module registry. Without this
     /// forward every `service_ctl` step is `unsupported` (the trait default),
     /// which would read as "this engine cannot" instead of the module's answer.
+    ///
+    /// The forwarded reply is the launcher's own: `{op, id, ctl_op, value, ...}`
+    /// for a control op, `{attached, modules}` for attach/detach/list/status. The
+    /// inherent [`ArtSession::service_op`] refreshes this adapter's `modules`
+    /// rows from it, so a live attach/detach is visible to the next launch
+    /// reply without a second query.
     fn service_op(
         &mut self,
         request: serde_json::Value,

@@ -218,6 +218,11 @@ for app in counter todo-list multi-activity form-validation settle-lab thread-he
     build_apk "$app"
 done
 
+# tail-probe is the long-tail module fixture (ADR-0029): one tab per module
+# (telephony, biometric, bluetooth, vibrator) printing what the framework's own
+# clients answered. Built at targetSdk 34 like the module scenario corpus.
+build_apk tail-probe
+
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from
 # ACOS_ART_KEYPROBE_MODE (see results/compat/K5.md).

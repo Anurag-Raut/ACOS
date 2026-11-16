@@ -62,6 +62,7 @@ pub const SESSION_TOOL_NAMES: &[&str] = &[
     "acos_status",
     "acos_doctor",
     "acos_services",
+    "acos_service_ctl",
 ];
 
 /// Identify a command from its wire name (`run-dex`).
@@ -666,6 +667,25 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                 }
             }),
         ),
+        "acos_service_ctl" => (
+            "ADR-0029 item 4: drive a scripted module's state on a live session (`acos_service_ctl`). \
+             `module` is the id (`net.telephony`), `op` is the module's own control operation \
+             (`calls`, `reset`, `sms`, `call_state`, `scan`, `auth`, ...) and `args` is that op's \
+             object. The module answers with the op's own value: a refused or unknown op is a \
+             structured error, never a silent success. Only an attached module answers; a detached \
+             one says so (`attach` it first with `acos_services`).",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["module", "op"],
+                "properties": {
+                    "module": {"type": "string", "minLength": 1, "description": "Module id (`net.telephony`, `hw.biometric`, `hw.bluetooth`, `feedback.vibrator`)."},
+                    "op": {"type": "string", "minLength": 1, "description": "The module's control operation name (`calls`, `sms`, `auth`, `scan`, ...)."},
+                    "args": {"type": "object", "description": "Op arguments (op-specific; see `acos_capabilities` modules[].controls)."},
+                    "base": base.clone()
+                }
+            }),
+        ),
         "acos_doctor" => (
             "Run the host preflight (`acos doctor`) and return its JSON report. Call it FIRST when \
              a build or launch fails before the app runs: it checks the Android SDK/build-tools, \
@@ -818,8 +838,9 @@ mod tests {
     fn every_protocol_tool_is_mapped_to_a_command() {
         let caps = Capabilities::unprobed();
         let infos = tool_infos(&caps);
-        // 13 protocol tools + acos_capabilities + acos_help + 10 session tools.
-        assert_eq!(infos.len(), 25);
+        // 13 protocol tools + acos_capabilities + acos_help + the session tools
+        // (`SESSION_TOOL_NAMES`).
+        assert_eq!(infos.len(), 13 + 2 + SESSION_TOOL_NAMES.len());
         let names: BTreeSet<&str> = infos.iter().map(|t| t.tool_name.as_str()).collect();
         for descriptor in mcp_tools().tools {
             assert!(

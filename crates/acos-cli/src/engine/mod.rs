@@ -338,9 +338,13 @@ pub trait SessionBackend {
         Vec::new()
     }
 
-    /// ADR-0029 item 4: one `acos_services`/`acos_service_ctl` operation on the
-    /// live session (`op: list|status|attach|detach|ctl`). An engine with no
-    /// service table refuses; none of them answers a no-op.
+    /// ADR-0029 item 4: the **one** service-module command on a live session.
+    ///
+    /// Every agent spelling ends here: `acos_services {op: list|status|attach|
+    /// detach}`, `acos_service_ctl {module, op, args}` (which the serve route
+    /// turns into `{op: "ctl", id, ctl_op, args}`) and a scenario's
+    /// `service_ctl:` step. An engine with no service table refuses; none of
+    /// them answers a no-op.
     fn service_op(
         &mut self,
         _request: serde_json::Value,

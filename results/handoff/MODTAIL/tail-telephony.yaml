@@ -1,0 +1,82 @@
+# MODTAIL proof: net.telephony attached at launch, scripted, driving two real
+# framework events (an incoming SMS broadcast and a PhoneStateListener callback)
+# and the scripted query answers. Trimmed to the ART engine's command surface.
+version: 1
+name: tail-telephony
+description: >-
+  net.telephony at `scripted`: TelephonyManager answers the scripted SIM, phone
+  type, network type and line-1 number; `acos_service_ctl` injects an incoming
+  SMS (decoded by the app through `SmsMessage.createFromPdu`) and a ringing call
+  state (delivered to a real `PhoneStateListener`); `SmsManager` records the
+  app's outgoing SMS.
+app: ../../../fixtures/build/apps/tail-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 240000
+services:
+  - id: net.telephony
+    profile: scripted
+steps:
+  - launch:
+      activity: dev.acos.fixtures.tailprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "TELEPHONY sim=READY phone=GSM network=LTE call=IDLE"}}
+      timeout_ms: 20000
+  - wait_for:
+      selector: {text: {contains: "line1=+15551234567"}}
+  # The operator is a guest *property* (`gsm.sim.operator.numeric`), which a
+  # module cannot set: the honest answer is the empty string, never a fake MCC.
+  - wait_for:
+      selector: {text: {contains: "operator=\"\""}}
+
+  # The app's phone screen starts listening for call state (a real app action:
+  # a listener is registered from the UI, not once at process start), then a
+  # ringing call reaches it.
+  - tap:
+      selector: {text: {exact: "Listen for calls"}}
+  - wait_for:
+      selector: {text: {contains: "CALL state=IDLE"}}
+      timeout_ms: 20000
+  - service_ctl:
+      module: net.telephony
+      op: call_state
+      args: {state: ringing, number: "+15550002222"}
+  - wait_for:
+      selector: {text: {contains: "CALL state=RINGING number=+15550002222"}}
+      timeout_ms: 20000
+
+  # An incoming SMS reaches the app's BroadcastReceiver as a real PDU.
+  - service_ctl:
+      module: net.telephony
+      op: sms
+      args: {from: "+15550001111", body: "ACOS SMS"}
+  - wait_for:
+      selector: {text: {contains: "SMS from=+15550001111 body=ACOS SMS"}}
+      timeout_ms: 20000
+
+  # An outgoing SMS goes through SmsManager -> ISms and is recorded.
+  - tap:
+      selector: {text: {exact: "Send SMS"}}
+  - wait_for:
+      selector: {text: {contains: "SMS-SENT queued to=+15557654321"}}
+      timeout_ms: 20000
+
+  # Re-query: the call state the listener reported is what the binder answers.
+  - tap:
+      selector: {text: {exact: "Telephony"}}
+  - wait_for:
+      selector: {text: {contains: "call=RINGING"}}
+      timeout_ms: 20000

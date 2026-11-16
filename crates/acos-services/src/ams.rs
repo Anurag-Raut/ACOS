@@ -92,6 +92,14 @@ pub enum Extra {
     Int(i32),
     /// `putExtra(boolean)`.
     Bool(bool),
+    /// `putExtra(String, byte[])` (a `VAL_BYTEARRAY` bundle value).
+    Bytes(Vec<u8>),
+    /// `putExtra(String, Serializable)` of an `Object[]` of `byte[]`: the shape
+    /// `SMS_RECEIVED` uses for its `pdus` extra (`Parcel.VAL_OBJECTARRAY`).
+    ByteArrays(Vec<Vec<u8>>),
+    /// A parcelable extra (a `BluetoothDevice` on `ACTION_FOUND`). The payload
+    /// is written with its class name, exactly like `Intent.putExtra(Parcelable)`.
+    Parcelable(crate::value::Parcelable),
     /// A value of a type ACOS records but does not interpret.
     Present,
 }
@@ -223,6 +231,21 @@ fn reduce_extras(bundle: &Bundle) -> BTreeMap<String, Extra> {
             Value::Str(Some(s)) | Value::Str8(Some(s)) => Extra::String(s.clone()),
             Value::Int(i) => Extra::Int(*i),
             Value::Bool(b) => Extra::Bool(*b),
+            Value::ByteArray(Some(bytes)) => Extra::Bytes(bytes.clone()),
+            Value::Parcelable(parcelable) => Extra::Parcelable(parcelable.clone()),
+            Value::ObjectArray(Some(items))
+                if items.iter().all(|item| matches!(item, Value::ByteArray(Some(_)))) =>
+            {
+                Extra::ByteArrays(
+                    items
+                        .iter()
+                        .filter_map(|item| match item {
+                            Value::ByteArray(Some(bytes)) => Some(bytes.clone()),
+                            _ => None,
+                        })
+                        .collect(),
+                )
+            }
             _ => Extra::Present,
         };
         out.insert(key.to_string(), extra);
@@ -237,6 +260,18 @@ fn encode_extras(extras: &BTreeMap<String, Extra>) -> Bundle {
             Extra::String(s) => bundle.put(key, Value::Str(Some(s.clone()))),
             Extra::Int(i) => bundle.put(key, Value::Int(*i)),
             Extra::Bool(b) => bundle.put(key, Value::Bool(*b)),
+            Extra::Bytes(bytes) => bundle.put(key, Value::ByteArray(Some(bytes.clone()))),
+            Extra::Parcelable(parcelable) => {
+                bundle.put(key, Value::Parcelable(parcelable.clone()))
+            }
+            Extra::ByteArrays(pdus) => bundle.put(
+                key,
+                Value::ObjectArray(Some(
+                    pdus.iter()
+                        .map(|pdu| Value::ByteArray(Some(pdu.clone())))
+                        .collect(),
+                )),
+            ),
             Extra::Present => bundle.put(key, Value::Skipped),
         }
     }
@@ -785,6 +820,54 @@ pub struct PendingReceiver {
     pub result_data: Option<String>,
     /// `true` when this receiver's delivery is ordered.
     pub ordered: bool,
+}
+
+impl PendingReceiver {
+    /// `true` for a receiver synthesized from an installed manifest, whose
+    /// marker bit [`synthesize_receiver_binder`] sets.
+    ///
+    /// An ACOS ART session has no separate process to instantiate a manifest
+    /// receiver in, so its delivery is reported, not fabricated.
+    #[must_use]
+    pub fn is_manifest(&self) -> bool {
+        self.receiver & 0x6000_0000_0000_0000 != 0
+    }
+}
+
+impl PendingReceiver {
+    /// The `IIntentReceiver.performReceive` delivery for one queued match.
+    ///
+    /// This is the ART host's side of a broadcast: the `Intent` is written with
+    /// the real `android.content.Intent.writeToParcel` layout
+    /// ([`crate::parcelable::write_intent`]), the `Bundle extras` parameter is
+    /// the null typed-object (`0`), and the transaction is
+    /// `IIntentReceiver.performReceive` (code 1, oneway). A host that receives
+    /// this frame hands it to the app's `ReceiverDispatcher`, exactly as
+    /// `system_server` does.
+    pub fn receiver_delivery(&self) -> Result<crate::host::PendingDelivery> {
+        let mut data = acos_parcel::Parcel::new();
+        data.write_interface_token("android.content.IIntentReceiver")
+            .map_err(ServiceError::Parcel)?;
+        // `performReceive(in Intent intent, ...)`: AIDL writes a parcelable as
+        // `writeTypedObject` (presence word + `writeToParcel` body, no class
+        // name).
+        data.write_int32(1);
+        crate::parcelable::write_intent(&mut data, &self.intent.to_parcelable())?;
+        data.write_int32(self.result_code);
+        data.write_string16_opt(self.result_data.as_deref())
+            .map_err(ServiceError::Parcel)?;
+        data.write_int32(0); // extras: writeTypedObject(null)
+        data.write_int32(i32::from(self.ordered));
+        data.write_int32(0); // sticky
+        data.write_int32(0); // sendingUser (Process.SYSTEM_UID)
+        Ok(crate::host::PendingDelivery {
+            target: acos_parcel::BinderId(self.receiver),
+            interface: "android.content.IIntentReceiver".to_string(),
+            code: 1,
+            method: "performReceive".to_string(),
+            data,
+        })
+    }
 }
 
 /// The AMS state machine.

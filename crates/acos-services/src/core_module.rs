@@ -72,7 +72,8 @@ impl CoreModule {
                 version: "1.0.0",
                 summary: "the Android system services every session boots with (AMS, ATMS, PMS, WMS, IME, clipboard, settings, display, extras)",
                 services,
-                providers: &["settings"],
+                features: &[],
+        providers: &["settings"],
                 broadcasts: &[],
                 windows: &[],
                 system_apps: &[],
@@ -157,7 +158,7 @@ impl Module for CoreModule {
         self.handles.take()
     }
 
-    fn control(&mut self, op: &str, _args: &Value) -> Result<Value> {
+    fn control(&mut self, _host: &mut ServiceHost, op: &str, _args: &Value) -> Result<Value> {
         Err(ServiceError::ModuleRejected {
             module: "core",
             detail: format!(

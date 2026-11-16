@@ -735,8 +735,57 @@ impl ServiceHost {
             .unwrap_or_default()
     }
 
-    /// Re-point the in-process package manager at `apk_path`.
+    /// Publish (or withdraw) one `PackageManager.hasSystemFeature` answer.
     ///
+    /// A host with no package manager has no `hasSystemFeature` that could
+    /// disagree with the attached set (the conformance kit attaches a module to
+    /// an otherwise empty host); every real session attaches `core`, which
+    /// registers the package manager, before any other module.
+    pub fn set_system_feature(&mut self, name: &str, enabled: bool) -> Result<()> {
+        if !self.entries.contains_key("android.content.pm.IPackageManager") {
+            return Ok(());
+        }
+        let object = self.ensure("android.content.pm.IPackageManager")?;
+        let service = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::pms::PmsService>())
+            .ok_or_else(|| {
+                ServiceError::Internal("package service is not a PmsService".into())
+            })?;
+        service.set_system_feature(name, enabled)
+    }
+
+    /// Queue a `system -> app` delivery a module produced outside a binder
+    /// transaction (a scripted call-state event, an authentication result).
+    ///
+    /// The peer thread drains [`ServiceHost::take_deliveries`] after a control
+    /// request, so a module's `control` can reach the app without waiting for
+    /// the app to call back in.
+    pub fn queue_delivery(&mut self, delivery: PendingDelivery) {
+        self.deliveries.push(delivery);
+    }
+
+    /// Deliver a broadcast the **host** originates (a module's control op).
+    ///
+    /// Goes through the session's own `IActivityManager` state, so the same
+    /// dynamic receivers a guest broadcast reaches get it, and queues the
+    /// resulting `IIntentReceiver.performReceive` deliveries. A broadcast the
+    /// app registered no receiver for is not an error (Android's own rule); the
+    /// matched count says what happened.
+    pub fn broadcast_intent(&mut self, intent: &crate::ams::IntentFacts) -> Result<i32> {
+        let object = self.ensure("android.app.IActivityManager")?;
+        let service = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .ok_or_else(|| {
+                ServiceError::Internal("activity service is not an AtmsService".into())
+            })?;
+        let (matched, deliveries) = service.inject_broadcast(intent)?;
+        self.deliveries.extend(deliveries);
+        Ok(matched)
+    }
+
+    /// Re-point the in-process package manager at `apk_path`.    ///
     /// `ServiceHost::standard()` seeds the PMS with the `hello-views` fixture;
     /// the runtime calls this before boot so the framework's
     /// `getApplicationInfo(<launched package>)` resolves the real APK instead

@@ -1079,7 +1079,7 @@
     },
     "ServiceCtlStep": {
       "additionalProperties": false,
-      "description": "`service_ctl`: one service-module operation between assertions (ADR-0029 item 4).\n\n`op` is `attach` (with `profile`/`config`), `detach`, or one of the module's own control ops (`sensors.set_value`, `sensors.play`, ...). The step is the scenario spelling of `acos_services`/`acos_service_ctl`, so a scripted module can be driven mid-run: set a sensor value, assert the view, play a shake, detach and assert the honest empty answer.",
+      "description": "`service_ctl`: one service-module operation between assertions (ADR-0029 item 4).\n\n`op` is `attach` (with `profile`/`config`), `detach`, or one of the module's own control ops (`sensors.set_value`, `net.telephony.sms`, `hw.bluetooth.scan`, ...). The step is the one scenario spelling of the agent API — `acos_services {op: attach|detach}` for the lifecycle words and `acos_service_ctl {module, op, args}` for a control op — so a scripted module can be driven mid-run: set a sensor value, assert the view, play a shake, detach and assert the honest empty answer. A control op reaches only a module that is attached in this run; a step naming a detached module is a structured step failure (never a silent no-op).",
       "properties": {
         "args": {
           "description": "Control-op arguments (`{sensor: \"accelerometer\", values: [0,0,9.81]}`)."
@@ -1403,7 +1403,7 @@
               "type": "null"
             }
           ],
-          "description": "ADR-0029 item 4: one service-module operation in the middle of a run (`attach`/`detach` a module, or a module control op such as `sensors.set_value`).\n\nThis is the scenario spelling of `acos_services`/`acos_service_ctl`, so a scripted module can be driven between assertions instead of only at launch."
+          "description": "ADR-0029 item 4: one service-module operation in the middle of a run.\n\n`op` is either the module-lifecycle word (`attach`/`detach`, with an optional `profile`/`config`) or a module's own control op (`sensors.set_value`, `net.telephony.sms`, `hw.bluetooth.scan`, ...) with `args`. This is the scenario spelling of the agent API (`acos_services` for attach/detach, `acos_service_ctl` for a control op), so a scripted module can be driven between assertions instead of only at launch."
         },
         "set_density": {
           "anyOf": [
