@@ -40,6 +40,7 @@
 #![forbid(unsafe_code)]
 
 pub mod a11y_bind; // MODA11Y2: system -> app AccessibilityService bind
+pub mod a11y_config; // MODA11Y6: <accessibility-service> meta-data -> capabilities
 pub mod ams;
 pub mod apk_facts; // PERF-REL3b: one APK open per launch facts set (manifest, budget)
 pub mod animation;

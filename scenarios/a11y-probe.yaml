@@ -47,10 +47,18 @@ steps:
   # scheduleBindService -> publishService -> IAccessibilityServiceClient.init),
   # so the app's own AccessibilityService.onServiceConnected runs with the
   # AccessibilityServiceInfo the system connected it with.
+  # MODA11Y6 step 2: the capabilities the app's own `AccessibilityServiceInfo`
+  # reports come from the `<accessibility-service>` meta-data block the module
+  # resolved out of the APK (@xml/accessibility_service_config -> resource table
+  # -> zip entry -> binary XML): canRetrieveWindowContent (1) +
+  # canPerformGestures (32) + canTakeScreenshot (128) = 161. The same values
+  # gate `getWindows`/`getRootInActiveWindow`/`find*`, so this line and the
+  # window list below cannot disagree.
   - assert_log:
       tag: AcosA11yProbe
       patterns:
-        - "service_connected"
+        # One line, because an ordered log assertion advances past each match.
+        - "service_connected id=dev.acos.fixtures.a11yprobe/.A11yProbeService capabilities=161"
   # MODA11Y4 step 2: the bound service's own interaction surface. `getWindows()`
   # answers from the LAYER1 stack (one application window, layer 0, active and
   # focused), `getRootInActiveWindow()` is the app's active window root, a

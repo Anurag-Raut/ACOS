@@ -21,8 +21,12 @@
         </activity>
 
         <!-- ADR-0029 a11y probe: the module enables this component through the
-             secure settings and reports it in the installed/enabled lists. The
-             service itself is not bound yet (see the module's honest limit). -->
+             secure settings, binds it and reports it in the installed/enabled
+             lists. MODA11Y6: the service declares its capabilities the way a
+             real accessibility service does — a `<meta-data
+             android:name="android.accessibilityservice"
+             android:resource="@xml/…"/>` block — and the module gates the
+             interaction surface on it. -->
         <service
             android:name=".A11yProbeService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
@@ -30,6 +34,23 @@
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+        <!-- The negative case: no window-content capability and no
+             interactive-windows flag, so every gated call answers the AOSP
+             refusal (null / false). -->
+        <service
+            android:name=".A11yBareService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_bare" />
         </service>
     </application>
 </manifest>

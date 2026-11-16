@@ -12,9 +12,9 @@ intended.
 | Brief step | State |
 |---|---|
 | 1. WM lock: no host state lock across a guest round trip; test: concurrent relayout + `getWindows`; restore the guest-side type-4 overlay assertion | **DONE, passes on ART (13/13)** (§1) |
-| 2. `getWindows` capability gate from the service's `accessibility-service` meta-data XML | not started |
-| 3. `dispatchGesture` (tap + swipe) and `takeScreenshot` | not started |
-| 4. Gaten bubble (`TYPE_ACCESSIBILITY_OVERLAY` owned by `GatenAccessibilityService`) | not started |
+| 2. `getWindows` capability gate from the service's `accessibility-service` meta-data XML | **DONE, passes on ART (13/13)** (§2) |
+| 3. `dispatchGesture` (tap + swipe) and `takeScreenshot` | **NOT STARTED** |
+| 4. Gaten bubble (`TYPE_ACCESSIBILITY_OVERLAY` owned by `GatenAccessibilityService`) | **NOT STARTED** |
 
 ## 1. The step-1 symptom is not a lock deadlock — it is a stale guest cache
 
@@ -166,3 +166,114 @@ point any run at):
 * `crates/acos-services/src/trace.rs::line` — stderr **and** `$ACOS_TRACE_FILE`;
 * `ACOS_WMS_TRACE` is now also implied by `ACOS_TRACE_FILE`; the a11y
   `getWindows` handler and the input ack wait log one line each.
+
+## 2. The capability gate (AOSP `AccessibilitySecurityPolicy`)
+
+### What AOSP does
+
+A service's capabilities come from the `<meta-data
+android:name="android.accessibilityservice" android:resource="@xml/…"/>` block,
+not from manifest attributes:
+
+* `AccessibilityServiceInfo.parseServiceInfo`
+  (`AccessibilityServiceInfo.java:735-800`) reads
+  `android:canRetrieveWindowContent` into
+  `CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT (1)`, `android:canPerformGestures`
+  into `CAPABILITY_CAN_PERFORM_GESTURES (1 << 5)` and
+  `android:canTakeScreenshot` into `CAPABILITY_CAN_TAKE_SCREENSHOT (1 << 7)`,
+  and `android:accessibilityFlags` into the `FLAG_*` mask;
+* `AccessibilitySecurityPolicy` (`:317-346`) then decides:
+  `canRetrieveWindowContentLocked = capabilities & 1`,
+  `canRetrieveWindowsLocked = canRetrieveWindowContentLocked &&
+  mRetrieveInteractiveWindows`
+  (`mRetrieveInteractiveWindows = flags & FLAG_RETRIEVE_INTERACTIVE_WINDOWS`,
+  **`1 << 6`**, `AbstractAccessibilityServiceConnection.java:453-454` — the
+  brief's `0x2` guess was wrong and MODA11Y5 never verified it),
+  `canGetAccessibilityNodeInfoLocked = canRetrieveWindowContentLocked &&
+  isRetrievalAllowingWindowLocked` (the *window* half is always true in ACOS:
+  every window in the LAYER1 stack is a window the manager knows).
+
+### What ACOS does now
+
+`crates/acos-services/src/a11y_config.rs` is the missing glue, all with the
+image's own data:
+
+```
+@xml/accessibility_service_config  (the manifest's MetaDataValue::Reference(id))
+  -> ResourceTable::resolve(id)          -> "res/xml/accessibility_service_config.xml"
+  -> Apk::entry_bytes(path)              -> the compiled AXML bytes
+  -> acos_apk::axml::parse               -> <accessibility-service> attributes
+  -> A11yServiceConfig { event_types, feedback_type, notification_timeout, flags, capabilities }
+```
+
+`plan_bind` reads it from the session APK (`apk_facts::open_shared`), stores it
+on the state (`A11yState::service_config`) **and** copies it into the
+`AccessibilityServiceInfo` parcel the app reads back from `getServiceInfo()`
+(indices 0/2/3/6/11 of the parcelable spec) — the abilities the host gates on
+and the abilities the app sees cannot disagree. The refusals are the AOSP ones:
+
+| call | without the capability |
+|---|---|
+| `getWindows`/`getWindow` | `null` typed object (the framework turns that into an empty window list, never an exception) |
+| `findAccessibilityNodeInfo*` (`getRootInActiveWindow` is one of these) | the relay's "nothing will call you back" `-1`, i.e. no node |
+| `performAccessibilityAction` | `false` |
+
+Every refusal is recorded in the module's `unsupported` list, and the module
+report now carries `service_config` with the parsed values and the four
+`can_*` answers.
+
+### The fixture declares the capability; a second service does not
+
+`fixtures/apps/a11y-probe`:
+
+* `res/xml/accessibility_service_config.xml` —
+  `canRetrieveWindowContent`, `canPerformGestures`, `canTakeScreenshot`,
+  `accessibilityFlags="flagRetrieveInteractiveWindows|flagReportViewIds"`, and
+  its service's `<meta-data android:resource>` now points at it;
+* `res/xml/accessibility_service_bare.xml` + `A11yBareService` — the block is
+  present but `canRetrieveWindowContent="false"` and no interactive-windows
+  flag: the AOSP refusals, never the window list.
+
+### Proof on ART
+
+`scenarios/a11y-probe.yaml` passes **13/13**
+(`results/handoff/MODA11Y6/step2/a11y-verdict.json`, `status=pass`) and the
+probe log carries both halves of the gate:
+
+```
+I AcosA11yProbe: service_connected id=dev.acos.fixtures.a11yprobe/.A11yProbeService capabilities=161
+I AcosA11yProbe: windows count=1 attempts=1
+...
+I AcosA11yProbe: windows2 count=2 attempts=2
+I AcosA11yProbe: window2[0] id=2 type=4 layer=1 active=false focused=false
+```
+
+`161 = 1 | 32 | 128` is exactly the three capabilities the block declares, read
+back by the app's own `AccessibilityServiceInfo`; the same values gate the
+`getWindows` calls around it.
+
+### Tests
+
+```
+crates/acos-services/tests/moda11y6_gate.rs (new, 6 tests, real fixture APK)
+  the_probe_service_declares_window_content_and_interactive_windows
+  the_bare_service_declares_no_window_content_capability
+  a_service_with_no_meta_data_has_no_capabilities
+  a_service_with_the_capability_gets_the_window_list
+  a_service_without_the_capability_gets_aosp_null_not_an_exception
+    (getWindows/getWindow null, find -1, action false, all recorded)
+  the_content_capability_without_the_interactive_windows_flag_hides_the_list
+crates/acos-services/tests/moda11y3_windows.rs (updated)
+  its fixtures now declare the capability a real service declares — the gate
+  is why they must.
+```
+
+## 3–4. Gestures, screenshots, the Gaten bubble
+
+Not started. The session's time went to step 1 (the "deadlock" turned out to be
+a stale guest cache) and step 2 (the gate the previous session deferred twice).
+The pieces step 3 needs are already in place: `dispatchGesture` can publish
+through `A11yState::input` (the same `InputHost` a scenario tap uses) and the
+capability gate already parses `canPerformGestures`/`canTakeScreenshot`; the
+screenshot path needs the composited frame from the C1/SurfaceFlinger state the
+launcher already holds. See "Remaining" for the smallest next actions.

@@ -59,9 +59,14 @@ public class A11yProbeService extends AccessibilityService {
     protected void onServiceConnected() {
         AccessibilityServiceInfo info = getServiceInfo();
         String component = info == null || info.getId() == null ? "?" : info.getId();
+        // MODA11Y6: capabilities and event types come from the
+        // `<accessibility-service>` meta-data block the module parsed out of
+        // the APK, which is also what gates the interaction surface.
+        // MODA11Y6: capabilities come from the `<accessibility-service>` block
+        // the module parsed out of the APK, which is also what gates the
+        // interaction surface.
         Log.i(TAG, "service_connected id=" + component
-                + " eventTypes=" + (info == null ? -999 : info.getCapabilities() * 0)
-                + " flags=" + (info == null ? -999 : info.getCapabilities()));
+                + " capabilities=" + (info == null ? -999 : info.getCapabilities()));
         sInstance = this;
         Thread probe = new Thread(this::probe, "a11y-probe");
         probe.setDaemon(true);

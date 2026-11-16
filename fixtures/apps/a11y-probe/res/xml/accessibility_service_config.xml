@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MODA11Y6 step 2: the declaration AOSP's AccessibilityServiceInfo
+  .parseServiceInfo inflates from
+  <meta-data android:name="android.accessibilityservice"
+             android:resource="@xml/accessibility_service_config"/>
+
+  `android:canRetrieveWindowContent` is what
+  AccessibilitySecurityPolicy.canRetrieveWindowContentLocked reads, and
+  `flagRetrieveInteractiveWindows` in `android:accessibilityFlags` is what
+  canRetrieveWindowsLocked adds for the window list
+  (FLAG_RETRIEVE_INTERACTIVE_WINDOWS = 1 << 6). `canPerformGestures` and
+  `canTakeScreenshot` are the two capabilities dispatchGesture and
+  takeScreenshot are gated on.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowsChanged|typeViewClicked"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagRetrieveInteractiveWindows|flagReportViewIds"
+    android:canRetrieveWindowContent="true"
+    android:canPerformGestures="true"
+    android:canTakeScreenshot="true"
+    android:notificationTimeout="100"
+    android:description="@string/app_name" />

@@ -61,6 +61,81 @@ fn rejected(detail: impl Into<String>) -> ServiceError {
     }
 }
 
+/// Copy the parsed `<accessibility-service>` block into the
+/// `AccessibilityServiceInfo` the bind hands the app.
+///
+/// Indices are [`crate::parcelable`]'s `AccessibilityServiceInfo` spec order:
+/// 0 `eventTypes`, 2 `feedbackType`, 3 `notificationTimeout`, 6 `flags`,
+/// 11 `mCapabilities`.
+fn apply_service_config(info: &mut crate::value::Parcelable, config: crate::a11y_config::A11yServiceConfig) {
+    let crate::value::Parcelable::Ordered { values, .. } = info else {
+        return;
+    };
+    if values.len() < 12 {
+        return;
+    }
+    values[0] = crate::value::Value::Int(config.event_types);
+    values[2] = crate::value::Value::Int(config.feedback_type);
+    values[3] = crate::value::Value::Long(config.notification_timeout);
+    values[6] = crate::value::Value::Int(config.flags);
+    values[11] = crate::value::Value::Int(config.capabilities);
+}
+
+/// Read the service's `<accessibility-service>` meta-data block from the
+/// session's APK.
+///
+/// `AccessibilityServiceInfo.parseServiceInfo` reads the block the
+/// `<meta-data android:name="android.accessibilityservice"
+/// android:resource="@xml/…"/>` points at, and that is the only source of a
+/// service's capabilities. A missing `android.accessibilityservice` entry, a
+/// value that is not a resource, an unresolvable reference or a malformed
+/// document leaves the service with **no** capabilities (reported through the
+/// module's `unsupported` list), never with invented ones.
+fn service_config_from_apk(
+    state: &mut A11yState,
+    meta_data: &[crate::pms::MetaDataEntry],
+) -> Option<crate::a11y_config::A11yServiceConfig> {
+    let resource_id = meta_data.iter().find_map(|entry| match entry.value {
+        crate::pms::MetaDataValue::Reference(id)
+            if entry.name == crate::a11y_config::SERVICE_META_DATA =>
+        {
+            Some(id)
+        }
+        _ => None,
+    })?;
+    let apk_path = match state.pms.as_ref() {
+        Some(pms) => pms
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .apk_path
+            .clone(),
+        None => {
+            state
+                .unsupported
+                .push("accessibility meta-data: no package manager".into());
+            return None;
+        }
+    };
+    let apk = match crate::apk_facts::open_shared(&apk_path) {
+        Ok(apk) => apk,
+        Err(error) => {
+            state
+                .unsupported
+                .push(format!("accessibility meta-data: open {}: {error}", apk_path.display()));
+            return None;
+        }
+    };
+    match crate::a11y_config::A11yServiceConfig::from_apk(&apk, resource_id) {
+        Ok(config) => Some(config),
+        Err(error) => {
+            state
+                .unsupported
+                .push(format!("accessibility meta-data @{resource_id:#010x}: {error}"));
+            None
+        }
+    }
+}
+
 /// The bind token for the `n`th system-initiated bind.
 ///
 /// It rides through the app as an opaque `IBinder` and comes back in
@@ -188,7 +263,21 @@ pub fn plan_bind(state: &mut A11yState) -> Result<Vec<PendingDelivery>> {
     // `<accessibility-service>` meta-data (AOSP's
     // `AccessibilityManagerService` parses that block, not the component).
     let create_info = service_info.to_parcelable(&app_info);
-    let acc_info = accessibility_info_for(&component, &service_info.meta_data);
+    let mut acc_info = accessibility_info_for(&component, &service_info.meta_data);
+    // MODA11Y6 step 2: the `<accessibility-service>` meta-data block is what
+    // AOSP's `AccessibilityServiceInfo.parseServiceInfo` inflates: the resource
+    // id in `<meta-data android:name="android.accessibilityservice"
+    // android:resource="@xml/…"/>` -> the APK's resource table -> the zip entry
+    // -> binary XML. A service that declares no block keeps capabilities 0,
+    // which is exactly the answer `AccessibilitySecurityPolicy` gives it.
+    let config = service_config_from_apk(state, &service_info.meta_data);
+    if let Some(config) = config {
+        // The `AccessibilityServiceInfo` the service reads back from
+        // `getServiceInfo()` is the one parsed from that block in AOSP
+        // (`AccessibilityServiceInfo.parseServiceInfo`), so the abilities the
+        // host gates on and the abilities the app sees must be the same ones.
+        apply_service_config(&mut acc_info, config);
+    }
     let token = token_for(state.next_bind_seq as u32 + 1);
     let intent = bind_intent(package, &class);
     // 1. `scheduleCreateService(token, ServiceInfo, CompatibilityInfo, int)`:
@@ -219,6 +308,7 @@ pub fn plan_bind(state: &mut A11yState) -> Result<Vec<PendingDelivery>> {
         ],
     )?;
     state.next_bind_seq += 1;
+    state.service_config = config;
     state.pending_bind = Some(crate::misc::A11yPendingBind {
         component: component.clone(),
         package: package.to_string(),
@@ -944,13 +1034,44 @@ impl ServiceObject for A11yConnectionNode {
             "findAccessibilityNodeInfoByAccessibilityId"
             | "findAccessibilityNodeInfosByText"
             | "findAccessibilityNodeInfosByViewId" => {
+                // `canGetAccessibilityNodeInfoLocked` =
+                // `canRetrieveWindowContentLocked && isRetrievalAllowingWindowLocked`;
+                // ACOS reports every window in the LAYER1 stack, so the second
+                // half (the window is known / active) always holds here and the
+                // content capability is the gate. AOSP answers `null` — the
+                // client sees "no node", not an exception.
+                if !state.can_retrieve_window_content() {
+                    state.unsupported.push(format!("{name} denied"));
+                    crate::exception::write_no_exception(reply);
+                    let _ = reply.write_int32(-1);
+                    return Ok(true);
+                }
                 self.relay_find(code, data, reply, &mut state)?;
             }
             "performAccessibilityAction" => {
+                // `performAccessibilityAction` gates on the same
+                // `canGetAccessibilityNodeInfoLocked` and answers `false`.
+                if !state.can_retrieve_window_content() {
+                    state.unsupported.push("performAccessibilityAction denied".into());
+                    crate::exception::write_no_exception(reply);
+                    let _ = reply.write_int32(0);
+                    return Ok(true);
+                }
                 self.relay_action(data, reply, &mut state)?;
             }
             "getWindows" => {
                 crate::trace::line("ACOSA11Y getWindows enter");
+                // `AccessibilitySecurityPolicy.canRetrieveWindowsLocked`
+                // (`AbstractAccessibilityServiceConnection.getWindows`): a
+                // service without the content capability + interactive-windows
+                // flag gets `null`, which the framework turns into an empty
+                // window list — never an error and never the list.
+                if !state.can_retrieve_windows() {
+                    state.unsupported.push("getWindows denied".into());
+                    crate::exception::write_no_exception(reply);
+                    let _ = reply.write_int32(0);
+                    return Ok(true);
+                }
                 let windows = state.window_snapshot();
                 crate::trace::line(format!("ACOSA11Y getWindows snapshot={}", windows.len()));
                 let connection_id = state
@@ -963,6 +1084,14 @@ impl ServiceObject for A11yConnectionNode {
                 write_window_list(reply, &windows, connection_id)?;
             }
             "getWindow" => {
+                // Same gate as `getWindows`: AOSP's `getWindow` checks
+                // `canRetrieveWindowsLocked` too and answers `null`.
+                if !state.can_retrieve_windows() {
+                    state.unsupported.push("getWindow denied".into());
+                    crate::exception::write_no_exception(reply);
+                    let _ = reply.write_int32(0);
+                    return Ok(true);
+                }
                 let requested = data.read_int32()?;
                 let windows = state.window_list_readonly();
                 let window = state

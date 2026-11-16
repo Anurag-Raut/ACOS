@@ -190,6 +190,12 @@ pub struct A11yState {
     pub next_window_id: i32,
     /// Interaction requests relayed to an app connection (bounded).
     pub interactions: Vec<A11yInteraction>,
+    /// The bound service's `<accessibility-service>` meta-data
+    /// (`AccessibilityServiceInfo.parseServiceInfo`): the capabilities and
+    /// flags `AccessibilitySecurityPolicy` gates the interaction surface on.
+    /// `None` while nothing is bound, and for a service that declares no
+    /// meta-data — which is the AOSP answer an unprivileged service gets.
+    pub service_config: Option<crate::a11y_config::A11yServiceConfig>,
     /// Window-stack changes the bound service has not been told about yet.
     ///
     /// AOSP's `AccessibilityWindowManager` emits one
@@ -239,6 +245,7 @@ impl A11yState {
             window_ids: Vec::new(),
             next_window_id: 1,
             interactions: Vec::new(),
+            service_config: None,
             windows_changed: Vec::new(),
         }
     }
@@ -401,6 +408,23 @@ impl A11yState {
         bits
     }
 
+    /// `AccessibilitySecurityPolicy.canRetrieveWindowContentLocked`: may the
+    /// bound service read window content at all?
+    #[must_use]
+    pub fn can_retrieve_window_content(&self) -> bool {
+        self.service_config
+            .is_some_and(|config| config.can_retrieve_window_content())
+    }
+
+    /// `AccessibilitySecurityPolicy.canRetrieveWindowsLocked`: the window
+    /// **list** (`getWindows`/`getWindow`) needs the content capability *and*
+    /// `FLAG_RETRIEVE_INTERACTIVE_WINDOWS`.
+    #[must_use]
+    pub fn can_retrieve_windows(&self) -> bool {
+        self.service_config
+            .is_some_and(|config| config.can_retrieve_windows())
+    }
+
     /// Record one event (bounded).
     pub fn record_event(&mut self, event_type: i32, event_time: i64) {
         if self.events.len() >= MAX_EVENTS {
@@ -493,6 +517,20 @@ impl A11yState {
             })),
             "app_thread": self.app_thread.map(|t| format!("{t:#x}")),
             "self_disabled": self.self_disabled,
+            // MODA11Y6: what the bound service declared in its
+            // `<accessibility-service>` block, and what that allows it to do
+            // (`AccessibilitySecurityPolicy`).
+            "service_config": self.service_config.as_ref().map(|config| serde_json::json!({
+                "event_types": config.event_types,
+                "feedback_type": config.feedback_type,
+                "notification_timeout": config.notification_timeout,
+                "flags": config.flags,
+                "capabilities": config.capabilities,
+                "can_retrieve_window_content": config.can_retrieve_window_content(),
+                "can_retrieve_windows": config.can_retrieve_windows(),
+                "can_perform_gestures": config.can_perform_gestures(),
+                "can_take_screenshot": config.can_take_screenshot(),
+            })),
             "unsupported": self.unsupported,
         })
     }
