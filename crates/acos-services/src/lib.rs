@@ -43,6 +43,7 @@ pub mod ams;
 pub mod apk_facts; // PERF-REL3b: one APK open per launch facts set (manifest, budget)
 pub mod animation;
 pub mod atms;
+pub mod client_transaction; // MPROC6: host-built launch transactions (ADR-0029)
 pub mod clipboard;
 pub mod codec;
 pub mod connectivity; // NET1: IConnectivityManager default network + callbacks

@@ -1189,12 +1189,70 @@ pub static SPECS: &[ParcelableSpec] = &[
         class: "android.app.servertransaction.ActivityRelaunchItem",
         fields: &[
             FieldOp::TypedList("android.app.ResultInfo"),
-            FieldOp::TypedList("android.content.Intent"),
+            FieldOp::TypedList("com.android.internal.content.ReferrerIntent"),
             FieldOp::Int, // mConfigChanges
             FieldOp::Typed("android.util.MergedConfiguration"),
             FieldOp::Bool, // mPreserveWindow
         ],
         verification: Verification::Full,
+    },
+    // MPROC6: the rest of the `ClientTransactionItem` / `ActivityLifecycleItem`
+    // family, in the image's `writeToParcel` order (the scanner's call list for
+    // each class is in `results/handoff/MPROC6/`).
+    //   PauseActivityItem: mFinished, mUserLeaving, mConfigChanges,
+    //     mDontReport, mAutoEnteringPip
+    ParcelableSpec {
+        class: "android.app.servertransaction.PauseActivityItem",
+        fields: &[
+            FieldOp::Bool,
+            FieldOp::Bool,
+            FieldOp::Int,
+            FieldOp::Bool,
+            FieldOp::Bool,
+        ],
+        verification: Verification::Full,
+    },
+    //   StopActivityItem: mConfigChanges only (`showWindow` is gone in API 34).
+    ParcelableSpec {
+        class: "android.app.servertransaction.StopActivityItem",
+        fields: &[FieldOp::Int],
+        verification: Verification::Full,
+    },
+    //   DestroyActivityItem: mFinished, mConfigChanges.
+    ParcelableSpec {
+        class: "android.app.servertransaction.DestroyActivityItem",
+        fields: &[FieldOp::Bool, FieldOp::Int],
+        verification: Verification::Full,
+    },
+    //   ActivityResultItem: writeTypedList(mResultInfoList).
+    ParcelableSpec {
+        class: "android.app.servertransaction.ActivityResultItem",
+        fields: &[FieldOp::TypedList("android.app.ResultInfo")],
+        verification: Verification::Full,
+    },
+    //   NewIntentItem: mResume, writeTypedList(mIntents) — the elements are
+    //   `ReferrerIntent`s, not plain `Intent`s.
+    ParcelableSpec {
+        class: "android.app.servertransaction.NewIntentItem",
+        fields: &[
+            FieldOp::Bool,
+            FieldOp::TypedList("com.android.internal.content.ReferrerIntent"),
+        ],
+        verification: Verification::Full,
+    },
+    // `com.android.internal.content.ReferrerIntent.writeToParcel`: the
+    // `Splice`/`Intent` payload (no presence marker), then the referrer
+    // string. Curated rather than Full: the scanner's linear walk of a
+    // subclass that calls `Intent.writeToParcel` on itself records only the
+    // trailing `writeString`, so the order is pinned by the real-Java
+    // differential (`tests/client_transaction_java.rs`) instead.
+    ParcelableSpec {
+        class: "com.android.internal.content.ReferrerIntent",
+        fields: &[
+            FieldOp::Nested("android.content.Intent"),
+            FieldOp::Str16, // mReferrer
+        ],
+        verification: Verification::Curated,
     },
     // `android.window.ClientWindowFrames.writeToParcel`.
     ParcelableSpec {
