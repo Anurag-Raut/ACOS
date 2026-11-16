@@ -284,6 +284,154 @@ pub fn init_delivery(
 pub const INTERACTION_CONNECTION: &str =
     "android.view.accessibility.IAccessibilityInteractionConnection";
 
+/// `IAccessibilityServiceClient.onAccessibilityEvent(in AccessibilityEvent,
+/// in boolean serviceWantsEvent)` — the second oneway transaction of
+/// `base/core/java/android/accessibilityservice/IAccessibilityServiceClient.aidl`.
+pub const SERVICE_CLIENT_ON_ACCESSIBILITY_EVENT: u32 = 2;
+
+/// `AccessibilityEvent.TYPE_WINDOWS_CHANGED` (`1 << 22`).
+pub const TYPE_WINDOWS_CHANGED: i32 = 1 << 22;
+
+/// `AccessibilityEvent.WINDOWS_CHANGE_ADDED`.
+pub const WINDOWS_CHANGE_ADDED: i32 = 1;
+
+/// `AccessibilityEvent.WINDOWS_CHANGE_REMOVED`.
+pub const WINDOWS_CHANGE_REMOVED: i32 = 1 << 1;
+
+/// `AccessibilityRecord.PROPERTY_IMPORTANT_FOR_ACCESSIBILITY` (`1 << 9`),
+/// which `obtainWindowsChangedEvent` sets through
+/// `setImportantForAccessibility(true)`.
+const PROPERTY_IMPORTANT_FOR_ACCESSIBILITY: i32 = 1 << 9;
+
+/// `AccessibilityRecord`'s `UNDEFINED` (`-1`).
+const RECORD_UNDEFINED: i32 = -1;
+
+/// `AccessibilityNodeInfo.UNDEFINED_NODE_ID`:
+/// `makeNodeId(UNDEFINED_ITEM_ID, UNDEFINED_ITEM_ID)` with
+/// `UNDEFINED_ITEM_ID == Integer.MAX_VALUE`.
+const UNDEFINED_NODE_ID: i64 = ((i32::MAX as i64) << 32) | i32::MAX as i64;
+
+/// One `IAccessibilityServiceClient.onAccessibilityEvent` delivery per queued
+/// window-stack change, addressed at the bound service's client binder.
+///
+/// The service must hear about a window that appears *after* its first
+/// `getWindows()`: `AccessibilityInteractionClient.getWindowsOnAllDisplays`
+/// answers from the guest-side `AccessibilityCache` on a hit
+/// (`AccessibilityInteractionClient.java:489-532`), and that cache is only
+/// cleared by an accessibility event — `AccessibilityCache
+/// .onAccessibilityEvent` clears it for `TYPE_WINDOWS_CHANGED`
+/// (`AccessibilityCache.java:276-288`). AOSP sends exactly these events from
+/// `AccessibilityWindowManager` (`obtainWindowsChangedEvent`, one per added,
+/// removed or changed window), and `notifyAccessibilityEvent` delivers them
+/// even when the service's `eventTypes` do not list them, because
+/// `TYPE_WINDOWS_CHANGED` is cache-critical.
+///
+/// Nothing is delivered when no service is bound: an unbound service cannot
+/// observe windows anyway, and a fabricated target would be a fake.
+pub fn windows_changed_deliveries(state: &mut crate::misc::A11yState) -> Vec<PendingDelivery> {
+    let changes = state.take_window_changes();
+    if changes.is_empty() {
+        return Vec::new();
+    }
+    let Some(bound) = state.bound_service.clone() else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for change in changes {
+        // AOSP addresses the event at the accessibility window id, which is
+        // assigned per `IWindow` on first use (never reused).
+        let window_id = state.window_id_for(change.window);
+        let data = match windows_changed_event(bound.connection_id, window_id, change.changes) {
+            Ok(data) => data,
+            Err(error) => {
+                eprintln!("{SERVICE_CLIENT}.onAccessibilityEvent: {error}");
+                continue;
+            }
+        };
+        out.push(PendingDelivery {
+            target: BinderId(bound.binder),
+            interface: SERVICE_CLIENT.to_string(),
+            code: SERVICE_CLIENT_ON_ACCESSIBILITY_EVENT,
+            method: "onAccessibilityEvent".into(),
+            data,
+        });
+    }
+    out
+}
+
+/// The `onAccessibilityEvent` request parcel for one `TYPE_WINDOWS_CHANGED`
+/// event, in the image's `AccessibilityEvent.writeToParcel` /
+/// `writeAccessibilityRecordToParcel` order
+/// (`base/core/java/android/view/accessibility/AccessibilityEvent.java:1657-1720`,
+/// the Java implementation this image runs — the app->system direction this
+/// repo already decodes reads `isSealed` as the first int, which is the same
+/// method).
+fn windows_changed_event(connection_id: i32, window_id: i32, changes: i32) -> Result<Parcel> {
+    let mut data = Parcel::new();
+    data.write_interface_token(SERVICE_CLIENT)?;
+    // The AIDL `in AccessibilityEvent` argument is a `writeTypedObject`, so the
+    // presence marker comes first and `IAccessibilityServiceClient$Stub`
+    // unmarshals it with `Parcel.readTypedObject(..., AccessibilityEvent.CREATOR)`.
+    data.write_int32(1);
+    // `AccessibilityEvent.writeToParcel`.
+    data.write_int32(1); // mSealed (AMS seals every delivered event)
+    data.write_int32(TYPE_WINDOWS_CHANGED);
+    data.write_int32(0); // mMovementGranularity
+    data.write_int32(0); // mAction
+    data.write_int32(0); // mContentChangeTypes
+    data.write_int32(changes); // mWindowChangeTypes
+    data.write_int32(0); // mSpeechStateChangeTypes
+    // `TextUtils.writeToParcel`: a non-`Spanned` CharSequence is `int 1` and
+    // then `Parcel.writeString8` (the image's own
+    // `TextUtils.writeToParcel` at framework/classes3.dex 0x455fda-0x455ff6:
+    // `writeInt(1)`, `writeString8(cs == null ? null : cs.toString())`), so a
+    // null CharSequence is `1` + a `-1` length — not `0`, which is the
+    // `Spanned` branch and desynchronises the whole record.
+    data.write_int32(1); // mPackageName: not spanned
+    data.write_string8_opt(None)?; // mPackageName: null
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| i64::try_from(d.as_millis()).unwrap_or(0))
+        .unwrap_or(0);
+    data.write_int64(now_ms); // mEventTime
+    // AMS sets the record's connection id when the service may retrieve
+    // window content, and lets the event carry no source otherwise
+    // (`AbstractAccessibilityServiceConnection.notifyAccessibilityEvent`).
+    data.write_int32(connection_id);
+    // `writeAccessibilityRecordToParcel` for the event itself.
+    data.write_int32(PROPERTY_IMPORTANT_FOR_ACCESSIBILITY); // mBooleanProperties
+    data.write_int32(RECORD_UNDEFINED); // mCurrentItemIndex
+    data.write_int32(RECORD_UNDEFINED); // mItemCount
+    data.write_int32(RECORD_UNDEFINED); // mFromIndex
+    data.write_int32(RECORD_UNDEFINED); // mToIndex
+    data.write_int32(0); // mScrollX
+    data.write_int32(0); // mScrollY
+    data.write_int32(RECORD_UNDEFINED); // mScrollDeltaX
+    data.write_int32(RECORD_UNDEFINED); // mScrollDeltaY
+    data.write_int32(0); // mMaxScrollX
+    data.write_int32(0); // mMaxScrollY
+    data.write_int32(RECORD_UNDEFINED); // mAddedCount
+    data.write_int32(RECORD_UNDEFINED); // mRemovedCount
+    data.write_int32(1); // mClassName: not spanned
+    data.write_string8_opt(None)?; // mClassName: null
+    data.write_int32(1); // mContentDescription: not spanned
+    data.write_string8_opt(None)?; // mContentDescription: null
+    data.write_int32(1); // mBeforeText: not spanned
+    data.write_string8_opt(None)?; // mBeforeText: null
+    data.write_string16_opt(None)?; // mParcelableData: writeParcelable(null)
+    data.write_int32(0); // mText: an empty list (AccessibilityRecord's field)
+    data.write_int32(window_id); // mSourceWindowId
+    data.write_int64(UNDEFINED_NODE_ID); // mSourceNodeId
+    data.write_int32(-1); // mSourceDisplayId (Display.INVALID_DISPLAY)
+    data.write_int32(0); // record mSealed
+    data.write_int32(0); // record count
+    // `in boolean serviceWantsEvent`: the service asked for window changes or
+    // not; a cache-critical event is delivered either way, and `true` is what
+    // AOSP passes when it does want it.
+    data.write_int32(1);
+    Ok(data)
+}
+
 /// `AccessibilityWindowInfo.UNDEFINED_WINDOW_ID`.
 pub const UNDEFINED_WINDOW_ID: i32 = -1;
 

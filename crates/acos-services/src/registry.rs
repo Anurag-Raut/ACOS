@@ -249,6 +249,14 @@ pub fn install_with_handles_and_insets(
     // binder; every `ViewRootImpl` window call lands here, byte-exact (see
     // `window_session.rs`). `IWindowId` is an aux binder so `getWindowId`
     // returns a routable handle instead of a fabricated id.
+    // The accessibility state is created before the window session so the
+    // session can be given the window-stack sink: a bound service must learn
+    // about a window added after its first `getWindows()` (AOSP
+    // `AccessibilityWindowManager` -> `TYPE_WINDOWS_CHANGED`).
+    let settings = Arc::new(Mutex::new(crate::provider::SettingsState::new()));
+    let a11y = Arc::new(Mutex::new(crate::misc::A11yState::with_settings(
+        Arc::clone(&settings),
+    )));
     let window_id = host.register_aux("android.view.IWindowId");
     let session_state = Arc::clone(&wms_state);
     let input_host = crate::window_session::input_dispatch::InputHost::from_env();
@@ -270,7 +278,11 @@ pub fn install_with_handles_and_insets(
                 // real FOCUS/TOUCH_MODE messages on `addToDisplayAsUser` and,
                 // when `ACOS_INPUT_TAP`/`ACOS_INPUT_KEY` is set, injects after
                 // the first relayout and logs the FINISHED/TIMELINE replies.
-                .with_input(input_host),
+                .with_input(input_host)
+                // MODA11Y6: the bound service hears about the stack the way
+                // AOSP's accessibility window manager reports it, so its own
+                // `getWindows()` sees a window added after its first query.
+                .with_window_changes(crate::registry::a11y_window_changes(Arc::clone(&a11y))),
         ),
     );
     wms_state
@@ -320,16 +332,12 @@ pub fn install_with_handles_and_insets(
             .send_pending_intent(binder, code)
     }));
     host.set_permission_store(Arc::clone(&permissions));
-    let settings = Arc::new(Mutex::new(crate::provider::SettingsState::new()));
     let display =
         Arc::new(Mutex::new(crate::display::DisplayState::new(
             crate::display::DisplayInfo::hello_views_with(insets.unwrap_or_else(|| {
                 crate::wms::InsetsMode::from_env(crate::wms::DEFAULT_INSETS_MODE)
             })),
         )));
-    let a11y = Arc::new(Mutex::new(crate::misc::A11yState::with_settings(
-        Arc::clone(&settings),
-    )));
     // MODA11Y2: the accessibility module reads the **installed** service list
     // from the package manager (lazily, after the APK is installed) instead of
     // trusting the launch config, and the dispatcher needs the state for the
@@ -813,4 +821,34 @@ mod t21_tests {
             crate::error::ServiceError::UnsupportedAndroidApi { .. }
         ));
     }
+}
+
+/// The window-stack sink the session calls after a window is added or removed:
+/// it queues one `TYPE_WINDOWS_CHANGED` per change and returns the
+/// `IAccessibilityServiceClient.onAccessibilityEvent` deliveries the bound
+/// service owes (AOSP `AccessibilityWindowManager` /
+/// `notifyAccessibilityEvent`, which delivers a cache-critical event even when
+/// the service did not subscribe to it).
+///
+/// The window session calls this with its own state lock released, so the two
+/// states are never held in both orders.
+#[must_use]
+pub fn a11y_window_changes(
+    a11y: std::sync::Arc<std::sync::Mutex<crate::misc::A11yState>>,
+) -> crate::window_session::WindowStackSink {
+    std::sync::Arc::new(move |change: crate::window_session::WindowStackChange| {
+        let changes = match change {
+            crate::window_session::WindowStackChange::Added(window) => {
+                (window, crate::a11y_bind::WINDOWS_CHANGE_ADDED)
+            }
+            crate::window_session::WindowStackChange::Removed(window) => {
+                (window, crate::a11y_bind::WINDOWS_CHANGE_REMOVED)
+            }
+        };
+        let mut state = a11y
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.record_window_change(changes.0, changes.1);
+        crate::a11y_bind::windows_changed_deliveries(&mut state)
+    })
 }

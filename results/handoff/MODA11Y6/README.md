@@ -11,7 +11,7 @@ intended.
 
 | Brief step | State |
 |---|---|
-| 1. WM lock: no host state lock across a guest round trip; test: concurrent relayout + `getWindows`; restore the guest-side type-4 overlay assertion | **root cause found, fix in progress** (§1) |
+| 1. WM lock: no host state lock across a guest round trip; test: concurrent relayout + `getWindows`; restore the guest-side type-4 overlay assertion | **DONE, passes on ART (13/13)** (§1) |
 | 2. `getWindows` capability gate from the service's `accessibility-service` meta-data XML | not started |
 | 3. `dispatchGesture` (tap + swipe) and `takeScreenshot` | not started |
 | 4. Gaten bubble (`TYPE_ACCESSIBILITY_OVERLAY` owned by `GatenAccessibilityService`) | not started |
@@ -91,12 +91,66 @@ before the loop finishes.
 
 ### The fix (step 1)
 
-Deliver `TYPE_WINDOWS_CHANGED` to the bound service when the window stack
-changes, the way AOSP does, and keep the window-session critical section free
-of anything that can wait on the guest (the discipline the orchestrator asked
-for, and the reason the trace above was needed: it proves the host never held
-the lock across a guest round trip in this path). Then the guest-side type-4
-assertion goes back into `scenarios/a11y-probe.yaml` on the first retry.
+1. **`TYPE_WINDOWS_CHANGED` delivery on a window-stack change.** The window
+   session (`window_session.rs`) hands a `WindowStackChange`
+   (`Added`/`Removed`) to a sink after `addToDisplayAsUser`/`remove`; the sink
+   (`registry::a11y_window_changes` → `a11y_bind::windows_changed_deliveries`)
+   queues one `AccessibilityEvent.TYPE_WINDOWS_CHANGED` per change and returns
+   the `IAccessibilityServiceClient.onAccessibilityEvent(event,
+   serviceWantsEvent)` deliveries, addressed at the bound service's client
+   binder. The event parcel is written in the image's own order
+   (`AccessibilityEvent.writeToParcel` / `writeAccessibilityRecordToParcel`);
+   two wire details were read out of the image dex, not guessed:
+   * the AIDL `in AccessibilityEvent` argument is a `writeTypedObject`, so a
+     presence `int 1` precedes the body (`IAccessibilityServiceClient$Stub`
+     unmarshals it with `Parcel.readTypedObject`);
+   * a null `CharSequence` is `int 1` (the *not-spanned* kind) followed by a
+     null `String8`, not `int 0` — `int 0` selects `TextUtils`'
+     `Spanned` branch and desynchronises the whole record
+     (`TextUtils.writeToParcel` at `framework/classes3.dex` 0x455fda:
+     `writeInt(1)`, `writeString8(cs == null ? null : cs.toString())`).
+   The first attempt at the parcel made the guest abort (SIGABRT) — the dex
+   read is what fixed it, and the run below is the proof.
+2. **The lock discipline.** The sink is called **after**
+   `raw_transact` drops the window-manager state guard, so the two states are
+   never held in both orders (`window_snapshot` takes the window state while
+   the accessibility state is held). The compiler now enforces it: the state
+   guard borrows `self`, so calling the `&mut self` notifier under it does not
+   build.
+
+### Proof on ART
+
+`scenarios/a11y-probe.yaml` passes **13/13** with the guest-side assertion
+restored (`results/handoff/MODA11Y6/step1/a11y-verdict.json`,
+`status=pass`), and the probe's own log is the evidence:
+
+```
+I AcosA11yProbe: overlay_added type=2032 token=set
+I AcosA11yProbe: windows2_start
+I AcosA11yProbe: onAccessibilityEvent type=4194304      <- TYPE_WINDOWS_CHANGED
+I AcosA11yProbe: windows2 count=2 attempts=2            <- the retry, not the cache
+I AcosA11yProbe: window2[0] id=2 type=4 layer=1 active=false focused=false
+I AcosA11yProbe: window2[1] id=1 type=1 layer=0 active=true focused=true
+I AcosA11yProbe: windows2 overlay=true
+```
+
+`type=4` is `AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY` and it is the
+topmost window — asserted by the service itself, above the `assert_windows`
+step that reads the host's own stack.
+
+### Tests
+
+```
+crates/acos-services/tests/moda11y6_windows_changed.rs (new, 3 tests)
+  a_window_add_and_remove_deliver_type_windows_changed_to_the_bound_service
+    (fails with the sink unwired: "one TYPE_WINDOWS_CHANGED per added window;
+     got []") — parses the event parcel field by field: sealed, type,
+     windowChanges mask, connection id, source window id, INVALID_DISPLAY
+  no_service_no_window_change_delivery
+  a_stalled_window_change_sink_does_not_block_the_window_snapshot
+    (the brief's concurrency test: a sink stalled for 1.5 s must not delay
+     `A11yState::window_snapshot`; asserts < 500 ms)
+```
 
 ### Evidence
 

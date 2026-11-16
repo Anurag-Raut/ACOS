@@ -121,6 +121,30 @@ pub mod codes {
 /// The descriptor every transaction of this interface carries.
 pub const DESCRIPTOR: &str = "android.view.IWindowSession";
 
+/// A window left or entered the layer stack.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowStackChange {
+    /// `addToDisplayAsUser` created the window (`ADD_OKAY`).
+    Added(u64),
+    /// `remove` dropped the window.
+    Removed(u64),
+}
+
+/// The sink a session installs so another system component (the accessibility
+/// module) learns about window-stack changes the way AOSP's
+/// `AccessibilityWindowManager` does — one event per added/removed window.
+///
+/// It is called **after** the window-manager state lock is released: the sink
+/// takes its own state lock and builds deliveries, and holding the window
+/// state across that would order the two locks against
+/// `A11yState::window_snapshot` (which takes them the other way round). See
+/// `results/handoff/MODA11Y6/README.md` §1.
+///
+/// It returns the deliveries the change owes the guest; the session hands them
+/// to the host through [`ServiceObject::drain_raw_deliveries`].
+pub type WindowStackSink =
+    std::sync::Arc<dyn Fn(WindowStackChange) -> Vec<PendingDelivery> + Send + Sync>;
+
 /// The host node behind `IWindowManager.openSession`.
 ///
 /// One instance per `ServiceHost`; it shares the [`WmsState`] with the `window`
@@ -150,6 +174,11 @@ pub struct WindowSessionService {
     /// `acos-wm`'s private channel), publishes the real FOCUS/TOUCH_MODE
     /// state, and `relayout` wakes the env-driven injector.
     input: Option<input_dispatch::InputHost>,
+    /// Who hears about window-stack changes (the accessibility module).
+    window_changes: Option<WindowStackSink>,
+    /// Deliveries a window-stack change produced, waiting for
+    /// [`ServiceObject::drain_raw_deliveries`].
+    window_change_deliveries: Vec<PendingDelivery>,
 }
 
 impl std::fmt::Debug for WindowSessionService {
@@ -174,6 +203,40 @@ impl WindowSessionService {
             visibility_delivered: HashSet::new(),
             callbacks_deferred: 0,
             input: None,
+            window_changes: None,
+            window_change_deliveries: Vec::new(),
+        }
+    }
+
+    /// Install the window-stack sink (the accessibility module's
+    /// `TYPE_WINDOWS_CHANGED` producer).
+    #[must_use]
+    pub fn with_window_changes(mut self, sink: WindowStackSink) -> Self {
+        self.window_changes = Some(sink);
+        self
+    }
+
+    /// Install or replace the window-stack sink on a node a host already
+    /// registered (`ServiceHost::dynamic_object_mut`). A test does this to
+    /// model a sink that stalls; production installs it once through
+    /// [`Self::with_window_changes`].
+    pub fn set_window_changes(&mut self, sink: WindowStackSink) {
+        self.window_changes = Some(sink);
+    }
+
+    /// Tell the sink about a stack change and keep the deliveries it produced.
+    ///
+    /// Must be called with `self.state`'s guard **dropped**: the sink reads the
+    /// accessibility state, whose `window_snapshot` takes the window-manager
+    /// state, so calling it under the guard would order the locks the other
+    /// way round.
+    fn notify_window_change(&mut self, change: WindowStackChange) {
+        let Some(sink) = self.window_changes.clone() else {
+            return;
+        };
+        let deliveries = sink(change);
+        if !deliveries.is_empty() {
+            self.window_change_deliveries.extend(deliveries);
         }
     }
 
@@ -445,6 +508,13 @@ impl Drop for RawTransactTrace {
 }
 
 impl ServiceObject for WindowSessionService {
+    /// The host configures a registered node through this (`sensors` does the
+    /// same for its feed); the window-stack sink is installed that way by
+    /// `registry::install` and by tests.
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
+    }
+
     fn call(
         &mut self,
         interface: &str,
@@ -483,6 +553,9 @@ impl ServiceObject for WindowSessionService {
     /// The visibility callback is delivered **once per window**, so a queue that
     /// keeps growing across relayouts cannot turn into a traversal storm.
     fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
+        // Window-stack change deliveries (the accessibility events a window
+        // add/remove owes the bound service) go out with the window callbacks.
+        let mut out = std::mem::take(&mut self.window_change_deliveries);
         let mut pending = Vec::new();
         {
             let mut state = self.lock();
@@ -490,7 +563,6 @@ impl ServiceObject for WindowSessionService {
                 pending.push(pc);
             }
         }
-        let mut out = Vec::new();
         for pc in pending {
             let method = pc.callback.method();
             let code = pc.callback.code();
@@ -594,6 +666,9 @@ impl ServiceObject for WindowSessionService {
             crate::trace::line(format!("ACOSWMS locked code={code}"));
         }
         let window_id = self.window_id_binder;
+        // Collected while the state lock is held, delivered after it is
+        // released (`notify_window_change` takes the accessibility state).
+        let mut stack_change: Option<WindowStackChange> = None;
         match code {
             codes::ADD_TO_DISPLAY | codes::ADD_TO_DISPLAY_AS_USER => {
                 // IWindow, LayoutParams (typed), viewVisibility, layerStackId,
@@ -626,6 +701,13 @@ impl ServiceObject for WindowSessionService {
                 let add = state
                     .add_to_display_as_user(window, params, requested_visible_types)
                     .map_err(werr)?;
+                if add.result == acos_wm::wms::ADD_OKAY {
+                    // AOSP `AccessibilityWindowManager.updateWindowsLocked`
+                    // reports every window that entered the stack
+                    // (`WINDOWS_CHANGE_ADDED`), which is what clears a bound
+                    // service's window cache.
+                    stack_change = Some(WindowStackChange::Added(window.0));
+                }
                 if trace {
                     eprintln!(
                         "ACOSWMS add-done window={:#x} result={} frame={:?}",
@@ -716,6 +798,7 @@ impl ServiceObject for WindowSessionService {
                         }
                     }
                     state.remove(binder.0).map_err(werr)?;
+                    stack_change = Some(WindowStackChange::Removed(binder.0));
                     if let Some(input) = &self.input {
                         let mut dispatch = input
                             .state()
@@ -991,6 +1074,15 @@ impl ServiceObject for WindowSessionService {
                 let _always = data.read_bool().map_err(perr)?;
             }
             _ => return Err(Self::unsupported(code)),
+        }
+        // The window-manager state lock is released **before** anything that
+        // can wait on another system component (the accessibility state here,
+        // a guest round trip anywhere): `A11yState::window_snapshot` takes the
+        // window state, so holding it while the sink runs would order the two
+        // the other way round (results/handoff/MODA11Y6/README.md §1).
+        drop(state);
+        if let Some(change) = stack_change {
+            self.notify_window_change(change);
         }
         Ok(true)
     }
