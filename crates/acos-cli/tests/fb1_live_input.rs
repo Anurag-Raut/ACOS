@@ -205,6 +205,9 @@ impl Daemon {
             .arg("--idle-timeout")
             .arg("120")
             .env("ACOS_RUNTIME_DIR", dir.join("runtime"))
+            // The suite may export ACOS_SESSION_SOCKET; it wins over the runtime
+            // dir, so this test must not inherit it.
+            .env_remove("ACOS_SESSION_SOCKET")
             .env("ACOS_CACHE_DIR", dir.join("cache"))
             .env("ACOS_ART_BIN", &fake)
             .env("FAKE_ART_OUT", &art_home)

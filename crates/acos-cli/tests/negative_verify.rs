@@ -150,6 +150,9 @@ fn broken_fixtures_never_false_pass() {
             .arg(&artifacts)
             .env("ACOS_BOOT_DIR", &boot)
             .env("ACOS_RUNTIME_DIR", scratch("runtime"))
+            // The suite may export ACOS_SESSION_SOCKET; it wins over the runtime
+            // dir, so this test must not inherit it.
+            .env_remove("ACOS_SESSION_SOCKET")
             .env("ACOS_SESSION_ROOT", &session_root)
             .env("ACOS_NO_BOOT_CACHE", "1");
         if case.native {

@@ -1,0 +1,19 @@
+=== acos-test-support (the SUN_LEN rule's own unit tests) ===
+   Compiling acos-test-support v0.2.3 (/home/Qui/.t3/worktrees/acos/t3-fb2c11fd-08fd93c959b26331/crates/acos-test-support)
+    Finished `test` profile [unoptimized] target(s) in 0.07s
+     Running unittests src/lib.rs (.cache/testflake-target/debug/deps/acos_test_support-ecffcf658b3d68ef)
+
+running 4 tests
+test tests::a_short_requested_root_is_honoured ... ok
+test tests::a_root_that_cannot_hold_a_socket_falls_through_to_a_short_one ... ok
+test tests::no_usable_candidate_falls_back_to_a_short_ram_disk_root ... ok
+test tests::the_budget_is_derived_from_the_deepest_name_and_not_a_round_number ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests acos_test_support
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

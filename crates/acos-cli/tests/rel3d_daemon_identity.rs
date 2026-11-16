@@ -21,6 +21,18 @@
 //! The daemon here is a *fake* (this test binary re-executed as a daemon) that
 //! speaks the real line-JSON wire protocol and claims another build, so the
 //! client's decision path is exercised unchanged.
+//!
+//! Isolation (TESTFLAKE): every arm gets its own short private directory and
+//! every child `acos` is pointed at it explicitly - **including**
+//! `ACOS_SESSION_SOCKET`, which wins over `ACOS_RUNTIME_DIR` and is exported by
+//! the worktree test env. Before this, the test half-isolated: it overrode
+//! `ACOS_RUNTIME_DIR` only, so a run with `ACOS_SESSION_SOCKET` set (the normal
+//! full-suite environment) routed every `acos session` call to the owner's
+//! shared daemon instead of the fake one in the scratch directory. The fake was
+//! never consulted, no `DAEMON_VERSION_MISMATCH` warning was printed, and the
+//! test failed - it passed standalone (variable unset) and failed inside
+//! `cargo test -p acos-cli` (variable set). Nothing about the assertion changed:
+//! a foreign-build daemon still must never answer this CLI.
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -179,21 +191,123 @@ fn acos() -> &'static str {
     env!("CARGO_BIN_EXE_acos")
 }
 
-fn scratch(name: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "acos-rel3d-{}-{name}-{}",
-        std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0)
-    ));
+/// The longest build-private directory name `acos serve` can create:
+/// `build-<git sha>.<source8>.<exe8>` plus `+dirty` folded to `_`. The test reads
+/// the CLI's real build id from `doctor`; this bound is only for sizing the
+/// scratch directory (the `acos` binary's identity is not the test binary's).
+const PRIVATE_BUILD_DIR_MAX: usize = 6 + 8 + 1 + 6 + 1 + 8 + 1 + 8;
+
+/// A private runtime directory for one arm, removed (and its daemons stopped)
+/// on drop.
+///
+/// Each arm of the test gets its own directory, so no two arms - and no two
+/// tests in the suite - can share a socket, a daemon or a registry entry.
+struct Scratch {
+    dir: PathBuf,
+}
+
+impl Scratch {
+    fn dir(&self) -> &Path {
+        &self.dir
+    }
+
+    /// The shared socket inside this arm's directory (where the fake listens).
+    fn socket(&self) -> PathBuf {
+        self.dir.join("session.sock")
+    }
+
+    /// Every build-private socket in this arm's directory, whichever build put
+    /// it there (`build-<build id>/session.sock`).
+    fn private_sockets(&self) -> Vec<PathBuf> {
+        let Ok(entries) = std::fs::read_dir(&self.dir) else {
+            return Vec::new();
+        };
+        entries
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().starts_with("build-"))
+            .map(|entry| entry.path().join("session.sock"))
+            .collect()
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        stop_daemon_at(&self.socket());
+        for socket in self.private_sockets() {
+            stop_daemon_at(&socket);
+        }
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+/// Stop the daemon that answers on `socket`, if any, and never a guess: the pid
+/// is the identity the daemon reports about itself. An arm's own fake is already
+/// killed by its owner before the guard drops, so this only ever ends the `acos`
+/// daemons the test caused to auto-start (which used to survive with their
+/// runtime directory deleted).
+fn stop_daemon_at(socket: &Path) {
+    let Ok(client) = acos_mcp::daemon::DaemonClient::connect(socket) else {
+        return;
+    };
+    let pid = client.daemon_identity().pid();
+    if let Some(pid) = pid.filter(|pid| *pid > 1) {
+        // SAFETY: signal 15 to a pid this user's daemon reported as its own.
+        unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) };
+    }
+}
+
+/// A fresh private directory for one arm.
+///
+/// It has to stay **short**: a build-private socket is
+/// `<dir>/build-<build id>/session.sock` and `sun_path` is 108 bytes with the
+/// NUL, so a long checkout path (this worktree's is 74 bytes) must not be used
+/// as the root. The candidates are tried in order and the first one whose
+/// deepest socket fits wins; `ACOS_VIEW_TEST_DIR` is honoured when it fits,
+/// ignored (it is the suite's scratch knob, not a socket guarantee) when it does
+/// not.
+fn scratch(name: &str) -> Scratch {
+    let leaf = format!("{}-{name}", std::process::id());
+    let fits = |root: &Path| {
+        root.join(&leaf)
+            .join("x".repeat(PRIVATE_BUILD_DIR_MAX))
+            .join("session.sock")
+            .as_os_str()
+            .as_encoded_bytes()
+            .len()
+            <= acos_test_support::SUN_PATH_MAX
+    };
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(dir) = std::env::var_os("ACOS_VIEW_TEST_DIR") {
+        candidates.push(PathBuf::from(dir));
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd.join(".cache/rel3d"));
+    }
+    let shm = Path::new("/dev/shm");
+    if shm.is_dir() {
+        candidates.push(shm.join("acos-rel3d-tests"));
+    }
+    candidates.push(std::env::temp_dir().join("acos-rel3d-tests"));
+    let root = candidates
+        .iter()
+        .find(|root| fits(root))
+        .cloned()
+        .unwrap_or_else(|| {
+            panic!(
+                "no scratch root is short enough for a Unix socket: \
+                 ACOS_VIEW_TEST_DIR={:?}, candidates={:?}, sun_path is {} bytes",
+                std::env::var_os("ACOS_VIEW_TEST_DIR"),
+                candidates,
+                acos_test_support::SUN_PATH_MAX + 1
+            )
+        });
+    let dir = root.join(leaf);
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("scratch");
     // The runtime directory rule: 0700, or `acos serve` refuses to use it.
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).expect("0700");
-    dir
+    Scratch { dir }
 }
 
 /// Start the fake daemon as a separate process (it must be killable).
@@ -248,6 +362,12 @@ fn run(dir: &Path, args: &[&str]) -> (Value, String) {
     let output = Command::new(acos())
         .current_dir(repo_root())
         .env("ACOS_RUNTIME_DIR", dir)
+        // `ACOS_SESSION_SOCKET` wins over `ACOS_RUNTIME_DIR` in the client
+        // (`daemon::socket_path`), and the worktree test env exports it. It is
+        // not this arm's socket, so it must not reach the child: without this
+        // the CLI answers from the owner's shared daemon and the arm's own fake
+        // is never consulted.
+        .env_remove("ACOS_SESSION_SOCKET")
         .env("ACOS_SESSION_IDLE_SECS", "60")
         .env("ACOS_NO_DAEMON", "0")
         .args(args)
@@ -274,9 +394,8 @@ fn stderr_warning(stderr: &str) -> Option<Value> {
 fn cli_build_id() -> String {
     // The CLI reports its own identity in the `hello` it sends; the doctor line
     // names it, so read it from there instead of duplicating the build hash.
-    let dir = scratch("identity");
-    let (value, _) = run(&dir, &["doctor", "--json"]);
-    let _ = std::fs::remove_dir_all(&dir);
+    let scratch = scratch("identity");
+    let (value, _) = run(scratch.dir(), &["doctor", "--json"]);
     let check = value["checks"]
         .as_array()
         .and_then(|checks| {
@@ -302,14 +421,17 @@ fn rel3d_a_foreign_daemon_never_answers_the_cli() {
     }
     let cli_build = cli_build_id();
     assert!(cli_build.contains('.'), "cli build id: {cli_build}");
+    // `serve::private_socket_path`: the directory is named after the *CLI's*
+    // build id, which `doctor` just named.
+    let build_dir = format!("build-{}", cli_build.replace('+', "_").replace('.', "_"));
     let foreign_build = "000000000000.deadbeef.0badf00d";
 
     // ---- Arm 1: a busy daemon of another build is left alone -------------
     // It holds a live session, so stopping it would destroy somebody's guest.
     let dir = scratch("busy");
-    let socket = dir.join("session.sock");
+    let socket = dir.socket();
     let mut fake = start_fake(&socket, foreign_build, 1, true, false);
-    let (value, stderr) = run(&dir, &["session", "list", "--json"]);
+    let (value, stderr) = run(dir.dir(), &["session", "list", "--json"]);
     assert_eq!(value["status"], "pass", "{value:#?}");
     let listed = value["result"]["sessions"].as_array().expect("sessions");
     assert!(
@@ -329,17 +451,21 @@ fn rel3d_a_foreign_daemon_never_answers_the_cli() {
             status
         );
     }
-    let private = dir.join(format!("build-{}", cli_build.replace('+', "_").replace('.', "_")));
+    let private = dir.dir().join(&build_dir).join("session.sock");
     assert!(
-        private.join("session.sock").exists(),
+        private.exists(),
         "a build-private daemon must serve this client: {}",
         private.display()
     );
     // `doctor` names the running daemon's identity next to the CLI's.
-    let (doctor, _) = run(&dir, &["doctor", "--json"]);
+    let (doctor, _) = run(dir.dir(), &["doctor", "--json"]);
     let check = doctor["checks"]
         .as_array()
-        .and_then(|checks| checks.iter().find(|check| check["name"] == "session_daemon"))
+        .and_then(|checks| {
+            checks
+                .iter()
+                .find(|check| check["name"] == "session_daemon")
+        })
         .expect("session_daemon check");
     assert_eq!(check["status"], "warn", "{check:#?}");
     let detail = check["detail"].as_str().unwrap_or("");
@@ -350,10 +476,10 @@ fn rel3d_a_foreign_daemon_never_answers_the_cli() {
 
     // ---- Arm 2: an idle auto-started daemon of another build is replaced --
     let dir = scratch("idle");
-    let socket = dir.join("session.sock");
+    let socket = dir.socket();
     let mut fake = start_fake(&socket, foreign_build, 0, true, false);
     let fake_pid = fake.id();
-    let (value, stderr) = run(&dir, &["session", "list", "--json"]);
+    let (value, stderr) = run(dir.dir(), &["session", "list", "--json"]);
     assert_eq!(value["status"], "pass", "{value:#?}");
     let warning = stderr_warning(&stderr)
         .unwrap_or_else(|| panic!("a structured warning must be printed; stderr={stderr}"));
@@ -365,10 +491,14 @@ fn rel3d_a_foreign_daemon_never_answers_the_cli() {
     let _ = fake.wait();
     assert!(!pid_alive(fake_pid), "the idle foreign daemon is stopped");
     // The shared socket now belongs to this build: doctor says it matches.
-    let (doctor, _) = run(&dir, &["doctor", "--json"]);
+    let (doctor, _) = run(dir.dir(), &["doctor", "--json"]);
     let check = doctor["checks"]
         .as_array()
-        .and_then(|checks| checks.iter().find(|check| check["name"] == "session_daemon"))
+        .and_then(|checks| {
+            checks
+                .iter()
+                .find(|check| check["name"] == "session_daemon")
+        })
         .expect("session_daemon check");
     assert_eq!(check["status"], "ok", "{check:#?}");
     assert!(
@@ -380,9 +510,9 @@ fn rel3d_a_foreign_daemon_never_answers_the_cli() {
     // It holds sessions, so it is left alone even though it cannot prove which
     // build it is; the client runs its own daemon instead.
     let dir = scratch("legacy");
-    let socket = dir.join("session.sock");
+    let socket = dir.socket();
     let mut fake = start_fake(&socket, "legacy", 1, false, true);
-    let (value, stderr) = run(&dir, &["session", "list", "--json"]);
+    let (value, stderr) = run(dir.dir(), &["session", "list", "--json"]);
     assert_eq!(value["status"], "pass", "{value:#?}");
     let listed = value["result"]["sessions"].as_array().expect("sessions");
     assert!(
@@ -412,7 +542,7 @@ fn rel3d_the_running_daemon_reports_its_identity() {
         return;
     }
     let dir = scratch("identity-live");
-    let socket = dir.join("session.sock");
+    let socket = dir.socket();
     let mut fake = start_fake(&socket, "000000000000.feedface.cafebabe", 0, true, false);
     // A raw client sees both identities and the refusal, and never a forwarded
     // envelope from the foreign build.
@@ -433,5 +563,51 @@ fn rel3d_the_running_daemon_reports_its_identity() {
     );
     let _ = fake.kill();
     let _ = fake.wait();
-    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The isolation contract, as a test: the arms above must not depend on an
+/// inherited `ACOS_SESSION_SOCKET`.
+///
+/// That variable wins over `ACOS_RUNTIME_DIR` in the client and the worktree
+/// test env exports it, so before this test the four arms silently ran against
+/// the owner's shared daemon during a full-suite run: the arm's fake was never
+/// consulted, no `DAEMON_VERSION_MISMATCH` was printed and the test failed (it
+/// passed standalone, where the variable was unset). Nothing here changes an
+/// assertion; it proves the arms hold with a live same-build daemon announced on
+/// that variable. A child process is used so the suite's environment is never
+/// mutated in-process.
+#[test]
+fn rel3d_arms_ignore_an_inherited_shared_socket() {
+    if std::env::var_os("REL3D_FAKE_SOCKET").is_some()
+        || std::env::var_os("REL3D_HOSTILE_ENV_CHILD").is_some()
+    {
+        return;
+    }
+    // A live daemon of this build outside the arms' directories: exactly the
+    // owner's shared daemon that the exported variable pointed the CLI at.
+    let elsewhere = scratch("elsewhere");
+    let (value, _) = run(elsewhere.dir(), &["session", "list", "--json"]);
+    assert_eq!(value["status"], "pass", "{value:#?}");
+    let hostile = elsewhere.socket();
+    assert!(
+        hostile.exists(),
+        "a daemon must be listening on the announced socket: {}",
+        hostile.display()
+    );
+
+    let child = Command::new(std::env::current_exe().expect("test binary"))
+        .args([TEST_NAME, "--exact", "--nocapture"])
+        .env("ACOS_SESSION_SOCKET", &hostile)
+        .env("REL3D_HOSTILE_ENV_CHILD", "1")
+        .stdin(Stdio::null())
+        .output()
+        .expect("run the foreign-daemon test in a child process");
+    assert!(
+        child.status.success(),
+        "the arms must not depend on the inherited ACOS_SESSION_SOCKET (= {})\n\
+         stdout={}\nstderr={}",
+        hostile.display(),
+        String::from_utf8_lossy(&child.stdout),
+        String::from_utf8_lossy(&child.stderr)
+    );
 }

@@ -1872,38 +1872,42 @@ mod tests {
     /// `<worktree>/.cache/live-view-test/<pid>-<tag>/stream.sock` is over that in
     /// an agent worktree (the checkout path alone is ~70 bytes), so six of these
     /// tests failed with "stream socket path ... is too long for a unix socket"
-    /// before reaching an assertion. `ACOS_VIEW_TEST_DIR` is honoured only when
-    /// it fits the budget (so a caller gets a clear error instead of a `bind`
-    /// failure), else the checkout path when that is short enough, else a fixed
-    /// short RAM-backed directory - these tests write a few KB, never artifacts.
+    /// before reaching an assertion. The rule is the shared one
+    /// ([`acos_test_support::short_scratch_root`]): `ACOS_VIEW_TEST_DIR` when it
+    /// fits the socket budget, else the checkout path when that is short enough,
+    /// else a fixed short RAM-backed directory - these tests write a few KB,
+    /// never artifacts. A `ACOS_VIEW_TEST_DIR` too long for a socket is reported
+    /// once and ignored instead of failing every test that binds a socket.
     fn scratch_root() -> PathBuf {
-        /// Leaves room for `/<pid>-<tag>` and a socket name below that.
-        const BUDGET: usize = 72;
-        let fits = |dir: &Path| dir.as_os_str().as_encoded_bytes().len() <= BUDGET;
+        let candidates: Vec<PathBuf> = crate::repo_root()
+            .ok()
+            .map(|root| vec![root.join(".cache/live-view-test")])
+            .unwrap_or_default();
+        acos_test_support::short_scratch_root(
+            "ACOS_VIEW_TEST_DIR",
+            &candidates,
+            "acos-live-view-tests",
+        )
+    }
 
-        if let Some(dir) = std::env::var_os("ACOS_VIEW_TEST_DIR") {
-            let dir = PathBuf::from(dir);
-            let len = dir.as_os_str().as_encoded_bytes().len();
-            assert!(
-                fits(&dir),
-                "ACOS_VIEW_TEST_DIR is {len} bytes, which leaves no room for a Unix \
-                 socket path (sun_path is 108 bytes with the NUL); use at most \
-                 {BUDGET} bytes: {}",
-                dir.display()
-            );
-            return dir;
-        }
-        if let Ok(root) = crate::repo_root() {
-            let workspace_root = root.join(".cache/live-view-test");
-            if fits(&workspace_root) {
-                return workspace_root;
-            }
-        }
-        let shm = Path::new("/dev/shm");
-        if shm.is_dir() {
-            return shm.join("acos-live-view-tests");
-        }
-        std::env::temp_dir().join("acos-live-view-tests")
+    /// The deepest socket these tests bind below the scratch root; the shared
+    /// budget is sized from this shape (see
+    /// `acos_test_support::SCRATCH_ROOT_BUDGET`).
+    fn deepest_stream_socket(root: &Path) -> PathBuf {
+        root.join(format!("{}-maskdetach", std::process::id()))
+            .join("stream.sock")
+    }
+
+    #[test]
+    fn the_scratch_root_leaves_room_for_the_stream_socket() {
+        let deepest = deepest_stream_socket(&scratch_root());
+        let len = deepest.as_os_str().as_encoded_bytes().len();
+        assert!(
+            len <= acos_test_support::SUN_PATH_MAX,
+            "{} is {len} bytes, too long for sun_path ({} with the NUL)",
+            deepest.display(),
+            acos_test_support::SUN_PATH_MAX + 1
+        );
     }
 
     fn scratch_dir(tag: &str) -> PathBuf {

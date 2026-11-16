@@ -28,5 +28,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+# Shared test-only helpers (the SUN_LEN scratch-root rule).
+acos-test-support = { path = "../acos-test-support" }
 # SHOTZ: the round-trip tests decode the PNG the capture path wrote.
 png = "0.17"
