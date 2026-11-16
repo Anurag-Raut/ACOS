@@ -54,6 +54,25 @@ public final class MainActivity extends Activity {
     private int listenerCount;
     private int callRingingLines;
     private final java.util.List<PhoneStateListener> listeners = new java.util.ArrayList<>();
+    /**
+     * The §2a experiment: the same listeners held only weakly, so a GC can
+     * collect them while the registration (and the host's reference on the
+     * callback binder) still exists.
+     */
+    private final java.util.List<java.lang.ref.WeakReference<PhoneStateListener>> weakListeners =
+            new java.util.ArrayList<>();
+
+    /** How many registered listeners a GC left reachable (the §2a counter). */
+    private int aliveListeners() {
+        int alive = 0;
+        for (java.lang.ref.WeakReference<PhoneStateListener> weak : weakListeners) {
+            if (weak.get() != null) {
+                alive++;
+            }
+        }
+        // A listener the app still holds strongly (the normal pattern) counts.
+        return alive + listeners.size();
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -183,8 +202,35 @@ public final class MainActivity extends Activity {
         // TextView append (both of which a non-UI thread can lose).
         report.setOnClickListener(view -> log("CALLTOTAL state_lines=" + callStateLines
                 + " ringing=" + callRingingLines + " listeners=" + listenerCount
-                + " held=" + listeners.size()));
+                + " held=" + listeners.size()
+                + " alive=" + aliveListeners()));
         appendToRoot(report);
+
+        // BINDERREF2 §2a probe: move every registered listener into a
+        // `WeakReference` list (so the *app* no longer references it) and force
+        // a collection. On Android the host's strong reference on the callback
+        // binder is what keeps the Java object alive, because libbinder's
+        // `JavaBBinder` holds a JNI global reference to it. The counters say
+        // whether this guest does the same: `alive` is the number of listener
+        // objects a GC left reachable, `ringing` is how many of them ran.
+        Button weaken = new Button(this);
+        weaken.setText("Weaken listeners");
+        weaken.setTag("weaken-listeners");
+        weaken.setOnClickListener(view -> {
+            weakListeners.clear();
+            for (PhoneStateListener listener : listeners) {
+                weakListeners.add(new java.lang.ref.WeakReference<>(listener));
+            }
+            listeners.clear();
+            callListener = null;
+            System.gc();
+            System.runFinalization();
+            System.gc();
+            log("CALLWEAK listeners=" + listenerCount
+                    + " alive=" + aliveListeners()
+                    + " refs=" + weakListeners.size());
+        });
+        appendToRoot(weaken);
 
         Button send = new Button(this);
         send.setText("Send SMS");
@@ -234,13 +280,24 @@ public final class MainActivity extends Activity {
         PhoneStateListener listener = new PhoneStateListener() {
             @Override
             public void onCallStateChanged(int state, String phoneNumber) {
-                callStateLines++;
-                if (state == TelephonyManager.CALL_STATE_RINGING) {
-                    callRingingLines++;
+                // BINDERREF2 §2a: a `oneway` callback whose Java listener the app
+                // dropped throws inside the stub and can never report it (the
+                // transaction has no reply to carry a status). Catching it here is
+                // what makes the difference between "the driver dropped it" and
+                // "the framework dispatched to a listener that is gone" visible.
+                try {
+                    callStateLines++;
+                    if (state == TelephonyManager.CALL_STATE_RINGING) {
+                        callRingingLines++;
+                    }
+                    log("CALL state=" + callName(state)
+                            + " number=" + (phoneNumber == null ? "null" : phoneNumber)
+                            + " listener=" + id);
+                } catch (Throwable error) {
+                    log("CALL-ERR listener=" + id
+                            + " error=" + error.getClass().getSimpleName()
+                            + " msg=" + error.getMessage());
                 }
-                log("CALL state=" + callName(state)
-                        + " number=" + (phoneNumber == null ? "null" : phoneNumber)
-                        + " listener=" + id);
             }
         };
         callListener = listener;
