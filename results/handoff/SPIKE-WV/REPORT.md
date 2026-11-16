@@ -107,7 +107,7 @@ The complete API-34 surface is in `research/spike-wv/provider/METHODS.md`
 |---|---|---|
 | PMS knows only one package | the provider package must be installed and `createApplicationContext` must work for it; the plan lists "a second APK" for v0.4.0, so this is on the critical path and is *not* WebView work | `crates/acos-services/src/pms.rs` header: "Mini PackageManagerService built from the fixture APK" |
 | hidden-API compile | provider implements framework-hidden interfaces; needs stubs generated from the image, not the SDK `android.jar` | `provider/METHODS.md` |
-| guest-side frame cost unknown | 8 ms engine time at 1080×2400 still has to cross the socket, decode PNG (≈?), and draw on CPU Skia; a 20 KB PNG at 1080×800 grew to ~? at 1080×2400 (measured: see `gate-d.json` `png_bytes_median`) | `evidence/gate-d.json` |
+| guest-side frame cost unknown | the engine already spends 8 ms per 1080×2400 frame, and a 72 KB PNG (37 KB at 1080×800) still has to cross the socket, be decoded, and be drawn on CPU Skia | `evidence/gate-d.json` (`png_bytes_median`) |
 | frame pump vs input | touch only routes when a frame is produced, so the provider needs a frame pump on a vsync-ish cadence; a stalled broker becomes a stalled UI thread (ANR risk if not off the main thread) | `LOG.md` 4.3 |
 | one engine, all sessions | a Chromium crash loses every session's WebView; needs a supervisor + honest `WebViewRenderProcess` signalling | design |
 | network semantics | the page fetch happens on the host: the guest's `offline` profile, TLS pinning and traffic recording are bypassed until the network module + request interception land. This must be stated in `fidelity` | gate a; ADR-0031 item 1 |
