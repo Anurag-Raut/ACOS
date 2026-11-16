@@ -138,6 +138,9 @@ impl PrivateDaemon {
             .arg(&socket)
             .arg("--engine")
             .arg(engine)
+            // REL3D: this daemon was started by a client, so a matching client
+            // may replace it when idle; an operator's `acos serve` never is.
+            .arg("--auto-started")
             // SERVELEAK's own-owner binding: a daemon spawned for one process
             // must exit when that process is gone, even after `kill -9` (the
             // accept loop checks the owner once a second). `PR_SET_PDEATHSIG`
@@ -214,6 +217,21 @@ impl PrivateDaemon {
         let deadline = Instant::now() + timeout;
         loop {
             if let Ok(client) = DaemonClient::connect(&self.socket) {
+                // REL3D: the private daemon is still identity-checked. It is
+                // spawned from the `acos` binary, which can be a **different
+                // build** than this `acos-mcp` server (an upgrade replaced one
+                // of them, or `ACOS_MCP_BIN`/`PATH` points elsewhere). Forwarding
+                // to it would answer with another build's behaviour, so it is
+                // refused with both identities named instead.
+                if let Some(mismatch) = client.mismatch() {
+                    let warning = mismatch.to_json();
+                    return Err(io::Error::other(format!(
+                        "{}: {}",
+                        mismatch.code(),
+                        serde_json::to_string(&warning)
+                            .unwrap_or_else(|_| mismatch.message())
+                    )));
+                }
                 self.client = Some(client);
                 return Ok(());
             }

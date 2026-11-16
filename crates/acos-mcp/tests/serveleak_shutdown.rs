@@ -91,6 +91,16 @@ fn fake_daemon(
                     table.lock().unwrap().insert(session.clone(), token.clone());
                     json!({"session_id": session, "session_token": token, "launched": true})
                 }
+                // REL3D: every daemon answers the identity handshake; a fake
+                // that does not is (correctly) refused as another build.
+                "hello" => {
+                    let held = table.lock().unwrap();
+                    json!({
+                        "identity": acos_mcp::identity::Identity::local(),
+                        "engine": "art",
+                        "sessions": held.len(),
+                    })
+                }
                 "session_list" => {
                     let held = table.lock().unwrap();
                     let list: Vec<Value> = held

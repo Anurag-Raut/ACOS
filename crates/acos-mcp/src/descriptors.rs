@@ -225,12 +225,7 @@ pub fn tool_infos(caps: &Capabilities) -> Vec<ToolInfo> {
                 ),
                 None => (false, Some("unrecognised protocol command".to_string())),
             };
-            let input_schema =
-                if SESSION_ADDRESSED_PROTOCOL_TOOLS.contains(&descriptor.name.as_str()) {
-                    with_reply_paging(&descriptor.name, with_session_id(descriptor.input_schema))
-                } else {
-                    with_reply_paging(&descriptor.name, descriptor.input_schema)
-                };
+            let input_schema = protocol_tool_schema(&descriptor.name, descriptor.input_schema);
             ToolInfo {
                 tool_name: descriptor.name,
                 command,
@@ -263,6 +258,22 @@ pub fn tool_infos(caps: &Capabilities) -> Vec<ToolInfo> {
 pub const SESSION_ADDRESSED_PROTOCOL_TOOLS: &[&str] =
     &["acos_observe", "acos_reset", "acos_destroy", "acos_run"];
 
+/// The `settle_timeout_ms` property the session verbs publish.
+///
+/// The daemon applies a per-request settle deadline to **every** session verb
+/// (`ArtSession::set_settle_timeout` before the verb runs), and `acos session
+/// key`/`acos session text` forward it. The schemas for those two verbs did not
+/// declare it, so REL3B's unknown-argument rule turned the CLI's own documented
+/// call into `INVALID_ARGUMENT`. One property, one description.
+fn settle_timeout_property() -> Value {
+    json!({
+        "type": "integer", "minimum": 1, "maximum": 600000,
+        "description": "P12b: bound this verb's strict/fast settle wait. On timeout the reply \
+                        still carries the latest tree and frame identity with `settled:false` \
+                        and `bound:timeout`; a timeout is never assertion evidence."
+    })
+}
+
 /// The `session_id` property every session-addressed tool publishes.
 fn session_id_property() -> Value {
     json!({
@@ -274,43 +285,82 @@ fn session_id_property() -> Value {
     })
 }
 
-/// Reply-shaping arguments every tool whose reply can carry a tree reads.
-///
-/// `tool_result` shapes `result.tree` for **every** tool (`shape_reply_tree`),
-/// so `full`/`cursor` are real arguments of a tool whose typed request predates
-/// the reply rule. `acos_verify` and `acos_observe` are exactly that case: their
-/// replies page with `cursor`/`full` (REL3C), and the CLI's own `session
-/// observe` sends both, so a schema that omitted them rejected the server's own
-/// documented paging call. One helper for `tool_infos` and `tool_schema`, so the
-/// advertised and enforced schemas cannot drift.
-fn with_reply_paging(tool_name: &str, mut schema: Value) -> Value {
-    if !matches!(tool_name, "acos_verify" | "acos_observe") {
-        return schema;
-    }
-    if let Some(properties) = schema.get_mut("properties").and_then(Value::as_object_mut) {
-        properties.entry("full".to_string()).or_insert_with(|| {
-            json!({
-                "type": "boolean",
-                "description": "Include the full tree inline instead of the compact screen (default false). \
-                                The full tree is always written to `tree_path`."
-            })
-        });
-        properties.entry("cursor".to_string()).or_insert_with(|| {
-            json!({
-                "type": "integer", "minimum": 0,
-                "description": "Compact-screen page cursor from a previous reply's `tree_next_cursor`."
-            })
-        });
-    }
-    schema
-}
-
 /// Add the top-level `session_id` to a closed schema (idempotent).
 fn with_session_id(mut schema: Value) -> Value {
     if let Some(properties) = schema.get_mut("properties").and_then(Value::as_object_mut) {
         properties
             .entry("session_id".to_string())
             .or_insert_with(session_id_property);
+    }
+    schema
+}
+
+/// Protocol tools whose reply REL3C shapes with `full`/`cursor`, and/or whose
+/// verb honours a per-request settle deadline.
+///
+/// REL3C added the compact/paged reply (`full`, `cursor`) and the daemon applies
+/// `settle_timeout_ms` to *every* session verb (`set_settle_timeout` before the
+/// verb runs), but only the session-tool schemas learned about them. The
+/// protocol tools kept the schema generated from their request struct, so
+/// callers that use the documented arguments were rejected by REL3B's
+/// unknown-argument rule: the REL3C reply test's own `acos_verify {cursor: 200}`
+/// and the CLI's own `acos session observe` (`full`, `cursor`,
+/// `settle_timeout_ms`) both came back `INVALID_ARGUMENT`. Publishing them here
+/// is the honest side of that contract: the arguments exist and do work, so the
+/// schema must not deny them.
+pub const PAGED_REPLY_PROTOCOL_TOOLS: &[&str] = &["acos_observe", "acos_verify"];
+
+/// Protocol tools that honour `settle_timeout_ms`.
+///
+/// The daemon sets the per-request settle deadline before every session verb, so
+/// the tools that can be pointed at a live session take it. `acos_verify` is a
+/// whole run, not a verb on a held session, so it does not.
+pub const SETTLE_PROTOCOL_TOOLS: &[&str] = &["acos_observe"];
+
+/// Add the reply-shaping (`full`, `cursor`) and/or settle arguments the server
+/// layer accepts on top of a protocol tool's own request (idempotent).
+fn with_reply_arguments(mut schema: Value, paging: bool, settle: bool) -> Value {
+    let Some(properties) = schema.get_mut("properties").and_then(Value::as_object_mut) else {
+        return schema;
+    };
+    if paging {
+        properties.entry("full".to_string()).or_insert_with(|| {
+            json!({
+                "type": "boolean",
+                "description": "REL3C: include the full tree inline instead of the compact \
+                                screen (default false). The full tree is always written to \
+                                `tree_path`; a full tree over the reply cap is replaced by the \
+                                compact view and the path."
+            })
+        });
+        properties.entry("cursor".to_string()).or_insert_with(|| {
+            json!({
+                "type": "integer", "minimum": 0,
+                "description": "REL3C: compact-screen page cursor from a previous reply's \
+                                `tree_next_cursor`."
+            })
+        });
+    }
+    if settle {
+        properties
+            .entry("settle_timeout_ms".to_string())
+            .or_insert_with(settle_timeout_property);
+    }
+    schema
+}
+
+/// The schema a protocol tool publishes: its own, plus the arguments this
+/// server layer adds on top of the protocol request (top-level `session_id`, the
+/// reply-shaping/settle pair). One helper for both `tools/list` and the
+/// dispatcher's argument check, so the two cannot drift.
+fn protocol_tool_schema(tool_name: &str, mut schema: Value) -> Value {
+    if SESSION_ADDRESSED_PROTOCOL_TOOLS.contains(&tool_name) {
+        schema = with_session_id(schema);
+    }
+    let paging = PAGED_REPLY_PROTOCOL_TOOLS.contains(&tool_name);
+    let settle = SETTLE_PROTOCOL_TOOLS.contains(&tool_name);
+    if paging || settle {
+        schema = with_reply_arguments(schema, paging, settle);
     }
     schema
 }
@@ -389,13 +439,7 @@ pub fn tool_schema(tool_name: &str) -> Option<Value> {
         .tools
         .into_iter()
         .find(|tool| tool.name == tool_name)
-        .map(|tool| {
-            if SESSION_ADDRESSED_PROTOCOL_TOOLS.contains(&tool_name) {
-                with_reply_paging(tool_name, with_session_id(tool.input_schema))
-            } else {
-                with_reply_paging(tool_name, tool.input_schema)
-            }
-        })
+        .map(|tool| protocol_tool_schema(&tool_name, tool.input_schema))
 }
 
 /// The tool names `tools/list` may advertise: protocol commands plus
@@ -697,6 +741,7 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     pre-action tree (no diff is invented)."
                 },
                 "code": {"type": ["integer", "string"], "description": "Numeric key code or name."},
+                "settle_timeout_ms": settle_timeout_property(),
                 "expect_change": {
                     "type": "boolean",
                     "description": "SE1: opt-in verification of the action's effect. After the \
@@ -742,6 +787,7 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     pre-action tree (no diff is invented)."
                 },
                 "text": {"type": "string", "description": "Text to type into the focused field."},
+                "settle_timeout_ms": settle_timeout_property(),
                 "mask": {"type": "boolean", "description": "Withhold the typed text from the reply (`target.text_masked`, `target.chars`). Use it for a secret whose field the tree does not report as focused. Without it, a focused non-password field is echoed and any other target is masked."},
                 "expect_change": {
                     "type": "boolean",

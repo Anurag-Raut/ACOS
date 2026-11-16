@@ -1972,3 +1972,251 @@ steps:
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ---------------------------------------------------------------------------
+// MERGEINTEG §5: one step, one entry.
+//
+// A step that needed several real attempts records them in `attempts`; the
+// step's own `status` is the **final** outcome. `verdict.json` and the reply's
+// `result.verdict` are built from the same struct, so a passing run can never
+// show a retried non-pass step in one view and a pass in the other.
+// ---------------------------------------------------------------------------
+
+struct ScrollBackend {
+    manifest: Option<ManifestInfo>,
+    attempts: u64,
+    /// The attempt number whose settled traversal first shows the target.
+    /// `None` means it never appears (the search must miss and say so).
+    match_on: Option<u64>,
+}
+
+impl ScrollBackend {
+    fn new(match_on: Option<u64>) -> Self {
+        ScrollBackend {
+            manifest: None,
+            attempts: 0,
+            match_on,
+        }
+    }
+
+    fn observation(&self) -> SessionObservation {
+        let matched = self.match_on.is_some_and(|on| self.attempts >= on);
+        let frame = FrameMeta::new(
+            1 + self.attempts,
+            "2026-11-11T00:00:00.000Z",
+            format!("scroll:{}", self.attempts),
+            1080,
+            2400,
+            420,
+            format!("scroll-hash-{}-{matched}", self.attempts),
+            true,
+        );
+        let node = UiNode::new(
+            "n1",
+            "android.widget.TextView",
+            Bounds::new(42, 612, 175, 663),
+        )
+        .with_text(if matched { "Row 9" } else { "Row 1" });
+        let tree = UiTree::new(frame.clone(), "dev.acos.fixtures.helloviews", vec![node]);
+        SessionObservation {
+            session_id: "s_scroll".to_string(),
+            package: "dev.acos.fixtures.helloviews".to_string(),
+            frame,
+            tree,
+            screenshot_png: Some(b"scroll".to_vec()),
+            crashed: None,
+            input: None,
+            settle: None,
+        }
+    }
+}
+
+impl Backend for ScrollBackend {
+    fn id(&self) -> &'static str {
+        "scroll-mock"
+    }
+
+    fn protocol_backend(&self) -> ProtocolBackend {
+        ProtocolBackend::AcosNative
+    }
+
+    fn fidelity(&self) -> Fidelity {
+        Fidelity::NativeRuntime
+    }
+
+    fn capabilities(&self) -> Capabilities {
+        Capabilities {
+            static_manifest: true,
+            launch: true,
+            ui_tree: true,
+            input: true,
+            ..Capabilities::default()
+        }
+    }
+
+    fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError> {
+        let info = acos_verify::manifest::load_manifest(apk)?;
+        self.manifest = Some(info.clone());
+        Ok(info)
+    }
+
+    fn launch(&mut self, _request: &LaunchRequest) -> Result<LaunchOutcome, BackendError> {
+        let observation = self.observation();
+        Ok(LaunchOutcome {
+            session_id: "s_scroll".to_string(),
+            package: "dev.acos.fixtures.helloviews".to_string(),
+            frame: Some(observation.frame.clone()),
+            screenshot_png: observation.screenshot_png.clone(),
+            crashed: None,
+            detail: serde_json::json!({"backend": "scroll-mock"}),
+        })
+    }
+
+    fn observe(&mut self) -> Result<SessionObservation, BackendError> {
+        Ok(self.observation())
+    }
+
+    fn refresh(&mut self) -> Result<SessionObservation, BackendError> {
+        Ok(self.observation())
+    }
+
+    /// One real gesture per attempt, exactly the default `scroll_until` contract.
+    fn input(&mut self, _action: &InputAction) -> Result<SessionObservation, BackendError> {
+        self.attempts += 1;
+        Ok(self.observation())
+    }
+}
+
+fn attempt_counter() -> &'static AtomicU64 {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    &COUNTER
+}
+
+fn run_scroll(match_on: Option<u64>, max_attempts: usize) -> (RunOutcome, Vec<u8>) {
+    let yaml = format!(
+        r#"
+version: 1
+name: scroll-attempts
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {{mode: offscreen, width: 1080, height: 2400, density_dpi: 420}}
+expectation: pass
+steps:
+  - launch: {{activity: dev.acos.fixtures.helloviews/.MainActivity}}
+  - scroll_until:
+      selector: {{text: {{exact: "Row 9"}}}}
+      from: {{x: 540, y: 1800}}
+      to: {{x: 540, y: 600}}
+      max_attempts: {max_attempts}
+"#
+    );
+    let scenario = Scenario::from_yaml_str(&yaml).expect("valid scenario");
+    let n = attempt_counter().fetch_add(1, Ordering::Relaxed);
+    let artifacts = workspace()
+        .join(".cache/mergeinteg-verify-tests")
+        .join(format!("scroll-{}-{n}-{max_attempts}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&artifacts);
+    let options = RunOptions {
+        apk: workspace().join("fixtures/build/apps/hello-views.apk"),
+        scenario_path: workspace().join("scenarios/hello-views.yaml"),
+        artifacts_dir: artifacts.clone(),
+        required_fidelity: None,
+        request_id: "req_scroll_attempts".to_string(),
+        flags: Vec::new(),
+        acos_version: "0.1.0".to_string(),
+        engine: "rust-vm".to_string(),
+        warnings: Vec::new(),
+    };
+    let clock = FixedClock::new(1_794_318_674_000);
+    let mut backend = ScrollBackend::new(match_on);
+    let outcome = run_scenario(&scenario, &options, &mut backend, &clock).expect("run");
+    // The disk copy is the second view of the same run: read the bytes back.
+    let disk = std::fs::read(artifacts.join("verdict.json")).expect("verdict.json");
+    let _ = std::fs::remove_dir_all(&artifacts);
+    (outcome, disk)
+}
+
+#[test]
+fn a_retried_step_is_one_entry_with_its_attempts() {
+    let (outcome, disk) = run_scroll(Some(2), 3);
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Pass,
+        "found on attempt 2: {:?}",
+        outcome.verdict.failure
+    );
+    let step = &outcome.verdict.steps[1];
+    assert_eq!(step.step, "scroll_until");
+    // One entry, and its status is the final outcome - not the failed attempt.
+    assert_eq!(step.status, Status::Pass);
+    assert!(step.error.is_none(), "a passing step carries no error");
+    // The history is explicit, not hidden: attempt 1 missed, attempt 2 passed.
+    assert_eq!(step.attempts.len(), 2, "{:?}", step.attempts);
+    assert_eq!(step.attempts[0].attempt, 1);
+    assert_eq!(step.attempts[0].status, Status::Fail);
+    assert!(
+        step.attempts[0]
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("not visible")),
+        "{:?}",
+        step.attempts[0]
+    );
+    assert_eq!(step.attempts[1].attempt, 2);
+    assert_eq!(step.attempts[1].status, Status::Pass);
+    assert_eq!(step.attempts[1].frame_seq, step.frame_seq);
+
+    // Both views of the run are the same document.
+    let disk: serde_json::Value = serde_json::from_slice(&disk).expect("disk verdict parses");
+    let inline = serde_json::to_value(&outcome.verdict).expect("verdict serializes");
+    assert_eq!(disk["steps"], inline["steps"], "verdict.json vs inline steps");
+    assert_eq!(disk["verdict"], inline["verdict"]);
+    // And the disk copy carries the same attempt history.
+    assert_eq!(disk["steps"][1]["attempts"].as_array().map(Vec::len), Some(2));
+    assert_eq!(disk["steps"][1]["status"], "pass");
+}
+
+#[test]
+fn a_step_that_never_passes_fails_with_every_attempt() {
+    let (outcome, disk) = run_scroll(None, 3);
+    assert_eq!(outcome.verdict.verdict, Status::Fail);
+    let step = &outcome.verdict.steps[1];
+    assert_eq!(step.step, "scroll_until");
+    assert_eq!(step.status, Status::Fail);
+    assert_eq!(
+        step.error.as_ref().map(|error| error.code),
+        Some(acos_protocol::ErrorCode::ElementNotFound)
+    );
+    // All three attempts are kept, none is a pass.
+    assert_eq!(step.attempts.len(), 3, "{:?}", step.attempts);
+    assert!(step.attempts.iter().all(|attempt| attempt.status == Status::Fail));
+    assert_eq!(
+        step.attempts.last().and_then(|attempt| attempt.reason.as_deref()),
+        Some(
+            "selector not visible after this attempt's settled traversal (search exhausted)"
+        )
+    );
+
+    let disk: serde_json::Value = serde_json::from_slice(&disk).expect("disk verdict parses");
+    let inline = serde_json::to_value(&outcome.verdict).expect("verdict serializes");
+    assert_eq!(disk["steps"], inline["steps"], "verdict.json vs inline steps");
+    assert_eq!(disk["steps"][1]["attempts"].as_array().map(Vec::len), Some(3));
+}
+
+#[test]
+fn a_first_attempt_pass_records_no_attempts_array() {
+    let (outcome, disk) = run_scroll(Some(1), 3);
+    assert_eq!(outcome.verdict.verdict, Status::Pass);
+    let step = &outcome.verdict.steps[1];
+    assert_eq!(step.status, Status::Pass);
+    assert!(
+        step.attempts.is_empty(),
+        "no retry, no attempts array: {:?}",
+        step.attempts
+    );
+    let disk: serde_json::Value = serde_json::from_slice(&disk).expect("disk verdict parses");
+    assert!(
+        disk["steps"][1].get("attempts").is_none(),
+        "a single attempt is the step's own outcome, not a history"
+    );
+}

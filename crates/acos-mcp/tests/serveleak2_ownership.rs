@@ -108,6 +108,15 @@ fn fake_daemon(path: &Path) -> FakeDaemon {
                                 "launched": true,
                             });
                         }
+                        // REL3D: the identity handshake every daemon answers.
+                        "hello" => {
+                            let held = table.lock().unwrap();
+                            result = json!({
+                                "identity": acos_mcp::identity::Identity::local(),
+                                "engine": "art",
+                                "sessions": held.len(),
+                            });
+                        }
                         "session_list" => {
                             let held = table.lock().unwrap();
                             let list: Vec<Value> = held

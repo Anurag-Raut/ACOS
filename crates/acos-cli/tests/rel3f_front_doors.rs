@@ -194,26 +194,56 @@ fn fake_daemon_capturing(
                 Err(_) => return,
             };
             let mut reader = BufReader::new(stream.try_clone().expect("clone"));
-            let mut line = String::new();
-            if reader.read_line(&mut line).is_ok() {
+            let mut out = stream;
+            // REL3D: one connection carries a `hello` handshake and then the
+            // real call, so answer every request on it. The handshake is not the
+            // call a test asks about: it is captured only when it is the first
+            // line, and tests that assert on the forwarded tool skip it.
+            loop {
+                let mut line = String::new();
+                match reader.read_line(&mut line) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {}
+                }
+                if line.trim().is_empty() {
+                    continue;
+                }
                 let request: Value = serde_json::from_str(&line).expect("request line");
-                let _ = captured_tx.send(request.clone());
+                let tool = request["tool"].as_str().unwrap_or("").to_string();
+                if tool != "hello" {
+                    let _ = captured_tx.send(request.clone());
+                }
                 let id = request["id"].clone();
+                // A fake daemon of *this* build: report the caller's own
+                // identity (REL3D refuses a daemon that cannot name its build).
+                let hello = tool == "hello";
+                let mut identity = request
+                    .pointer("/args/client")
+                    .cloned()
+                    .unwrap_or_else(|| json!({}));
+                if let Some(object) = identity.as_object_mut() {
+                    object.insert("pid".into(), json!(std::process::id()));
+                    object.insert("engine".into(), json!("art"));
+                    object.insert("auto_started".into(), json!(true));
+                }
                 let envelope = json!({
-                    "request_id": "req_test",
+                    "request_id": if hello { "req_test_hello" } else { "req_test" },
                     "ok": true,
                     "status": "pass",
                     "backend": "acos-native",
                     "fidelity": "native-runtime",
                     "capabilities_used": [],
-                    "result": result,
+                    "result": if hello {
+                        json!({"identity": identity, "engine": "art", "sessions": 0})
+                    } else {
+                        result.clone()
+                    },
                     "metrics": {"wall_ms": 0},
                 });
                 let response = json!({"id": id, "envelope": envelope});
-                let mut out = stream;
                 let _ = writeln!(out, "{response}");
+                let _ = out.flush();
             }
-            return;
         }
     });
     (socket, captured_rx, handle)

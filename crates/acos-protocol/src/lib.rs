@@ -85,5 +85,5 @@ pub use scenario::{
 pub use ui::{Bounds, Selector, TextMatch, UiNode, UiTree};
 pub use verdict::{
     AppIdentity, ArtifactRef, FailureClassification, Reproducer, ResourceReport, ScenarioIdentity,
-    StepResult, Verdict, VERDICT_SCHEMA_VERSION,
+    StepAttempt, StepResult, Verdict, VERDICT_SCHEMA_VERSION,
 };

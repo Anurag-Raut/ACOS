@@ -31,6 +31,7 @@ pub mod descriptors;
 pub mod flutter_backend;
 pub mod gate;
 pub mod help;
+pub mod identity;
 pub mod jsonrpc;
 pub mod paths;
 pub mod private_daemon;
