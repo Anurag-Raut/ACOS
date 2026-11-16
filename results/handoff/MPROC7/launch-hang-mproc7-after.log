@@ -1,0 +1,178 @@
+warning: acos-binder-peer@0.2.2: built /home/Qui/.t3/worktrees/acos/t3-c8359f70-55fc41a57d616519/.cache/mproc7-target/debug/build/acos-binder-peer-1bf80c28dddde2d5/out/libacos_binder_driver.so
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:1998:9
+     |
+1978 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+1998 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+     |
+     = note: `#[warn(unreachable_patterns)]` on by default
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:2328:9
+     |
+2272 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+2328 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3779:9
+     |
+3735 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         -------------------- matches all the relevant values
+...
+3779 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         ^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3859:9
+     |
+3817 |         FieldOp::BoolCond(inner) => {
+     |         ------------------------ matches all the relevant values
+...
+3859 |         FieldOp::BoolCond(inner) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:656:7
+    |
+656 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-services` (lib) generated 5 warnings
+warning: unused variable: `started`
+   --> crates/acos-art/src/boot_image.rs:801:13
+    |
+801 |         let started = Instant::now();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_started`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/launch.rs:726:9
+    |
+726 |     let mut cmd = shared.command(spec, app_meta, providers)?;
+    |         ----^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: method `cache_str` is never used
+   --> crates/acos-art/src/boot_image.rs:540:8
+    |
+539 | impl CacheOutcome {
+    | ----------------- method in this implementation
+540 |     fn cache_str(&self) -> &'static str {
+    |        ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: fields `guest_lib_dir` and `uid` are never read
+   --> crates/acos-art/src/launch.rs:550:5
+    |
+536 | struct SecondarySpec {
+    |        ------------- fields in this struct
+...
+550 |     guest_lib_dir: String,
+    |     ^^^^^^^^^^^^^
+551 |     /// `ApplicationInfo.uid` the package manager assigned.
+552 |     uid: Option<i32>,
+    |     ^^^
+    |
+    = note: `SecondarySpec` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `argv` is never read
+   --> crates/acos-art/src/launch.rs:585:5
+    |
+578 | struct SecondaryGuest {    spec: SecondarySpec,
+    |        -------------- field in this struct
+...
+585 |     argv: Vec<String>,
+    |     ^^^^
+
+warning: field `animations_on` is never read
+    --> crates/acos-art/src/launch.rs:3011:5
+     |
+2992 | struct ProbeSample {
+     |        ----------- field in this struct
+...
+3011 |     animations_on: Option<bool>,
+     |     ^^^^^^^^^^^^^
+     |
+     = note: `ProbeSample` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: function `adler32` is never used
+    --> crates/acos-art/src/launch.rs:7439:4
+     |
+7439 | fn adler32(data: &[u8]) -> u32 {
+     |    ^^^^^^^
+
+warning: field `spawn_requests` is never read
+    --> crates/acos-art/src/launch.rs:7509:5
+     |
+7504 | struct PeerSummary {
+     |        ----------- field in this struct
+...
+7509 |     spawn_requests: u64,
+     |     ^^^^^^^^^^^^^^
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> crates/acos-art/src/lib.rs:836:20
+    |
+836 |     pub fn sandbox(&self) -> Sandbox {
+    |                    ^^^^^     ------- the same lifetime is hidden here
+    |                    |
+    |                    the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+836 |     pub fn sandbox(&self) -> Sandbox<'_> {
+    |                                     ++++
+
+warning: `acos-art` (lib) generated 9 warnings (run `cargo fix --lib -p acos-art` to apply 1 suggestion)
+warning: unused variable: `rest`
+   --> crates/acos-art/src/main.rs:102:13
+    |
+102 |     let mut rest: Vec<String> = Vec::new();
+    |             ^^^^ help: if this is intentional, prefix it with an underscore: `_rest`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/main.rs:102:9
+    |
+102 |     let mut rest: Vec<String> = Vec::new();
+    |         ----^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/main.rs:149:13
+    |
+149 |         let mut next = |i: &mut usize| -> Result<String> {
+    |             ----^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: `acos-art` (bin "acos-art") generated 3 warnings (run `cargo fix --bin "acos-art"` to apply 2 suggestions)
+    Finished `test` profile [unoptimized] target(s) in 0.03s
+     Running tests/launch_hang.rs (.cache/mproc7-target/debug/deps/launch_hang-ab03eae2f2a2e0d6)
+
+running 1 test
+LHFLAKE warm-up normal: 281.03743ms (untimed, cold caches land here)
+LHFLAKE measured return: 281.069922ms (bound 5s)
+test ordinary_launch_to_application_created_stays_fast ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.68s
+
