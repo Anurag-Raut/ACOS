@@ -624,6 +624,27 @@ public final class LaunchMain {
     /** P3b: wakeup for the probe thread, so a host request is not a 50 ms wait. */
     static final Object sProbeWake = new Object();
     static boolean sProbeRequested = false;
+    /**
+     * SETTLE5: the probe channel's own liveness facts, so a host that waits for
+     * a sample can never be left guessing whether its wake reached the guest.
+     * `sProbePostedMs` is when the probe thread handed a sample to the main
+     * looper, `sProbePending` is whether that runnable is still queued (the main
+     * thread is busy or blocked), and `sLastWakeMarkMs` rate-limits the MARK.
+     */
+    static volatile long sProbePostedMs = 0;
+    static volatile boolean sProbePending = false;
+    static volatile long sLastWakeMarkMs = 0;
+    /**
+     * SETTLE5: the host's demand channel is this control thread. Once it has
+     * ended (stdin EOF/close, a dead reader), no `PROBE` wake can ever arrive
+     * again, so the 5 s idle fallback would be the only sample source and every
+     * strict settle (1.5 s deadline) would time out on a *healthy, idle*
+     * screen. A dead control channel switches the fallback to a fast poll: the
+     * sample is still a real probe sample with the same settle rule, so this can
+     * never turn a stale observation into a pass — it only keeps the screen
+     * observable without the demand wake.
+     */
+    static volatile boolean sProbeControlDead = false;
 
     // ------------------------------------------------- P10: view-dirty probe
     //
@@ -1697,6 +1718,21 @@ public final class LaunchMain {
                                 sProbeRequested = true;
                                 sProbeWake.notifyAll();
                             }
+                            // SETTLE5: a wake that arrives while the previous
+                            // sample has not run yet (or long after the last
+                            // one) names a starved/blocked main looper instead
+                            // of leaving a host-side `probe-floor` timeout
+                            // unexplained. Bounded: at most one mark per 500 ms.
+                            long nowMs = System.currentTimeMillis();
+                            long gap = sProbePostedMs == 0
+                                    ? -1 : nowMs - sProbePostedMs;
+                            if (sProbePending && gap >= 500
+                                    && nowMs - sLastWakeMarkMs >= 500) {
+                                sLastWakeMarkMs = nowMs;
+                                System.out.println("ACOSLAUNCH MARK probe-stalled"
+                                        + " pending_ms=" + gap + " wake=received");
+                                System.out.flush();
+                            }
                         } else if (word.toUpperCase().startsWith("ROTATE")) {
                             // ROT3: a display rotation. It must run on the main
                             // looper (configuration changes are a main-thread
@@ -1718,8 +1754,19 @@ public final class LaunchMain {
                             });
                         }
                     }
-                } catch (Throwable ignored) {
-                    // No stdin (one-shot launches) is normal.
+                    sProbeControlDead = true;
+                    System.out.println("ACOSLAUNCH MARK probe-control-exit reason=eof");
+                    System.out.flush();
+                } catch (Throwable t) {
+                    // No stdin (one-shot launches) is normal; in an interactive
+                    // session an ended control thread ends the demand probe, so
+                    // it must be named, never swallowed (SETTLE5).
+                    sProbeControlDead = true;
+                    if (System.getenv("ACOSLAUNCH_INTERACTIVE") != null) {
+                        System.out.println("ACOSLAUNCH MARK probe-control-exit reason="
+                                + unwrap(t));
+                        System.out.flush();
+                    }
                 }
             }
         }, "acos-probe-control");
@@ -1737,6 +1784,9 @@ public final class LaunchMain {
                 final long minGapMs = envLong("P10_PROBE_MIN_GAP_MS", 25);
                 final long fallbackMs =
                         envLong("P10_PROBE_FALLBACK_MS", 5000);
+                // SETTLE5: with no demand channel left, poll at a strict-settle
+                // useful cadence instead of the 5 s idle fallback.
+                final long deadChannelMs = envLong("P10_PROBE_DEAD_CHANNEL_MS", 300);
                 long seq = 0;
                 long pendingSince = 0;
                 long lastEmitMs = 0;
@@ -1771,7 +1821,8 @@ public final class LaunchMain {
                                 && now - sDirtyAtMs >= debounceMs
                                 && now - lastEmitMs >= minGapMs) {
                             cause = "dirty";
-                        } else if (now - lastEmitMs >= fallbackMs) {
+                        } else if (now - lastEmitMs >= (sProbeControlDead
+                                ? Math.min(fallbackMs, deadChannelMs) : fallbackMs)) {
                             cause = "poll";
                         }
                         if (cause != null) {
@@ -1780,6 +1831,8 @@ public final class LaunchMain {
                             lastEmitMs = now;
                             final String why = cause;
                             pending.set(true);
+                            sProbePostedMs = now;
+                            sProbePending = true;
                             main.post(new Runnable() {
                                 @Override
                                 public void run() {
@@ -1823,6 +1876,7 @@ public final class LaunchMain {
                                         probeError("sample", n, null, t);
                                     } finally {
                                         pending.set(false);
+                                        sProbePending = false;
                                     }
                                 }
                             });
@@ -1832,7 +1886,9 @@ public final class LaunchMain {
                     // tick, whichever is first. No probe runs per draw: the
                     // listeners only mark dirty (P10).
                     try {
-                        long waitMs = fallbackMs - (System.currentTimeMillis() - lastEmitMs);
+                        long waitMs = (sProbeControlDead
+                                ? Math.min(fallbackMs, deadChannelMs) : fallbackMs)
+                                - (System.currentTimeMillis() - lastEmitMs);
                         long nowMs = System.currentTimeMillis();
                         long gapWait = minGapMs - (nowMs - lastEmitMs);
                         if (gapWait > waitMs) waitMs = gapWait;
