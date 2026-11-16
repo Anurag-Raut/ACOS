@@ -226,6 +226,10 @@ done
 # framework decoded from the ACOS PMS reply. It is the app-visible check that
 # `PackageInfo.writeToParcel`'s String8 arrays are encoded as String8.
 build_apk pms-parcel
+# back-layers is the REL3K2 Back-ordering fixture: an AlertDialog and an
+# EditText (whose focus raises the soft input) are the two layers above the
+# Activity. `scenarios/back-layers.yaml` asserts which layer consumed Back.
+build_apk back-layers
 # tap-targets is the REL3E input-handling fixture: a non-clickable label whose
 # clickable switch sits beside it (a tap there is a press the app never
 # consumes: `finishInputEvent(handled) = false`) and a clickable button that
