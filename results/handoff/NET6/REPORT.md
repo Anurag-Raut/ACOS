@@ -68,6 +68,21 @@ a `runOnUiThread` update posted from a binder thread does not wake ACOS's idle
 main looper promptly (measured; see `FINDING-RESOLVED.md`, residual). The
 callback itself is delivered — the log line is the app's own `onLost`.
 
+### 3.1 After the modules merge (`7c4317ab`, PIFILLIN)
+
+`git merge modules` (commit `4fc1c1c9`) is in, and the whole proof was re-run on
+the merged tree — `run/proof-after-merge/proof.log`:
+
+```
+arm=off     verdict=pass steps=8/8
+arm=real    verdict=pass steps=9/9
+arm=offline verdict=pass steps=14/14
+hostport    check=no_leak "relay_veths": [] "session_rules": 0 forwarders=0
+```
+
+and `cargo test -p acos-netd -p acos-services` again green (`rc=0`, 68 test
+binaries, `run/acceptance-tests-after-merge.log`).
+
 ## 4. Acceptance
 
 * `cargo test -p acos-netd -p acos-services` — **PASS**, `rc=0`, 66 green test
