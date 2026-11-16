@@ -39,6 +39,16 @@ pub const F_REP: u32 = 4;
 /// A peer that never sees a hello treats the connection as the primary process
 /// (tag 0), which is exactly the one-guest fast path that existed before.
 pub const F_HELLO: u32 = 5;
+/// Peer -> driver: a synthetic node handed to this process died.
+///
+/// MPROC3 step 3c: a binder that lives in *another* app process reaches this
+/// process as a synthetic node (see [`crate::peer::FOREIGN_FLAG`]). When the
+/// owning process's connection closes, the peer sends one `F_DEATH` per node
+/// that process owns and this connection holds, with `target` = the node id.
+/// The driver turns it into the `BR_DEAD_BINDER` a local `linkToDeath`
+/// registered for, so `IBinder.DeathRecipient.binderDied` runs — the same
+/// event a real kernel driver produces when a remote process dies.
+pub const F_DEATH: u32 = 6;
 
 /// Size of the fixed frame header (`struct fhdr`).
 pub const HEADER_SIZE: usize = 48;

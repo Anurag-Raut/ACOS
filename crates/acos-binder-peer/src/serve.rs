@@ -50,6 +50,8 @@ pub struct ServeOutcome {
     pub unroutable: u64,
     /// Connections closed by the driver (each dropped that process's binders).
     pub closed: usize,
+    /// Death notifications written to a holder whose node's owner died.
+    pub deaths: u64,
 }
 
 /// Serve driver connections on `listener` until `stop` is set or every
@@ -249,6 +251,9 @@ pub fn serve(peer: &mut Peer, listener: RawFd, stop: &AtomicBool) -> io::Result<
                     break;
                 }
                 outcome.frames_out += 1;
+                if out.ty == crate::protocol::F_DEATH {
+                    outcome.deaths += 1;
+                }
                 if dbg {
                     eprintln!(
                         "peer-trace: process {dest}: out ty={} seq={} code={} data={} offs={}",
@@ -301,6 +306,43 @@ fn close_conn(peer: &mut Peer, conns: &mut Vec<Conn>, index: usize, outcome: &mu
             "acos-binder-peer: process {tag} connection closed ({binders} java binders, \
              {owners} host binder records dropped)"
         );
+    }
+    // The process's binders that other processes hold as synthetic nodes are
+    // dead now: every holder must get its `linkToDeath` callback (MPROC3 step
+    // 3c). The peer queued those frames while dropping the process's state.
+    flush_deaths(peer, conns, outcome);
+}
+
+/// Write the death notifications (and the structured refusals for transactions
+/// that were waiting on a dead owner) the peer queued.
+///
+/// A holder that is no longer connected is not an error: it can never receive a
+/// callback again, and its own close already released its nodes.
+fn flush_deaths(peer: &mut Peer, conns: &mut Vec<Conn>, outcome: &mut ServeOutcome) {
+    for (dest, frame) in peer.take_death_frames() {
+        let Some(target_fd) = conns.iter().find(|c| c.tag == Some(dest)).map(|c| c.fd) else {
+            outcome.unroutable += 1;
+            close_frame_fds(&frame);
+            continue;
+        };
+        if let Err(e) = write_frame(target_fd, &frame) {
+            eprintln!(
+                "acos-binder-peer: write_frame FAILED for process {dest} (ty={}): {e}",
+                frame.ty
+            );
+            close_frame_fds(&frame);
+            continue;
+        }
+        outcome.frames_out += 1;
+        if frame.ty == crate::protocol::F_DEATH {
+            outcome.deaths += 1;
+            eprintln!(
+                "acos-binder-peer: process {dest}: binder died (node {:#x}) \u{2014} \
+                 F_DEATH written",
+                frame.target
+            );
+        }
+        close_frame_fds(&frame);
     }
 }
 

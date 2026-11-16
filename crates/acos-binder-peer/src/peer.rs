@@ -62,6 +62,20 @@ pub const PROC_MASK: u64 = 0x3f;
 /// `IApplicationThread.bindApplication` request here, and the peer delivers it
 /// to the real `ApplicationThread` binder after `attachApplication`.
 pub const LAUNCH_NODE: u64 = 1 << 40;
+/// Bit 41 marks a **synthetic node for a binder that lives in another app
+/// process** (MPROC3 step 3c).
+///
+/// A binder handle is only meaningful inside the process that owns it, so a
+/// reply that carries another process's `BINDER_TYPE_HANDLE` would make the
+/// receiver call a *different object*. The peer therefore hands the receiver a
+/// node instead: `FOREIGN_FLAG | n` names `(owner_tag, owner_wire)`, and a
+/// transaction addressed to it is forwarded to the owner's connection and its
+/// reply relayed back. This is the routing ADR-0029 assigns to the Rust service
+/// layer; the guest still sees one ordinary `IBinder` (`BinderProxy`), and its
+/// `linkToDeath` works through [`crate::protocol::F_DEATH`].
+pub const FOREIGN_FLAG: u64 = 1 << 41;
+/// Foreign nodes one peer may allocate before it starts refusing (bounded, R1).
+pub const MAX_FOREIGN_NODES: usize = 4096;
 
 // --- bounded queues (R1 defence in depth) ---------------------------------
 //
@@ -258,6 +272,20 @@ impl std::fmt::Display for TagRefusal {
 static EMPTY_BINDERS: std::sync::LazyLock<HashMap<u32, String>> =
     std::sync::LazyLock::new(HashMap::new);
 
+/// One synthetic node the peer allocated for a binder owned by another process
+/// (MPROC3 step 3c).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForeignNode {
+    /// The process whose driver wire handle this node stands for.
+    pub owner_tag: u32,
+    /// That process's driver wire handle.
+    pub wire: u32,
+    /// Processes this node was written to. The node lives while it has holders;
+    /// each holder is released when its connection closes (a per-handle release
+    /// needs the driver's `BC_RELEASE` path, see `docs`/`STATUS` note).
+    pub holders: Vec<u32>,
+}
+
 /// Name the primary connection carries until its own handshake arrives.
 const DEFAULT_PRIMARY_NAME: &str = "primary";
 
@@ -289,6 +317,23 @@ pub struct Peer {
     /// `UNKNOWN_TRANSACTION` from a node that was not rooted). Counting these
     /// separately is what stops "20 replies" from being read as "20 deliveries".
     pub reverse_failed: u64,
+    /// Synthetic nodes for binders owned by another process, by node id.
+    foreign: HashMap<u64, ForeignNode>,
+    /// `(owner_tag, wire)` -> synthetic node, so one binder has one node.
+    foreign_index: HashMap<(u32, u32), u64>,
+    /// Next synthetic node number (1-based; [`FOREIGN_FLAG`] is the tag bit).
+    foreign_next: u64,
+    /// Transactions the peer forwarded to an owner, keyed by
+    /// `(owner_tag, forwarded seq)` -> `(caller tag, caller seq, node)`.
+    pending_foreign: HashMap<(u32, u32), (u32, u32, u64)>,
+    /// Death notifications waiting for the serve loop to write them.
+    pending_deaths: Vec<(u32, Frame)>,
+    /// Cross-process transactions forwarded to their owner and relayed back.
+    pub foreign_forwards: u64,
+    /// Cross-process transactions that found no live owner (structured refusals).
+    pub foreign_dead: u64,
+    /// Synthetic nodes freed because no holder process is left.
+    pub foreign_released: u64,
 }
 
 impl std::fmt::Debug for Peer {
@@ -348,6 +393,14 @@ impl Peer {
             log_lines: 0,
             reverse_replies: 0,
             reverse_failed: 0,
+            foreign: HashMap::new(),
+            foreign_index: HashMap::new(),
+            foreign_next: 1,
+            pending_foreign: HashMap::new(),
+            pending_deaths: Vec::new(),
+            foreign_forwards: 0,
+            foreign_dead: 0,
+            foreign_released: 0,
         }
     }
 
@@ -581,6 +634,21 @@ impl Peer {
             }
         }
         let owners = self.host.drop_process_binders(tag);
+        // MPROC3 step 3c: the process's binders that other processes hold as
+        // synthetic nodes are dead now. Release them and queue one
+        // `F_DEATH` per holder (plus a structured refusal for every forwarded
+        // transaction still waiting for an answer), so `linkToDeath` fires in
+        // the holders instead of their next call hanging or reaching a
+        // recycled handle.
+        let released = self.release_foreign_of(tag);
+        let freed_as_holder = self.release_foreign_holders_of(tag);
+        if released > 0 {
+            eprintln!(
+                "acos-binder-peer: process tag {tag} disconnected ({released} foreign nodes \
+                 released, {freed_as_holder} freed as holder, {} holders notified)",
+                self.pending_deaths.len()
+            );
+        }
         (binders, owners)
     }
 
@@ -629,7 +697,14 @@ impl Peer {
                 }
             }
             F_REQ => {
-                if let Some(reply) = self.handle_request(tag, &frame) {
+                // A transaction addressed to a synthetic foreign node belongs to
+                // another process (MPROC3 step 3c): forward it to the owner and
+                // relay the owner's reply back. It has no immediate reply, so it
+                // is never written to this connection.
+                if frame.target & FOREIGN_FLAG != 0 {
+                    let (dest, forwarded) = self.forward_foreign(tag, frame.target, &frame);
+                    out.push((dest, forwarded));
+                } else if let Some(reply) = self.handle_request(tag, &frame) {
                     if frame.flags & TF_ONE_WAY == 0 {
                         out.push((tag, reply));
                     }
@@ -637,7 +712,11 @@ impl Peer {
             }
             F_REP => {
                 self.reverse_replies += 1;
-                if frame.flags & TF_STATUS_CODE != 0 {
+                // A reply to a transaction this peer forwarded from another
+                // process goes back to that process, with its own seq.
+                if let Some(relay) = self.relay_foreign_reply(tag, &frame) {
+                    out.push(relay);
+                } else if frame.flags & TF_STATUS_CODE != 0 {
                     self.reverse_failed += 1;
                     eprintln!(
                         "acos-binder-peer: process {tag}: reverse delivery seq={} was NOT \
@@ -670,47 +749,334 @@ impl Peer {
         if let Some(frame) = self.take_launch_delivery(tag) {
             out.push((tag, frame));
         }
+        out.extend(self.take_death_frames());
         out
     }
 
-    /// Refuse a reply that hands process `tag` a binder owned by another app
-    /// process.
+    // --- cross-process binder routing (MPROC3 step 3c) --------------------
+
+    /// The synthetic node that stands for `(owner_tag, wire)` inside process
+    /// `holder`, allocating it on first use.
     ///
-    /// A binder handle is only meaningful inside the process that owns it. With
-    /// one process that case could not arise; with N it can, and writing the
-    /// other process's wire handle into this reply would make the guest call a
-    /// *different object* and report success — the one outcome this codebase
-    /// never allows. Cross-process binder transfer needs a node on the receiving
-    /// side (the routing work of MPROC2 step 3c), so until it exists the answer
-    /// is a structured error, never a fabricated handle.
-    fn refuse_foreign_binder(&mut self, tag: u32, frame: &Frame, reply: &Parcel) -> Option<Frame> {
-        let foreign: Vec<u64> = reply
+    /// One node per `(owner, wire)` pair, whatever the number of holders: the
+    /// pair *is* the object, and two holders must see two proxies to one object,
+    /// not two objects. `None` means the bounded table is full, which the caller
+    /// reports as `ART_RESOURCE_LIMIT` — never a fabricated handle.
+    #[must_use]
+    pub fn foreign_node(&mut self, owner_tag: u32, wire: u32, holder: u32) -> Option<u64> {
+        let key = (owner_tag, wire);
+        let node = match self.foreign_index.get(&key) {
+            Some(node) => *node,
+            None => {
+                if self.foreign.len() >= MAX_FOREIGN_NODES {
+                    self.resource_limits = self.resource_limits.saturating_add(1);
+                    eprintln!(
+                        "acos-binder-peer: ART_RESOURCE_LIMIT: foreign node table is full \u{2014} \
+                         refusing to proxy (owner tag {owner_tag}, wire {wire})"
+                    );
+                    return None;
+                }
+                let node = FOREIGN_FLAG | self.foreign_next;
+                self.foreign_next = self.foreign_next.wrapping_add(1).max(1);
+                self.foreign_index.insert(key, node);
+                self.foreign.insert(
+                    node,
+                    ForeignNode { owner_tag, wire, holders: Vec::new() },
+                );
+                node
+            }
+        };
+        let owner_dead = !self.process(owner_tag).is_some_and(ProcessConn::connected);
+        let entry = self.foreign.get_mut(&node).expect("just inserted");
+        if !entry.holders.contains(&holder) {
+            entry.holders.push(holder);
+        }
+        if owner_dead {
+            // A proxy to an already-dead object: the death notification is due
+            // as soon as the receiver holds it, exactly as a kernel driver
+            // reports a dead binder on the first reference.
+            self.queue_death(node, holder);
+        }
+        Some(node)
+    }
+
+    /// The `(owner tag, owner wire handle)` a synthetic node stands for.
+    #[must_use]
+    pub fn foreign_owner(&self, node: u64) -> Option<(u32, u32)> {
+        self.foreign.get(&node).map(|n| (n.owner_tag, n.wire))
+    }
+
+    /// Every live foreign node, as `(node, owner tag, wire, holders)` — the
+    /// evidence a reply/verdict carries.
+    #[must_use]
+    pub fn foreign_nodes(&self) -> Vec<(u64, u32, u32, Vec<u32>)> {
+        let mut out: Vec<(u64, u32, u32, Vec<u32>)> = self
+            .foreign
+            .iter()
+            .map(|(node, n)| (*node, n.owner_tag, n.wire, n.holders.clone()))
+            .collect();
+        out.sort_by_key(|x| x.0);
+        out
+    }
+
+    /// How many synthetic nodes are live.
+    #[must_use]
+    pub fn foreign_node_count(&self) -> usize {
+        self.foreign.len()
+    }
+
+    /// Rewrite a reply/delivery parcel so that process `dest` receives every
+    /// binder as something that process can actually call.
+    ///
+    /// Public because it is the routing contract: every parcel the peer writes
+    /// into a process's connection (host reply, reverse delivery, forwarded
+    /// transaction, relayed reply) goes through here.
+    ///
+    /// A binder of `dest` itself stays a wire handle (its own handle space). A
+    /// binder of another process becomes a synthetic node ([`FOREIGN_FLAG`]);
+    /// the driver maps that node to a local handle, and a transaction on it comes
+    /// back as an [`F_REQ`] with the node as `target`, which
+    /// [`Self::forward_foreign`] forwards to the owner.
+    pub fn export_for_process(&mut self, dest: u32, parcel: &Parcel) -> Parcel {
+        let foreign: Vec<(BinderId, u32, u32)> = parcel
             .binder_ids()
             .into_iter()
-            .filter(|id| owner_process(*id).is_some_and(|owner| owner != tag))
-            .map(|id| id.0)
+            .filter_map(|id| {
+                let owner = owner_process(id)?;
+                if owner == dest {
+                    return None;
+                }
+                let wire = java_wire(id)?;
+                Some((id, owner, wire))
+            })
             .collect();
         if foreign.is_empty() {
+            return parcel.clone();
+        }
+        let mut nodes: HashMap<u64, u64> = HashMap::new();
+        for (id, owner, wire) in &foreign {
+            if let Some(node) = self.foreign_node(*owner, *wire, dest) {
+                nodes.insert(id.0, node);
+            }
+        }
+        if nodes.is_empty() {
+            return parcel.clone();
+        }
+        // Rebuild the parcel with the node ids in place of the Java binder ids.
+        // `frame_from_parcel` then writes `BINDER_TYPE_BINDER(node)` for a
+        // `FOREIGN_FLAG` id (see its binder branch), which is what the driver
+        // turns into a local handle for the receiver.
+        let data = parcel.marshall();
+        let mut out = data.clone();
+        for &off in parcel.objects() {
+            if off + 16 > out.len() {
+                continue;
+            }
+            let id = u64::from_le_bytes(out[off + 8..off + 16].try_into().expect("id"));
+            if let Some(node) = nodes.get(&id) {
+                out[off..off + 4]
+                    .copy_from_slice(&acos_parcel::binder::BINDER_TYPE_BINDER.to_le_bytes());
+                out[off + 8..off + 16].copy_from_slice(&node.to_le_bytes());
+            }
+        }
+        let offsets = parcel.objects().to_vec();
+        let mut rewritten = Parcel::new();
+        rewritten.unmarshall_with_objects(&out, &offsets);
+        rewritten.set_data_position(0);
+        rewritten
+    }
+
+    /// Forward a transaction addressed to a synthetic foreign node to the
+    /// process that owns the binder.
+    ///
+    /// The caller waits for the reply: the peer remembers
+    /// `(owner, forwarded seq) -> (caller, caller seq, node)` and relays the
+    /// owner's [`F_REP`] back as the caller's [`F_RSP`]. A one-way transaction is
+    /// fire-and-forget (the owner sends no reply for it). A node whose owner has
+    /// no live connection is a structured refusal, never a hang and never a
+    /// fabricated success.
+    fn forward_foreign(&mut self, tag: u32, node: u64, frame: &Frame) -> (u32, Frame) {
+        let Some((owner, wire)) = self.foreign_owner(node) else {
+            let record = UnsupportedRecord {
+                descriptor: "<foreign-node>".into(),
+                code: frame.code,
+                method: format!("code {}", frame.code),
+                error: codes::SERVICE_UNKNOWN_BINDER.into(),
+                message: format!("target {node:#x} is not a synthetic foreign node"),
+            };
+            self.log_unsupported(&record);
+            return (
+                tag,
+                self.error_reply(frame, &ServiceError::UnknownBinder { handle: node }),
+            );
+        };
+        if !self.process(owner).is_some_and(ProcessConn::connected) {
+            self.foreign_dead = self.foreign_dead.saturating_add(1);
+            let record = UnsupportedRecord {
+                descriptor: "<foreign-node>".into(),
+                code: frame.code,
+                method: format!("code {}", frame.code),
+                error: codes::SERVICE_UNKNOWN_BINDER.into(),
+                message: format!(
+                    "transaction on node {node:#x} (process {tag}) but its owner process \
+                     {owner} has no connection"
+                ),
+            };
+            self.log_unsupported(&record);
+            return (
+                tag,
+                self.error_reply(frame, &ServiceError::UnknownBinder { handle: node }),
+            );
+        }
+        let data = import_parcel_for(tag, frame);
+        let exported = self.export_for_process(owner, &data);
+        let one_way = frame.flags & TF_ONE_WAY != 0;
+        let seq = self.next_txn_seq;
+        self.next_txn_seq = self.next_txn_seq.wrapping_add(1).max(1);
+        if !one_way {
+            self.pending_foreign
+                .insert((owner, seq), (tag, frame.seq, node));
+        }
+        self.foreign_forwards = self.foreign_forwards.saturating_add(1);
+        let base = Frame {
+            ty: F_TXN,
+            seq,
+            code: frame.code,
+            flags: frame.flags,
+            target: u64::from(wire),
+            ..Default::default()
+        };
+        (owner, frame_from_parcel(F_TXN, &base, &exported))
+    }
+
+    /// Relay an owner's [`F_REP`] back to the process that called into it.
+    ///
+    /// Returns `None` when the reply belongs to a reverse delivery instead (the
+    /// pre-MPROC3 case, which keeps its existing logging path).
+    fn relay_foreign_reply(&mut self, owner: u32, frame: &Frame) -> Option<(u32, Frame)> {
+        let (caller, caller_seq, node) = self.pending_foreign.remove(&(owner, frame.seq))?;
+        if !self.process(caller).is_some_and(ProcessConn::connected) {
             return None;
         }
-        let record = UnsupportedRecord {
-            descriptor: "<binder-transfer>".into(),
-            code: frame.code,
-            method: format!("code {}", frame.code),
-            error: codes::UNSUPPORTED_ANDROID_API.into(),
-            message: format!(
-                "reply to process {tag} carries binders of another process: {foreign:?}"
-            ),
+        if frame.flags & TF_STATUS_CODE != 0 {
+            // libbinder never reached `onTransact` in the owner: the call failed.
+            self.reverse_failed = self.reverse_failed.saturating_add(1);
+            let base = Frame::plain(F_RSP, caller_seq, 0, 0, 0, Vec::new());
+            let reply = self.error_reply(
+                &base,
+                &ServiceError::UnknownBinder { handle: node },
+            );
+            return Some((caller, reply));
+        }
+        let data = import_parcel_for(owner, frame);
+        let exported = self.export_for_process(caller, &data);
+        let base = Frame::plain(F_RSP, caller_seq, 0, 0, 0, Vec::new());
+        Some((caller, frame_from_parcel(F_RSP, &base, &exported)))
+    }
+
+    /// Queue a [`crate::protocol::F_DEATH`] for one holder of a node.
+    fn queue_death(&mut self, node: u64, holder: u32) {
+        let frame = Frame::plain(crate::protocol::F_DEATH, 0, 0, 0, node, Vec::new());
+        self.pending_deaths.push((holder, frame));
+    }
+
+    /// The death notifications the serve loop must write now.
+    pub fn take_death_frames(&mut self) -> Vec<(u32, Frame)> {
+        std::mem::take(&mut self.pending_deaths)
+    }
+
+    /// The owner of every foreign node this process holds died: notify the
+    /// holders and refuse the transactions still waiting for an answer.
+    ///
+    /// The nodes stay in the table (a dead proxy is still a proxy: a late call
+    /// on it must fail, not resolve to whatever reuses the number), but their
+    /// `(owner, wire)` index entry goes, so a restarted owner's reused wire
+    /// handle becomes a *new* object with a new node. Called from
+    /// [`Self::disconnect_process`]; the notifications are queued for the serve
+    /// loop, which writes them to the holders' connections.
+    pub fn release_foreign_of(&mut self, tag: u32) -> usize {
+        let owned: Vec<(u64, u32, u32)> = self
+            .foreign
+            .iter()
+            .filter(|(_, n)| n.owner_tag == tag)
+            .map(|(node, n)| (*node, n.owner_tag, n.wire))
+            .collect();
+        for (node, owner, wire) in &owned {
+            self.foreign_index.remove(&(*owner, *wire));
+            let holders = self
+                .foreign
+                .get(node)
+                .map(|n| n.holders.clone())
+                .unwrap_or_default();
+            for holder in holders {
+                self.queue_death(*node, holder);
+            }
+            // A node nobody holds any more cannot be reached again.
+            if let Some(n) = self.foreign.get(node) {
+                if n.holders.is_empty() {
+                    self.foreign.remove(node);
+                }
+            }
+        }
+        // Requests still waiting for this owner can never be answered.
+        let waiting: Vec<(u32, u32)> = self
+            .pending_foreign
+            .iter()
+            .filter(|((owner, _), _)| *owner == tag)
+            .map(|(key, _)| *key)
+            .collect();
+        for key in waiting {
+            if let Some((caller, caller_seq, node)) = self.pending_foreign.remove(&key) {
+                self.foreign_dead = self.foreign_dead.saturating_add(1);
+                if self.process(caller).is_some_and(ProcessConn::connected) {
+                    let base = Frame::plain(F_RSP, caller_seq, 0, 0, 0, Vec::new());
+                    let reply =
+                        self.error_reply(&base, &ServiceError::UnknownBinder { handle: node });
+                    self.pending_deaths.push((caller, reply));
+                }
+            }
+        }
+        owned.len()
+    }
+
+    /// Drop every reference process `tag` holds to other processes' binders
+    /// (its connection is gone, so it can never release them itself).
+    ///
+    /// Returns the number of nodes freed.
+    pub fn release_foreign_holders_of(&mut self, tag: u32) -> usize {
+        let held: Vec<u64> = self
+            .foreign
+            .iter()
+            .filter(|(_, n)| n.holders.contains(&tag))
+            .map(|(node, _)| *node)
+            .collect();
+        let mut freed = 0;
+        for node in held {
+            if self.release_foreign_holder(node, tag) {
+                freed += 1;
+            }
+        }
+        freed
+    }
+
+    /// Release one holder's reference to a node (the driver's `BC_RELEASE`
+    /// path). The node is freed once no process holds it; while any holder is
+    /// left the same node id keeps naming the same object.
+    ///
+    /// Returns true when the node was freed.
+    pub fn release_foreign_holder(&mut self, node: u64, holder: u32) -> bool {
+        let Some(entry) = self.foreign.get_mut(&node) else {
+            return false;
         };
-        self.log_unsupported(&record);
-        Some(self.error_reply(
-            frame,
-            &ServiceError::UnsupportedAndroidApi {
-                interface: "<binder-transfer>".into(),
-                code: frame.code,
-                method: "cross-process binder".into(),
-            },
-        ))
+        entry.holders.retain(|h| *h != holder);
+        if !entry.holders.is_empty() {
+            return false;
+        }
+        let (owner_tag, wire) = (entry.owner_tag, entry.wire);
+        self.foreign.remove(&node);
+        self.foreign_index.remove(&(owner_tag, wire));
+        self.foreign_released = self.foreign_released.saturating_add(1);
+        true
     }
 
     fn handle_request(&mut self, tag: u32, frame: &Frame) -> Option<Frame> {        if frame.code == PING_TRANSACTION {
@@ -975,10 +1341,12 @@ impl Peer {
                         state.app_thread = Some(wire);
                     }
                 }
-                if let Some(refusal) = self.refuse_foreign_binder(tag, frame, &reply) {
-                    return refusal;
-                }
-                frame_from_parcel(F_RSP, frame, &reply)
+                // Every binder this reply carries reaches the caller as
+                // something it can call: its own wire handle for its own
+                // binders, a synthetic node for another process's (MPROC3
+                // step 3c). No fabricated handle can be produced here.
+                let exported = self.export_for_process(tag, &reply);
+                frame_from_parcel(F_RSP, frame, &exported)
             }
             Err(err) => {
                 // This parcel has already been decoded (the descriptor and
@@ -1324,7 +1692,8 @@ impl Peer {
             }
             let seq = self.next_txn_seq;
             self.next_txn_seq = self.next_txn_seq.wrapping_add(1).max(1);
-            let mut frame = frame_from_parcel(F_TXN, &Frame { seq, ..Default::default() }, &d.data);
+            let exported = self.export_for_process(tag, &d.data);
+            let mut frame = frame_from_parcel(F_TXN, &Frame { seq, ..Default::default() }, &exported);
             frame.target = u64::from(wire);
             frame.code = d.code;
             frame.flags = 0;
@@ -1530,6 +1899,12 @@ pub fn frame_from_parcel(ty: u32, base: &Frame, parcel: &Parcel) -> Frame {
             let (tag, id) = if parsed.id == 0 {
                 (acos_parcel::binder::BINDER_TYPE_BINDER, 0u64)
             } else if parsed.id & NODE_TAG != 0 {
+                (acos_parcel::binder::BINDER_TYPE_BINDER, parsed.id)
+            } else if parsed.id & FOREIGN_FLAG != 0 {
+                // A synthetic node for a binder that lives in another app
+                // process (MPROC3 step 3c). It must reach the receiver as a
+                // *node* (`BINDER_TYPE_BINDER`), never as a handle: its low
+                // bits are the peer's node number, not a driver handle.
                 (acos_parcel::binder::BINDER_TYPE_BINDER, parsed.id)
             } else if let Some(wire) = java_wire(BinderId(parsed.id)) {
                 (acos_parcel::binder::BINDER_TYPE_HANDLE, u64::from(wire))

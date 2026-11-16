@@ -29,11 +29,12 @@ pub mod serve;
 
 pub use peer::{
     frame_from_parcel, host_binder_kind, import_parcel, import_parcel_for, java_binder_id, java_wire,
-    owner_process, peer_node, Peer, ProcessConn, TagRefusal, UnsupportedRecord, JAVA_TAG, NODE_TAG,
-    PROC_MASK, PROC_SHIFT,
+    owner_process, peer_node, ForeignNode, Peer, ProcessConn, TagRefusal, UnsupportedRecord,
+    FOREIGN_FLAG, JAVA_TAG, MAX_FOREIGN_NODES, NODE_TAG, PROC_MASK, PROC_SHIFT,
 };
 pub use serve::{serve, refuse_frame, ServeOutcome};
 pub use protocol::{
-    accept, close_frame_fds, listen, read_frame, write_frame, Frame, F_HELLO, F_REP, F_REQ, F_RSP,
-    F_TXN, MAX_PROCESSES, MAX_PROCESS_TAG, PING_TRANSACTION, TAG_PRIMARY, TF_ONE_WAY, TF_STATUS_CODE,
+    accept, close_frame_fds, listen, read_frame, write_frame, Frame, F_DEATH, F_HELLO, F_REP, F_REQ,
+    F_RSP, F_TXN, MAX_PROCESSES, MAX_PROCESS_TAG, PING_TRANSACTION, TAG_PRIMARY, TF_ONE_WAY,
+    TF_STATUS_CODE,
 };
