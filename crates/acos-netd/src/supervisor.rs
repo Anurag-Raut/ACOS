@@ -682,7 +682,7 @@ impl Relay {
         self.fabric_run_all(&plan::veth_attach_rules(net, netns_pid))?;
         // Default deny: this session reaches none of the host's loopback until
         // it opts a port in (which inserts an ACCEPT above this DROP).
-        let gates: Vec<String> = vec![plan::hostport_default_rule(net)];
+        let gates: Vec<String> = plan::hostport_default_rules(net);
         if let Err(e) = self.fabric_run_all(&gates) {
             let _ = self.fabric_run_all(&plan::veth_detach_rules(net));
             return Err(e);

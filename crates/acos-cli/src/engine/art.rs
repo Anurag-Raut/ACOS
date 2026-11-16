@@ -1483,7 +1483,21 @@ impl ArtSession {
         animations: &str,
         insets: &str,
     ) -> Result<ArtSession, BackendError> {
-        Self::start_inner(apk, artifacts, animations, insets, None)
+        Self::start_inner(apk, artifacts, animations, insets, None, None)
+    }
+
+    /// NET3: [`Self::start_with_options`] for a session the *serve* daemon
+    /// holds: `session_id` names the relay session (`acos-<id>`), the same rule
+    /// `acos_net` resolves, so a client can address the network of the session
+    /// it holds. `None` keeps the one-shot `art-<pid>` name.
+    pub fn start_with_session(
+        apk: &Path,
+        artifacts: &Path,
+        animations: &str,
+        insets: &str,
+        session_id: Option<&str>,
+    ) -> Result<ArtSession, BackendError> {
+        Self::start_inner(apk, artifacts, animations, insets, None, session_id)
     }
 
     /// ZPROD3: start a session that must run on a persistent zygote child
@@ -1504,13 +1518,14 @@ impl ArtSession {
         animations: &str,
         insets: &str,
         zygote: Option<Arc<ZygoteHost>>,
+        session_id: Option<&str>,
     ) -> Result<ArtSession, BackendError> {
         let start = zygote.map(|host| ZygoteStart {
             key: zygote_key_of(apk, insets, animations),
             host,
             reuse_tag: None,
         });
-        Self::start_inner(apk, artifacts, animations, insets, start)
+        Self::start_inner(apk, artifacts, animations, insets, start, session_id)
     }
 
     fn start_inner(
@@ -1519,6 +1534,7 @@ impl ArtSession {
         animations: &str,
         insets: &str,
         zygote: Option<ZygoteStart>,
+        session_id: Option<&str>,
     ) -> Result<ArtSession, BackendError> {
         let insets: &'static str = match acos_services::wms::parse_insets_mode(insets) {
             Some(acos_services::wms::InsetsMode::Carve) => "carve",
@@ -1621,6 +1637,11 @@ impl ArtSession {
             // the read-only view-tree probe the `tree`/`tap` replies carry.
             .env("ACOSLAUNCH_INTERACTIVE", "1")
             .env("ACOSLAUNCH_LIVE_PROBE", "1")
+            // The relay session is addressed by the *serve* session id, so the
+            // launcher names it `acos-<id>` (`acos_net` resolves the same rule):
+            // the interactive path builds its sandbox here, and the demo path's
+            // `art-<pid>` name is not addressable by a client.
+            .envs(session_id.map(|id| ("ACOS_ART_SESSION_ID", id)))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -5091,6 +5112,7 @@ impl SessionBackend for ArtSession {
                 self.animations,
                 self.insets(),
                 zygote_start.clone(),
+                None,
             ) {
                 Ok(session) => {
                     fresh = Some(session);

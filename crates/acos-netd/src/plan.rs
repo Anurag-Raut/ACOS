@@ -113,8 +113,9 @@ pub fn session(idx: u32) -> Option<SessionNet> {
 /// the one address every session already routes to: the relay forwards it out of
 /// `tap0`, and pasta's inbound NAT turns `MAP:PORT` into `127.0.0.1:PORT` on the
 /// host. Nothing else on the host's loopback is reachable: every session gets a
-/// default-deny DROP for this address at attach ([`hostport_default_rule`]) and a
-/// named port is opened only by an explicit opt-in ([`hostport_allow_rule`]).
+/// default-deny rejection of this address at attach ([`hostport_default_rules`])
+/// and a named port is opened only by an explicit opt-in
+/// ([`hostport_allow_rule`]).
 #[must_use]
 pub fn host_loopback_map() -> String {
     ip(connectivity::NET_GUEST_GATEWAY)
@@ -138,7 +139,7 @@ pub fn host_loopback_map() -> String {
 ///   every `-T` form of the pinned tag and uses [`host_loopback_map`] instead.
 /// * `--map-host-loopback <MAP>` — the *only* host-loopback path there is: pasta
 ///   rewrites the relay's `MAP` destination to the host's `127.0.0.1`. It is
-///   gated per session per port in the relay netns (see [`hostport_default_rule`]
+///   gated per session per port in the relay netns (see [`hostport_default_rules`]
 ///   and [`hostport_allow_rule`]); `--no-map-gw` keeps pasta from choosing that
 ///   address by itself.
 /// * `--no-splice` — no layer-4 splice between guest and host sockets.
@@ -265,13 +266,26 @@ pub fn netem_clear_rule(net: &SessionNet) -> String {
 /// [`hostport_allow_rule`] insert (netfilter evaluates a chain top to bottom, and
 /// an `ACCEPT` in this chain ends the packet's traversal — it never reaches the
 /// relay's own link-local/CGNAT drops below it).
+/// A `REJECT` with a TCP reset, not a `DROP`: a session that asks for a host
+/// port it did not opt in to must be *refused* — an immediate RST, the answer a
+/// phone gives for a closed port — not left to hang in SYN retries. Measured
+/// (NET3): with a `DROP` the guest's own boot probe to the map address stalls
+/// ~4.5 s; with a reset it fails at once, and "refused" is what the semantics
+/// of an un-opened port promise.
 #[must_use]
-pub fn hostport_default_rule(net: &SessionNet) -> String {
-    format!(
-        "iptables -w -A {SESSION_CHAIN} -i {} -d {}/32 -j DROP",
-        net.veth,
-        host_loopback_map()
-    )
+pub fn hostport_default_rules(net: &SessionNet) -> Vec<String> {
+    vec![
+        format!(
+            "iptables -w -A {SESSION_CHAIN} -i {} -d {}/32 -p tcp -j REJECT --reject-with tcp-reset",
+            net.veth,
+            host_loopback_map()
+        ),
+        format!(
+            "iptables -w -A {SESSION_CHAIN} -i {} -d {}/32 -j REJECT",
+            net.veth,
+            host_loopback_map()
+        ),
+    ]
 }
 
 /// Host-port opt-in, part 2: open exactly one port of the host's loopback for

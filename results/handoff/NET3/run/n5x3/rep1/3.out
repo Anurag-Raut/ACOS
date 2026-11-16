@@ -1,0 +1,5 @@
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-a531561b-3a8f5c6b7589fc68/results/handoff/NET3/run/n5x3/rep1/3
+  steps: 10
+exit=0

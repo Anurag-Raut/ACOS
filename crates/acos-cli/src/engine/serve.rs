@@ -697,6 +697,9 @@ impl ServeEngine {
             animations,
             insets,
             Some(Arc::clone(&self.zygote)),
+            // NET3: the relay session takes this session's id, so `acos_net`
+            // addresses the network of the session the caller holds.
+            Some(id),
         ) {
             Ok(mut session) => {
                 session.set_settle_timeout(settle_timeout_ms);

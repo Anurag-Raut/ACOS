@@ -160,14 +160,23 @@ fn controls_are_per_session() {
 
     // Host ports: default deny the whole host loopback at attach, then one
     // ACCEPT per opted-in port, inserted above that DROP.
-    let deny = plan::hostport_default_rule(&b);
+    let deny = plan::hostport_default_rules(&b);
+    assert_eq!(deny.len(), 2, "tcp is reset, everything else is rejected: {deny:?}");
     assert_eq!(
-        deny,
+        deny[0],
         format!(
-            "iptables -w -A ACOS-SESS -i acosv2 -d {}/32 -j DROP",
+            "iptables -w -A ACOS-SESS -i acosv2 -d {}/32 -p tcp -j REJECT --reject-with tcp-reset",
             plan::host_loopback_map()
         ),
-        "{deny}"
+        "{deny:?}"
+    );
+    assert_eq!(
+        deny[1],
+        format!(
+            "iptables -w -A ACOS-SESS -i acosv2 -d {}/32 -j REJECT",
+            plan::host_loopback_map()
+        ),
+        "{deny:?}"
     );
     let allow = plan::hostport_allow_rule(&b, 8081, true);
     assert_eq!(

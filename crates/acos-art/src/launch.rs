@@ -1044,6 +1044,15 @@ pub(crate) fn launch_session(
         sb.with_image(Some(image.dir.clone()));
     }
     sb.run_root(run.path());
+    // NET3: the relay session takes the *serve* session id when the caller has
+    // one (`ACOS_ART_SESSION_ID`, set by the engine's interactive spawn), so the
+    // live session API's `acos_net` controls address the session the client
+    // knows. Without it the name is `art-<pid>` and no client could name it.
+    if let Ok(id) = std::env::var("ACOS_ART_SESSION_ID") {
+        if !id.is_empty() {
+            sb.net_session(Some(&id));
+        }
+    }
     // Z4: a foreign-guest session does not spawn ART itself, so the guest
     // seccomp/Landlock guard is applied per forked child (the child loads the
     // same `libacos_seccomp_guest.so` after its bind mounts, exactly AOSP's

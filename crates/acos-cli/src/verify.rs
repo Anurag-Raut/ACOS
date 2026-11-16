@@ -516,6 +516,9 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                 animations,
                 &insets_owned,
                 Some(zygote),
+                // A verify run is one-shot: its relay session keeps the
+                // `art-<pid>` name (nothing holds it to address by id).
+                None,
             ) {
                 Ok(session) => {
                     session_boot_ms = Some(session.session_start_ms());
