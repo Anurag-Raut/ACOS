@@ -133,6 +133,7 @@ fn real_main() -> Result<ExitCode> {
     let mut activity: Option<String> = None;
     let mut session_id: Option<String> = None;
     let mut socket: Option<PathBuf> = None;
+    let mut services: Vec<serde_json::Value> = Vec::new();
 
     let mut i = 1;
     while i < args.len() {
@@ -184,6 +185,12 @@ fn real_main() -> Result<ExitCode> {
             "--animations" => {
                 let value = next(&mut i)?;
                 animations = acos_art::launch::Animations::parse(&value).map_err(Error::Layout)?;
+            }
+            // ADR-0029 item 4: `--service id[:profile][,config]`, repeatable.
+            "--service" => {
+                let spec = acos_services::module::ModuleSpec::parse(&next(&mut i)?)
+                    .map_err(|error| Error::Layout(error.to_string()))?;
+                services.push(spec.to_json());
             }
             "--package" => package = Some(next(&mut i)?),
             "--activity" => activity = Some(next(&mut i)?),
@@ -385,6 +392,7 @@ fn real_main() -> Result<ExitCode> {
                 nav_inset,
                 insets,
                 animations,
+                services,
             };
             let res = acos_art::launch::launch(&root, &opts)?;
             println!("{}", serde_json::to_string_pretty(&res).unwrap());

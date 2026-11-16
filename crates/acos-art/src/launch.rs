@@ -37,9 +37,9 @@ use std::os::fd::RawFd;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 /// The guest class that performs the framework startup.
@@ -116,6 +116,10 @@ pub struct LaunchOpts {
     pub insets: String,
     /// P12: per-session framework animation scales.
     pub animations: Animations,
+    /// ADR-0029 item 4: the `services:` specs this session attaches
+    /// (`[{id, profile, config}]`). Empty means `core` only (today's service
+    /// table plus tombstones).
+    pub services: Vec<serde_json::Value>,
 }
 
 impl Default for LaunchOpts {
@@ -132,6 +136,7 @@ impl Default for LaunchOpts {
             nav_inset: 63,
             insets: acos_services::wms::DEFAULT_INSETS_MODE.as_str().to_string(),
             animations: Animations::On,
+            services: Vec::new(),
         }
     }
 }
@@ -709,18 +714,44 @@ pub(crate) fn launch_session(
     // uses and captures C1's stored buffer, so the standard install hands both
     // back. Building the host here (instead of inside the peer thread) keeps
     // those handles in the launcher without a second install.
+    let mut module_specs: Vec<acos_services::module::ModuleSpec> =
+        acos_services::module::ModuleSpec::parse_list(&serde_json::Value::Array(
+            opts.services.clone(),
+        ))
+        .map_err(|error| Error::Layout(format!("services: {error}")))?;
+    if module_specs.is_empty() {
+        if let Ok(raw) = std::env::var("ACOS_ART_SERVICES") {
+            let value: serde_json::Value = serde_json::from_str(&raw)
+                .map_err(|error| Error::Layout(format!("ACOS_ART_SERVICES is not JSON: {error}")))?;
+            module_specs = acos_services::module::ModuleSpec::parse_list(&value)
+                .map_err(|error| Error::Layout(format!("ACOS_ART_SERVICES: {error}")))?;
+        }
+    }
+    let mut session_modules = match prebuilt {
+        Some((host, handles)) => acos_services::module::SessionModules::from_installed(host, handles),
+        None => acos_services::module::SessionModules::new(),
+    };
+    session_modules
+        .attach(&module_specs)
+        .map_err(|error| Error::Layout(format!("services: {error}")))?;
+    // ADR-0029 item 4: the attached set is published on the ready line and in
+    // every `acos_services` reply, so the agent sees what the session actually
+    // attached (never what it asked for).
+    let session_module_rows = session_modules.verdict_modules();
     let live_handles = {
         // ZM2 prototype C: a host-template child starts from the template's
         // empty (fully installed) service graph, which is CoW-shared until the
         // child writes it. The APK install below is per session either way.
-        let (mut host, handles) = match prebuilt {
-            Some(pair) => pair,
-            None => {
-                let mut host = acos_services::ServiceHost::new();
-                let handles = acos_services::registry::install_with_handles(&mut host);
-                (host, handles)
-            }
-        };
+        //
+        // ADR-0029 item 4: the modules were attached above, before the guest
+        // boots; the host and the registry now move to the peer thread, which
+        // is the only thread that mutates the service table (live attach/detach
+        // is a request to it, never a second mutation path).
+        let handles = session_modules
+            .take_session_handles()
+            .expect("core publishes the session handles at attach");
+        let (host, registry) = session_modules.into_parts();
+        let mut host = host;
         // K3d: the PMS publishes the APK path the **guest** can open
         // (`/data/app/<name>.apk`, read-only bound by the sandbox), not the host
         // file. `PackageManager.getResourcesForApplication` builds `Resources`
@@ -745,9 +776,11 @@ pub(crate) fn launch_session(
                 }
             }
         }
-        (host, handles)
+        (host, handles, registry)
     };
-    let (peer_host, live) = live_handles;
+    let (peer_host, live, peer_registry) = live_handles;
+    let service_control = Arc::new(ServiceControl::default());
+    let peer_control = Arc::clone(&service_control);
     let interactive = std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some();
     crate::stage("peer-setup");
     let peer_thread = std::thread::spawn(move || {
@@ -795,7 +828,14 @@ pub(crate) fn launch_session(
             // `getApplicationInfo` and must get the real package, not the
             // hello-views fixture (and never a fabricated null).
             let mut peer = Peer::with_host(peer_host, Some(peer_log));
-            let rc = serve(&mut peer, client, &peer_stop);
+            let mut peer_registry = peer_registry;
+            let rc = serve(
+                &mut peer,
+                &mut peer_registry,
+                client,
+                &peer_stop,
+                &peer_control,
+            );
             unsafe {
                 libc::close(client);
             }
@@ -1588,6 +1628,9 @@ pub(crate) fn launch_session(
             // VIEW1a: where the live-view stream socket is bound (VIEW1c: its
             // own host-only directory, never mounted into the guest).
             &view_dir.0,
+            // ADR-0029 item 4: the attached set and the live-op channel.
+            &session_module_rows,
+            &service_control,
         );
         match dead {
             Ok(end) => {
@@ -4423,6 +4466,10 @@ fn interactive_serve(
     // bind-mounted into the guest, unlike the session's `/dev/socket`
     // directory); the live-view stream socket `view.sock` is bound there.
     sockets: &Path,
+    // ADR-0029 item 4: the attached modules at launch (ready line), and the
+    // channel to the peer thread for live attach/detach.
+    modules: &[serde_json::Value],
+    control: &ServiceControl,
 ) -> std::io::Result<SessionEnd> {
     let mut evidence: Vec<serde_json::Value> = Vec::new();
     let mut captures = 0u64;
@@ -4614,6 +4661,7 @@ fn interactive_serve(
     let ready = serde_json::json!({
         "ok": true,
         "cmd": "ready",
+        "modules": modules,
         "package": package,
         "activity": activity.unwrap_or(""),
         // VIEW1a: the live-view stream socket (`docs/LIVE_VIEW.md`), null when
@@ -5305,6 +5353,21 @@ fn interactive_serve(
                         }
                     }
                 }
+            }
+            "services" => {
+                // ADR-0029 item 4: list/status/attach/detach on the live
+                // session. The peer thread owns the host, so the request is
+                // handed to it and its answer is forwarded verbatim (a refusal
+                // for an `at-launch` module is the peer's structured error).
+                let reply = match control.submit(request.clone(), Duration::from_secs(10)) {
+                    Some(reply) => reply,
+                    None => serde_json::json!({
+                        "ok": false, "cmd": "services", "code": "SERVICE_CONTROL_TIMEOUT",
+                        "error": "the peer thread did not answer the module request within 10 s",
+                    }),
+                };
+                protocol_write(&reply);
+                evidence.push(reply);
             }
             "tap" | "key" | "type_text" => {
                 let text_arg = request
@@ -6275,6 +6338,64 @@ fn meta_spec(entries: &[acos_services::pms::MetaDataEntry]) -> String {
         .join(";")
 }
 
+/// ADR-0029 item 4: live module attach/detach crosses from the interactive
+/// command loop (the thread that answers the caller) to the peer thread (the
+/// only owner of the `ServiceHost`). One request/reply pair per call, bounded
+/// by a deadline; a peer that cannot answer in time is a structured error, never
+/// a silent success.
+#[derive(Default)]
+struct ServiceControl {
+    requests: Mutex<Vec<(u64, serde_json::Value)>>,
+    replies: Mutex<HashMap<u64, serde_json::Value>>,
+    next_id: AtomicU64,
+    reply_cv: Condvar,
+}
+
+impl ServiceControl {
+    fn submit(&self, request: serde_json::Value, timeout: Duration) -> Option<serde_json::Value> {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+        self.requests
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push((id, request));
+        let deadline = Instant::now() + timeout;
+        let mut replies = self.replies.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            if let Some(reply) = replies.remove(&id) {
+                return Some(reply);
+            }
+            let now = Instant::now();
+            if now >= deadline {
+                return None;
+            }
+            let (guard, _) = self
+                .reply_cv
+                .wait_timeout(replies, deadline - now)
+                .unwrap_or_else(|e| e.into_inner());
+            replies = guard;
+        }
+    }
+
+    /// Peer-thread side: the oldest pending request, if any.
+    fn take(&self) -> Option<(u64, serde_json::Value)> {
+        let mut requests = self.requests.lock().unwrap_or_else(|e| e.into_inner());
+        if requests.is_empty() {
+            None
+        } else {
+            Some(requests.remove(0))
+        }
+    }
+
+    /// Peer-thread side: publish the answer and wake the caller.
+    fn reply(&self, id: u64, value: serde_json::Value) {
+        self.replies
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, value);
+        self.reply_cv.notify_all();
+    }
+}
+
 #[derive(Default)]
 struct PeerSummary {
     calls: Vec<ServiceCall>,
@@ -6289,8 +6410,127 @@ struct PeerSummary {
     resource_limits: u64,
 }
 
-fn serve(peer: &mut Peer, fd: RawFd, stop: &AtomicBool) -> std::io::Result<()> {
+/// One `{"cmd":"services", ...}` operation against the peer thread's host.
+///
+/// `list`/`status` are read-only. `attach`/`detach` go through
+/// `attach_live`/`detach_live`, which refuse an `at-launch` module with the
+/// launch call in the message; a refusal is never turned into a success.
+fn service_request(
+    peer: &mut Peer,
+    modules: &mut acos_services::module::ModuleRegistry,
+    request: &serde_json::Value,
+) -> serde_json::Value {
+    let op = request.get("op").and_then(|v| v.as_str()).unwrap_or("");
+    let result = match op {
+        "list" | "status" => Ok(serde_json::json!({
+            "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
+                "id": id,
+                "profile": profile.as_str(),
+            })).collect::<Vec<_>>(),
+            "modules": modules.verdict_modules(),
+        })),
+        "attach" => {
+            let Some(id) = request.get("id").and_then(|v| v.as_str()) else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "code": "BAD_REQUEST",
+                    "error": "attach needs a string `id`",
+                });
+            };
+            let profile = match request.get("profile").and_then(|v| v.as_str()) {
+                None => acos_services::module::Profile::Real,
+                Some(name) => match acos_services::module::Profile::parse(name) {
+                    Some(profile) => profile,
+                    None => {
+                        return serde_json::json!({
+                            "ok": false, "cmd": "services", "code": "BAD_REQUEST",
+                            "error": format!("unknown profile {name:?}"),
+                        })
+                    }
+                },
+            };
+            let config = match request.get("config") {
+                None => acos_services::module::ModuleConfig::default(),
+                Some(value) => {
+                    match acos_services::module::ModuleConfig::from_json("<live>", value) {
+                    Ok(config) => config,
+                        Err(error) => {
+                            return serde_json::json!({
+                                "ok": false, "cmd": "services", "code": "BAD_REQUEST",
+                                "error": error.to_string(),
+                            })
+                        }
+                    }
+                }
+            };
+            modules
+                .attach_live(peer.host_mut(), id, profile, &config)
+                .map(|()| serde_json::json!({
+                    "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
+                        "id": id,
+                        "profile": profile.as_str(),
+                    })).collect::<Vec<_>>(),
+                    "modules": modules.verdict_modules(),
+                }))
+        }
+        "detach" => {
+            let Some(id) = request.get("id").and_then(|v| v.as_str()) else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "code": "BAD_REQUEST",
+                    "error": "detach needs a string `id`",
+                });
+            };
+            modules.detach_live(peer.host_mut(), id).map(|()| serde_json::json!({
+                "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
+                    "id": id,
+                    "profile": profile.as_str(),
+                })).collect::<Vec<_>>(),
+                "modules": modules.verdict_modules(),
+            }))
+        }
+        other => {
+            return serde_json::json!({
+                "ok": false, "cmd": "services", "code": "BAD_REQUEST",
+                "error": format!("unknown op {other:?}; use list, status, attach or detach"),
+            })
+        }
+    };
+    match result {
+        Ok(value) => {
+            let mut reply = serde_json::json!({"ok": true, "cmd": "services", "op": op});
+            if let (Some(target), Some(object)) = (reply.as_object_mut(), Some(())) {
+                let _ = object;
+                if let Some(source) = value.as_object() {
+                    for (key, item) in source {
+                        target.insert(key.clone(), item.clone());
+                    }
+                }
+            }
+            reply
+        }
+        Err(error) => serde_json::json!({
+            "ok": false, "cmd": "services", "op": op,
+            "code": error.code(),
+            "error": error.to_string(),
+        }),
+    }
+}
+
+fn serve(
+    peer: &mut Peer,
+    modules: &mut acos_services::module::ModuleRegistry,
+    fd: RawFd,
+    stop: &AtomicBool,
+    control: &ServiceControl,
+) -> std::io::Result<()> {
     loop {
+        // ADR-0029 item 4: drain live module requests between frames. The call
+        // loops (the socket has a 1 s receive timeout), so a live `attach` is
+        // applied within at most one idle second and before the next binder
+        // transaction is served.
+        while let Some((id, request)) = control.take() {
+            let reply = service_request(peer, modules, &request);
+            control.reply(id, reply);
+        }
         let frame: Frame = match read_frame(fd) {
             Ok(f) => f,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),

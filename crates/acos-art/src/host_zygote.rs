@@ -250,6 +250,7 @@ pub fn run_template(root: &ArtRoot, plan_dir: &Path, shims: SessionShims) -> Res
                     .ok()
                     .and_then(|value| crate::launch::Animations::parse(&value).ok())
                     .unwrap_or_default(),
+                services: Vec::new(),
             };
             let host = prebuilt.take();
             let code = match crate::launch::launch_session(root, &child_opts, host, &shims) {

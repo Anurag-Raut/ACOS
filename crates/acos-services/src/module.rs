@@ -378,14 +378,20 @@ impl ModuleSpec {
         }
     }
 
-    /// Parse the CLI spelling `id[:profile]` (`vibrator:scripted`).
+    /// Parse the CLI spelling `id[:profile][,config]` (`vibrator:scripted`,
+    /// `vibrator:stub,{"x":1}`).
     ///
-    /// An unknown profile is an error, never a silent fallback: `wifi:rela`
-    /// must not attach something the agent did not ask for.
+    /// An unknown profile or a config that is not a JSON object is an error,
+    /// never a silent fallback: `wifi:rela` must not attach something the agent
+    /// did not ask for, and `wifi:stub,enable` must not attach with defaults.
     pub fn parse(text: &str) -> Result<Self> {
-        let (id, profile) = match text.split_once(':') {
+        let (head, config) = match text.split_once(',') {
+            Some((head, config)) => (head, Some(config)),
+            None => (text, None),
+        };
+        let (id, profile) = match head.split_once(':') {
             Some((id, profile)) => (id, profile),
-            None => (text, "real"),
+            None => (head, "real"),
         };
         if id.is_empty() {
             return Err(ServiceError::ModuleRejected {
@@ -406,7 +412,97 @@ impl ModuleSpec {
                 ),
             });
         };
-        Ok(Self::new(id, profile))
+        let mut spec = Self::new(id, profile);
+        if let Some(config) = config {
+            let value: Value = serde_json::from_str(config).map_err(|error| {
+                ServiceError::ModuleRejected {
+                    module: "<launch>",
+                    detail: format!(
+                        "service spec {text:?} has a config that is not JSON: {error}; use \
+                         `id[:profile][,{{\"key\": value}}]`"
+                    ),
+                }
+            })?;
+            spec.config = ModuleConfig::from_json("<launch>", &value)?;
+        }
+        Ok(spec)
+    }
+
+    /// Build a spec from the object form (`{id, profile, config}`).
+    ///
+    /// This is the launch request / scenario spelling; `null` and an absent
+    /// profile mean the module's default profile, never a guess at a stronger
+    /// one.
+    pub fn from_json(value: &Value) -> Result<Self> {
+        let Some(object) = value.as_object() else {
+            return Err(ServiceError::ModuleRejected {
+                module: "<launch>",
+                detail: format!("services entry must be an object, got {value}"),
+            });
+        };
+        for key in object.keys() {
+            if !matches!(key.as_str(), "id" | "profile" | "config") {
+                return Err(ServiceError::ModuleRejected {
+                    module: "<launch>",
+                    detail: format!(
+                        "services entry has unknown field {key:?}; use only id, profile, config"
+                    ),
+                });
+            }
+        }
+        let Some(id) = object.get("id").and_then(Value::as_str) else {
+            return Err(ServiceError::ModuleRejected {
+                module: "<launch>",
+                detail: format!("services entry {value} has no string `id`"),
+            });
+        };
+        if id.is_empty() {
+            return Err(ServiceError::ModuleRejected {
+                module: "<launch>",
+                detail: "services entry has an empty `id`".to_string(),
+            });
+        }
+        let mut spec = match object.get("profile") {
+            None | Some(Value::Null) => Self::new(id, Profile::Real),
+            Some(Value::String(profile)) => match Profile::parse(profile) {
+                Some(profile) => Self::new(id, profile),
+                None => {
+                    return Err(ServiceError::ModuleRejected {
+                        module: "<launch>",
+                        detail: format!(
+                            "profile {profile:?} is unknown; use one of {}",
+                            Profile::ALL
+                                .iter()
+                                .map(|p| p.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                    })
+                }
+            },
+            Some(other) => {
+                return Err(ServiceError::ModuleRejected {
+                    module: "<launch>",
+                    detail: format!("`profile` must be a string, got {other}"),
+                })
+            }
+        };
+        if let Some(config) = object.get("config") {
+            spec.config = ModuleConfig::from_json("<launch>", config)?;
+        }
+        Ok(spec)
+    }
+
+    /// Parse a JSON array of specs (`services: [...]`).
+    pub fn parse_list(value: &Value) -> Result<Vec<Self>> {
+        match value {
+            Value::Null => Ok(Vec::new()),
+            Value::Array(items) => items.iter().map(Self::from_json).collect(),
+            other => Err(ServiceError::ModuleRejected {
+                module: "<launch>",
+                detail: format!("`services` must be an array, got {other}"),
+            }),
+        }
     }
 
     /// The launch-reply / verdict row for this request.
@@ -608,6 +704,14 @@ pub trait Module: Send {
 
     /// The honest state (ADR-0029 item 5).
     fn report(&self) -> ModuleReport;
+
+    /// Session handles this module publishes to the launcher
+    /// ([`crate::registry::LiveHandles`]). Only `core` has any; every other
+    /// module returns `None`. This is how the launch path attaches modules and
+    /// still gets the compositor/input state a live session drives.
+    fn take_session_handles(&mut self) -> Option<crate::registry::LiveHandles> {
+        None
+    }
 }
 
 /// The AOSP behaviour a tombstone name is decided by.
@@ -619,8 +723,8 @@ pub enum AospReaction {
     /// silent no-op. So the name gets a tombstone.
     Tombstone,
     /// AOSP builds *working* behaviour out of `null` (a disabled manager), or
-    /// its client code is not in the offline AOSP tree so a throwing binder is
-    /// unverified. Keep `null`; report the name as `off`.
+    /// the client resolves the name lazily inside a `try/catch` and reports the
+    /// missing feature. Keep `null`; report the name as `off`.
     Null,
 }
 
@@ -778,7 +882,7 @@ pub const TOMBSTONES: &[Tombstone] = &[
         module: "net.wifi",
         reason: "no Wi-Fi stack (the network module owns real internet, ADR-0030)",
         reaction: AospReaction::Null,
-        evidence: "WifiManager's client source lives under packages/modules/Wifi, which is not in the offline AOSP cache (.cache/aosp is framework/base only), so a present-but-throwing binder is unverified; null is today's behaviour and cannot crash init",
+        evidence: "packages/modules/Wifi framework/java/android/net/wifi/WifiFrameworkInitializer.java:75-85 registers a context-aware factory that returns null when PMS reports no FEATURE_WIFI, and WifiManager.java:2202-2209 only stores the proxy/looper; ACOS reports no Wi-Fi feature, so Android's real missing path already answers `null` (re-decided from source, 2026-11-16)",
     },
     Tombstone {
         name: "phone",
@@ -786,7 +890,7 @@ pub const TOMBSTONES: &[Tombstone] = &[
         module: "net.telephony",
         reason: "no telephony stack",
         reaction: AospReaction::Null,
-        evidence: "TelephonyManager is not in the offline AOSP cache; null is today's behaviour",
+        evidence: "base/telephony/java/android/telephony/TelephonyManager.java:513-524 constructs the manager from the context only (no binder at init); the service is resolved lazily in getITelephony() (:6641-6649) and callers handle a null proxy (:579-588 return null, :480-488 fall back to INVALID_SUBSCRIPTION_ID), so null is the working AOSP path and a tombstone would turn handled calls into binder exceptions",
     },
     Tombstone {
         name: "bluetooth",
@@ -794,7 +898,7 @@ pub const TOMBSTONES: &[Tombstone] = &[
         module: "hw.bluetooth",
         reason: "no Bluetooth stack",
         reaction: AospReaction::Null,
-        evidence: "BluetoothAdapter/BluetoothManager are not in the offline AOSP cache (packages/modules/Bluetooth); null is today's behaviour",
+        evidence: "packages/modules/Bluetooth framework/java/android/bluetooth/BluetoothAdapter.java:1096-1114 logs `BluetoothServiceManager is null` / `Bluetooth service is null` and returns a null adapter (BluetoothManager.java:65-67 passes that through), which is AOSP's documented no-Bluetooth path; a tombstone would make the adapter constructor throw while initialising the framework's own service",
     },
     Tombstone {
         name: "bluetooth_manager",
@@ -802,7 +906,7 @@ pub const TOMBSTONES: &[Tombstone] = &[
         module: "hw.bluetooth",
         reason: "no Bluetooth stack",
         reaction: AospReaction::Null,
-        evidence: "as `bluetooth`: client source not cached",
+        evidence: "as `bluetooth`: BluetoothFrameworkInitializer.java:99-104 always builds BluetoothManager, but BluetoothManager.java:65-67 returns the null adapter from BluetoothAdapter.createAdapter (BluetoothAdapter.java:1096-1114), so no binder is ever required for `bluetooth_manager`",
     },
     Tombstone {
         name: "nfc",
@@ -810,7 +914,7 @@ pub const TOMBSTONES: &[Tombstone] = &[
         module: "hw.nfc",
         reason: "no NFC stack",
         reaction: AospReaction::Null,
-        evidence: "NfcAdapter is not in the offline AOSP cache (packages/apps/Nfc); null is today's behaviour",
+        evidence: "base/nfc/java/android/nfc/NfcAdapter.java:749-780 gates on FEATURE_NFC/FEATURE_NFC_HOST_CARD_EMULATION and throws UnsupportedOperationException when the device has none, before any ServiceManager lookup; ACOS reports the features absent, so `null` (the name is never read) is AOSP's real missing path",
     },
     Tombstone {
         name: "media.camera",
@@ -825,32 +929,32 @@ pub const TOMBSTONES: &[Tombstone] = &[
         descriptor: "android.media.session.ISessionManager",
         module: "media.session",
         reason: "no media-session service",
-        reaction: AospReaction::Null,
-        evidence: "MediaSessionManager's client source is not in the offline AOSP cache; null is today's behaviour",
+        reaction: AospReaction::Tombstone,
+        evidence: "base/media/java/android/media/session/MediaSessionManager.java:124-133 stores the proxy from MediaFrameworkPlatformInitializer.getMediaSessionServiceRegisterer().get() without transacting (plus MEDIA_COMMUNICATION_SERVICE), so a throwing binder cannot break getSystemService; null makes every later call an NPE",
     },
     Tombstone {
         name: "media_router",
         descriptor: "android.media.IMediaRouterService",
         module: "media.session",
         reason: "no media-router service",
-        reaction: AospReaction::Null,
-        evidence: "MediaRouter static initialization is not in the offline AOSP cache; a throwing binder there is unverified",
+        reaction: AospReaction::Tombstone,
+        evidence: "base/media/java/android/media/MediaRouter.java:140-150 builds the proxy from ServiceManager.getService(MEDIA_ROUTER_SERVICE) and Static.startMonitoringRoutes -> rebindAsUser (:443-456) calls registerClientAsUser inside `try/catch (RemoteException)`, so a tombstone is caught and logged while a null binder is an NPE thrown out of getSystemService(MEDIA_ROUTER_SERVICE)",
     },
     Tombstone {
         name: "search",
         descriptor: "android.app.ISearchManager",
         module: "system.search",
         reason: "no search service",
-        reaction: AospReaction::Null,
-        evidence: "SearchManager's constructor fetches the service itself (app/SearchManager.java has no `public SearchManager(Context)`); its init path is unverified, so null stays",
+        reaction: AospReaction::Tombstone,
+        evidence: "base/core/java/android/app/SearchManager.java:557-562 builds the proxy with `ISearchManager.Stub.asInterface(ServiceManager.getServiceOrThrow(SEARCH_SERVICE))` in its constructor, so a null name already throws ServiceNotFoundException out of getSystemService(SearchManager.class); a tombstone moves that to a structured error at first use and cannot break init (the constructor never transacts)",
     },
     Tombstone {
         name: "role",
         descriptor: "android.app.role.IRoleManager",
         module: "system.role",
         reason: "no role manager",
-        reaction: AospReaction::Null,
-        evidence: "RoleManager is not in the offline AOSP cache; null is today's behaviour",
+        reaction: AospReaction::Tombstone,
+        evidence: "packages/modules/Permission framework-s/java/android/app/role/RoleFrameworkInitializer.java:44-46 registers `new RoleManager(context, IRoleManager.Stub.asInterface(serviceBinder))` with no null check (a null binder builds a RoleManager that NPEs on every call), and RoleManager.java:282-285 only stores the proxy; a tombstone answers a structured error at first use instead",
     },
     Tombstone {
         name: "carrier_config",
@@ -858,7 +962,7 @@ pub const TOMBSTONES: &[Tombstone] = &[
         module: "net.telephony",
         reason: "no telephony stack",
         reaction: AospReaction::Null,
-        evidence: "CarrierConfigManager is not in the offline AOSP cache; null is today's behaviour",
+        evidence: "TelephonyFrameworkInitializer.java:83-86 registers CarrierConfigManager only when PMS reports FEATURE_TELEPHONY_SUBSCRIPTION, and CarrierConfigManager.java:151-153 stores the context without resolving the binder; ACOS reports no telephony feature, so Android's real missing path (`null`) is already the honest answer and a tombstone would never be reached",
     },
     Tombstone {
         name: "webviewupdate",
@@ -866,7 +970,7 @@ pub const TOMBSTONES: &[Tombstone] = &[
         module: "web.webview",
         reason: "no WebView provider yet (ADR-0031)",
         reaction: AospReaction::Null,
-        evidence: "reachable only through WebViewFactory, which the package manager reports absent; null is today's behaviour",
+        evidence: "base/core/java/android/webkit/WebViewFactory.java:614-625 resolves the service lazily and :295-300 catches the failure of `waitForAndGetProvider()` and returns a LIBLOAD_* status, so null is a handled, reported path; a tombstone would only change the logged exception, not the outcome",
     },
 ];
 
@@ -1221,6 +1325,22 @@ impl ModuleRegistry {
         self.detach(host, id)
     }
 
+    /// Record that a module is already installed on the host (the zygote host
+    /// template installs `core` once, before any session exists). No
+    /// registration is made here: the caller owns the host.
+    pub fn adopt_attached(&mut self, id: &str, profile: Profile) -> Result<()> {
+        let index = self
+            .entries
+            .iter()
+            .position(|entry| entry.module.manifest().id == id)
+            .ok_or_else(|| ServiceError::ModuleRejected {
+                module: "<launch>",
+                detail: format!("unknown module {id:?}"),
+            })?;
+        self.entries[index].profile = profile;
+        Ok(())
+    }
+
     /// Attach every requested spec, in order. `core` is attached first and
     /// always, at `real`.
     ///
@@ -1231,7 +1351,9 @@ impl ModuleRegistry {
         host: &mut ServiceHost,
         specs: &[ModuleSpec],
     ) -> Result<Vec<(&'static str, Profile)>> {
-        if self.contains("core") {
+        // `core` is attached once. A host that already carries it (the zygote
+        // host template) is adopted, not installed twice.
+        if self.contains("core") && !self.profile("core").is_some_and(Profile::is_attached) {
             self.attach(host, "core", Profile::Real, &ModuleConfig::default())?;
         }
         for spec in specs {
@@ -1256,6 +1378,41 @@ impl ModuleRegistry {
         self.entries
             .iter()
             .map(|entry| entry.module.report())
+            .collect()
+    }
+
+    /// Take the session handles a module published at attach (`core` only).
+    pub fn take_session_handles(&mut self) -> Option<crate::registry::LiveHandles> {
+        self.entries
+            .iter_mut()
+            .find_map(|entry| entry.module.take_session_handles())
+    }
+
+    /// The attached set as the `verdict.json` / launch-reply rows.
+    ///
+    /// One row per module the session *asked for* plus every module that is
+    /// attached, sorted by id, so a verdict can never omit the module it lied
+    /// about. `state` is the honest one: `attached` only for a module whose
+    /// profile really is attached (`off` detaches), `off` otherwise. `fidelity`
+    /// is `real` only for `real`; `stub`/`scripted` passes are labelled so a
+    /// verdict that relied on one says so.
+    #[must_use]
+    pub fn verdict_modules(&self) -> Vec<Value> {
+        self.entries
+            .iter()
+            .map(|entry| {
+                let manifest = entry.module.manifest();
+                let report = entry.module.report();
+                let profile = report.profile;
+                json!({
+                    "id": manifest.id,
+                    "profile": profile.unwrap_or(Profile::Off).as_str(),
+                    "attach": manifest.attach.as_str(),
+                    "state": if report.attached { "attached" } else { "off" },
+                    "fidelity": profile.map(Profile::as_str).unwrap_or(Profile::Off.as_str()),
+                    "reason": report.reason,
+                })
+            })
             .collect()
     }
 
@@ -1302,6 +1459,9 @@ impl ModuleRegistry {
         let mut installed = Vec::new();
         for tombstone in TOMBSTONES {
             if tombstone.reaction != AospReaction::Tombstone {
+                continue;
+            }
+            if self.tombstoned.contains(&tombstone.name) {
                 continue;
             }
             let attached = self
@@ -1514,6 +1674,144 @@ pub fn install_standard(host: &mut ServiceHost) -> ModuleRegistry {
         .expect("core module attach cannot fail");
     registry.install_tombstones(host);
     registry
+}
+
+/// One live session's module set: the host plus the registry attached to it.
+///
+/// This is the object the launch paths use (ADR-0029 item 4). It owns both
+/// halves so a caller can never attach a module to one host and report it on
+/// another:
+///
+/// ```ignore
+/// let mut session = SessionModules::new();
+/// session.attach(&specs)?;              // core + specs + tombstones
+/// let handles = session.take_session_handles();
+/// let (host, registry) = session.into_parts();
+/// ```
+///
+/// The Rust VM launch keeps the object; the ART launcher takes the host out
+/// after attaching so the peer thread can serve it.
+pub struct SessionModules {
+    host: ServiceHost,
+    registry: ModuleRegistry,
+    /// Handles a host that was installed before this object existed (the
+    /// zygote host template) published. Taken before any module's own.
+    adopted_handles: Option<crate::registry::LiveHandles>,
+}
+
+impl SessionModules {
+    /// An empty host and the standard module set (nothing attached yet).
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            host: ServiceHost::new(),
+            registry: ModuleRegistry::standard(),
+            adopted_handles: None,
+        }
+    }
+
+    /// A session around a host that already exists (the zygote host template).
+    #[must_use]
+    pub fn with_host(host: ServiceHost) -> Self {
+        Self {
+            host,
+            registry: ModuleRegistry::standard(),
+            adopted_handles: None,
+        }
+    }
+
+    /// A session around a host that already has `core` installed and its
+    /// handles published (the zygote host template).
+    #[must_use]
+    pub fn from_installed(host: ServiceHost, handles: crate::registry::LiveHandles) -> Self {
+        let mut registry = ModuleRegistry::standard();
+        registry
+            .adopt_attached("core", Profile::Real)
+            .expect("the standard registry contains core");
+        Self {
+            host,
+            registry,
+            adopted_handles: Some(handles),
+        }
+    }
+
+    /// Attach `core` (always `real`), the requested specs in order, and a
+    /// tombstone for every gap name nobody serves.
+    ///
+    /// A refused spec leaves the host exactly as it was: `core` is attached
+    /// first and every later attach rolls its own scope back on error, so the
+    /// caller can report the error instead of running an app against a
+    /// half-attached session.
+    pub fn attach(&mut self, specs: &[ModuleSpec]) -> Result<()> {
+        self.registry.attach_session(&mut self.host, specs)?;
+        self.registry.install_tombstones(&mut self.host);
+        Ok(())
+    }
+
+    /// Attach a `hot` module to the live session.
+    pub fn attach_live(
+        &mut self,
+        id: &str,
+        profile: Profile,
+        config: &ModuleConfig,
+    ) -> Result<()> {
+        self.registry.attach_live(&mut self.host, id, profile, config)?;
+        self.registry.install_tombstones(&mut self.host);
+        Ok(())
+    }
+
+    /// Detach a `hot` module from the live session.
+    pub fn detach_live(&mut self, id: &str) -> Result<()> {
+        self.registry.detach_live(&mut self.host, id)
+    }
+
+    /// Drive scripted state.
+    pub fn control(&mut self, id: &str, op: &str, args: &Value) -> Result<Value> {
+        self.registry.control(id, op, args)
+    }
+
+    /// The registry (reports, verdict rows, status).
+    #[must_use]
+    pub fn registry(&self) -> &ModuleRegistry {
+        &self.registry
+    }
+
+    /// The host (a live session serving its own registrations).
+    #[must_use]
+    pub fn host(&self) -> &ServiceHost {
+        &self.host
+    }
+
+    /// Handles `core` published at attach (compositor/input).
+    pub fn take_session_handles(&mut self) -> Option<crate::registry::LiveHandles> {
+        self.adopted_handles
+            .take()
+            .or_else(|| self.registry.take_session_handles())
+    }
+
+    /// The registry's honest rows for this session.
+    #[must_use]
+    pub fn verdict_modules(&self) -> Vec<Value> {
+        self.registry.verdict_modules()
+    }
+
+    /// The capability payload with this session's attached set.
+    #[must_use]
+    pub fn status_json(&self) -> Value {
+        self.registry.status_json()
+    }
+
+    /// Split into the two halves the launch path needs.
+    #[must_use]
+    pub fn into_parts(self) -> (ServiceHost, ModuleRegistry) {
+        (self.host, self.registry)
+    }
+}
+
+impl Default for SessionModules {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// The conformance kit every module must pass (ADR-0029 item 7).
@@ -1892,6 +2190,83 @@ mod tests {
         let error = ModuleSpec::parse("core:rela").expect_err("typo must fail");
         assert!(matches!(error, ServiceError::ModuleRejected { .. }));
         assert!(ModuleSpec::parse(":stub").is_err());
+    }
+
+    #[test]
+    fn a_spec_parses_the_object_and_config_spellings() {
+        // `id[:profile][,config]` (CLI) and `{id, profile, config}` (JSON) name
+        // the same module; a config that is not an object is refused.
+        let cli = ModuleSpec::parse("feedback.vibrator:scripted,{\"enable\":[\"a\"]}")
+            .expect("valid spec with config");
+        assert_eq!(cli.profile, Profile::Scripted);
+        assert_eq!(cli.config.string_array("enable"), vec!["a".to_string()]);
+        let json = ModuleSpec::from_json(&json!({
+            "id": "feedback.vibrator",
+            "profile": "scripted",
+            "config": {"enable": ["a"]},
+        }))
+        .expect("valid object spec");
+        assert_eq!(json, cli);
+        assert!(ModuleSpec::parse("feedback.vibrator:stub,enable").is_err());
+        assert!(ModuleSpec::from_json(&json!({"id": "x", "profile": "rela"})).is_err());
+        assert!(ModuleSpec::from_json(&json!({"id": "x", "extra": 1})).is_err());
+    }
+
+    #[test]
+    fn a_session_modules_object_attaches_and_reports_the_verdict_rows() {
+        // ADR-0029 item 4: one object owns the host and the registry, so the
+        // reported set cannot belong to a different host than the one attached.
+        let mut session = SessionModules::new();
+        session
+            .attach(&[
+                ModuleSpec::parse("feedback.vibrator:stub").unwrap(),
+                ModuleSpec::parse("feedback.vibrator:stub").unwrap_or_else(|_| {
+                    ModuleSpec::new("feedback.vibrator", Profile::Stub)
+                }),
+            ])
+            .expect("the standard modules attach");
+        let rows = session.verdict_modules();
+        let core = rows
+            .iter()
+            .find(|row| row["id"] == "core")
+            .expect("core is always a row");
+        assert_eq!(core["state"], "attached");
+        assert_eq!(core["fidelity"], "real");
+        let vibrator = rows
+            .iter()
+            .find(|row| row["id"] == "feedback.vibrator")
+            .expect("the requested module is a row");
+        assert_eq!(vibrator["state"], "attached");
+        assert_eq!(vibrator["fidelity"], "stub");
+        assert_eq!(vibrator["attach"], "hot");
+        // `off` is a detach, and the row says so instead of pretending.
+        session
+            .attach(&[ModuleSpec::parse("feedback.vibrator:off").unwrap()])
+            .expect("off detaches");
+        let rows = session.verdict_modules();
+        let vibrator = rows
+            .iter()
+            .find(|row| row["id"] == "feedback.vibrator")
+            .expect("row stays");
+        assert_eq!(vibrator["state"], "off");
+        assert_eq!(vibrator["fidelity"], "off");
+        assert!(vibrator["reason"].as_str().unwrap().contains("attach"));
+        // A live attach/detach is the same path `acos_services` uses, and an
+        // `at-launch` module refuses instead of pretending to change.
+        session
+            .attach_live(
+                "feedback.vibrator",
+                Profile::Stub,
+                &ModuleConfig::default(),
+            )
+            .expect("hot module attaches live");
+        let error = session
+            .attach_live("core", Profile::Real, &ModuleConfig::default())
+            .expect_err("at-launch module refuses a live attach");
+        assert!(error.to_string().contains("at-launch"));
+        session.detach_live("feedback.vibrator").expect("hot detach");
+        assert!(session.detach_live("feedback.vibrator").is_ok());
+        assert!(session.take_session_handles().is_some(), "core published handles");
     }
 
     #[test]

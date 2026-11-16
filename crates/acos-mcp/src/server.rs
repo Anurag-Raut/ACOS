@@ -370,7 +370,41 @@ impl<B: Backend> Server<B> {
                 } else {
                     self.backend.capabilities()
                 };
-                pass_with_result("req_capabilities", caps.to_json())
+                let mut value = caps.to_json();
+                // ADR-0029 item 4/6: when the caller names a session, the
+                // payload shows that session's *attached* modules (the same
+                // rows `acos_services` answers), not only the catalog. An
+                // unknown session is reported as `session: null` with the
+                // reason, never a silent catalog-only answer.
+                let session_id = args
+                    .pointer("/base/session_id")
+                    .or_else(|| args.get("session_id"))
+                    .and_then(Value::as_str);
+                if let Some(session_id) = session_id {
+                    let ctx = self.call_context(token, &args);
+                    let request = json!({
+                        "op": "list",
+                        "base": {"session_id": session_id},
+                    });
+                    let session = self
+                        .backend
+                        .session_call("acos_services", &request, &ctx)
+                        .and_then(|envelope| envelope.result().cloned())
+                        .map(|result| {
+                            json!({
+                                "session_id": session_id,
+                                "attached": result.get("attached").cloned().unwrap_or(Value::Null),
+                                "modules": result.get("modules").cloned().unwrap_or(Value::Null),
+                            })
+                        });
+                    value["session"] = session.unwrap_or_else(|| {
+                        json!({
+                            "session_id": session_id,
+                            "error": "no live session with this id; launch it first (acos_launch) or omit session_id for the catalog",
+                        })
+                    });
+                }
+                pass_with_result("req_capabilities", value)
             }
             ToolRef::Help => {
                 let caps = self.backend.capabilities();

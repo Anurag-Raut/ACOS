@@ -75,6 +75,7 @@ fn run_with_reference(scenario_name: &str, app: &str, artifacts_name: &str) -> R
         request_id: format!("req_test_{scenario_name}"),
         flags: vec!["--reference".to_string()],
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
     };
     let clock = FixedClock::new(1_794_318_674_000);
     let outcome =
@@ -175,6 +176,7 @@ steps:
         request_id: "req_unknown_step".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
     };
     let clock = FixedClock::new(1_794_318_674_000);
     let outcome = run_scenario(&scenario, &options, &mut backend, &clock).unwrap();
@@ -261,6 +263,7 @@ steps:
         request_id: "req_fidelity".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
     };
     let clock = FixedClock::new(1_794_318_674_000);
     let outcome = run_scenario(&scenario, &options, &mut backend, &clock).unwrap();
@@ -543,6 +546,7 @@ fn run_slice_with_settle(
         request_id: "req_advisor_rule".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
     };
     let clock = FixedClock::new(1_794_318_674_000);
     let outcome = run_scenario(&scenario, &options, &mut backend, &clock).expect("run");
@@ -569,6 +573,7 @@ fn run_slice_keep(
         request_id: "req_slice_keep".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
     };
     let clock = FixedClock::new(1_794_318_674_000);
     let outcome = run_scenario(&scenario, &options, &mut backend, &clock).expect("run");
@@ -1011,6 +1016,7 @@ steps:
         request_id: "req_wait_for_teeth".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
     };
     let clock = FixedClock::new(1_794_318_674_000);
     let outcome = run_scenario(&scenario, &options, &mut backend, &clock).expect("run");
@@ -1220,6 +1226,7 @@ fn run_log_scenario(
         request_id: "req_log_poll".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
     };
     let clock = FixedClock::new(1_794_318_674_000);
     run_scenario(scenario, &options, backend, &clock).expect("run_scenario succeeds")

@@ -414,6 +414,59 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     };
     std::env::set_var(acos_services::wms::INSETS_ENV, &insets_owned);
 
+    // ADR-0029 item 4: the scenario's `services:` block is applied at launch,
+    // through the same validated spec path the launch request uses. A module
+    // the engine cannot attach is a refusal here, before a guest exists.
+    let scenario_services: Vec<serde_json::Value> = acos_protocol::scenario::Scenario::load(&scenario)
+        .ok()
+        .map(|scenario| {
+            scenario
+                .services
+                .iter()
+                .map(|service| {
+                    serde_json::json!({
+                        "id": service.id,
+                        "profile": service.profile,
+                        "config": service.config,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut validated_services = Vec::new();
+    for service in &scenario_services {
+        match acos_services::module::ModuleSpec::from_json(service) {
+            Ok(spec) => validated_services.push(spec.to_json()),
+            Err(error) => {
+                let envelope = Envelope::failure(
+                    request_id,
+                    ProtocolBackend::AcosNative,
+                    Fidelity::StaticAnalysis,
+                    ProtocolError::new(ErrorCode::InvalidScenario, error.to_string())
+                        .with_hint("Fix the scenario `services:` entry; the profile must be one of off, stub, scripted, real.")
+                        .with_details(serde_json::json!({"field": "services", "value": service})),
+                    Metrics::wall_ms(0),
+                );
+                return finish_run(&envelope, &args, &artifacts, Some(trust));
+            }
+        }
+    }
+    if !validated_services.is_empty() && engine == Engine::RustVm {
+        let envelope = Envelope::failure(
+            request_id,
+            ProtocolBackend::AcosNative,
+            Fidelity::StaticAnalysis,
+            ProtocolError::new(
+                ErrorCode::UnsupportedBackend,
+                "services: a scenario `services:` block needs the ART engine",
+            )
+            .with_hint("The Rust VM has no service table to attach modules to. Run `--engine art`; the verdict then lists the attached modules and their fidelity.")
+            .with_details(serde_json::json!({"field": "services", "capability": "service.modules"})),
+            Metrics::wall_ms(0),
+        );
+        return finish_run(&envelope, &args, &artifacts, Some(trust));
+    }
+
     let request = VerifyRequest {
         base: RequestBase::new(request_id.clone()),
         apk: args.apk.as_ref().map(|path| path.display().to_string()),
@@ -510,12 +563,13 @@ pub fn run(args: VerifyArgs) -> ExitCode {
             let zygote = Arc::new(crate::engine::zygote_host::ZygoteHost::for_artifacts(
                 &artifacts,
             ));
-            match crate::engine::art::ArtSession::start_with_zygote(
+            match crate::engine::art::ArtSession::start_with_session(
                 &apk,
                 &artifacts,
                 animations,
                 &insets_owned,
                 Some(zygote),
+                &validated_services,
             ) {
                 Ok(session) => {
                     session_boot_ms = Some(session.session_start_ms());
@@ -545,6 +599,9 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     let engine_label = backend.engine();
     let mode = backend.mode().unwrap_or(Mode::Live);
     let session_caps = backend.session_capabilities();
+    // ADR-0029 item 4: the attached set as the *launcher* reported it, captured
+    // before the session is torn down (the rows are the verdict's evidence).
+    let session_modules = backend.modules();
     let mut guarded = crate::trust::TrustGuard::new(Box::new(backend), trust);
     let mut envelope = acos_verify::verify(&request, &mut guarded);
     // W46: tear the session down *before* annotating, so the launcher's own
@@ -564,6 +621,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         session_animations,
         session_insets,
         session_boot_image,
+        &session_modules,
     );
     finish_run(&envelope, &args, &artifacts, Some(trust))
 }
@@ -582,6 +640,7 @@ pub(crate) fn annotate(
     session_animations: Option<&'static str>,
     session_insets: Option<&'static str>,
     session_boot_image: Option<serde_json::Value>,
+    session_modules: &[serde_json::Value],
 ) {
     let engine = engine.unwrap_or(Engine::RustVm);
     // ARTGC: the engine writes `art-frames/live-session.json` and
@@ -655,6 +714,7 @@ pub(crate) fn annotate(
             "missing": caps.missing(),
         })),
         "explicit": args.engine != "rust-vm" || mode == Mode::Preview,
+        "modules": session_modules,
         "animations": session_animations.unwrap_or("on"),
         "insets": session_insets
             .unwrap_or(acos_services::wms::DEFAULT_INSETS_MODE.as_str()),
@@ -677,7 +737,47 @@ pub(crate) fn annotate(
             }
         }
     }
+    // ADR-0029 item 4/5: the attached modules are evidence, so they are written
+    // into `verdict.json` exactly as the launcher reported them. A run that
+    // relied on `stub`/`scripted` says so in `notes`, so a reader can never
+    // mistake a stand-in for a real implementation.
+    let module_notes: Vec<String> = session_modules
+        .iter()
+        .filter_map(|module| {
+            let id = module.get("id").and_then(|v| v.as_str()).unwrap_or("");
+            let profile = module.get("profile").and_then(|v| v.as_str()).unwrap_or("off");
+            let state = module.get("state").and_then(|v| v.as_str()).unwrap_or("off");
+            if state == "attached" && matches!(profile, "stub" | "scripted") {
+                Some(format!(
+                    "fidelity: module `{id}` is attached at `{profile}` (not `real`); every                      result that depends on it is that fidelity, not a real implementation"
+                ))
+            } else if state != "attached" {
+                Some(format!(
+                    "fidelity: module `{id}` is off ({}); behaviour that needs it is                      unsupported, never a pass",
+                    module
+                        .get("reason")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("no reason reported")
+                ))
+            } else {
+                None
+            }
+        })
+        .collect();
     if let Some(object) = verdict.as_object_mut() {
+        if !session_modules.is_empty() {
+            object.insert("modules".to_string(), serde_json::json!(session_modules));
+        }
+        if !module_notes.is_empty() {
+            let notes = object
+                .entry("notes".to_string())
+                .or_insert_with(|| serde_json::json!([]));
+            if let Some(list) = notes.as_array_mut() {
+                for note in &module_notes {
+                    list.push(serde_json::json!(note));
+                }
+            }
+        }
         object.insert("engine".to_string(), engine_block["engine"].clone());
         object.insert("mode".to_string(), engine_block["mode"].clone());
         object.insert(
@@ -873,6 +973,39 @@ fn print_summary(envelope: &Envelope, artifacts: &Path) {
             .unwrap_or("-");
         let mode = verdict.get("mode").and_then(|v| v.as_str()).unwrap_or("-");
         println!("  engine: {engine} (mode: {mode})");
+        if let Some(modules) = verdict.get("modules").and_then(|v| v.as_array()) {
+            let attached: Vec<String> = modules
+                .iter()
+                .filter(|module| {
+                    module.get("state").and_then(|v| v.as_str()) == Some("attached")
+                })
+                .map(|module| {
+                    format!(
+                        "{}:{}",
+                        module.get("id").and_then(|v| v.as_str()).unwrap_or(""),
+                        module.get("profile").and_then(|v| v.as_str()).unwrap_or("")
+                    )
+                })
+                .collect();
+            let off: Vec<&str> = modules
+                .iter()
+                .filter(|module| {
+                    module.get("state").and_then(|v| v.as_str()) != Some("attached")
+                })
+                .filter_map(|module| module.get("id").and_then(|v| v.as_str()))
+                .collect();
+            if !attached.is_empty() || !off.is_empty() {
+                println!(
+                    "  services: {} attached{}",
+                    attached.join(", "),
+                    if off.is_empty() {
+                        String::new()
+                    } else {
+                        format!("; off: {}", off.join(", "))
+                    }
+                );
+            }
+        }
         if let Some(steps) = verdict.get("unsupported_steps").and_then(|v| v.as_array()) {
             for step in steps {
                 println!(

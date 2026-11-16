@@ -1077,6 +1077,30 @@
       },
       "type": "object"
     },
+    "ServiceRequest": {
+      "additionalProperties": false,
+      "description": "One `services:` entry (`{id, profile, config}`), the scenario spelling of a launch request (ADR-0029 item 4).",
+      "properties": {
+        "config": {
+          "description": "Module configuration object (scripted state, launch config)."
+        },
+        "id": {
+          "description": "Module id (`feedback.vibrator`).",
+          "type": "string"
+        },
+        "profile": {
+          "description": "Requested profile; `None` means the module's default (strongest implemented) profile, exactly like the MCP/CLI form.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
     "StateAssertion": {
       "description": "Assert node state flags.",
       "properties": {
@@ -1297,6 +1321,13 @@
             }
           ],
           "description": "Launch the app."
+        },
+        "requires_services": {
+          "description": "ADR-0029 item 4/5: module ids this step needs attached (`feedback.vibrator`).\n\nA step whose module is `off` is `unsupported`, never `pass`: the executor refuses to run an assertion against behaviour the session does not have.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "reset": {
           "anyOf": [
@@ -1897,6 +1928,13 @@
         "ui_tree": true
       },
       "description": "Artifact options."
+    },
+    "services": {
+      "description": "ADR-0029 item 4: the service modules this scenario attaches at launch, in order. Shape is the launch-request shape (`{id, profile, config}`); the profiles and ids are validated here so a typo is an invalid scenario, never a silently defaulted session.",
+      "items": {
+        "$ref": "#/definitions/ServiceRequest"
+      },
+      "type": "array"
     },
     "steps": {
       "description": "Ordered steps.",

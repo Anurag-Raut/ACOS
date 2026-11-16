@@ -34,6 +34,9 @@ use crate::module::{
 /// The `core` module.
 pub struct CoreModule {
     profile: Profile,
+    /// The compositor/input handles `attach` published, taken once by the
+    /// launch path ([`Module::take_session_handles`]). Detach drops them.
+    handles: Option<crate::registry::LiveHandles>,
 }
 
 impl CoreModule {
@@ -42,6 +45,7 @@ impl CoreModule {
     pub fn new() -> Self {
         Self {
             profile: Profile::Off,
+            handles: None,
         }
     }
 
@@ -118,10 +122,11 @@ impl Module for CoreModule {
                 ),
             });
         }
-        // The exact call sessions made before modules existed. Its return value
-        // (the input/compositor handles a live session drives) is read through
-        // `ServiceHost`/the session, not through the module.
-        let _handles = crate::registry::install_with_handles(host);
+        // The exact call sessions made before modules existed. The handles it
+        // returns (the input/compositor state a live session drives) are
+        // published through `take_session_handles` so a launch path can attach
+        // modules and still drive the same C1/input state.
+        self.handles = Some(crate::registry::install_with_handles(host));
         self.profile = profile;
         Ok(())
     }
@@ -131,7 +136,12 @@ impl Module for CoreModule {
         // is rolled back after this returns (ADR-0029 item 2). Nothing of
         // `core` runs outside the host, so there is no thread or fd to stop.
         self.profile = Profile::Off;
+        self.handles = None;
         Ok(())
+    }
+
+    fn take_session_handles(&mut self) -> Option<crate::registry::LiveHandles> {
+        self.handles.take()
     }
 
     fn control(&mut self, op: &str, _args: &Value) -> Result<Value> {

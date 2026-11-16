@@ -328,6 +328,12 @@ pub trait SessionBackend {
     /// The commands this backend executes today.
     fn capabilities(&self) -> SessionCapabilities;
 
+    /// ADR-0029 item 4: the service modules the session attached (verdict
+    /// rows). Engines with no module registry report none, never a guess.
+    fn modules(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
     /// Start the app and return the first completed frame.
     fn launch(&mut self, apk: &Path) -> Result<LaunchOutcome, BackendError>;
 
@@ -579,6 +585,14 @@ impl EngineBackend {
         match self {
             EngineBackend::Native(_) => Some(Mode::Live),
             EngineBackend::Session { session, .. } => Some(session.mode()),
+        }
+    }
+
+    /// ADR-0029 item 4: the modules the session attached.
+    pub fn modules(&self) -> Vec<serde_json::Value> {
+        match self {
+            EngineBackend::Native(_) => Vec::new(),
+            EngineBackend::Session { session, .. } => session.modules(),
         }
     }
 

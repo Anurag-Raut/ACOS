@@ -111,6 +111,11 @@ pub struct ArtSession {
     width: u32,
     height: u32,
     density: u32,
+    /// ADR-0029 item 4: the `services:` specs this session was launched with,
+    /// kept so a `reset`/relaunch attaches the same modules.
+    services: Vec<serde_json::Value>,
+    /// The modules the guest's ready line reported as attached (verdict rows).
+    modules: Vec<serde_json::Value>,
     /// H13b: the boot image this session's ready line reported —
     /// `{mode, cache: hit|built|fallback|external|none, reason}` — so a serve's
     /// launch reply and session list can say whether the shared-image cache hit.
@@ -1483,7 +1488,7 @@ impl ArtSession {
         animations: &str,
         insets: &str,
     ) -> Result<ArtSession, BackendError> {
-        Self::start_inner(apk, artifacts, animations, insets, None)
+        Self::start_inner(apk, artifacts, animations, insets, None, &[])
     }
 
     /// ZPROD3: start a session that must run on a persistent zygote child
@@ -1505,12 +1510,27 @@ impl ArtSession {
         insets: &str,
         zygote: Option<Arc<ZygoteHost>>,
     ) -> Result<ArtSession, BackendError> {
+        Self::start_with_session(apk, artifacts, animations, insets, zygote, &[])
+    }
+
+    /// ADR-0029 item 4: [`Self::start_with_zygote`] plus the `services:` specs
+    /// the session attaches at launch. The specs are forwarded to `acos-art` in
+    /// its environment and echoed in the launch reply from the ready line, so a
+    /// reply reports what was attached, never what was requested.
+    pub fn start_with_session(
+        apk: &Path,
+        artifacts: &Path,
+        animations: &str,
+        insets: &str,
+        zygote: Option<Arc<ZygoteHost>>,
+        services: &[serde_json::Value],
+    ) -> Result<ArtSession, BackendError> {
         let start = zygote.map(|host| ZygoteStart {
             key: zygote_key_of(apk, insets, animations),
             host,
             reuse_tag: None,
         });
-        Self::start_inner(apk, artifacts, animations, insets, start)
+        Self::start_inner(apk, artifacts, animations, insets, start, services)
     }
 
     fn start_inner(
@@ -1519,6 +1539,7 @@ impl ArtSession {
         animations: &str,
         insets: &str,
         zygote: Option<ZygoteStart>,
+        services: &[serde_json::Value],
     ) -> Result<ArtSession, BackendError> {
         let insets: &'static str = match acos_services::wms::parse_insets_mode(insets) {
             Some(acos_services::wms::InsetsMode::Carve) => "carve",
@@ -1616,6 +1637,13 @@ impl ArtSession {
             .arg(animations)
             .arg("--insets")
             .arg(insets)
+            // ADR-0029 item 4: the module specs. The launcher attaches them
+            // before the guest boots; an invalid spec is refused there with a
+            // structured error instead of a silently defaulted session.
+            .env(
+                "ACOS_ART_SERVICES",
+                serde_json::to_string(&services).unwrap_or_else(|_| "[]".to_string()),
+            )
             // The launcher reads this seam (no `acos-art` CLI flag change): a
             // live session instead of a one-shot launch. The guest publishes
             // the read-only view-tree probe the `tree`/`tap` replies carry.
@@ -1870,6 +1898,8 @@ impl ArtSession {
             width: 1080,
             height: 2400,
             density: 420,
+            services: services.to_vec(),
+            modules: Vec::new(),
             boot_image: None,
             stream_socket: None,
             cached: None,
@@ -2008,6 +2038,9 @@ impl ArtSession {
         if let Some(boot) = ready.get("boot_image") {
             session.boot_image = Some(boot.clone());
         }
+        if let Some(modules) = ready.get("modules").and_then(|v| v.as_array()) {
+            session.modules = modules.clone();
+        }
         if let Some(package) = ready.get("package").and_then(|v| v.as_str()) {
             session.package = package.to_string();
         }
@@ -2073,6 +2106,34 @@ impl ArtSession {
     #[must_use]
     pub fn boot_image(&self) -> Option<&serde_json::Value> {
         self.boot_image.as_ref()
+    }
+
+    /// ADR-0029 item 4: the modules the guest's ready line reported attached.
+    #[must_use]
+    pub fn modules(&self) -> &[serde_json::Value] {
+        &self.modules
+    }
+
+    /// ADR-0029 item 4: the `services:` specs this session was launched with.
+    #[must_use]
+    pub fn services(&self) -> &[serde_json::Value] {
+        &self.services
+    }
+
+    /// ADR-0029 item 4: one `acos_services` operation (list/status/attach/
+    /// detach) on this live guest. The launcher's peer thread owns the service
+    /// table, so this is a command, not a local mutation.
+    pub fn service_op(
+        &mut self,
+        request: serde_json::Value,
+    ) -> Result<serde_json::Value, BackendError> {
+        let mut request = request;
+        request["cmd"] = serde_json::json!("services");
+        let reply = self.command(request)?;
+        if let Some(modules) = reply.get("modules").and_then(|v| v.as_array()) {
+            self.modules = modules.clone();
+        }
+        Ok(reply)
     }
 
     /// The bound frame's identity: `(frame_seq, md5, captured_at)`.
@@ -4587,6 +4648,10 @@ impl SessionBackend for ArtSession {
         Engine::Art
     }
 
+    fn modules(&self) -> Vec<serde_json::Value> {
+        self.modules.clone()
+    }
+
     fn mode(&self) -> Mode {
         // This engine launches a real Activity; `render-app` (offline preview)
         // is a different command and never reaches this adapter.
@@ -5091,6 +5156,7 @@ impl SessionBackend for ArtSession {
                 self.animations,
                 self.insets(),
                 zygote_start.clone(),
+                &self.services,
             ) {
                 Ok(session) => {
                     fresh = Some(session);

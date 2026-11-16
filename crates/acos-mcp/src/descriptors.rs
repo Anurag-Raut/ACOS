@@ -61,6 +61,7 @@ pub const SESSION_TOOL_NAMES: &[&str] = &[
     "acos_logs",
     "acos_status",
     "acos_doctor",
+    "acos_services",
 ];
 
 /// Identify a command from its wire name (`run-dex`).
@@ -373,6 +374,25 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     label you can recognise — the server destroys its own idle \
                                     sessions, and the label is how you tell which one went."
                 },
+                "services": {
+                    "type": "array",
+                    "description": "ADR-0029 item 4: service modules to attach at launch, in order \
+                                    (`core` is always attached first at `real`). The reply's \
+                                    `modules` list reports what was actually attached and its \
+                                    fidelity; a module at `stub`/`scripted` is never a real \
+                                    implementation and a verdict that relies on it says so. \
+                                    Attach a module you need instead of assuming it is there.",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["id"],
+                        "properties": {
+                            "id": {"type": "string", "minLength": 1, "description": "Module id, e.g. `feedback.vibrator` (see acos_capabilities.modules.modules)."},
+                            "profile": {"type": "string", "enum": ["off", "stub", "scripted", "real"], "description": "Requested profile; omit for the module's strongest implemented profile. `off` detaches and the reply says so."},
+                            "config": {"type": "object", "description": "Module configuration object (scripted state, launch config)."}
+                        }
+                    }
+                },
                 "idle_ttl_s": {
                     "type": "integer", "minimum": 0,
                     "description": "FB5: seconds of idleness before this server destroys the session \
@@ -621,6 +641,30 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              `guest_rss_kb`, and `live`. Use it to find and clean up every session you left \
              behind — the server also reclaims its own after the idle TTL.",
             with_base(json!({})),
+        ),
+        "acos_services" => (
+            "ADR-0029 item 4: the service modules of a live session. `op: \"list\"` (default) \
+             returns `attached` and the honest per-module `modules` rows; `status` is the same \
+             set with the session's allow/refuse detail; `attach`/`detach` change the session \
+             and answer with the new set. Only `hot` modules can change on a live session: an \
+             `at-launch` module (e.g. `core`) is refused with the launch call in the message, \
+             never silently ignored. `acos_capabilities` with `session_id` shows the same set.",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["op"],
+                "properties": {
+                    "op": {
+                        "type": "string",
+                        "enum": ["list", "status", "attach", "detach"],
+                        "description": "`list`/`status` are read-only. `attach`/`detach` need `id` and are refused for an `at-launch` module."
+                    },
+                    "id": {"type": "string", "minLength": 1, "description": "Module id for attach/detach (`feedback.vibrator`)."},
+                    "profile": {"type": "string", "enum": ["off", "stub", "scripted", "real"], "description": "attach: requested profile; omit for the module's default."},
+                    "config": {"type": "object", "description": "attach: module configuration object."},
+                    "base": base.clone()
+                }
+            }),
         ),
         "acos_doctor" => (
             "Run the host preflight (`acos doctor`) and return its JSON report. Call it FIRST when \

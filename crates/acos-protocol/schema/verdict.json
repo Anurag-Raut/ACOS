@@ -1106,6 +1106,46 @@
         }
       ]
     },
+    "ModuleState": {
+      "description": "One module row in `verdict.json`.",
+      "properties": {
+        "attach": {
+          "description": "`hot` or `at-launch`.",
+          "type": "string"
+        },
+        "fidelity": {
+          "description": "The fidelity the module appended to the session (`real`/`stub`/ `scripted`/`off`).",
+          "type": "string"
+        },
+        "id": {
+          "description": "Module id (`feedback.vibrator`).",
+          "type": "string"
+        },
+        "profile": {
+          "description": "Attached profile, `off` when not attached.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why it is off, or what is degraded while it is on.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "`attached` or `off`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "attach",
+        "fidelity",
+        "id",
+        "profile",
+        "state"
+      ],
+      "type": "object"
+    },
     "ProtocolError": {
       "description": "A structured error: stable code, human message, next action, retryability, and the failure class derived from the code.\n\nDeserialization fills `hint`, `retryable` and `class` from the code when a producer omitted them, so an older envelope can never decode to a code with the wrong owner.",
       "properties": {
@@ -1510,6 +1550,13 @@
         }
       ],
       "description": "Isolation actually used."
+    },
+    "modules": {
+      "description": "ADR-0029 item 4/5: the service modules the session attached, with their profile and honest state. `fidelity` is `real` only for `real`; a verdict whose pass relied on `stub`/`scripted` names it here and in `notes`.",
+      "items": {
+        "$ref": "#/definitions/ModuleState"
+      },
+      "type": "array"
     },
     "notes": {
       "default": [],

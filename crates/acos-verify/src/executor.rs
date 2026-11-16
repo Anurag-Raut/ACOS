@@ -63,6 +63,10 @@ pub struct RunOptions {
     pub flags: Vec<String>,
     /// `acos` version string.
     pub acos_version: String,
+    /// ADR-0029 item 4: the `services:` the session attached, `(id, profile)`.
+    /// A step that `requires_services` a module not attached here is
+    /// `unsupported`, never run against behaviour the session does not have.
+    pub services: Vec<(String, String)>,
 }
 
 /// The result of a run.
@@ -77,6 +81,16 @@ pub struct RunOutcome {
     /// What artifact retention did (ARTGC); `None` for runs that never reached
     /// the artifacts stage.
     pub retention: Option<crate::retention::RetentionReport>,
+}
+
+/// The first module a step requires that this session has not attached.
+fn missing_service(step: &Step, services: &[(String, String)]) -> Option<String> {
+    step.requires_services.iter().find_map(|id| {
+        let attached = services
+            .iter()
+            .any(|(attached, profile)| attached == id && profile != "off");
+        (!attached).then(|| id.clone())
+    })
 }
 
 /// Internal per-step execution state.
@@ -325,7 +339,39 @@ pub fn run_scenario(
         };
 
         let cause_id = format!("{}:{}:{}", options.request_id, step.kind(), index);
-        let exec = if bound_is_fast && binds_to_bound_frame(step) {
+        // ADR-0029 item 4/5: a step that needs a module this session does not
+        // have is `unsupported`, never executed and never a pass.
+        let exec = if let Some(missing) = missing_service(step, &options.services) {
+            let attach = format!(
+                "acos_launch {{services: [{{id: {:?}, profile: \"real\"}}]}} or the CLI                  `--service {}{{profile}}` flag",
+                missing, missing
+            );
+            let error = ProtocolError::new(
+                ErrorCode::UnsupportedBackend,
+                format!(
+                    "step {} needs service module {:?}, which this session does not have attached (module is off)",
+                    step.kind(),
+                    missing
+                ),
+            )
+            .with_hint(format!(
+                "Attach the module at launch ({attach}); a step whose module is off is unsupported, never a pass."
+            ))
+            .with_details(serde_json::json!({
+                "capability": "service.module",
+                "module": missing,
+                "required_by": step.kind(),
+            }));
+            StepExec {
+                status: Status::Unsupported,
+                error: Some(error),
+                assertions: Vec::new(),
+                observation: None,
+                produced_frame: None,
+                session: None,
+                settle: None,
+            }
+        } else if bound_is_fast && binds_to_bound_frame(step) {
             fast_bound_failure(step.kind())
         } else if let Some(failure) = content_settle_pixel_failure(step, bound_settle.as_ref()) {
             // SE2: content stability says nothing about pixels (they may still

@@ -244,6 +244,13 @@ impl Peer {
         &self.host
     }
 
+    /// The host, mutably: a live session's module attach/detach is a service
+    /// table mutation and the peer thread is the table's owner.
+    #[must_use]
+    pub fn host_mut(&mut self) -> &mut ServiceHost {
+        &mut self.host
+    }
+
     /// Path of the JSON-lines unsupported log, when enabled.
     #[must_use]
     pub fn log_path(&self) -> Option<&Path> {

@@ -691,12 +691,32 @@ impl ServeEngine {
             );
         }
         let artifacts = self.artifacts_root.join(sanitize_session_id(id));
-        match ArtSession::start_with_zygote(
+        // ADR-0029 item 4: `acos_launch {services: [...]}`. The shapes are
+        // validated here so a bad spec is INVALID_ARGUMENT before a guest
+        // exists, and the launcher refuses an unknown module/profile itself.
+        let services = match args.get("services") {
+            None => Vec::new(),
+            Some(value) => match acos_services::module::ModuleSpec::parse_list(value) {
+                Ok(specs) => specs.iter().map(acos_services::module::ModuleSpec::to_json).collect(),
+                Err(error) => {
+                    return art_failure(
+                        request_id,
+                        Some(id),
+                        trust,
+                        ErrorCode::InvalidArgument,
+                        error.to_string(),
+                        json!({"field": "services", "value": value}),
+                    )
+                }
+            },
+        };
+        match ArtSession::start_with_session(
             &apk,
             &artifacts,
             animations,
             insets,
             Some(Arc::clone(&self.zygote)),
+            &services,
         ) {
             Ok(mut session) => {
                 session.set_settle_timeout(settle_timeout_ms);
@@ -940,6 +960,11 @@ impl ServeEngine {
             "acos_assert" => assert(&mut session, args, trust),
             "acos_logs" => logs(&mut session, args),
             "acos_status" => Ok(status_value(&session)),
+            // ADR-0029 item 4: list/status/attach/detach on the live guest.
+            // The launcher's peer thread owns the service table, so this is a
+            // command; an `at-launch` module is refused by the launcher with
+            // the launch call in the message.
+            "acos_services" => service_control(&mut session, args),
             "acos_reset" => reset(&mut session, args),
             "acos_swipe" => Err(BackendError::unsupported(
                 "input.swipe",
@@ -971,6 +996,7 @@ impl ServeEngine {
                 if let Some(object) = result.as_object_mut() {
                     object.insert("animations".into(), json!(session.animations()));
                     object.insert("insets".into(), json!(session.insets()));
+                    object.insert("modules".into(), json!(session.modules()));
                 }
                 label_frame(&mut result, &session);
                 label_timing(&mut result, &session, tool, started);
@@ -2694,6 +2720,47 @@ fn status_value(session: &ArtSession) -> Value {
     });
     merge_zygote_fields(&mut status, session);
     status
+}
+
+/// ADR-0029 item 4: `acos_services {op, id?, profile?, config?}`.
+///
+/// `op` is closed (`list`, `status`, `attach`, `detach`); an unknown op, a
+/// missing id for attach/detach and a bad profile are `InvalidArgument`, never a
+/// silent no-op. The launcher performs the mutation and reports the attached
+/// set it actually has.
+fn service_control(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let op = args.get("op").and_then(Value::as_str).unwrap_or("");
+    if !matches!(op, "list" | "status" | "attach" | "detach") {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: format!("unknown op {op:?}; use list, status, attach or detach"),
+        });
+    }
+    let mut request = json!({"op": op});
+    if matches!(op, "attach" | "detach") {
+        let Some(id) = args.get("id").and_then(Value::as_str) else {
+            return Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: format!("{op} needs a string `id`"),
+            });
+        };
+        request["id"] = json!(id);
+    }
+    if op == "attach" {
+        if let Some(profile) = args.get("profile").and_then(Value::as_str) {
+            request["profile"] = json!(profile);
+        }
+        if let Some(config) = args.get("config") {
+            request["config"] = config.clone();
+        }
+    }
+    let mut reply = session.service_op(request)?;
+    reply["session_id"] = json!(args
+        .pointer("/base/session_id")
+        .or_else(|| args.get("session_id"))
+        .and_then(Value::as_str)
+        .unwrap_or(""));
+    Ok(reply)
 }
 
 fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
