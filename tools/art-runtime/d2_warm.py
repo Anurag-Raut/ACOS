@@ -131,6 +131,46 @@ def comm_of(pid):
         return "?"
 
 
+def _record_daemon(pid):
+    """Record this rep's session daemon (`pid starttime`) for the run's reaper.
+
+    `tools/bench/reap-daemons.sh` reads exactly this file (`ACOS_BENCH_PIDFILE`,
+    set per run by `acos-bench.sh`) and re-verifies pid, start time, command and
+    run id before it signals anything. The call was written but the helper was
+    never defined, so the whole latency phase aborted with `NameError` at the
+    first daemon spawn (found while running the REL3A A/B).
+    """
+    path = os.environ.get("ACOS_BENCH_PIDFILE")
+    if not path:
+        return
+    try:
+        stat = Path("/proc/%d/stat" % int(pid)).read_text()
+        start = stat.rsplit(")", 1)[1].split()[19]
+    except (OSError, IndexError):
+        start = "0"
+    try:
+        with open(path, "a") as fh:
+            fh.write("%d %s\n" % (int(pid), start))
+    except OSError:
+        pass
+
+
+def _environ_has(pid, needle):
+    """True when process `pid`'s environment carries `needle` as one entry.
+
+    SERVELEAK2/F2/F1 uses this to prove ownership: a process whose command line
+    names this rep's scratch path is only a leak of *this* run when it also
+    inherited the run id. The interpreter raises NameError without it (found
+    while running the REL3A A/B: the call was written but never defined), which
+    aborts the whole latency phase whenever a survivor exists.
+    """
+    try:
+        raw = Path("/proc/%d/environ" % int(pid)).read_bytes()
+    except OSError:
+        return False
+    return needle.encode() in raw.split(b"\0")
+
+
 def ppid_map():
     """parent -> [child pid] (for descendant walks)."""
     out = {}
