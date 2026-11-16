@@ -104,9 +104,9 @@ pub const FLAG_PERMISSION_USER_SET: i32 = 1 << 0;
 pub const FLAG_PERMISSION_USER_FIXED: i32 = 1 << 1;
 /// `PackageManager.FLAG_PERMISSION_POLICY_FIXED` (`:5110`) — never set by ACOS.
 pub const FLAG_PERMISSION_POLICY_FIXED: i32 = 1 << 2;
-/// `PackageManager.FLAG_PERMISSION_SYSTEM_FIXED` (`:5130`) — never set by ACOS.
+/// `PackageManager.FLAG_PERMISSION_SYSTEM_FIXED` (`:5135`) — never set by ACOS.
 pub const FLAG_PERMISSION_SYSTEM_FIXED: i32 = 1 << 4;
-/// `PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT` — an install-time grant.
+/// `PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT` (`:5146`) — an install-time grant.
 pub const FLAG_PERMISSION_GRANTED_BY_DEFAULT: i32 = 1 << 5;
 
 /// One permission's runtime state.
