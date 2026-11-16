@@ -490,7 +490,7 @@ pub fn run_scenario(
         // records its attempts here, not as extra step entries, so a passing run
         // can never show a non-pass step and `verdict.json` and the inline
         // `result.verdict` stay the same document.
-        step_result.attempts = step_attempts(exec.until.as_ref());
+        step_result.attempts = step_attempts(exec.until.as_ref(), exec.error.as_ref());
 
         // Write evidence and declare it.
         let step_artifact = acos_protocol::step_file_name(index, step.kind());
@@ -1879,7 +1879,10 @@ fn scroll_until_step(
 /// number of attempts when the search missed. So attempts `1..n-1` did not find
 /// it and attempt `n` is the step's own outcome: the same facts whether the step
 /// passed or missed, and never a second step entry.
-fn step_attempts(until: Option<&serde_json::Value>) -> Vec<StepAttempt> {
+fn step_attempts(
+    until: Option<&serde_json::Value>,
+    error: Option<&ProtocolError>,
+) -> Vec<StepAttempt> {
     let Some(until) = until else {
         return Vec::new();
     };
@@ -1904,8 +1907,40 @@ fn step_attempts(until: Option<&serde_json::Value>) -> Vec<StepAttempt> {
         let reason = if matched {
             "selector visible in this attempt's settled traversal".to_string()
         } else if last {
-            "selector not visible after this attempt's settled traversal (search exhausted)"
-                .to_string()
+            // REL3H/REL3H2: the final attempt's reason is the search's own
+            // answer, never a generic "exhausted" when the backend said *why*
+            // it stopped - an end of the list and a gesture the app did not
+            // consume are different facts with different next actions, and both
+            // live in this one history rather than in a second structure.
+            match error.map(|error| error.code) {
+                Some(ErrorCode::EndOfList) => {
+                    "end_of_list: two consumed gestures in a row moved nothing, so this \
+                     direction has no more content"
+                        .to_string()
+                }
+                Some(ErrorCode::ElementNotFound)
+                    if error
+                        .and_then(|error| error.details.as_ref())
+                        .and_then(|details| details.get("gesture_consumed"))
+                        .and_then(serde_json::Value::as_bool)
+                        == Some(false) =>
+                {
+                    let why = error
+                        .and_then(|error| error.details.as_ref())
+                        .and_then(|details| details.get("reason"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("not_handled");
+                    format!(
+                        "gesture not consumed (swipe missed the scroller?): the app window \
+                         answered finishInputEvent(handled) = false ({why}), so this attempt \
+                         searched nothing new"
+                    )
+                }
+                _ => {
+                    "selector not visible after this attempt's settled traversal (search exhausted)"
+                        .to_string()
+                }
+            }
         } else {
             "selector not visible in this attempt's settled traversal".to_string()
         };
@@ -2761,6 +2796,14 @@ fn expect_change_failure(
     });
     // Keep the observation: the failing step's tree/frame are still evidence.
     failure.observation = observation.cloned();
+    // REL3H2: and keep the delivery + settle record. REL3E's rule is that a
+    // failing input step still says what the app did with the gesture
+    // (`handled`, the acks, the resolved target); dropping them here made a
+    // failed `expect_change` step report `handled: null` / `published: 0` - the
+    // facts existed and the step hid them, which is the same false-evidence
+    // class as a silent pass.
+    failure.delivery = exec.delivery.clone();
+    failure.settle = exec.settle.clone();
     Some(failure)
 }
 

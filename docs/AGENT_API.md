@@ -1430,6 +1430,22 @@ reply alone. `verdict.json`, `steps/NN-<kind>.json` and the inline
 `result.verdict` are all written from the same `Verdict` structure: a passing run
 never shows a retried non-pass step in one view and a pass in the other.
 
+The **final** attempt's `reason` is the search's own answer, so a miss says why it
+stopped instead of a generic "exhausted" (REL3H2, in this history - never a
+second structure):
+
+* `"end_of_list: two consumed gestures in a row moved nothing, so this direction
+  has no more content"` - the step's `error.code` is `END_OF_LIST`, and
+  `error.details` carries `end_of_list: true`, `unchanged_gestures: 2`,
+  `gesture_consumed: true`, `attempts`, `max_attempts`, `last_tree_texts`;
+* `"gesture not consumed (swipe missed the scroller?): the app window answered
+  finishInputEvent(handled) = false (...)"` - `error.code` is
+  `ELEMENT_NOT_FOUND` with `details.gesture_consumed: false` and
+  `details.reason: "unhandled_input" | "not_handled"`: nothing learned about the
+  end of the list, so re-aim the gesture rather than raising `max_attempts`;
+* otherwise `ELEMENT_NOT_FOUND` after every attempt (the selector may never
+  render).
+
 A non-pass verdict has `failure` populated:
 
 ```json

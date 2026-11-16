@@ -4938,3 +4938,31 @@ nothing in this change is on the tap path).
   `acos-mcp --test compact_reply` 1/1, `acos-cli engine::serve::tests::shaped_tree` 1/1.
 - **Conclusion / next:** the BENCHFIX regression is closed. v0.3.0's remaining gate work is the
   other tracks, not this reply path.
+
+## REL3H2 — can a fixture produce "unhandled ack, but the screen changes a moment later"?
+
+**Question.** MEDIUM review finding #1 says REL3H's unhandled-input shortcut could
+bind a probe sample taken after the publish but before the UI thread ran the
+handler (or before the handler's posted side effect ran and drew). To pin the fix
+end-to-end I built a fixture whose press answers `finishInputEvent(handled) =
+false` and then posts a `setText` 60 ms later, and ran a scenario with
+`expect_change: true` on it.
+
+**Result (negative, and useful).** The ART guest never called the app's touch
+listener on that screen. Measured on `unhandled-post.apk` (a screen-filling
+`LinearLayout#root` with `setOnTouchListener` logging every action and returning
+false): a tap on a non-clickable child resolved to the right node and point
+(`target.hit.point = {540, 369}`, the label at `[42,317][1038,422]`), the window
+acked all 2 published events `handled = false` in 5 ms, and the app log contained
+only `onCreate` - no `onTouch`, no posted `setText`, and `count` stayed `0`. A tap
+on a clickable `Button` in the same guest does dispatch and change state.
+
+So the ART guest's dispatch path acks "unhandled" without consulting a
+non-clickable view's `OnTouchListener`: it looks like a hit test on clickable
+nodes rather than a real `ViewGroup.dispatchTouchEvent` chain. That is an
+emulation-fidelity question, not a settle question, so the fixture and its ART
+test were **removed** rather than committed as a failing/ignored test; the gate
+itself is pinned by `acos-art`'s `launch::rel3h_unhandled_input_tests::gate`
+unit tests (ack floor, confirmation window, posted-draw restart, pending-work
+reset). Follow-up (not this track): dispatch touches through the real view chain
+so a non-clickable listener runs.

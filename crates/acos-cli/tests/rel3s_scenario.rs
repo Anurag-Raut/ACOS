@@ -374,15 +374,27 @@ steps:
         Value::from(true),
         "the step JSON says the list ended: {until}"
     );
+    // REL3H2: the facts behind it live in the error details, and the attempt
+    // history (the one-step-one-entry rule) says why the last attempt stopped.
+    let details = &search["error"]["details"];
     assert_eq!(
-        until["unchanged_gestures"],
+        details["unchanged_gestures"],
         Value::from(2),
-        "REL3H2: the end is two consumed gestures that moved nothing: {until}"
+        "REL3H2: the end is two consumed gestures that moved nothing: {details}"
     );
     assert_eq!(
-        until["gesture_consumed"],
+        details["gesture_consumed"],
         Value::from(true),
-        "the list's own boundaries consumed the swipes: {until}"
+        "the list's own boundaries consumed the swipes: {details}"
+    );
+    let history = search["attempts"].as_array().expect("the attempt history");
+    let last = history.last().expect("at least one attempt");
+    assert!(
+        last["reason"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("end_of_list:"),
+        "the final attempt says the list ended: {last}"
     );
     let attempts = until["attempts"].as_u64().unwrap_or(0);
     assert!(
@@ -460,14 +472,18 @@ steps:
         "nothing was learned about the end of a list: {until}"
     );
     assert_eq!(
-        until["gesture_consumed"],
-        Value::from(false),
-        "the app window did not consume the swipe: {until}"
-    );
-    assert_eq!(
         until["attempts"],
         Value::from(1),
         "repeating the same missed gesture cannot help: {until}"
     );
     assert_eq!(until["max_attempts"], Value::from(6), "{until}");
+    // REL3H2: the delivery facts are the error's, and (one-step-one-entry) a
+    // single attempt is the step's own outcome, so no retry history is invented.
+    let details = &search["error"]["details"];
+    assert_eq!(
+        details["gesture_consumed"],
+        Value::from(false),
+        "the app window did not consume the swipe: {details}"
+    );
+    assert_eq!(details["handled"], Value::from(false), "{details}");
 }

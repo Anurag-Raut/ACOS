@@ -2011,12 +2011,22 @@ impl ScrollBackend {
             format!("scroll-hash-{}-{matched}", self.attempts),
             true,
         );
+        // REL3H2: a list that is *scrolling* (not at its end) shows a different
+        // row after every gesture, so a search that never matches uses all of
+        // its attempts and reports `ELEMENT_NOT_FOUND`. A backend whose tree
+        // never changes is a list at its end (two consumed gestures move
+        // nothing -> `END_OF_LIST`), which is a different fact - and a different
+        // test (see `acos-verify`'s `backend::tests`).
         let node = UiNode::new(
             "n1",
             "android.widget.TextView",
             Bounds::new(42, 612, 175, 663),
         )
-        .with_text(if matched { "Row 9" } else { "Row 1" });
+        .with_text(if matched {
+            "Row 9".to_string()
+        } else {
+            format!("Row {}", 1 + self.attempts)
+        });
         let tree = UiTree::new(frame.clone(), "dev.acos.fixtures.helloviews", vec![node]);
         SessionObservation {
             session_id: "s_scroll".to_string(),
