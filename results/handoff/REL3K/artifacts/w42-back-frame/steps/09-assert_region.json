@@ -1,0 +1,83 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "display_origin": [
+          0,
+          0
+        ],
+        "display_region": [
+          42,
+          435,
+          996,
+          126
+        ],
+        "distinct_colors": 80,
+        "frame_region": [
+          42,
+          435,
+          1038,
+          561
+        ],
+        "frame_seq": 10,
+        "hash": "2f288179593157a94778e9dc2c8dc7d6db2ae99fd51ec6d0ca96f86c0d90f6b0"
+      },
+      "expected": {
+        "criteria": [
+          "hash=2f288179593157a94778e9dc2c8dc7d6db2ae99fd51ec6d0ca96f86c0d90f6b0"
+        ],
+        "display_origin": [
+          0,
+          0
+        ],
+        "display_region": [
+          42,
+          435,
+          996,
+          126
+        ]
+      },
+      "kind": "region",
+      "matched_node_ids": [],
+      "message": "display region [42,435,996,126] (frame [42,435]) matched (hash=2f288179593157a94778e9dc2c8dc7d6db2ae99fd51ec6d0ca96f86c0d90f6b0)",
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 66,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/10.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/10.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/09-assert_region.json"
+    }
+  ],
+  "frame_seq": 10,
+  "index": 9,
+  "provenance": {
+    "frame": "host-observed"
+  },
+  "settle": {
+    "bound": "strict-event",
+    "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+    "mode": "strict",
+    "probe_seq": 27,
+    "settled": true,
+    "strict_rule": "event",
+    "tree_age_ms": 39
+  },
+  "status": "pass",
+  "step": "assert_region",
+  "trust": "trusted"
+}

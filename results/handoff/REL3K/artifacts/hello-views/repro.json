@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.3",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/fixtures/build/apps/hello-views.apk",
+  "apk_sha256": "25d0615792c4c3c74624e33c2d492e8e646b807a806a1b7b3403e73baf6e30a1",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-713e1712-963774725228835b/scenarios/hello-views.yaml",
+  "scenario_sha256": "65ad3f83ae3ca82dcca35448d0970782f46a132dc3c312f49444960adab0d00d",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

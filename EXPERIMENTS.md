@@ -4799,3 +4799,55 @@ nothing in this change is on the tap path).
   curated spec in `acos-services/src/parcelable.rs` starts with a `Byte` before
   four `IntArray`s; the AOSP source is not in the cache to verify, so it was not
   touched (the real layout is probably four int arrays, no leading byte).
+
+## E9.7 — REL3K: Back on real ART is complete and merged onto rel-030 — PASS (acceptance in `results/handoff/REL3K/REPORT.md`)
+
+- **Date / branch:** 2026-11-16, `rel3k` = `art-back-1` (`15c6a111`) + the
+  finished ROT8b WIP (`361470bb`) merged with `rel-030` (`2022d89c`, merge
+  `332d2c5a`). Report: `results/handoff/REL3K/REPORT.md`.
+- **Question:** can Back ship? Every Back case must be a real observation on
+  ART: B→A in AOSP order, root Back finishes the task with an honest verdict,
+  no stale frame, an app-handled Back stays on screen, a `finish()`+`start`
+  tap never binds an empty "finished" screen, and the MCP `acos_key back` and
+  scenario `back` are one path.
+- **The fix (task-finished proof):** `AtmsState::task_finished_proof` is
+  positive — a record is ended by `finished` **or** `Destroyed` (plus a named
+  record and no pending launch). The old negative predicate (`!is_alive()`) was
+  both a false pass (an `Uncreated` record counted as ended) and a false stall
+  (a finished record whose destroy callback had not arrived kept the proof
+  false until the settle deadline). Seven unit tests; the two changed
+  behaviours fail on the old predicate (`rot8b-fail-before.log`).
+- **Merge:** textual conflicts were none; the merge exposed four rel-030
+  defects that had to be fixed for a green integration branch: the 5-argument
+  `tool_result` call site (acos-mcp did not compile), the compact tree dropping
+  `focused`/`password` (fb1's typing contract), `cursor`/`full` missing from
+  `acos_verify`/`acos_observe` schemas (paging a reply was impossible), and
+  `settle_timeout_ms` sent to `acos_observe` (no settle rule). Details and the
+  design choices are in the report §1.2.
+- **Result (ART, `--engine art`, artifacts under
+  `results/handoff/REL3K/artifacts/`):** `multi-activity` 22 steps pass —
+  back #1 binds `strict-event`, `handled:true` (2/2 acks), pixels changed, the
+  ordered log is Pause B → Start/Resume A → Stop B → Destroy B; back #2 binds
+  `window-gone`, `task_finished:true`, `pixels_changed:false`, no PNG, and
+  `assert_not_visible` passes. `hello-views` 27, `counter` 24,
+  `multi-activity-finish` 19, `v1-recreate` 18, `w42-back-frame` (gate) 17 and
+  `finish-start` 7 pass; the w42 region hashes equal Main's post-Back pixels
+  (no stale destroyed-window buffer). Negatives fail as designed:
+  wrong text after Back (`ASSERTION_FAILED`), `onSaveInstanceState` after a
+  finishing Back (`ASSERTION_FAILED`), text after a finished task
+  (`ELEMENT_NOT_FOUND`), wrong Home after `finish()`+start (`ASSERTION_FAILED`).
+- **MCP:** `acos_key {"code":"back"}` and the scenario `back` both reach the ART
+  daemon's `key` command (code 4 → the framework's own
+  `IActivityClientController.onBackPressed`); a new `art_default` test pins the
+  MCP route and that the REL3E `handled` bit and the `window-gone` settle cross
+  the MCP boundary verbatim.
+- **Crate tests:** all targets green except `acos-art --test cleanup`'s
+  `leak_scan_…` (fails only in the full parallel run, 8/8 alone — same load
+  class as the E9.4 LHFLAKE note) and `acos-cli --test native_launch`'s
+  `…_without_native_…` (the frozen Rust VM returns a top-level
+  `UNSUPPORTED_JAVA_API` with an empty ladder; sources identical to rel-030).
+- **Not done:** no dialog/IME-first Back scenario yet (the framework claims
+  Back before the IME on API 34, but the app-visible case should be asserted);
+  the MCP Back was not executed against a live guest (only its daemon wiring);
+  `hello-views`'s root-Back `state_changed` under-claims `false` when the
+  pre-action probe sample was empty (never over-claims).

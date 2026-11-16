@@ -86,7 +86,10 @@ fn a_paused_or_stopped_record_is_still_live() {
         if state == "stopped" {
             atms.activity_stopped(main, None).unwrap();
         }
-        assert!(!atms.task_finished_proof(), "a {state} record is not finished");
+        assert!(
+            !atms.task_finished_proof(),
+            "a {state} record is not finished"
+        );
     }
 }
 
@@ -155,7 +158,8 @@ fn an_unstarted_record_fails_closed() {
     // A record that exists but never ran is not `alive` in the lifecycle enum;
     // proof is positive now (`finished` or `Destroyed`), so it fails closed.
     let mut atms = seeded();
-    atms.activities.retain(|a| a.token != FIXTURE_ACTIVITY_TOKEN);
+    atms.activities
+        .retain(|a| a.token != FIXTURE_ACTIVITY_TOKEN);
     atms.ensure_activity(GUEST_TAG | 8, MAIN);
     assert!(
         !atms.task_finished_proof(),
@@ -166,9 +170,13 @@ fn an_unstarted_record_fails_closed() {
 #[test]
 fn an_unnamed_record_fails_closed() {
     let mut atms = seeded();
-    atms.activities.retain(|a| a.token != FIXTURE_ACTIVITY_TOKEN);
+    atms.activities
+        .retain(|a| a.token != FIXTURE_ACTIVITY_TOKEN);
     // `ensure_activity` is what an unidentified token becomes; it cannot be
     // judged finished even when it carries the flag.
     atms.ensure_activity(GUEST_TAG | 9, "").finished = true;
-    assert!(!atms.task_finished_proof(), "a record with no class is not judged finished");
+    assert!(
+        !atms.task_finished_proof(),
+        "a record with no class is not judged finished"
+    );
 }

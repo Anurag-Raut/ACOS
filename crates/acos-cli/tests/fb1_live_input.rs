@@ -34,9 +34,18 @@ fn repo_root() -> PathBuf {
 }
 
 fn scratch(tag: &str) -> PathBuf {
-    let dir = repo_root()
-        .join(".cache")
-        .join(format!("fb1-test-{tag}-{}", std::process::id()));
+    // The daemon's `serve.sock` lives in here, so the directory name is part of
+    // a unix-socket path and must fit `sun_path` (108 bytes) even from a long
+    // worktree root. A short stable digest of the tag keeps the tests distinct
+    // without spending the budget on prose.
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    tag.hash(&mut hasher);
+    let dir = repo_root().join(".cache").join(format!(
+        "fb1-{:08x}-{}",
+        hasher.finish() as u32,
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("runtime")).unwrap();
     std::fs::create_dir_all(dir.join("cache")).unwrap();

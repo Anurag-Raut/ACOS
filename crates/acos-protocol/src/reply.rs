@@ -90,7 +90,8 @@ pub struct ShapedTree {
 /// Only visible nodes whose `text` or `content_desc` is non-empty are returned:
 /// a structural wrapper carries no answer to "what is on screen". Each node
 /// keeps its tree `id` and Android `resource_id`, bounds, class, clickable and
-/// window/package fields, plus its text and content description.
+/// window/package fields, its text and content description, and the input state
+/// (`focused`, `password`) an agent needs to type into it.
 #[must_use]
 pub fn compact_nodes(tree: &Value) -> Vec<Value> {
     let mut out = Vec::new();
@@ -159,7 +160,11 @@ fn walk_compact(node: &Value, out: &mut Vec<Value>) {
                     .unwrap_or(false),
             ),
         );
-        for key in ["visible", "window", "package"] {
+        // Input state is what an agent needs to act on the node it found:
+        // `focused` is how the typing path knows where text will land, and
+        // `password` is how it masks the characters it types (REL3E). Both are
+        // booleans, so the page stays small.
+        for key in ["visible", "window", "package", "focused", "password"] {
             if let Some(value) = map.get(key) {
                 compact.insert(key.to_string(), value.clone());
             }
