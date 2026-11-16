@@ -1,11 +1,25 @@
 //! `location` — the location service module (stub, scripted).
 //!
-//! The module owns the `ServiceManager` name `location`
+//! The module answers the `ServiceManager` name `location`
 //! (`android.location.ILocationManager`, API 34) and serves the subset of the
 //! framework interface a `LocationManager` / `Geocoder` client actually uses.
 //! It has **no `real` profile**: a sandbox has no GPS, no network trilateration
 //! and no geocoder backend, so `scripted` (the agent drives every fix) is the
 //! honest top profile.
+//!
+//! # The node is `core`'s, the module fills it (ADR-0029 note MODSENS)
+//!
+//! `LocationManager` resolves the `ILocationManager` proxy once per process
+//! (`SystemServiceRegistry`) and keeps it, so the binder must not change under a
+//! guest. `core` therefore **publishes** the node
+//! ([`crate::core_module::FILLED_BY_MODULE`], the off/disabled answer) and this
+//! module **fills** the same object on attach
+//! ([`LocationService::fill`] via `ServiceHost::dynamic_object_mut`); a detach
+//! empties it in place ([`LocationService::empty`]). Consequences an agent can
+//! rely on: a live `acos_services {op: "attach", id: "location"}` is visible
+//! through a `LocationManager` the app created while the module was off, and a
+//! live detach answers the honest disabled state on that same binder — neither
+//! a stale fix nor a dead handle.
 //!
 //! ## Wire evidence
 //!
@@ -89,14 +103,22 @@
 //! * Every fix the module ever delivers is recorded (provider, lat/lng,
 //!   accuracy, timestamps) and summarised in [`ModuleReport::reason`], so a
 //!   verdict can cite what the session actually received.
-//! * `play_track` delivers one point per `interval_ms` on a thread, so updates
-//!   arrive at real timing; `loop` repeats the track until `play_track` is
-//!   called again, `stop_track` runs, or the module detaches.
-//! * The PendingIntent form of `requestLocationUpdates` is **not delivered**:
-//!   the guest cannot create a `PendingIntent` in this build (ATMS has no
-//!   `getIntentSender`), and delivering one needs `IIntentSender.send` with a
-//!   marshalled `Intent`, which no host writer exists for. The registration is
-//!   refused with a structured error naming that gap, never accepted silently.
+//! * `play_track` is a **schedule**, not a thread: `Track.next_due` is published
+//!   through `ServiceObject::next_delivery_deadline` and advanced point by point
+//!   by `advance_timed` on the peer's idle wakeup, so updates arrive at real
+//!   timing; `loop` repeats the track until `play_track` is called again,
+//!   `stop_track` runs, or the module detaches (nothing to join).
+//! * The PendingIntent form of `requestLocationUpdates` is **not delivered**, and
+//!   the reason is measured (MODLOC3): the image's own client
+//!   (`LocationProviderManager$LocationPendingIntentTransport`) builds
+//!   `new Intent()`, `putExtra` with the fix under
+//!   `LocationManager.KEY_LOCATION_CHANGED` (`"location"`) and hands it to
+//!   `PendingIntentSender.send(...)` as the **fill-in** intent of
+//!   `IIntentSender.send`. MODNOTIF5 accepts that transaction but refuses to merge
+//!   a fill-in into a stored intent (`Intent.fillIn` is not modelled, PIFILLIN),
+//!   so a fired sender today can carry no fix (or a stale stored one). The
+//!   registration is refused with a structured `UNSUPPORTED_ANDROID_API` naming
+//!   exactly that; the listener form is the supported path.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -126,7 +148,10 @@ pub const CALLBACK_DESCRIPTOR: &str = "android.location.ILocationCallback";
 pub const GEOCODE_CALLBACK_DESCRIPTOR: &str = "android.location.IGeocodeListener";
 /// Descriptor of the cancellation signal returned by `getCurrentLocation`.
 pub const CANCELLATION_DESCRIPTOR: &str = "android.os.ICancellationSignal";
-/// Descriptor of the `PendingIntent` target the pending-intent form would drive.
+/// The `PendingIntent` target descriptor the pending-intent form would drive
+/// (`PendingIntent.writeToParcel` carries one strong binder to an
+/// `IIntentSender`). Kept for the wire evidence: the refusal below names why the
+/// fill-in the framework sends cannot be merged yet (PIFILLIN).
 pub const INTENT_SENDER_DESCRIPTOR: &str = "android.content.IIntentSender";
 /// The module id.
 pub const MODULE_ID: &str = "location";
@@ -868,10 +893,12 @@ fn manifest_ref() -> &'static ModuleManifest {
         security: SecurityClass::InProcess,
         process_initializers: &[],
         features: &[],
-        // `location` is a name a phone always publishes: `core` serves the
-        // disabled-device node while this module is off, and the module takes the
-        // name over when it attaches (ADR-0029 amendment, `replaces`).
-        replaces: &[SERVICE_NAME],
+        // ADR-0029 note (MODSENS): `location`'s framework client caches the
+        // `ILocationManager` proxy, so `core` publishes the node
+        // (`core_module::FILLED_BY_MODULE`) and this module fills it. The name is
+        // not taken over: an attach must not replace the binder, and a detach
+        // empties the node back to the honest disabled answer.
+        replaces: &[],
     };
     &MANIFEST
 }
@@ -1134,13 +1161,81 @@ fn read_geocoder_params(data: &mut Parcel) -> Result<GeocoderParams> {
 }
 
 /// The `ILocationManager` node.
+///
+/// ADR-0029 note (MODSENS): this object is **core's** — `core` publishes the
+/// node (`core_module::FILLED_BY_MODULE`) in its off state and the `location`
+/// module fills it while attached. `LocationManager` resolves the
+/// `ILocationManager` proxy once per process and keeps it
+/// (`SystemServiceRegistry`), so a hot attach must reuse the same binder and a
+/// detach must empty it in place rather than free it.
 pub struct LocationService {
     state: Arc<Mutex<LocationState>>,
     /// The session's monotonic stamp source (a delivered fix carries it).
     stamp: Stamp,
+    /// True once the module filled this node; `false` is the disabled-device
+    /// answer a phone publishes with location off (and what a detach restores).
+    filled: bool,
 }
 
 impl LocationService {
+    /// The node in its **off** state: what `core` publishes for a device with
+    /// location off. It answers `isGeocodeAvailable` false and the structured
+    /// "not attached" error for every provider call, and serves no fix.
+    #[must_use]
+    pub fn off() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(LocationState::default())),
+            stamp: Stamp::new(),
+            filled: false,
+        }
+    }
+
+    /// Install the scripted state into the node `core` published.
+    ///
+    /// Called by [`LocationModule::attach`]: no second registration is made, so
+    /// a guest that already holds the `ILocationManager` proxy keeps talking to
+    /// the same binder and starts receiving fixes.
+    pub fn fill(&mut self, state: Arc<Mutex<LocationState>>, stamp: Stamp) {
+        self.state = state;
+        self.stamp = stamp;
+        self.filled = true;
+    }
+
+    /// Empty the node back to the honest disabled answer (a detach, or a
+    /// `core` re-install): every registration and fix is dropped, and the same
+    /// binder answers the off node from now on.
+    pub fn empty(&mut self) {
+        self.state = Arc::new(Mutex::new(LocationState::default()));
+        self.stamp = Stamp::new();
+        self.filled = false;
+    }
+
+    /// True while the module has filled this node.
+    #[must_use]
+    pub fn is_filled(&self) -> bool {
+        self.filled
+    }
+
+    /// The off node's answer: the framework's disabled-device truth.
+    fn off_transact(code: u32, reply: &mut Parcel) -> Result<bool> {
+        if code == codes::IS_GEOCODE_AVAILABLE {
+            // `Geocoder.isPresent()` asks this ahead of every geocode call; a
+            // device with no geocoder provider answers false.
+            write_no_exception(reply);
+            reply.write_int32(0);
+            return Ok(true);
+        }
+        Err(ServiceError::UnsupportedAndroidApi {
+            interface: DESCRIPTOR.to_string(),
+            code,
+            method: format!(
+                "{MODULE_ID}: the location module is not attached; the `location` name answers \
+                 the disabled-device node (a phone with location off). Attach it: {}",
+                crate::module::attach_call(MODULE_ID, Profile::Scripted)
+            ),
+        })
+    }
+
     fn lock(&self) -> MutexGuard<'_, LocationState> {
         self.state
             .lock()
@@ -1285,6 +1380,17 @@ fn skip_work_source(data: &mut Parcel) -> Result<()> {
     Ok(())
 }
 
+/// Publish the `location` `ServiceManager` name with its **off** node.
+///
+/// `core` calls this (see `core_module::FILLED_BY_MODULE`): a real device always
+/// publishes `ILocationManager` (`Geocoder.isPresent()` dereferences it without a
+/// null check), so the name must exist before any module is attached. The same
+/// node is what [`LocationModule::attach`] fills, which is why the binder never
+/// changes under a guest that cached the proxy.
+pub fn install(host: &mut ServiceHost) {
+    host.register_dynamic_named(SERVICE_NAME, DESCRIPTOR, Box::new(LocationService::off()));
+}
+
 impl ServiceObject for LocationService {
     fn call(
         &mut self,
@@ -1302,6 +1408,12 @@ impl ServiceObject for LocationService {
         })
     }
 
+    /// ADR-0029's `as_any_mut` seam: the `location` module fills the node
+    /// `core` published through `ServiceHost::dynamic_object_mut`.
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
+    }
+
     fn raw_transact(
         &mut self,
         interface: &str,
@@ -1311,6 +1423,12 @@ impl ServiceObject for LocationService {
     ) -> Result<bool> {
         if interface != DESCRIPTOR {
             return Ok(false);
+        }
+        if !self.filled {
+            // A detached (or never attached) node answers the disabled device
+            // state on the very same binder: a guest that cached the proxy gets
+            // the honest answer, never a stale success and never a dead handle.
+            return Self::off_transact(code, reply);
         }
         match code {
             // @nullable Location getLastLocation(String, LastLocationRequest,
@@ -1442,6 +1560,22 @@ impl ServiceObject for LocationService {
             }
             // void registerLocationPendingIntent(String, LocationRequest,
             // PendingIntent, String, String)
+            //
+            // MODLOC3: refused, and the reason is measured, not assumed. The
+            // image's `LocationProviderManager$LocationPendingIntentTransport`
+            // builds `new Intent()`, `putExtra` with the fix and
+            // `PendingIntentSender.send(pendingIntent, context, intent, ...)` —
+            // the Location travels as the **fill-in** intent of
+            // `IIntentSender.send`, under `LocationManager.KEY_LOCATION_CHANGED`
+            // (`"location"`, plus `"locations"` for a batched result and
+            // `"providerEnabled"` for the enabled/disabled callback). MODNOTIF5
+            // accepts `IIntentSender.send` but refuses a fill-in on a mutable
+            // sender (`Intent.fillIn` is not modelled, PIFILLIN) and drops it on
+            // an immutable one, so a fired sender cannot carry a fresh fix.
+            // Accepting the registration would mean either losing the Location
+            // (a PendingIntent that fires with no fix) or leaking a stale one
+            // into the record; both are fake success. The listener form is the
+            // supported path.
             codes::REGISTER_LOCATION_PENDING_INTENT => {
                 self.check_permission("requestLocationUpdates(PendingIntent)")?;
                 let provider = data.read_string16()?.unwrap_or_default();
@@ -1455,25 +1589,24 @@ impl ServiceObject for LocationService {
                 };
                 let _package = data.read_string16()?;
                 let _attribution_tag = data.read_string16()?;
-                let mut state = self.lock();
-                state.last_error = Some(format!(
-                    "registerLocationPendingIntent({provider}) refused: delivering location \
-                     through a PendingIntent needs IIntentSender.send with a marshalled Intent, \
-                     and this build has no Intent parcel writer (ATMS has no getIntentSender)"
-                ));
+                let reason = format!(
+                    "registerLocationPendingIntent({provider}) refused: the framework delivers \
+                     a fix as the **fill-in** intent of IIntentSender.send \
+                     (LocationPendingIntentTransport puts the Location under \
+                     LocationManager.KEY_LOCATION_CHANGED), and merging a fill-in into the \
+                     stored intent needs Intent.fillIn, which this build refuses (PIFILLIN); \
+                     use the LocationListener form"
+                );
                 if target.is_none() {
                     return Err(self.illegal_argument(
                         "registerLocationPendingIntent: null PendingIntent".into(),
                     ));
                 }
+                self.lock().last_error = Some(reason.clone());
                 return Err(ServiceError::UnsupportedAndroidApi {
                     interface: DESCRIPTOR.to_string(),
-                    code: INTENT_SENDER_CODE,
-                    method: format!(
-                        "{MODULE_ID}: registerLocationPendingIntent({provider}) has no delivery \
-                         path in this build (no IIntentSender.send / Intent parcel writer); use \
-                         the LocationListener form"
-                    ),
+                    code,
+                    method: format!("{MODULE_ID}: {reason}"),
                 });
             }
             // void unregisterLocationPendingIntent(PendingIntent)
@@ -1735,10 +1868,6 @@ impl ServiceObject for LocationService {
         }
     }
 }
-
-/// Transaction code used in the `registerLocationPendingIntent` refusal message
-/// (it names the missing delivery path, not an interface this module serves).
-const INTENT_SENDER_CODE: u32 = 0;
 
 /// `LocationManagerService.reverseGeocode`: nearest scripted place within its
 /// radius, or `None` for the framework's no-geocoder path.
@@ -2053,32 +2182,35 @@ impl Module for LocationModule {
         }
         // The attached state replaces the module's own, so a second attach
         // always starts from the config (never from a stale session).
-        self.state = Arc::new(Mutex::new(state));
-        self.last_stamp = Stamp::new();
-        // `register_dynamic_named` replaces the core install's offline node for
-        // this name (a device with no location module still publishes it), so a
-        // session never carries two binders with one descriptor.
-        host.register_dynamic_named(
-            SERVICE_NAME,
-            DESCRIPTOR,
-            Box::new(LocationService {
-                state: Arc::clone(&self.state),
-                stamp: self.last_stamp.clone(),
-            }),
-        );
+        let state = Arc::new(Mutex::new(state));
+        let stamp = Stamp::new();
+        // ADR-0029 note (MODSENS): the node is `core`'s. Fill it in place, so the
+        // binder a guest's `LocationManager` already holds keeps working across
+        // the hot attach (and a detach empties it in place instead of freeing
+        // it, which would leave the guest with a dead handle).
+        if host.dynamic_object_mut(DESCRIPTOR).is_none() {
+            // A host without `core` (the conformance kit builds one for `core`
+            // itself) has no node yet: publish the off node first, then fill it.
+            install(host);
+        }
+        let service = host
+            .dynamic_object_mut(DESCRIPTOR)
+            .and_then(|object| object.as_any_mut())
+            .and_then(|any| any.downcast_mut::<LocationService>())
+            .ok_or_else(|| ServiceError::ModuleRejected {
+                module: MODULE_ID,
+                detail: "the host has no LocationService node for `location`; `core` \
+                         publishes it and must be attached first"
+                    .into(),
+            })?;
+        service.fill(Arc::clone(&state), stamp.clone());
+        self.state = state;
+        self.last_stamp = stamp;
         self.profile = profile;
         Ok(())
     }
 
-    /// While the module is off, `location` keeps answering the disabled device
-    /// state: this is core's offline node (`extras::LocationService`), which is
-    /// what a phone with every provider off answers — `isGeocodeAvailable`
-    /// false, and a structured error for every provider call.
-    fn off_node(&self) -> Option<Box<dyn ServiceObject>> {
-        Some(Box::new(crate::extras::LocationService::new()))
-    }
-
-    fn detach(&mut self, _host: &mut ServiceHost) -> Result<()> {
+    fn detach(&mut self, host: &mut ServiceHost) -> Result<()> {
         self.stop_track();
         {
             let mut state = self.lock();
@@ -2086,6 +2218,17 @@ impl Module for LocationModule {
             state.registrations.clear();
             state.pending_current.clear();
             state.track = None;
+        }
+        // Empty the node `core` published: the same binder answers the disabled
+        // device state again, so a guest holding the proxy sees the honest
+        // answer (a re-registration would free the binder and hand the guest a
+        // stale handle instead).
+        if let Some(service) = host
+            .dynamic_object_mut(DESCRIPTOR)
+            .and_then(|object| object.as_any_mut())
+            .and_then(|any| any.downcast_mut::<LocationService>())
+        {
+            service.empty();
         }
         self.state = Arc::new(Mutex::new(LocationState::default()));
         self.last_stamp = Stamp::new();

@@ -752,14 +752,18 @@ impl ServiceObject for RestrictionsService {
 /// `ILocationManager.Stub.TRANSACTION_geocoderIsPresent` (image class
 /// `android.location.ILocationManager$Stub`, constant value 12).
 pub const LOCATION_TRANSACTION_GEOCODER_IS_PRESENT: u32 = 12;
-/// Descriptor of the platform location service.
-pub const LOCATION_DESCRIPTOR: &str = "android.location.ILocationManager";
 
-/// `android.location.ILocationManager`: the service a real device always
-/// publishes, with no location hardware and no geocoder provider.
+/// Descriptor of the platform location service.
+///
+/// A real device always publishes `ILocationManager`, with no location hardware
+/// and no geocoder provider. The **node** is not here: `core` publishes it and
+/// the `location` module fills it (`core_module::FILLED_BY_MODULE`, ADR-0029
+/// note MODSENS), because `LocationManager` caches the `ILocationManager` proxy
+/// for the process's life; a hot attach must reuse the binder.
 ///
 /// `Geocoder.isPresent()` is a static helper that asks this binder
-/// (`geocoderIsPresent`) without a null check:
+/// (`geocoderIsPresent`, code [`LOCATION_TRANSACTION_GEOCODER_IS_PRESENT`])
+/// without a null check:
 ///
 /// ```text
 /// ServiceManager.getService("location") -> null
@@ -768,45 +772,9 @@ pub const LOCATION_DESCRIPTOR: &str = "android.location.ILocationManager";
 ///
 /// (measured from the API-34 `android.location.Geocoder` dex, line 73/74), which
 /// is what killed `com.dot.gallery` in `GalleryApp.onCreate` after its keystore
-/// wall was removed. A device without a geocoder answers `false`; that is the
-/// honest answer here (the image has no geocoder provider and ACOS has no
-/// network to reach one). Other location calls are named unsupported gaps —
-/// they never occurred in the corpus before the frame rung.
-#[derive(Debug, Default)]
-pub struct LocationService;
-
-impl LocationService {
-    /// New handler.
-    #[must_use]
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-impl ServiceObject for LocationService {
-    fn call(&mut self, interface: &str, method: &MethodInfo, _args: &[Value]) -> Result<CallResult> {
-        Err(unsupported(interface, method))
-    }
-
-    fn raw_transact(
-        &mut self,
-        interface: &str,
-        code: u32,
-        _data: &mut acos_parcel::Parcel,
-        reply: &mut acos_parcel::Parcel,
-    ) -> Result<bool> {
-        if interface != LOCATION_DESCRIPTOR {
-            return Ok(false);
-        }
-        if code == LOCATION_TRANSACTION_GEOCODER_IS_PRESENT {
-            // `geocoderIsPresent()` is `writeBoolean`, i.e. one int word.
-            crate::exception::write_no_exception(reply);
-            reply.write_int32(0);
-            return Ok(true);
-        }
-        Ok(false)
-    }
-}
+/// wall was removed. A device without a geocoder answers `false`
+/// (`crate::modules::location::LocationService::off()` is that disabled-device
+/// answer now); ACOS has no geocoder provider and no network to reach one.
 
 // ---------------------------------------------------------------------------
 // ITrustManager ("trust")

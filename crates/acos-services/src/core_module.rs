@@ -119,7 +119,13 @@ const CONTROLS: [ControlOp; 0] = [];
 /// * `accessibility` — `core` installs the disabled fallback service (a session
 ///   that does not attach the module keeps the boot behaviour); the
 ///   `accessibility` module configures the same shared state and owns the name.
-pub const FILLED_BY_MODULE: &[&str] = &["sensorservice", "accessibility"];
+/// * `location` — `core` publishes the disabled-device node (`isGeocodeAvailable`
+///   false, a structured error for every provider call) for the same reason as
+///   `sensorservice` plus one more: `LocationManager` resolves the
+///   `ILocationManager` proxy once per process and keeps it, so a hot attach has
+///   to reuse the same binder. The `location` module fills that node while it is
+///   attached and a detach empties it back to the disabled answer.
+pub const FILLED_BY_MODULE: &[&str] = &["sensorservice", "accessibility", "location"];
 
 impl Default for CoreModule {
     fn default() -> Self {

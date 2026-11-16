@@ -859,11 +859,19 @@ pub trait Module: Send {
     ///
     /// ADR-0029's default is "no node": the name answers `null` (AOSP's own
     /// missing path) or the gap tombstone. A few names have no such path on a
-    /// real device: `location` is always published, and a phone with location
-    /// disabled still answers `ILocationManager` with no providers and no
-    /// geocoder. For those, the module hands back the honest disabled node and
-    /// [`ModuleRegistry::detach`] installs it after the attach scope has been
-    /// rolled back (so it is not undone with the module's own registrations).
+    /// real device, so they need a present-but-disabled node. There are two ways
+    /// to get one and they are not interchangeable:
+    ///
+    /// * **`core` publishes it** and the module fills it
+    ///   ([`crate::core_module::FILLED_BY_MODULE`], ADR-0029 note MODSENS) — this
+    ///   is what `sensorservice` and `location` do, because their framework
+    ///   client caches the proxy for the process's life and a hot attach must
+    ///   reuse the binder. The module has no `off_node`; a detach empties the
+    ///   node in place.
+    /// * **the module hands one back here** when the name is the module's own and
+    ///   no client caches the proxy: [`ModuleRegistry::detach`] installs it after
+    ///   the attach scope has been rolled back (so it is not undone with the
+    ///   module's own registrations). No shipped module needs this today.
     ///
     /// A returned node must answer the *disabled* device state, never data:
     /// the conformance kit's honest-report check rejects a detached module whose
@@ -1522,9 +1530,10 @@ impl ModuleRegistry {
         }
         // Every module that is still off and has a documented disabled node
         // (see [`Module::off_node`]) answers its name again. This is what makes
-        // a detach return the host to the same state the session started in:
-        // detaching `core` removes the node core registered for a name another
-        // module owns, and that module's off node takes the name back.
+        // a detach return the host to the same state the session started in.
+        // (A node `core` publishes and a module fills — `sensorservice`,
+        // `location` — is emptied by the module's own `detach` and is rolled back
+        // with `core`'s registrations; no shipped module needs this hook.)
         self.install_off_nodes(host);
         Ok(())
     }
