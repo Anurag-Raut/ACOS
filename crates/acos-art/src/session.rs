@@ -433,6 +433,11 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     let sock_dir = sdir.join("socket");
     fs::create_dir_all(&sock_dir)?;
     let logd = Logd::start(&sock_dir).map_err(Error::Io)?;
+    // SPIKE-NET: netd replacement for `/dev/socket/dnsproxyd` (gated). This is
+    // the *launcher's* socket dir; the production zygote gives the app process
+    // its own (`<plan>/<tag>/sock`, served by `zygote_prod::prepare_session`),
+    // and the exec path uses this one. Held until the session ends.
+    let _dns = crate::spike_net::serve_dnsproxyd_if_enabled(&sock_dir).map_err(Error::Io)?;
 
     let guest_apk = format!("/data/app/{apk_name}");
     let guest_out = format!("/data/session/{session_id}/out");
@@ -457,6 +462,9 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();
     sb.run_root(run.path());
+    // NET2: the relay session is addressed by this id (`acos-<id>`), which is
+    // what the live session API's net controls name.
+    sb.net_session(Some(&session_id));
     sb.seccomp_guest(true);
     sb.with_shim(false);
     sb.ro_bind(&art_shim, "/data/shim/libartshim.so");

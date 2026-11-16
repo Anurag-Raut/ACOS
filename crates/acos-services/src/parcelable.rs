@@ -133,6 +133,14 @@ pub enum FieldOp {
     /// `supportedModes[i].writeToParcel(dest, flags)`, and `readFromParcel`
     /// mirrors it with `Display.Mode.CREATOR.createFromParcel(source)`.
     CountedNested(&'static str),
+    /// A `writeInt` count followed by that many addresses as
+    /// `LinkProperties.writeAddresses` / `writeAddress` write them: the raw
+    /// address bytes via `Parcel.writeByteArray` and, for a 16-byte (IPv6)
+    /// address, `writeBoolean(hasScopeId)` plus `writeInt(scopeId)` when set.
+    ///
+    /// Not a parcelable list: the framework writes `InetAddress` bytes directly,
+    /// there is no class name and no `writeToParcel`.
+    AddressList,
     /// `DisplayCutout$ParcelableWrapper.writeCutoutToParcel`: an `int` variant
     /// marker (`-1` null, `0` `NO_CUTOUT`, `1` full cutout) and, for variant
     /// `1`, the full geometry. See [`read_cutout`]/[`write_cutout`].
@@ -771,6 +779,17 @@ pub static SPECS: &[ParcelableSpec] = &[
     ParcelableSpec {
         class: "android.graphics.Insets",
         fields: &[FieldOp::Int, FieldOp::Int, FieldOp::Int, FieldOp::Int],
+        verification: Verification::Full,
+    },
+    // `android.app.ActivityManager$PendingIntentInfo.writeToParcel` (image dex
+    // `framework/classes.dex`): `writeString(mCreatorPackage)`,
+    // `writeInt(mCreatorUid)`, `writeBoolean(mImmutable)`,
+    // `writeInt(mIntentSenderType)`. `IActivityManager.getInfoForIntentSender`
+    // answers one, and the framework reads it on the `PendingIntent` path
+    // (PIFILLIN).
+    ParcelableSpec {
+        class: "android.app.ActivityManager$PendingIntentInfo",
+        fields: &[FieldOp::Str16, FieldOp::Int, FieldOp::Bool, FieldOp::Int],
         verification: Verification::Full,
     },
     // `android.os.LocaleList.writeToParcel` is a single `writeString8`
@@ -1577,31 +1596,67 @@ pub static SPECS: &[ParcelableSpec] = &[
     // facts, domains, the dhcp server address byte array, MTU, TCP buffer
     // sizes, route parcelables, the nullable HTTP proxy (a byte marker), the
     // nullable NAT64 prefix, the stacked links (`writeList`), wake-on-LAN and
-    // the two captive-portal parcelables. ACOS's network carries no address
-    // list (the sandbox has no interface to describe), so every list is an
-    // explicit `0` count, never a fabricated address.
+    // the two captive-portal parcelables.
+    //
+    // The lists are variable length on the wire; each list is one field here.
+    // Without the network module every list is empty and the bytes are the ones
+    // ACOS shipped before (an explicit `0` count per list), so an empty list and
+    // the old three-`Int` form are byte-identical.
     ParcelableSpec {
         class: "android.net.LinkProperties",
         fields: &[
-            FieldOp::Str16,     // interface name
-            FieldOp::Int,       // link address count
-            FieldOp::Int,       // DNS address count
-            FieldOp::Int,       // validated private DNS count
-            FieldOp::Bool,      // usePrivateDns
-            FieldOp::Str16,     // privateDnsServerName
-            FieldOp::Int,       // PCSCF count
-            FieldOp::Str16,     // domains
+            FieldOp::Str16,    // interface name
+            FieldOp::ParcelableList("android.net.LinkAddress"), // link addresses
+            FieldOp::AddressList, // DNS servers
+            FieldOp::AddressList, // validated private DNS servers
+            FieldOp::Bool,     // usePrivateDns
+            FieldOp::Str16,    // privateDnsServerName
+            FieldOp::AddressList, // PCSCF servers
+            FieldOp::Str16,    // domains
             FieldOp::ByteArray, // dhcp server address (null)
-            FieldOp::Int,       // mtu
-            FieldOp::Str16,     // tcpBufferSizes
-            FieldOp::Int,       // route count
-            FieldOp::Byte,      // httpProxy presence marker
-            FieldOp::Str16,     // nat64Prefix (writeParcelable)
-            FieldOp::Int,       // stacked links (`writeList` count)
-            FieldOp::Bool,      // wakeOnLanSupported
-            FieldOp::Str16,     // captivePortalApiUrl (writeParcelable)
-            FieldOp::Str16,     // captivePortalData (writeParcelable)
+            FieldOp::Int,      // mtu
+            FieldOp::Str16,    // tcpBufferSizes
+            FieldOp::ParcelableList("android.net.RouteInfo"), // routes
+            FieldOp::Byte,     // httpProxy presence marker
+            FieldOp::Str16,    // nat64Prefix (writeParcelable)
+            FieldOp::Int,      // stacked links (`writeList` count)
+            FieldOp::Bool,     // wakeOnLanSupported
+            FieldOp::Str16,    // captivePortalApiUrl (writeParcelable)
+            FieldOp::Str16,    // captivePortalData (writeParcelable)
         ],
+        verification: Verification::Full,
+    },
+    // `LinkAddress.writeToParcel`: the raw address bytes, prefix length, flags,
+    // scope, then the two lifetimes (`LIFETIME_UNKNOWN` = -1 when unset).
+    ParcelableSpec {
+        class: "android.net.LinkAddress",
+        fields: &[
+            FieldOp::ByteArray, // address.getAddress()
+            FieldOp::Int,       // prefixLength
+            FieldOp::Int,       // flags (OsConstants.IFA_F_*)
+            FieldOp::Int,       // scope (RT_SCOPE_*)
+            FieldOp::Long,      // deprecationTime
+            FieldOp::Long,      // expirationTime
+        ],
+        verification: Verification::Full,
+    },
+    // `RouteInfo.writeToParcel`: destination `IpPrefix` (writeParcelable),
+    // gateway bytes, interface, type, MTU.
+    ParcelableSpec {
+        class: "android.net.RouteInfo",
+        fields: &[
+            FieldOp::Named("android.net.IpPrefix"), // destination
+            FieldOp::ByteArray, // gateway (null for an on-link route)
+            FieldOp::Str16,     // mInterface
+            FieldOp::Int,       // mType (RTN_UNICAST = 1)
+            FieldOp::Int,       // mMtu
+        ],
+        verification: Verification::Full,
+    },
+    // `IpPrefix.writeToParcel`: address bytes + prefix length.
+    ParcelableSpec {
+        class: "android.net.IpPrefix",
+        fields: &[FieldOp::ByteArray, FieldOp::Int],
         verification: Verification::Full,
     },
     // `NetworkInfo.writeToParcel` (the deprecated query replies).
@@ -2031,6 +2086,13 @@ pub fn read_payload(class: &str, parcel: &mut Parcel) -> Result<Parcelable> {
     if class == AUDIO_ATTRIBUTES_CLASS {
         return read_audio_attributes(parcel);
     }
+    // PIFILLIN: a `Location` travels in a `PendingIntent` fill-in's extras
+    // (`LocationManager.KEY_LOCATION_CHANGED`), so the codec has to read and
+    // write it. The layout lives in the `location` module next to the writer the
+    // `ILocationListener` path already uses.
+    if class == crate::modules::location::LOCATION_CLASS {
+        return crate::modules::location::read_location_value(parcel);
+    }
     let spec = spec_for(class).ok_or_else(|| unsupported(class))?;
     let mut values = Vec::with_capacity(spec.fields.len());
     // `ACOS_PARCEL_TRACE=1` prints one line per field with the parcel offset, so
@@ -2075,6 +2137,9 @@ pub fn write_payload(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
     }
     if class == AUDIO_ATTRIBUTES_CLASS {
         return write_audio_attributes(parcel, value);
+    }
+    if class == crate::modules::location::LOCATION_CLASS {
+        return crate::modules::location::write_location_value(parcel, value);
     }
     let spec = spec_for(class).ok_or_else(|| unsupported(class))?;
     if values.len() != spec.fields.len() {
@@ -2281,6 +2346,30 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
                     } else {
                         out.push(Value::Parcelable(read_payload(class, parcel)?));
                     }
+                }
+                Value::List(Some(out))
+            }
+        }
+        FieldOp::AddressList => {
+            let n = parcel.read_int32()?;
+            if n < 0 {
+                Value::List(None)
+            } else {
+                let n = n as usize;
+                if n > parcel.remaining() {
+                    return Err(ParcelError::BadLength {
+                        len: n,
+                        max: parcel.remaining(),
+                    }
+                    .into());
+                }
+                let mut out = Vec::with_capacity(n);
+                for _ in 0..n {
+                    let addr = parcel.read_byte_array()?;
+                    if addr.as_ref().map(Vec::len) == Some(16) && parcel.read_bool()? {
+                        let _scope = parcel.read_int32()?;
+                    }
+                    out.push(Value::ByteArray(addr));
                 }
                 Value::List(Some(out))
             }
@@ -2640,6 +2729,34 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
                 }
             }
             _ => return Err(bad(format!("expected counted payloads, got {value:?}"))),
+        },
+        FieldOp::AddressList => match value {
+            Value::List(None) | Value::Skipped => parcel.write_int32(-1),
+            Value::List(Some(items)) => {
+                parcel.write_int32(
+                    i32::try_from(items.len()).map_err(|_| bad("address list too large"))?,
+                );
+                for item in items {
+                    let Value::ByteArray(Some(addr)) = item else {
+                        return Err(bad(format!(
+                            "expected a byte-array address, got {item:?}"
+                        )));
+                    };
+                    match addr.len() {
+                        // `writeAddress`: the bytes, then (IPv6 only) whether a
+                        // scope id follows. ACOS's addresses carry no scope id.
+                        4 => parcel.write_byte_array(Some(addr))?,
+                        16 => {
+                            parcel.write_byte_array(Some(addr))?;
+                            parcel.write_bool(false);
+                        }
+                        n => {
+                            return Err(bad(format!("address is {n} bytes, not 4 or 16")));
+                        }
+                    }
+                }
+            }
+            _ => return Err(bad(format!("expected an address list, got {value:?}"))),
         },
         FieldOp::Named(_) | FieldOp::IgnoredNamed(_) => {
             let p = expect_parcelable(value)?;
@@ -4153,6 +4270,7 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         // The Icon payload is a direct `Icon.writeToParcel` nested call.
         FieldOp::Icon => call == "writeParcelable",
         FieldOp::CountedNested(_) => call == "writeInt",
+        FieldOp::AddressList => call == "writeInt",
         // No Java `writeToParcel` call emits these bytes (the peer's native
         // reader consumes them), so a DEX scan cannot verify them.
         FieldOp::Raw => false,

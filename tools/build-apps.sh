@@ -19,6 +19,8 @@
 #   fixtures/build/apps/insets-probe.apk
 #   fixtures/build/apps/sensor-probe.apk   (MODSENS: native sensorservice feed)
 #   fixtures/build/apps/notif-perm-probe.apk (MODNOTIF5: notifications + POST_NOTIFICATIONS gate)
+#   fixtures/build/apps/net-check.apk  (NET3/NET4: the relay fetch fixture)
+#
 # Installation on a device is attempted only if one is already attached; no
 # emulator is ever started here.
 set -euo pipefail
@@ -247,6 +249,13 @@ build_apk location-probe
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from
 # ACOS_ART_KEYPROBE_MODE (see results/compat/K5.md).
+# --- net-check ---------------------------------------------------------------
+# SPIKE-NET fixture: apps that need the real network. HttpURLConnection GET of
+# https://example.com; the status code (or the exception class) goes into a
+# TextView, plus the ConnectivityManager report.
+build_apk net-check
+
+# --- keystore-probe ----------------------------------------------------------
 build_apk keystore-probe
 
 # insets-probe is the W7 window-model fixture: an edge-to-edge Activity that

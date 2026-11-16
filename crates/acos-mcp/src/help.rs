@@ -351,7 +351,7 @@ fn tool_returns(tool: &ToolInfo) -> &'static str {
         "acos_services" => "`attached[]` (`id`, `profile`) and `modules[]` (`id`, `profile`, `attach`, `state`, `fidelity`, `reason`); attach/detach answer with the set they produced",
         "acos_service_ctl" => "`id`, `op`, `value` (the module's own answer) and the honest `modules[]` rows after the control; a detached module is a structured refusal",
         "acos_capabilities" => "the implemented command list, the resolved `acos` binary/version, the server limits and — with `session_id` — that session's attached modules",
-        "acos_doctor" => "`checks[]` with pass/fail and a concrete `fix` per failing check",
+        "acos_net" => "`action`, the relay state (`up`, `pasta_version`, `host_ports`) and this \n                       session's own row (`networked`, `offline`, `delay_ms`, `loss_pct`); \n                       `hostport` also returns the relay's `host_ports` list",        "acos_doctor" => "`checks[]` with pass/fail and a concrete `fix` per failing check",
         "acos_help" => "`guide` (the requested section), `guide_topics`, `fidelity_rules`, `supported`/`unsupported`",
         "acos_inspect" => "package, version, min/target SDK, launcher, permissions, components, DEX/native/asset inventory, signature schemes",
         "acos_observe" => "the reference session's tree and/or text, plus frame metadata (frame_seq, cause_id, content_hash, meaningful)",

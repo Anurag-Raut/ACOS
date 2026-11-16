@@ -9,6 +9,7 @@
 
 use acos_parcel::{BinderId, Parcel};
 use acos_services::module::{ModuleConfig, ModuleRegistry, ModuleSpec, Profile};
+use acos_services::host::FireSender;
 use acos_services::{ServiceError, ServiceHost};
 use serde_json::json;
 
@@ -23,11 +24,23 @@ fn spec(config: serde_json::Value) -> ModuleSpec {
 
 /// A host with `core` + the location module attached, and its binder.
 fn host_with(config: serde_json::Value) -> (ServiceHost, BinderId) {
+    host_with_fire(config, None).0
+}
+
+/// The same, with the session's `IIntentSender` path published before the
+/// module attaches (a `PendingIntent` registration reads it at `attach`).
+fn host_with_fire(
+    config: serde_json::Value,
+    fire: Option<FireSender>,
+) -> ((ServiceHost, BinderId), ModuleRegistry) {
     let mut host = ServiceHost::new();
     let mut registry = ModuleRegistry::standard();
     registry
         .attach(&mut host, "core", Profile::Real, &ModuleConfig::default())
         .expect("core attaches");
+    if let Some(fire) = fire {
+        host.set_pending_intent_fire(fire);
+    }
     registry
         .attach(
             &mut host,
@@ -40,7 +53,7 @@ fn host_with(config: serde_json::Value) -> (ServiceHost, BinderId) {
         .check_service("location")
         .expect("lookup is infallible")
         .expect("location must resolve");
-    (host, binder)
+    ((host, binder), registry)
 }
 
 fn transact(
@@ -620,59 +633,141 @@ fn a_provider_toggle_notifies_its_listeners_and_a_detached_module_is_honest() {
     ));
 }
 
-/// MODLOC3: `requestLocationUpdates(PendingIntent)` (transaction 5) is refused,
-/// and the refusal names the one thing it would need.
+/// PIFILLIN: `requestLocationUpdates(PendingIntent)` (transaction 5) keeps the
+/// caller's `IIntentSender` and fires it with a **fill-in** intent carrying the
+/// fix, exactly like `LocationProviderManager$LocationPendingIntentTransport`
+/// (`results/handoff/MODLOC3/pending-intent-dex.txt`):
 ///
-/// The image's own client is the evidence: `LocationPendingIntentTransport`
-/// (`services/classes2.dex`, class
-/// `Lcom/android/server/location/provider/LocationProviderManager$LocationPendingIntentTransport;`)
-/// builds `new Intent()`, `putExtra("location", lastLocation)` and
-/// `PendingIntentSender.send(pendingIntent, context, intent, …)` — the fix travels
-/// as the **fill-in** intent of `IIntentSender.send`, under
-/// `LocationManager.KEY_LOCATION_CHANGED`. MODNOTIF5 refuses a fill-in on a
-/// mutable sender (`Intent.fillIn` is not modelled) and drops it on an immutable
-/// one, so accepting this registration could only fire a sender with no fix or
-/// with a stale one. The step is refused; the LocationListener form is the
-/// supported path.
+/// * registration answers the void success and fires `providerEnabled`, the
+///   transport's `deliverOnProviderEnabledChanged` payload;
+/// * every `set_location` fires the sender once with
+///   `putExtra("location", fix)` — the extra the framework uses
+///   (`LocationManager.KEY_LOCATION_CHANGED`);
+/// * a provider toggle fires `providerEnabled` again;
+/// * unregistering stops the fires.
+///
+/// The merged accessor (`p.merge(...)`) is a handler returning `None` and no
+/// start result; the module's contract is "queue the fill-in, fire it once".
 #[test]
-fn the_pending_intent_form_is_refused_and_names_the_fill_in_it_needs() {
-    let (mut host, binder) = host_with(json!({}));
-    // A real `PendingIntent` parcel: the presence word, then the strong binder.
+fn the_pending_intent_form_keeps_the_sender_and_fires_the_fix_as_a_fill_in() {
+    use acos_services::modules::location::{
+        KEY_LOCATION_CHANGED, KEY_PROVIDER_ENABLED, LOCATION_CLASS, LOCATION_LATITUDE,
+        LOCATION_LONGITUDE, LOCATION_PROVIDER,
+    };
+    use acos_services::ams::Extra;
+    use acos_services::value::Value;
+    use std::sync::{Arc, Mutex};
+
+    let fired: Arc<Mutex<Vec<(u64, Option<acos_services::ams::IntentFacts>)>>> =
+        Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&fired);
+    let fire: FireSender = Arc::new(move |sender, _code, fill_in| {
+        sink.lock().expect("fired").push((sender, fill_in));
+        Ok(acos_services::pending_intent::SendEvidence {
+            code: 0,
+            outcome: Ok(0),
+            intent: acos_services::ams::IntentFacts::default(),
+            refused_cancelled: false,
+            fill_in_ignored: false,
+            fill_in: None,
+            fill_in_changes: 0,
+        })
+    });
+    let ((mut host, binder), mut registry) = host_with_fire(json!({}), Some(fire));
+
     let sender = BinderId(0x1000_0005);
-    let error = transact(&mut host, binder, 5, |data| {
-        data.write_string16("gps").expect("provider");
-        write_location_request(data, "gps");
+    let register = |host: &mut ServiceHost| {
+        transact(host, binder, 5, |data| {
+            data.write_string16("gps").expect("provider");
+            write_location_request(data, "gps");
+            data.write_int32(1);
+            data.write_strong_binder(sender);
+            data.write_string16("dev.acos.fixtures.locationprobe")
+                .expect("package");
+            data.write_string16_opt(None).expect("attribution tag");
+        })
+    };
+    let mut reply = register(&mut host).expect("the pending-intent form registers");
+    assert_eq!(reply.read_int32().expect("exception header"), 0);
+    {
+        let fired = fired.lock().expect("fired");
+        assert_eq!(fired.len(), 1, "registration reports the provider state");
+        assert_eq!(fired[0].0, sender.0);
+        let fill_in = fired[0].1.clone().expect("a fill-in");
+        assert_eq!(
+            fill_in.extras.get(KEY_PROVIDER_ENABLED),
+            Some(&Extra::Bool(true)),
+            "deliverOnProviderEnabledChanged: putExtra(\"providerEnabled\", enabled)"
+        );
+    }
+
+    // A fix fires the sender once with the Location under the framework's key.
+    let value = registry
+        .control(
+            &mut host,
+            "location",
+            "set_location",
+            &json!({"provider": "gps", "lat": 37.4220, "lng": -122.0841, "accuracy": 4.0}),
+        )
+        .expect("set_location");
+    assert_eq!(value["delivered"], 1);
+    assert_eq!(value["pending_intent_fires"], 1);
+    {
+        let fired = fired.lock().expect("fired");
+        assert_eq!(fired.len(), 2, "one registration fire + one fix fire");
+        let fill_in = fired[1].1.clone().expect("a fill-in");
+        let Some(Extra::Parcelable(location)) = fill_in.extras.get(KEY_LOCATION_CHANGED) else {
+            panic!("the fix must travel under {KEY_LOCATION_CHANGED}: {:?}", fill_in.extras);
+        };
+        assert_eq!(location.class(), Some(LOCATION_CLASS));
+        let fields = location.fields().expect("Location fields");
+        assert_eq!(fields[LOCATION_PROVIDER], Value::Str8(Some("gps".into())));
+        assert_eq!(fields[LOCATION_LATITUDE], Value::Double(37.4220));
+        assert_eq!(fields[LOCATION_LONGITUDE], Value::Double(-122.0841));
+        // The extra re-encodes to the image's `Location.writeToParcel` bytes, so
+        // the guest's `Location.CREATOR` is what reads it.
+        let mut parcel = Parcel::new();
+        acos_services::parcelable::write_payload(&mut parcel, location).expect("encode Location");
+        parcel.set_data_position(0);
+        assert_eq!(parcel.read_string8().expect("provider").as_deref(), Some("gps"));
+    }
+
+    // A provider toggle fires `providerEnabled` for the registration.
+    let toggled = registry
+        .control(
+            &mut host,
+            "location",
+            "set_provider_enabled",
+            &json!({"provider": "gps", "enabled": false}),
+        )
+        .expect("set_provider_enabled");
+    assert_eq!(toggled["pending_intent_fires"], 1);
+    {
+        let fired = fired.lock().expect("fired");
+        let (_, fill_in) = fired.last().expect("a fire");
+        assert_eq!(
+            fill_in.as_ref().and_then(|f| f.extras.get(KEY_PROVIDER_ENABLED)),
+            Some(&Extra::Bool(false))
+        );
+    }
+
+    // Unregistering the sender stops it: no more fires for a fix.
+    transact(&mut host, binder, 6, |data| {
         data.write_int32(1);
         data.write_strong_binder(sender);
-        data.write_string16("dev.acos.fixtures.locationprobe")
-            .expect("package");
-        data.write_string16_opt(None).expect("attribution tag");
     })
-    .expect_err("the pending-intent form must be refused, never accepted silently");
-    assert_eq!(error.code(), "UNSUPPORTED_ANDROID_API");
-    match &error {
-        ServiceError::UnsupportedAndroidApi {
-            interface,
-            code,
-            method,
-        } => {
-            assert_eq!(interface, DESCRIPTOR);
-            // The refusal reports the transaction the caller sent, not a made-up
-            // interface code.
-            assert_eq!(*code, 5);
-            assert!(
-                method.contains("KEY_LOCATION_CHANGED"),
-                "the refusal must name the extra the framework sends: {method}"
-            );
-            assert!(
-                method.contains("fill-in") && method.contains("PIFILLIN"),
-                "the refusal must name the fill-in merge it needs: {method}"
-            );
-            assert!(
-                method.contains("LocationListener"),
-                "the refusal must name the supported path: {method}"
-            );
-        }
-        other => panic!("expected UnsupportedAndroidApi, got {other:?}"),
-    }
+    .expect("unregister");
+    registry
+        .control(
+            &mut host,
+            "location",
+            "set_location",
+            &json!({"provider": "gps", "lat": 1.0, "lng": 2.0, "accuracy": 5.0}),
+        )
+        .expect("set_location after unregister");
+    assert_eq!(
+        fired.lock().expect("fired").len(),
+        3,
+        "an unregistered sender is not fired"
+    );
 }

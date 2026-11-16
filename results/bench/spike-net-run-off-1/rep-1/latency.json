@@ -1,0 +1,80 @@
+{
+  "acos": "/home/Qui/.t3/worktrees/acos/t3-bd758e68-c5d2c8dcdcd2504d/.cache/sn3-target/release/acos",
+  "binary_sha256": "c85b26f7f2f8f2d9fae701a94f5cebafd4fcc794cc85d5667bea86ca27454865",
+  "bundle_wall_s": 4.79,
+  "checks": {
+    "failed_by_code": {},
+    "failed_steps": 0
+  },
+  "env": {
+    "ACOS_STRICT_SETTLE": "default",
+    "animations": "on"
+  },
+  "errors": [
+    "RuntimeError: two consecutive settled captures differ: [None, None]"
+  ],
+  "failures": {
+    "failed_by_code": {},
+    "failed_steps": 0,
+    "rows": []
+  },
+  "host_after": {
+    "loadavg1": 3.45,
+    "loadavg15": 10.01,
+    "loadavg5": 7.28,
+    "mem_available_gib": 48.25,
+    "mem_available_mib": 49403.2,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-f066ed14-06e9c0727e3632b2 && cat > results/handoff/REL3E/rel3e-handled.yaml <<'EOF'\n# REL3E: a real-ART scenario",
+        "comm": "bash",
+        "pid": 479543
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task REL3E -- tools/guarded.sh --mem 10G --time 600 -- env -u ACOS_HOME ACOS_ART_BIN=/home/Qui/.t3/worktrees/acos/t3-f",
+        "comm": "bash",
+        "pid": 479546
+      }
+    ],
+    "runnable": "5/1832",
+    "used_mib": 12505.5,
+    "used_pct": 20.2,
+    "utc": "2026-11-16T03:24:12+00:00"
+  },
+  "host_before": {
+    "loadavg1": 3.45,
+    "loadavg15": 10.01,
+    "loadavg5": 7.28,
+    "mem_available_gib": 48.26,
+    "mem_available_mib": 49416.3,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-f066ed14-06e9c0727e3632b2 && cat > results/handoff/REL3E/rel3e-handled.yaml <<'EOF'\n# REL3E: a real-ART scenario",
+        "comm": "bash",
+        "pid": 479543
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task REL3E -- tools/guarded.sh --mem 10G --time 600 -- env -u ACOS_HOME ACOS_ART_BIN=/home/Qui/.t3/worktrees/acos/t3-f",
+        "comm": "bash",
+        "pid": 479546
+      }
+    ],
+    "runnable": "5/1832",
+    "used_mib": 12492.4,
+    "used_pct": 20.18,
+    "utc": "2026-11-16T03:24:12+00:00"
+  },
+  "ok": false,
+  "phase": "latency",
+  "samples": {},
+  "schema": "acos-bench-phase/2",
+  "survivors": [],
+  "teardowns": [],
+  "utc": "2026-11-16T03:24:12+00:00"
+}

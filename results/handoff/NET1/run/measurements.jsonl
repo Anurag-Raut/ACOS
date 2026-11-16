@@ -1,0 +1,13 @@
+{"metric":"relay_up","wall_ms":32,"relay_pss_kb":20359,"pasta_version":"2026_10_02.cba3570","pasta_tag_expected":"2026_10_02.cba3570"}
+{"metric":"http_200","n":1,"attached":1,"http_200":1,"attach_ms_last":17.1}
+{"metric":"http_200","n":20,"attached":20,"http_200":20,"attach_ms_last":43.4}
+{"metric":"offline_isolation","iso1_failed":1,"iso1_200":22,"iso2_200":43}
+{"metric":"latency_isolation","iso1_before":125,"iso1_after":82,"iso2_before":96,"iso2_after":1301}
+{"metric":"host_loopback","result":"000FAIL"}
+{"metric":"lan_blocked","result":"000FAIL","ip":"192.168.31.2"}
+{"metric":"fail_closed","up":"False","error":"network-unavailable"}
+{"metric":"restart_recovery","up":"True","http_200":1}
+{"metric":"cycle_leak","cycles":50,"sessions_left":0,"relay_veths":0,"session_rules":0,"all_ok":1}
+{"metric":"pss","n":1,"pss":{"pasta_kb": 16676, "fabric_kb": 639, "total_kb": 17315}}
+{"metric":"pss","n":5,"pss":{"pasta_kb": 16676, "fabric_kb": 639, "total_kb": 17315}}
+{"metric":"pss","n":20,"pss":{"pasta_kb": 16676, "fabric_kb": 654, "total_kb": 17330}}

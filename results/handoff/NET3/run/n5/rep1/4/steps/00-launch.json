@@ -1,0 +1,25 @@
+{
+  "assertions": [],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 138,
+  "evidence": [
+    {
+      "kind": "step",
+      "path": "steps/00-launch.json"
+    }
+  ],
+  "index": 0,
+  "provenance": {
+    "frame": "host-observed",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "launch",
+  "trust": "trusted"
+}

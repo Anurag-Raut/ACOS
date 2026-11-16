@@ -1405,6 +1405,10 @@ def phase_loop(args):
     samples = {}
     errors = []
     doc = {}
+    # Defined before the `try`: the handler below and the returned document both
+    # read it, so a failure inside the bundle must report *that* error instead of
+    # dying with `UnboundLocalError: cohort` (found running the SPIKE-NET A/B).
+    cohort = {}
     try:
         p5 = load_module("h6_p5_loop", P5_LOOP)
         p5.APK = COUNTER

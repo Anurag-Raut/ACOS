@@ -1176,30 +1176,13 @@ fn execute_step(
                     "the backend cannot observe a UI tree",
                 );
             }
-            match backend.observe() {
-                Ok(observation) => {
-                    if let Some(failure) = observation_binding_error(backend.id(), &observation) {
-                        return failure;
-                    }
-                    if let Some(bound) = bound_frame_seq {
-                        if observation.frame.frame_seq != bound {
-                            return frame_binding_failure(bound, &observation);
-                        }
-                    }
-                    if let Some(failure) = meaningful_error(&observation) {
-                        return failure;
-                    }
-                    let evaluated = eval_text(assertion, &observation);
-                    let mut exec = if evaluated.result.passed {
-                        StepExec::passed_assertion(evaluated)
-                    } else {
-                        StepExec::failed(evaluated)
-                    };
-                    exec.observation = Some(observation);
-                    exec
-                }
-                Err(error) => StepExec::backend_error(&error, backend.id(), "assert_text"),
-            }
+            observation_assertion(
+                backend,
+                |observation| eval_text(assertion, observation),
+                "assert_text",
+                bound_frame_seq,
+                assertion.timeout_ms,
+            )
         }
         StepRef::AssertVisible(assertion) => {
             capabilities_used.insert(Capability::UiTree.as_str().to_string());
@@ -1214,6 +1197,7 @@ fn execute_step(
                 |observation| eval_visible(assertion, observation),
                 "assert_visible",
                 bound_frame_seq,
+                assertion.timeout_ms,
             )
         }
         StepRef::AssertNotVisible(assertion) => {
@@ -1229,6 +1213,7 @@ fn execute_step(
                 |observation| eval_not_visible(assertion, observation),
                 "assert_not_visible",
                 bound_frame_seq,
+                assertion.timeout_ms,
             )
         }
         StepRef::AssertState(assertion) => {
@@ -1244,6 +1229,7 @@ fn execute_step(
                 |observation| eval_state(assertion, observation),
                 "assert_state",
                 bound_frame_seq,
+                assertion.timeout_ms,
             )
         }
         StepRef::AssertWindows(assertion) => {
@@ -1259,6 +1245,10 @@ fn execute_step(
                 |observation| eval_windows(assertion, observation),
                 "assert_windows",
                 bound_frame_seq,
+                // `assert_windows` has no `timeout_ms`: it describes the frame
+                // the previous step left behind. (NET4 gave the text/state
+                // assertions a real wait; this one keeps the single sample.)
+                None,
             )
         }
         StepRef::AssertLog(assertion) => {
@@ -1639,36 +1629,105 @@ fn environment_step(
     }
 }
 
+/// Evaluate one assertion against the live tree.
+///
+/// **`timeout_ms` is a real, event-driven wait (NET4).** The scenario schema
+/// documents it as "the runtime waits for a matching frame/tree, never for a
+/// fixed sleep", but this function used to take a single `observe()` and return —
+/// the same defect W17 fixed for `wait_for` (one observation, ~1 ms, even with a
+/// 15 s budget). Measured consequence: `scenarios/net-check.yaml` asserts
+/// `exact "HTTP 200"` with `timeout_ms: 60000` on a status line the app fills in
+/// from a background fetch; roughly 1 run in 18 sampled the tree while it still
+/// read `pending` and failed a scenario that passes on the next sample.
+///
+/// The wait keeps the assertion's own rule: every poll evaluates the *same*
+/// predicate, and only a genuine pass ends the wait early. A poll that fails is
+/// only "not yet" while the deadline is open; when it closes, the last
+/// evaluation (with its diff and observation) is the step's verdict — never a
+/// timeout that claims to have checked something it did not.
 fn observation_assertion(
     backend: &mut dyn Backend,
-    evaluate: impl FnOnce(&SessionObservation) -> Evaluated,
+    evaluate: impl Fn(&SessionObservation) -> Evaluated,
     context: &str,
     bound_frame_seq: Option<u64>,
+    timeout_ms: Option<u64>,
 ) -> StepExec {
-    match backend.observe() {
-        Ok(observation) => {
-            if let Some(failure) = observation_binding_error(backend.id(), &observation) {
-                return failure;
-            }
-            if let Some(bound) = bound_frame_seq {
-                if observation.frame.frame_seq != bound {
-                    return frame_binding_failure(bound, &observation);
+    // A frame-bound assertion describes *that* frame, so a re-sample would
+    // compare against a different one — which is exactly what a `timeout_ms`
+    // asks for: "the live tree, until it says this". Such an assertion cites the
+    // sample that passed and drops the previous step's frame binding (the
+    // verdict still records the frame it read). Without a timeout nothing
+    // changes: one sample, bound to the frame the last step left behind.
+    let wait = match timeout_ms {
+        Some(ms) if ms > 0 => Some(Duration::from_millis(ms)),
+        _ => None,
+    };
+    let bound_frame_seq = if wait.is_some() { None } else { bound_frame_seq };
+    let started = Instant::now();
+    // Each poll is a fresh traversal and, on ART, a stored frame; pace them so a
+    // long budget cannot exhaust the guest's buffer pool (same rule, same
+    // numbers, as `wait_for`).
+    let mut interval = Duration::from_millis(WAIT_FOR_POLL_INTERVAL_MS);
+    let mut polls = 0u64;
+    loop {
+        polls += 1;
+        match backend.observe() {
+            Ok(observation) => {
+                if let Some(failure) = observation_binding_error(backend.id(), &observation) {
+                    return failure;
                 }
+                if let Some(bound) = bound_frame_seq {
+                    if observation.frame.frame_seq != bound {
+                        return frame_binding_failure(bound, &observation);
+                    }
+                }
+                if let Some(failure) = meaningful_error(&observation) {
+                    return failure;
+                }
+                let evaluated = evaluate(&observation);
+                let passed = evaluated.result.passed;
+                let mut exec = if passed {
+                    StepExec::passed_assertion(evaluated)
+                } else {
+                    StepExec::failed(evaluated)
+                };
+                let elapsed = started.elapsed();
+                if passed || wait.is_none() {
+                    if let Some(error) = exec.error.as_mut() {
+                        annotate_assert_wait(error, polls, elapsed);
+                    }
+                    exec.observation = Some(observation);
+                    return exec;
+                }
+                if elapsed >= wait.unwrap_or_default() {
+                    // The budget is spent: the last sample *is* the answer.
+                    if let Some(error) = exec.error.as_mut() {
+                        annotate_assert_wait(error, polls, elapsed);
+                    }
+                    exec.observation = Some(observation);
+                    return exec;
+                }
+                interval = interval.min(
+                    wait.unwrap_or_default().saturating_sub(elapsed).max(Duration::from_millis(1)),
+                );
             }
-            if let Some(failure) = meaningful_error(&observation) {
-                return failure;
-            }
-            let evaluated = evaluate(&observation);
-            let mut exec = if evaluated.result.passed {
-                StepExec::passed_assertion(evaluated)
-            } else {
-                StepExec::failed(evaluated)
-            };
-            exec.observation = Some(observation);
-            exec
+            Err(error) => return StepExec::backend_error(&error, backend.id(), context),
         }
-        Err(error) => StepExec::backend_error(&error, backend.id(), context),
+        std::thread::sleep(interval);
+        interval = (interval * 2).min(Duration::from_millis(WAIT_FOR_MAX_POLL_INTERVAL_MS));
     }
+}
+
+/// Record how an assertion's wait ended (`polls`, `waited_ms`), so a failure
+/// that only appeared after N samples is distinguishable from one that was
+/// already true on the first.
+fn annotate_assert_wait(error: &mut acos_protocol::ProtocolError, polls: u64, elapsed: Duration) {
+    let mut details = error.details.take().unwrap_or_else(|| serde_json::json!({}));
+    if let Some(object) = details.as_object_mut() {
+        object.insert("polls".to_string(), serde_json::json!(polls));
+        object.insert("waited_ms".to_string(), serde_json::json!(elapsed.as_millis() as u64));
+    }
+    error.details = Some(details);
 }
 
 /// Steps that establish (or deliberately wait for) a new completed frame. A pure

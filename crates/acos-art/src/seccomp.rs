@@ -351,7 +351,12 @@ fn audit_action() -> DenyAction {
 }
 
 /// Assemble the filter program.
-fn build_program_with(action: &DenyAction) -> Vec<Insn> {
+///
+/// SPIKE-NET: `allow_inet` also permits `AF_INET`/`AF_INET6` sockets. It is
+/// only ever set when `ACOS_SPIKE_NET=1`, i.e. when the session really has a
+/// network namespace with an interface in it (ADR-0030 §2: the address
+/// families are allowed only when the network module is attached).
+fn build_program_with(action: &DenyAction, allow_inet: bool) -> Vec<Insn> {
     let mut b = Builder::new();
     let deny = b.label();
     let kill = b.label();
@@ -382,7 +387,24 @@ fn build_program_with(action: &DenyAction) -> Vec<Insn> {
 
     b.mark(socket_check);
     b.ld_abs(OFF_ARG0);
-    b.jeq(libc::AF_UNIX as u32, list, deny);
+    if allow_inet {
+        // SPIKE-NET: `AF_UNIX | AF_INET | AF_INET6` pass on to the syscall
+        // deny list, every other family (notably `AF_NETLINK`, which is how
+        // nftables would rewrite the session's LAN-drop chain) is denied. The
+        // chain must fall through to `deny` only after all three comparisons:
+        // an earlier `jeq(AF_UNIX, list, deny)` would send `AF_INET` to `deny`
+        // and leave this branch dead (measured: `socket(AF_INET)` returned
+        // EACCES with the spike on).
+        let inet4 = b.label();
+        let inet6 = b.label();
+        b.jeq(libc::AF_UNIX as u32, list, inet4);
+        b.mark(inet4);
+        b.jeq(libc::AF_INET as u32, list, inet6);
+        b.mark(inet6);
+        b.jeq(libc::AF_INET6 as u32, list, deny);
+    } else {
+        b.jeq(libc::AF_UNIX as u32, list, deny);
+    }
 
     b.mark(list);
     b.ld_abs(OFF_NR);
@@ -441,7 +463,7 @@ pub fn build_blob() -> Vec<u8> {
 
 /// The blob for an explicit deny action (the audit uses [`DenyAction::Kill`]).
 pub fn build_blob_with(action: &DenyAction) -> Vec<u8> {
-    let prog = build_program_with(action);
+    let prog = build_program_with(action, crate::spike_net::enabled());
     let mut out = Vec::with_capacity(prog.len() * 8);
     for i in &prog {
         out.extend_from_slice(&i.code.to_le_bytes());
@@ -550,7 +572,87 @@ mod tests {
     use super::*;
 
     fn compiled() -> Vec<Insn> {
-        build_program_with(&DenyAction::Errno)
+        build_program_with(&DenyAction::Errno, false)
+    }
+
+    /// A tiny cBPF interpreter for the op set `Builder` emits (Ld/And/Jeq/Ja/
+    /// Ret), so the socket-family gate is proven on the *program*, not on a
+    /// hand-read branch. `seccomp_data` is `nr, arch, ip, args[6]`.
+    fn evaluate(p: &[Insn], nr: u32, arg0: u64) -> u32 {
+        let mut pc = 0usize;
+        let mut acc: u64 = 0;
+        let word = |off: u32, nr: u32, arg0: u64| -> u64 {
+            match off {
+                OFF_NR => u64::from(nr),
+                OFF_ARCH => u64::from(AUDIT_ARCH),
+                o if (16..16 + 8 * 6).contains(&o) => {
+                    if o == OFF_ARG0 {
+                        arg0
+                    } else {
+                        0
+                    }
+                }
+                _ => 0,
+            }
+        };
+        for _ in 0..10_000 {
+            let i = &p[pc];
+            match i.code {
+                LD_ABS_W => {
+                    acc = word(i.k, nr, arg0);
+                    pc += 1;
+                }
+                AND_K => {
+                    acc &= u64::from(i.k);
+                    pc += 1;
+                }
+                JEQ_K => {
+                    pc += if acc == u64::from(i.k) {
+                        usize::from(i.jt) + 1
+                    } else {
+                        usize::from(i.jf) + 1
+                    };
+                }
+                JA => pc += i.k as usize + 1,
+                RET_K => return i.k,
+                other => panic!("unexpected op {other:#x} at {pc}"),
+            }
+        }
+        panic!("the filter did not terminate");
+    }
+
+    /// SPIKE-NET's socket gate: `AF_INET`/`AF_INET6` are reachable **only** with
+    /// the spike on, and `AF_NETLINK` is denied either way (it is how the nft
+    /// backend of `iptables` would rewrite the session's LAN-drop chain).
+    #[test]
+    fn socket_families_follow_the_spike_flag() {
+        let off = build_program_with(&DenyAction::Errno, false);
+        let on = build_program_with(&DenyAction::Errno, true);
+        let deny = RET_ERRNO | (libc::EACCES as u32 & 0xffff);
+        let unix = libc::AF_UNIX as u64;
+        let inet = libc::AF_INET as u64;
+        let inet6 = libc::AF_INET6 as u64;
+        let netlink = libc::AF_NETLINK as u64;
+
+        // Flag off: the production program is unchanged — only AF_UNIX.
+        assert_eq!(evaluate(&off, libc::SYS_socket as u32, unix), RET_ALLOW);
+        assert_eq!(evaluate(&off, libc::SYS_socket as u32, inet), deny);
+        assert_eq!(evaluate(&off, libc::SYS_socket as u32, netlink), deny);
+        // Flag on: internet families pass, netlink still does not.
+        assert_eq!(evaluate(&on, libc::SYS_socket as u32, unix), RET_ALLOW);
+        assert_eq!(evaluate(&on, libc::SYS_socket as u32, inet), RET_ALLOW);
+        assert_eq!(evaluate(&on, libc::SYS_socket as u32, inet6), RET_ALLOW);
+        assert_eq!(evaluate(&on, libc::SYS_socket as u32, netlink), deny);
+        assert_eq!(
+            evaluate(&on, libc::SYS_socketpair as u32, inet),
+            RET_ALLOW,
+            "socketpair goes through the same family gate"
+        );
+        // The rest of the deny list is untouched by the flag.
+        assert_eq!(evaluate(&on, libc::SYS_ptrace as u32, 0), deny);
+        assert_eq!(evaluate(&on, libc::SYS_mount as u32, 0), deny);
+        // And a plain syscall still passes.
+        assert_eq!(evaluate(&on, libc::SYS_read as u32, 0), RET_ALLOW);
     }
 
     #[test]
@@ -563,13 +665,13 @@ mod tests {
 
     #[test]
     fn audit_action_kills_and_never_returns_eacces() {
-        let p = build_program_with(&DenyAction::Kill(None));
+        let p = build_program_with(&DenyAction::Kill(None), false);
         // The kill terminal is emitted before the allow/deny terminals.
         assert!(p.iter().any(|i| i.k == RET_KILL_PROCESS));
         assert_eq!(build_blob_with(&DenyAction::Kill(None)).len(), p.len() * 8);
         // The production build carries the same (unreachable) kill terminal, so
         // its last instruction is still the EACCES deny.
-        let q = build_program_with(&DenyAction::Errno);
+        let q = build_program_with(&DenyAction::Errno, false);
         assert_eq!(q.last().map(|i| i.k), Some(RET_ERRNO | (libc::EACCES as u32 & 0xffff)));
         // A subset build jumps to the kill terminal only for the listed nrs.
         let sub = DenyAction::Kill(Some(vec![libc::SYS_ptrace as u32]));

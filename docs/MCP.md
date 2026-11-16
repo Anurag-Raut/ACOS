@@ -174,7 +174,9 @@ Server limits (all optional):
 
 **Real ART, by default.** The MCP session tools (`acos_launch`, `acos_observe`,
 `acos_observe_tree`, `acos_tap`, `acos_text`, `acos_key`, `acos_logs`,
-`acos_status`, `acos_reset`, `acos_destroy`) do not run on the frozen in-process
+`acos_status`, `acos_reset`, `acos_destroy`, and the network module's
+`acos_net` — same name and arguments as the session API's verb) do not run on the
+frozen in-process
 Rust VM any more. On the first session tool call the server lazily spawns **its
 own private** `acos serve --engine art` daemon on a socket under
 `$XDG_RUNTIME_DIR/acos/mcp-<pid>-<rand>/session.sock` and forwards every session
@@ -367,6 +369,7 @@ server.
 | `acos_capability_report` | protocol | `capability-report` | `static-analysis` | `apk`, `base` |
 | `acos_capabilities` | server | - | `n/a` | - |
 | `acos_help` | server | - | `n/a` | - |
+| `acos_net` | server | - | `native-runtime` | - |
 | `acos_launch` | server | - | `native-runtime` | - |
 | `acos_observe_tree` | server | - | `native-runtime` | - |
 | `acos_tap` | server | - | `native-runtime` | - |

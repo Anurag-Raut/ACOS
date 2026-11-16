@@ -1,0 +1,12 @@
+host_listener_18081=000 host_listener_18080=000
+check=relay_up PASS "pasta_version": "2026_10_02.cba3570"
+check=hostport_opted_in PASS localhost=200 map=200
+check=hostport_not_opted_in_refused PASS localhost=000000 map=000000 gateway=000000
+check=other_host_loopback_ports_refused PASS localhost=000000 map=000000 gateway=000000
+check=hostport_revoke PASS before=200 after=000000 forwarders_after_del=0
+check=identity "exe": "/home/Qui/.t3/worktrees/acos/t3-3b7682df-e7bdda06fd42e449/.cache/net4-target/release/acos-netd" "build_id": "9e02d063cb3b0565"
+check=stale_supervisor_replaced PASS old_pid=2601363 new_pid=2603969 "build_id": "9e02d063cb3b0565" -> "build_id": "0f39441f94bba530"
+check=relay_up_again "up": true
+check=guest_cgroup_enforced PASS cgroup=/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2604121-i2619232.scope memory.max=1073741824 oom_killed=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2604121-i2619232.scope/memory.events 1 run_exit=143 python_exit=137 [low 0 high 0 max 38 oom 1 oom_kill 1 oom_group_kill 0 sock_throttled 0 ]
+check=cgroup_limit_is_the_scope PASS outside-any-scope: unguarded-ok 1572864000
+check=no_leak "relay_veths": [] "session_rules": 0 forwarders=0

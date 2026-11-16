@@ -1,0 +1,16 @@
+arm=relay rep=1 n=1 session_start_ms=5069 cache=built prep_ms=4579 key=ff39b037f1d6b9ff session_id=verify-2470085 wall_ms=5363
+arm=relay rep=1 pass=1/1 wall_ms=5363
+arm=relay rep=2 n=1 session_start_ms=364 cache=hit prep_ms=None key=ff39b037f1d6b9ff session_id=verify-2471350 wall_ms=60604
+arm=relay rep=2 pass=0/1 wall_ms=60604
+arm=relay rep=3 n=1 session_start_ms=340 cache=hit prep_ms=None key=ff39b037f1d6b9ff session_id=verify-2490421 wall_ms=60546
+arm=relay rep=3 pass=0/1 wall_ms=60546
+arm=relay rep=4 n=1 session_start_ms=299 cache=hit prep_ms=None key=ff39b037f1d6b9ff session_id=verify-2505444 wall_ms=606
+arm=relay rep=4 pass=1/1 wall_ms=606
+arm=off rep=1 n=1 session_start_ms=177 cache=hit prep_ms=None key=ff39b037f1d6b9ff session_id=verify-2505607 wall_ms=60388
+arm=off rep=1 pass=0/1 wall_ms=60388
+arm=off rep=2 n=1 session_start_ms=207 cache=hit prep_ms=None key=ff39b037f1d6b9ff session_id=verify-2511782 wall_ms=60427
+arm=off rep=2 pass=0/1 wall_ms=60427
+arm=off rep=3 n=1 session_start_ms=6431 cache=built prep_ms=6114 key=ff39b037f1d6b9ff session_id=verify-2524063 wall_ms=66638
+arm=off rep=3 pass=0/1 wall_ms=66638
+arm=off rep=4 n=1 session_start_ms=160 cache=hit prep_ms=None key=ff39b037f1d6b9ff session_id=verify-2533053 wall_ms=60389
+arm=off rep=4 pass=0/1 wall_ms=60389

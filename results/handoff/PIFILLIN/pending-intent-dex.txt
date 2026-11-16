@@ -1,0 +1,662 @@
+# PIFILLIN dex probe (the image dex is authoritative)
+
+image: /home/Qui/Projects/acos/.cache/boot/android-34/dex (framework + services, API 34)
+tool: results/handoff/PIFILLIN/dexdisasm.py (operand-level disassembler over research/framework-dex/dexclosure.py)
+
+## 1. PendingIntentRecord.sendInner: the fill-in decision (services/classes.dex)
+
+   0022..0029: if ((key.flags & 0x40000000 /*FLAG_ONE_SHOT*/) != 0) cancelIntentSender(this, true)
+   0030..0045: finalIntent = key.requestIntent != null ? new Intent(key.requestIntent) : new Intent()
+   0046..0054: v6 = (key.flags & 0x04000000 /*FLAG_IMMUTABLE*/) != 0; if (v6 != 0) skip the merge
+   0056..005d: if (intent != null) finalIntent.fillIn(intent, key.flags); if ((changes & 2 /*FILL_IN_DATA*/) != 0) resolvedType = key.requestResolvedType
+
+CLASS Lcom/android/server/am/PendingIntentRecord;
+METHOD sendInner (Landroid/app/IApplicationThread;ILandroid/content/Intent;Ljava/lang/String;Landroid/os/IBinder;Landroid/content/IIntentReceiver;Ljava/lang/String;Landroid/os/IBinder;Ljava/lang/String;IIILandroid/os/Bundle;)I
+  0000 move-object/from16 v15, v36
+  0002 move-object/from16 v0, v39
+  0004 move-object/from16 v1, v41
+  0006 move-object/from16 v14, v49
+  0008 const/4 v2, #1
+  0009 if-eqz v0, +5 (-> 000e)
+  000b invoke-virtual {v0, v2}, method@2030 // Landroid/content/Intent;->setDefusable(Z)V
+  000e if-eqz v14, +5 (-> 0013)
+  0010 invoke-virtual {v14, v2}, method@11300 // Landroid/os/Bundle;->setDefusable(Z)V
+  0013 iget-object v3, v15, @13665 // field ('Lcom/android/server/am/PendingIntentRecord;', 'controller')
+  0015 iget-object v3, v3, @13643 // field ('Lcom/android/server/am/PendingIntentController;', 'mLock')
+  0017 monitor-enter v3
+  0018 iget-boolean v4, v15, @13664 // field ('Lcom/android/server/am/PendingIntentRecord;', 'canceled')
+  001a const/16 v13, #-96
+  001c if-eqz v4, +4 (-> 0020)
+  001e monitor-exit v3
+  001f return v13
+  0020 iput-boolean v2, v15, @13675 // field ('Lcom/android/server/am/PendingIntentRecord;', 'sent')
+  0022 iget-object v4, v15, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  0024 iget v4, v4, @13650 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'flags')
+  0026 const/high16 v5, #1073741824
+  0028 and-int/2addr v4, v5
+  0029 if-eqz v4, +7 (-> 0030)
+  002b iget-object v4, v15, @13665 // field ('Lcom/android/server/am/PendingIntentRecord;', 'controller')
+  002d invoke-virtual {v4, v15, v2}, method@29506 // Lcom/android/server/am/PendingIntentController;->cancelIntentSender(Lcom/android/server/am/PendingIntentRecord;Z)V
+  0030 iget-object v4, v15, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  0032 iget-object v4, v4, @13655 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'requestIntent')
+  0034 if-eqz v4, +12 (-> 0040)
+  0036 new-instance v4, @515 // field ('Landroid/hardware/biometrics/face/EnrollmentStageConfig;', 'stage')
+  0038 iget-object v5, v15, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  003a iget-object v5, v5, @13655 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'requestIntent')
+  003c invoke-direct {v4, v5}, method@1957 // Landroid/content/Intent;-><init>(Landroid/content/Intent;)V
+  003f goto +6 (-> 0045)
+  0040 new-instance v4, @515 // field ('Landroid/hardware/biometrics/face/EnrollmentStageConfig;', 'stage')
+  0042 invoke-direct {v4}, method@1955 // Landroid/content/Intent;-><init>()V
+  0045 move-object v12, v4
+  0046 iget-object v4, v15, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  0048 iget v5, v4, @13650 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'flags')
+  004a const/high16 v6, #67108864
+  004c and-int/2addr v6, v5
+  004d const/4 v11, #0
+  004e if-eqz v6, +4 (-> 0052)
+  0050 move v6, v2
+  0051 goto +2 (-> 0053)
+  0052 move v6, v11
+  0053 const/4 v7, #2
+  0054 if-nez v6, +38 (-> 007a)
+  0056 if-eqz v0, +17 (-> 0067)
+  0058 invoke-virtual {v12, v0, v5}, method@1966 // Landroid/content/Intent;->fillIn(Landroid/content/Intent;I)I
+  005b move-result v4
+  005c and-int/2addr v4, v7
+  005d if-nez v4, +7 (-> 0064)
+  005f iget-object v4, v15, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  0061 iget-object v4, v4, @13656 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'requestResolvedType')
+  0063 goto +6 (-> 0069)
+  0064 move-object/from16 v4, v40
+  0066 goto +3 (-> 0069)
+  0067 iget-object v4, v4, @13656 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'requestResolvedType')
+  0069 move/from16 v5, v47
+  006b and-int/lit16 v5, v5, #-196
+  006d and-int v6, v48, v5
+  006f invoke-virtual {v12}, method@1979 // Landroid/content/Intent;->getFlags()I
+  0072 move-result v8
+  0073 not-int v5, v5
+  0074 and-int/2addr v5, v8
+  0075 or-int/2addr v5, v6
+  0076 invoke-virtual {v12, v5}, method@2031 // Landroid/content/Intent;->setFlags(I)Landroid/content/Intent;
+  0079 goto +3 (-> 007c)
+  007a iget-object v4, v4, @13656 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'requestResolvedType')
+  007c move-object v8, v4
+  007d invoke-static/range {v49..v49}, method@275 // Landroid/app/ActivityOptions;->fromBundle(Landroid/os/Bundle;)Landroid/app/ActivityOptions;
+  0080 move-result-object v4
+  0081 if-eqz v4, +9 (-> 008a)
+  0083 invoke-virtual {v4}, method@276 // Landroid/app/ActivityOptions;->getPendingIntentLaunchFlags()I
+  0086 move-result v5
+  0087 invoke-virtual {v12, v5}, method@1961 // Landroid/content/Intent;->addFlags(I)Landroid/content/Intent;
+  008a iget-object v5, v15, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  008c iget-object v5, v5, @13652 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'options')
+  008e if-nez v5, +8 (-> 0096)
+  0090 new-instance v5, @9536 // field ('Lcom/android/server/accessibility/AccessibilityUserState;', 'mFocusColorDefaultValue')
+  0092 invoke-direct {v5, v4}, method@62206 // Lcom/android/server/wm/SafeActivityOptions;-><init>(Landroid/app/ActivityOptions;)V
+  0095 goto +4 (-> 0099)
+  0096 invoke-virtual {v5, v4}, method@62208 // Lcom/android/server/wm/SafeActivityOptions;->setCallerOptions(Landroid/app/ActivityOptions;)V
+  0099 move-object/from16 v16, v5
+  009b iget-object v4, v15, @13672 // field ('Lcom/android/server/am/PendingIntentRecord;', 'mAllowlistDuration')
+  009d const/4 v5, #0
+  009e if-eqz v4, +9 (-> 00a7)
+  00a0 invoke-virtual {v4, v1}, method@13566 // Landroid/util/ArrayMap;->get(Ljava/lang/Object;)Ljava/lang/Object;
+  00a3 move-result-object v4
+  00a4 check-cast v4, @4973 // field ('Lcom/android/internal/util/FrameworkStatsLog;', 'CREDENTIAL_MANAGER_TOTAL_CANDIDATE_REPORTED__QUERY_UNIQUE_ENTRIES__AUTHENTICATION_ENTRY')
+  00a6 goto +2 (-> 00a8)
+  00a7 move-object v4, v5
+  00a8 iget-object v6, v15, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  00aa iget v9, v6, @13657 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'type')
+  00ac if-ne v9, v7, +37 (-> 00d1)
+  00ae iget-object v6, v6, @13647 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'allIntents')
+  00b0 if-eqz v6, +33 (-> 00d1)
+  00b2 array-length v9, v6
+  00b3 if-le v9, v2, +30 (-> 00d1)
+  00b5 array-length v5, v6
+  00b6 new-array v9, v5, @9929 // field ('Lcom/android/server/accessibility/gestures/TouchExplorer;', 'DEBUG')
+  00b8 array-length v10, v6
+  00b9 new-array v13, v10, @10206 // field ('Lcom/android/server/accessibility/magnification/TwoFingersDownOrSwipe;', 'mDoubleTapTimeout')
+  00bb array-length v7, v6
+  00bc invoke-static {v6, v11, v9, v11, v7}, method@62875 // Ljava/lang/System;->arraycopy(Ljava/lang/Object;ILjava/lang/Object;II)V
+  00bf iget-object v6, v15, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  00c1 iget-object v6, v6, @13648 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'allResolvedTypes')
+  00c3 if-eqz v6, +6 (-> 00c9)
+  00c5 array-length v7, v6
+  00c6 invoke-static {v6, v11, v13, v11, v7}, method@62875 // Ljava/lang/System;->arraycopy(Ljava/lang/Object;ILjava/lang/Object;II)V
+  00c9 sub-int/2addr v5, v2
+  00ca aput-object v12, v9, v5
+  00cc sub-int/2addr v10, v2
+  00cd aput-object v8, v13, v10
+  00cf move-object v7, v9
+  00d0 goto +3 (-> 00d3)
+  00d1 move-object v7, v5
+  00d2 move-object v13, v7
+  00d3 monitor-exit v3
+  00d4 invoke-static {}, method@11215 // Landroid/os/Binder;->getCallingUid()I
+  00d7 move-result v5
+  00d8 invoke-static {}, method@11214 // Landroid/os/Binder;->getCallingPid()I
+  00db move-result v6
+  00dc iget-object v3, v15, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  00de iget v3, v3, @13657 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'type')
+  00e0 if-ne v3, v2, +9 (-> 00e9)
+  00e2 iget-object v3, v15, @13665 // field ('Lcom/android/server/am/PendingIntentRecord;', 'controller')
+  00e4 iget-object v3, v3, @13637 // field ('Lcom/android/server/am/PendingIntentController;', 'mAmInternal')
+  00e6 invoke-virtual {v3, v14, v5}, method@225 // Landroid/app/ActivityManagerInternal;->enforceBroadcastOptionsPermissions(Landroid/os/Bundle;I)V
+  00e9 invoke-static {}, method@11213 // Landroid/os/Binder;->clearCallingIdentity()J
+  00ec move-result-wide v34
+  00ed if-eqz v4, +118 (-> 0163)
+  00ef new-instance v9, @9662 // field ('Lcom/android/server/accessibility/FlashNotificationsController$FlashContentObserver;', 'mScreenFlashNotificationUri')
+  00f1 const/16 v10, #64
+  00f3 invoke-direct {v9, v10}, method@62854 // Ljava/lang/StringBuilder;-><init>(I)V
+  00f6 const-string/jumbo v10, string@1167261697
+  00f9 invoke-virtual {v9, v10}, method@62864 // Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  00fc iget-object v10, v4, @13661 // field ('Lcom/android/server/am/PendingIntentRecord$TempAllowListDuration;', 'reason')
+  00fe if-nez v10, +4 (-> 0102)
+  0100 const-string v10, @0 // field ('Landroid/accessibilityservice/AccessibilityServiceInfo;', 'crashed')
+  0102 invoke-virtual {v9, v10}, method@62864 // Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  0105 const-string v10, @8126 // field ('Lcom/android/server/DeviceIdleController;', 'mInjector')
+  0107 invoke-virtual {v9, v10}, method@62864 // Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  010a invoke-static {v9, v5}, method@12506 // Landroid/os/UserHandle;->formatUid(Ljava/lang/StringBuilder;I)V
+  010d const-string v10, @11802 // field ('Lcom/android/server/am/AppErrors$$ExternalSyntheticLambda0;', 'f$0')
+  010f invoke-virtual {v9, v10}, method@62864 // Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  0112 invoke-virtual {v12}, method@1969 // Landroid/content/Intent;->getAction()Ljava/lang/String;
+  0115 move-result-object v10
+  0116 if-eqz v10, +10 (-> 0120)
+  0118 invoke-virtual {v12}, method@1969 // Landroid/content/Intent;->getAction()Ljava/lang/String;
+  011b move-result-object v10
+  011c invoke-virtual {v9, v10}, method@62864 // Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  011f goto +32 (-> 013f)
+  0120 invoke-virtual {v12}, method@1973 // Landroid/content/Intent;->getComponent()Landroid/content/ComponentName;
+  0123 move-result-object v10
+  0124 if-eqz v10, +10 (-> 012e)
+  0126 invoke-virtual {v12}, method@1973 // Landroid/content/Intent;->getComponent()Landroid/content/ComponentName;
+  0129 move-result-object v10
+  012a invoke-virtual {v10, v9}, method@1805 // Landroid/content/ComponentName;->appendShortString(Ljava/lang/StringBuilder;)V
+  012d goto +18 (-> 013f)
+  012e invoke-virtual {v12}, method@1974 // Landroid/content/Intent;->getData()Landroid/net/Uri;
+  0131 move-result-object v10
+  0132 if-eqz v10, +13 (-> 013f)
+  0134 invoke-virtual {v12}, method@1974 // Landroid/content/Intent;->getData()Landroid/net/Uri;
+  0137 move-result-object v10
+  0138 invoke-virtual {v10}, method@10099 // Landroid/net/Uri;->toSafeString()Ljava/lang/String;
+  013b move-result-object v10
+  013c invoke-virtual {v9, v10}, method@62864 // Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  013f iget-object v10, v15, @13665 // field ('Lcom/android/server/am/PendingIntentRecord;', 'controller')
+  0141 iget-object v10, v10, @13637 // field ('Lcom/android/server/am/PendingIntentController;', 'mAmInternal')
+  0143 iget v11, v15, @13677 // field ('Lcom/android/server/am/PendingIntentRecord;', 'uid')
+  0145 iget-wide v2, v4, @13660 // field ('Lcom/android/server/am/PendingIntentRecord$TempAllowListDuration;', 'duration')
+  0147 move-object/from16 v47, v13
+  0149 iget v13, v4, @13663 // field ('Lcom/android/server/am/PendingIntentRecord$TempAllowListDuration;', 'type')
+  014b iget v4, v4, @13662 // field ('Lcom/android/server/am/PendingIntentRecord$TempAllowListDuration;', 'reasonCode')
+  014d invoke-virtual {v9}, method@62874 // Ljava/lang/StringBuilder;->toString()Ljava/lang/String;
+  0150 move-result-object v33
+  0151 move-object/from16 v25, v10
+  0153 move/from16 v26, v6
+  0155 move/from16 v27, v5
+  0157 move/from16 v28, v11
+  0159 move-wide/from16 v29, v2
+  015b move/from16 v31, v13
+  015d move/from16 v32, v4
+  015f invoke-virtual/range {v25..v33}, method@273 // Landroid/app/ActivityManagerInternal;->tempAllowlistForPendingIntent(IIIJIILjava/lang/String;)V
+  0162 goto +60 (-> 019e)
+  0163 move-object/from16 v47, v13
+  0165 iget-object v2, v15, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  0167 iget v2, v2, @13657 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'type')
+  0169 const/4 v3, #5
+  016a if-ne v2, v3, +52 (-> 019e)
+  016c if-eqz v14, +50 (-> 019e)
+  016e new-instance v2, @126 // field ('Landroid/app/ForegroundServiceDelegationOptions;', 'mDelegationService')
+  0170 invoke-direct {v2, v14}, method@572 // Landroid/app/BroadcastOptions;-><init>(Landroid/os/Bundle;)V
+  0173 invoke-virtual {v2}, method@585 // Landroid/app/BroadcastOptions;->getTemporaryAppAllowlistDuration()J
+  0176 move-result-wide v3
+  0177 const-wide/16 v9, #0
+  0179 cmp-long v3, v3, v9
+  017b if-lez v3, +35 (-> 019e)
+  017d iget-object v3, v15, @13665 // field ('Lcom/android/server/am/PendingIntentRecord;', 'controller')
+  017f iget-object v3, v3, @13637 // field ('Lcom/android/server/am/PendingIntentController;', 'mAmInternal')
+  0181 iget v4, v15, @13677 // field ('Lcom/android/server/am/PendingIntentRecord;', 'uid')
+  0183 invoke-virtual {v2}, method@585 // Landroid/app/BroadcastOptions;->getTemporaryAppAllowlistDuration()J
+  0186 move-result-wide v29
+  0187 invoke-virtual {v2}, method@588 // Landroid/app/BroadcastOptions;->getTemporaryAppAllowlistType()I
+  018a move-result v31
+  018b invoke-virtual {v2}, method@587 // Landroid/app/BroadcastOptions;->getTemporaryAppAllowlistReasonCode()I
+  018e move-result v32
+  018f invoke-virtual {v2}, method@586 // Landroid/app/BroadcastOptions;->getTemporaryAppAllowlistReason()Ljava/lang/String;
+  0192 move-result-object v33
+  0193 move-object/from16 v25, v3
+  0195 move/from16 v26, v6
+  0197 move/from16 v27, v5
+  0199 move/from16 v28, v4
+  019b invoke-virtual/range {v25..v33}, method@273 // Landroid/app/ActivityManagerInternal;->tempAllowlistForPendingIntent(IIIJIILjava/lang/String;)V
+  019e if-eqz v42, +5 (-> 01a3)
+  01a0 const/16 v25, #1
+  01a2 goto +3 (-> 01a5)
+  01a3 const/16 v25, #0
+  01a5 if-eqz v42, +48 (-> 01d5)
+  01a7 if-nez v37, +46 (-> 01d5)
+  01a9 const-string v2, @13751 // field ('Lcom/android/server/am/PlatformCompatCache$CacheItem;', 'mPlatformCompat')
+  01ab new-instance v3, @9662 // field ('Lcom/android/server/accessibility/FlashNotificationsController$FlashContentObserver;', 'mScreenFlashNotificationUri')
+  01ad invoke-direct {v3}, method@62853 // Ljava/lang/StringBuilder;-><init>()V
+  01b0 const-string v4, @39018 // field ('Landroid/os/IInstalld$Default;', 'linkNativeLibraryDirectory')
+  01b2 invoke-virtual {v3, v4}, method@62864 // Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  01b5 invoke-virtual {v3, v0}, method@62863 // Ljava/lang/StringBuilder;->append(Ljava/lang/Object;)Ljava/lang/StringBuilder;
+  01b8 const-string v0, @3130 // field ('Lco/nstant/in/cbor/model/AdditionalInformation;', 'TWO_BYTES')
+  01ba invoke-virtual {v3, v0}, method@62864 // Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  01bd invoke-static {}, method@11215 // Landroid/os/Binder;->getCallingUid()I
+  01c0 move-result v0
+  01c1 invoke-virtual {v3, v0}, method@62859 // Ljava/lang/StringBuilder;->append(I)Ljava/lang/StringBuilder;
+  01c4 const-string v0, @3924 // field ('Lcom/android/internal/util/FrameworkStatsLog;', 'APP_PROCESS_DIED__IMPORTANCE__IMPORTANCE_PERCEPTIBLE_PRE_26')
+  01c6 invoke-virtual {v3, v0}, method@62864 // Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+  01c9 invoke-virtual {v3}, method@62874 // Ljava/lang/StringBuilder;->toString()Ljava/lang/String;
+  01cc move-result-object v0
+  01cd new-instance v3, @9667 // field ('Lcom/android/server/accessibility/FlashNotificationsController$FlashNotification;', 'mOffDuration')
+  01cf invoke-direct {v3}, method@62908 // Ljava/lang/Throwable;-><init>()V
+  01d2 invoke-static {v2, v0, v3}, method@13817 // Landroid/util/Slog;->w(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I
+  01d5 iget-object v0, v15, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  01d7 iget v0, v0, @13658 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'userId')
+  01d9 const/4 v2, #-2
+  01da if-ne v0, v2, +10 (-> 01e4)
+  01dc iget-object v0, v15, @13665 // field ('Lcom/android/server/am/PendingIntentRecord;', 'controller')
+  01de iget-object v0, v0, @13645 // field ('Lcom/android/server/am/PendingIntentController;', 'mUserController')
+  01e0 invoke-virtual {v0}, method@30908 // Lcom/android/server/am/UserController;->getCurrentOrTargetUserId()I
+  01e3 move-result v0
+  01e4 move/from16 v23, v0
+  01e6 iget-object v0, v15, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  01e8 iget v2, v0, @13657 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'type')
+  01ea const/4 v3, #1
+  01eb if-eq v2, v3, +232 (-> 02d3)
+  01ed const/4 v3, #2
+  01ee if-eq v2, v3, +105 (-> 0257)
+  01f0 const/4 v3, #3
+  01f1 if-eq v2, v3, +73 (-> 023a)
+  01f3 const/4 v0, #4
+  01f4 if-eq v2, v0, +11 (-> 01ff)
+  01f6 const/4 v0, #5
+  01f7 if-eq v2, v0, +8 (-> 01ff)
+  01f9 move-object/from16 v39, v12
+  01fb const/16 v20, #0
+  01fd goto/16 +293 (-> 0322)
+  01ff iget-object v0, v15, @13671 // field ('Lcom/android/server/am/PendingIntentRecord;', 'mAllowBgActivityStartsForServiceSender')
+  0201 invoke-virtual {v15, v0, v1, v14, v5}, method@29539 // Lcom/android/server/am/PendingIntentRecord;->getBackgroundStartPrivilegesForActivitySender(Landroid/util/ArraySet;Landroid/os/IBinder;Landroid/os/Bundle;I)Landroid/app/BackgroundStartPrivileges;
+  0204 move-result-object v24
+  0205 iget-object v0, v15, @13665 // field ('Lcom/android/server/am/PendingIntentRecord;', 'controller')
+  0207 iget-object v0, v0, @13637 // field ('Lcom/android/server/am/PendingIntentController;', 'mAmInternal')
+  0209 iget v1, v15, @13677 // field ('Lcom/android/server/am/PendingIntentRecord;', 'uid')
+  020b iget-object v2, v15, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  020d iget v3, v2, @13657 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'type')
+  020f const/4 v4, #5
+  0210 if-ne v3, v4, +5 (-> 0215)
+  0212 const/16 v20, #1
+  0214 goto +3 (-> 0217)
+  0215 const/16 v20, #0
+  0217 iget-object v3, v2, @13653 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'packageName')
+  0219 iget-object v2, v2, @13649 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'featureId')
+  021b move-object/from16 v16, v0
+  021d move/from16 v17, v1
+  021f move-object/from16 v18, v12
+  0221 move-object/from16 v19, v8
+  0223 move-object/from16 v21, v3
+  0225 move-object/from16 v22, v2
+  0227 invoke-virtual/range {v16..v24}, method@271 // Landroid/app/ActivityManagerInternal;->startServiceInPackage(ILandroid/content/Intent;Ljava/lang/String;ZLjava/lang/String;Ljava/lang/String;ILandroid/app/BackgroundStartPrivileges;)Landroid/content/ComponentName;
+  022a goto -49 (-> 01f9)
+  022b move-object/from16 v39, v12
+  022d const/16 v13, #-96
+  022f goto/16 +245 (-> 0324)
+  0231 move-exception v0
+  0232 const-string v1, @13751 // field ('Lcom/android/server/am/PlatformCompatCache$CacheItem;', 'mPlatformCompat')
+  0234 const-string v2, @41700 // field ('Landroid/view/View;', 'setOnClickListener')
+  0236 invoke-static {v1, v2, v0}, method@13817 // Landroid/util/Slog;->w(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I
+  0239 goto -64 (-> 01f9)
+  023a iget-object v1, v15, @13665 // field ('Lcom/android/server/am/PendingIntentRecord;', 'controller')
+  023c iget-object v1, v1, @13638 // field ('Lcom/android/server/am/PendingIntentController;', 'mAtmInternal')
+  023e const/4 v2, #-1
+  023f iget-object v3, v0, @13646 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'activity')
+  0241 iget-object v4, v0, @13659 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'who')
+  0243 iget v0, v0, @13654 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'requestCode')
+  0245 move-object/from16 v43, v1
+  0247 move/from16 v44, v2
+  0249 move-object/from16 v45, v3
+  024b move-object/from16 v46, v4
+  024d move/from16 v47, v0
+  024f move/from16 v48, v38
+  0251 move-object/from16 v49, v12
+  0253 invoke-virtual/range {v43..v49}, method@62127 // Lcom/android/server/wm/ActivityTaskManagerInternal;->sendActivityResult(ILandroid/os/IBinder;Ljava/lang/String;IILandroid/content/Intent;)V
+  0256 goto -93 (-> 01f9)
+  0257 iget-object v2, v0, @13647 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'allIntents')
+  0259 if-eqz v2, +47 (-> 0288)
+  025b array-length v2, v2
+  025c const/4 v3, #1
+  025d if-le v2, v3, +43 (-> 0288)
+  025f iget-object v2, v15, @13665 // field ('Lcom/android/server/am/PendingIntentRecord;', 'controller')
+  0261 iget-object v2, v2, @13638 // field ('Lcom/android/server/am/PendingIntentController;', 'mAtmInternal')
+  0263 iget v3, v15, @13677 // field ('Lcom/android/server/am/PendingIntentRecord;', 'uid')
+  0265 iget-object v8, v0, @13653 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'packageName')
+  0267 iget-object v0, v0, @13649 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'featureId')
+  0269 const/4 v13, #0
+  026a invoke-virtual {v15, v1}, method@29538 // Lcom/android/server/am/PendingIntentRecord;->getBackgroundStartPrivilegesForActivitySender(Landroid/os/IBinder;)Landroid/app/BackgroundStartPrivileges;
+  026d move-result-object v14
+  026e move-object v1, v2
+  026f move v2, v3
+  0270 move v3, v6
+  0271 move v4, v5
+  0272 move-object v5, v8
+  0273 move-object v6, v0
+  0274 move-object/from16 v8, v47
+  0276 move-object/from16 v9, v44
+  0278 move-object/from16 v10, v16
+  027a const/16 v20, #0
+  027c move/from16 v11, v23
+  027e move-object/from16 v39, v12
+  0280 move v12, v13
+  0281 move-object/from16 v13, v36
+  0283 invoke-virtual/range {v1..v14}, method@62139 // Lcom/android/server/wm/ActivityTaskManagerInternal;->startActivitiesInPackage(IIILjava/lang/String;Ljava/lang/String;[Landroid/content/Intent;[Ljava/lang/String;Landroid/os/IBinder;Lcom/android/server/wm/SafeActivityOptions;IZLcom/android/server/am/PendingIntentRecord;Landroid/app/BackgroundStartPrivileges;)I
+  0286 move-result v0
+  0287 goto +58 (-> 02c1)
+  0288 move-object/from16 v39, v12
+  028a const/16 v20, #0
+  028c iget-object v2, v15, @13665 // field ('Lcom/android/server/am/PendingIntentRecord;', 'controller')
+  028e iget-object v2, v2, @13638 // field ('Lcom/android/server/am/PendingIntentController;', 'mAtmInternal')
+  0290 iget v3, v15, @13677 // field ('Lcom/android/server/am/PendingIntentRecord;', 'uid')
+  0292 iget-object v7, v0, @13653 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'packageName')
+  0294 iget-object v0, v0, @13649 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'featureId')
+  0296 const/4 v12, #0
+  0297 const/16 v17, #0
+  0299 const-string v18, @36726 // field ('Landroid/net/IpMemoryStore$$ExternalSyntheticLambda0;', 'apply')
+  029b const/16 v19, #0
+  029d invoke-virtual {v15, v1}, method@29538 // Lcom/android/server/am/PendingIntentRecord;->getBackgroundStartPrivilegesForActivitySender(Landroid/os/IBinder;)Landroid/app/BackgroundStartPrivileges;
+  02a0 move-result-object v21
+  02a1 move-object v1, v2
+  02a2 move v2, v3
+  02a3 move v3, v6
+  02a4 move v4, v5
+  02a5 move-object v5, v7
+  02a6 move-object v6, v0
+  02a7 move-object/from16 v7, v39
+  02a9 move-object/from16 v9, v44
+  02ab move-object/from16 v10, v45
+  02ad move/from16 v11, v46
+  02af move-object/from16 v13, v16
+  02b1 move/from16 v14, v23
+  02b3 move-object/from16 v15, v17
+  02b5 move-object/from16 v16, v18
+  02b7 move/from16 v17, v19
+  02b9 move-object/from16 v18, v36
+  02bb move-object/from16 v19, v21
+  02bd invoke-virtual/range {v1..v19}, method@62140 // Lcom/android/server/wm/ActivityTaskManagerInternal;->startActivityInPackage(IIILjava/lang/String;Ljava/lang/String;Landroid/content/Intent;Ljava/lang/String;Landroid/os/IBinder;Ljava/lang/String;IILcom/android/server/wm/SafeActivityOptions;ILcom/android/server/wm/Task;Ljava/lang/String;ZLcom/android/server/am/PendingIntentRecord;Landroid/app/BackgroundStartPrivileges;)I
+  02c0 move-result v0
+  02c1 move v13, v0
+  02c2 goto/16 +98 (-> 0324)
+  02c4 move-exception v0
+  02c5 goto +6 (-> 02cb)
+  02c6 move-exception v0
+  02c7 move-object/from16 v39, v12
+  02c9 const/16 v20, #0
+  02cb const-string v1, @13751 // field ('Lcom/android/server/am/PlatformCompatCache$CacheItem;', 'mPlatformCompat')
+  02cd const-string v2, @41699 // field ('Landroid/view/View;', 'setBackgroundColor')
+  02cf invoke-static {v1, v2, v0}, method@13817 // Landroid/util/Slog;->w(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I
+  02d2 goto +80 (-> 0322)
+  02d3 move-object/from16 v39, v12
+  02d5 const/16 v20, #0
+  02d7 iget-object v0, v15, @13670 // field ('Lcom/android/server/am/PendingIntentRecord;', 'mAllowBgActivityStartsForBroadcastSender')
+  02d9 invoke-virtual {v15, v0, v1, v14, v5}, method@29539 // Lcom/android/server/am/PendingIntentRecord;->getBackgroundStartPrivilegesForActivitySender(Landroid/util/ArraySet;Landroid/os/IBinder;Landroid/os/Bundle;I)Landroid/app/BackgroundStartPrivileges;
+  02dc move-result-object v18
+  02dd iget-object v0, v15, @13665 // field ('Lcom/android/server/am/PendingIntentRecord;', 'controller')
+  02df iget-object v0, v0, @13637 // field ('Lcom/android/server/am/PendingIntentController;', 'mAmInternal')
+  02e1 iget-object v1, v15, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  02e3 iget-object v2, v1, @13653 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'packageName')
+  02e5 iget-object v4, v1, @13649 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'featureId')
+  02e7 iget v7, v15, @13677 // field ('Lcom/android/server/am/PendingIntentRecord;', 'uid')
+  02e9 const/4 v11, #0
+  02ea const/4 v12, #0
+  02eb if-eqz v42, +5 (-> 02f0)
+  02ed move/from16 v17, v3
+  02ef goto +3 (-> 02f2)
+  02f0 move/from16 v17, v20
+  02f2 const/16 v16, #0
+  02f4 const/16 v19, #0
+  02f6 move-object v1, v2
+  02f7 move-object v2, v4
+  02f8 move v3, v7
+  02f9 move v4, v5
+  02fa move v5, v6
+  02fb move-object/from16 v6, v39
+  02fd move-object v7, v8
+  02fe move-object/from16 v8, v37
+  0300 move-object/from16 v9, v42
+  0302 move/from16 v10, v38
+  0304 move-object/from16 v13, v43
+  0306 move-object/from16 v14, v49
+  0308 move/from16 v15, v17
+  030a move/from16 v17, v23
+  030c invoke-virtual/range {v0..v19}, method@218 // Landroid/app/ActivityManagerInternal;->broadcastIntentInPackage(Ljava/lang/String;Ljava/lang/String;IIILandroid/content/Intent;Ljava/lang/String;Landroid/app/IApplicationThread;Landroid/content/IIntentReceiver;ILjava/lang/String;Landroid/os/Bundle;Ljava/lang/String;Landroid/os/Bundle;ZZILandroid/app/BackgroundStartPrivileges;[I)I
+  030f move-result v0
+  0310 if-nez v0, +5 (-> 0315)
+  0312 move/from16 v11, v20
+  0314 goto +3 (-> 0317)
+  0315 move/from16 v11, v25
+  0317 move/from16 v25, v11
+  0319 goto +9 (-> 0322)
+  031a move-exception v0
+  031b const-string v1, @13751 // field ('Lcom/android/server/am/PlatformCompatCache$CacheItem;', 'mPlatformCompat')
+  031d const-string v2, @41699 // field ('Landroid/view/View;', 'setBackgroundColor')
+  031f invoke-static {v1, v2, v0}, method@13817 // Landroid/util/Slog;->w(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I
+  0322 move/from16 v13, v20
+  0324 if-eqz v25, +43 (-> 034f)
+  0326 const/16 v1, #-96
+  0328 if-eq v13, v1, +39 (-> 034f)
+  032a new-instance v0, @515 // field ('Landroid/hardware/biometrics/face/EnrollmentStageConfig;', 'stage')
+  032c move-object/from16 v4, v39
+  032e invoke-direct {v0, v4}, method@1957 // Landroid/content/Intent;-><init>(Landroid/content/Intent;)V
+  0331 const/4 v1, #0
+  0332 const/4 v2, #0
+  0333 const/4 v3, #0
+  0334 const/4 v4, #0
+  0335 const/4 v5, #0
+  0336 move-object/from16 v6, v36
+  0338 iget-object v6, v6, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  033a iget v6, v6, @13658 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'userId')
+  033c move-object/from16 v36, v42
+  033e move-object/from16 v37, v0
+  0340 move/from16 v38, v1
+  0342 move-object/from16 v39, v2
+  0344 move-object/from16 v40, v3
+  0346 move/from16 v41, v4
+  0348 move/from16 v42, v5
+  034a move/from16 v43, v6
+  034c invoke-interface/range {v36..v43}, method@1940 // Landroid/content/IIntentReceiver;->performReceive(Landroid/content/Intent;ILjava/lang/String;Landroid/os/Bundle;ZZI)V
+  034f invoke-static/range {v34..v35}, method@11222 // Landroid/os/Binder;->restoreCallingIdentity(J)V
+  0352 return v13
+  0353 move-exception v0
+  0354 invoke-static/range {v34..v35}, method@11222 // Landroid/os/Binder;->restoreCallingIdentity(J)V
+  0357 throw v0
+  0358 move-exception v0
+  0359 monitor-exit v3
+  035a throw v0
+
+## 2. ActivityManagerService.isIntentSenderTargetedToPackage (services/classes.dex)
+
+   returns false for a non-record binder or a null allIntents array;
+   returns false for any stored intent with BOTH a package and a component; else true.
+
+CLASS Lcom/android/server/am/ActivityManagerService;
+METHOD isIntentSenderTargetedToPackage (Landroid/content/IIntentSender;)Z
+  0000 instance-of v3, v4, @4974 // field ('Lcom/android/internal/util/FrameworkStatsLog;', 'CREDENTIAL_MANAGER_TOTAL_CANDIDATE_REPORTED__QUERY_UNIQUE_ENTRIES__CREDENTIAL_ENTRY')
+  0002 const/4 v0, #0
+  0003 if-nez v3, +3 (-> 0006)
+  0005 return v0
+  0006 check-cast v4, @4974 // field ('Lcom/android/internal/util/FrameworkStatsLog;', 'CREDENTIAL_MANAGER_TOTAL_CANDIDATE_REPORTED__QUERY_UNIQUE_ENTRIES__CREDENTIAL_ENTRY')
+  0008 iget-object v3, v4, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  000a iget-object v3, v3, @13647 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'allIntents')
+  000c if-nez v3, +3 (-> 000f)
+  000e return v0
+  000f move v3, v0
+  0010 iget-object v1, v4, @13666 // field ('Lcom/android/server/am/PendingIntentRecord;', 'key')
+  0012 iget-object v1, v1, @13647 // field ('Lcom/android/server/am/PendingIntentRecord$Key;', 'allIntents')
+  0014 array-length v2, v1
+  0015 if-ge v3, v2, +20 (-> 0029)
+  0017 aget-object v1, v1, v3
+  0019 invoke-virtual {v1}, method@1983 // Landroid/content/Intent;->getPackage()Ljava/lang/String;
+  001c move-result-object v2
+  001d if-eqz v2, +9 (-> 0026)
+  001f invoke-virtual {v1}, method@1973 // Landroid/content/Intent;->getComponent()Landroid/content/ComponentName;
+  0022 move-result-object v1
+  0023 if-eqz v1, +3 (-> 0026)
+  0025 return v0
+  0026 add-int/lit8 v3, v3, #1
+  0028 goto -24 (-> 0010)
+  0029 const/4 v3, #1
+  002a return v3
+  002b return v0
+
+## 3. PendingIntent.getBroadcastAsUser passes INTENT_SENDER_BROADCAST = 1 (framework/classes.dex)
+
+   `001d const/4 v4, #1` is the `type` argument of getIntentSenderWithFeature.
+   ActivityManager.INTENT_SENDER_*: BROADCAST=1, ACTIVITY=2, ACTIVITY_RESULT=3, SERVICE=4, FS=5
+   (base/core/java/android/app/ActivityManager.java:603-632). The old ACOS constants were shifted by one.
+
+CLASS Landroid/app/PendingIntent;
+METHOD getBroadcastAsUser (Landroid/content/Context;ILandroid/content/Intent;ILandroid/os/UserHandle;)Landroid/app/PendingIntent;
+  0000 move-object/from16 v1, v18
+  0002 move-object/from16 v2, v20
+  0004 invoke-virtual/range {v18..v18}, method@28911 // Landroid/content/Context;->getPackageName()Ljava/lang/String;
+  0007 move-result-object v15
+  0008 invoke-virtual/range {v18..v18}, method@28881 // Landroid/content/Context;->getContentResolver()Landroid/content/ContentResolver;
+  000b move-result-object v0
+  000c invoke-virtual {v2, v0}, method@29967 // Landroid/content/Intent;->resolveTypeIfNeeded(Landroid/content/ContentResolver;)Ljava/lang/String;
+  000f move-result-object v16
+  0010 const/4 v0, #0
+  0011 move/from16 v14, v21
+  0013 invoke-static {v14, v2, v1, v0}, method@14244 // Landroid/app/PendingIntent;->checkPendingIntent(ILandroid/content/Intent;Landroid/content/Context;Z)V
+  0016 invoke-virtual {v2, v1}, method@29921 // Landroid/content/Intent;->prepareToLeaveProcess(Landroid/content/Context;)V
+  0019 invoke-static {}, method@3852 // Landroid/app/ActivityManager;->getService()Landroid/app/IActivityManager;
+  001c move-result-object v3
+  001d const/4 v4, #1
+  001e invoke-virtual/range {v18..v18}, method@28870 // Landroid/content/Context;->getAttributionTag()Ljava/lang/String;
+  0021 move-result-object v6
+  0022 const/4 v7, #0
+  0023 const/4 v8, #0
+  0024 filled-new-array/range {v20..v20}, method@8176 // Landroid/app/FragmentTransition$3;->onGetEpicenter(Landroid/transition/Transition;)Landroid/graphics/Rect;
+  0027 move-result-object v10
+  0028 const/4 v0, #0
+  0029 if-eqz v16, +8 (-> 0031)
+  002b filled-new-array/range {v16..v16}, method@8571 // Landroid/app/IActivityClientController;->finishActivity(Landroid/os/IBinder;ILandroid/content/Intent;I)Z
+  002e move-result-object v5
+  002f move-object v11, v5
+  0030 goto +2 (-> 0032)
+  0031 move-object v11, v0
+  0032 const/4 v13, #0
+  0033 invoke-virtual/range {v22..v22}, method@60744 // Landroid/os/UserHandle;->getIdentifier()I
+  0036 move-result v17
+  0037 move-object v5, v15
+  0038 move/from16 v9, v19
+  003a move/from16 v12, v21
+  003c move/from16 v14, v17
+  003e invoke-interface/range {v3..v14}, method@9473 // Landroid/app/IActivityManager;->getIntentSenderWithFeature(ILjava/lang/String;Ljava/lang/String;Landroid/os/IBinder;Ljava/lang/String;I[Landroid/content/Intent;[Ljava/lang/String;ILandroid/os/Bundle;I)Landroid/content/IIntentSender;
+  0041 move-result-object v3
+  0042 if-eqz v3, +7 (-> 0049)
+  0044 new-instance v0, @1284 // field ('Landroid/R$attr;', 'drawableEnd')
+  0046 invoke-direct {v0, v3}, method@14239 // Landroid/app/PendingIntent;-><init>(Landroid/content/IIntentSender;)V
+  0049 return-object v0
+  004a move-exception v0
+  004b invoke-virtual {v0}, method@60641 // Landroid/os/RemoteException;->rethrowFromSystemServer()Ljava/lang/RuntimeException;
+  004e move-result-object v3
+  004f throw v3
+
+## 4. Location.writeToParcel field order and mask bits (framework/classes2.dex)
+
+   provider String8, mFieldsMask int, time long, elapsed long,
+   [elapsedRealtimeUncertainty double], lat double, lng double, [altitude double],
+   [speed float], [bearing float], [accuracy float], [vertical accuracy float],
+   [speed accuracy float], [bearing accuracy float], [msl altitude double],
+   [msl accuracy float], extras Bundle. There is NO mock bit on the wire.
+
+CLASS Landroid/location/Location;
+METHOD writeToParcel (Landroid/os/Parcel;I)V
+  0000 iget-object v0, v2, @13887 // field ('Landroid/location/Location;', 'mProvider')
+  0002 invoke-virtual {v3, v0}, method@59475 // Landroid/os/Parcel;->writeString8(Ljava/lang/String;)V
+  0005 iget v0, v2, @13881 // field ('Landroid/location/Location;', 'mFieldsMask')
+  0007 invoke-virtual {v3, v0}, method@59461 // Landroid/os/Parcel;->writeInt(I)V
+  000a iget-wide v0, v2, @13890 // field ('Landroid/location/Location;', 'mTimeMs')
+  000c invoke-virtual {v3, v0, v1}, method@59465 // Landroid/os/Parcel;->writeLong(J)V
+  000f iget-wide v0, v2, @13878 // field ('Landroid/location/Location;', 'mElapsedRealtimeNs')
+  0011 invoke-virtual {v3, v0, v1}, method@59465 // Landroid/os/Parcel;->writeLong(J)V
+  0014 invoke-virtual {v2}, method@30906 // Landroid/location/Location;->hasElapsedRealtimeUncertaintyNanos()Z
+  0017 move-result v0
+  0018 if-eqz v0, +7 (-> 001f)
+  001a iget-wide v0, v2, @13879 // field ('Landroid/location/Location;', 'mElapsedRealtimeUncertaintyNs')
+  001c invoke-virtual {v3, v0, v1}, method@59456 // Landroid/os/Parcel;->writeDouble(D)V
+  001f iget-wide v0, v2, @13883 // field ('Landroid/location/Location;', 'mLatitudeDegrees')
+  0021 invoke-virtual {v3, v0, v1}, method@59456 // Landroid/os/Parcel;->writeDouble(D)V
+  0024 iget-wide v0, v2, @13884 // field ('Landroid/location/Location;', 'mLongitudeDegrees')
+  0026 invoke-virtual {v3, v0, v1}, method@59456 // Landroid/os/Parcel;->writeDouble(D)V
+  0029 invoke-virtual {v2}, method@30903 // Landroid/location/Location;->hasAltitude()Z
+  002c move-result v0
+  002d if-eqz v0, +7 (-> 0034)
+  002f iget-wide v0, v2, @13875 // field ('Landroid/location/Location;', 'mAltitudeMeters')
+  0031 invoke-virtual {v3, v0, v1}, method@59456 // Landroid/os/Parcel;->writeDouble(D)V
+  0034 invoke-virtual {v2}, method@30909 // Landroid/location/Location;->hasSpeed()Z
+  0037 move-result v0
+  0038 if-eqz v0, +7 (-> 003f)
+  003a iget v0, v2, @13889 // field ('Landroid/location/Location;', 'mSpeedMetersPerSecond')
+  003c invoke-virtual {v3, v0}, method@59459 // Landroid/os/Parcel;->writeFloat(F)V
+  003f invoke-virtual {v2}, method@30904 // Landroid/location/Location;->hasBearing()Z
+  0042 move-result v0
+  0043 if-eqz v0, +7 (-> 004a)
+  0045 iget v0, v2, @13877 // field ('Landroid/location/Location;', 'mBearingDegrees')
+  0047 invoke-virtual {v3, v0}, method@59459 // Landroid/os/Parcel;->writeFloat(F)V
+  004a invoke-virtual {v2}, method@30902 // Landroid/location/Location;->hasAccuracy()Z
+  004d move-result v0
+  004e if-eqz v0, +7 (-> 0055)
+  0050 iget v0, v2, @13882 // field ('Landroid/location/Location;', 'mHorizontalAccuracyMeters')
+  0052 invoke-virtual {v3, v0}, method@59459 // Landroid/os/Parcel;->writeFloat(F)V
+  0055 invoke-virtual {v2}, method@30911 // Landroid/location/Location;->hasVerticalAccuracy()Z
+  0058 move-result v0
+  0059 if-eqz v0, +7 (-> 0060)
+  005b iget v0, v2, @13874 // field ('Landroid/location/Location;', 'mAltitudeAccuracyMeters')
+  005d invoke-virtual {v3, v0}, method@59459 // Landroid/os/Parcel;->writeFloat(F)V
+  0060 invoke-virtual {v2}, method@30910 // Landroid/location/Location;->hasSpeedAccuracy()Z
+  0063 move-result v0
+  0064 if-eqz v0, +7 (-> 006b)
+  0066 iget v0, v2, @13888 // field ('Landroid/location/Location;', 'mSpeedAccuracyMetersPerSecond')
+  0068 invoke-virtual {v3, v0}, method@59459 // Landroid/os/Parcel;->writeFloat(F)V
+  006b invoke-virtual {v2}, method@30905 // Landroid/location/Location;->hasBearingAccuracy()Z
+  006e move-result v0
+  006f if-eqz v0, +7 (-> 0076)
+  0071 iget v0, v2, @13876 // field ('Landroid/location/Location;', 'mBearingAccuracyDegrees')
+  0073 invoke-virtual {v3, v0}, method@59459 // Landroid/os/Parcel;->writeFloat(F)V
+  0076 invoke-virtual {v2}, method@30907 // Landroid/location/Location;->hasMslAltitude()Z
+  0079 move-result v0
+  007a if-eqz v0, +7 (-> 0081)
+  007c iget-wide v0, v2, @13886 // field ('Landroid/location/Location;', 'mMslAltitudeMeters')
+  007e invoke-virtual {v3, v0, v1}, method@59456 // Landroid/os/Parcel;->writeDouble(D)V
+  0081 invoke-virtual {v2}, method@30908 // Landroid/location/Location;->hasMslAltitudeAccuracy()Z
+  0084 move-result v0
+  0085 if-eqz v0, +7 (-> 008c)
+  0087 iget v0, v2, @13885 // field ('Landroid/location/Location;', 'mMslAltitudeAccuracyMeters')
+  0089 invoke-virtual {v3, v0}, method@59459 // Landroid/os/Parcel;->writeFloat(F)V
+  008c iget-object v0, v2, @13880 // field ('Landroid/location/Location;', 'mExtras')
+  008e invoke-virtual {v3, v0}, method@59452 // Landroid/os/Parcel;->writeBundle(Landroid/os/Bundle;)V
+  0091 return-void
+
+## 5. ActivityManager$PendingIntentInfo.writeToParcel (framework/classes.dex)
+
+   writeString(mCreatorPackage), writeInt(mCreatorUid), writeBoolean(mImmutable),
+   writeInt(mIntentSenderType) -- the reply of getInfoForIntentSender.
+
+CLASS Landroid/app/ActivityManager$PendingIntentInfo;
+METHOD writeToParcel (Landroid/os/Parcel;I)V
+  0000 iget-object v0, v1, @8146 // field ('Landroid/app/ActivityManager$PendingIntentInfo;', 'mCreatorPackage')
+  0002 invoke-virtual {v2, v0}, method@60496 // Landroid/os/Parcel;->writeString(Ljava/lang/String;)V
+  0005 iget v0, v1, @8147 // field ('Landroid/app/ActivityManager$PendingIntentInfo;', 'mCreatorUid')
+  0007 invoke-virtual {v2, v0}, method@60480 // Landroid/os/Parcel;->writeInt(I)V
+  000a iget-boolean v0, v1, @8148 // field ('Landroid/app/ActivityManager$PendingIntentInfo;', 'mImmutable')
+  000c invoke-virtual {v2, v0}, method@60466 // Landroid/os/Parcel;->writeBoolean(Z)V
+  000f iget v0, v1, @8149 // field ('Landroid/app/ActivityManager$PendingIntentInfo;', 'mIntentSenderType')
+  0011 invoke-virtual {v2, v0}, method@60480 // Landroid/os/Parcel;->writeInt(I)V
+  0014 return-void
+
+## 6. The location transport's fill-in builders
+
+   `LocationProviderManager$LocationPendingIntentTransport.deliverOnLocationChanged` /
+   `deliverOnProviderEnabledChanged` are reproduced in pending-intent-dex-modloc3.txt
+   (MODLOC3's probe of services/classes2.dex): putExtra("location", fix),
+   putExtra("locations", Location[]) for a batch, putExtra("providerEnabled", boolean).

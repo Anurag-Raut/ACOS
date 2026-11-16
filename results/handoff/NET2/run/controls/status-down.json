@@ -1,0 +1,31 @@
+{
+  "up": false,
+  "down_reason": "pasta killed (held down)",
+  "fabric_pid": 1291049,
+  "pasta_pid": null,
+  "pasta_version": "2026_10_02.cba3570",
+  "pasta_tag_expected": "2026_10_02.cba3570",
+  "host_ports": [
+    18081
+  ],
+  "sessions": [
+    {
+      "index": 1,
+      "name": "fc",
+      "veth": "acosv1",
+      "address": "10.163.1.2",
+      "gateway": "10.163.1.1",
+      "pid": 1296079,
+      "offline": false,
+      "delay_ms": 0,
+      "loss_pct": 0,
+      "host_ports": [],
+      "alive": true
+    }
+  ],
+  "relay_veths": [
+    "acosv1"
+  ],
+  "session_rules": 1,
+  "attach_ms_last": 18.504558
+}

@@ -214,6 +214,102 @@ public final class ParcelableCompareMain {
         return devices;
     }
 
+    // ------------------------------------------------------------------
+    // PIFILLIN: `Intent.fillIn` differential cases
+    // ------------------------------------------------------------------
+    //
+    // Each case builds the *stored* intent (`a`) and the caller's fill-in
+    // (`b`), calls the real `Intent.fillIn(b, flags)` and writes `a` with the
+    // real `writeToParcel`. The Rust side builds the same two intents, runs
+    // `acos_services::fill_in::fill_in_value` and writes the merged value with
+    // `parcelable::write_intent`: the two byte streams must be identical.
+    //
+    // A non-null `Uri` is deliberately absent: this image's `Uri.writeToParcel`
+    // body is not pinned by the dex, so `parcelable` refuses it instead of
+    // guessing (`type`-only reaches the same data/type rule with String8).
+
+    static Intent filledIn(Intent a, Intent b, int flags) {
+        a.fillIn(b, flags);
+        return a;
+    }
+
+    static Intent emptyFilledIn() {
+        Intent a = new Intent();
+        Intent b = new Intent("android.intent.action.VIEW");
+        b.setType("text/plain");
+        b.setIdentifier("id-1");
+        b.setPackage("dev.acos.fixtures.pifillin");
+        b.addCategory("android.intent.category.DEFAULT");
+        b.addCategory("android.intent.category.BROWSABLE");
+        b.putExtra("action", "from-fill-in");
+        b.putExtra("count", 3);
+        return filledIn(a, b, 0);
+    }
+
+    static Intent componentFilledIn(boolean allow) {
+        Intent a = new Intent();
+        a.setComponent(new android.content.ComponentName("dev.acos.fixtures", "Stored"));
+        a.setAction("stored.action");
+        Intent b = new Intent();
+        b.setComponent(new android.content.ComponentName("dev.acos.fixtures", "Fill"));
+        b.setAction("fill.action");
+        return filledIn(a, b, allow ? Intent.FILL_IN_COMPONENT | Intent.FILL_IN_ACTION : 0);
+    }
+
+    static Intent overwrittenFilledIn() {
+        Intent a = new Intent();
+        a.setAction("stored.action");
+        a.addCategory("stored.category");
+        a.setPackage("stored.pkg");
+        a.setComponent(new android.content.ComponentName("stored.pkg", "Stored"));
+        Intent b = new Intent();
+        b.setAction("fill.action");
+        b.addCategory("fill.category");
+        b.setPackage("fill.pkg");
+        b.setComponent(new android.content.ComponentName("fill.pkg", "Fill"));
+        return filledIn(a, b, Intent.FILL_IN_ACTION | Intent.FILL_IN_CATEGORIES
+                | Intent.FILL_IN_PACKAGE | Intent.FILL_IN_COMPONENT);
+    }
+
+    static Intent extrasFilledIn() {
+        Intent a = new Intent();
+        a.putExtra("stored", "mine");
+        a.putExtra("shared", 1);
+        Intent b = new Intent();
+        b.putExtra("fresh", true);
+        b.putExtra("shared", 2);
+        return filledIn(a, b, 0);
+    }
+
+    static Intent dataTypeFilledIn() {
+        Intent a = new Intent();
+        a.setType("text/plain");
+        Intent b = new Intent();
+        b.setType("image/png");
+        return filledIn(a, b, Intent.FILL_IN_DATA);
+    }
+
+    static Intent selectorFilledIn() {
+        Intent a = new Intent();
+        a.setAction("outer.action");
+        Intent selector = new Intent("inner.action");
+        selector.addCategory("inner.category");
+        Intent b = new Intent();
+        b.setSelector(selector);
+        return filledIn(a, b, Intent.FILL_IN_SELECTOR);
+    }
+
+    static Intent flagsAndBoundsFilledIn() {
+        Intent a = new Intent();
+        a.setAction("stored.action");
+        a.setFlags(0x10000000);
+        a.setSourceBounds(new android.graphics.Rect(1, 2, 3, 4));
+        Intent b = new Intent();
+        b.setFlags(0x00000001);
+        b.setSourceBounds(new android.graphics.Rect(10, 20, 30, 40));
+        return filledIn(a, b, Intent.FILL_IN_SOURCE_BOUNDS);
+    }
+
     static void emit(String name, Writer writer) throws Exception {
         Parcel p = Parcel.obtain();
         try {
@@ -256,6 +352,15 @@ public final class ParcelableCompareMain {
         ctor.setAccessible(true);
         final PendingIntent pending = (PendingIntent) ctor.newInstance(sender);
         emit("notification_intent", p -> notification(pending).writeToParcel(p, 0));
+        // PIFILLIN: `a.fillIn(b, flags)` then `a.writeToParcel`.
+        emit("fillin_empty", p -> emptyFilledIn().writeToParcel(p, 0));
+        emit("fillin_component_kept", p -> componentFilledIn(false).writeToParcel(p, 0));
+        emit("fillin_component_allowed", p -> componentFilledIn(true).writeToParcel(p, 0));
+        emit("fillin_overwritten", p -> overwrittenFilledIn().writeToParcel(p, 0));
+        emit("fillin_extras", p -> extrasFilledIn().writeToParcel(p, 0));
+        emit("fillin_data_type", p -> dataTypeFilledIn().writeToParcel(p, 0));
+        emit("fillin_selector", p -> selectorFilledIn().writeToParcel(p, 0));
+        emit("fillin_flags_bounds", p -> flagsAndBoundsFilledIn().writeToParcel(p, 0));
 
         for (String arg : args) {
             int eq = arg.indexOf('=');
@@ -271,6 +376,26 @@ public final class ParcelableCompareMain {
                 Parcelable got = null;
                 Object dynamicObject = null;
                 Object dynamicException = null;
+                if (name.startsWith("fillin_")) {
+                    Intent intent = Intent.CREATOR.createFromParcel(p);
+                    p.enforceNoDataAvail();
+                    System.out.println("read." + name + "=ok");
+                    System.out.println("read." + name + ".action="
+                            + intent.getAction() + " type=" + intent.getType()
+                            + " flags=" + intent.getFlags()
+                            + " categories=" + intent.getCategories()
+                            + " package=" + intent.getPackage()
+                            + " extras=" + intent.getExtras());
+                    Parcel rewritten = Parcel.obtain();
+                    try {
+                        intent.writeToParcel(rewritten, 0);
+                        System.out.println("roundtrip." + name + "="
+                                + hex(rewritten.marshall()));
+                    } finally {
+                        rewritten.recycle();
+                    }
+                    continue;
+                }
                 switch (name) {
                     case "bluetooth_result": {
                         dynamicObject = p.readValue(null);
