@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/fragments-nav.apk",
+  "apk_sha256": "7636339889eab262f92e6d476043f76a5e58513082d2393bbea2ddf953c7a790",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w15-fragments-nav.yaml",
+  "scenario_sha256": "d4fce6124cf9895d059a5c711a186c2499afa719444bb5d12b827fe8f82a8fa7",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/widget-gallery.apk",
+  "apk_sha256": "bad162f7928da534e4d4ef149b003bb3823ff9a72583699de583bb3ad2a08d76",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/suite/T04-text-wrong.yaml",
+  "scenario_sha256": "39398d89be3ec151219ac9ba8d2e801ac2e7c18ce5ab5dfc9bf572b2e082522d",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

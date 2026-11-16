@@ -1,0 +1,1426 @@
+{
+  "animations": "off",
+  "app": {
+    "package": "com.gaten",
+    "path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+    "sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29"
+  },
+  "backend": "acos-native",
+  "captures": {
+    "lesson-anki-blocked": "frames/12-lesson-anki-blocked.png",
+    "lesson-back-home": "frames/26-lesson-back-home.png",
+    "lesson-home": "frames/8-lesson-home.png",
+    "lesson-home-again": "frames/15-lesson-home-again.png",
+    "lesson-token-entered": "frames/23-lesson-token-entered.png",
+    "lesson-wanikani-connect": "frames/19-lesson-wanikani-connect.png"
+  },
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "results/release/v0.3.0-gate/correctness/04-scenarios-baseline022/gaten-lesson/artifacts",
+    "engine_report": "results/release/v0.3.0-gate/correctness/04-scenarios-baseline022/gaten-lesson/artifacts/engine.json",
+    "pruned_session_captures": 20,
+    "retention": "results/release/v0.3.0-gate/correctness/04-scenarios-baseline022/gaten-lesson/artifacts/retention.json",
+    "verdict": "results/release/v0.3.0-gate/correctness/04-scenarios-baseline022/gaten-lesson/artifacts/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-16T09:26:11.122Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 3 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (prune-unreferenced): 85 file(s) / 20.6 MiB kept, 20 file(s) / 3.2 MiB pruned; see retention.json"
+  ],
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.2.2",
+    "apk_path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+    "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 400,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "scenarios/gaten-lesson.yaml",
+    "scenario_sha256": "221e17e8dfa8280852576d15ae5c27ffb2932ceb550a23bb58b28d09a2ab0a81"
+  },
+  "request_id": "req_34b6cf_18e87c5540293ee6",
+  "resources": {
+    "events": 294,
+    "frames_captured": 28,
+    "memory_mib": 239,
+    "peak_rss_bytes": 251645952,
+    "sessions": 1,
+    "steps": 28,
+    "wall_ms": 13286
+  },
+  "scenario": {
+    "name": "gaten-lesson",
+    "path": "scenarios/gaten-lesson.yaml",
+    "sha256": "221e17e8dfa8280852576d15ae5c27ffb2932ceb550a23bb58b28d09a2ab0a81"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=307MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3454685-i3424196.scope)",
+    "code": null,
+    "disk_free_bytes": 232340172800,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": "results/release/v0.3.0-gate/correctness/04-scenarios-baseline022/gaten-lesson/artifacts/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_gaten-dev-f344272-x86_64-release-unsigned",
+  "started_at": "2026-11-16T09:25:57.836Z",
+  "status": "pass",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 1550,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "previous_observation": false
+          },
+          "expected": {
+            "compared": false
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "no previous observation to compare; change not claimed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 5512,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/3.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/3.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-tap.json"
+        }
+      ],
+      "frame_seq": 3,
+      "index": 1,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 15,
+        "bound": "strict-event",
+        "first_change_ms": 58,
+        "frame_ms": 484,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 92,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/4.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/4.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-tap.json"
+        }
+      ],
+      "frame_seq": 4,
+      "index": 2,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "state-commit",
+        "first_change_ms": 64,
+        "frame_ms": 67,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "settled": true,
+        "state_changed": true
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 46,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/5.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/5.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/03-tap.json"
+        }
+      ],
+      "frame_seq": 5,
+      "index": 3,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "state-commit",
+        "first_change_ms": 2,
+        "frame_ms": 20,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "settled": true,
+        "state_changed": true
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 61,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/6.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/6.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/04-tap.json"
+        }
+      ],
+      "frame_seq": 6,
+      "index": 4,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 15,
+        "bound": "state-commit",
+        "first_change_ms": 19,
+        "frame_ms": 31,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "settled": true,
+        "state_changed": true
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 338,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/7.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/7.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/05-wait_for.json"
+        }
+      ],
+      "frame_seq": 7,
+      "index": 5,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 257,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 39
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 69,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/8.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/8.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/8-lesson-home.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/06-capture.json"
+        }
+      ],
+      "frame_seq": 8,
+      "index": 6,
+      "name": "lesson-home",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 258,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 35
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 910,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/10.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/10.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/07-tap.json"
+        }
+      ],
+      "frame_seq": 10,
+      "index": 7,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 618,
+        "frame_ms": 827,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 94,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/11.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/11.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/08-wait_for.json"
+        }
+      ],
+      "frame_seq": 11,
+      "index": 8,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 286,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 41
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 89,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/12.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/12.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/12-lesson-anki-blocked.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/09-capture.json"
+        }
+      ],
+      "frame_seq": 12,
+      "index": 9,
+      "name": "lesson-anki-blocked",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 287,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 36
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              278,
+              1150,
+              801,
+              1224
+            ],
+            "hint": "",
+            "node": "n26_",
+            "text": "Anki is not installed",
+            "visible": true
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "text": {
+                "exact": "Anki is not installed"
+              }
+            },
+            "text": {
+              "exact": "Anki is not installed"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n26_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/12.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/12.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/10-assert_text.json"
+        }
+      ],
+      "frame_seq": 12,
+      "index": 10,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 287,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 36
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              396,
+              1458,
+              682,
+              1511
+            ],
+            "hint": "",
+            "node": "n27_",
+            "text": "Download Anki",
+            "visible": true
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "text": {
+                "exact": "Download Anki"
+              }
+            },
+            "text": {
+              "exact": "Download Anki"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n27_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/12.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/12.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/11-assert_text.json"
+        }
+      ],
+      "frame_seq": 12,
+      "index": 11,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 287,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 36
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 1241,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/13.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/13.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/12-back.json"
+        }
+      ],
+      "frame_seq": 13,
+      "index": 12,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 600,
+        "frame_ms": 1199,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "back"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 104,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/14.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/14.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/13-wait_for.json"
+        }
+      ],
+      "frame_seq": 14,
+      "index": 13,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 319,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 43
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 113,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/15.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/15.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/15-lesson-home-again.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/14-capture.json"
+        }
+      ],
+      "frame_seq": 15,
+      "index": 14,
+      "name": "lesson-home-again",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 320,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 915,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/17.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/17.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/15-tap.json"
+        }
+      ],
+      "frame_seq": 17,
+      "index": 15,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 595,
+        "frame_ms": 823,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 82,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/18.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/18.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/16-wait_for.json"
+        }
+      ],
+      "frame_seq": 18,
+      "index": 16,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 349,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 82,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/19.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/19.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/19-lesson-wanikani-connect.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/17-capture.json"
+        }
+      ],
+      "frame_seq": 19,
+      "index": 17,
+      "name": "lesson-wanikani-connect",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 350,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              292,
+              624,
+              786,
+              698
+            ],
+            "hint": "",
+            "node": "n27_",
+            "text": "Connect WaniKani",
+            "visible": true
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "text": {
+                "exact": "Connect WaniKani"
+              }
+            },
+            "text": {
+              "exact": "Connect WaniKani"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n27_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/19.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/19.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/18-assert_text.json"
+        }
+      ],
+      "frame_seq": 19,
+      "index": 18,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 350,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              58,
+              1142,
+              1024,
+              1195
+            ],
+            "hint": "",
+            "node": "n27_",
+            "text": "Personal access token",
+            "visible": true
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "text": {
+                "exact": "Personal access token"
+              }
+            },
+            "text": {
+              "exact": "Personal access token"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n27_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/19.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/19.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/19-assert_text.json"
+        }
+      ],
+      "frame_seq": 19,
+      "index": 19,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 350,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 261,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/21.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/21.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/20-tap.json"
+        }
+      ],
+      "frame_seq": 21,
+      "index": 20,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 144,
+        "frame_ms": 177,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 71,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/22.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/22.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/21-type.json"
+        }
+      ],
+      "frame_seq": 22,
+      "index": 21,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 10,
+        "bound": "state-commit",
+        "first_change_ms": 35,
+        "frame_ms": 42,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "settled": true,
+        "state_changed": true
+      },
+      "status": "pass",
+      "step": "type"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 73,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/23.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/23.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/23-lesson-token-entered.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/22-capture.json"
+        }
+      ],
+      "frame_seq": 23,
+      "index": 22,
+      "name": "lesson-token-entered",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 357,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 33
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              100,
+              1253,
+              982,
+              1306
+            ],
+            "hint": "Paste your token",
+            "node": "n28_",
+            "text": "••••••••••••••••",
+            "visible": true
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "content_desc": {
+                "exact": "WaniKani personal access token"
+              }
+            },
+            "text": {
+              "regex": "^[•*]{16}$"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n28_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/23.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/23.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/23-assert_text.json"
+        }
+      ],
+      "frame_seq": 23,
+      "index": 23,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 357,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 33
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 1134,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/24.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/24.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/24-back.json"
+        }
+      ],
+      "frame_seq": 24,
+      "index": 24,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 511,
+        "frame_ms": 1103,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event"
+      },
+      "status": "pass",
+      "step": "back"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 315,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/25.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/25.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/25-wait_for.json"
+        }
+      ],
+      "frame_seq": 25,
+      "index": 25,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 396,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 88,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/26.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/26.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/26-lesson-back-home.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/26-capture.json"
+        }
+      ],
+      "frame_seq": 26,
+      "index": 26,
+      "name": "lesson-back-home",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 397,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 41
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              150,
+              610,
+              764,
+              663
+            ],
+            "hint": "",
+            "node": "n27_",
+            "text": "Daily streak",
+            "visible": true
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "text": {
+                "contains": "Daily streak"
+              }
+            },
+            "text": {
+              "contains": "Daily streak"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n27_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/26.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/26.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/27-assert_text.json"
+        }
+      ],
+      "frame_seq": 26,
+      "index": 27,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 397,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 41
+      },
+      "status": "pass",
+      "step": "assert_text"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "pass"
+}

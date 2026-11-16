@@ -1,0 +1,2087 @@
+{
+  "animations": "on",
+  "app": {
+    "package": "dev.acos.fixtures.todolist",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/todo-list.apk",
+    "sha256": "1d94c4c9806be2f3a9e6dd4f9699c1923459e8e09dcdef2b776de8b522b375eb"
+  },
+  "backend": "acos-native",
+  "captures": {
+    "after-add-milk": "frames/8-after-add-milk.png",
+    "after-remove": "frames/15-after-remove.png"
+  },
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "results/release/v0.3.0-gate/correctness/04-scenarios/todo-list/artifacts",
+    "engine_report": "results/release/v0.3.0-gate/correctness/04-scenarios/todo-list/artifacts/engine.json",
+    "pruned_session_captures": 12,
+    "retention": "results/release/v0.3.0-gate/correctness/04-scenarios/todo-list/artifacts/retention.json",
+    "verdict": "results/release/v0.3.0-gate/correctness/04-scenarios/todo-list/artifacts/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-16T09:15:59.801Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (prune-unreferenced): 66 file(s) / 1.6 MiB kept, 12 file(s) / 0.9 MiB pruned; see retention.json"
+  ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794521208377128221,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/todo-list.apk",
+      "sha256": "1d94c4c9806be2f3a9e6dd4f9699c1923459e8e09dcdef2b776de8b522b375eb",
+      "sha256_12": "1d94c4c9806b",
+      "size_bytes": 12756
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794819964136509737,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/todo-list.yaml",
+      "sha256": "707d0844de7bfea29671cb5ea974730274687a361afa0c3c63d432c6b6cb71c6",
+      "sha256_12": "707d0844de7b",
+      "size_bytes": 3605
+    },
+    "scenario_engine": "rust-vm",
+    "warnings": [
+      {
+        "code": "SCENARIO_ENGINE_MISMATCH",
+        "engine": "art",
+        "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+        "scenario_engine": "rust-vm"
+      },
+      {
+        "acked": 8,
+        "code": "INPUT_UNHANDLED",
+        "handled": false,
+        "hint": "nothing at this point consumed the input and the tree has no node there (the app's window answered `finishInputEvent(handled) = false`); nothing changed because nothing was tappable",
+        "message": "step 7 (type): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+        "published": 8,
+        "step": 7,
+        "step_kind": "type",
+        "target": null,
+        "unhandled": [
+          6,
+          8,
+          10,
+          12
+        ]
+      },
+      {
+        "acked": 10,
+        "code": "INPUT_UNHANDLED",
+        "handled": false,
+        "hint": "nothing at this point consumed the input and the tree has no node there (the app's window answered `finishInputEvent(handled) = false`); nothing changed because nothing was tappable",
+        "message": "step 13 (type): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+        "published": 10,
+        "step": 13,
+        "step_kind": "type",
+        "target": null,
+        "unhandled": [
+          18,
+          20,
+          22,
+          24,
+          26
+        ]
+      }
+    ]
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.3.0",
+    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/todo-list.apk",
+    "apk_sha256": "1d94c4c9806be2f3a9e6dd4f9699c1923459e8e09dcdef2b776de8b522b375eb",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/todo-list.yaml",
+    "scenario_sha256": "707d0844de7bfea29671cb5ea974730274687a361afa0c3c63d432c6b6cb71c6"
+  },
+  "request_id": "req_3367a4_18e87bc894768d86",
+  "resources": {
+    "events": 302,
+    "frames_captured": 24,
+    "memory_mib": 15,
+    "peak_rss_bytes": 16351232,
+    "sessions": 1,
+    "steps": 29,
+    "wall_ms": 6697
+  },
+  "scenario": {
+    "name": "todo-list",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/todo-list.yaml",
+    "sha256": "707d0844de7bfea29671cb5ea974730274687a361afa0c3c63d432c6b6cb71c6"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=107MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3368882-i3348681.scope)",
+    "code": null,
+    "disk_free_bytes": 249012768768,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": "results/release/v0.3.0-gate/correctness/04-scenarios/todo-list/artifacts/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_todo-list",
+  "started_at": "2026-11-16T09:15:53.104Z",
+  "status": "pass",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 142,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 56,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-wait_for.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 1,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 6,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 39,
+        "waited_ms": 55,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              42,
+              317,
+              1038,
+              435
+            ],
+            "hint": "New item",
+            "node": "n4_dev.acos.fixtures.todolist:id/input",
+            "text": "New item",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              42,
+              317,
+              1038,
+              435
+            ],
+            "selector": {
+              "id": "input"
+            },
+            "text": {
+              "exact": "New item"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n4_dev.acos.fixtures.todolist:id/input"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-assert_text.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 2,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 6,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 39,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              42,
+              435,
+              273,
+              561
+            ],
+            "hint": "",
+            "node": "n5_dev.acos.fixtures.todolist:id/add",
+            "text": "Add",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              42,
+              435,
+              273,
+              561
+            ],
+            "selector": {
+              "id": "add"
+            },
+            "text": {
+              "exact": "Add"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n5_dev.acos.fixtures.todolist:id/add"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/03-assert_text.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 3,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 6,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 39,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              273,
+              435,
+              504,
+              561
+            ],
+            "hint": "",
+            "node": "n5_dev.acos.fixtures.todolist:id/clear",
+            "text": "Clear all",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              273,
+              435,
+              504,
+              561
+            ],
+            "selector": {
+              "id": "clear"
+            },
+            "text": {
+              "exact": "Clear all"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n5_dev.acos.fixtures.todolist:id/clear"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/04-assert_text.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 4,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 6,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 39,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "matched_lines": 3,
+            "sample": [
+              "AcosTodo: onCreate",
+              "AcosTodo: onStart",
+              "AcosTodo: onResume"
+            ]
+          },
+          "expected": {
+            "min_matches": 1,
+            "ordered": true,
+            "patterns": [
+              "^onCreate$",
+              "^onStart$",
+              "^onResume$"
+            ],
+            "since_previous_step": false,
+            "tag": "AcosTodo"
+          },
+          "kind": "log",
+          "matched_node_ids": [],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/05-assert_log.json"
+        }
+      ],
+      "index": 5,
+      "provenance": {
+        "logs": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "assert_log"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "acks": 2,
+            "delivered": true,
+            "handled": true,
+            "visual_change": false
+          },
+          "expected": {
+            "delivered": true
+          },
+          "kind": "input_delivery",
+          "matched_node_ids": [],
+          "message": "host-observed input delivery (2 guest ack(s), handled: Some(true)); no visual change; no state change claimed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 172,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/4.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/4.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/06-tap.json"
+        }
+      ],
+      "frame_seq": 4,
+      "index": 6,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "handled_hint": "the app's window consumed the input (`finishInputEvent(handled) = true`) but the settled frame shows no change: the handler may be asynchronous, or the control already had that state. Assert on the state you expect instead of expecting a change",
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[42,317][1038,435]",
+              "class": "android.widget.EditText",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": true,
+              "id": "n4_dev.acos.fixtures.todolist:id/input",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.todolist:id/input",
+              "scrollable": false,
+              "text": "New item",
+              "visible_bounds": "[42,317][1038,435]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[42,317][1038,435]",
+              "class": "android.widget.EditText",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": true,
+              "id": "n4_dev.acos.fixtures.todolist:id/input",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.todolist:id/input",
+              "scrollable": false,
+              "text": "New item",
+              "visible_bounds": "[42,317][1038,435]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "point": {
+            "x": 540,
+            "y": 376
+          },
+          "selector": {
+            "selector": "id==\"input\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 77,
+        "frame_ms": 118,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": false,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 172,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 104,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/5.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/5.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/07-type.json"
+        }
+      ],
+      "frame_seq": 5,
+      "index": 7,
+      "input": {
+        "expect_change": false,
+        "handled": false,
+        "handled_evidence": {
+          "acked": 8,
+          "published": 8,
+          "source": "guest",
+          "unhandled": [
+            6,
+            8,
+            10,
+            12
+          ]
+        },
+        "handled_hint": "nothing at this point consumed the input and the tree has no node there (the app's window answered `finishInputEvent(handled) = false`); nothing changed because nothing was tappable",
+        "target": null
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 10,
+        "bound": "strict-event",
+        "first_change_ms": 51,
+        "frame_ms": 92,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 104,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "type",
+      "warnings": [
+        {
+          "acked": 8,
+          "code": "INPUT_UNHANDLED",
+          "handled": false,
+          "hint": "nothing at this point consumed the input and the tree has no node there (the app's window answered `finishInputEvent(handled) = false`); nothing changed because nothing was tappable",
+          "message": "step 7 (type): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+          "published": 8,
+          "step": 7,
+          "step_kind": "type",
+          "target": null,
+          "unhandled": [
+            6,
+            8,
+            10,
+            12
+          ]
+        }
+      ]
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1555,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/7.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/7.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/08-tap.json"
+        }
+      ],
+      "frame_seq": 7,
+      "index": 8,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[42,435][273,561]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.todolist:id/add",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.todolist:id/add",
+              "scrollable": false,
+              "text": "Add",
+              "visible_bounds": "[42,435][273,561]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[42,435][273,561]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.todolist:id/add",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.todolist:id/add",
+              "scrollable": false,
+              "text": "Add",
+              "visible_bounds": "[42,435][273,561]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "point": {
+            "x": 157,
+            "y": 498
+          },
+          "selector": {
+            "selector": "id==\"add\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 95,
+        "frame_ms": 1086,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 1555,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "matched_lines": 1,
+            "sample": [
+              "AcosTodo: add item=milk size=1"
+            ]
+          },
+          "expected": {
+            "min_matches": 1,
+            "ordered": true,
+            "patterns": [
+              "^add item=milk size=1$"
+            ],
+            "since_previous_step": true,
+            "tag": "AcosTodo"
+          },
+          "kind": "log",
+          "matched_node_ids": [],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/09-assert_log.json"
+        }
+      ],
+      "index": 9,
+      "provenance": {
+        "logs": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "assert_log"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              42,
+              561,
+              1038,
+              687
+            ],
+            "hint": "",
+            "node": "n5_android:id/text1",
+            "text": "milk",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              42,
+              561,
+              1038,
+              687
+            ],
+            "selector": {
+              "text": {
+                "exact": "milk"
+              }
+            },
+            "text": {
+              "exact": "milk"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n5_android:id/text1"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/7.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/7.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/10-assert_text.json"
+        }
+      ],
+      "frame_seq": 7,
+      "index": 10,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 95,
+        "frame_ms": 1086,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 52,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/8.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/8.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/8-after-add-milk.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/11-capture.json"
+        }
+      ],
+      "frame_seq": 8,
+      "index": 11,
+      "name": "after-add-milk",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 62,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 52,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "acks": 2,
+            "delivered": true,
+            "handled": true,
+            "visual_change": false
+          },
+          "expected": {
+            "delivered": true
+          },
+          "kind": "input_delivery",
+          "matched_node_ids": [],
+          "message": "host-observed input delivery (2 guest ack(s), handled: Some(true)); no visual change; no state change claimed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 156,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/10.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/10.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/12-tap.json"
+        }
+      ],
+      "frame_seq": 10,
+      "index": 12,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "handled_hint": "the app's window consumed the input (`finishInputEvent(handled) = true`) but the settled frame shows no change: the handler may be asynchronous, or the control already had that state. Assert on the state you expect instead of expecting a change",
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[42,317][1038,435]",
+              "class": "android.widget.EditText",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": true,
+              "id": "n4_dev.acos.fixtures.todolist:id/input",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.todolist:id/input",
+              "scrollable": false,
+              "text": "New item",
+              "visible_bounds": "[42,317][1038,435]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[42,317][1038,435]",
+              "class": "android.widget.EditText",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": true,
+              "id": "n4_dev.acos.fixtures.todolist:id/input",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.todolist:id/input",
+              "scrollable": false,
+              "text": "New item",
+              "visible_bounds": "[42,317][1038,435]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "point": {
+            "x": 540,
+            "y": 376
+          },
+          "selector": {
+            "selector": "id==\"input\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 65,
+        "frame_ms": 103,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": false,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 156,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 100,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/11.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/11.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/13-type.json"
+        }
+      ],
+      "frame_seq": 11,
+      "index": 13,
+      "input": {
+        "expect_change": false,
+        "handled": false,
+        "handled_evidence": {
+          "acked": 10,
+          "published": 10,
+          "source": "guest",
+          "unhandled": [
+            18,
+            20,
+            22,
+            24,
+            26
+          ]
+        },
+        "handled_hint": "nothing at this point consumed the input and the tree has no node there (the app's window answered `finishInputEvent(handled) = false`); nothing changed because nothing was tappable",
+        "target": null
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 10,
+        "bound": "strict-event",
+        "first_change_ms": 50,
+        "frame_ms": 88,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 100,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "type",
+      "warnings": [
+        {
+          "acked": 10,
+          "code": "INPUT_UNHANDLED",
+          "handled": false,
+          "hint": "nothing at this point consumed the input and the tree has no node there (the app's window answered `finishInputEvent(handled) = false`); nothing changed because nothing was tappable",
+          "message": "step 13 (type): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+          "published": 10,
+          "step": 13,
+          "step_kind": "type",
+          "target": null,
+          "unhandled": [
+            18,
+            20,
+            22,
+            24,
+            26
+          ]
+        }
+      ]
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1137,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/13.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/13.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/14-tap.json"
+        }
+      ],
+      "frame_seq": 13,
+      "index": 14,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[42,435][273,561]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.todolist:id/add",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.todolist:id/add",
+              "scrollable": false,
+              "text": "Add",
+              "visible_bounds": "[42,435][273,561]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[42,435][273,561]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.todolist:id/add",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.todolist:id/add",
+              "scrollable": false,
+              "text": "Add",
+              "visible_bounds": "[42,435][273,561]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "point": {
+            "x": 157,
+            "y": 498
+          },
+          "selector": {
+            "selector": "id==\"add\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 95,
+        "frame_ms": 1084,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 1137,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "matched_lines": 1,
+            "sample": [
+              "AcosTodo: add item=bread size=2"
+            ]
+          },
+          "expected": {
+            "min_matches": 1,
+            "ordered": true,
+            "patterns": [
+              "^add item=bread size=2$"
+            ],
+            "since_previous_step": true,
+            "tag": "AcosTodo"
+          },
+          "kind": "log",
+          "matched_node_ids": [],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/15-assert_log.json"
+        }
+      ],
+      "index": 15,
+      "provenance": {
+        "logs": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "assert_log"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              42,
+              690,
+              1038,
+              816
+            ],
+            "hint": "",
+            "node": "n5_android:id/text1",
+            "text": "bread",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              42,
+              690,
+              1038,
+              816
+            ],
+            "selector": {
+              "text": {
+                "exact": "bread"
+              }
+            },
+            "text": {
+              "exact": "bread"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n5_android:id/text1"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/13.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/13.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/16-assert_text.json"
+        }
+      ],
+      "frame_seq": 13,
+      "index": 16,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 95,
+        "frame_ms": 1084,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1007,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/14.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/14.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/17-tap.json"
+        }
+      ],
+      "frame_seq": 14,
+      "index": 17,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": {
+              "bounds": "[42,561][1038,2169]",
+              "class": "android.widget.ListView",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_dev.acos.fixtures.todolist:id/list",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.todolist:id/list",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[42,561][1038,2169]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[42,561][1038,687]",
+              "class": "android.widget.TextView",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_android:id/text1",
+              "password": false,
+              "resource_id": "android:id/text1",
+              "scrollable": false,
+              "text": "milk",
+              "visible_bounds": "[42,561][1038,687]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "node": {
+            "bounds": "[42,561][1038,687]",
+            "class": "android.widget.TextView",
+            "clickable": false,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n5_android:id/text1",
+            "password": false,
+            "resource_id": "android:id/text1",
+            "scrollable": false,
+            "text": "milk",
+            "visible_bounds": "[42,561][1038,687]",
+            "window": "main"
+          },
+          "point": {
+            "x": 540,
+            "y": 624
+          },
+          "selector": {
+            "selector": "text==\"milk\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 146,
+        "frame_ms": 995,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 1007,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "matched_lines": 1,
+            "sample": [
+              "AcosTodo: remove item=milk size=1"
+            ]
+          },
+          "expected": {
+            "min_matches": 1,
+            "ordered": true,
+            "patterns": [
+              "^remove item=milk size=1$"
+            ],
+            "since_previous_step": true,
+            "tag": "AcosTodo"
+          },
+          "kind": "log",
+          "matched_node_ids": [],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/18-assert_log.json"
+        }
+      ],
+      "index": 18,
+      "provenance": {
+        "logs": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "assert_log"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "present": false,
+            "visible": null
+          },
+          "expected": {
+            "selector": {
+              "text": {
+                "exact": "milk"
+              }
+            },
+            "visible": false
+          },
+          "kind": "not_visible",
+          "matched_node_ids": [],
+          "message": "node absent",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/14.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/14.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/19-assert_not_visible.json"
+        }
+      ],
+      "frame_seq": 14,
+      "index": 19,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 146,
+        "frame_ms": 995,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_not_visible"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              42,
+              561,
+              1038,
+              687
+            ],
+            "hint": "",
+            "node": "n5_android:id/text1",
+            "text": "bread",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              42,
+              561,
+              1038,
+              687
+            ],
+            "selector": {
+              "text": {
+                "exact": "bread"
+              }
+            },
+            "text": {
+              "exact": "bread"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n5_android:id/text1"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/14.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/14.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/20-assert_text.json"
+        }
+      ],
+      "frame_seq": 14,
+      "index": 20,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 146,
+        "frame_ms": 995,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 54,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/15.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/15.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/15-after-remove.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/21-capture.json"
+        }
+      ],
+      "frame_seq": 15,
+      "index": 21,
+      "name": "after-remove",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 144,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 54,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 195,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/16.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/16.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/22-rotate.json"
+        }
+      ],
+      "frame_seq": 16,
+      "index": 22,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 146,
+        "frame_ms": 995,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 195,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "rotate"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              170,
+              475,
+              2358,
+              601
+            ],
+            "hint": "",
+            "node": "n5_android:id/text1",
+            "text": "bread",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              170,
+              475,
+              2358,
+              601
+            ],
+            "selector": {
+              "text": {
+                "exact": "bread"
+              }
+            },
+            "text": {
+              "exact": "bread"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n5_android:id/text1"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/16.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/16.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/23-assert_text.json"
+        }
+      ],
+      "frame_seq": 16,
+      "index": 23,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 151,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 35,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "present": false,
+            "visible": null
+          },
+          "expected": {
+            "selector": {
+              "text": {
+                "exact": "milk"
+              }
+            },
+            "visible": false
+          },
+          "kind": "not_visible",
+          "matched_node_ids": [],
+          "message": "node absent",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/16.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/16.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/24-assert_not_visible.json"
+        }
+      ],
+      "frame_seq": 16,
+      "index": 24,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 151,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 35,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_not_visible"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 196,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/17.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/17.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/25-rotate.json"
+        }
+      ],
+      "frame_seq": 17,
+      "index": 25,
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 146,
+        "frame_ms": 995,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 196,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "rotate"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              42,
+              561,
+              1038,
+              687
+            ],
+            "hint": "",
+            "node": "n5_android:id/text1",
+            "text": "bread",
+            "visible": true
+          },
+          "expected": {
+            "bounds": [
+              42,
+              561,
+              1038,
+              687
+            ],
+            "selector": {
+              "text": {
+                "exact": "bread"
+              }
+            },
+            "text": {
+              "exact": "bread"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n5_android:id/text1"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/17.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/17.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/26-assert_text.json"
+        }
+      ],
+      "frame_seq": 17,
+      "index": 26,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 158,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 39,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 1757,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/18.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/18.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/27-back.json"
+        }
+      ],
+      "frame_seq": 18,
+      "index": 27,
+      "input": {
+        "expect_change": false,
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "handled_hint": "the app's window consumed the input (`finishInputEvent(handled) = true`) but the settled frame shows no change: the handler may be asynchronous, or the control already had that state. Assert on the state you expect instead of expecting a change",
+        "target": null
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 10,
+        "bound": "strict-event",
+        "first_change_ms": 1708,
+        "frame_ms": 1746,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": false,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 1757,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "back"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "crashes": 0
+          },
+          "expected": "no crash",
+          "kind": "no_crash",
+          "matched_node_ids": [],
+          "message": "no crash recorded",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/28-assert_no_crash.json"
+        }
+      ],
+      "index": 28,
+      "provenance": {
+        "crash_reports": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "assert_no_crash"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "pass"
+}

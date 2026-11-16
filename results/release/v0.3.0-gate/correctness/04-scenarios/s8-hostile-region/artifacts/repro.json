@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/hostile-probe.apk",
+  "apk_sha256": "df2736658d4498d0d895f2237646d7d9638801b6d969b256752f08dcb82fdb5a",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/s8-hostile-region.yaml",
+  "scenario_sha256": "b8c3cfdc685cc4eddeda9497532a0510ea50a632bb80e6089fd4ec86d3a769fc",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

@@ -1,0 +1,81 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "bounds": [
+          0,
+          0,
+          1080,
+          2400
+        ],
+        "hint": "",
+        "node": "n0_probe-spam",
+        "text": "HOSTILE PASS",
+        "visible": true
+      },
+      "expected": {
+        "bounds": null,
+        "selector": {
+          "id": "probe-spam"
+        },
+        "text": {
+          "exact": "HOSTILE PASS"
+        }
+      },
+      "kind": "text",
+      "matched_node_ids": [
+        "n0_probe-spam"
+      ],
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 0,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/1.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/1.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/01-assert_text.json"
+    }
+  ],
+  "frame_seq": 1,
+  "index": 1,
+  "provenance": {
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "animating": false,
+    "bound": "timeout",
+    "mode": "strict",
+    "probe": {
+      "guest_stall_pending_ms": null,
+      "newest_sample_age_ms": 1553,
+      "note": "the demand-probe channel's own counters at the timeout: wakes written, wakes the channel refused, guest samples the host refused (not newer), and the guest's own starved-probe mark",
+      "stale_samples": 31,
+      "wake_failures": 0,
+      "wakes_sent": 30
+    },
+    "probe_seq": 1063,
+    "reason": "probe-floor",
+    "settled": false,
+    "strict_rule": "event",
+    "tree_age_ms": 1553,
+    "waited_ms": 0,
+    "waited_ms_source": "step",
+    "warning": "strict settle timed out: the tree and frame identity are the latest observed state, not a settled one; this is not assertion evidence"
+  },
+  "status": "pass",
+  "step": "assert_text",
+  "trust": "trusted"
+}

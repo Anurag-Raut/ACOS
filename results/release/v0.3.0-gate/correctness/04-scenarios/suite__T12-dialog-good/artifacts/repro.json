@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/dialogs-menus.apk",
+  "apk_sha256": "e3e25ff139baf623abe65ccbcb126c694cb39c46c9366883010e0be8d6da6ae6",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/suite/T12-dialog-good.yaml",
+  "scenario_sha256": "b04ca2f8cc0fb10f04256e36f9ff83d45c789e96a8b538f26c58176bb238cc5e",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

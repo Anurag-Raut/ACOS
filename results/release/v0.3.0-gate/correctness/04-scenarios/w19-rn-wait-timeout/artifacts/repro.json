@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/rn-hello.apk",
+  "apk_sha256": "9ddb7acfa0912324aee65aba41014ae3f03d7d5a8b0af91ceebfa75b3090f6da",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w19-rn-wait-timeout.yaml",
+  "scenario_sha256": "0dee89dc206c5d40574ba6effee2c3f5bed518a5922257058d549420bffdde74",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

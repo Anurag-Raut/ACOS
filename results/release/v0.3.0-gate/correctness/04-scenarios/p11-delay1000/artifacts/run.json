@@ -1,0 +1,7 @@
+{
+  "request_id": "req_32f878_18e87bbea633b2bb",
+  "started_at": "2026-11-16T09:15:10.269Z",
+  "scenario": "scenarios/p11-delay1000.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

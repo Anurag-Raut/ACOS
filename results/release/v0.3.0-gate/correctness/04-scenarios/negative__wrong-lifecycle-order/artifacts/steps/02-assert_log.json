@@ -1,0 +1,62 @@
+{
+  "assertions": [
+    {
+      "actual": [],
+      "diff": {
+        "actual": [],
+        "detail": "log patterns did not appear in the required order",
+        "expected": {
+          "min_matches": 1,
+          "ordered": true,
+          "patterns": [
+            "^onResume$",
+            "^onStart$",
+            "^onCreate$"
+          ]
+        }
+      },
+      "expected": {
+        "min_matches": 1,
+        "ordered": true,
+        "patterns": [
+          "^onResume$",
+          "^onStart$",
+          "^onCreate$"
+        ]
+      },
+      "kind": "log",
+      "matched_node_ids": [],
+      "passed": false
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 1,
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "message": "log assertion did not hold",
+    "retryable": false
+  },
+  "evidence": [
+    {
+      "kind": "log",
+      "path": "logs/logcat.txt"
+    },
+    {
+      "kind": "step",
+      "path": "steps/02-assert_log.json"
+    }
+  ],
+  "index": 2,
+  "provenance": {
+    "logs": "guest-asserted"
+  },
+  "status": "fail",
+  "step": "assert_log",
+  "trust": "trusted"
+}

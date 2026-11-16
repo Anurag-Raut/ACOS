@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+  "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+  "scenario_path": "scenarios/gaten-lesson.yaml",
+  "scenario_sha256": "221e17e8dfa8280852576d15ae5c27ffb2932ceb550a23bb58b28d09a2ab0a81",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 400
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

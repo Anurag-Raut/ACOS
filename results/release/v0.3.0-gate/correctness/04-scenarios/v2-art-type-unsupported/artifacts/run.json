@@ -1,0 +1,7 @@
+{
+  "request_id": "req_3372f4_18e87bcb1d9c316d",
+  "started_at": "2026-11-16T09:16:03.812Z",
+  "scenario": "scenarios/v2-art-type-unsupported.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

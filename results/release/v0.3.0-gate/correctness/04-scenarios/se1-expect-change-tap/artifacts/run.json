@@ -1,0 +1,7 @@
+{
+  "request_id": "req_335577_18e87bc3cc1aab17",
+  "started_at": "2026-11-16T09:15:32.380Z",
+  "scenario": "scenarios/se1-expect-change-tap.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

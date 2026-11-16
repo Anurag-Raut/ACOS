@@ -1,0 +1,17 @@
+{"scenario": "scenarios/gaten-lesson.yaml", "name": "gaten-lesson", "exit": 0, "secs": 14}
+{"scenario": "scenarios/hello-views.yaml", "name": "hello-views", "exit": 1, "secs": 6}
+{"scenario": "scenarios/multi-activity.yaml", "name": "multi-activity", "exit": 1, "secs": 5}
+{"scenario": "scenarios/negative/multi-wrong-after-back.yaml", "name": "negative__multi-wrong-after-back", "exit": 1, "secs": 5}
+{"scenario": "scenarios/negative/offscreen-pager-wait.yaml", "name": "negative__offscreen-pager-wait", "exit": 1, "secs": 1}
+{"scenario": "scenarios/s8-hostile-region.yaml", "name": "s8-hostile-region", "exit": 1, "secs": 4}
+{"scenario": "scenarios/s8-hostile-untrusted.yaml", "name": "s8-hostile-untrusted", "exit": 1, "secs": 2}
+{"scenario": "scenarios/suite/T07-form-good.yaml", "name": "suite__T07-form-good", "exit": 1, "secs": 3}
+{"scenario": "scenarios/svg-viewbox.yaml", "name": "svg-viewbox", "exit": 1, "secs": 13}
+{"scenario": "scenarios/w15-broken-crash.yaml", "name": "w15-broken-crash", "exit": 1, "secs": 1}
+{"scenario": "scenarios/w15-broken-missing-symbol.yaml", "name": "w15-broken-missing-symbol", "exit": 1, "secs": 0}
+{"scenario": "scenarios/w25-gaten-launch.yaml", "name": "w25-gaten-launch", "exit": 1, "secs": 1}
+{"scenario": "scenarios/w26-gaten-debug-launch.yaml", "name": "w26-gaten-debug-launch", "exit": 1, "secs": 2}
+{"scenario": "scenarios/w28-gaten-debug-launch.yaml", "name": "w28-gaten-debug-launch", "exit": 1, "secs": 1}
+{"scenario": "scenarios/w44-hostile-forest-untrusted.yaml", "name": "w44-hostile-forest-untrusted", "exit": 1, "secs": 2}
+{"scenario": "scenarios/w44-hostile-parcel.yaml", "name": "w44-hostile-parcel", "exit": 1, "secs": 4}
+{"scenario": "scenarios/w44-hostile-probe-spam.yaml", "name": "w44-hostile-probe-spam", "exit": 1, "secs": 2}

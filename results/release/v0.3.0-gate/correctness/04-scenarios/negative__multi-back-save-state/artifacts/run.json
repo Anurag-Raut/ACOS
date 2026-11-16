@@ -1,0 +1,7 @@
+{
+  "request_id": "req_32e7b9_18e87bbc5ef9935f",
+  "started_at": "2026-11-16T09:15:00.484Z",
+  "scenario": "scenarios/negative/multi-back-save-state.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

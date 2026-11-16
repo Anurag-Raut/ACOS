@@ -1,0 +1,95 @@
+{
+  "assertions": [
+    {
+      "actual": null,
+      "diff": {
+        "actual": null,
+        "detail": "selector matched no node",
+        "expected": {
+          "text": {
+            "exact": "Hidden"
+          }
+        }
+      },
+      "expected": {
+        "text": {
+          "exact": "Hidden"
+        }
+      },
+      "kind": "wait_for",
+      "matched_node_ids": [],
+      "passed": false
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 1056,
+  "error": {
+    "class": "infra_timeout",
+    "code": "TIMEOUT",
+    "details": {
+      "content_confirmation_pending": false,
+      "elapsed_ms": 1055,
+      "last_frame_seq": 8,
+      "offscreen_match": {
+        "bounds": "[1122,317][1239,368]",
+        "class": "android.widget.TextView",
+        "content_desc": "",
+        "node_id": "n6_dev.acos.fixtures.offscreenpager:id/hidden",
+        "text": "Hidden",
+        "visible_bounds": null,
+        "window": "main"
+      },
+      "polls": 6,
+      "require_visible": true,
+      "selector": {
+        "text": {
+          "exact": "Hidden"
+        }
+      },
+      "settle": {
+        "mode": "content",
+        "reason": "unsettled",
+        "settled": false,
+        "source": "executor",
+        "waited_ms": 0
+      },
+      "timeout_ms": 1000
+    },
+    "hint": "The live tree kept being re-traversed until the deadline. Increase `timeout_ms` if the app is genuinely slow, or fix the selector/state; a timeout is a structured failure, never a pass. The step's `settle` record names the rule(s) it asked for and why each observation failed.",
+    "message": "wait_for timed out after 1000 ms: selector text==\"Hidden\" did not satisfy the condition (require_visible=true); it DID match a node that is not visible to the user (bounds [1122,317][1239,368], visible_bounds <none>) — scroll it into view first",
+    "retryable": true
+  },
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/8.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/8.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/02-wait_for.json"
+    }
+  ],
+  "frame_seq": 8,
+  "index": 2,
+  "provenance": {
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "mode": "content",
+    "reason": "unsettled",
+    "settled": false,
+    "source": "executor",
+    "waited_ms": 0
+  },
+  "status": "timeout",
+  "step": "wait_for",
+  "trust": "trusted"
+}

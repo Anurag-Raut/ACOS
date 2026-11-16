@@ -1,0 +1,329 @@
+{
+  "animations": "on",
+  "app": {
+    "package": "dev.acos.fixtures.dialogsmenus",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/dialogs-menus.apk",
+    "sha256": "e3e25ff139baf623abe65ccbcb126c694cb39c46c9366883010e0be8d6da6ae6"
+  },
+  "backend": "acos-native",
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "results/release/v0.3.0-gate/correctness/04-scenarios/suite__T12-dialog-wrong/artifacts",
+    "engine_report": "results/release/v0.3.0-gate/correctness/04-scenarios/suite__T12-dialog-wrong/artifacts/engine.json",
+    "retention": "results/release/v0.3.0-gate/correctness/04-scenarios/suite__T12-dialog-wrong/artifacts/retention.json",
+    "verdict": "results/release/v0.3.0-gate/correctness/04-scenarios/suite__T12-dialog-wrong/artifacts/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "failure": {
+    "code": "ASSERTION_FAILED",
+    "error": {
+      "class": "assertion",
+      "code": "ASSERTION_FAILED",
+      "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+      "message": "log assertion did not hold",
+      "retryable": false
+    },
+    "step_index": 2,
+    "summary": "step 2 (assert_log) fail"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-16T09:15:58.377Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [
+    "stopped at step 2 (assert_log): fail; later steps were not executed",
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 3 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (keep-all): 14 file(s) / 0.4 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json"
+  ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794359985597958548,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/dialogs-menus.apk",
+      "sha256": "e3e25ff139baf623abe65ccbcb126c694cb39c46c9366883010e0be8d6da6ae6",
+      "sha256_12": "e3e25ff139ba",
+      "size_bytes": 16852
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794819964136509737,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/suite/T12-dialog-wrong.yaml",
+      "sha256": "671eaea59680c7991b7da6d5817d65295a2565e2f7b22d7a3eb2278de7f630f0",
+      "sha256_12": "671eaea59680",
+      "size_bytes": 815
+    },
+    "scenario_engine": "rust-vm",
+    "warnings": [
+      {
+        "code": "SCENARIO_ENGINE_MISMATCH",
+        "engine": "art",
+        "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+        "scenario_engine": "rust-vm"
+      }
+    ]
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.3.0",
+    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/dialogs-menus.apk",
+    "apk_sha256": "e3e25ff139baf623abe65ccbcb126c694cb39c46c9366883010e0be8d6da6ae6",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/suite/T12-dialog-wrong.yaml",
+    "scenario_sha256": "671eaea59680c7991b7da6d5817d65295a2565e2f7b22d7a3eb2278de7f630f0"
+  },
+  "request_id": "req_336618_18e87bc85973f8d7",
+  "resources": {
+    "events": 137,
+    "frames_captured": 2,
+    "memory_mib": 14,
+    "peak_rss_bytes": 15720448,
+    "sessions": 1,
+    "steps": 3,
+    "wall_ms": 6293
+  },
+  "scenario": {
+    "name": "T12-dialog-wrong",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/suite/T12-dialog-wrong.yaml",
+    "sha256": "671eaea59680c7991b7da6d5817d65295a2565e2f7b22d7a3eb2278de7f630f0"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=88MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3368483-i3325605.scope)",
+    "code": null,
+    "disk_free_bytes": 249013878784,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": "results/release/v0.3.0-gate/correctness/04-scenarios/suite__T12-dialog-wrong/artifacts/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_dialogs-menus",
+  "started_at": "2026-11-16T09:15:52.084Z",
+  "status": "fail",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 155,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "previous_observation": false
+          },
+          "expected": {
+            "compared": false
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "no previous observation to compare; change not claimed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1064,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/3.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/3.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-tap.json"
+        }
+      ],
+      "frame_seq": 3,
+      "index": 1,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[42,317][293,443]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_dev.acos.fixtures.dialogsmenus:id/dialog",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.dialogsmenus:id/dialog",
+              "scrollable": false,
+              "text": "Alert dialog",
+              "visible_bounds": "[42,317][293,443]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[42,317][293,443]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_dev.acos.fixtures.dialogsmenus:id/dialog",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.dialogsmenus:id/dialog",
+              "scrollable": false,
+              "text": "Alert dialog",
+              "visible_bounds": "[42,317][293,443]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "point": {
+            "x": 167,
+            "y": 380
+          },
+          "selector": {
+            "selector": "id==\"dialog\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 101,
+        "frame_ms": 982,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 1064,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": [
+            "AcosDialogs: dialog_shown"
+          ],
+          "diff": {
+            "actual": [
+              "AcosDialogs: dialog_shown"
+            ],
+            "detail": "log patterns did not appear in the required order",
+            "expected": {
+              "min_matches": 1,
+              "ordered": true,
+              "patterns": [
+                "^dialog_ok which=0$"
+              ]
+            }
+          },
+          "expected": {
+            "min_matches": 1,
+            "ordered": true,
+            "patterns": [
+              "^dialog_ok which=0$"
+            ]
+          },
+          "kind": "log",
+          "matched_node_ids": [],
+          "passed": false
+        }
+      ],
+      "duration_ms": 5074,
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "log assertion did not hold",
+        "retryable": false
+      },
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-assert_log.json"
+        }
+      ],
+      "index": 2,
+      "provenance": {
+        "logs": "guest-asserted"
+      },
+      "status": "fail",
+      "step": "assert_log"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "fail"
+}

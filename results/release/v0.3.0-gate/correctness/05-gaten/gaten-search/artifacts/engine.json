@@ -1,0 +1,218 @@
+{
+  "engine": {
+    "animations": "off",
+    "commands": {
+      "missing": [
+        "environment"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "swipe",
+        "type_text",
+        "key",
+        "rotate",
+        "reset",
+        "close",
+        "logs",
+        "crash_reports"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "results/release/v0.3.0-gate/correctness/05-gaten/gaten-search/artifacts",
+      "engine_report": "results/release/v0.3.0-gate/correctness/05-gaten/gaten-search/artifacts/engine.json",
+      "pruned_session_captures": 15,
+      "retention": "results/release/v0.3.0-gate/correctness/05-gaten/gaten-search/artifacts/retention.json",
+      "verdict": "results/release/v0.3.0-gate/correctness/05-gaten/gaten-search/artifacts/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": true,
+    "insets": "report",
+    "mode": "live",
+    "session_exit": {
+      "abi": null,
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=425MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3433700-i3470238.scope)",
+      "code": null,
+      "disk_free_bytes": 240518991872,
+      "guest_crash": null,
+      "guest_exit": 0,
+      "guest_signal": null,
+      "native_crash": null,
+      "native_crash_path": null,
+      "outcome": "ok",
+      "panic": null,
+      "path": "results/release/v0.3.0-gate/correctness/05-gaten/gaten-search/artifacts/art-frames/session-exit.json",
+      "retryable": false,
+      "stage": "teardown-evidence"
+    },
+    "timing": {
+      "attributed_ms": 11880,
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "hit",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-e0a4f967c8b53ba1",
+        "input_hash": "e0a4f967c8b53ba1",
+        "mode": "shared-fixed"
+      },
+      "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
+      "session_start_ms": 1338,
+      "steps": [
+        {
+          "index": 0,
+          "status": "pass",
+          "step": "launch",
+          "wall_ms": 1528
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 5555
+        },
+        {
+          "index": 2,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 78
+        },
+        {
+          "index": 3,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 122
+        },
+        {
+          "index": 4,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 52
+        },
+        {
+          "index": 5,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 423
+        },
+        {
+          "index": 6,
+          "status": "pass",
+          "step": "capture",
+          "wall_ms": 87
+        },
+        {
+          "index": 7,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 1195
+        },
+        {
+          "index": 8,
+          "status": "pass",
+          "step": "type",
+          "wall_ms": 87
+        },
+        {
+          "index": 9,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 1051
+        },
+        {
+          "index": 10,
+          "status": "pass",
+          "step": "capture",
+          "wall_ms": 109
+        },
+        {
+          "index": 11,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        },
+        {
+          "index": 12,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        },
+        {
+          "index": 13,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 624
+        },
+        {
+          "index": 14,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 88
+        },
+        {
+          "index": 15,
+          "status": "pass",
+          "step": "capture",
+          "wall_ms": 87
+        },
+        {
+          "index": 16,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 1
+        },
+        {
+          "index": 17,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 1
+        },
+        {
+          "index": 18,
+          "status": "pass",
+          "step": "back",
+          "wall_ms": 582
+        },
+        {
+          "index": 19,
+          "status": "pass",
+          "step": "wait_for",
+          "wall_ms": 89
+        },
+        {
+          "index": 20,
+          "status": "pass",
+          "step": "capture",
+          "wall_ms": 121
+        },
+        {
+          "index": 21,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        }
+      ],
+      "unattributed_ms": 74,
+      "unit": "ms",
+      "verdict_wall_ms": 11954
+    },
+    "trust": "trusted",
+    "unsupported_steps": []
+  },
+  "provenance_rule": null,
+  "request_id": "req_346493_18e87c2be6afe089",
+  "verdict_status": "pass"
+}

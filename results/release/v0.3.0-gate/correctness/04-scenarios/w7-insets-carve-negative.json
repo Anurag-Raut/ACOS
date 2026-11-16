@@ -1,0 +1,413 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "message": "expected text exactly \"status=128\", got text \"status=0\" / hint \"\"",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 15265792,
+    "wall_ms": 155
+  },
+  "ok": false,
+  "request_id": "req_338fe5_18e87bd12afdeae8",
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": "results/release/v0.3.0-gate/correctness/04-scenarios/w7-insets-carve-negative/artifacts",
+    "certification": "certified-with-limits",
+    "certification_limits": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "section": "§8.7"
+    },
+    "certification_policy": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+      "section": "§8.8"
+    },
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794532733530101989,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/insets-probe.apk",
+        "sha256": "0eec6e68fa5d9b7735e2e8890f41023fd68570842a2bbb448b5570ee1804319f",
+        "sha256_12": "0eec6e68fa5d",
+        "size_bytes": 12756
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794819964138509767,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w7-insets-carve-negative.yaml",
+        "sha256": "33b72a6206462bcdbee776dc149add62358b8aaebff2fc7b957aea2b48ce9841",
+        "sha256_12": "33b72a620646",
+        "size_bytes": 1982
+      },
+      "scenario_engine": "rust-vm",
+      "warnings": [
+        {
+          "code": "SCENARIO_ENGINE_MISMATCH",
+          "engine": "art",
+          "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+          "scenario_engine": "rust-vm"
+        }
+      ]
+    },
+    "trust": "trusted",
+    "verdict": {
+      "animations": "on",
+      "app": {
+        "package": "dev.acos.fixtures.insetsprobe",
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/insets-probe.apk",
+        "sha256": "0eec6e68fa5d9b7735e2e8890f41023fd68570842a2bbb448b5570ee1804319f"
+      },
+      "backend": "acos-native",
+      "certification": "certified-with-limits",
+      "certification_limits": {
+        "doc": "docs/SANDBOX_CERTIFICATION.md",
+        "section": "§8.7"
+      },
+      "certification_policy": {
+        "doc": "docs/SANDBOX_CERTIFICATION.md",
+        "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+        "section": "§8.8"
+      },
+      "engine": "art",
+      "evidence": {
+        "artifacts": "results/release/v0.3.0-gate/correctness/04-scenarios/w7-insets-carve-negative/artifacts",
+        "engine_report": "results/release/v0.3.0-gate/correctness/04-scenarios/w7-insets-carve-negative/artifacts/engine.json",
+        "retention": "results/release/v0.3.0-gate/correctness/04-scenarios/w7-insets-carve-negative/artifacts/retention.json",
+        "verdict": "results/release/v0.3.0-gate/correctness/04-scenarios/w7-insets-carve-negative/artifacts/verdict.json"
+      },
+      "evidence_provenance": {
+        "binder_transactions": "host-observed",
+        "crash_reports": "guest-asserted",
+        "frames": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "logs": "guest-asserted",
+        "static_manifest": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "failure": {
+        "code": "ASSERTION_FAILED",
+        "error": {
+          "class": "assertion",
+          "code": "ASSERTION_FAILED",
+          "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+          "message": "expected text exactly \"status=128\", got text \"status=0\" / hint \"\"",
+          "retryable": false
+        },
+        "step_index": 3,
+        "summary": "step 3 (assert_text) fail"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-16T09:16:30.226Z",
+      "insets": "carve",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [
+        "stopped at step 3 (assert_text): fail; later steps were not executed",
+        "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,128], so png_y = display_y - 128 (frame 2 is display [0,128][1080,2337]). Do not compare a tree bound with a PNG pixel without that offset.",
+        "artifacts: referenced (keep-all): 15 file(s) / 0.5 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json"
+      ],
+      "provenance": {
+        "apk": {
+          "mtime_ns": 1794532733530101989,
+          "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/insets-probe.apk",
+          "sha256": "0eec6e68fa5d9b7735e2e8890f41023fd68570842a2bbb448b5570ee1804319f",
+          "sha256_12": "0eec6e68fa5d",
+          "size_bytes": 12756
+        },
+        "engine": "art",
+        "fidelity": "art-reference",
+        "scenario": {
+          "mtime_ns": 1794819964138509767,
+          "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w7-insets-carve-negative.yaml",
+          "sha256": "33b72a6206462bcdbee776dc149add62358b8aaebff2fc7b957aea2b48ce9841",
+          "sha256_12": "33b72a620646",
+          "size_bytes": 1982
+        },
+        "scenario_engine": "rust-vm",
+        "warnings": [
+          {
+            "code": "SCENARIO_ENGINE_MISMATCH",
+            "engine": "art",
+            "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+            "scenario_engine": "rust-vm"
+          }
+        ]
+      },
+      "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+      "reproducer": {
+        "acos_version": "0.3.0",
+        "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/insets-probe.apk",
+        "apk_sha256": "0eec6e68fa5d9b7735e2e8890f41023fd68570842a2bbb448b5570ee1804319f",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 420,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w7-insets-carve-negative.yaml",
+        "scenario_sha256": "33b72a6206462bcdbee776dc149add62358b8aaebff2fc7b957aea2b48ce9841"
+      },
+      "request_id": "req_338fe5_18e87bd12afdeae8",
+      "resources": {
+        "events": 120,
+        "frames_captured": 4,
+        "memory_mib": 14,
+        "peak_rss_bytes": 15265792,
+        "sessions": 1,
+        "steps": 4,
+        "wall_ms": 155
+      },
+      "scenario": {
+        "name": "w7-insets-carve-negative",
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w7-insets-carve-negative.yaml",
+        "sha256": "33b72a6206462bcdbee776dc149add62358b8aaebff2fc7b957aea2b48ce9841"
+      },
+      "schema_version": 1,
+      "session_exit": {
+        "abi": null,
+        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=52MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3379212-i3376338.scope)",
+        "code": null,
+        "disk_free_bytes": 248897191936,
+        "guest_crash": null,
+        "guest_exit": 0,
+        "guest_signal": null,
+        "native_crash": null,
+        "native_crash_path": null,
+        "outcome": "ok",
+        "panic": null,
+        "path": "results/release/v0.3.0-gate/correctness/04-scenarios/w7-insets-carve-negative/artifacts/art-frames/session-exit.json",
+        "retryable": false,
+        "stage": "teardown-evidence"
+      },
+      "session_id": "s_art_insets-probe",
+      "started_at": "2026-11-16T09:16:30.071Z",
+      "status": "fail",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 86,
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "provenance": {
+            "frame": "host-observed",
+            "launch_markers": "guest-asserted",
+            "lifecycle_markers": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "launch"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 64,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/2.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/2.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/01-wait_for.json"
+            }
+          ],
+          "frame_seq": 2,
+          "index": 1,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "settle": {
+            "bound": "strict-event",
+            "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+            "mode": "strict",
+            "probe_seq": 4,
+            "reason": "strict-event",
+            "settled": true,
+            "strict_rule": "event",
+            "tree_age_ms": 37,
+            "waited_ms": 64,
+            "waited_ms_source": "step"
+          },
+          "status": "pass",
+          "step": "wait_for"
+        },
+        {
+          "assertions": [
+            {
+              "actual": {
+                "bounds": [
+                  21,
+                  551,
+                  445,
+                  602
+                ],
+                "hint": "",
+                "node": "n5_dev.acos.fixtures.insetsprobe:id/frame",
+                "text": "frame=[0,128][1080,2337]",
+                "visible": true
+              },
+              "expected": {
+                "bounds": null,
+                "selector": {
+                  "id": "frame"
+                },
+                "text": {
+                  "exact": "frame=[0,128][1080,2337]"
+                }
+              },
+              "kind": "text",
+              "matched_node_ids": [
+                "n5_dev.acos.fixtures.insetsprobe:id/frame"
+              ],
+              "passed": true
+            }
+          ],
+          "duration_ms": 0,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/2.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/2.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/02-assert_text.json"
+            }
+          ],
+          "frame_seq": 2,
+          "index": 2,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "settle": {
+            "bound": "strict-event",
+            "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+            "mode": "strict",
+            "probe_seq": 4,
+            "reason": "strict-event",
+            "settled": true,
+            "strict_rule": "event",
+            "tree_age_ms": 37,
+            "waited_ms": 0,
+            "waited_ms_source": "step"
+          },
+          "status": "pass",
+          "step": "assert_text"
+        },
+        {
+          "assertions": [
+            {
+              "actual": {
+                "hint": "",
+                "text": "status=0"
+              },
+              "diff": {
+                "actual": {
+                  "hint": "",
+                  "text": "status=0"
+                },
+                "detail": "text/hint did not match (exactly \"status=128\")",
+                "expected": {
+                  "exact": "status=128"
+                },
+                "path": "nodes[5].text"
+              },
+              "expected": {
+                "exact": "status=128"
+              },
+              "kind": "text",
+              "matched_node_ids": [
+                "n5_dev.acos.fixtures.insetsprobe:id/status"
+              ],
+              "passed": false
+            }
+          ],
+          "duration_ms": 0,
+          "error": {
+            "class": "assertion",
+            "code": "ASSERTION_FAILED",
+            "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+            "message": "expected text exactly \"status=128\", got text \"status=0\" / hint \"\"",
+            "retryable": false
+          },
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/2.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/2.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/03-assert_text.json"
+            }
+          ],
+          "frame_seq": 2,
+          "index": 3,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "settle": {
+            "bound": "strict-event",
+            "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+            "mode": "strict",
+            "probe_seq": 4,
+            "reason": "strict-event",
+            "settled": true,
+            "strict_rule": "event",
+            "tree_age_ms": 37,
+            "waited_ms": 0,
+            "waited_ms_source": "step"
+          },
+          "status": "fail",
+          "step": "assert_text"
+        }
+      ],
+      "trust": "trusted",
+      "unsupported_steps": [],
+      "verdict": "fail"
+    },
+    "verdict_path": "results/release/v0.3.0-gate/correctness/04-scenarios/w7-insets-carve-negative/artifacts/verdict.json"
+  },
+  "session_id": "s_art_insets-probe",
+  "status": "fail"
+}

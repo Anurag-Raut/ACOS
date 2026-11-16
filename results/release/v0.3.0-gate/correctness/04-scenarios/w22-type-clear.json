@@ -1,0 +1,125 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "logs",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 15802368,
+    "wall_ms": 3064
+  },
+  "ok": true,
+  "request_id": "req_3382ef_18e87bcde48bd8cd",
+  "result": {
+    "artifacts_dir": "results/release/v0.3.0-gate/correctness/04-scenarios/w22-type-clear/artifacts",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794521210303166283,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/form-validation.apk",
+        "sha256": "d8c277d7476a54f8a09288962fd3d9a864ad53b934350721af81725cb3ba7aa9",
+        "sha256_12": "d8c277d7476a",
+        "size_bytes": 12756
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794819964137509752,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w22-type-clear.yaml",
+        "sha256": "1c94d62aa00769e3984202547c06e0f11bce645abbd95e9777b9ded99efe790e",
+        "sha256_12": "1c94d62aa007",
+        "size_bytes": 1490
+      },
+      "scenario_engine": "rust-vm",
+      "warnings": [
+        {
+          "code": "SCENARIO_ENGINE_MISMATCH",
+          "engine": "art",
+          "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art… [ACOS: result.result.provenance.warnings[0].message bounded for size — 302 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+          "scenario_engine": "rust-vm"
+        },
+        {
+          "acked": 24,
+          "code": "INPUT_UNHANDLED",
+          "handled": false,
+          "hint": "nothing at this point consumed the input and the tree has no node there (the app's window answered `finishInputEvent(handled) = false`); nothing changed because nothing was tappable",
+          "message": "step 3 (type): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+          "published": 24,
+          "step": 3,
+          "step_kind": "type",
+          "target": null,
+          "unhandled": [
+            6,
+            8,
+            10,
+            12,
+            14,
+            16,
+            18,
+            20,
+            22,
+            24,
+            26,
+            28
+          ]
+        },
+        {
+          "acked": 30,
+          "code": "INPUT_UNHANDLED",
+          "handled": false,
+          "hint": "nothing at this point consumed the input and the tree has no node there (the app's window answered `finishInputEvent(handled) = false`); nothing changed because nothing was tappable",
+          "message": "step 4 (type): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+          "published": 30,
+          "step": 4,
+          "step_kind": "type",
+          "target": null,
+          "unhandled": [
+            54,
+            56,
+            58,
+            60,
+            62,
+            64,
+            66,
+            68,
+            70,
+            72,
+            74,
+            76,
+            78,
+            80,
+            82
+          ]
+        }
+      ]
+    },
+    "reply_capped": true,
+    "verdict_path": "results/release/v0.3.0-gate/correctness/04-scenarios/w22-type-clear/artifacts/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_form-validation",
+  "status": "pass"
+}

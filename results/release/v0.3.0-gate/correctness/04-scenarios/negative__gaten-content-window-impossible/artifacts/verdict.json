@@ -1,0 +1,312 @@
+{
+  "animations": "on",
+  "app": {
+    "package": "dev.acos.fixtures.counter",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/counter.apk",
+    "sha256": "8170835e70f2d8d5c4a9ec6498e2571ab2bc8571e4681ccbcb1a4bd394100c39"
+  },
+  "backend": "acos-native",
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__gaten-content-window-impossible/artifacts",
+    "engine_report": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__gaten-content-window-impossible/artifacts/engine.json",
+    "retention": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__gaten-content-window-impossible/artifacts/retention.json",
+    "verdict": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__gaten-content-window-impossible/artifacts/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "failure": {
+    "code": "TIMEOUT",
+    "error": {
+      "class": "infra_timeout",
+      "code": "TIMEOUT",
+      "details": {
+        "backend": "acos-art-session",
+        "context": "tap",
+        "reason": "content-not-stable",
+        "settle": {
+          "bound": "content-timeout",
+          "elapsed_ms": 2,
+          "mode": "content",
+          "pixel_evidence": false,
+          "probe_seq": 11,
+          "probe_seq_first": 11,
+          "probe_seq_floor": 8,
+          "settled": false,
+          "signature": "97323e4f63fb21f3",
+          "signature_fields": [
+            "class",
+            "resource_id",
+            "text",
+            "content_desc",
+            "hint",
+            "visible",
+            "enabled",
+            "focused",
+            "clickable",
+            "scrollable",
+            "checked",
+            "selected",
+            "window",
+            "package"
+          ],
+          "traversals": 1,
+          "unproven_replies": 0,
+          "window_ms": 300
+        },
+        "traversals": 1,
+        "window_ms": 300
+      },
+      "hint": "Content settle needs the tree's text/content-desc/bounds/state to stop                  changing for the window, on traversals that are provably fresh samples. If                  the screen updates a value continuously (a countdown or a progress                  percentage), no settle rule can prove it: use `settle: fast` for navigation                  only, then assert once you know the value.",
+      "message": "settle content: the UI tree content signature was still changing after                  1 proven traversal(s) / 2 ms (window 300 ms); the screen                  is not content-stable, so nothing it shows is settled",
+      "retryable": true
+    },
+    "step_index": 2,
+    "summary": "step 2 (tap) timeout"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-16T09:14:25.641Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [
+    "stopped at step 2 (tap): timeout; later steps were not executed",
+    "negative control failed exactly as declared (TIMEOUT / Some(\"content-not-stable\"))",
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (keep-all): 15 file(s) / 0.3 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json"
+  ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794521207401108938,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/counter.apk",
+      "sha256": "8170835e70f2d8d5c4a9ec6498e2571ab2bc8571e4681ccbcb1a4bd394100c39",
+      "sha256_12": "8170835e70f2",
+      "size_bytes": 12756
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794819964135509721,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/negative/gaten-content-window-impossible.yaml",
+      "sha256": "a69dd8101b6382c8f61d6cf1be44de43511ecca2727444f8be3273cedf122a53",
+      "sha256_12": "a69dd8101b63",
+      "size_bytes": 2049
+    },
+    "scenario_engine": "rust-vm",
+    "warnings": [
+      {
+        "code": "SCENARIO_ENGINE_MISMATCH",
+        "engine": "art",
+        "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+        "scenario_engine": "rust-vm"
+      }
+    ]
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.3.0",
+    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/counter.apk",
+    "apk_sha256": "8170835e70f2d8d5c4a9ec6498e2571ab2bc8571e4681ccbcb1a4bd394100c39",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/negative/gaten-content-window-impossible.yaml",
+    "scenario_sha256": "a69dd8101b6382c8f61d6cf1be44de43511ecca2727444f8be3273cedf122a53"
+  },
+  "request_id": "req_32d44a_18e87bb42a09c0bb",
+  "resources": {
+    "events": 85,
+    "frames_captured": 2,
+    "memory_mib": 13,
+    "peak_rss_bytes": 14475264,
+    "sessions": 1,
+    "steps": 3,
+    "wall_ms": 249
+  },
+  "scenario": {
+    "name": "gaten-content-window-impossible",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/negative/gaten-content-window-impossible.yaml",
+    "sha256": "a69dd8101b6382c8f61d6cf1be44de43511ecca2727444f8be3273cedf122a53"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=67MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3331168-i3300729.scope)",
+    "code": null,
+    "disk_free_bytes": 253653336064,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__gaten-content-window-impossible/artifacts/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_counter",
+  "started_at": "2026-11-16T09:14:25.392Z",
+  "status": "timeout",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 126,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 55,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-wait_for.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 1,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 7,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 54,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 68,
+      "error": {
+        "class": "infra_timeout",
+        "code": "TIMEOUT",
+        "details": {
+          "backend": "acos-art-session",
+          "context": "tap",
+          "reason": "content-not-stable",
+          "settle": {
+            "bound": "content-timeout",
+            "elapsed_ms": 2,
+            "mode": "content",
+            "pixel_evidence": false,
+            "probe_seq": 11,
+            "probe_seq_first": 11,
+            "probe_seq_floor": 8,
+            "settled": false,
+            "signature": "97323e4f63fb21f3",
+            "signature_fields": [
+              "class",
+              "resource_id",
+              "text",
+              "content_desc",
+              "hint",
+              "visible",
+              "enabled",
+              "focused",
+              "clickable",
+              "scrollable",
+              "checked",
+              "selected",
+              "window",
+              "package"
+            ],
+            "traversals": 1,
+            "unproven_replies": 0,
+            "window_ms": 300
+          },
+          "traversals": 1,
+          "window_ms": 300
+        },
+        "hint": "Content settle needs the tree's text/content-desc/bounds/state to stop                  changing for the window, on traversals that are provably fresh samples. If                  the screen updates a value continuously (a countdown or a progress                  percentage), no settle rule can prove it: use `settle: fast` for navigation                  only, then assert once you know the value.",
+        "message": "settle content: the UI tree content signature was still changing after                  1 proven traversal(s) / 2 ms (window 300 ms); the screen                  is not content-stable, so nothing it shows is settled",
+        "retryable": true
+      },
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/02-tap.json"
+        }
+      ],
+      "index": 2,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": null
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "timeout",
+      "step": "tap"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "timeout"
+}

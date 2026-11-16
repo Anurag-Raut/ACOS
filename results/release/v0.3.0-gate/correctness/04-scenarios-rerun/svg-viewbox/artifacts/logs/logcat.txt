@@ -1,0 +1,309 @@
+--------- beginning of main
+1794820693767      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1794820693767      2  I : Using CollectorTypeCC GC.
+1794820693767      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794820693767      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794820693767      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1794820693767      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1794820693767      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1794820693767      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1794820693767      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1794820693767     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1794820693767     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1794820693767     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1794820693767     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1794820693767     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1794820693767     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1794820693767     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1794820693767     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1794820693767     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1794820693767     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1794820693767     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1794820693767     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1794820693767     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1794820693767     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1794820693767     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1794820693767     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1794820693767     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1794820693767     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1794820693767     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1794820693767     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1794820693767     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1794820693767     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1794820693767     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1794820693767     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1794820693767     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1794820693767     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1794820693767     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1794820693767     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1794820693767     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1794820693767     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1794820693767     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1794820693767     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1794820693767     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1794820693767     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1794820693767     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1794820693767     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1794820693767     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1794820693767     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1794820693767     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794820693767     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794820693767     50  I nativeloader: InitApexLibraries skipped: No such file or directory
+1794820693767     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794820693767     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand
+1794820693767     53  D nativeloader: InitExtendedPublicLibraries: 
+1794820693767     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794820693767     55  D nativeloader: InitProductPublicLibraries: 
+1794820693767     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794820693767     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1794820693767     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1794820693767     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794820693767     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794820693767     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1794820693767     62  W ziparchive: Unable to open '/data/app/svg-viewbox.dm': No such file or directory
+1794820693767     63  W ziparchive: Unable to open '/data/app/svg-viewbox.dm': No such file or directory
+1794820693767     64  D nativeloader: Configuring clns-2 for other apk /data/app/svg-viewbox.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.svgviewbox
+1794820693767     65  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.svgviewbox/cache: chown failed: EINVAL (Invalid argument)
+1794820693767     66  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.svgviewbox/code_cache: chown failed: EINVAL (Invalid argument)
+1794820693767     67  V GraphicsEnvironment: Currently set values for:
+1794820693767     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794820693767     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794820693767     70  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.svgviewbox: false
+1794820693767     71  V GraphicsEnvironment: dev.acos.fixtures.svgviewbox is not listed in per-application setting
+1794820693767     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794820693767     73  W SystemServiceRegistry: No service published for: netstats
+1794820693767     74  E TrafficStats: TrafficStats not initialized, uid=10192
+1794820693767     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1794820693767     76  I AcosSvgProbe: onCreate
+1794820693767     77  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794820693767     78  E logdw: dev.acos.fixtures.svgviewbox.MainActivity
+1794820693767     79  E logdw: dev.acos.fixtures.svgviewbox.MainActivity
+1794820693767     80  E logdw: dev.acos.fixtures.svgviewbox.MainActivity
+1794820693767     81  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1794820693767     82  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,368.0 sdk=34
+1794820693767     83  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289     84  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289     85  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289     86  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289     87  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289     88  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289     89  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289     90  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289     91  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289     92  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289     93  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289     94  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289     95  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289     96  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289     97  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289     98  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289     99  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    100  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    101  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    102  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    103  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    104  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    105  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    106  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    107  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    108  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    109  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    110  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    111  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    112  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    113  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    114  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    115  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    116  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    117  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    118  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    119  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    120  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    121  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    122  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    123  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    124  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    125  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    126  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    127  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    128  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    129  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    130  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    131  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    132  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    133  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    134  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    135  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    136  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    137  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    138  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    139  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    140  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    141  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    142  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    143  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    144  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    145  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    146  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    147  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    148  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    149  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    150  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    151  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    152  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    153  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    154  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    155  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    156  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    157  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    158  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    159  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    160  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    161  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    162  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    163  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    164  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    165  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    166  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    167  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    168  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    169  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    170  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    171  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    172  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    173  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820695289    174  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    175  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    176  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    177  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    178  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    179  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    180  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    181  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    182  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    183  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    184  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    185  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    186  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    187  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    188  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    189  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    190  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    191  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    192  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    193  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    194  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    195  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    196  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    197  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    198  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    199  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    200  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    201  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    202  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    203  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    204  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    205  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    206  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    207  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    208  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    209  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    210  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    211  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    212  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    213  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    214  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    215  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    216  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    217  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    218  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    219  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    220  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    221  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    222  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    223  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    224  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    225  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    226  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    227  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    228  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    229  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    230  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    231  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    232  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    233  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    234  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    235  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    236  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    237  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    238  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    239  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    240  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    241  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    242  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    243  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    244  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    245  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    246  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    247  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    248  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    249  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    250  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    251  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    252  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    253  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    254  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    255  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    256  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    257  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    258  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    259  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    260  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    261  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    262  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    263  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    264  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    265  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    266  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    267  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    268  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    269  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    270  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    271  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    272  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    273  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    274  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    275  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    276  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    277  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    278  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    279  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    280  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    281  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    282  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    283  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    284  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    285  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    286  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    287  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    288  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    289  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    290  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    291  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    292  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    293  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    294  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    295  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    296  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    297  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    298  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    299  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    300  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    301  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    302  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    303  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    304  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    305  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    306  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    307  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34
+1794820697518    308  I AcosSvgProbe: view=270x116 canvas=1080x2400 density=2.625 canvasIsViewPx=false scale=0.2244564 ink=9,1036,1070,1294 inkInsideView=false canvasMatrix=1.0,0.0,1.0,454.0 sdk=34

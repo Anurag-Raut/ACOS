@@ -1,0 +1,263 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "INSUFFICIENT_HOST_EVIDENCE",
+    "hint": "This run is untrusted: the UI tree is guest-asserted. Use a host-observed assertion (assert_region / assert_screenshot / capture) or run a trusted fixture. Do not weaken the trust check to make it pass.",
+    "message": "UNTRUSTED_TREE_ASSERTION: this run is untrusted, so the UI tree is guest-asserted and cannot justify a pass. Use a host-observed assertion (assert_region / assert_screenshot / capture); the tree is still used to resolve tap targets for navigation.",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 14426112,
+    "wall_ms": 1518
+  },
+  "ok": false,
+  "request_id": "req_34029e_18e87bf0f921e594",
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": "results/release/v0.3.0-gate/correctness/04-scenarios-rerun/w44-hostile-probe-spam/artifacts",
+    "certification": "certified-with-limits",
+    "certification_limits": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "section": "§8.7"
+    },
+    "certification_policy": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+      "section": "§8.8"
+    },
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794455346652310454,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/hostile-spam.apk",
+        "sha256": "798d3e96b6220c0ac5bb57ea73d34afa04e68382305d53a2d06d7b3f3d450615",
+        "sha256_12": "798d3e96b622",
+        "size_bytes": 16787
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794819964137509752,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w44-hostile-probe-spam.yaml",
+        "sha256": "180f010ec3dacad6736b48a0df7a91932f31bdccf1d8c7e49d43b1786ce4e9bf",
+        "sha256_12": "180f010ec3da",
+        "size_bytes": 973
+      },
+      "scenario_engine": "rust-vm",
+      "warnings": [
+        {
+          "code": "SCENARIO_ENGINE_MISMATCH",
+          "engine": "art",
+          "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+          "scenario_engine": "rust-vm"
+        }
+      ]
+    },
+    "trust": "untrusted",
+    "verdict": {
+      "animations": "on",
+      "app": {
+        "package": "dev.acos.fixtures.hostileprobe",
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/hostile-spam.apk",
+        "sha256": "798d3e96b6220c0ac5bb57ea73d34afa04e68382305d53a2d06d7b3f3d450615"
+      },
+      "backend": "acos-native",
+      "certification": "certified-with-limits",
+      "certification_limits": {
+        "doc": "docs/SANDBOX_CERTIFICATION.md",
+        "section": "§8.7"
+      },
+      "certification_policy": {
+        "doc": "docs/SANDBOX_CERTIFICATION.md",
+        "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+        "section": "§8.8"
+      },
+      "engine": "art",
+      "evidence": {
+        "artifacts": "results/release/v0.3.0-gate/correctness/04-scenarios-rerun/w44-hostile-probe-spam/artifacts",
+        "engine_report": "results/release/v0.3.0-gate/correctness/04-scenarios-rerun/w44-hostile-probe-spam/artifacts/engine.json",
+        "retention": "results/release/v0.3.0-gate/correctness/04-scenarios-rerun/w44-hostile-probe-spam/artifacts/retention.json",
+        "verdict": "results/release/v0.3.0-gate/correctness/04-scenarios-rerun/w44-hostile-probe-spam/artifacts/verdict.json"
+      },
+      "evidence_provenance": {
+        "binder_transactions": "host-observed",
+        "crash_reports": "guest-asserted",
+        "frames": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "logs": "guest-asserted",
+        "static_manifest": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "failure": {
+        "code": "INSUFFICIENT_HOST_EVIDENCE",
+        "error": {
+          "class": "assertion",
+          "code": "INSUFFICIENT_HOST_EVIDENCE",
+          "hint": "This run is untrusted: the UI tree is guest-asserted. Use a host-observed assertion (assert_region / assert_screenshot / capture) or run a trusted fixture. Do not weaken the trust check to make it pass.",
+          "message": "UNTRUSTED_TREE_ASSERTION: this run is untrusted, so the UI tree is guest-asserted and cannot justify a pass. Use a host-observed assertion (assert_region / assert_screenshot / capture); the tree is still used to resolve tap targets for navigation.",
+          "retryable": false
+        },
+        "step_index": 1,
+        "summary": "step 1 (assert_text) fail"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-16T09:18:48.216Z",
+      "insets": "report",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [
+        "stopped at step 1 (assert_text): fail; later steps were not executed",
+        "scenario expected `pass`, engine produced `fail` — result is a truthful partial",
+        "artifacts: referenced (keep-all): 10 file(s) / 0.1 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json"
+      ],
+      "provenance": {
+        "apk": {
+          "mtime_ns": 1794455346652310454,
+          "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/hostile-spam.apk",
+          "sha256": "798d3e96b6220c0ac5bb57ea73d34afa04e68382305d53a2d06d7b3f3d450615",
+          "sha256_12": "798d3e96b622",
+          "size_bytes": 16787
+        },
+        "engine": "art",
+        "fidelity": "art-reference",
+        "scenario": {
+          "mtime_ns": 1794819964137509752,
+          "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w44-hostile-probe-spam.yaml",
+          "sha256": "180f010ec3dacad6736b48a0df7a91932f31bdccf1d8c7e49d43b1786ce4e9bf",
+          "sha256_12": "180f010ec3da",
+          "size_bytes": 973
+        },
+        "scenario_engine": "rust-vm",
+        "warnings": [
+          {
+            "code": "SCENARIO_ENGINE_MISMATCH",
+            "engine": "art",
+            "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+            "scenario_engine": "rust-vm"
+          }
+        ]
+      },
+      "provenance_rule": "untrusted run: only host-observed evidence may justify a pass; tree-only assertions fail closed with INSUFFICIENT_HOST_EVIDENCE",
+      "reproducer": {
+        "acos_version": "0.3.0",
+        "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/hostile-spam.apk",
+        "apk_sha256": "798d3e96b6220c0ac5bb57ea73d34afa04e68382305d53a2d06d7b3f3d450615",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 420,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w44-hostile-probe-spam.yaml",
+        "scenario_sha256": "180f010ec3dacad6736b48a0df7a91932f31bdccf1d8c7e49d43b1786ce4e9bf"
+      },
+      "request_id": "req_34029e_18e87bf0f921e594",
+      "resources": {
+        "events": 1,
+        "frames_captured": 1,
+        "memory_mib": 13,
+        "peak_rss_bytes": 14426112,
+        "sessions": 1,
+        "steps": 2,
+        "wall_ms": 1518
+      },
+      "scenario": {
+        "name": "w44-hostile-probe-spam",
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/w44-hostile-probe-spam.yaml",
+        "sha256": "180f010ec3dacad6736b48a0df7a91932f31bdccf1d8c7e49d43b1786ce4e9bf"
+      },
+      "schema_version": 1,
+      "session_exit": {
+        "abi": null,
+        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=62MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3408553-i3382053.scope)",
+        "code": null,
+        "disk_free_bytes": 238734389248,
+        "guest_crash": "ACOSLAUNCH {\"outcome\":\"ok\",\"activity\":\"dev.acos.fixtures.hostileprobe.MainActivity\",\"application_created\":true,\"activity_resumed\":true,\"marker\":\"activity-resumed\"}",
+        "guest_exit": 0,
+        "guest_signal": null,
+        "native_crash": null,
+        "native_crash_path": null,
+        "outcome": "ok",
+        "panic": null,
+        "path": "results/release/v0.3.0-gate/correctness/04-scenarios-rerun/w44-hostile-probe-spam/artifacts/art-frames/session-exit.json",
+        "retryable": false,
+        "stage": "teardown-evidence"
+      },
+      "session_id": "s_art_hostile-spam",
+      "started_at": "2026-11-16T09:18:46.698Z",
+      "status": "fail",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 1517,
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "provenance": {
+            "frame": "host-observed",
+            "launch_markers": "guest-asserted",
+            "lifecycle_markers": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "launch"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 1,
+          "error": {
+            "class": "assertion",
+            "code": "INSUFFICIENT_HOST_EVIDENCE",
+            "hint": "This run is untrusted: the UI tree is guest-asserted. Use a host-observed assertion (assert_region / assert_screenshot / capture) or run a trusted fixture. Do not weaken the trust check to make it pass.",
+            "message": "UNTRUSTED_TREE_ASSERTION: this run is untrusted, so the UI tree is guest-asserted and cannot justify a pass. Use a host-observed assertion (assert_region / assert_screenshot / capture); the tree is still used to resolve tap targets for navigation.",
+            "retryable": false
+          },
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/01-assert_text.json"
+            }
+          ],
+          "index": 1,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "status": "fail",
+          "step": "assert_text"
+        }
+      ],
+      "trust": "untrusted",
+      "unsupported_steps": [],
+      "verdict": "fail"
+    },
+    "verdict_path": "results/release/v0.3.0-gate/correctness/04-scenarios-rerun/w44-hostile-probe-spam/artifacts/verdict.json"
+  },
+  "session_id": "s_art_hostile-spam",
+  "status": "fail"
+}

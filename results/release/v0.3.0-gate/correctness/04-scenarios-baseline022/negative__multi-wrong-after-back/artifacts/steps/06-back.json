@@ -1,0 +1,53 @@
+{
+  "assertions": [],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 3045,
+  "error": {
+    "class": "infra_timeout",
+    "code": "TIMEOUT",
+    "details": {
+      "animating": false,
+      "backend": "acos-art-session",
+      "context": "back",
+      "frame_seq": 8,
+      "reason": "no-draw-after-action",
+      "settle": {
+        "ack_ms": 5,
+        "animating": false,
+        "bound": "timeout",
+        "first_change_ms": null,
+        "frame_ms": null,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": false,
+        "reason": "no-draw-after-action",
+        "settled": false,
+        "state_changed": null,
+        "strict_rule": "event"
+      }
+    },
+    "hint": "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT failure; use wait_for for a later event, or `animations:off` for a functional check. The latest tree/frame is kept in the step evidence.",
+    "message": "back: strict settle timed out (no-draw-after-action); the step is a non-pass because the screen was still changing when the deadline elapsed",
+    "retryable": true
+  },
+  "evidence": [
+    {
+      "kind": "step",
+      "path": "steps/06-back.json"
+    }
+  ],
+  "index": 6,
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "status": "timeout",
+  "step": "back",
+  "trust": "trusted"
+}

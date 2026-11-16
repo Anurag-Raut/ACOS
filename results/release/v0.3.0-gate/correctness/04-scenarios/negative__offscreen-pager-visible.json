@@ -1,0 +1,377 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "ELEMENT_OFFSCREEN",
+    "hint": "The selector matched only a node that is not visible to the user (off screen, clipped by an ancestor scroll/pager, or inside a hidden window). The error details carry the node's bounds and its (empty) visible rect. Scroll it into view first (or use a visible element); do not treat it as a pass.",
+    "message": "selector text==\"Hidden\" matched no visible node, but it matches a node that is not visible to the user (text \"Hidden\" content_desc \"\" class android.widget.TextView bounds [1122,317][1239,368] visible_bounds <none> in window \"main\"); this is the GR2 W4 false-pass class — scroll it into view or target a visible node, never treat it as a pass",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 14782464,
+    "wall_ms": 229
+  },
+  "ok": false,
+  "request_id": "req_32e993_18e87bbd2a8fe82d",
+  "result": {
+    "artifact_validation": {
+      "issues": [],
+      "ok": true
+    },
+    "artifacts_dir": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__offscreen-pager-visible/artifacts",
+    "certification": "certified-with-limits",
+    "certification_limits": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "section": "§8.7"
+    },
+    "certification_policy": {
+      "doc": "docs/SANDBOX_CERTIFICATION.md",
+      "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+      "section": "§8.8"
+    },
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794521214439248068,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/offscreen-pager.apk",
+        "sha256": "7e2a469d20614c5ecde47b0a3407b40d4930991a23cdf0cc928179a298c51d80",
+        "sha256_12": "7e2a469d2061",
+        "size_bytes": 12756
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794819964135509721,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/negative/offscreen-pager-visible.yaml",
+        "sha256": "634a0dd579f7a65d8967c888470e419a71de688811b428d218ff97be5917b847",
+        "sha256_12": "634a0dd579f7",
+        "size_bytes": 1295
+      },
+      "scenario_engine": "rust-vm",
+      "warnings": [
+        {
+          "code": "SCENARIO_ENGINE_MISMATCH",
+          "engine": "art",
+          "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+          "scenario_engine": "rust-vm"
+        }
+      ]
+    },
+    "trust": "trusted",
+    "verdict": {
+      "animations": "on",
+      "app": {
+        "package": "dev.acos.fixtures.offscreenpager",
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/offscreen-pager.apk",
+        "sha256": "7e2a469d20614c5ecde47b0a3407b40d4930991a23cdf0cc928179a298c51d80"
+      },
+      "backend": "acos-native",
+      "certification": "certified-with-limits",
+      "certification_limits": {
+        "doc": "docs/SANDBOX_CERTIFICATION.md",
+        "section": "§8.7"
+      },
+      "certification_policy": {
+        "doc": "docs/SANDBOX_CERTIFICATION.md",
+        "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+        "section": "§8.8"
+      },
+      "engine": "art",
+      "evidence": {
+        "artifacts": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__offscreen-pager-visible/artifacts",
+        "engine_report": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__offscreen-pager-visible/artifacts/engine.json",
+        "retention": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__offscreen-pager-visible/artifacts/retention.json",
+        "verdict": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__offscreen-pager-visible/artifacts/verdict.json"
+      },
+      "evidence_provenance": {
+        "binder_transactions": "host-observed",
+        "crash_reports": "guest-asserted",
+        "frames": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "logs": "guest-asserted",
+        "static_manifest": "host-observed",
+        "tree": "guest-asserted"
+      },
+      "failure": {
+        "code": "ELEMENT_OFFSCREEN",
+        "error": {
+          "class": "assertion",
+          "code": "ELEMENT_OFFSCREEN",
+          "hint": "The selector matched only a node that is not visible to the user (off screen, clipped by an ancestor scroll/pager, or inside a hidden window). The error details carry the node's bounds and its (empty) visible rect. Scroll it into view first (or use a visible element); do not treat it as a pass.",
+          "message": "selector text==\"Hidden\" matched no visible node, but it matches a node that is not visible to the user (text \"Hidden\" content_desc \"\" class android.widget.TextView bounds [1122,317][1239,368] visible_bounds <none> in window \"main\"); this is the GR2 W4 false-pass class — scroll it into view or target a visible node, never treat it as a pass",
+          "retryable": false
+        },
+        "step_index": 2,
+        "summary": "step 2 (assert_visible) fail"
+      },
+      "fidelity": "art-reference",
+      "finished_at": "2026-11-16T09:15:04.280Z",
+      "insets": "report",
+      "isolation": "process",
+      "mode": "live",
+      "notes": [
+        "stopped at step 2 (assert_visible): fail; later steps were not executed",
+        "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+        "artifacts: referenced (keep-all): 14 file(s) / 0.3 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json"
+      ],
+      "provenance": {
+        "apk": {
+          "mtime_ns": 1794521214439248068,
+          "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/offscreen-pager.apk",
+          "sha256": "7e2a469d20614c5ecde47b0a3407b40d4930991a23cdf0cc928179a298c51d80",
+          "sha256_12": "7e2a469d2061",
+          "size_bytes": 12756
+        },
+        "engine": "art",
+        "fidelity": "art-reference",
+        "scenario": {
+          "mtime_ns": 1794819964135509721,
+          "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/negative/offscreen-pager-visible.yaml",
+          "sha256": "634a0dd579f7a65d8967c888470e419a71de688811b428d218ff97be5917b847",
+          "sha256_12": "634a0dd579f7",
+          "size_bytes": 1295
+        },
+        "scenario_engine": "rust-vm",
+        "warnings": [
+          {
+            "code": "SCENARIO_ENGINE_MISMATCH",
+            "engine": "art",
+            "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+            "scenario_engine": "rust-vm"
+          }
+        ]
+      },
+      "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+      "reproducer": {
+        "acos_version": "0.3.0",
+        "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/offscreen-pager.apk",
+        "apk_sha256": "7e2a469d20614c5ecde47b0a3407b40d4930991a23cdf0cc928179a298c51d80",
+        "backend": "acos-native",
+        "display": {
+          "density_dpi": 420,
+          "height": 2400,
+          "mode": "offscreen",
+          "width": 1080
+        },
+        "fidelity": "art-reference",
+        "flags": [],
+        "isolation": "process",
+        "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/negative/offscreen-pager-visible.yaml",
+        "scenario_sha256": "634a0dd579f7a65d8967c888470e419a71de688811b428d218ff97be5917b847"
+      },
+      "request_id": "req_32e993_18e87bbd2a8fe82d",
+      "resources": {
+        "events": 85,
+        "frames_captured": 3,
+        "memory_mib": 14,
+        "peak_rss_bytes": 14782464,
+        "sessions": 1,
+        "steps": 3,
+        "wall_ms": 229
+      },
+      "scenario": {
+        "name": "negative-offscreen-pager-visible",
+        "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/negative/offscreen-pager-visible.yaml",
+        "sha256": "634a0dd579f7a65d8967c888470e419a71de688811b428d218ff97be5917b847"
+      },
+      "schema_version": 1,
+      "session_exit": {
+        "abi": null,
+        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=69MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3336606-i3316297.scope)",
+        "code": null,
+        "disk_free_bytes": 248996868096,
+        "guest_crash": null,
+        "guest_exit": 0,
+        "guest_signal": null,
+        "native_crash": null,
+        "native_crash_path": null,
+        "outcome": "ok",
+        "panic": null,
+        "path": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__offscreen-pager-visible/artifacts/art-frames/session-exit.json",
+        "retryable": false,
+        "stage": "teardown-evidence"
+      },
+      "session_id": "s_art_offscreen-pager",
+      "started_at": "2026-11-16T09:15:04.051Z",
+      "status": "fail",
+      "steps": [
+        {
+          "assertions": [],
+          "duration_ms": 154,
+          "evidence": [
+            {
+              "kind": "step",
+              "path": "steps/00-launch.json"
+            }
+          ],
+          "index": 0,
+          "provenance": {
+            "frame": "host-observed",
+            "launch_markers": "guest-asserted",
+            "lifecycle_markers": "guest-asserted",
+            "tree": "guest-asserted"
+          },
+          "status": "pass",
+          "step": "launch"
+        },
+        {
+          "assertions": [],
+          "duration_ms": 53,
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/2.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/2.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/01-wait_for.json"
+            }
+          ],
+          "frame_seq": 2,
+          "index": 1,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "settle": {
+            "bound": "strict-event",
+            "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+            "mode": "strict",
+            "probe_seq": 7,
+            "reason": "strict-event",
+            "settled": true,
+            "strict_rule": "event",
+            "tree_age_ms": 40,
+            "waited_ms": 53,
+            "waited_ms_source": "step"
+          },
+          "status": "pass",
+          "step": "wait_for"
+        },
+        {
+          "assertions": [
+            {
+              "actual": {
+                "bounds": [
+                  1122,
+                  317,
+                  1239,
+                  368
+                ],
+                "content_desc": "",
+                "id": "n6_dev.acos.fixtures.offscreenpager:id/hidden",
+                "text": "Hidden",
+                "visible": false,
+                "visible_bounds": null,
+                "window": "main"
+              },
+              "diff": {
+                "actual": {
+                  "bounds": [
+                    1122,
+                    317,
+                    1239,
+                    368
+                  ],
+                  "content_desc": "",
+                  "id": "n6_dev.acos.fixtures.offscreenpager:id/hidden",
+                  "text": "Hidden",
+                  "visible": false,
+                  "visible_bounds": null,
+                  "window": "main"
+                },
+                "detail": "selector matched only a node that is not visible to the user (text \"Hidden\" content_desc \"\" class android.widget.TextView bounds [1122,317][1239,368] visible_bounds <none> in window \"main\"); scroll it into view first",
+                "expected": {
+                  "selector": {
+                    "text": {
+                      "exact": "Hidden"
+                    }
+                  },
+                  "visible": true
+                },
+                "path": "nodes[0].visible"
+              },
+              "expected": {
+                "selector": {
+                  "text": {
+                    "exact": "Hidden"
+                  }
+                },
+                "visible": true
+              },
+              "kind": "visible",
+              "matched_node_ids": [
+                "n6_dev.acos.fixtures.offscreenpager:id/hidden"
+              ],
+              "passed": false
+            }
+          ],
+          "duration_ms": 1,
+          "error": {
+            "class": "assertion",
+            "code": "ELEMENT_OFFSCREEN",
+            "hint": "The selector matched only a node that is not visible to the user (off screen, clipped by an ancestor scroll/pager, or inside a hidden window). The error details carry the node's bounds and its (empty) visible rect. Scroll it into view first (or use a visible element); do not treat it as a pass.",
+            "message": "selector text==\"Hidden\" matched no visible node, but it matches a node that is not visible to the user (text \"Hidden\" content_desc \"\" class android.widget.TextView bounds [1122,317][1239,368] visible_bounds <none> in window \"main\"); this is the GR2 W4 false-pass class — scroll it into view or target a visible node, never treat it as a pass",
+            "retryable": false
+          },
+          "evidence": [
+            {
+              "kind": "tree",
+              "path": "tree/2.json"
+            },
+            {
+              "kind": "frame",
+              "path": "frames/2.png"
+            },
+            {
+              "kind": "step",
+              "path": "steps/02-assert_visible.json"
+            }
+          ],
+          "frame_seq": 2,
+          "index": 2,
+          "provenance": {
+            "tree": "guest-asserted"
+          },
+          "settle": {
+            "bound": "strict-event",
+            "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+            "mode": "strict",
+            "probe_seq": 7,
+            "reason": "strict-event",
+            "settled": true,
+            "strict_rule": "event",
+            "tree_age_ms": 40,
+            "waited_ms": 0,
+            "waited_ms_source": "step"
+          },
+          "status": "fail",
+          "step": "assert_visible"
+        }
+      ],
+      "trust": "trusted",
+      "unsupported_steps": [],
+      "verdict": "fail"
+    },
+    "verdict_path": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__offscreen-pager-visible/artifacts/verdict.json"
+  },
+  "session_id": "s_art_offscreen-pager",
+  "status": "fail"
+}

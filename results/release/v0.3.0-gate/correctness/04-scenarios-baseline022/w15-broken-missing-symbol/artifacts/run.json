@@ -1,0 +1,7 @@
+{
+  "request_id": "req_34c408_18e87c61daa0427a",
+  "started_at": "2026-11-16T09:26:51.228Z",
+  "scenario": "scenarios/w15-broken-missing-symbol.yaml",
+  "apk": "",
+  "acos_version": "0.2.2"
+}

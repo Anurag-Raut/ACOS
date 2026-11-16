@@ -1,0 +1,481 @@
+Mon Nov 16 09:22:31 AM UTC 2026
+== alone: a_kept_session_survives_the_launching_client
+warning: acos-binder-peer@0.3.0: built /home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/rg1-target/release/build/acos-binder-peer-5232b8ab71f88e6f/out/libacos_binder_driver.so
+   Compiling acos-mcp v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/crates/acos-mcp)
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:656:7
+    |
+656 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-services` (lib) generated 1 warning
+warning: unused variable: `started`
+   --> crates/acos-art/src/boot_image.rs:801:13
+    |
+801 |         let started = Instant::now();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_started`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: method `cache_str` is never used
+   --> crates/acos-art/src/boot_image.rs:540:8
+    |
+539 | impl CacheOutcome {
+    | ----------------- method in this implementation
+540 |     fn cache_str(&self) -> &'static str {
+    |        ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field `animations_on` is never read
+    --> crates/acos-art/src/launch.rs:2091:5
+     |
+2068 | struct ProbeSample {
+     |        ----------- field in this struct
+...
+2091 |     animations_on: Option<bool>,
+     |     ^^^^^^^^^^^^^
+     |
+     = note: `ProbeSample` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: function `adler32` is never used
+    --> crates/acos-art/src/launch.rs:6982:4
+     |
+6982 | fn adler32(data: &[u8]) -> u32 {
+     |    ^^^^^^^
+
+warning: function `tail` is never used
+    --> crates/acos-art/src/launch.rs:7533:4
+     |
+7533 | fn tail(s: &str, max: usize) -> String {
+     |    ^^^^
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> crates/acos-art/src/lib.rs:836:20
+    |
+836 |     pub fn sandbox(&self) -> Sandbox {
+    |                    ^^^^^     ------- the same lifetime is hidden here
+    |                    |
+    |                    the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+836 |     pub fn sandbox(&self) -> Sandbox<'_> {
+    |                                     ++++
+
+warning: value assigned to `unsettled` is never read
+    --> crates/acos-verify/src/executor.rs:1131:21
+     |
+1131 |             let mut unsettled: Option<BackendError> = None;
+     |                     ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` on by default
+
+warning: value assigned to `unsettled` is never read
+    --> crates/acos-verify/src/executor.rs:2051:13
+     |
+2051 |     let mut unsettled: Option<BackendError> = None;
+     |             ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+
+warning: `acos-art` (lib) generated 6 warnings
+warning: `acos-verify` (lib) generated 2 warnings
+   Compiling acos-cli v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/crates/acos-cli)
+warning: value assigned to `tap_target` is never read
+    --> crates/acos-cli/src/engine/mod.rs:1182:25
+     |
+1182 |                 let mut tap_target: Option<serde_json::Value> = None;
+     |                         ^^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-cli/src/serve.rs:836:16
+    |
+836 |             Ok(mut client) => match client.mismatch() {
+    |                ----^^^^^^
+    |                |
+    |                help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: method `label` is never used
+   --> crates/acos-cli/src/engine/mod.rs:264:12
+    |
+257 | impl FrameEvidence {
+    | ------------------ method in this implementation
+...
+264 |     pub fn label(&self) -> String {
+    |            ^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: associated items `start`, `start_with_animations`, `start_with_options`, `zygote_facts`, `zygote_previous_child_pid`, and `observation_settle` are never used
+    --> crates/acos-cli/src/engine/art.rs:1519:12
+     |
+1501 | impl ArtSession {
+     | --------------- associated items in this implementation
+...
+1519 |     pub fn start(apk: &Path, artifacts: &Path) -> Result<ArtSession, BackendError> {
+     |            ^^^^^
+...
+1527 |     pub fn start_with_animations(
+     |            ^^^^^^^^^^^^^^^^^^^^^
+...
+1542 |     pub fn start_with_options(
+     |            ^^^^^^^^^^^^^^^^^^
+...
+2115 |     pub fn zygote_facts(&self) -> Option<&ZygoteFacts> {
+     |            ^^^^^^^^^^^^
+...
+2120 |     pub fn zygote_previous_child_pid(&self) -> Option<u32> {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+2329 |     pub fn observation_settle(&self) -> &'static str {
+     |            ^^^^^^^^^^^^^^^^^^
+
+warning: method `first_frame_bound` is never used
+    --> crates/acos-cli/src/engine/art.rs:4243:19
+     |
+3914 | impl ArtSession {
+     | --------------- method in this implementation
+...
+4243 |     pub(crate) fn first_frame_bound(&self) -> Option<(bool, Option<String>)> {
+     |                   ^^^^^^^^^^^^^^^^^
+
+warning: function `read_png` is never used
+    --> crates/acos-cli/src/engine/art.rs:5697:4
+     |
+5697 | fn read_png(path: &Path) -> Result<Vec<u8>, BackendError> {
+     |    ^^^^^^^^
+
+warning: function `kill_group_signals` is never used
+    --> crates/acos-cli/src/engine/art.rs:5816:15
+     |
+5816 | pub(crate) fn kill_group_signals() -> usize {
+     |               ^^^^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+   --> crates/acos-cli/src/engine/serve.rs:196:12
+    |
+190 | impl ServeEngine {
+    | ---------------- associated function in this implementation
+...
+196 |     pub fn new(
+    |            ^^^
+
+warning: function `flat_text` is never used
+    --> crates/acos-cli/src/engine/serve.rs:3603:4
+     |
+3603 | fn flat_text(tree: &UiTree) -> String {
+     |    ^^^^^^^^^
+
+warning: associated items `disabled`, `keeper_count`, and `keeper_pids` are never used
+   --> crates/acos-cli/src/engine/zygote_host.rs:164:12
+    |
+ 93 | impl ZygoteHost {
+    | --------------- associated items in this implementation
+...
+164 |     pub fn disabled() -> Self {
+    |            ^^^^^^^^
+...
+179 |     pub fn keeper_count(&self) -> usize {
+    |            ^^^^^^^^^^^^
+...
+184 |     pub fn keeper_pids(&self) -> Vec<u32> {
+    |            ^^^^^^^^^^^
+
+warning: associated function `at` is never used
+   --> crates/acos-cli/src/live_registry.rs:123:12
+    |
+ 95 | impl LiveRegistry {
+    | ----------------- associated function in this implementation
+...
+123 |     pub fn at(dir: PathBuf) -> Self {
+    |            ^^
+
+warning: `acos-cli` (bin "acos") generated 11 warnings (run `cargo fix --bin "acos"` to apply 1 suggestion)
+    Finished `release` profile [optimized + debuginfo] target(s) in 7.93s
+     Running tests/gl1_kept_session.rs (.cache/rg1-target/release/deps/gl1_kept_session-612d28b1cfb1c612)
+
+running 1 test
+test a_kept_session_survives_the_launching_client ... FAILED
+
+failures:
+
+---- a_kept_session_survives_the_launching_client stdout ----
+
+thread 'a_kept_session_survives_the_launching_client' panicked at crates/acos-cli/tests/gl1_kept_session.rs:168:5:
+assertion `left == right` failed: Object {
+    "backend": String("acos-native"),
+    "capabilities_used": Array [],
+    "error": Object {
+        "class": String("harness"),
+        "code": String("INVALID_ARGUMENT"),
+        "details": Object {
+            "engine": String("art"),
+            "engine_frozen": Bool(false),
+            "evidence_label": String("none"),
+            "trust": String("trusted"),
+        },
+        "hint": String("Fix the named request argument. Read error.details for the field and accepted values."),
+        "message": String("`screenshot` must be true or a path inside the session's artifacts directory (/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/gl1-tests/t-kept-3431872/runtime/art-sessions/s_cli); /home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/gl1-tests/t-kept-3431872 is outside the artifacts directory"),
+        "retryable": Bool(false),
+    },
+    "fidelity": String("art-reference"),
+    "metrics": Object {
+        "wall_ms": Number(0),
+    },
+    "ok": Bool(false),
+    "request_id": String("req_345eed_18e87c2898e44a6d"),
+    "session_id": String("s_cli"),
+    "status": String("error"),
+}
+  left: Bool(false)
+ right: Bool(true)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    a_kept_session_survives_the_launching_client
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 5.95s
+
+error: test failed, to rerun pass `-p acos-cli --test gl1_kept_session`
+EXIT=101
+Mon Nov 16 09:22:45 AM UTC 2026
+== alone: a_sigkilled_daemon_takes_its_guests_with_it
+   Compiling acos-mcp v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/crates/acos-mcp)
+warning: acos-binder-peer@0.3.0: built /home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/rg1-target/release/build/acos-binder-peer-5232b8ab71f88e6f/out/libacos_binder_driver.so
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:656:7
+    |
+656 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-services` (lib) generated 1 warning
+warning: unused variable: `started`
+   --> crates/acos-art/src/boot_image.rs:801:13
+    |
+801 |         let started = Instant::now();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_started`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: method `cache_str` is never used
+   --> crates/acos-art/src/boot_image.rs:540:8
+    |
+539 | impl CacheOutcome {
+    | ----------------- method in this implementation
+540 |     fn cache_str(&self) -> &'static str {
+    |        ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field `animations_on` is never read
+    --> crates/acos-art/src/launch.rs:2091:5
+     |
+2068 | struct ProbeSample {
+     |        ----------- field in this struct
+...
+2091 |     animations_on: Option<bool>,
+     |     ^^^^^^^^^^^^^
+     |
+     = note: `ProbeSample` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: function `adler32` is never used
+    --> crates/acos-art/src/launch.rs:6982:4
+     |
+6982 | fn adler32(data: &[u8]) -> u32 {
+     |    ^^^^^^^
+
+warning: function `tail` is never used
+    --> crates/acos-art/src/launch.rs:7533:4
+     |
+7533 | fn tail(s: &str, max: usize) -> String {
+     |    ^^^^
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> crates/acos-art/src/lib.rs:836:20
+    |
+836 |     pub fn sandbox(&self) -> Sandbox {
+    |                    ^^^^^     ------- the same lifetime is hidden here
+    |                    |
+    |                    the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+836 |     pub fn sandbox(&self) -> Sandbox<'_> {
+    |                                     ++++
+
+warning: value assigned to `unsettled` is never read
+    --> crates/acos-verify/src/executor.rs:1131:21
+     |
+1131 |             let mut unsettled: Option<BackendError> = None;
+     |                     ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` on by default
+
+warning: value assigned to `unsettled` is never read
+    --> crates/acos-verify/src/executor.rs:2051:13
+     |
+2051 |     let mut unsettled: Option<BackendError> = None;
+     |             ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+
+warning: `acos-art` (lib) generated 6 warnings
+warning: `acos-verify` (lib) generated 2 warnings
+   Compiling acos-cli v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/crates/acos-cli)
+warning: value assigned to `tap_target` is never read
+    --> crates/acos-cli/src/engine/mod.rs:1182:25
+     |
+1182 |                 let mut tap_target: Option<serde_json::Value> = None;
+     |                         ^^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-cli/src/serve.rs:836:16
+    |
+836 |             Ok(mut client) => match client.mismatch() {
+    |                ----^^^^^^
+    |                |
+    |                help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: method `label` is never used
+   --> crates/acos-cli/src/engine/mod.rs:264:12
+    |
+257 | impl FrameEvidence {
+    | ------------------ method in this implementation
+...
+264 |     pub fn label(&self) -> String {
+    |            ^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: associated items `start`, `start_with_animations`, `start_with_options`, `zygote_facts`, `zygote_previous_child_pid`, and `observation_settle` are never used
+    --> crates/acos-cli/src/engine/art.rs:1519:12
+     |
+1501 | impl ArtSession {
+     | --------------- associated items in this implementation
+...
+1519 |     pub fn start(apk: &Path, artifacts: &Path) -> Result<ArtSession, BackendError> {
+     |            ^^^^^
+...
+1527 |     pub fn start_with_animations(
+     |            ^^^^^^^^^^^^^^^^^^^^^
+...
+1542 |     pub fn start_with_options(
+     |            ^^^^^^^^^^^^^^^^^^
+...
+2115 |     pub fn zygote_facts(&self) -> Option<&ZygoteFacts> {
+     |            ^^^^^^^^^^^^
+...
+2120 |     pub fn zygote_previous_child_pid(&self) -> Option<u32> {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+2329 |     pub fn observation_settle(&self) -> &'static str {
+     |            ^^^^^^^^^^^^^^^^^^
+
+warning: method `first_frame_bound` is never used
+    --> crates/acos-cli/src/engine/art.rs:4243:19
+     |
+3914 | impl ArtSession {
+     | --------------- method in this implementation
+...
+4243 |     pub(crate) fn first_frame_bound(&self) -> Option<(bool, Option<String>)> {
+     |                   ^^^^^^^^^^^^^^^^^
+
+warning: function `read_png` is never used
+    --> crates/acos-cli/src/engine/art.rs:5697:4
+     |
+5697 | fn read_png(path: &Path) -> Result<Vec<u8>, BackendError> {
+     |    ^^^^^^^^
+
+warning: function `kill_group_signals` is never used
+    --> crates/acos-cli/src/engine/art.rs:5816:15
+     |
+5816 | pub(crate) fn kill_group_signals() -> usize {
+     |               ^^^^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+   --> crates/acos-cli/src/engine/serve.rs:196:12
+    |
+190 | impl ServeEngine {
+    | ---------------- associated function in this implementation
+...
+196 |     pub fn new(
+    |            ^^^
+
+warning: function `flat_text` is never used
+    --> crates/acos-cli/src/engine/serve.rs:3603:4
+     |
+3603 | fn flat_text(tree: &UiTree) -> String {
+     |    ^^^^^^^^^
+
+warning: associated items `disabled`, `keeper_count`, and `keeper_pids` are never used
+   --> crates/acos-cli/src/engine/zygote_host.rs:164:12
+    |
+ 93 | impl ZygoteHost {
+    | --------------- associated items in this implementation
+...
+164 |     pub fn disabled() -> Self {
+    |            ^^^^^^^^
+...
+179 |     pub fn keeper_count(&self) -> usize {
+    |            ^^^^^^^^^^^^
+...
+184 |     pub fn keeper_pids(&self) -> Vec<u32> {
+    |            ^^^^^^^^^^^
+
+warning: associated function `at` is never used
+   --> crates/acos-cli/src/live_registry.rs:123:12
+    |
+ 95 | impl LiveRegistry {
+    | ----------------- associated function in this implementation
+...
+123 |     pub fn at(dir: PathBuf) -> Self {
+    |            ^^
+
+warning: `acos-cli` (bin "acos") generated 11 warnings (run `cargo fix --bin "acos"` to apply 1 suggestion)
+    Finished `release` profile [optimized + debuginfo] target(s) in 9.25s
+     Running tests/gl1_kept_session.rs (.cache/rg1-target/release/deps/gl1_kept_session-612d28b1cfb1c612)
+
+running 1 test
+test a_sigkilled_daemon_takes_its_guests_with_it ... FAILED
+
+failures:
+
+---- a_sigkilled_daemon_takes_its_guests_with_it stdout ----
+live guests before SIGKILL: [3433079, 3434130, 3434140]
+guests gone 3 ms after the daemon SIGKILL
+
+thread 'a_sigkilled_daemon_takes_its_guests_with_it' panicked at crates/acos-cli/tests/gl1_kept_session.rs:392:9:
+guest 3434140 is still running after the daemon died
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    a_sigkilled_daemon_takes_its_guests_with_it
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 13.38s
+
+error: test failed, to rerun pass `-p acos-cli --test gl1_kept_session`
+EXIT=101
+Mon Nov 16 09:23:08 AM UTC 2026

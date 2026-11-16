@@ -1,0 +1,2349 @@
+{
+  "animations": "off",
+  "app": {
+    "package": "com.gaten",
+    "path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+    "sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29"
+  },
+  "backend": "acos-native",
+  "captures": {
+    "kanji-home": "frames/8-kanji-home.png",
+    "kanji-hub": "frames/12-kanji-hub.png",
+    "kanji-hub-rtk": "frames/30-kanji-hub-rtk.png",
+    "kanji-hub-wanikani": "frames/22-kanji-hub-wanikani.png",
+    "kanji-page": "frames/16-kanji-page.png",
+    "kanji-wanikani-selected": "frames/19-kanji-wanikani-selected.png"
+  },
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "results/release/v0.3.0-gate/correctness/04-scenarios/gaten-kanji/artifacts",
+    "engine_report": "results/release/v0.3.0-gate/correctness/04-scenarios/gaten-kanji/artifacts/engine.json",
+    "pruned_session_captures": 22,
+    "retention": "results/release/v0.3.0-gate/correctness/04-scenarios/gaten-kanji/artifacts/retention.json",
+    "verdict": "results/release/v0.3.0-gate/correctness/04-scenarios/gaten-kanji/artifacts/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-16T09:13:35.851Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 3 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (prune-unreferenced): 94 file(s) / 23.2 MiB kept, 22 file(s) / 4.0 MiB pruned; see retention.json"
+  ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794503846699559546,
+      "path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+      "sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+      "sha256_12": "e04c7ffcf012",
+      "size_bytes": 114751344
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794819964133509690,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/gaten-kanji.yaml",
+      "sha256": "a6ebba4d79c9f7c560cb3348a599979ca52c85fd75f599d1c856a5c9b42d3a19",
+      "sha256_12": "a6ebba4d79c9",
+      "size_bytes": 4369
+    },
+    "scenario_engine": "rust-vm",
+    "warnings": [
+      {
+        "code": "SCENARIO_ENGINE_MISMATCH",
+        "engine": "art",
+        "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+        "scenario_engine": "rust-vm"
+      }
+    ]
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.3.0",
+    "apk_path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+    "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 400,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/gaten-kanji.yaml",
+    "scenario_sha256": "a6ebba4d79c9f7c560cb3348a599979ca52c85fd75f599d1c856a5c9b42d3a19"
+  },
+  "request_id": "req_32af26_18e87ba503c427a3",
+  "resources": {
+    "events": 291,
+    "frames_captured": 33,
+    "memory_mib": 240,
+    "peak_rss_bytes": 252542976,
+    "sessions": 1,
+    "steps": 33,
+    "wall_ms": 14844
+  },
+  "scenario": {
+    "name": "gaten-kanji",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/gaten-kanji.yaml",
+    "sha256": "a6ebba4d79c9f7c560cb3348a599979ca52c85fd75f599d1c856a5c9b42d3a19"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=275MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3321655-i3300307.scope)",
+    "code": null,
+    "disk_free_bytes": 254618476544,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": "results/release/v0.3.0-gate/correctness/04-scenarios/gaten-kanji/artifacts/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_gaten-dev-f344272-x86_64-release-unsigned",
+  "started_at": "2026-11-16T09:13:21.007Z",
+  "status": "pass",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 1534,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "previous_observation": false
+          },
+          "expected": {
+            "compared": false
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "no previous observation to compare; change not claimed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 5519,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/3.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/3.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-tap.json"
+        }
+      ],
+      "frame_seq": 3,
+      "index": 1,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,2117][1022,2253]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Set up Gaten",
+              "enabled": true,
+              "focused": false,
+              "id": "n13_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,2117][1022,2253]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 539,
+            "y": 2184
+          },
+          "selector": {
+            "selector": "text*=\"Set up Gaten\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 80,
+        "frame_ms": 486,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 5519,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 62,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/4.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/4.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-tap.json"
+        }
+      ],
+      "frame_seq": 4,
+      "index": 2,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,2127][1022,2253]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Skip lookup mode setup",
+              "enabled": true,
+              "focused": false,
+              "id": "n17_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,2127][1022,2253]",
+              "window": "main"
+            }
+          },
+          "node": {
+            "bounds": "[498,2163][582,2216]",
+            "class": "X4.e",
+            "clickable": false,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n18_",
+            "password": false,
+            "resource_id": "",
+            "scrollable": false,
+            "text": "Skip",
+            "visible_bounds": "[498,2163][582,2216]",
+            "window": "main"
+          },
+          "point": {
+            "x": 540,
+            "y": 2189
+          },
+          "selector": {
+            "selector": "text==\"Skip\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "state-commit",
+        "first_change_ms": 33,
+        "frame_ms": 35,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "reason": "state-commit",
+        "settled": true,
+        "state_changed": true,
+        "waited_ms": 62,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 47,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/5.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/5.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/03-tap.json"
+        }
+      ],
+      "frame_seq": 5,
+      "index": 3,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,2127][1022,2253]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Skip lookup mode setup",
+              "enabled": false,
+              "focused": false,
+              "id": "n17_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,2127][1022,2253]",
+              "window": "main"
+            }
+          },
+          "node": {
+            "bounds": "[498,2163][582,2216]",
+            "class": "X4.e",
+            "clickable": false,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n18_",
+            "password": false,
+            "resource_id": "",
+            "scrollable": false,
+            "text": "Skip",
+            "visible_bounds": "[498,2163][582,2216]",
+            "window": "main"
+          },
+          "point": {
+            "x": 540,
+            "y": 2189
+          },
+          "selector": {
+            "selector": "text==\"Skip\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "state-commit",
+        "first_change_ms": 2,
+        "frame_ms": 20,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "reason": "state-commit",
+        "settled": true,
+        "state_changed": true,
+        "waited_ms": 47,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 59,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/6.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/6.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/04-tap.json"
+        }
+      ],
+      "frame_seq": 6,
+      "index": 4,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,2127][1022,2253]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Skip Anki setup",
+              "enabled": true,
+              "focused": false,
+              "id": "n17_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,2127][1022,2253]",
+              "window": "main"
+            }
+          },
+          "node": {
+            "bounds": "[498,2163][582,2216]",
+            "class": "X4.e",
+            "clickable": false,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n18_",
+            "password": false,
+            "resource_id": "",
+            "scrollable": false,
+            "text": "Skip",
+            "visible_bounds": "[498,2163][582,2216]",
+            "window": "main"
+          },
+          "point": {
+            "x": 540,
+            "y": 2189
+          },
+          "selector": {
+            "selector": "text==\"Skip\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 15,
+        "bound": "state-commit",
+        "first_change_ms": 18,
+        "frame_ms": 31,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "reason": "state-commit",
+        "settled": true,
+        "state_changed": true,
+        "waited_ms": 59,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 325,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/7.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/7.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/05-wait_for.json"
+        }
+      ],
+      "frame_seq": 7,
+      "index": 5,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 222,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 35,
+        "waited_ms": 325,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 74,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/8.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/8.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/8-kanji-home.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/06-capture.json"
+        }
+      ],
+      "frame_seq": 8,
+      "index": 6,
+      "name": "kanji-home",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 223,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 34,
+        "waited_ms": 74,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1337,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/10.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/10.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/07-tap.json"
+        }
+      ],
+      "frame_seq": 10,
+      "index": 7,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[689,2151][862,2316]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Settings",
+              "enabled": true,
+              "focused": false,
+              "id": "n14_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[688,2151][862,2316]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 775,
+            "y": 2233
+          },
+          "selector": {
+            "selector": "content_desc==\"Settings\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 461,
+        "frame_ms": 1261,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 1337,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 86,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/11.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/11.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/08-wait_for.json"
+        }
+      ],
+      "frame_seq": 11,
+      "index": 8,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 262,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 43,
+        "waited_ms": 86,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 86,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/12.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/12.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/12-kanji-hub.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/09-capture.json"
+        }
+      ],
+      "frame_seq": 12,
+      "index": 9,
+      "name": "kanji-hub",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 263,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 86,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              58,
+              1198,
+              1022,
+              1355
+            ],
+            "node": "n25_",
+            "visible": true,
+            "visible_bounds": [
+              58,
+              1198,
+              1022,
+              1355
+            ]
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "content_desc": {
+                "exact": "Kanji reference. Remembering the Kanji"
+              }
+            },
+            "visible": true
+          },
+          "kind": "visible",
+          "matched_node_ids": [
+            "n25_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/12.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/12.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/10-assert_visible.json"
+        }
+      ],
+      "frame_seq": 12,
+      "index": 10,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 263,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_visible"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "present": false,
+            "visible": null
+          },
+          "expected": {
+            "selector": {
+              "content_desc": {
+                "exact": "Kanji reference. WaniKani"
+              }
+            },
+            "visible": false
+          },
+          "kind": "not_visible",
+          "matched_node_ids": [],
+          "message": "node absent",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/12.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/12.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/11-assert_not_visible.json"
+        }
+      ],
+      "frame_seq": 12,
+      "index": 11,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 263,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_not_visible"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 896,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/14.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/14.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/12-tap.json"
+        }
+      ],
+      "frame_seq": 14,
+      "index": 12,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,1198][1022,1355]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Kanji reference. Remembering the Kanji",
+              "enabled": true,
+              "focused": false,
+              "id": "n25_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,1198][1022,1355]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 540,
+            "y": 1276
+          },
+          "selector": {
+            "selector": "content_desc*=\"Kanji reference.\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 641,
+        "frame_ms": 806,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 896,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 84,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/15.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/15.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/13-wait_for.json"
+        }
+      ],
+      "frame_seq": 15,
+      "index": 13,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 292,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 44,
+        "waited_ms": 84,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 74,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/16.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/16.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/16-kanji-page.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/14-capture.json"
+        }
+      ],
+      "frame_seq": 16,
+      "index": 14,
+      "name": "kanji-page",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 293,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 34,
+        "waited_ms": 74,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              58,
+              700,
+              934,
+              790
+            ],
+            "hint": "",
+            "node": "n26_",
+            "text": "Keywords, Heisig stories and Koohii mnemonics · bundled, works offline",
+            "visible": true
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "text": {
+                "contains": "bundled, works offline"
+              }
+            },
+            "text": {
+              "contains": "bundled, works offline"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n26_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/16.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/16.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/15-assert_text.json"
+        }
+      ],
+      "frame_seq": 16,
+      "index": 15,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 293,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 34,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              58,
+              418,
+              934,
+              471
+            ],
+            "hint": "",
+            "node": "n26_",
+            "text": "WaniKani",
+            "visible": true
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "text": {
+                "exact": "WaniKani"
+              }
+            },
+            "text": {
+              "exact": "WaniKani"
+            }
+          },
+          "kind": "text",
+          "matched_node_ids": [
+            "n26_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/16.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/16.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/16-assert_text.json"
+        }
+      ],
+      "frame_seq": 16,
+      "index": 16,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 293,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 34,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_text"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 423,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/18.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/18.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/17-tap.json"
+        }
+      ],
+      "frame_seq": 18,
+      "index": 17,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,386][1022,603]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "WaniKani. Your WaniKani account's kanji pages and radicals · needs a connected account",
+              "enabled": true,
+              "focused": false,
+              "id": "n25_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,386][1022,603]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 540,
+            "y": 494
+          },
+          "selector": {
+            "selector": "content_desc*=\"WaniKani. Your WaniKani account\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 148,
+        "frame_ms": 336,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 423,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 85,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/19.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/19.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/19-kanji-wanikani-selected.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/18-capture.json"
+        }
+      ],
+      "frame_seq": 19,
+      "index": 18,
+      "name": "kanji-wanikani-selected",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 306,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 43,
+        "waited_ms": 85,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "present": false,
+            "visible": null
+          },
+          "expected": {
+            "selector": {
+              "text": {
+                "exact": "The choice could not be saved. Try again."
+              }
+            },
+            "visible": false
+          },
+          "kind": "not_visible",
+          "matched_node_ids": [],
+          "message": "node absent",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/19.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/19.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/19-assert_not_visible.json"
+        }
+      ],
+      "frame_seq": 19,
+      "index": 19,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 306,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 43,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_not_visible"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 1145,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/20.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/20.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/20-back.json"
+        }
+      ],
+      "frame_seq": 20,
+      "index": 20,
+      "input": {
+        "expect_change": false,
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": null
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 10,
+        "bound": "strict-event",
+        "first_change_ms": 582,
+        "frame_ms": 1116,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 1145,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "back"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 87,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/21.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/21.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/21-wait_for.json"
+        }
+      ],
+      "frame_seq": 21,
+      "index": 21,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 343,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 38,
+        "waited_ms": 86,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 86,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/22.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/22.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/22-kanji-hub-wanikani.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/22-capture.json"
+        }
+      ],
+      "frame_seq": 22,
+      "index": 22,
+      "name": "kanji-hub-wanikani",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 344,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 43,
+        "waited_ms": 86,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              58,
+              1198,
+              1022,
+              1355
+            ],
+            "node": "n25_",
+            "visible": true,
+            "visible_bounds": [
+              58,
+              1198,
+              1022,
+              1355
+            ]
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "content_desc": {
+                "exact": "Kanji reference. WaniKani"
+              }
+            },
+            "visible": true
+          },
+          "kind": "visible",
+          "matched_node_ids": [
+            "n25_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/22.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/22.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/23-assert_visible.json"
+        }
+      ],
+      "frame_seq": 22,
+      "index": 23,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 344,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 43,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_visible"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "present": false,
+            "visible": null
+          },
+          "expected": {
+            "selector": {
+              "content_desc": {
+                "exact": "Kanji reference. Remembering the Kanji"
+              }
+            },
+            "visible": false
+          },
+          "kind": "not_visible",
+          "matched_node_ids": [],
+          "message": "node absent",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/22.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/22.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/24-assert_not_visible.json"
+        }
+      ],
+      "frame_seq": 22,
+      "index": 24,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 344,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 43,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_not_visible"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 906,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/24.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/24.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/25-tap.json"
+        }
+      ],
+      "frame_seq": 24,
+      "index": 25,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,1198][1022,1355]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Kanji reference. WaniKani",
+              "enabled": true,
+              "focused": false,
+              "id": "n25_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,1198][1022,1355]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 540,
+            "y": 1276
+          },
+          "selector": {
+            "selector": "content_desc*=\"Kanji reference.\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 525,
+        "frame_ms": 817,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 906,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 84,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/25.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/25.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/26-wait_for.json"
+        }
+      ],
+      "frame_seq": 25,
+      "index": 26,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 372,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 44,
+        "waited_ms": 84,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 444,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/27.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/27.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/27-tap.json"
+        }
+      ],
+      "frame_seq": 27,
+      "index": 27,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,605][1022,822]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Remembering the Kanji. Keywords, Heisig stories and Koohii mnemonics · bundled, works offline",
+              "enabled": true,
+              "focused": false,
+              "id": "n25_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,605][1022,822]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 540,
+            "y": 713
+          },
+          "selector": {
+            "selector": "content_desc*=\"Remembering the Kanji. Keywords\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 159,
+        "frame_ms": 368,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 444,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 1166,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/28.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/28.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/28-back.json"
+        }
+      ],
+      "frame_seq": 28,
+      "index": 28,
+      "input": {
+        "expect_change": false,
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": null
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 10,
+        "bound": "strict-event",
+        "first_change_ms": 517,
+        "frame_ms": 1134,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 1166,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "back"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 91,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/29.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/29.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/29-wait_for.json"
+        }
+      ],
+      "frame_seq": 29,
+      "index": 29,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 422,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42,
+        "waited_ms": 90,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 88,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/30.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/30.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/30-kanji-hub-rtk.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/30-capture.json"
+        }
+      ],
+      "frame_seq": 30,
+      "index": 30,
+      "name": "kanji-hub-rtk",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 423,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42,
+        "waited_ms": 88,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              58,
+              1198,
+              1022,
+              1355
+            ],
+            "node": "n25_",
+            "visible": true,
+            "visible_bounds": [
+              58,
+              1198,
+              1022,
+              1355
+            ]
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "content_desc": {
+                "exact": "Kanji reference. Remembering the Kanji"
+              }
+            },
+            "visible": true
+          },
+          "kind": "visible",
+          "matched_node_ids": [
+            "n25_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/30.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/30.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/31-assert_visible.json"
+        }
+      ],
+      "frame_seq": 30,
+      "index": 31,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 423,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_visible"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "present": false,
+            "visible": null
+          },
+          "expected": {
+            "selector": {
+              "content_desc": {
+                "exact": "Kanji reference. WaniKani"
+              }
+            },
+            "visible": false
+          },
+          "kind": "not_visible",
+          "matched_node_ids": [],
+          "message": "node absent",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/30.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/30.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/32-assert_not_visible.json"
+        }
+      ],
+      "frame_seq": 30,
+      "index": 32,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 423,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_not_visible"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "pass"
+}

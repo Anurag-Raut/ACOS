@@ -1,0 +1,272 @@
+{
+  "animations": "on",
+  "app": {
+    "package": "dev.acos.fixtures.todolist",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/todo-list.apk",
+    "sha256": "1d94c4c9806be2f3a9e6dd4f9699c1923459e8e09dcdef2b776de8b522b375eb"
+  },
+  "backend": "acos-native",
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__todo-missing-item/artifacts",
+    "engine_report": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__todo-missing-item/artifacts/engine.json",
+    "retention": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__todo-missing-item/artifacts/retention.json",
+    "verdict": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__todo-missing-item/artifacts/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "failure": {
+    "code": "ELEMENT_NOT_FOUND",
+    "error": {
+      "class": "assertion",
+      "code": "ELEMENT_NOT_FOUND",
+      "hint": "Re-observe the tree and check the selector (id/text/class/bounds). If the node is legitimately absent, fix the scenario expectation.",
+      "message": "selector text==\"eggs\" matched no node",
+      "retryable": false
+    },
+    "step_index": 2,
+    "summary": "step 2 (assert_visible) fail"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-16T09:15:06.877Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [
+    "stopped at step 2 (assert_visible): fail; later steps were not executed",
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (keep-all): 14 file(s) / 0.3 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json"
+  ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794521208377128221,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/todo-list.apk",
+      "sha256": "1d94c4c9806be2f3a9e6dd4f9699c1923459e8e09dcdef2b776de8b522b375eb",
+      "sha256_12": "1d94c4c9806b",
+      "size_bytes": 12756
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794819964135509721,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/negative/todo-missing-item.yaml",
+      "sha256": "6cd724b7beb6a6f833a9c56307097c80640ca67b040f9727ec7180c52b952bc2",
+      "sha256_12": "6cd724b7beb6",
+      "size_bytes": 673
+    },
+    "scenario_engine": "rust-vm",
+    "warnings": [
+      {
+        "code": "SCENARIO_ENGINE_MISMATCH",
+        "engine": "art",
+        "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+        "scenario_engine": "rust-vm"
+      }
+    ]
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.3.0",
+    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/todo-list.apk",
+    "apk_sha256": "1d94c4c9806be2f3a9e6dd4f9699c1923459e8e09dcdef2b776de8b522b375eb",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/negative/todo-missing-item.yaml",
+    "scenario_sha256": "6cd724b7beb6a6f833a9c56307097c80640ca67b040f9727ec7180c52b952bc2"
+  },
+  "request_id": "req_32ebb0_18e87bbdc5f4c249",
+  "resources": {
+    "events": 88,
+    "frames_captured": 3,
+    "memory_mib": 14,
+    "peak_rss_bytes": 14761984,
+    "sessions": 1,
+    "steps": 3,
+    "wall_ms": 210
+  },
+  "scenario": {
+    "name": "negative-todo-missing-item",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/scenarios/negative/todo-missing-item.yaml",
+    "sha256": "6cd724b7beb6a6f833a9c56307097c80640ca67b040f9727ec7180c52b952bc2"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=63MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3337147-i3383792.scope)",
+    "code": null,
+    "disk_free_bytes": 249088679936,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": "results/release/v0.3.0-gate/correctness/04-scenarios/negative__todo-missing-item/artifacts/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_todo-list",
+  "started_at": "2026-11-16T09:15:06.667Z",
+  "status": "fail",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 154,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 55,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-wait_for.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 1,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 7,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 54,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": null,
+          "diff": {
+            "actual": null,
+            "detail": "selector matched no node",
+            "expected": {
+              "selector": {
+                "text": {
+                  "exact": "eggs"
+                }
+              },
+              "visible": true
+            }
+          },
+          "expected": {
+            "selector": {
+              "text": {
+                "exact": "eggs"
+              }
+            },
+            "visible": true
+          },
+          "kind": "visible",
+          "matched_node_ids": [],
+          "passed": false
+        }
+      ],
+      "duration_ms": 0,
+      "error": {
+        "class": "assertion",
+        "code": "ELEMENT_NOT_FOUND",
+        "hint": "Re-observe the tree and check the selector (id/text/class/bounds). If the node is legitimately absent, fix the scenario expectation.",
+        "message": "selector text==\"eggs\" matched no node",
+        "retryable": false
+      },
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-assert_visible.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 2,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 7,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "fail",
+      "step": "assert_visible"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "fail"
+}

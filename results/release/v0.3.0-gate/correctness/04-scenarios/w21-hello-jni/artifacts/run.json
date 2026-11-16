@@ -1,0 +1,7 @@
+{
+  "request_id": "req_337f42_18e87bcd27883ece",
+  "started_at": "2026-11-16T09:16:12.568Z",
+  "scenario": "scenarios/w21-hello-jni.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

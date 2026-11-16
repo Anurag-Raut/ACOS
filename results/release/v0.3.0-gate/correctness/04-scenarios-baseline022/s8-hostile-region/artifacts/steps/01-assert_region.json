@@ -1,0 +1,47 @@
+{
+  "assertions": [],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 1516,
+  "error": {
+    "class": "infra_timeout",
+    "code": "TIMEOUT",
+    "details": {
+      "animating": false,
+      "backend": "acos-art-session",
+      "context": "assert_region",
+      "frame_seq": 2,
+      "reason": "probe-floor",
+      "settle": {
+        "animating": false,
+        "bound": "timeout",
+        "mode": "strict",
+        "probe_seq": 9999,
+        "reason": "probe-floor",
+        "settled": false,
+        "strict_rule": "event",
+        "tree_age_ms": 3053,
+        "warning": "strict settle timed out: the tree and frame identity are the latest observed state, not a settled one; this is not assertion evidence"
+      }
+    },
+    "hint": "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT failure; use wait_for for a later event, or `animations:off` for a functional check. The latest tree/frame is kept in the step evidence.",
+    "message": "capture: strict settle timed out (probe-floor); the step is a non-pass because the screen was still changing when the deadline elapsed",
+    "retryable": true
+  },
+  "evidence": [
+    {
+      "kind": "step",
+      "path": "steps/01-assert_region.json"
+    }
+  ],
+  "index": 1,
+  "provenance": {
+    "frame": "host-observed"
+  },
+  "status": "timeout",
+  "step": "assert_region",
+  "trust": "untrusted"
+}

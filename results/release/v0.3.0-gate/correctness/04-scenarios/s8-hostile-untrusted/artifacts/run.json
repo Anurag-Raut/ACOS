@@ -1,0 +1,7 @@
+{
+  "request_id": "req_3354b2_18e87bc35339c429",
+  "started_at": "2026-11-16T09:15:30.352Z",
+  "scenario": "scenarios/s8-hostile-untrusted.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

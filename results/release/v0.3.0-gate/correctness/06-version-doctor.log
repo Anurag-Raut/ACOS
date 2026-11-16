@@ -1,0 +1,159 @@
+CMD: /home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/rg1-prefix/bin/acos --version
+acos 0.3.0
+EXIT=0
+
+CMD: /home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/rg1-prefix/bin/acos doctor --json
+{
+  "checks": [
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/rg1-prefix/share/acos/0.3.0",
+      "name": "acos_home",
+      "status": "ok"
+    },
+    {
+      "detail": "0.3.0",
+      "name": "install_version",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/rg1-prefix/share/acos/0.3.0/.cache/art/sysroot",
+      "name": "install_sysroot",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/rg1-prefix/share/acos/0.3.0/.cache/boot/android-34/fonts",
+      "name": "install_fonts",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/rg1-prefix/share/acos/0.3.0/.cache/boot/android-34/overlays",
+      "name": "install_overlays",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/rg1-prefix/share/acos/0.3.0/.cache/boot/android-34/BOOTCLASSPATH",
+      "name": "install_bootclasspath",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/rg1-prefix/share/acos/0.3.0/crates/acos-art/guest/java/dev/acos/art/AppMain.java",
+      "name": "install_guest_sources",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/rg1-prefix/share/acos/0.3.0/bin/acos-art",
+      "name": "install_acos_art",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/rg1-prefix/share/acos/0.3.0/.cache (data, sessions, sockets, build caches)",
+      "name": "install_state",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/Android/Sdk",
+      "name": "android_sdk",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/Android/Sdk/build-tools/35.0.0",
+      "name": "build_tools",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/Android/Sdk/build-tools/35.0.0/aapt2",
+      "name": "aapt2",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/Android/Sdk/build-tools/35.0.0/d8",
+      "name": "d8",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/Android/Sdk/build-tools/35.0.0/zipalign",
+      "name": "zipalign",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/Android/Sdk/build-tools/35.0.0/apksigner",
+      "name": "apksigner",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/Android/Sdk/platforms/android-34/android.jar",
+      "name": "android_jar",
+      "status": "ok"
+    },
+    {
+      "detail": "openjdk version \"17.0.21.0.2\" 2026-10-22",
+      "name": "java",
+      "status": "ok"
+    },
+    {
+      "detail": "javac 17.0.21.0.2",
+      "name": "javac",
+      "status": "ok"
+    },
+    {
+      "detail": "/usr/bin/keytool",
+      "name": "keytool",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/linux-x86_64/bin",
+      "name": "ndk_clang",
+      "status": "ok"
+    },
+    {
+      "detail": "/usr/bin/bwrap",
+      "name": "bwrap",
+      "status": "ok"
+    },
+    {
+      "detail": "/usr/bin/systemd-run",
+      "name": "systemd-run",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1",
+      "name": "workspace",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/tools/apk_append.py",
+      "name": "apk_append",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/fixtures/build/apps/debug.keystore",
+      "name": "debug_keystore",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/boot/android-34",
+      "name": "boot_classpath",
+      "status": "ok"
+    },
+    {
+      "detail": "no daemon running (/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/rg1/rt-smoke/sock absent); cli f162b2d96068+dirty.077ec03d.05161886",
+      "name": "session_daemon",
+      "status": "ok"
+    },
+    {
+      "detail": "24% used (46663 MiB available of 61908 MiB)",
+      "name": "host_memory",
+      "status": "ok"
+    }
+  ],
+  "ok": true,
+  "subject": {
+    "acos_home": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1/.cache/rg1-prefix/share/acos/0.3.0",
+    "acos_version": "0.3.0",
+    "arch": "x86_64",
+    "cwd": "/home/Qui/.t3/worktrees/acos/t3-9fde79f7-5b90a224f291fea1",
+    "layout": "installed",
+    "os": "linux"
+  }
+}
+EXIT=0

@@ -1,0 +1,7 @@
+{
+  "request_id": "req_32b86d_18e87ba72ccd8418",
+  "started_at": "2026-11-16T09:13:29.448Z",
+  "scenario": "scenarios/gaten-recognition.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}
