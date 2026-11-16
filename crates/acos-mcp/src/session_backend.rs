@@ -1002,6 +1002,13 @@ impl SessionBackend {
             } else {
                 Value::Null
             },
+            // PROVENANCE: which APK booted on the Flutter product path.
+            "provenance": acos_protocol::provenance::block(
+                apk,
+                None,
+                acos_protocol::commands::VerifyEngine::RustVm.as_str(),
+                Fidelity::NativeRuntime,
+            ),
         });
         let envelope = if first_frame_ok {
             Envelope::pass(
@@ -1276,6 +1283,13 @@ impl SessionBackend {
             "natives": natives,
             "real_boot": real_boot,
             "frame": Value::Null,
+            // PROVENANCE: which APK booted on the React Native product path.
+            "provenance": acos_protocol::provenance::block(
+                apk,
+                None,
+                acos_protocol::commands::VerifyEngine::RustVm.as_str(),
+                Fidelity::NativeRuntime,
+            ),
         });
         let envelope = if tree_ok {
             Envelope::pass(
@@ -1539,7 +1553,7 @@ impl SessionBackend {
                     let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
                     sessions.insert(id.clone(), session);
                 }
-                launch_envelope(request_id, &id, &report)
+                launch_envelope(request_id, &id, &report, &apk)
             }
             Err(err) => {
                 session.close();
@@ -2987,8 +3001,21 @@ fn input_envelope(
     }
 }
 
-fn launch_envelope(request_id: &str, session_id: &str, report: &LaunchReport) -> Envelope {
-    let result = ladder_json(report);
+fn launch_envelope(
+    request_id: &str,
+    session_id: &str,
+    report: &LaunchReport,
+    apk: &std::path::Path,
+) -> Envelope {
+    let mut result = ladder_json(report);
+    // PROVENANCE: the same block the CLI writes: absolute APK path + digest,
+    // engine, fidelity. This in-process route is the frozen Rust VM.
+    result["provenance"] = acos_protocol::provenance::block(
+        apk,
+        None,
+        acos_protocol::commands::VerifyEngine::RustVm.as_str(),
+        Fidelity::NativeRuntime,
+    );
     let mut metrics = Metrics::wall_ms(report.wall_ms);
     if report.peak_rss_bytes > 0 {
         metrics = metrics.with_peak_rss_bytes(report.peak_rss_bytes);

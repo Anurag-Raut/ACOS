@@ -231,10 +231,39 @@ ART) and `rust-vm` (the frozen Rust VM). Omitted means `art`; the reply's
 and `required_fidelity: "art-reference"` on a non-ART run is refused
 (`UNSUPPORTED_BACKEND`), never passed.
 
-The **scenario YAML `engine:` field is a different thing**: it is the legacy
-native-vs-reference preference (`native-preferred` | `native-only` |
-`reference-only`) and ART verification does not read it. Do not confuse the two;
-the tool/CLI argument selects the execution engine.
+The **scenario YAML `engine:` field uses the same two words** (`art` /
+`rust-vm`) and is metadata about what the scenario was written for; the
+tool/CLI argument selects the execution engine. The legacy spellings
+(`native-preferred`, `native-only` → `rust-vm`; `reference-only` → `art`) still
+parse and produce a scenario warning naming the current word.
+
+### Provenance: every reply names its inputs
+
+`acos_verify` and `acos_launch` results carry a `provenance` block (also written
+into `verdict.json` and printed in the CLI's summary line):
+
+```json
+"provenance": {
+  "scenario": {"path": "/abs/s.yaml", "sha256": "<64 hex>", "sha256_12": "<12 hex>"},
+  "apk":      {"path": "/abs/app.apk", "sha256": "<64 hex>", "sha256_12": "<12 hex>"},
+  "engine": "art", "fidelity": "art-reference", "warnings": []
+}
+```
+
+Paths are absolute and `launch` sets `scenario: null` (it has no scenario). A
+warning is structured, never a fail: `SCENARIO_APP_OVERRIDDEN` means the
+scenario's own `app:` names a different file than the `--apk` that ran. Use
+`sha256_12` to check that the build you just made is the binary the verdict is
+about.
+
+### Unknown arguments are rejected
+
+Every tool's `inputSchema` is a closed object (`additionalProperties: false`)
+and the server enforces the same rule: an argument the tool does not have is
+`INVALID_ARGUMENT`, naming the argument, the valid ones and a near-miss
+suggestion. A silently ignored argument (for example `acos_observe_tree
+{"screenshot": true}` on a build without it) reads as a success for work that
+never happened, so it is refused instead.
 
 ---
 
@@ -380,8 +409,10 @@ server.
 Regenerate the block with `cargo run -p acos-mcp --example gen-tools-docs`.
 
 `acos_verify` also accepts `engine: "art"` (mapped to the CLI's `--engine`).
-Without it `acos verify` uses its default engine, which cannot honour an
-ART-only scenario (`animations: off`); pass `engine: "art"` for real ART.
+`art` is the default in the tool, in the schema and in `acos verify` itself
+(one constant: `acos_protocol::commands::DEFAULT_VERIFY_ENGINE`), so the CLI and
+the tool never disagree about which engine a run used. Pass `engine: "rust-vm"`
+only for the frozen VM.
 
 A run owns its `artifacts` directory: a non-empty directory written by another
 run is refused with `INVALID_ARGUMENT` naming the previous run id

@@ -33,10 +33,20 @@ impl McpToolDescriptor {
         command: CommandName,
         description: impl Into<String>,
     ) -> McpToolDescriptor {
+        // ARGS: the published schema is a **closed** object. schemars does not
+        // emit `additionalProperties: false` for a struct, and an open schema
+        // tells a client that any extra key is acceptable — which is how
+        // `acos_observe_tree {"screenshot": true}` on a build that ignored it
+        // looked like a success (feedback 2026-11-15). The server rejects an
+        // unknown argument for the same reason; see `acos-mcp::args`.
+        let mut input_schema = schema_value::<T>();
+        if let Some(object) = input_schema.as_object_mut() {
+            object.insert("additionalProperties".to_string(), Value::Bool(false));
+        }
         McpToolDescriptor {
             name: command.tool_name().to_string(),
             description: description.into(),
-            input_schema: schema_value::<T>(),
+            input_schema,
         }
     }
 }

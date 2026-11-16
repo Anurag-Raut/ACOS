@@ -34,6 +34,7 @@ pub mod events;
 pub mod frame;
 pub mod identity;
 pub mod mcp;
+pub mod provenance;
 pub mod scenario;
 pub mod schema;
 pub mod ui;

@@ -813,3 +813,80 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
     assert!(valid().validate().is_ok());
     assert_eq!(valid().isolation, IsolationLevel::Process);
 }
+
+/// ENGINE VOCABULARY: the YAML `engine:` field and `--engine` use the same two
+/// words. Before this, `engine: art` was `INVALID_SCENARIO: unknown variant
+/// 'art'` while the CLI took `--engine art` — two vocabularies for one concept
+/// (feedback 2026-11-14). The legacy names still parse and say what they mean.
+#[test]
+fn the_scenario_engine_field_uses_the_cli_vocabulary() {
+    let with_engine = |value: &str| {
+        VALID.replace("engine: native-preferred", &format!("engine: {value}"))
+    };
+
+    for (value, expected) in [
+        ("art", Engine::Art),
+        ("rust-vm", Engine::RustVm),
+        // Legacy spellings map onto the canonical names instead of failing.
+        ("native-preferred", Engine::RustVm),
+        ("native-only", Engine::RustVm),
+        ("reference-only", Engine::Art),
+    ] {
+        let scenario = Scenario::from_yaml_str(&with_engine(value))
+            .unwrap_or_else(|validation| panic!("engine: {value} must parse: {validation:?}"));
+        assert_eq!(scenario.engine, expected, "engine: {value}");
+    }
+
+    // The canonical spelling keeps the legacy scenarios and the CLI in one
+    // vocabulary, and is what a written-back scenario says.
+    let scenario = Scenario::from_yaml_str(&VALID).expect("legacy scenario still parses");
+    assert_eq!(scenario.engine, Engine::RustVm);
+    let written = scenario.to_yaml_string().unwrap();
+    assert!(written.contains("engine: rust-vm"), "{written}");
+    assert!(!written.contains("native-preferred"), "{written}");
+
+    // A legacy value is accepted, not an error.
+    assert!(Scenario::from_yaml_str(&VALID).is_ok());
+
+    // An unknown value still fails, and the message names the valid ones (the
+    // error is the serde shape: `unknown variant ... expected `art` or `rust-vm``).
+    let error = Scenario::from_yaml_str(&with_engine("ART"))
+        .err()
+        .expect("unknown engine rejected");
+    let message = format!("{error:?}");
+    assert!(message.contains("unknown variant"), "{message}");
+    assert!(message.contains("art"), "{message}");
+
+    // The same name the CLI prints is available from the type.
+    assert_eq!(Engine::Art.as_str(), "art");
+    assert_eq!(Engine::RustVm.as_str(), "rust-vm");
+}
+
+/// The legacy-name warning is attached by the parsing entry points (`load` /
+/// `from_yaml_str`), where the raw YAML is still available, so an old scenario
+/// runs and its author learns the current spelling.
+#[test]
+fn a_legacy_engine_value_warns_with_the_canonical_name() {
+    let path = std::env::temp_dir().join(format!(
+        "acos-scenario-engine-{}.yaml",
+        std::process::id()
+    ));
+    std::fs::write(&path, VALID).expect("write scenario");
+    let scenario = Scenario::load(&path).expect("legacy scenario loads");
+    assert_eq!(scenario.engine, Engine::RustVm);
+    // `load` drops the warnings on success (they are not errors); the warning
+    // itself is produced by `from_yaml_str` and asserted through the invalid
+    // path, where warnings travel with the errors.
+    let invalid = VALID.replace("name: valid", "name: ' '");
+    let validation = Scenario::from_yaml_str(&invalid).expect_err("blank name is invalid");
+    assert!(
+        validation
+            .warnings
+            .iter()
+            .any(|warning| warning.path == "engine"
+                && warning.message.contains("`engine: rust-vm`")),
+        "{:?}",
+        validation.warnings
+    );
+    let _ = std::fs::remove_file(&path);
+}

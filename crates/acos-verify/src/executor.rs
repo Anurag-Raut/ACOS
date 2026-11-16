@@ -59,10 +59,18 @@ pub struct RunOptions {
     pub required_fidelity: Option<Fidelity>,
     /// Request id.
     pub request_id: String,
-    /// Deterministic flags for the reproducer.
+    /// Deterministic `NAME=VALUE` flags for the reproducer.
     pub flags: Vec<String>,
     /// `acos` version string.
     pub acos_version: String,
+    /// The execution engine this run was started with (`art` / `rust-vm`),
+    /// from the request. Recorded in the verdict's provenance block so the
+    /// verdict names the engine even when it is produced without the CLI.
+    pub engine: String,
+    /// Structured, non-fatal facts for `provenance.warnings[]` (for example
+    /// `SCENARIO_APP_OVERRIDDEN` when `--apk` and the scenario's `app:` name
+    /// different files). Warnings never change the verdict.
+    pub warnings: Vec<serde_json::Value>,
 }
 
 /// The result of a run.
@@ -643,6 +651,30 @@ pub fn run_scenario(
     verdict.captures = captures;
     verdict.failure = failure;
     verdict.notes = notes;
+
+    // PROVENANCE: which inputs produced this verdict. The block is built here,
+    // not in the CLI, so every front door (CLI, `acos serve`, MCP) and every
+    // direct `acos_verify::verify` caller writes the same fields into
+    // `verdict.json`: absolute scenario/APK paths with their digests, the
+    // engine, the achieved fidelity and structured warnings. A relative path
+    // or a missing digest is exactly how an older scenario ran against a stale
+    // APK and returned `pass` without saying so (feedback 2026-11-14).
+    let mut provenance = acos_protocol::provenance::block(
+        &options.apk,
+        Some(&options.scenario_path),
+        &options.engine,
+        achieved,
+    );
+    if let Some(object) = provenance.as_object_mut() {
+        object.insert(
+            "scenario_engine".to_string(),
+            serde_json::json!(scenario.engine.as_str()),
+        );
+    }
+    for warning in &options.warnings {
+        acos_protocol::provenance::push_warning(&mut provenance, warning.clone());
+    }
+    verdict.provenance = Some(provenance);
 
     // ---- events / logs / resources ---------------------------------------
     let events = build_events(&produced_frames, &all_logs, session_id.as_deref());

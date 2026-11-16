@@ -1055,7 +1055,7 @@ version: 1                    # required; only 1 is accepted
 name: hello-views             # required, non-empty
 description: ...              # optional
 app: fixtures/build/apps/hello-views.apk
-engine: native-preferred      # native-preferred | native-only | reference-only
+engine: rust-vm              # art | rust-vm (same names as --engine)
 fallback: report-and-escalate # report-and-escalate | report-only | forbid
 api_level: 34
 isolation: process            # shared-task | process | sandbox | core | vm

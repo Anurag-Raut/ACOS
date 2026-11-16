@@ -26,17 +26,44 @@ use crate::ui::{Bounds, Selector};
 /// The only scenario format version this crate accepts.
 pub const SCENARIO_VERSION: u32 = 1;
 
-/// Which engine should run the scenario.
+/// Which engine the scenario is written for.
+///
+/// **One vocabulary: the CLI/MCP one.** `art` (real ART, or recorded ART
+/// evidence) and `rust-vm` (the frozen Rust VM) are the names the `--engine`
+/// flag and the MCP `engine` argument use; the YAML field says the same thing
+/// with the same words. A scenario written for the pre-v0.3 names still parses:
+///
+/// | legacy value | same meaning as |
+/// |---|---|
+/// | `native-preferred` | `rust-vm` (the native runtime was preferred) |
+/// | `native-only` | `rust-vm` (pair it with `fallback: forbid` if no fallback is meant) |
+/// | `reference-only` | `art` (recorded ART reference evidence) |
+///
+/// A legacy value is accepted and reported as a [`ScenarioWarning`] naming its
+/// new name, so an old scenario keeps running while its author learns the
+/// current spelling (feedback 2026-11-14: `INVALID_SCENARIO: unknown variant
+/// 'art'`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum Engine {
-    /// Use the native runtime when it can, otherwise fall back per policy.
+    /// Real ART (or recorded ART reference evidence) — the CLI's `--engine art`.
     #[default]
-    NativePreferred,
-    /// Only the native runtime; never fall back.
-    NativeOnly,
-    /// Only the reference backend.
-    ReferenceOnly,
+    #[serde(alias = "reference-only")]
+    Art,
+    /// The frozen Rust VM / native runtime — the CLI's `--engine rust-vm`.
+    #[serde(alias = "native-preferred", alias = "native-only")]
+    RustVm,
+}
+
+impl Engine {
+    /// The canonical name, the same string `--engine` takes.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Engine::Art => "art",
+            Engine::RustVm => "rust-vm",
+        }
+    }
 }
 
 /// What to do when the preferred engine cannot run a step.
@@ -796,7 +823,13 @@ impl Scenario {
                 format!("YAML/format parse failed: {e}"),
             ))
         })?;
-        let validation = scenario.validate();
+        let mut validation = scenario.validate();
+        // The legacy `engine:` spellings are serde aliases, so the parsed value
+        // no longer knows which spelling it came from; the raw YAML does. One
+        // warning names the canonical word instead of failing the scenario.
+        if let Some(warning) = legacy_engine_warning(yaml) {
+            validation.warnings.push(warning);
+        }
         if validation.is_ok() {
             Ok(scenario)
         } else {
@@ -1014,6 +1047,36 @@ fn validate_action_like(
         &format!("{path}.{step_name}.timeout_ms"),
         step.timeout_ms,
     );
+}
+
+/// The scenario's legacy `engine:` spelling, when it used one.
+///
+/// The three pre-v0.3 names are serde aliases of the canonical `art` /
+/// `rust-vm` values, so a parsed [`Scenario`] cannot tell which spelling it
+/// came from. This reads the top-level `engine:` line of the source instead and
+/// returns the warning that names the current word (feedback 2026-11-14:
+/// `INVALID_SCENARIO: unknown variant 'art'` from two vocabularies for one
+/// concept).
+fn legacy_engine_warning(yaml: &str) -> Option<ScenarioWarning> {
+    let value = yaml.lines().find_map(|line| {
+        let rest = line.strip_prefix("engine:")?;
+        // Only the top-level key: a nested `engine:` never starts at column 0.
+        Some(rest.trim().trim_matches('"').trim_matches('\'').to_string())
+    })?;
+    let canonical = match value.as_str() {
+        "native-preferred" => "rust-vm",
+        "native-only" => "rust-vm",
+        "reference-only" => "art",
+        _ => return None,
+    };
+    Some(ScenarioWarning {
+        path: "engine".to_string(),
+        message: format!(
+            "`engine: {value}` is the legacy name for `engine: {canonical}`; the scenario \
+             format and the `--engine` flag use one vocabulary: `art` (real ART / recorded ART \
+             evidence) or `rust-vm` (the frozen Rust VM). The run is unaffected."
+        ),
+    })
 }
 
 /// Validate a scenario and return every problem.

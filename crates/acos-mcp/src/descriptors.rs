@@ -292,6 +292,48 @@ pub fn session_tools() -> Vec<ToolInfo> {
     out
 }
 
+/// The published argument schema of one tool, for the dispatcher's
+/// unknown-argument check.
+///
+/// It is the same schema `tools/list` publishes (protocol command, session tool,
+/// `acos_capabilities`, `acos_help`), so the rule a client validates against and
+/// the rule the server enforces cannot drift.
+#[must_use]
+pub fn tool_schema(tool_name: &str) -> Option<Value> {
+    if tool_name == CAPABILITIES_TOOL {
+        return Some(capabilities_tool().input_schema);
+    }
+    if tool_name == HELP_TOOL {
+        return Some(help_tool().input_schema);
+    }
+    if SESSION_TOOL_NAMES.contains(&tool_name) {
+        return Some(session_tool_spec(tool_name).1);
+    }
+    // ARGS: the protocol descriptors already close their object
+    // (`McpToolDescriptor::new`), so the schema a client validates and the
+    // schema this check enforces are the same document.
+    acos_protocol::mcp_tools()
+        .tools
+        .into_iter()
+        .find(|tool| tool.name == tool_name)
+        .map(|tool| tool.input_schema)
+}
+
+/// The tool names `tools/list` may advertise: protocol commands plus
+/// `acos_capabilities`, `acos_help` and the session tools.
+#[must_use]
+pub fn known_tool_names() -> Vec<String> {
+    let mut names: Vec<String> = acos_protocol::mcp_tools()
+        .tools
+        .into_iter()
+        .map(|tool| tool.name)
+        .collect();
+    names.push(CAPABILITIES_TOOL.to_string());
+    names.push(HELP_TOOL.to_string());
+    names.extend(SESSION_TOOL_NAMES.iter().map(|name| (*name).to_string()));
+    names
+}
+
 fn session_tool_spec(name: &str) -> (&'static str, Value) {
     let base = json!({
         "type": "object",
@@ -302,10 +344,15 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
         }
     });
     let with_base = |properties: Value| {
+        // ARGS: a closed object. An unknown argument is a caller error, not a
+        // flag to ignore: `acos_observe_tree {"screenshot": true}` on a build
+        // without it read as a success (feedback 2026-11-15). The server
+        // enforces the same rule in `crate::args::check`, so a client that does
+        // not validate still cannot get a silent no-op.
         let mut schema = json!({
             "type": "object",
             "properties": properties,
-            "additionalProperties": true
+            "additionalProperties": false
         });
         schema["properties"]["base"] = base.clone();
         schema
@@ -325,6 +372,13 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             with_base(json!({
                 "apk": {"type": "string", "description": "Path to the .apk, under ACOS_ALLOWED_ROOTS."},
                 "timeout_ms": {"type": "integer", "minimum": 1, "description": "Wall-clock ceiling for the launch (defaults to the server call budget)."},
+                "display": {
+                    "type": "string",
+                    "description": "Display override for the in-process session, `WIDTHxHEIGHT@DPI` (for \
+                                    example `1080x2400@400`). This argument is accepted by the \
+                                    in-process engine; the ART daemon route reports the display it \
+                                    used instead of overriding it."
+                },
                 "settle": {
                     "type": "string", "enum": ["fast", "strict", "content"],
                     "description": "How the launch reply binds its tree. `strict` (default) keeps the \

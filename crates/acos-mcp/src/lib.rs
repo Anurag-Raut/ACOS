@@ -21,6 +21,7 @@
 // One controlled `libc::kill` call (see `process::kill_tree`) is the only unsafe
 // code in this crate; everything else is safe Rust.
 
+pub mod args;
 pub mod backend;
 pub mod base64;
 pub mod preview;

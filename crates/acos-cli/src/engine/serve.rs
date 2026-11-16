@@ -1357,6 +1357,15 @@ fn launch_reply(
             {"stage": "first_frame", "ok": true, "status": "ok", "ms": session.session_start_ms()}
         ],
     });
+    // PROVENANCE: which APK this guest booted, with its digest, the engine and
+    // the fidelity. The digest is what makes "the launch passed" checkable
+    // against the build under test (feedback 2026-11-14: a stale APK passed).
+    result["provenance"] = acos_protocol::provenance::block(
+        &held.apk,
+        None,
+        ENGINE_ART,
+        Fidelity::ArtReference,
+    );
     label_meta(&mut result, ENGINE_ART, held.trust, EVIDENCE_HOST_PIXEL);
     // ZPROD3: a session that really runs a zygote child says so, with the facts
     // the keeper acked. With the flag off `merge_zygote_fields` changes nothing,

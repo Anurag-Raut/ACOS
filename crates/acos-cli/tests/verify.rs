@@ -299,3 +299,131 @@ fn a_rerun_into_the_default_artifacts_dir_replaces_the_previous_run() {
     assert_eq!(verdict["artifacts_overwrote_run"], first_run.as_str());
     let _ = std::fs::remove_dir_all(&cwd);
 }
+
+/// PROVENANCE + the single engine default: `acos verify` from a cwd with a
+/// **relative** scenario path prints a summary line and writes a verdict that
+/// both name the absolute scenario and APK with their 12-character digests, the
+/// engine and the fidelity. Before this, `verify: pass` named neither input, so
+/// a mistyped scenario path could run an older scenario against a stale APK and
+/// look correct (feedback 2026-11-14).
+#[test]
+fn the_summary_line_and_verdict_name_the_scenario_and_apk() {
+    let apk = require_hello_views_apk();
+    let artifacts = scratch("provenance");
+    let output = Command::cargo_bin("acos")
+        .unwrap()
+        .current_dir(workspace())
+        .arg("verify")
+        // Deliberately relative: the tool must report it absolutely.
+        .arg("scenarios/negative/wrong-text.yaml")
+        .arg("--apk")
+        .arg(&apk)
+        .arg("--reference")
+        .arg("fixtures/reference/hello-views/art-api34-x86_64")
+        .arg("--artifacts")
+        .arg(&artifacts)
+        .output()
+        .expect("run acos verify");
+
+    let scenario = workspace().join("scenarios/negative/wrong-text.yaml");
+    let scenario = std::fs::canonicalize(&scenario).unwrap_or(scenario);
+    let apk = std::fs::canonicalize(&apk).unwrap_or(apk);
+
+    // 1. The human summary line (text output, no --json).
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains(&format!("provenance: scenario {}", scenario.display())),
+        "the summary must name the scenario: {stdout}"
+    );
+    assert!(
+        stdout.contains(&format!("apk {}", apk.display())),
+        "the summary must name the APK: {stdout}"
+    );
+    assert!(stdout.contains("(sha "), "the summary must carry digests: {stdout}");
+    assert!(stdout.contains("engine rust-vm"), "{stdout}");
+    assert!(stdout.contains("fidelity "), "{stdout}");
+
+    // 2. verdict.json carries the same block, with absolute paths.
+    let verdict: Value =
+        serde_json::from_slice(&std::fs::read(artifacts.join("verdict.json")).unwrap())
+            .expect("verdict.json");
+    let provenance = &verdict["provenance"];
+    assert_eq!(
+        provenance["scenario"]["path"],
+        serde_json::json!(scenario.display().to_string()),
+        "{provenance}"
+    );
+    assert_eq!(
+        provenance["apk"]["path"],
+        serde_json::json!(apk.display().to_string()),
+        "{provenance}"
+    );
+    for file in ["scenario", "apk"] {
+        let sha = provenance[file]["sha256"].as_str().expect("sha256");
+        assert_eq!(sha.len(), 64);
+        assert_eq!(
+            provenance[file]["sha256_12"],
+            serde_json::json!(&sha[..12]),
+            "{provenance}"
+        );
+    }
+    assert_eq!(provenance["engine"], "rust-vm", "{provenance}");
+    assert_eq!(verdict["reproducer"]["scenario_path"], provenance["scenario"]["path"]);
+    assert!(
+        std::path::Path::new(
+            verdict["reproducer"]["scenario_path"]
+                .as_str()
+                .expect("scenario path")
+        )
+        .is_absolute(),
+        "repro.json must not store a relative scenario path: {}",
+        verdict["reproducer"]
+    );
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+/// The CLI already rejects an unknown flag (clap), which the MCP side now also
+/// does for arguments: one rule for both front doors.
+#[test]
+fn an_unknown_flag_is_a_usage_error_not_silently_ignored() {
+    let output = Command::cargo_bin("acos")
+        .unwrap()
+        .arg("verify")
+        .arg("scenarios/counter.yaml")
+        .arg("--screenshot")
+        .output()
+        .expect("run acos verify");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--screenshot"), "{stderr}");
+    assert!(
+        stderr.contains("unexpected argument") || stderr.contains("unknown"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("--scenario"),
+        "clap suggests a real flag: {stderr}"
+    );
+}
+
+/// The `--engine` default in `--help` is the constant the code uses.
+#[test]
+fn the_engine_default_in_help_is_the_one_constant() {
+    let output = Command::cargo_bin("acos")
+        .unwrap()
+        .args(["verify", "--help"])
+        .output()
+        .expect("run acos verify --help");
+    let help = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        help.contains(&format!(
+            "[default: {}]",
+            acos_protocol::commands::DEFAULT_VERIFY_ENGINE_NAME
+        )),
+        "help must print the constant default: {help}"
+    );
+    assert!(
+        !help.contains("[default: rust-vm]"),
+        "help must not claim a default the code does not use: {help}"
+    );
+}

@@ -165,26 +165,19 @@
       ]
     },
     "Engine": {
-      "description": "Which engine should run the scenario.",
+      "description": "Which engine the scenario is written for.\n\n**One vocabulary: the CLI/MCP one.** `art` (real ART, or recorded ART evidence) and `rust-vm` (the frozen Rust VM) are the names the `--engine` flag and the MCP `engine` argument use; the YAML field says the same thing with the same words. A scenario written for the pre-v0.3 names still parses:\n\n| legacy value | same meaning as | |---|---| | `native-preferred` | `rust-vm` (the native runtime was preferred) | | `native-only` | `rust-vm` (pair it with `fallback: forbid` if no fallback is meant) | | `reference-only` | `art` (recorded ART reference evidence) |\n\nA legacy value is accepted and reported as a [`ScenarioWarning`] naming its new name, so an old scenario keeps running while its author learns the current spelling (feedback 2026-11-14: `INVALID_SCENARIO: unknown variant 'art'`).",
       "oneOf": [
         {
-          "description": "Use the native runtime when it can, otherwise fall back per policy.",
+          "description": "Real ART (or recorded ART reference evidence) — the CLI's `--engine art`.",
           "enum": [
-            "native-preferred"
+            "art"
           ],
           "type": "string"
         },
         {
-          "description": "Only the native runtime; never fall back.",
+          "description": "The frozen Rust VM / native runtime — the CLI's `--engine rust-vm`.",
           "enum": [
-            "native-only"
-          ],
-          "type": "string"
-        },
-        {
-          "description": "Only the reference backend.",
-          "enum": [
-            "reference-only"
+            "rust-vm"
           ],
           "type": "string"
         }
@@ -1832,7 +1825,7 @@
           "$ref": "#/definitions/Engine"
         }
       ],
-      "default": "native-preferred",
+      "default": "art",
       "description": "Engine preference."
     },
     "expect_error": {

@@ -57,11 +57,20 @@ pub fn verify_with_clock(
     };
 
     // 2. Resolve the APK (flag overrides the scenario).
+    //
+    // PROVENANCE: both paths are made absolute before anything else. A relative
+    // path means a different file to every reader (the caller's cwd, the MCP
+    // server's cwd, `repro.sh`'s cwd), and it was a relative scenario path in
+    // `repro.json` that made an older scenario run against a stale APK look
+    // reproducible.
+    let scenario_path = acos_protocol::provenance::absolute(Path::new(&request.scenario));
     let apk = request
         .apk
-        .clone()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| resolve_relative(&request.scenario, &scenario.app));
+        .as_deref()
+        .map(|path| acos_protocol::provenance::absolute(Path::new(path)))
+        .unwrap_or_else(|| {
+            resolve_relative(&scenario_path.display().to_string(), &scenario.app)
+        });
     if !apk.is_file() {
         let protocol = ProtocolError::new(
             ErrorCode::ApkIo,
@@ -78,6 +87,33 @@ pub fn verify_with_clock(
         );
     }
 
+    // PROVENANCE: a `pass` says which APK it judged. When `--apk` and the
+    // scenario's own `app:` name different files the run is still valid (the
+    // flag is documented to override), but it is never silent: the warning goes
+    // into `provenance.warnings[]` in the envelope and in `verdict.json`.
+    let mut warnings: Vec<serde_json::Value> = Vec::new();
+    if request.apk.is_some() {
+        let declared = acos_protocol::provenance::absolute(&resolve_relative(
+            &scenario_path.display().to_string(),
+            &scenario.app,
+        ));
+        let used = acos_protocol::provenance::absolute(&apk);
+        if declared != used {
+            warnings.push(serde_json::json!({
+                "code": acos_protocol::provenance::WARN_SCENARIO_APP_OVERRIDDEN,
+                "message": format!(
+                    "the scenario's own `app:` names {} but this run used --apk {}; the verdict \
+                     is about the --apk file (provenance.apk.sha256_12 is the digest of the bytes \
+                     that ran). Drop --apk to run the scenario's own app.",
+                    declared.display(),
+                    used.display()
+                ),
+                "scenario_app": declared.display().to_string(),
+                "apk": used.display().to_string(),
+            }));
+        }
+    }
+
     let isolation = request
         .base
         .isolation
@@ -90,12 +126,14 @@ pub fn verify_with_clock(
 
     let options = RunOptions {
         apk,
-        scenario_path: PathBuf::from(&request.scenario),
+        scenario_path: scenario_path.clone(),
         artifacts_dir: PathBuf::from(&request.artifacts),
         required_fidelity: request.required_fidelity,
         request_id: request_id.clone(),
         flags: request.flags.clone(),
         acos_version: env!("CARGO_PKG_VERSION").to_string(),
+        engine: request.engine.as_str().to_string(),
+        warnings,
     };
 
     // 3. Run.

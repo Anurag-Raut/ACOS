@@ -1129,9 +1129,27 @@ pub enum VerifyEngine {
 
 impl Default for VerifyEngine {
     fn default() -> Self {
-        VerifyEngine::Art
+        DEFAULT_VERIFY_ENGINE
     }
 }
+
+/// The **one** default execution engine for a verification run.
+///
+/// It is the single source for `acos verify --help` (clap's
+/// `default_value`), the MCP `acos_verify` schema (`#[serde(default)]` +
+/// `Default`) and every dispatcher that fills the engine in for a caller that
+/// did not name one. Two different defaults for the same command (the CLI said
+/// `rust-vm`, the MCP tool ran `art`) is exactly the proven-answer-to-the-wrong-
+/// question bug the v0.3.0 verdict work removes: help text and behaviour must
+/// come from this constant.
+///
+/// `art` is the default because a pass has to rest on real Android behaviour;
+/// `rust-vm` is a diagnostics engine and is only ever selected explicitly (or
+/// by `--reference`, which replays recorded evidence, not live ART).
+pub const DEFAULT_VERIFY_ENGINE: VerifyEngine = VerifyEngine::Art;
+
+/// [`DEFAULT_VERIFY_ENGINE`] as the wire/CLI string.
+pub const DEFAULT_VERIFY_ENGINE_NAME: &str = DEFAULT_VERIFY_ENGINE.as_str();
 
 impl VerifyEngine {
     /// The stable CLI string.
@@ -1141,6 +1159,20 @@ impl VerifyEngine {
             VerifyEngine::Art => "art",
             VerifyEngine::RustVm => "rust-vm",
         }
+    }
+
+    /// Every engine name, in the order an error message should list them.
+    #[must_use]
+    pub const fn all() -> [VerifyEngine; 2] {
+        [VerifyEngine::Art, VerifyEngine::RustVm]
+    }
+
+    /// Parse a CLI/MCP engine name. No aliases, no guessing.
+    #[must_use]
+    pub fn parse(value: &str) -> Option<VerifyEngine> {
+        VerifyEngine::all()
+            .into_iter()
+            .find(|engine| engine.as_str() == value)
     }
 }
 
