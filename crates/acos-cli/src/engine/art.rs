@@ -260,6 +260,9 @@ pub struct ArtSession {
     /// package (the same rule `animations`/`insets` follow), and a `reset`
     /// relaunch installs exactly this list again.
     extra_apks: Vec<PathBuf>,
+    /// MPROC7: the launcher's idle kill in seconds (`None` keeps the launcher
+    /// default of 30; `Some(0)` disables it). Launch-time, like `extra_apks`.
+    idle_kill_seconds: Option<u64>,
     /// P12b: per-request strict/fast settle deadline (`settle_timeout_ms`).
     /// `None` keeps the engine's documented default; on timeout the guest still
     /// returns the latest tree and frame identity with `settled:false`.
@@ -1504,7 +1507,7 @@ impl ArtSession {
         animations: &str,
         insets: &str,
     ) -> Result<ArtSession, BackendError> {
-        Self::start_inner(apk, extra_apks, artifacts, animations, insets, None)
+        Self::start_inner(apk, extra_apks, artifacts, animations, insets, None, None)
     }
 
     /// ZPROD3: start a session that must run on a persistent zygote child
@@ -1526,7 +1529,7 @@ impl ArtSession {
         insets: &str,
         zygote: Option<Arc<ZygoteHost>>,
     ) -> Result<ArtSession, BackendError> {
-        Self::start_with_zygote_and_apks(apk, &[], artifacts, animations, insets, zygote)
+        Self::start_with_zygote_and_apks(apk, &[], artifacts, animations, insets, None, zygote)
     }
 
     /// MPROC1: [`ArtSession::start_with_zygote`] plus a list of extra APKs.
@@ -1539,6 +1542,7 @@ impl ArtSession {
         artifacts: &Path,
         animations: &str,
         insets: &str,
+        idle_kill_seconds: Option<u64>,
         zygote: Option<Arc<ZygoteHost>>,
     ) -> Result<ArtSession, BackendError> {
         let start = zygote.map(|host| ZygoteStart {
@@ -1546,7 +1550,15 @@ impl ArtSession {
             host,
             reuse_tag: None,
         });
-        Self::start_inner(apk, extra_apks, artifacts, animations, insets, start)
+        Self::start_inner(
+            apk,
+            extra_apks,
+            artifacts,
+            animations,
+            insets,
+            idle_kill_seconds,
+            start,
+        )
     }
 
     fn start_inner(
@@ -1555,6 +1567,7 @@ impl ArtSession {
         artifacts: &Path,
         animations: &str,
         insets: &str,
+        idle_kill_seconds: Option<u64>,
         zygote: Option<ZygoteStart>,
     ) -> Result<ArtSession, BackendError> {
         let insets: &'static str = match acos_services::wms::parse_insets_mode(insets) {
@@ -1674,6 +1687,13 @@ impl ArtSession {
                     ),
                 })?,
             );
+        }
+        // MPROC7: the session's idle kill. Both spellings: the launcher flag for
+        // the exec path, and the env a frozen host-template child reads
+        // (`host_zygote` builds the child's `LaunchOpts` from it).
+        if let Some(seconds) = idle_kill_seconds {
+            command.arg("--idle-kill-seconds").arg(seconds.to_string());
+            command.env("ACOSLAUNCH_IDLE_KILL_SECS", seconds.to_string());
         }
         command
             .stdin(Stdio::piped())
@@ -1798,7 +1818,16 @@ impl ArtSession {
         {
             let tail = Arc::clone(&stderr_tail);
             let stderr = child.stderr.take().expect("piped stderr");
+            // Keep the whole launcher stderr in the run's artifacts as well as
+            // the bounded tail the replies carry. The launcher's own decisions
+            // (spawns, idle kills, spawn failures) and the guest's tee are what
+            // explains a process-level failure; an 8 KiB tail of the guest trace
+            // is not enough. Bounded at 16 MiB so a chatty guest cannot fill the
+            // disk.
+            let log_path = artifacts.join("launcher.stderr.log");
             std::thread::spawn(move || {
+                let mut file = std::fs::File::create(&log_path).ok();
+                let mut written = 0usize;
                 let mut reader = BufReader::new(stderr);
                 let mut line = String::new();
                 loop {
@@ -1806,6 +1835,13 @@ impl ArtSession {
                     match reader.read_line(&mut line) {
                         Ok(0) | Err(_) => break,
                         Ok(_) => {
+                            if let Some(file) = file.as_mut() {
+                                if written < 16 * 1024 * 1024 {
+                                    use std::io::Write as _;
+                                    let _ = file.write_all(line.as_bytes());
+                                    written += line.len();
+                                }
+                            }
                             let mut tail = tail.lock().unwrap_or_else(|e| e.into_inner());
                             tail.extend(line.bytes());
                             while tail.len() > 8192 {
@@ -1968,6 +2004,7 @@ impl ArtSession {
             insets,
             animations,
             extra_apks: extra_apks.to_vec(),
+            idle_kill_seconds,
             settle_timeout_ms: None,
             bound_settle: None,
             reset_settle_timeout_ms: None,
@@ -2312,6 +2349,13 @@ impl ArtSession {
     #[must_use]
     pub fn extra_apks(&self) -> &[PathBuf] {
         &self.extra_apks
+    }
+
+    /// MPROC7: the idle kill this session launched with (`None` = the
+    /// launcher's default 30 s, `Some(0)` = disabled).
+    #[must_use]
+    pub fn idle_kill_seconds(&self) -> Option<u64> {
+        self.idle_kill_seconds
     }
 
     /// MPROC1: run one session control op (`acos_service_ctl`).
@@ -5196,6 +5240,7 @@ impl SessionBackend for ArtSession {
                 &artifacts,
                 self.animations,
                 self.insets(),
+                self.idle_kill_seconds,
                 zygote_start.clone(),
             ) {
                 Ok(session) => {
@@ -5297,6 +5342,7 @@ impl SessionBackend for ArtSession {
         }
         self.closed = true;
         let stopped = self.shutdown();
+
         // ZPROD3: a zygote session's app child lives inside the keeper's
         // sandbox, so closing the session must end *that child* too (by its
         // process group). A keeper that is already gone is not an error here:
@@ -7422,7 +7468,7 @@ mod tests {
         let mut zg = ArtSession::start(&apk, &dir.join("zg")).expect("zygote-shaped session starts");
         zg.zygote = Some(ZygoteBinding {
             host: Arc::new(ZygoteHost::disabled()),
-            key: zygote_key_of(&apk, "report", "on"),
+            key: zygote_key_of(&apk, "report", "on", &[]),
             facts: ZygoteFacts {
                 tag: 0,
                 child_pid: 0,

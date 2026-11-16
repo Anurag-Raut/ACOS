@@ -820,11 +820,23 @@ struct SecondaryPool {
     failures: Vec<serde_json::Value>,
     /// MPROC5c: processes the idle kill took (`tag`, package, pid, idle_ms).
     kills: Vec<serde_json::Value>,
+    /// MPROC7: the activity manager's state. The launcher owns every process it
+    /// started, so when **it** kills or reaps one (`idle_kill`'s
+    /// waitpid/cgroup kill, `reap`'s `try_wait`) it removes the `ProcessRecord`
+    /// itself; waiting for the peer to see the socket close made the process
+    /// table depend on a transport event that may never be observed (a peer
+    /// thread blocked in a service handler, a suppressed close, an immediate
+    /// respawn under the same tag).
+    atms: Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
     started: Instant,
 }
 
 impl SecondaryPool {
-    fn new(specs: Vec<SecondarySpec>, shared: SecondaryShared) -> Self {
+    fn new(
+        specs: Vec<SecondarySpec>,
+        shared: SecondaryShared,
+        atms: Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
+    ) -> Self {
         Self {
             specs,
             shared,
@@ -833,6 +845,7 @@ impl SecondaryPool {
             uninstalled: Vec::new(),
             failures: Vec::new(),
             kills: Vec::new(),
+            atms,
             started: Instant::now(),
         }
     }
@@ -904,6 +917,22 @@ impl SecondaryPool {
                 (app_meta, providers)
             })
             .unwrap_or_default();
+        // MPROC7: a new process instance restarts its guest probe counter. Clear
+        // the dead instance's sample and give the new one a base above the
+        // session's current maximum, so `strict` settle still sees a *fresh*
+        // sample after an idle kill / respawn.
+        {
+            let mut state = probe_state.lock().unwrap_or_else(|e| e.into_inner());
+            let highest = state
+                .by_process
+                .values()
+                .map(|p| p.seq)
+                .chain(state.latest.as_ref().map(|p| p.seq))
+                .max()
+                .unwrap_or(0);
+            state.seq_offsets.insert(spec.tag, highest);
+            state.by_process.remove(&spec.tag);
+        }
         let stderr = Arc::new(std::sync::Mutex::new(TailBuffer::with_cap(1 << 16)));
         match spawn_secondary(
             &self.shared,
@@ -987,6 +1016,13 @@ impl SecondaryPool {
             guest.cgroup.kill();
             let _ = guest.child.kill();
             let _ = guest.child.wait();
+            // MPROC7: the launcher killed it, so the launcher removes the
+            // activity manager's `ProcessRecord` (the peer will also observe the
+            // socket close, but the table must not depend on that).
+            self.atms
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .process_died(tag);
             let record = serde_json::json!({
                 "tag": tag,
                 "package": package,
@@ -1012,6 +1048,7 @@ impl SecondaryPool {
     /// that crashed must be visible, never mistaken for a running one).
     fn reap(&mut self) -> Vec<serde_json::Value> {
         let mut exited = Vec::new();
+        let mut gone = Vec::new();
         for (tag, guest) in &mut self.guests {
             match guest.child.try_wait() {
                 Ok(Some(status)) => {
@@ -1032,9 +1069,20 @@ impl SecondaryPool {
                         guest.spec.package
                     );
                     exited.push(record);
+                    gone.push(*tag);
                 }
                 _ => {}
             }
+        }
+        // MPROC7: a reaped guest is gone; the launcher (which waited for it)
+        // drops it and its `ProcessRecord`, so the next intent for its package
+        // is a real spawn even if the peer has not seen the socket close yet.
+        for tag in &gone {
+            self.guests.remove(tag);
+            self.atms
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .process_died(*tag);
         }
         exited
     }
@@ -1919,7 +1967,11 @@ pub(crate) fn launch_session(
         animations: opts.animations.as_str(),
         live_probe: interactive,
     };
-    let mut secondary_pool = SecondaryPool::new(secondary_specs, secondary_shared);
+    let mut secondary_pool = SecondaryPool::new(
+        secondary_specs,
+        secondary_shared,
+        Arc::clone(&live.atms),
+    );
     if !interactive && !secondary_pool.specs.is_empty() {
         eprintln!(
             "acos-art: launch: {} secondary package(s) installed; a non-interactive session has \
@@ -3066,6 +3118,13 @@ struct ProbeState {
     /// MPROC5: the foreground process tag (`LiveHandles::top_process`), written
     /// by ATMS whenever the top-of-task moves.
     top_process: Arc<std::sync::atomic::AtomicU32>,
+    /// MPROC7: per-process probe-sequence bases. A guest's probe counter starts
+    /// at 1 in every **process**, so a respawned process's samples (1, 2, ...)
+    /// are below the session's last served sequence and every later strict
+    /// settle waited forever on a "fresh" sample (`probe-floor`). When a process
+    /// is spawned, its entries are cleared and this base is set to the session's
+    /// current maximum, so its samples continue monotonically.
+    seq_offsets: std::collections::BTreeMap<u32, u64>,
     /// H15: the last `anim_callbacks` set traced, so the trace names each
     /// distinct animation callback once instead of once per sample.
     anim_traced: String,
@@ -3929,6 +3988,11 @@ fn drain_tee_lines<R: std::io::Read>(
                         set_animations_state(on);
                     }
                     let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+                    // MPROC7: rebase a (re)spawned process's own counter so the
+                    // session's probe sequence stays monotonic across a respawn.
+                    let seq = seq.saturating_add(
+                        state.seq_offsets.get(&tag).copied().unwrap_or(0),
+                    );
                     let newer = state
                         .by_process
                         .get(&tag)
@@ -7848,6 +7912,7 @@ mod probe_line_tests {
             ProbeState {
                 latest: self.latest.clone(),
                 by_process: self.by_process.clone(),
+                seq_offsets: self.seq_offsets.clone(),
                 top_process: Arc::clone(&self.top_process),
                 unsupported: self.unsupported.clone(),
                 unsupported_seq: self.unsupported_seq,

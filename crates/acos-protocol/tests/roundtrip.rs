@@ -892,6 +892,7 @@ fn scenario_all_steps_round_trip_json_and_yaml() {
         clear_state: true,
         settle_timeout_ms: None,
         settle: None,
+        idle_kill_seconds: None,
     }));
     steps.push(Step {
         wait_for: Some(WaitForStep {

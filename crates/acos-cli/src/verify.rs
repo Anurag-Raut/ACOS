@@ -521,6 +521,22 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                     return finish_run(&envelope, &args, &artifacts, Some(trust));
                 }
             };
+            // MPROC7: the scenario's launch-time idle kill, for the same reason:
+            // the launcher owns the timer, so it must be known before the guest
+            // starts.
+            let idle_kill_seconds = match resolve_idle_kill_seconds(&scenario) {
+                Ok(value) => value,
+                Err(error) => {
+                    let envelope = Envelope::failure(
+                        request_id,
+                        ProtocolBackend::AcosNative,
+                        Fidelity::StaticAnalysis,
+                        error,
+                        Metrics::wall_ms(0),
+                    );
+                    return finish_run(&envelope, &args, &artifacts, Some(trust));
+                }
+            };
             // ZPROD3: a `verify` run uses the same engine path as `acos serve`.
             // With `ACOS_ART_ZYGOTE=on` that means a persistent-zygote child
             // (`start_with_zygote`); with the flag off the host is disabled and
@@ -535,6 +551,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                 &artifacts,
                 animations,
                 &insets_owned,
+                idle_kill_seconds,
                 Some(zygote),
             ) {
                 Ok(session) => {
@@ -1052,4 +1069,43 @@ pub fn resolve_extra_apks(scenario: &Path) -> Result<Vec<PathBuf>, ProtocolError
         out.push(resolved);
     }
     Ok(out)
+}
+
+/// MPROC7: a scenario's launch-step `idle_kill_seconds` (the launcher option).
+///
+/// The value belongs to the *launch* step but must reach the launcher before it
+/// starts (the launcher owns the idle timer), so the scenario is read before the
+/// session is created. A scenario with several launch steps that disagree is a
+/// scenario error: one launcher has one idle rule.
+pub fn resolve_idle_kill_seconds(scenario: &Path) -> Result<Option<u64>, ProtocolError> {
+    let parsed = acos_protocol::scenario::Scenario::load(scenario).map_err(|validation| {
+        let detail = validation
+            .errors
+            .first()
+            .map(|error| format!("{}: {}", error.path, error.message))
+            .unwrap_or_else(|| "invalid scenario".to_string());
+        ProtocolError::new(
+            ErrorCode::InvalidScenario,
+            format!("cannot read scenario {}: {detail}", scenario.display()),
+        )
+    })?;
+    let mut value: Option<u64> = None;
+    for step in &parsed.steps {
+        let Some(launch) = &step.launch else { continue };
+        let Some(secs) = launch.idle_kill_seconds else { continue };
+        if let Some(previous) = value {
+            if previous != secs {
+                return Err(ProtocolError::new(
+                    ErrorCode::InvalidScenario,
+                    format!(
+                        "scenario {} sets launch.idle_kill_seconds to {previous} and {secs}; one \
+                         launcher has one idle rule",
+                        scenario.display()
+                    ),
+                ));
+            }
+        }
+        value = Some(secs);
+    }
+    Ok(value)
 }

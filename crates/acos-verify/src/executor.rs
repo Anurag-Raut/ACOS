@@ -1367,6 +1367,20 @@ fn execute_step(
         StepRef::SetPermission(setup) => {
             environment_step(backend, caps, EnvironmentChange::Permission(setup.clone()))
         }
+        StepRef::Wait(wait) => {
+            // A timeline step: it asserts nothing, it lets time pass (the
+            // launcher's idle kill, a timeout) so the next assertions describe
+            // the state the scenario is about. `observation.settle` records how
+            // long the wait really was, so the verdict carries the proof.
+            let started = std::time::Instant::now();
+            std::thread::sleep(std::time::Duration::from_millis(wait.ms));
+            let mut exec = StepExec::pass();
+            exec.settle = Some(serde_json::json!({
+                "waited_ms": started.elapsed().as_millis() as u64,
+                "requested_ms": wait.ms,
+            }));
+            exec
+        }
         StepRef::SetLocale(setup) => {
             environment_step(backend, caps, EnvironmentChange::Locale(setup.clone()))
         }
@@ -3119,6 +3133,7 @@ mod launch_gate_tests {
             clear_state: true,
             settle_timeout_ms: None,
             settle: None,
+            idle_kill_seconds: None,
         }
     }
 
@@ -3176,6 +3191,7 @@ mod launch_gate_tests {
             clear_state: false,
             settle_timeout_ms: None,
             settle: None,
+            idle_kill_seconds: None,
         };
         let failure = static_launch_assertion(&manifest, &step).expect("must fail");
         assert_eq!(failure.status, Status::Error);

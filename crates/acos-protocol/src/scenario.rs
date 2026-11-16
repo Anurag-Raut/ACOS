@@ -86,6 +86,9 @@ pub struct Step {
     /// Wait for a selector (event-driven).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wait_for: Option<WaitForStep>,
+    /// Wait for a fixed number of milliseconds (a timeline step).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wait: Option<WaitStep>,
     /// Tap a selector or point.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tap: Option<TapStep>,
@@ -166,6 +169,8 @@ pub enum StepRef<'a> {
     Launch(&'a LaunchStep),
     /// See [`Step::wait_for`].
     WaitFor(&'a WaitForStep),
+    /// See [`Step::wait`].
+    Wait(&'a WaitStep),
     /// See [`Step::tap`].
     Tap(&'a TapStep),
     /// See [`Step::r#type`].
@@ -218,6 +223,7 @@ impl StepRef<'_> {
         match self {
             StepRef::Launch(_) => "launch",
             StepRef::WaitFor(_) => "wait_for",
+            StepRef::Wait(_) => "wait",
             StepRef::Tap(_) => "tap",
             StepRef::Type(_) => "type",
             StepRef::Key(_) => "key",
@@ -250,6 +256,7 @@ impl Step {
         [
             self.launch.is_some(),
             self.wait_for.is_some(),
+            self.wait.is_some(),
             self.tap.is_some(),
             self.r#type.is_some(),
             self.key.is_some(),
@@ -285,6 +292,9 @@ impl Step {
         }
         if self.wait_for.is_some() {
             return self.wait_for.as_ref().map(StepRef::WaitFor);
+        }
+        if self.wait.is_some() {
+            return self.wait.as_ref().map(StepRef::Wait);
         }
         if self.tap.is_some() {
             return self.tap.as_ref().map(StepRef::Tap);
@@ -424,6 +434,26 @@ pub struct LaunchStep {
     /// pixel assertion bound to it fails closed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settle: Option<StepSettle>,
+    /// MPROC7: the launcher's idle kill, in seconds, for this session
+    /// (`0` disables it). A lazily spawned secondary process that starts no
+    /// activity and holds no started/bound service is killed after this long,
+    /// and the next intent respawns it. Launch-time (the launcher owns the
+    /// timer): a scenario that proves the idle kill sets this small, exactly as
+    /// `acos-art launch --idle-kill-seconds` / `ACOSLAUNCH_IDLE_KILL_SECS`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_kill_seconds: Option<u64>,
+}
+
+/// `wait`: a fixed timeline delay.
+///
+/// It asserts nothing; it exists so a scenario can prove time-based behaviour
+/// (the launcher's idle kill, a timeout) without racing the assertions that
+/// follow. The step's observation records `waited_ms`, so the verdict shows the
+/// delay actually elapsed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WaitStep {
+    /// Milliseconds to wait (1..=600000).
+    pub ms: u64,
 }
 
 /// `wait_for`.
@@ -1178,11 +1208,24 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                         "launch accepts `activity` or `intent_action`, not both",
                     );
                 }
+                if let Some(secs) = launch.idle_kill_seconds {
+                    if secs > 86_400 {
+                        v.push(
+                            format!("{path}.idle_kill_seconds"),
+                            "idle_kill_seconds must be <= 86400 (one day); 0 disables the idle kill",
+                        );
+                    }
+                }
             }
             StepRef::WaitFor(wait) => {
                 validate_selector(&mut v, &path, &wait.selector, "selector");
                 if wait.timeout_ms == 0 {
                     v.push(format!("{path}.timeout_ms"), "timeout_ms must be > 0");
+                }
+            }
+            StepRef::Wait(wait) => {
+                if wait.ms == 0 || wait.ms > 600_000 {
+                    v.push(format!("{path}.ms"), "ms must be in 1..=600000");
                 }
             }
             StepRef::Tap(tap) => {

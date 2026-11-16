@@ -657,6 +657,27 @@ impl AtmsState {
         self.tops.remove(&tag);
         self.activities
             .retain(|a| process_tag_of(a.token) != tag);
+        // MPROC7: the launcher serves the **foreground process's** probe sample.
+        // When the process it published dies (idle kill, crash), that tag has no
+        // samples left, so a tree reply would wait forever on a stale sample
+        // (`probe-floor`, `tree_age_ms` growing). Stock moves the foreground to
+        // the activity below; here that is `previous_top`, else any surviving
+        // top, else the primary process.
+        let published = self
+            .top_process
+            .as_ref()
+            .map(|top| top.load(std::sync::atomic::Ordering::Relaxed));
+        if published == Some(tag) {
+            let next = self
+                .previous_top
+                .filter(|(other, _)| *other != tag && self.process(*other).is_some())
+                .map(|(other, _)| other)
+                .or_else(|| self.tops.keys().copied().find(|other| *other != tag))
+                .unwrap_or(0);
+            if let Some(top) = &self.top_process {
+                top.store(next, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
         if self.processes.len() != before {
             self.emit(LifecycleState::ProcessKilled, None);
         }
@@ -1337,6 +1358,12 @@ impl AtmsState {
         // task, so the record below it is the new top (what the guest's
         // destroy+resume transactions return to).
         self.ams.finish_activity(token);
+        // MPROC7: the finished process's idle clock starts at the finish. Stock
+        // refreshes it when the activity leaves the top; with a result delivery
+        // the resume below is deferred to `deliver_result`, so this would
+        // otherwise leave a stale `last_active` and make a just-finished process
+        // an immediate idle-kill candidate.
+        self.mark_process_active(self.activity_tag(token));
         // MPROC7: when the caller waits for a result, its resume travels with
         // that result (`ActivityResultItem` + `ResumeActivityItem`, stock ATMS's
         // shape), not as a second, earlier resume.

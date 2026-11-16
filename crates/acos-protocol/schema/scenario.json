@@ -482,6 +482,15 @@
           "description": "String extras.",
           "type": "object"
         },
+        "idle_kill_seconds": {
+          "description": "MPROC7: the launcher's idle kill, in seconds, for this session (`0` disables it). A lazily spawned secondary process that starts no activity and holds no started/bound service is killed after this long, and the next intent respawns it. Launch-time (the launcher owns the timer): a scenario that proves the idle kill sets this small, exactly as `acos-art launch --idle-kill-seconds` / `ACOSLAUNCH_IDLE_KILL_SECS`.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "intent_action": {
           "description": "Intent action.",
           "type": [
@@ -1415,6 +1424,17 @@
           ],
           "description": "Type text."
         },
+        "wait": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WaitStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Wait for a fixed number of milliseconds (a timeline step)."
+        },
         "wait_for": {
           "anyOf": [
             {
@@ -1773,6 +1793,21 @@
       },
       "required": [
         "selector"
+      ],
+      "type": "object"
+    },
+    "WaitStep": {
+      "description": "`wait`: a fixed timeline delay.\n\nIt asserts nothing; it exists so a scenario can prove time-based behaviour (the launcher's idle kill, a timeout) without racing the assertions that follow. The step's observation records `waited_ms`, so the verdict shows the delay actually elapsed.",
+      "properties": {
+        "ms": {
+          "description": "Milliseconds to wait (1..=600000).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ms"
       ],
       "type": "object"
     }

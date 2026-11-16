@@ -172,3 +172,44 @@ fn process_death_drops_the_record_and_its_activities() {
         "its activity records went with it, so a later startActivity is a spawn again"
     );
 }
+
+/// MPROC7: killing the foreground process must move the served foreground.
+///
+/// The launcher serves the probe sample of `top_process`. When that process is
+/// idle-killed, its tag has no samples any more, so leaving `top_process` on it
+/// makes every later tree reply wait on a stale sample (`probe-floor`,
+/// `tree_age_ms` growing — measured in `scenarios/mproc3-two-process.yaml`).
+/// The foreground must move to the activity below (`previous_top`), like stock
+/// ATMS resumes the activity under a dying top.
+#[test]
+fn a_dead_foreground_process_moves_the_published_top_below_it() {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    let mut atms = AtmsState::new();
+    atms.process_started(0, "dev.acos.fixtures.proca", 10001);
+    atms.process_started(1, "dev.acos.fixtures.procb", 10002);
+    let top = std::sync::Arc::new(AtomicU32::new(1));
+    atms.top_process = Some(std::sync::Arc::clone(&top));
+    atms.tops.insert(0, 0x1000_0000_0000_0003);
+    atms.tops.insert(1, 0x4000_0000_004d);
+    atms.previous_top = Some((0, 0x1000_0000_0000_0003));
+
+    atms.process_died(1);
+    assert_eq!(
+        top.load(Ordering::Relaxed),
+        0,
+        "the primary process is the served foreground after the top was killed"
+    );
+}
+
+/// A dead process that is not the published top leaves the foreground alone.
+#[test]
+fn a_dead_background_process_does_not_move_the_published_top() {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    let mut atms = AtmsState::new();
+    atms.process_started(0, "dev.acos.fixtures.proca", 10001);
+    atms.process_started(1, "dev.acos.fixtures.procb", 10002);
+    let top = std::sync::Arc::new(AtomicU32::new(0));
+    atms.top_process = Some(std::sync::Arc::clone(&top));
+    atms.process_died(1);
+    assert_eq!(top.load(Ordering::Relaxed), 0);
+}

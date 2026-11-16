@@ -596,41 +596,46 @@ fn application_info_writes_label_res_before_label_and_logo_after_icon() {
     assert_eq!(values[9], Value::Int(0), "field 9 is `showUser`");
 }
 
-/// MPROC7: `activityStopped`'s saved-state `Bundle` carries a `VAL_LIST` (the
-/// image's tag 12). The reader had no model for it, so the whole
-/// `activityStopped` request failed (`unmodelled Parcel.VAL_* tag 12`) and the
-/// stop never reached the activity manager. The tag is length-prefixed, and the
-/// decoder verifies the length word: a differently shaped body (e.g. a
-/// `SparseArray`) fails there instead of desynchronising the rest of the parcel.
+/// MPROC7: `activityStopped`'s saved-state `Bundle` carries the window
+/// hierarchy's `SparseArray` (the image's `VAL_SPARSEARRAY`, tag 12). The reader
+/// had no model for it, so the whole `activityStopped` request failed
+/// (`unmodelled Parcel.VAL_* tag 12`) and the stop never reached the activity
+/// manager. The body is a size, then `(int key, writeValue value)` pairs; the
+/// decoder verifies the length word, so a differently shaped body fails there
+/// instead of desynchronising the rest of the parcel.
 #[test]
-fn bundle_reader_consumes_a_val_list_and_checks_its_length() {
+fn bundle_reader_consumes_a_sparse_array_and_checks_its_length() {
     use acos_services::value::DynamicValue;
-    let list = DynamicValue::List(Some(vec![
-        DynamicValue::Int(7),
-        DynamicValue::String(Some("state".into())),
-        DynamicValue::Bool(true),
-    ]));
+    let sparse = DynamicValue::SparseArray(vec![
+        (0x0102_0012, DynamicValue::Int(7)),
+        (3, DynamicValue::String(Some("state".into()))),
+        (4, DynamicValue::Bool(true)),
+    ]);
     let mut parcel = acos_parcel::Parcel::new();
-    parcelable::write_dynamic(&mut parcel, &list).expect("write VAL_LIST");
+    parcelable::write_dynamic(&mut parcel, &sparse).expect("write VAL_SPARSEARRAY");
     let bytes = parcel.marshall();
     let mut parcel = acos_parcel::Parcel::new();
     parcel.unmarshall(&bytes);
     assert_eq!(
-        parcelable::read_dynamic(&mut parcel).expect("read VAL_LIST"),
-        list
+        parcelable::read_dynamic(&mut parcel).expect("read VAL_SPARSEARRAY"),
+        sparse
     );
-    assert_eq!(parcel.data_position(), bytes.len(), "the list consumed its bytes");
+    assert_eq!(parcel.data_position(), bytes.len(), "the array consumed its bytes");
+
+    // The first word of the body is the size, not a value tag: that is what
+    // separates the sparse-array shape from a list (the guest's real key was
+    // `android:id/content`, 0x01020012, which is not a `writeValue` tag).
+    assert_eq!(i32::from_le_bytes(bytes[8..12].try_into().expect("size")), 3);
 
     // A declared length that does not match the body is refused (the check is
     // what makes a wrong tag shape a structured error, not silent corruption).
     let mut bad = bytes.clone();
-    // The length word sits right after the 4-byte tag.
     let declared = i32::from_le_bytes(bad[4..8].try_into().expect("len word"));
     bad[4..8].copy_from_slice(&(declared + 4).to_le_bytes());
     let mut parcel = acos_parcel::Parcel::new();
     parcel.unmarshall(&bad);
     assert!(
         parcelable::read_dynamic(&mut parcel).is_err(),
-        "a VAL_LIST whose body does not match its length word must be refused"
+        "a VAL_SPARSEARRAY whose body does not match its length word must be refused"
     );
 }

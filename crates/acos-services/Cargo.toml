@@ -21,12 +21,6 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 proptest = "1"
-# The real-Java differential (`tests/client_transaction_java.rs`) runs the case
-# on the ACOS VM with the real framework DEX, exactly like the runtime harness.
-# A dev-dependency cycle (acos-runtime depends on this crate) is what Cargo
-# allows for test-only edges.
-acos-runtime = { path = "../acos-runtime" }
-acos-vm = { path = "../acos-vm" }
 
 [[example]]
 name = "scan-parcelables"

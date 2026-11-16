@@ -2,7 +2,7 @@
 //!
 //! The same harness as MODNOTIF4's
 //! `real_java_write_to_parcel_matches_the_rust_codec`: the Java case
-//! (`tests/java/ClientTransactionCompareMain.java`) runs on the real Android 14
+//! (`tests/java/client_transaction/ClientTransactionCompareMain.java`) runs on the real Android 14
 //! framework through the ACOS VM, builds the *same* logical values the host
 //! encodes, calls the real `writeToParcel` into an ACOS-native `Parcel` and
 //! prints the marshalled bytes. This test:
@@ -108,13 +108,13 @@ fn is_fresh(artifact: &Path, deps: &[PathBuf]) -> bool {
     })
 }
 
-/// Signature-only `@hide` stubs (`tests/java/stubs`), compiled once.
+/// Signature-only `@hide` stubs (`tests/java/client_transaction/stubs`), compiled once.
 fn stub_jar(tools: &Tools) -> Option<PathBuf> {
     let root = repo_root();
-    let out = root.join("target/tmp/acos-services/stubs");
+    let out = root.join("target/tmp/acos-runtime/client_transaction/stubs");
     let jar = out.join("hidden-stubs.jar");
     let mut sources = Vec::new();
-    collect_java(&root.join("crates/acos-services/tests/java/stubs"), &mut sources);
+    collect_java(&root.join("crates/acos-runtime/tests/java/client_transaction/stubs"), &mut sources);
     sources.sort();
     if is_fresh(&jar, &sources) {
         return Some(jar);
@@ -150,10 +150,10 @@ fn stub_jar(tools: &Tools) -> Option<PathBuf> {
 fn compile_case(name: &str) -> Option<PathBuf> {
     let tools = tools()?;
     let root = repo_root();
-    let out = root.join("target/tmp/acos-services").join(name);
+    let out = root.join("target/tmp/acos-runtime/client_transaction").join(name);
     let dex = out.join("classes.dex");
     let source = root
-        .join("crates/acos-services/tests/java")
+        .join("crates/acos-runtime/tests/java/client_transaction")
         .join(format!("{name}.java"));
     let stubs = stub_jar(&tools)?;
     if is_fresh(&dex, &[source.clone(), stubs.clone()]) {

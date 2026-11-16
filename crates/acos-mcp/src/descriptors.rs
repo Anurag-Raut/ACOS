@@ -361,6 +361,15 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     reply echoes the list and `result.extra_packages` names each \
                                     package, uid and guest sourceDir/nativeLibraryDir."
                 },
+                "idle_kill_seconds": {
+                    "type": "integer", "minimum": 0, "maximum": 86400,
+                    "description": "MPROC7: how long a lazily spawned secondary ART process may sit \
+                                    idle (no started activity, no started/bound service, no visible \
+                                    window) before the launcher kills it; the next intent respawns it. \
+                                    `0` disables the idle kill (launcher default 30). Launch-time: a \
+                                    live session cannot change it (acos_destroy, then relaunch). ART \
+                                    only; the reply names the value the launcher used."
+                },
                 "animations": {
                     "type": "string", "enum": ["on", "off"],
                     "description": "P12: per-session framework animation scales. `on` (default) is real \

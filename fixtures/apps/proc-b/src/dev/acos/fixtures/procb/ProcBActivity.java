@@ -47,12 +47,39 @@ public class ProcBActivity extends Activity {
                 finishWithResult();
             }
         });
+        // MPROC7 step 3: `FLAG_ACTIVITY_SINGLE_TOP` to the resumed top activity.
+        // The framework reuses this instance and the host delivers
+        // `NewIntentItem`; `onNewIntent` runs (never a second `onCreate`).
+        ((Button) findViewById(R.id.again)).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent intent = new Intent(ProcBActivity.this, ProcBActivity.class);
+                intent.putExtra(EXTRA_NOTE, "again");
+                intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                Log.i(TAG, "ACOSPROBE b start-again single_top=true");
+                startActivity(intent);
+            }
+        });
         String note = getIntent() == null ? null : getIntent().getStringExtra(EXTRA_NOTE);
         String line = "ACOSPROBE b created pkg=" + getPackageName()
                 + " note=" + (note == null ? "none" : note)
                 + " pid=" + android.os.Process.myPid();
         Log.i(TAG, line);
         status.setText("B\n" + line);
+    }
+
+    /**
+     * MPROC7 step 3: `FLAG_ACTIVITY_SINGLE_TOP` to a resumed activity is an
+     * `onNewIntent` (the activity above is the same instance), so the extra the
+     * host encoded into `NewIntentItem` must be visible here.
+     */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String note = intent == null ? null : intent.getStringExtra(EXTRA_NOTE);
+        Log.i(TAG, "ACOSPROBE b newIntent note=" + (note == null ? "none" : note)
+                + " pid=" + android.os.Process.myPid());
     }
 
     @Override

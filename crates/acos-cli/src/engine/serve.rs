@@ -585,6 +585,26 @@ impl ServeEngine {
                 )
             }
         };
+        // MPROC7: the launcher's idle kill, launch-time like `extra_apks`.
+        // `0` disables it. The same value the scenario launch step carries and
+        // `acos-art launch --idle-kill-seconds` takes.
+        let idle_kill_seconds: Option<u64> = match args.get("idle_kill_seconds") {
+            None => None,
+            Some(value) => match value.as_u64() {
+                Some(seconds) if seconds <= 86_400 => Some(seconds),
+                _ => {
+                    return art_failure(
+                        request_id,
+                        Some(id),
+                        trust,
+                        ErrorCode::InvalidArgument,
+                        "idle_kill_seconds must be an integer in 0..=86400 (0 disables the idle                          kill)"
+                            .to_string(),
+                        json!({"field": "idle_kill_seconds", "value": value}),
+                    )
+                }
+            },
+        };
         let apk = match acos_mcp::safety::validate_path(apk_arg, &ctx.allowed_roots) {
             Ok(path) => path,
             Err(reason) => {
@@ -667,6 +687,32 @@ impl ServeEngine {
                         ),
                         "extra_apks is launch-time: call acos_destroy for this session id, \
                          then acos_launch with the package set you want.",
+                    );
+                }
+                if args.get("idle_kill_seconds").is_some()
+                    && session.idle_kill_seconds() != idle_kill_seconds
+                {
+                    return with_hint(
+                        art_failure(
+                            request_id,
+                            Some(id),
+                            held.trust,
+                            ErrorCode::InvalidArgument,
+                            format!(
+                                "session `{id}` runs with idle_kill_seconds={} and a live session \
+                                 cannot change it",
+                                session
+                                    .idle_kill_seconds()
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_else(|| "default".into())
+                            ),
+                            json!({
+                                "held_idle_kill_seconds": session.idle_kill_seconds(),
+                                "requested_idle_kill_seconds": idle_kill_seconds,
+                            }),
+                        ),
+                        "idle_kill_seconds is launch-time: call acos_destroy for this session id, \
+                         then acos_launch with the value you want.",
                     );
                 }
                 if args.get("insets").is_some() && session.insets() != insets {
@@ -767,6 +813,7 @@ impl ServeEngine {
             &artifacts,
             animations,
             insets,
+            idle_kill_seconds,
             Some(Arc::clone(&self.zygote)),
         ) {
             Ok(mut session) => {
