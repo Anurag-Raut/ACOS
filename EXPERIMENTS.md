@@ -4729,3 +4729,50 @@ nothing in this change is on the tap path).
   `pasta`, per-session veth, boundary once, control API for offline/delay/loss/HAR);
   default stays `off` per ADR-0030 item 6. Option A is the upgrade path with identical
   plumbing and a 4–8 week TCP stack. Owner decisions listed in DESIGN.md §"Open questions".
+
+## E13.18 — NET1: the shared network relay (design B2) as a real supervisor, transport proven end to end — MEASURED (transport; ART wiring and host-port path open)
+
+- **Date / commit:** 2026-11-16, branch `net1` (from `netshare` `1249d7d6`).
+- **Question / goal:** does B2 (one relay netns + one `pasta` per host, one netns +
+  veth per session, ADR-0030 amendment 3) work as a product-shaped supervisor — real
+  relay netns, real `pasta`, real per-session netns — with the LAN/host-loopback
+  boundary, per-session online/offline and latency/loss, fail-closed when the relay
+  dies, and flat memory? (NETSHARE measured a Python prototype; this measures the Rust
+  implementation the module will wrap.)
+- **Method:** new `crates/acos-netd` (supervisor lib + CLI); `pasta`
+  2026_10_02.cba3570 rebuilt static from the pinned tag (sha256
+  `314c37e878bd6ffe43200735800d5efd4859d81d46b0450358a103c36c0edf60`, identical to the
+  spike's recorded binary). `results/handoff/NET1/proof.sh` starts the supervisor,
+  spawns sessions that each run `curl` **inside** their own netns (guest privilege: no
+  capability in the relay netns), and measures. Host loopback and LAN listeners were
+  real `python3 -m http.server` on `127.0.0.1:18080` and `192.168.31.2:18081`. No sudo,
+  no kernel change, `unshare --user --map-root-user` like the spike.
+- **Result:** 10/10 checks PASS —
+  HTTP 200 at N=1 and N=20 (1/1, 20/20; attach 17.1 ms / 43.4 ms); offline on session 1
+  produced failures on session 1 only (session 2: 43 × 200); `netem delay 400ms` on
+  session 2 moved its median fetch 96 → 1301 ms while session 1 was unchanged (125 → 82
+  ms); host loopback and LAN both unreachable (`000`); `kill-pasta --hold` →
+  `status.up=false`, attach → `network-unavailable` (fail closed), relay restart →
+  HTTP 200 again; 50 attach/detach cycles left `relay_veths=0`, `ACOS-SESS rules=0`,
+  `sessions=0`. Memory PSS of the network machinery (pasta + fabric) 16.9 MiB at N=1,
+  16.9 at N=5, 16.9 at N=20 — flat (pasta's own PSS varies 12.6–28.3 MiB across runs
+  with traffic, so read *flat*, not the absolute value).
+- **Finding:** the veth move needs the relay netns and the session netns to belong to
+  the **same** user namespace (capability flows downward only), so the supervisor must
+  spawn the session — which is exactly the spike's model (`pasta` spawned the guest in
+  the netns it created). The exec-based session shim costs 15–49 ms attach, i.e. **not**
+  the design's 2 ms rtnetlink floor; that needs `rtnetlink` in the supervisor.
+- **Fidelity / evidence:** MEASURED (transport). `results/handoff/NET1/REPORT.md`,
+  `results/handoff/NET1/run/proof.log`, `run/measurements.jsonl`, `crates/acos-netd/
+  tests/plan_rules.rs` (10 tests). Honest limits: no `acos-art` path calls the relay yet
+  (`ACOS_NET_ARM=base` is still the live arm, unchanged), the host-port opt-in is
+  implemented but not proven end to end, and the fourth `dnsproxyd` producer
+  (`zygote_prod::prepare_session`) is not wired.
+- **Regression / false pass:** nothing in the default path changed (everything is behind
+  `ACOS_SPIKE_NET=1`, default off; `ACOS_NET_ARM` unset = `relay` for the netd CLI only).
+  The A/B driver refuses to run until the ART wiring lands, precisely so an `off`-vs-`off`
+  comparison cannot be reported as a pass.
+- **Conclusion / next:** the transport is ready to be wrapped by the module framework.
+  Smallest next action: replace `acos_art::spike_net::wrap` with `Request::Spawn`
+  (stdio by fd or per-session log files) behind `ACOS_NET_ARM`, re-run `proof.sh` with a
+  `net-check` ART session, then hand `ab-driver.sh` to the bench owner.

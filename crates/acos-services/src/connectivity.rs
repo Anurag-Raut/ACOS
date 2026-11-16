@@ -86,6 +86,51 @@ pub const NET_GUEST_GATEWAY: [u8; 4] = [169, 254, 2, 1];
 /// The DNS server handed to the guest by DHCP (`pasta -D`).
 pub const NET_DNS_SERVER: [u8; 4] = [1, 1, 1, 1];
 
+/// First two octets of the per-session address block (design B2, ADR-0030
+/// amendment 3).
+///
+/// With the shared relay every session keeps its **own** netns and its own
+/// address, so `LinkProperties` is per session: [`session_network`] is the one
+/// function both the transport (`acos_netd::plan`) and this module's
+/// `LinkProperties` read, and the interface an app describes is therefore the
+/// interface the session's netns has, by construction.
+pub const NET_SESSION_BASE: [u8; 2] = [10, 163];
+
+/// Prefix length of one session's block (`10.163.<idx>.0/30`: the relay end
+/// takes `.1`, the guest `.2`).
+pub const NET_SESSION_PREFIX_LEN: u8 = 30;
+
+/// Highest session index a block can be handed out for (`10.163.254.0/30`).
+pub const NET_SESSION_MAX_INDEX: u32 = 254;
+
+/// The address, prefix and gateway of session `idx` (1-based).
+///
+/// `None` for `idx == 0` or `idx > NET_SESSION_MAX_INDEX`: an address block is
+/// never reused silently, so the caller fails with a structured error instead.
+#[must_use]
+pub fn session_network(idx: u32) -> Option<SessionNetwork> {
+    if idx == 0 || idx > NET_SESSION_MAX_INDEX {
+        return None;
+    }
+    let n = u8::try_from(idx).ok()?;
+    Some(SessionNetwork {
+        address: [NET_SESSION_BASE[0], NET_SESSION_BASE[1], n, 2],
+        prefix_len: NET_SESSION_PREFIX_LEN,
+        gateway: [NET_SESSION_BASE[0], NET_SESSION_BASE[1], n, 1],
+    })
+}
+
+/// One session's network, as both `LinkProperties` and the transport see it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SessionNetwork {
+    /// The guest's address in its own netns (`10.163.<idx>.2`).
+    pub address: [u8; 4],
+    /// Prefix length ([`NET_SESSION_PREFIX_LEN`]).
+    pub prefix_len: u8,
+    /// The relay end of the session's veth, the guest's default gateway.
+    pub gateway: [u8; 4],
+}
+
 /// `ConnectivityManager.TYPE_WIFI` (the legacy type of the emulated network).
 pub const LEGACY_TYPE_WIFI: i32 = 1;
 

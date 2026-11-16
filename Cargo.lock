@@ -168,6 +168,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "acos-netd"
+version = "0.2.2"
+dependencies = [
+ "acos-services",
+ "libc",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "acos-parcel"
 version = "0.2.2"
 dependencies = [

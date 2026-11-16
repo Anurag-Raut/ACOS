@@ -1,0 +1,22 @@
+[package]
+name = "acos-netd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "ACOS network relay supervisor (design B2): one relay netns + one pasta per host, one netns + veth per session, per-session online/offline and latency/loss, netd's dnsproxyd responder. Transport half of the ADR-0030 network module."
+
+[lib]
+name = "acos_netd"
+path = "src/lib.rs"
+
+[[bin]]
+name = "acos-netd"
+path = "src/main.rs"
+
+[dependencies]
+acos-services = { path = "../acos-services" }
+libc = "0.2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

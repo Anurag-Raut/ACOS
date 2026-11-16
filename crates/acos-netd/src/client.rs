@@ -1,0 +1,343 @@
+//! Client side: find (or start) the host's supervisor, then speak its protocol.
+//!
+//! This is the surface the session API (CLI/MCP `serve` verbs, later the module
+//! framework) wraps: [`Client::ensure_up`], [`Client::status`],
+//! [`Client::spawn`], [`Client::detach`], [`Client::offline`], [`Client::delay`],
+//! [`Client::host_port`].
+
+use std::io::{BufRead, BufReader, Write};
+use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
+use std::time::{Duration, Instant};
+
+use crate::proto::{self, ErrorCode, ProtoError, Reply, Request, SessionInfo, StatusInfo};
+use crate::supervisor::NETD_SOCK;
+
+/// How long [`Client::ensure_up`] waits for a fresh supervisor to answer.
+pub const START_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Environment variable that selects the transport arm:
+/// `relay` (design B2, the default once the module ships) or `base` (the
+/// proven per-session `pasta` of the spike, kept as the fallback arm for one
+/// release).
+pub const ARM_ENV: &str = "ACOS_NET_ARM";
+
+/// The transport arm in use.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Arm {
+    /// Per-session `pasta` (the spike's transport).
+    Base,
+    /// Design B2: one relay netns + one `pasta` for the host, one netns + veth
+    /// per session.
+    Relay,
+}
+
+impl Arm {
+    /// Read [`ARM_ENV`]; anything but `base`/`relay` is an error, never a
+    /// silent default (a typo must not switch the transport).
+    pub fn from_env() -> Result<Self, ProtoError> {
+        match std::env::var(ARM_ENV).as_deref() {
+            Ok("relay") => Ok(Self::Relay),
+            Ok("base") => Ok(Self::Base),
+            Ok(other) => Err(ProtoError {
+                code: ErrorCode::Invalid,
+                message: format!("{ARM_ENV}={other}: expected `relay` or `base`"),
+            }),
+            Err(_) => Ok(Self::Relay),
+        }
+    }
+}
+
+/// The short, private state directory (`/run/user/<uid>/acos-netd`).
+///
+/// Short because the control socket is an `AF_UNIX` path (108 bytes), private
+/// because it is the handle to the host's only NAT process.
+pub fn state_dir() -> PathBuf {
+    let uid = unsafe { libc::geteuid() };
+    let base = if let Ok(d) = std::env::var("ACOS_NETD_STATE") {
+        PathBuf::from(d)
+    } else {
+        PathBuf::from(format!("/run/user/{uid}/acos-netd"))
+    };
+    let _ = std::fs::create_dir_all(&base);
+    use std::os::unix::fs::PermissionsExt;
+    let _ = std::fs::set_permissions(&base, std::fs::Permissions::from_mode(0o700));
+    base
+}
+
+/// The supervisor's control socket.
+#[must_use]
+pub fn socket_path() -> PathBuf {
+    state_dir().join(NETD_SOCK)
+}
+
+/// A connected supervisor.
+pub struct Client {
+    stream: UnixStream,
+}
+
+impl Client {
+    /// Connect to an already-running supervisor.
+    pub fn connect() -> Result<Self, ProtoError> {
+        let path = socket_path();
+        let stream = UnixStream::connect(&path).map_err(|e| ProtoError {
+            code: ErrorCode::SupervisorGone,
+            message: format!("{}: {e}", path.display()),
+        })?;
+        stream.set_read_timeout(Some(Duration::from_secs(120))).ok();
+        Ok(Self { stream })
+    }
+
+    /// Connect, starting the supervisor when it is not running.
+    ///
+    /// The supervisor is started in its **own user namespace**
+    /// (`unshare --user --map-root-user`), because both the relay netns and
+    /// every session netns are owned by it: an unprivileged process cannot
+    /// create a netns in the host's user namespace, and a veth can only be moved
+    /// into a netns of the same (or a descendant) user namespace.
+    pub fn ensure_up() -> Result<Self, ProtoError> {
+        // A live supervisor is never replaced by a second one: two supervisors
+        // would mean two relay netns and two `pasta` processes for one host.
+        if let Ok(mut c) = Self::connect() {
+            match c.status() {
+                Ok(s) if s.up => return Ok(c),
+                Ok(_) => {
+                    // The supervisor is alive but its relay is down (pasta died,
+                    // or it is held down): it is the only process that can
+                    // restart it, so ask it to.
+                    let r = c.request(&Request::Up { pasta: None })?;
+                    if r.status.as_ref().is_some_and(|s| s.up) {
+                        return Ok(c);
+                    }
+                    return Err(r.error.map_or_else(
+                        || ProtoError {
+                            code: ErrorCode::NetworkUnavailable,
+                            message: "the network relay is down".into(),
+                        },
+                        |e| e,
+                    ));
+                }
+                Err(_) => {}
+            }
+        }
+        Self::start_supervisor()?;
+        let deadline = Instant::now() + START_TIMEOUT;
+        let mut last = None;
+        while Instant::now() < deadline {
+            match Self::connect() {
+                Ok(mut c) => match c.status() {
+                    Ok(s) if s.up => return Ok(c),
+                    Ok(s) => last = s.down_reason.or(last),
+                    Err(e) => last = Some(e.message),
+                },
+                Err(e) => last = Some(e.message),
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        Err(ProtoError {
+            code: ErrorCode::NetworkUnavailable,
+            message: format!(
+                "the network relay did not come up: {}",
+                last.unwrap_or_else(|| "no status".into())
+            ),
+        })
+    }
+
+    /// Connect to the running supervisor, or bootstrap one. Unlike
+    /// [`Self::ensure_up`] this never asks an existing supervisor to recover:
+    /// a session attach on a down relay must answer `network-unavailable`
+    /// (fail closed), not silently restart the network under the caller.
+    pub fn attach_client() -> Result<Self, ProtoError> {
+        match Self::connect() {
+            Ok(c) => Ok(c),
+            Err(_) => Self::ensure_up(),
+        }
+    }
+
+    fn start_supervisor() -> Result<(), ProtoError> {
+        use std::os::unix::process::CommandExt;
+        use std::process::{Command, Stdio};
+        let exe = std::env::current_exe().map_err(|e| ProtoError {
+            code: ErrorCode::Io,
+            message: format!("current_exe: {e}"),
+        })?;
+        let dir = state_dir();
+        let log = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(dir.join("supervisor.log"))
+            .map_err(|e| ProtoError { code: ErrorCode::Io, message: e.to_string() })?;
+        let mut cmd = Command::new("unshare");
+        cmd.arg("--user").arg("--map-root-user").arg("--").arg(exe).arg("serve");
+        // Inside `--map-root-user` the supervisor's euid is 0, so it cannot
+        // derive the user's runtime directory itself: it is handed over
+        // explicitly (the same directory the client bound the socket in).
+        cmd.env("ACOS_NETD_STATE", &dir);
+        cmd.stdin(Stdio::null())
+            .stdout(log.try_clone().map_err(|e| ProtoError {
+                code: ErrorCode::Io,
+                message: e.to_string(),
+            })?)
+            .stderr(log);
+        unsafe {
+            // `setsid`: the supervisor outlives the session that started it (the
+            // relay is per host, not per session).
+            cmd.pre_exec(|| {
+                libc::setsid();
+                Ok(())
+            });
+        }
+        let child = cmd.spawn().map_err(|e| ProtoError {
+            code: ErrorCode::NetworkUnavailable,
+            message: format!("cannot start the relay supervisor: {e}"),
+        })?;
+        // The child is detached on purpose; it is reaped by init after this
+        // process exits, and `ensure_up` talks to it over the socket.
+        std::mem::forget(child);
+        Ok(())
+    }
+
+    /// Send one request and read one reply.
+    pub fn request(&mut self, req: &Request) -> Result<Reply, ProtoError> {
+        let line = proto::encode(req);
+        self.stream.write_all(line.as_bytes()).map_err(io)?;
+        self.stream.flush().map_err(io)?;
+        let mut reply_line = String::new();
+        BufReader::new(self.stream.try_clone().map_err(io)?)
+            .read_line(&mut reply_line)
+            .map_err(io)?;
+        if reply_line.trim().is_empty() {
+            return Err(ProtoError {
+                code: ErrorCode::SupervisorGone,
+                message: "the supervisor closed the connection".into(),
+            });
+        }
+        serde_json::from_str(reply_line.trim_end()).map_err(|e| ProtoError {
+            code: ErrorCode::Io,
+            message: format!("reply: {e} ({reply_line:?})"),
+        })
+    }
+
+    /// Relay state, including `up` and the reason it is down.
+    pub fn status(&mut self) -> Result<StatusInfo, ProtoError> {
+        let mut r = self.request(&Request::Status)?;
+        r.status.take().ok_or_else(|| no_payload(&r))
+    }
+
+    /// Spawn a command in a new session netns joined to the relay.
+    pub fn spawn(
+        &mut self,
+        session: &str,
+        argv: Vec<String>,
+        stdout: Option<String>,
+        stderr: Option<String>,
+    ) -> Result<(SessionInfo, f64), ProtoError> {
+        self.spawn_with(session, argv, stdout, stderr, None)
+    }
+
+    /// [`Self::spawn`] with an explicit address-block index.
+    pub fn spawn_with(
+        &mut self,
+        session: &str,
+        argv: Vec<String>,
+        stdout: Option<String>,
+        stderr: Option<String>,
+        index: Option<u32>,
+    ) -> Result<(SessionInfo, f64), ProtoError> {
+        let mut r = self.request(&Request::Spawn {
+            session: session.to_string(),
+            argv,
+            index,
+            stdout,
+            stderr,
+            ready_timeout_s: None,
+            die_with_relay: None,
+        })?;
+        let ms = r.attach_ms.unwrap_or(0.0);
+        match r.session.take() {
+            Some(s) => Ok((s, ms)),
+            None => Err(no_payload(&r)),
+        }
+    }
+
+    /// Attach an existing netns (harness/tests).
+    pub fn attach(&mut self, session: &str, netns_pid: u32) -> Result<SessionInfo, ProtoError> {
+        let mut r = self.request(&Request::Attach {
+            session: session.to_string(),
+            netns_pid,
+            index: None,
+        })?;
+        r.session.take().ok_or_else(|| no_payload(&r))
+    }
+
+    /// Tear a session down (veth, rules, guest).
+    pub fn detach(&mut self, session: &str) -> Result<SessionInfo, ProtoError> {
+        let mut r = self.request(&Request::Detach { session: session.to_string() })?;
+        r.session.take().ok_or_else(|| no_payload(&r))
+    }
+
+    /// Per-session online/offline.
+    pub fn offline(&mut self, session: &str, offline: bool) -> Result<SessionInfo, ProtoError> {
+        let mut r = self.request(&Request::Offline { session: session.to_string(), offline })?;
+        r.session.take().ok_or_else(|| no_payload(&r))
+    }
+
+    /// Per-session latency/loss (`ms = 0, loss_pct = 0` clears).
+    pub fn delay(
+        &mut self,
+        session: &str,
+        ms: u32,
+        jitter_ms: u32,
+        loss_pct: u32,
+    ) -> Result<SessionInfo, ProtoError> {
+        let mut r = self.request(&Request::Delay { session: session.to_string(), ms, jitter_ms, loss_pct })?;
+        r.session.take().ok_or_else(|| no_payload(&r))
+    }
+
+    /// Explicit host-port opt-in.
+    pub fn host_port(
+        &mut self,
+        port: u16,
+        on: bool,
+        session: Option<&str>,
+    ) -> Result<StatusInfo, ProtoError> {
+        let mut r = self.request(&Request::HostPort {
+            port,
+            on,
+            session: session.map(str::to_string),
+        })?;
+        r.status.take().ok_or_else(|| no_payload(&r))
+    }
+
+    /// Kill `pasta` on purpose (fail-closed proof). `hold` keeps the relay down
+    /// until the next `ensure_up`.
+    pub fn kill_pasta(&mut self, hold: bool) -> Result<(), ProtoError> {
+        let mut r = self.request(&Request::KillPasta { hold })?;
+        if r.ok { Ok(()) } else { Err(payload_error(&r)) }
+    }
+
+    /// Stop the supervisor and the relay netns.
+    pub fn shutdown(&mut self) -> Result<(), ProtoError> {
+        let mut r = self.request(&Request::Shutdown)?;
+        if r.ok { Ok(()) } else { Err(payload_error(&r)) }
+    }
+}
+
+fn io(e: std::io::Error) -> ProtoError {
+    ProtoError { code: ErrorCode::Io, message: e.to_string() }
+}
+
+fn payload_error(r: &Reply) -> ProtoError {
+    r.error.clone().unwrap_or(ProtoError {
+        code: ErrorCode::Io,
+        message: "reply has no error".into(),
+    })
+}
+
+fn no_payload(r: &Reply) -> ProtoError {
+    if r.ok {
+        ProtoError { code: ErrorCode::Io, message: "reply is missing its payload".into() }
+    } else {
+        payload_error(r)
+    }
+}
