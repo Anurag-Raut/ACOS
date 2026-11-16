@@ -334,6 +334,23 @@ pub trait SessionBackend {
         Vec::new()
     }
 
+    /// ADR-0029 item 4: drive an attached service module's scripted state
+    /// (the scenario `service_ctl:` step / `acos_service_ctl`).
+    ///
+    /// The default is a structured `unsupported`: an engine with no module
+    /// registry cannot pretend a control op happened.
+    fn service_ctl(
+        &mut self,
+        module: &str,
+        op: &str,
+        _args: &serde_json::Value,
+    ) -> Result<serde_json::Value, BackendError> {
+        Err(BackendError::unsupported(
+            "service.modules",
+            format!("this engine has no service modules, so `{module}`/`{op}` was not applied"),
+        ))
+    }
+
     /// Start the app and return the first completed frame.
     fn launch(&mut self, apk: &Path) -> Result<LaunchOutcome, BackendError>;
 
@@ -1141,13 +1158,21 @@ impl Backend for EngineBackend {
     fn configure(&mut self, change: &EnvironmentChange) -> Result<(), BackendError> {
         match self {
             EngineBackend::Native(backend) => backend.configure(change),
-            EngineBackend::Session { .. } => Err(BackendError::unsupported(
-                "environment",
-                format!(
-                    "the ART session protocol has no `{}` command yet",
-                    change.kind()
-                ),
-            )),
+            EngineBackend::Session { session, .. } => match change {
+                // ADR-0029 item 4: a scenario `service_ctl:` step goes to the
+                // launcher's module registry through the live session command.
+                EnvironmentChange::ServiceCtl(ctl) => {
+                    let args = ctl.args.clone().unwrap_or(serde_json::Value::Null);
+                    session.service_ctl(&ctl.module, &ctl.op, &args).map(|_| ())
+                }
+                _ => Err(BackendError::unsupported(
+                    "environment",
+                    format!(
+                        "the ART session protocol has no `{}` command yet",
+                        change.kind()
+                    ),
+                )),
+            },
         }
     }
 

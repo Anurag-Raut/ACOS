@@ -92,6 +92,11 @@ fn the_vibrator_module_passes_the_conformance_kit() {
 }
 
 #[test]
+fn the_telephony_module_passes_the_conformance_kit() {
+    run_in_quiet_process("net.telephony");
+}
+
+#[test]
 fn a_gap_name_answers_a_structured_tombstone_naming_the_module_and_the_attach_call() {
     let mut host = ServiceHost::new();
     let mut registry = ModuleRegistry::standard();
@@ -198,7 +203,7 @@ fn attaching_the_vibrator_serves_the_name_and_the_report_says_which_profile() {
     // A void method is recorded, not faked into a hardware effect.
     transact(&mut host, "vibrator_manager", 7).expect("vibrate answers");
     let calls = registry
-        .control("feedback.vibrator", "calls", &serde_json::Value::Null)
+        .control(&mut host, "feedback.vibrator", "calls", &serde_json::Value::Null)
         .expect("calls control op");
     assert_eq!(calls["vibrate_calls"], 1);
 

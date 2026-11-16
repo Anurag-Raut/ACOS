@@ -42,7 +42,8 @@ pub enum Capability {
     Input,
     /// Reset task/app/data state.
     Reset,
-    /// set_network / set_permission / set_locale / set_density / set_theme / set_time.
+    /// set_network / set_permission / set_locale / set_density / set_theme /
+    /// set_time / service_ctl.
     Environment,
     /// Crash/ANR reports distinct from ordinary logs.
     CrashReports,
@@ -511,6 +512,8 @@ pub enum EnvironmentChange {
     Theme(ThemeSetup),
     /// Set the runtime clock.
     Time(TimeSetup),
+    /// ADR-0029 item 4: drive an attached service module's scripted state.
+    ServiceCtl(acos_protocol::scenario::ServiceCtlStep),
 }
 
 impl EnvironmentChange {
@@ -523,6 +526,7 @@ impl EnvironmentChange {
             EnvironmentChange::Density(_) => "set_density",
             EnvironmentChange::Theme(_) => "set_theme",
             EnvironmentChange::Time(_) => "set_time",
+            EnvironmentChange::ServiceCtl(_) => "service_ctl",
         }
     }
 }

@@ -183,6 +183,10 @@ pub enum DynamicValue {
     Map(Vec<(DynamicValue, DynamicValue)>),
     /// A `VAL_PARCELABLE` payload.
     Parcelable(Parcelable),
+    /// `VAL_OBJECTARRAY`: `Parcel.writeArray(Object[])` — a count word then one
+    /// `writeValue` payload per element. Android's `SMS_RECEIVED` broadcast
+    /// carries its PDUs this way (`Object[]` of `byte[]`).
+    ObjectArray(Option<Vec<DynamicValue>>),
     /// A value this crate does not model; its bytes were skipped.
     Skipped {
         /// `Parcel.VAL_*` tag.
@@ -288,6 +292,9 @@ pub enum Value {
     CharArray(Option<Vec<u16>>),
     /// `byte[]`.
     ByteArray(Option<Vec<u8>>),
+    /// `Object[]` (a `Parcel.writeArray` inside a `Bundle` value). Android's
+    /// `SMS_RECEIVED` broadcast stores its PDUs as `Object[]` of `byte[]`.
+    ObjectArray(Option<Vec<Value>>),
     /// `List<String>`.
     StringList(Option<Vec<Option<String>>>),
     /// A parcelable payload.

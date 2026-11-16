@@ -1077,6 +1077,28 @@
       },
       "type": "object"
     },
+    "ServiceCtlStep": {
+      "additionalProperties": false,
+      "description": "`service_ctl`: drive an attached service module (ADR-0029 item 4).\n\nThe step is the scenario spelling of `acos_service_ctl {module, op, args}`. It only reaches a module the scenario attached through the top-level `services:` block; a step naming a detached module is a structured step failure (never a silent no-op), and its effect is asserted by the following steps like any other input.",
+      "properties": {
+        "args": {
+          "description": "Op arguments (op-specific)."
+        },
+        "module": {
+          "description": "Module id (`net.telephony`).",
+          "type": "string"
+        },
+        "op": {
+          "description": "The module's control operation (`sms`, `call_state`, `auth`, `scan`, ...).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "module",
+        "op"
+      ],
+      "type": "object"
+    },
     "ServiceRequest": {
       "additionalProperties": false,
       "description": "One `services:` entry (`{id, profile, config}`), the scenario spelling of a launch request (ADR-0029 item 4).",
@@ -1350,6 +1372,17 @@
             }
           ],
           "description": "Rotate the display."
+        },
+        "service_ctl": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ServiceCtlStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ADR-0029 item 4: drive an attached service module's scripted state (`acos_service_ctl` as a scenario step)."
         },
         "set_density": {
           "anyOf": [

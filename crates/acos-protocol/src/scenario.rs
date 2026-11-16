@@ -150,6 +150,10 @@ pub struct Step {
     /// debuggable/source-owned builds; never for arbitrary third-party APKs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call_activity_method: Option<CallActivityMethodStep>,
+    /// ADR-0029 item 4: drive an attached service module's scripted state
+    /// (`acos_service_ctl` as a scenario step).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_ctl: Option<ServiceCtlStep>,
     /// ADR-0029 item 4/5: module ids this step needs attached (`feedback.vibrator`).
     ///
     /// A step whose module is `off` is `unsupported`, never `pass`: the executor
@@ -209,6 +213,8 @@ pub enum StepRef<'a> {
     SetTime(&'a TimeSetup),
     /// See [`Step::call_activity_method`].
     CallActivityMethod(&'a CallActivityMethodStep),
+    /// See [`Step::service_ctl`].
+    ServiceCtl(&'a ServiceCtlStep),
 }
 
 impl StepRef<'_> {
@@ -239,6 +245,7 @@ impl StepRef<'_> {
             StepRef::SetTheme(_) => "set_theme",
             StepRef::SetTime(_) => "set_time",
             StepRef::CallActivityMethod(_) => "call_activity_method",
+            StepRef::ServiceCtl(_) => "service_ctl",
         }
     }
 }
@@ -271,6 +278,7 @@ impl Step {
             self.set_theme.is_some(),
             self.set_time.is_some(),
             self.call_activity_method.is_some(),
+            self.service_ctl.is_some(),
         ]
         .into_iter()
         .filter(|present| *present)
@@ -359,6 +367,9 @@ impl Step {
                 .call_activity_method
                 .as_ref()
                 .map(StepRef::CallActivityMethod);
+        }
+        if self.service_ctl.is_some() {
+            return self.service_ctl.as_ref().map(StepRef::ServiceCtl);
         }
         None
     }
@@ -657,6 +668,25 @@ pub struct TimeSetup {
     /// Optional IANA timezone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timezone: Option<String>,
+}
+
+/// `service_ctl`: drive an attached service module (ADR-0029 item 4).
+///
+/// The step is the scenario spelling of `acos_service_ctl {module, op, args}`.
+/// It only reaches a module the scenario attached through the top-level
+/// `services:` block; a step naming a detached module is a structured step
+/// failure (never a silent no-op), and its effect is asserted by the following
+/// steps like any other input.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceCtlStep {
+    /// Module id (`net.telephony`).
+    pub module: String,
+    /// The module's control operation (`sms`, `call_state`, `auth`, `scan`, ...).
+    pub op: String,
+    /// Op arguments (op-specific).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<Value>,
 }
 
 /// `call_activity_method` (optional; debug/source-owned builds only).
@@ -1428,6 +1458,27 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                     &path,
                     "optional step: only valid for debuggable/source-owned builds with an injected test hook",
                 );
+            }
+            StepRef::ServiceCtl(ctl) => {
+                if ctl.module.trim().is_empty() {
+                    v.push(format!("{path}.module"), "module must not be empty");
+                }
+                if ctl.op.trim().is_empty() {
+                    v.push(format!("{path}.op"), "op must not be empty");
+                }
+                if !scenario
+                    .services
+                    .iter()
+                    .any(|service| service.id == ctl.module)
+                {
+                    v.push(
+                        &path,
+                        format!(
+                            "module {:?} is not attached by this scenario's `services:` block; a control step can only drive an attached module",
+                            ctl.module
+                        ),
+                    );
+                }
             }
         }
     }

@@ -965,6 +965,7 @@ impl ServeEngine {
             // command; an `at-launch` module is refused by the launcher with
             // the launch call in the message.
             "acos_services" => service_control(&mut session, args),
+            "acos_service_ctl" => service_ctl(&mut session, args),
             "acos_reset" => reset(&mut session, args),
             "acos_swipe" => Err(BackendError::unsupported(
                 "input.swipe",
@@ -2725,6 +2726,38 @@ fn status_value(session: &ArtSession) -> Value {
     status
 }
 
+/// ADR-0029 item 4: `acos_service_ctl {module, op, args?}` on a live session.
+///
+/// The tool is the module-shaped spelling of `acos_services {op: "ctl"}`; the
+/// module id and op travel as `id`/`module_op` so the module's own op name
+/// cannot collide with the action word.
+fn service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let (Some(module), Some(module_op)) = (
+        args.get("module").and_then(Value::as_str),
+        args.get("op").and_then(Value::as_str),
+    ) else {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: "acos_service_ctl needs a string `module` and a string `op`".into(),
+        });
+    };
+    let mut request = json!({
+        "op": "ctl",
+        "id": module,
+        "module_op": module_op,
+    });
+    if let Some(module_args) = args.get("args") {
+        request["args"] = module_args.clone();
+    }
+    let mut reply = session.service_op(request)?;
+    reply["session_id"] = json!(args
+        .pointer("/base/session_id")
+        .or_else(|| args.get("session_id"))
+        .and_then(Value::as_str)
+        .unwrap_or(""));
+    Ok(reply)
+}
+
 /// ADR-0029 item 4: `acos_services {op, id?, profile?, config?}`.
 ///
 /// `op` is closed (`list`, `status`, `attach`, `detach`); an unknown op, a
@@ -2733,13 +2766,39 @@ fn status_value(session: &ArtSession) -> Value {
 /// set it actually has.
 fn service_control(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let op = args.get("op").and_then(Value::as_str).unwrap_or("");
-    if !matches!(op, "list" | "status" | "attach" | "detach") {
+    if !matches!(op, "list" | "status" | "attach" | "detach" | "ctl") {
         return Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
-            detail: format!("unknown op {op:?}; use list, status, attach or detach"),
+            detail: format!("unknown op {op:?}; use list, status, attach, detach or ctl"),
         });
     }
     let mut request = json!({"op": op});
+    if op == "ctl" {
+        // ADR-0029 item 4: `acos_service_ctl` drives a scripted module's state.
+        // The module op travels as `module_op` so it cannot collide with the
+        // `acos_services` action word.
+        let (Some(id), Some(module_op)) = (
+            args.get("id").and_then(Value::as_str),
+            args.get("module_op").and_then(Value::as_str),
+        ) else {
+            return Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: "ctl needs a string `id` and a string `module_op`".into(),
+            });
+        };
+        request["id"] = json!(id);
+        request["module_op"] = json!(module_op);
+        if let Some(module_args) = args.get("args") {
+            request["args"] = module_args.clone();
+        }
+        let mut reply = session.service_op(request)?;
+        reply["session_id"] = json!(args
+            .pointer("/base/session_id")
+            .or_else(|| args.get("session_id"))
+            .and_then(Value::as_str)
+            .unwrap_or(""));
+        return Ok(reply);
+    }
     if matches!(op, "attach" | "detach") {
         let Some(id) = args.get("id").and_then(Value::as_str) else {
             return Err(BackendError::Failed {

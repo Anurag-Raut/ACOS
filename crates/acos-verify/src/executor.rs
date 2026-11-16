@@ -1425,6 +1425,18 @@ fn execute_step(
         StepRef::SetTime(setup) => {
             environment_step(backend, caps, EnvironmentChange::Time(setup.clone()))
         }
+        // ADR-0029 item 4: a module control step is not the generic
+        // `environment` capability (a backend whose environment steps are not
+        // implemented may still have modules). The backend's `configure`
+        // answers `unsupported` when it has no module registry, so a
+        // control op is never claimed to have happened.
+        StepRef::ServiceCtl(ctl) => {
+            let change = EnvironmentChange::ServiceCtl(ctl.clone());
+            match backend.configure(&change) {
+                Ok(()) => StepExec::pass(),
+                Err(error) => StepExec::backend_error(&error, backend.id(), change.kind()),
+            }
+        }
         StepRef::CallActivityMethod(_) => StepExec::unsupported(
             Capability::Environment,
             "call_activity_method requires an injected debug hook that this build does not provide",

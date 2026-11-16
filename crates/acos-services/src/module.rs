@@ -182,6 +182,10 @@ pub struct ModuleManifest {
     pub summary: &'static str,
     /// `ServiceManager` names (with their AIDL descriptors) the module provides.
     pub services: &'static [ServiceProvide],
+    /// `PackageManager` system features the module makes available
+    /// (`android.hardware.telephony`). Attach turns them on, detach off, so
+    /// `hasSystemFeature` agrees with the attached set.
+    pub features: &'static [&'static str],
     /// Content-provider authorities the module provides.
     pub providers: &'static [&'static str],
     /// Broadcasts the module starts or answers.
@@ -335,6 +339,7 @@ impl ModuleManifest {
             "attach": self.attach.as_str(),
             "profiles": self.profiles_with_off().iter().map(|p| p.as_str()).collect::<Vec<_>>(),
             "provides": {
+                "features": self.features,
                 "services": self.services.iter().map(|s| json!({
                     "name": s.name,
                     "descriptor": s.descriptor,
@@ -714,7 +719,13 @@ pub trait Module: Send {
     fn detach(&mut self, host: &mut ServiceHost) -> Result<()>;
 
     /// Drive scripted state (`acos_service_ctl`). Must refuse when detached.
-    fn control(&mut self, op: &str, args: &Value) -> Result<Value>;
+    ///
+    /// `host` is the session's service host: a control op that changes what the
+    /// app observes (an incoming SMS, a call-state event, an authentication
+    /// result) must be able to deliver it through the same path the framework
+    /// uses ([`ServiceHost::broadcast_intent`], [`ServiceHost::queue_delivery`]).
+    /// The peer thread flushes those deliveries after the control returns.
+    fn control(&mut self, host: &mut ServiceHost, op: &str, args: &Value) -> Result<Value>;
 
     /// The honest state (ADR-0029 item 5).
     fn report(&self) -> ModuleReport;
@@ -1078,6 +1089,7 @@ impl ModuleRegistry {
         for module in [
             Box::new(crate::core_module::CoreModule::new()) as Box<dyn Module>,
             Box::new(crate::modules::vibrator::VibratorModule::new()),
+            Box::new(crate::modules::telephony::TelephonyModule::new()),
         ] {
             if let Err(error) = registry.add(module) {
                 panic!("standard module set is invalid: {error}");
@@ -1242,6 +1254,17 @@ impl ModuleRegistry {
         let attach_result = self.entries[index].module.attach(host, profile, config);
         match attach_result {
             Ok(()) => {
+                let manifest = self.entries[index].module.manifest();
+                for feature in manifest.features {
+                    if let Err(error) = host.set_system_feature(feature, true) {
+                        // A feature the module promises but cannot publish would
+                        // make `hasSystemFeature` disagree with the attached
+                        // set; roll the attach back rather than lie.
+                        self.entries[index].module.detach(host)?;
+                        host.end_scope(scope);
+                        return Err(error);
+                    }
+                }
                 let id = self.entries[index].module.manifest().id;
                 self.entries[index].profile = profile;
                 self.entries[index].scope = Some(scope);
@@ -1274,7 +1297,25 @@ impl ModuleRegistry {
         if let Some(scope) = self.entries[index].scope.take() {
             host.end_scope(scope);
         }
+        // A feature another attached module still provides stays on; one this
+        // module alone published is turned off again.
+        let released: Vec<&'static str> = {
+            let mine = self.entries[index].module.manifest().features;
+            mine.iter()
+                .copied()
+                .filter(|feature| {
+                    !self.entries.iter().enumerate().any(|(i, entry)| {
+                        i != index
+                            && entry.profile.is_attached()
+                            && entry.module.manifest().features.contains(feature)
+                    })
+                })
+                .collect()
+        };
         self.entries[index].profile = Profile::Off;
+        for feature in released {
+            let _ = host.set_system_feature(feature, false);
+        }
         let id = self.entries[index].module.manifest().id;
         self.attached_order.retain(|attached| *attached != id);
         // The name is now unserved again: put its tombstone back, so a detached
@@ -1431,7 +1472,13 @@ impl ModuleRegistry {
     }
 
     /// Drive scripted state on an attached module.
-    pub fn control(&mut self, id: &str, op: &str, args: &Value) -> Result<Value> {
+    pub fn control(
+        &mut self,
+        host: &mut ServiceHost,
+        id: &str,
+        op: &str,
+        args: &Value,
+    ) -> Result<Value> {
         let index = self
             .entries
             .iter()
@@ -1452,7 +1499,7 @@ impl ModuleRegistry {
                 ),
             });
         }
-        self.entries[index].module.control(op, args)
+        self.entries[index].module.control(host, op, args)
     }
 
     /// Run `f` with the module object for `id` (tests and the launch reply).
@@ -1781,7 +1828,7 @@ impl SessionModules {
 
     /// Drive scripted state.
     pub fn control(&mut self, id: &str, op: &str, args: &Value) -> Result<Value> {
-        self.registry.control(id, op, args)
+        self.registry.control(&mut self.host, id, op, args)
     }
 
     /// The registry (reports, verdict rows, status).
@@ -2051,7 +2098,7 @@ pub mod conformance {
             }
         }
         if honest {
-            match registry.control(module_id, "no-such-op", &Value::Null) {
+            match registry.control(&mut host, module_id, "no-such-op", &Value::Null) {
                 Err(ServiceError::ModuleRejected { .. }) => {}
                 other => {
                     honest = false;
@@ -2109,7 +2156,7 @@ pub mod conformance {
                 .attach(&mut host, module_id, default_profile, &ModuleConfig::default())
                 .is_ok()
             {
-                match registry.control(module_id, "no-such-op", &Value::Null) {
+                match registry.control(&mut host, module_id, "no-such-op", &Value::Null) {
                     Err(ServiceError::ModuleRejected { .. }) => {}
                     other => {
                         negative = false;

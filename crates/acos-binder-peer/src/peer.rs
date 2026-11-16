@@ -889,7 +889,11 @@ impl Peer {
         seq
     }
 
-    fn take_delivery_frames(&mut self) -> Vec<Frame> {
+    /// The `system -> app` frames queued by anything that ran on the host (a
+    /// binder transaction, or a module's live `control` op). Public so the
+    /// launcher can flush them after a control request, which is not followed
+    /// by a binder transaction of its own.
+    pub fn take_delivery_frames(&mut self) -> Vec<Frame> {
         let mut pending = std::mem::take(&mut self.local_deliveries);
         pending.extend(self.host.take_deliveries());
         // Defence in depth: even the frames produced in one turn are bounded, so a

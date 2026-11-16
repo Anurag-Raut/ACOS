@@ -4652,6 +4652,30 @@ impl SessionBackend for ArtSession {
         self.modules.clone()
     }
 
+    fn service_ctl(
+        &mut self,
+        module: &str,
+        op: &str,
+        args: &serde_json::Value,
+    ) -> Result<serde_json::Value, BackendError> {
+        // The launcher's peer thread owns the module registry: the control op
+        // is a `services` command with `op: "ctl"`, and its own value comes
+        // back under `value` (a refusal is the peer's structured error).
+        let mut request = serde_json::json!({
+            "op": "ctl",
+            "id": module,
+            "module_op": op,
+        });
+        if !args.is_null() {
+            request["args"] = args.clone();
+        }
+        let reply = self.service_op(request)?;
+        if let Some(modules) = reply.get("modules").and_then(|v| v.as_array()) {
+            self.modules = modules.clone();
+        }
+        Ok(reply)
+    }
+
     fn mode(&self) -> Mode {
         // This engine launches a real Activity; `render-app` (offline preview)
         // is a different command and never reaches this adapter.

@@ -6487,10 +6487,37 @@ fn service_request(
                 "modules": modules.verdict_modules(),
             }))
         }
+        // ADR-0029 item 4: `acos_service_ctl` — drive a module's scripted
+        // state on the live session. The module mutates the host (deliveries,
+        // broadcasts) and its answer is the op's own value, never a fabricated
+        // success.
+        "ctl" => {
+            let (Some(id), Some(op)) = (
+                request.get("id").and_then(|v| v.as_str()),
+                request
+                    .get("module_op")
+                    .or_else(|| request.get("op"))
+                    .and_then(|v| v.as_str()),
+            ) else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "code": "BAD_REQUEST",
+                    "error": "ctl needs a string `id` and a string `module_op`",
+                });
+            };
+            let args = request.get("args").cloned().unwrap_or(serde_json::Value::Null);
+            modules
+                .control(peer.host_mut(), id, op, &args)
+                .map(|value| serde_json::json!({
+                    "id": id,
+                    "op": op,
+                    "value": value,
+                    "modules": modules.verdict_modules(),
+                }))
+        }
         other => {
             return serde_json::json!({
                 "ok": false, "cmd": "services", "code": "BAD_REQUEST",
-                "error": format!("unknown op {other:?}; use list, status, attach or detach"),
+                "error": format!("unknown op {other:?}; use list, status, attach, detach or ctl"),
             })
         }
     };
@@ -6530,6 +6557,20 @@ fn serve(
         while let Some((id, request)) = control.take() {
             let reply = service_request(peer, modules, &request);
             control.reply(id, reply);
+            // A live `ctl` op can queue `system -> app` deliveries (an SMS, a
+            // call-state event, an authentication result). No binder
+            // transaction follows to flush them, so do it here.
+            for out in peer.take_delivery_frames() {
+                if let Err(e) = write_frame(fd, &out) {
+                    eprintln!(
+                        "peer-trace: write_frame FAILED after control op: {e} (ty={} seq={} code={} data={})",
+                        out.ty, out.seq, out.code, out.data.len()
+                    );
+                    close_frame_fds(&out);
+                    return Err(e);
+                }
+                close_frame_fds(&out);
+            }
         }
         let frame: Frame = match read_frame(fd) {
             Ok(f) => f,

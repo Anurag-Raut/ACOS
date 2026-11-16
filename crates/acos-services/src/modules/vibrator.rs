@@ -94,6 +94,7 @@ fn manifest_ref() -> &'static ModuleManifest {
             name: SERVICE_NAME,
             descriptor: DESCRIPTOR,
         }],
+        features: &[],
         providers: &[],
         broadcasts: &[],
         windows: &[],
@@ -276,7 +277,7 @@ impl Module for VibratorModule {
         Ok(())
     }
 
-    fn control(&mut self, op: &str, _args: &Value) -> Result<Value> {
+    fn control(&mut self, _host: &mut ServiceHost, op: &str, _args: &Value) -> Result<Value> {
         let Some(state) = self.state.as_ref() else {
             return Err(ServiceError::ModuleRejected {
                 module: MODULE_ID,
