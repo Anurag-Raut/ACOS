@@ -70,6 +70,8 @@ pub mod provider;
 pub mod registry;
 pub mod surface_client;
 pub mod trace;
+// ADR-0031: the `webviewupdate` peer (`IWebViewUpdateService`).
+pub mod webview;
 pub mod value;
 pub mod window_session;
 pub mod wms;

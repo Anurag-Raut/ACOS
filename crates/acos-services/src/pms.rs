@@ -899,6 +899,10 @@ impl Default for FeatureTable {
         let mut t = Self {
             features: Vec::new(),
         };
+        // `android.software.webview` is deliberately absent from this static
+        // table: it is not a device constant but follows from whether the
+        // session has a WebView provider package installed (`PmsState::
+        // has_system_feature`, ADR-0031).
         for (name, enabled) in [
             ("android.hardware.touchscreen", true),
             ("android.hardware.touchscreen.multitouch", true),
@@ -908,7 +912,6 @@ impl Default for FeatureTable {
             ("android.hardware.vulkan.version", false),
             ("android.software.companion_device_setup", false),
             ("android.software.picture_in_picture", false),
-            ("android.software.webview", false),
             ("android.software.app_widgets", false),
             ("android.software.input_methods", false),
         ] {
@@ -930,6 +933,9 @@ impl FeatureTable {
     }
 
     /// Every feature the table declares, in declaration order.
+    ///
+    /// `android.software.webview` is not in the table: its answer is a package
+    /// fact ([`PmsState::has_system_feature`]), so it never appears here.
     #[must_use]
     pub fn declared(&self) -> Vec<(&str, bool)> {
         self.features
@@ -1443,6 +1449,32 @@ impl PmsState {
         }
     }
 
+    /// `PackageManager.hasSystemFeature(name)`.
+    ///
+    /// Almost every name is a constant of the device profile. One is not:
+    /// `android.software.webview` is true exactly when a WebView provider
+    /// package is installed in this session (ADR-0031 — the provider is an
+    /// ordinary system package, so the feature follows from the package table,
+    /// not from a flag). That is also what the framework then checks next:
+    /// `WebViewFactory.getProvider()` throws `UnsupportedOperationException`
+    /// when this is false, exactly as on a phone without a provider.
+    #[must_use]
+    pub fn has_system_feature(&self, name: &str) -> bool {
+        if name == crate::webview::WEBVIEW_FEATURE {
+            return self.has_webview_provider();
+        }
+        self.features.has(name)
+    }
+
+    /// Is a WebView provider package installed in this session?
+    ///
+    /// The provider is a system package baked into the session image, so the
+    /// test is the same package-table lookup any other package gets.
+    #[must_use]
+    pub fn has_webview_provider(&self) -> bool {
+        self.lookup(Some(crate::webview::PROVIDER_PACKAGE)).is_some()
+    }
+
     /// The installed record and provider declaring `authority`, if any.
     #[must_use]
     pub fn provider_for_authority(
@@ -1727,6 +1759,12 @@ impl ServiceObject for PmsService {
             "getPackageInfo" => {
                 let package = args.first().and_then(Value::as_str);
                 let flags = flags_arg(args, 1);
+                trace_query(
+                    "getPackageInfo",
+                    package.unwrap_or(""),
+                    flags,
+                    state.package().requested_permissions.len(),
+                );
                 let info = match Self::lookup(&state, package) {
                     Ok(record) => {
                         Self::cache(record);
@@ -1811,7 +1849,7 @@ impl ServiceObject for PmsService {
             }
             "hasSystemFeature" => {
                 let name = args.first().and_then(Value::as_str).unwrap_or_default();
-                vec![Value::Bool(state.features.has(name))]
+                vec![Value::Bool(state.has_system_feature(name))]
             }
             // `getSystemAvailableFeatures() : ParceledListSlice<FeatureInfo>`.
             // The answer is the declared feature table, so
@@ -1820,10 +1858,16 @@ impl ServiceObject for PmsService {
             // is listed that is not also answered true, and a `false` entry
             // stays absent (the platform omits disabled features).
             "getSystemAvailableFeatures" => {
+                // The webview feature is not a constant: it is present exactly
+                // when the provider package is installed (ADR-0031).
+                let webview = state
+                    .has_webview_provider()
+                    .then_some((crate::webview::WEBVIEW_FEATURE, true));
                 let items = state
                     .features
                     .declared()
                     .into_iter()
+                    .chain(webview)
                     .filter(|(_, enabled)| *enabled)
                     .map(|(name, _)| {
                         Value::Parcelable(Parcelable::ordered(
@@ -2072,6 +2116,34 @@ impl ServiceObject for PmsService {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `android.software.webview` is a package fact, not a device constant
+    /// (ADR-0031): the feature is false with no provider package installed —
+    /// which is what makes `WebViewFactory.getProvider()` throw the honest
+    /// `UnsupportedOperationException` — and true once the session image has
+    /// the provider package.
+    #[test]
+    fn webview_feature_follows_the_provider_package() {
+        let mut state = PmsState::hello_views();
+        assert!(
+            !state.has_system_feature(crate::webview::WEBVIEW_FEATURE),
+            "no provider package installed = no webview feature"
+        );
+        assert!(
+            !state.features.declared().iter().any(|(n, _)| *n == crate::webview::WEBVIEW_FEATURE),
+            "the static table must not claim the feature"
+        );
+
+        let mut record = state.packages[state.primary].clone();
+        record.package.package_name = crate::webview::PROVIDER_PACKAGE.into();
+        record.app.package_name = crate::webview::PROVIDER_PACKAGE.into();
+        record.package.application = record.app.clone();
+        state.packages.push(record);
+        assert!(
+            state.has_system_feature(crate::webview::WEBVIEW_FEATURE),
+            "the installed provider package is the feature"
+        );
+    }
 
     /// AOSP `parseBaseApplication` sets `FLAG_HAS_CODE` from
     /// `android:hasCode` (default `true`). Without it `LoadedApk.mIncludeCode`

@@ -352,11 +352,27 @@ pub fn install_with_handles_and_insets(
             ))) as Box<dyn ServiceObject>
         },
     );
+    // ADR-0031: the `webviewupdate` peer is wall 3 of
+    // `WebViewFactory.getProvider()` — `getUpdateService()` ->
+    // `ServiceManager.getService("webviewupdate")` -> a null service NPEs inside
+    // `waitForAndGetProvider()` and surfaces as
+    // `MissingWebViewPackageException`. It answers from the same package state
+    // `PackageManager` serves, so the provider record cannot drift from the
+    // package's own record; with no provider package installed it answers
+    // "no provider" (null record, non-OK status), never a fake success.
+    let pms_state = Arc::new(Mutex::new(crate::pms::PmsState::hello_views()));
+    let webviewupdate_state = Arc::clone(&pms_state);
     host.register("package", "android.content.pm.IPackageManager", move |w| {
-        let pms = Arc::new(Mutex::new(crate::pms::PmsState::hello_views()));
-        Box::new(crate::pms::PmsService::new(pms, w)) as Box<dyn ServiceObject>
+        Box::new(crate::pms::PmsService::new(Arc::clone(&pms_state), w))
+            as Box<dyn ServiceObject>
     });
-    host.register(
+    host.register_dynamic_named(
+        "webviewupdate",
+        crate::webview::DESCRIPTOR,
+        Box::new(crate::webview::WebViewUpdateService::new(
+            webviewupdate_state,
+        )),
+    );    host.register(
         "display",
         "android.hardware.display.IDisplayManager",
         move |_w| {

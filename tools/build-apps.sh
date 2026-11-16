@@ -241,6 +241,11 @@ build_apk pms-parcel
 # ACOS_ART_KEYPROBE_MODE (see results/compat/K5.md).
 build_apk keystore-probe
 
+# SPIKE-WV (ADR-0031 gate, research/spike-wv/): webview-probe creates a real
+# android.webkit.WebView and reports the exact outcome (uid, hasSystemFeature,
+# provider discovery, load, JS) into its UI tree and logcat tag WVProbe.
+build_apk webview-probe
+
 # insets-probe is the W7 window-model fixture: an edge-to-edge Activity that
 # prints the frame and the reported system-bar insets. It is the only fixture
 # built at targetSdk 35, the Android 15 edge-to-edge default.
