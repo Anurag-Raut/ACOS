@@ -541,6 +541,12 @@ fn a_provider_toggle_notifies_its_listeners_and_a_detached_module_is_honest() {
         .check_service("location")
         .expect("lookup")
         .expect("binder");
+    // ADR-0029 note (MODSENS): the attach fills `core`'s node, it does not replace
+    // it (a guest's `LocationManager` caches the proxy for the process's life).
+    assert_eq!(
+        binder, off_binder,
+        "an attach must reuse the binder core published, not register a new one"
+    );
     let listener = BinderId(0x1000_0004);
     transact(&mut host, binder, 3, |data| {
         data.write_string16("gps").expect("provider");
@@ -572,23 +578,36 @@ fn a_provider_toggle_notifies_its_listeners_and_a_detached_module_is_honest() {
     assert_eq!(body.read_string16().expect("provider").expect("p"), "gps");
     assert_eq!(body.read_int32().expect("enabled"), 0);
 
-    // Detach: the name goes back to the honest disabled device answer.
+    // Detach: the node is **emptied in place**, back to the honest disabled
+    // device answer. A handle the guest still holds keeps working on the same
+    // binder and now gets that answer — never a stale fix, never a dead handle.
     registry.detach(&mut host, "location").expect("detach");
-    // A handle the guest still holds answers the structured "module is off"
-    // error after the detach, never a bare unknown-handle service error.
-    let stale = transact(&mut host, binder, 1, write_last_location_request)
-        .expect_err("a stale handle must answer the structured error");
-    match &stale {
-        ServiceError::ModuleUnavailable { module, .. } => assert_eq!(*module, "location"),
-        other => panic!("expected ModuleUnavailable, got {other:?}"),
-    }
-    let off = host
+    let emptied = host
         .check_service("location")
         .expect("lookup")
-        .expect("the off node stays registered");
-    let error = transact(&mut host, off, 1, write_last_location_request)
-        .expect_err("the detached module must not answer a fix");
-    assert_eq!(error.code(), "UNSUPPORTED_ANDROID_API");
+        .expect("the node core published stays registered");
+    assert_eq!(
+        emptied, binder,
+        "a detach must empty the node in place, not free the binder"
+    );
+    let stale = transact(&mut host, binder, 1, write_last_location_request)
+        .expect_err("the emptied node must not answer a fix");
+    assert_eq!(stale.code(), "UNSUPPORTED_ANDROID_API");
+    match &stale {
+        ServiceError::UnsupportedAndroidApi { interface, method, .. } => {
+            assert_eq!(interface, "android.location.ILocationManager");
+            assert!(
+                method.contains("not attached") && method.contains("id\": \"location"),
+                "the disabled answer must name the module and the attach call: {method}"
+            );
+        }
+        other => panic!("expected the disabled-device answer, got {other:?}"),
+    }
+    // The geocoder truth is still answered on the same binder (a phone with
+    // location off has no geocoder provider either).
+    let mut reply = transact(&mut host, binder, 12, |_| {}).expect("geocoder presence");
+    assert_eq!(reply.read_int32().expect("header"), 0);
+    assert_eq!(reply.read_int32().expect("present"), 0);
     // Control on a detached module refuses (no fake success).
     assert!(matches!(
         registry.control(
@@ -599,4 +618,61 @@ fn a_provider_toggle_notifies_its_listeners_and_a_detached_module_is_honest() {
         ),
         Err(ServiceError::ModuleRejected { .. })
     ));
+}
+
+/// MODLOC3: `requestLocationUpdates(PendingIntent)` (transaction 5) is refused,
+/// and the refusal names the one thing it would need.
+///
+/// The image's own client is the evidence: `LocationPendingIntentTransport`
+/// (`services/classes2.dex`, class
+/// `Lcom/android/server/location/provider/LocationProviderManager$LocationPendingIntentTransport;`)
+/// builds `new Intent()`, `putExtra("location", lastLocation)` and
+/// `PendingIntentSender.send(pendingIntent, context, intent, …)` — the fix travels
+/// as the **fill-in** intent of `IIntentSender.send`, under
+/// `LocationManager.KEY_LOCATION_CHANGED`. MODNOTIF5 refuses a fill-in on a
+/// mutable sender (`Intent.fillIn` is not modelled) and drops it on an immutable
+/// one, so accepting this registration could only fire a sender with no fix or
+/// with a stale one. The step is refused; the LocationListener form is the
+/// supported path.
+#[test]
+fn the_pending_intent_form_is_refused_and_names_the_fill_in_it_needs() {
+    let (mut host, binder) = host_with(json!({}));
+    // A real `PendingIntent` parcel: the presence word, then the strong binder.
+    let sender = BinderId(0x1000_0005);
+    let error = transact(&mut host, binder, 5, |data| {
+        data.write_string16("gps").expect("provider");
+        write_location_request(data, "gps");
+        data.write_int32(1);
+        data.write_strong_binder(sender);
+        data.write_string16("dev.acos.fixtures.locationprobe")
+            .expect("package");
+        data.write_string16_opt(None).expect("attribution tag");
+    })
+    .expect_err("the pending-intent form must be refused, never accepted silently");
+    assert_eq!(error.code(), "UNSUPPORTED_ANDROID_API");
+    match &error {
+        ServiceError::UnsupportedAndroidApi {
+            interface,
+            code,
+            method,
+        } => {
+            assert_eq!(interface, DESCRIPTOR);
+            // The refusal reports the transaction the caller sent, not a made-up
+            // interface code.
+            assert_eq!(*code, 5);
+            assert!(
+                method.contains("KEY_LOCATION_CHANGED"),
+                "the refusal must name the extra the framework sends: {method}"
+            );
+            assert!(
+                method.contains("fill-in") && method.contains("PIFILLIN"),
+                "the refusal must name the fill-in merge it needs: {method}"
+            );
+            assert!(
+                method.contains("LocationListener"),
+                "the refusal must name the supported path: {method}"
+            );
+        }
+        other => panic!("expected UnsupportedAndroidApi, got {other:?}"),
+    }
 }

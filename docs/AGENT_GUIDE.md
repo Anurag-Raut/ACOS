@@ -501,6 +501,23 @@ lifecycle. What a module delivered is recorded in the session: `verdict.json` â†
 `modules[].reason` names the delivered fixes, and `ctl_op: "delivered"` returns
 the list itself.
 
+**A live attach/detach is visible through the app's own `LocationManager`.** The
+`location` name is published by `core` (the disabled-device answer) and the
+module fills that same binder (ADR-0029 note MODSENS), so an app that resolved
+`LocationManager` while the module was off still talks to the live module after
+`acos_services {"op": "attach", "id": "location", "profile": "scripted"}`,
+and a detach answers the honest disabled state again on the same handle. Before
+that fix the attach replaced the binder and the cached proxy kept answering the
+old node. Full scenario: `results/handoff/MODLOC3/location-live-attach.yaml`.
+
+**Honest limit: `requestLocationUpdates(PendingIntent)`** (`requestLocationUpdates`
+with a `PendingIntent`) is refused with `UNSUPPORTED_ANDROID_API`. The framework
+delivers the fix as the *fill-in* intent of `IIntentSender.send` (the image's
+`LocationPendingIntentTransport` puts the `Location` under
+`LocationManager.KEY_LOCATION_CHANGED`); merging a fill-in into the stored intent
+is not modelled yet (PIFILLIN), so firing that sender would carry no fix. Use
+the `LocationListener` form.
+
 `launch.activity` takes the same component spellings Android does, expanded
 before the launch gate runs: `com.example.app/.MainActivity` (a real
 `adb shell am start` component, `ComponentName.unflattenFromString`),
