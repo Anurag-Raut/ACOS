@@ -4678,3 +4678,48 @@ nothing in this change is on the tap path).
   peak vs the 256 MiB limit). INT-KG-AB recorded the same `launch_hang` flake on
   `main` and queued it as LHFLAKE.
 
+
+## E67 — `sensors` module: the native sensor service over a real `BitTube` — MEASURED
+
+- **Date / commit:** 2026-11-16, branch `modsens` (from `modules`).
+- **Question / goal:** can ACOS serve Android's **native** sensor stack (not a
+  Java system service) from a scripted feed, so `SensorManager`,
+  `SensorEventListener` and `flush()` work unchanged, and can a scenario drive it
+  mid-run?
+- **Method:** read the AOSP protocol (`libs/sensor/ISensorServer.cpp`,
+  `ISensorEventConnection.cpp`, `Sensor.cpp`, `SensorManager.cpp`,
+  `core/jni/android_hardware_SensorManager.cpp`) and pinned the image's
+  `sizeof(ASensorEvent) = 0x68` in `libsensor.so` (`SensorEventQueue::read`,
+  0x11dbd). Added `crates/acos-services/src/sensors.rs` (the node, the event
+  connection, the `BitTube` writer thread, the scripted hub), the `sensors`
+  module (`off`/`stub`/`scripted`, no `real`), a `service_ctl` scenario step and
+  the `ctl` op on the launcher's `services` command, plus the `sensor-probe`
+  fixture. ART runs under `run-exclusive` + `guarded` (12 GiB).
+- **Inputs:** `fixtures/build/apps/sensor-probe.apk` (built by
+  `tools/build-apps.sh`), `scenarios/sensors-scripted.yaml`,
+  `scenarios/sensors-off.yaml`; API-34 image.
+- **Result:** run 1 (before the padding fix) — the framework sensor list was
+  empty even with seven sensors served: the guest logged `Failed to read reply
+  from getSensorList`, because each flattened `Sensor` (145 B) must be padded to
+  `pad_size` (148 B). Run 2 — every step green: `sensors: 7`, the decoded
+  `Sensor` object in logcat, `accel: 1.5 -2.0 9.8`, `light: 1234`, `shake: 11`
+  (12 scripted samples → 11 sign flips), 317 recorded events, detach →
+  `attached = [core]`; `sensors-off.yaml` → `sensors: 0`.
+- **Finding:** the whole chain works: list → `createSensorEventConnection` →
+  `getSensorChannel` (two fds) → `enableDisable` → 104-byte `ASensorEvent`
+  packets at the requested period, on the same binder an app resolved before a
+  hot attach. Proven: byte layouts, delivery rate, on-change suppression, flush
+  meta event. Hypothesis left open: nothing.
+- **Fidelity / evidence:** `scripted` (never `real`; there is no sensor
+  hardware). `results/handoff/MODSENS/` (`verify.json`, `verify-off.json`,
+  `verdict-*.json`, `engine-*.json`, `logcat-*.txt`, `sensors-module-tests.log`,
+  `README.md`, `AOSP_DECISIONS.md`).
+- **Regression / false pass:** the W26 placeholder's reply carried an exception
+  word the client read as the count (harmless while empty); fixed, W26's test
+  updated with the reason. No false pass: the module has no `real` profile, the
+  report and verdict say `scripted`, and a detached module's control ops are
+  refused.
+- **Conclusion / next:** ships as `sensors` (`stub`/`scripted`). Next: a
+  dedicated `acos_service_ctl` MCP descriptor (the op exists today as
+  `acos_services {op: "ctl"}`), and a permission-gated delivery mode if the
+  permission module wants one.

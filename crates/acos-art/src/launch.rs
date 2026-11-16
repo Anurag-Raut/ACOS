@@ -6487,10 +6487,44 @@ fn service_request(
                 "modules": modules.verdict_modules(),
             }))
         }
+        "ctl" => {
+            // `acos_service_ctl` / a scenario `service_ctl` step: a module's own
+            // control op (`sensors.set_value`, `sensors.play`, ...). The module
+            // registry refuses a detached module, so a control can never look
+            // applied when the module is off.
+            let Some(id) = request.get("id").and_then(|v| v.as_str()) else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "op": "ctl", "code": "BAD_REQUEST",
+                    "error": "ctl needs a string `id`",
+                });
+            };
+            let Some(ctl_op) = request.get("ctl_op").and_then(|v| v.as_str()) else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "op": "ctl", "code": "BAD_REQUEST",
+                    "error": "ctl needs a string `ctl_op` (the module's control op)",
+                });
+            };
+            let args = request
+                .get("args")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            modules.control(id, ctl_op, &args).map(|reply| {
+                serde_json::json!({
+                    "module": id,
+                    "ctl_op": ctl_op,
+                    "reply": reply,
+                    "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
+                        "id": id,
+                        "profile": profile.as_str(),
+                    })).collect::<Vec<_>>(),
+                    "modules": modules.verdict_modules(),
+                })
+            })
+        }
         other => {
             return serde_json::json!({
                 "ok": false, "cmd": "services", "code": "BAD_REQUEST",
-                "error": format!("unknown op {other:?}; use list, status, attach or detach"),
+                "error": format!("unknown op {other:?}; use list, status, attach, detach or ctl"),
             })
         }
     };

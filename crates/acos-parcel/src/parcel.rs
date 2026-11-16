@@ -245,6 +245,27 @@ impl Parcel {
         self.write_int32(i32::from(v));
     }
 
+    /// Append `bytes` verbatim, **without** a length word and without padding.
+    ///
+    /// This is what a native `Flattenable` payload needs: `Parcel::write(const
+    /// Flattenable&)` is `writeInt32(flattenedSize)` followed by exactly
+    /// `flattenedSize` bytes, and the native `unflatten` walks those bytes field
+    /// by field — so the size must be exact (padding would desynchronise the
+    /// next object in the parcel). The sensor `Sensor` flatten is the case that
+    /// forced this: `libs/sensor/Sensor.cpp:534-559` mixes `String8` (4-byte
+    /// aligned) fields with a one-byte `bool`, so its payload only happens to be
+    /// 4-aligned.
+    ///
+    /// The bytes must not contain flat objects (no binder, no descriptor). It is
+    /// the caller's job to write the leading size when its own wire format needs
+    /// one.
+    pub fn write_raw_bytes(&mut self, bytes: &[u8]) {
+        let end = self.pos + bytes.len();
+        self.reserve(end);
+        self.data[self.pos..end].copy_from_slice(bytes);
+        self.pos = end;
+    }
+
     // ------------------------------------------------------------------
     // scalar readers
     // ------------------------------------------------------------------
@@ -352,6 +373,14 @@ impl Parcel {
     /// Strict `readChar` (UTF-16 code unit).
     pub fn read_char(&mut self) -> Result<u16> {
         Ok(self.read_int32()? as u16)
+    }
+
+    /// Read `len` bytes verbatim (the counterpart of [`Self::write_raw_bytes`]).
+    pub fn read_raw_bytes(&mut self, len: usize) -> Result<Vec<u8>> {
+        self.check(len)?;
+        let bytes = self.data[self.pos..self.pos + len].to_vec();
+        self.pos += len;
+        Ok(bytes)
     }
 
     // ------------------------------------------------------------------

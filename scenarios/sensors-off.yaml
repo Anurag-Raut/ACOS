@@ -1,0 +1,44 @@
+# MODSENS: the honest off state, as the app sees it.
+#
+# Same fixture, same APK, no `services:` at all: `sensorservice` is published by
+# `core` with no feed, which is the stock answer of a device without sensors. The
+# app's `getSensorList(TYPE_ALL)` is therefore empty and it registers no listener,
+# so the live rows stay at their initial `-`. Paired with `sensors-scripted.yaml`
+# this is the "detach -> honest empty sensor list" half of the module's proof.
+version: 1
+name: sensors-off
+description: >-
+  sensor-probe on ART with no sensor module: the framework sensor list is empty
+  because `sensorservice` has no feed, and no listener value ever arrives.
+app: fixtures/build/apps/sensor-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 640
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.sensorprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: sensor_count}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: sensor_count}
+      text: {exact: "sensors: 0"}
+  # No sensor row is listed at all: the names line is blank, so "no names" is a
+  # visible marker the tree can prove without an empty-string matcher.
+  - assert_not_visible:
+      selector: {id: accel_seen}
+  - assert_text:
+      selector: {id: accel}
+      text: {exact: "-"}

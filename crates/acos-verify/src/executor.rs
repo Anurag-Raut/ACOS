@@ -17,7 +17,9 @@ use acos_protocol::assertion::{
 };
 use acos_protocol::commands::ResetScope;
 use acos_protocol::events::{Event, EventBody};
-use acos_protocol::scenario::{Expectation, ExpectedError, Scenario, Step, StepRef, StepSettle};
+use acos_protocol::scenario::{
+    Expectation, ExpectedError, Scenario, ServiceCtlStep, Step, StepRef, StepSettle,
+};
 use acos_protocol::ui::Bounds;
 use acos_protocol::verdict::{
     AppIdentity, ArtifactRef, FailureClassification, Reproducer, ResourceReport, ScenarioIdentity,
@@ -31,7 +33,7 @@ use crate::assertions::{
 };
 use crate::backend::{
     Backend, BackendError, Capabilities, Capability, CrashRecord, EnvironmentChange, InputAction,
-    LaunchRequest, LogRecord, SessionObservation,
+    LaunchRequest, LogRecord, ServiceCtlRequest, SessionObservation,
 };
 use crate::clock::Clock;
 use crate::error::VerifyError;
@@ -1429,6 +1431,63 @@ fn execute_step(
             Capability::Environment,
             "call_activity_method requires an injected debug hook that this build does not provide",
         ),
+        StepRef::ServiceCtl(ctl) => service_ctl_step(backend, ctl),
+    }
+}
+
+/// ADR-0029 item 4: one `service_ctl` step (attach/detach/control).
+///
+/// A backend without the capability answers `unsupported` (never a pass); a
+/// module that refuses the operation (off module, unknown op, `real` profile it
+/// does not implement) is a **failed** step with the module's own structured
+/// message, because the scenario asked for something the session cannot do.
+fn service_ctl_step(backend: &mut dyn Backend, ctl: &ServiceCtlStep) -> StepExec {
+    let request = ServiceCtlRequest {
+        module: ctl.module.clone(),
+        op: ctl.op.clone(),
+        profile: ctl.profile.clone(),
+        config: ctl.config.clone(),
+        args: ctl.args.clone(),
+    };
+    match backend.service_ctl(&request) {
+        Ok(reply) => {
+            let mut exec = StepExec::pass();
+            let summary = summarize_reply(&reply);
+            // The reply is the step's evidence: a reviewer reads what the module
+            // actually applied (`scheduled=12`, `delivered_to=1`, the attached
+            // set after a detach), not only that the step did not fail.
+            exec.assertions.push(acos_protocol::assertion::AssertionResult {
+                kind: "service_ctl".to_string(),
+                passed: true,
+                expected: Some(serde_json::json!({
+                    "module": request.module,
+                    "op": request.kind(),
+                })),
+                actual: Some(reply),
+                diff: None,
+                matched_node_ids: Vec::new(),
+                message: Some(summary),
+            });
+            exec
+        }
+        Err(error) => StepExec::backend_error(&error, backend.id(), request.kind()),
+    }
+}
+
+/// A one-line summary of a `service_ctl` reply (evidence, never a pass claim).
+fn summarize_reply(reply: &serde_json::Value) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for key in ["attached", "scheduled", "delivered_to", "applied", "delivered", "connections"] {
+        if let Some(value) = reply.get(key) {
+            if !value.is_null() {
+                parts.push(format!("{key}={value}"));
+            }
+        }
+    }
+    if parts.is_empty() {
+        "ok".to_string()
+    } else {
+        parts.join(" ")
     }
 }
 

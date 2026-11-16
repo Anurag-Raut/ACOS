@@ -4652,6 +4652,17 @@ impl SessionBackend for ArtSession {
         self.modules.clone()
     }
 
+    /// ADR-0029 item 4: the `acos_services`/`acos_service_ctl` command, forwarded
+    /// to the launcher's peer thread that owns the module registry. Without this
+    /// forward every `service_ctl` step is `unsupported` (the trait default),
+    /// which would read as "this engine cannot" instead of the module's answer.
+    fn service_op(
+        &mut self,
+        request: serde_json::Value,
+    ) -> Result<serde_json::Value, BackendError> {
+        ArtSession::service_op(self, request)
+    }
+
     fn mode(&self) -> Mode {
         // This engine launches a real Activity; `render-app` (offline preview)
         // is a different command and never reaches this adapter.
@@ -4685,6 +4696,10 @@ impl SessionBackend for ArtSession {
             // Fatal guest log entries (ART LOG(FATAL)/CHECK/abort_message and
             // the JVM's `FATAL EXCEPTION` line) are a real crash signature.
             crash_reports: true,
+            // ADR-0029 item 4: the launcher's peer thread owns the module
+            // registry, so `service_ctl` is a command to it (attach/detach and
+            // a module's own control ops).
+            services: true,
         }
     }
 

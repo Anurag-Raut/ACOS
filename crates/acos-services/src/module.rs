@@ -1077,6 +1077,7 @@ impl ModuleRegistry {
         let mut registry = Self::new();
         for module in [
             Box::new(crate::core_module::CoreModule::new()) as Box<dyn Module>,
+            Box::new(crate::modules::sensors::SensorsModule::new()),
             Box::new(crate::modules::vibrator::VibratorModule::new()),
         ] {
             if let Err(error) = registry.add(module) {
@@ -1974,9 +1975,37 @@ pub mod conformance {
         // 2. attach (twice, so check 3 has a second cycle). The tombstones a
         // session installs are part of the baseline: a detached module must come
         // back to "its name answers a tombstone", not to "its name is null".
+        //
+        // A session always has `core`, and a module may legitimately fill a node
+        // `core` publishes (`sensors` fills `sensorservice`, so a hot attach does
+        // not invalidate the proxy an app already holds). The kit therefore runs
+        // against a real session host for every module but `core` itself, and
+        // records what each of the module's names answers *before* the attach:
+        // detach must restore that exact answer.
         let mut host = ServiceHost::new();
+        if module_id != "core" {
+            if let Err(error) = registry.attach(
+                &mut host,
+                "core",
+                Profile::Real,
+                &ModuleConfig::default(),
+            ) {
+                return Report {
+                    module: manifest.id,
+                    checks: vec![Check {
+                        name: "attach",
+                        pass: false,
+                        detail: format!("the session host could not attach core: {error}"),
+                    }],
+                };
+            }
+        }
         registry.install_tombstones(&mut host);
         let before = baseline(&host);
+        let before_answers: Vec<(&'static str, String)> = provides
+            .iter()
+            .map(|name| (*name, answer_tag(&mut host, name)))
+            .collect();
         let mut attach_ok = true;
         let mut attach_detail = String::new();
         for cycle in 0..2 {
@@ -2033,21 +2062,19 @@ pub mod conformance {
             detail: format!("baseline {before:?} after {after:?}"),
         });
 
-        // 4. honest report: nothing is served, nothing fakes success
+        // 4. honest report: nothing of the module is served, nothing fakes
+        // success. Each name must answer exactly what it answered before the
+        // attach: `null`, a tombstone, a `core` placeholder reply/error, or an
+        // error — but not the module's own answer.
         let mut honest = true;
         let mut honest_detail = String::new();
-        for name in &provides {
-            match host.check_service(name).ok().flatten() {
-                None => {}
-                Some(binder) => match transact_once(&mut host, binder) {
-                    Err(ServiceError::ModuleUnavailable { module, .. }) if module == module_id => {}
-                    other => {
-                        honest = false;
-                        honest_detail = format!(
-                            "detached module still answers {name:?}: {other:?} (expected null or a tombstone naming {module_id})"
-                        );
-                    }
-                },
+        for (name, before_answer) in &before_answers {
+            let after = answer_tag(&mut host, name);
+            if after != *before_answer {
+                honest = false;
+                honest_detail = format!(
+                    "detached module still answers {name:?} differently: {after} (before the attach it was {before_answer})"
+                );
             }
         }
         if honest {
@@ -2159,6 +2186,25 @@ pub mod conformance {
         Report {
             module: manifest.id,
             checks,
+        }
+    }
+
+    /// What a `ServiceManager` name answers right now, as a comparable tag.
+    ///
+    /// `null` (Android's own missing path), `tombstone:<module>` (a structured
+    /// `ModuleUnavailable`), `error:<code>` (any other structured refusal, e.g.
+    /// the stock `sensorservice` answering a truncated request) or `reply` (the
+    /// name served something). A module that changes the answer of a name it
+    /// provides and does not restore it on detach fails the kit.
+    fn answer_tag(host: &mut ServiceHost, name: &str) -> String {
+        match host.check_service(name) {
+            Ok(None) => "null".to_string(),
+            Ok(Some(binder)) => match transact_once(host, binder) {
+                Ok(_) => "reply".to_string(),
+                Err(ServiceError::ModuleUnavailable { module, .. }) => format!("tombstone:{module}"),
+                Err(error) => format!("error:{}", error.code()),
+            },
+            Err(error) => format!("error:{}", error.code()),
         }
     }
 

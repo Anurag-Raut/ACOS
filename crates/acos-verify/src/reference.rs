@@ -185,6 +185,7 @@ impl Backend for ReferenceBackend {
             reset: false,
             environment: false,
             crash_reports: false,
+            services: false,
         }
     }
 

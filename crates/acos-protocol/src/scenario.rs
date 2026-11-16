@@ -150,6 +150,15 @@ pub struct Step {
     /// debuggable/source-owned builds; never for arbitrary third-party APKs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call_activity_method: Option<CallActivityMethodStep>,
+    /// ADR-0029 item 4: one service-module operation in the middle of a run
+    /// (`attach`/`detach` a module, or a module control op such as
+    /// `sensors.set_value`).
+    ///
+    /// This is the scenario spelling of `acos_services`/`acos_service_ctl`, so a
+    /// scripted module can be driven between assertions instead of only at
+    /// launch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_ctl: Option<ServiceCtlStep>,
     /// ADR-0029 item 4/5: module ids this step needs attached (`feedback.vibrator`).
     ///
     /// A step whose module is `off` is `unsupported`, never `pass`: the executor
@@ -209,6 +218,8 @@ pub enum StepRef<'a> {
     SetTime(&'a TimeSetup),
     /// See [`Step::call_activity_method`].
     CallActivityMethod(&'a CallActivityMethodStep),
+    /// See [`Step::service_ctl`].
+    ServiceCtl(&'a ServiceCtlStep),
 }
 
 impl StepRef<'_> {
@@ -239,6 +250,7 @@ impl StepRef<'_> {
             StepRef::SetTheme(_) => "set_theme",
             StepRef::SetTime(_) => "set_time",
             StepRef::CallActivityMethod(_) => "call_activity_method",
+            StepRef::ServiceCtl(_) => "service_ctl",
         }
     }
 }
@@ -271,6 +283,7 @@ impl Step {
             self.set_theme.is_some(),
             self.set_time.is_some(),
             self.call_activity_method.is_some(),
+            self.service_ctl.is_some(),
         ]
         .into_iter()
         .filter(|present| *present)
@@ -359,6 +372,9 @@ impl Step {
                 .call_activity_method
                 .as_ref()
                 .map(StepRef::CallActivityMethod);
+        }
+        if self.service_ctl.is_some() {
+            return self.service_ctl.as_ref().map(StepRef::ServiceCtl);
         }
         None
     }
@@ -671,6 +687,33 @@ pub struct CallActivityMethodStep {
     #[serde(default)]
     pub args: Vec<Value>,
 }
+
+/// `service_ctl`: one service-module operation between assertions (ADR-0029
+/// item 4).
+///
+/// `op` is `attach` (with `profile`/`config`), `detach`, or one of the module's
+/// own control ops (`sensors.set_value`, `sensors.play`, ...). The step is the
+/// scenario spelling of `acos_services`/`acos_service_ctl`, so a scripted module
+/// can be driven mid-run: set a sensor value, assert the view, play a shake,
+/// detach and assert the honest empty answer.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceCtlStep {
+    /// Module id (`sensors`, `feedback.vibrator`).
+    pub module: String,
+    /// `attach`, `detach`, or a module control op (`set_value`, `play`, ...).
+    pub op: String,
+    /// Profile for `attach` (`off`/`stub`/`scripted`/`real`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// Module config for `attach`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config: Option<Value>,
+    /// Control-op arguments (`{sensor: "accelerometer", values: [0,0,9.81]}`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<Value>,
+}
+
 
 /// Artifact options.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1428,6 +1471,47 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                     &path,
                     "optional step: only valid for debuggable/source-owned builds with an injected test hook",
                 );
+            }
+            StepRef::ServiceCtl(ctl) => {
+                if ctl.module.trim().is_empty() {
+                    v.push(format!("{path}.module"), "module id must not be empty");
+                }
+                if ctl.op.trim().is_empty() {
+                    v.push(format!("{path}.op"), "op must not be empty");
+                }
+                if let Some(profile) = &ctl.profile {
+                    if !SERVICE_PROFILES.contains(&profile.as_str()) {
+                        v.push(
+                            format!("{path}.profile"),
+                            format!(
+                                "unknown profile {profile:?}; use one of {}",
+                                SERVICE_PROFILES.join(", ")
+                            ),
+                        );
+                    }
+                    if ctl.op != "attach" {
+                        v.push(
+                            format!("{path}.profile"),
+                            "`profile` only applies to op `attach`",
+                        );
+                    }
+                }
+                if let Some(config) = &ctl.config {
+                    if !config.is_object() {
+                        v.push(format!("{path}.config"), "config must be an object");
+                    }
+                    if ctl.op != "attach" {
+                        v.push(
+                            format!("{path}.config"),
+                            "`config` only applies to op `attach`",
+                        );
+                    }
+                }
+                if let Some(args) = &ctl.args {
+                    if !args.is_object() && !args.is_null() {
+                        v.push(format!("{path}.args"), "args must be an object");
+                    }
+                }
             }
         }
     }
