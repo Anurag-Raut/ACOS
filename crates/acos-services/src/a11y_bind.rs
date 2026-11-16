@@ -892,14 +892,30 @@ impl A11yConnectionNode {
             }
         };
         let events = crate::a11y_native::GestureStep::gesture_events(steps);
-        let channel_events = crate::a11y_native::channel_events(&events, 0, display_id);
+        // The stroke's clock starts now (the same `CLOCK_MONOTONIC` base a real
+        // `InputDispatcher` stamps events with) and every event keeps the
+        // guest's own offset from it, so a 200 ms swipe is a 200 ms event-time
+        // span even though the host publishes it in one turn.
+        let down_time_ns = crate::input_channel::monotonic_nanos();
+        let channel_events = crate::a11y_native::channel_events(&events, down_time_ns, display_id);
+        for event in &events {
+            let point = event.points.first().copied().unwrap_or((0.0, 0.0));
+            crate::trace::line(format!(
+                "ACOSA11Y dispatchGesture seq={sequence} t={} action={} at=({:.1},{:.1})",
+                event.time_ms, event.action, point.0, point.1
+            ));
+        }
         match state.publish_gesture(token, &channel_events) {
             Ok(()) => {
                 self.deliveries
                     .push(gesture_result_delivery(&bound, sequence, true));
                 crate::misc::A11yGestureRecord {
                     sequence,
-                    events: steps.len(),
+                    // The record counts the `MotionEvent`s the app received
+                    // (one per `GestureStep` point), which is what "the stroke
+                    // reached the list" means; `steps.len()` is the slice's
+                    // sampling, not the touch stream.
+                    events: events.len(),
                     delivered: true,
                     reason: None,
                 }

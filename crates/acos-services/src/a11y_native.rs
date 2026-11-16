@@ -559,14 +559,23 @@ pub const KEY_SCREENSHOT_TIMESTAMP: &str = "screenshot_timestamp";
 /// `AccessibilityService.TAKE_SCREENSHOT_SUCCESS`.
 pub const TAKE_SCREENSHOT_SUCCESS: i32 = 0;
 
-/// `PARAMETER_SCREENSHOT_STATUS`'s `VAL_INTEGER`.
-const VAL_INTEGER: i32 = 0;
-/// `VAL_LONG`.
-const VAL_LONG: i32 = 1;
-/// `VAL_PARCELABLE`.
-const VAL_PARCELABLE: i32 = 2;
+/// The `Parcel.writeValue` tags, from [`crate::parcelable::val`] — the image's
+/// own `Parcel.getValueType`/`isLengthPrefixed` values.
+///
+/// These were once hand-copied as `0/1/2`, which is `VAL_STRING`/`VAL_INTEGER`/
+/// `VAL_MAP`: the framework then read an integer payload as a string, a long as
+/// an int, and a parcelable as a length-prefixed map. Nothing reads a `Bundle`
+/// with invented tags.
+use crate::parcelable::val::{INTEGER as VAL_INTEGER, LONG as VAL_LONG, PARCELABLE as VAL_PARCELABLE};
 /// Android 14 `Bundle` magic (`"BNDL"`).
-const BUNDLE_MAGIC: i32 = 0x4e44_4c42;
+///
+/// The one definition lives in [`crate::parcelable`] and is shared here on
+/// purpose: a local copy of this constant once carried the two 16-bit halves
+/// swapped (`0x4e44_4c42`), so `BaseBundle.readFromParcelInner` read the magic
+/// word **as** the byte length (`1313098818`, not a multiple of 4) and threw
+/// `IllegalStateException("Bundle length is not aligned by 4")` inside the
+/// guest before any callback ran. One constant, one wire fact.
+const BUNDLE_MAGIC: i32 = crate::parcelable::BUNDLE_MAGIC as i32;
 
 /// Java's `String.hashCode` (the `ArrayMap` order `Bundle` writes entries in).
 fn java_string_hash(s: &str) -> i32 {
@@ -574,21 +583,72 @@ fn java_string_hash(s: &str) -> i32 {
         .fold(0i32, |h, c| h.wrapping_mul(31).wrapping_add(i32::from(c)))
 }
 
+
+/// Write one `VAL_PARCELABLE` value: the tag, the length of the value's body,
+/// then `writeParcelable(v, 0)`'s class name followed by the payload.
+///
+/// `Parcel.isLengthPrefixed` — read out of the image's own bytecode
+/// (`framework/classes3.dex`, `Landroid/os/Parcel;->isLengthPrefixed(I)Z`, its
+/// sparse-switch keys are `2, 4, 11, 12, 16, 17, 21`) — lists `VAL_PARCELABLE`
+/// (4) as length-prefixed, and `Parcel.readValue` consumes that word before
+/// `readParcelableInternal`. Without it every following entry is four bytes out
+/// of step, which is why the framework-side codec is written here as tags plus
+/// lengths rather than as a bare tag/value stream.
+fn write_parcelable_value(
+    parcel: &mut Parcel,
+    class: &str,
+    body: impl FnOnce(&mut Parcel) -> Result<()>,
+) -> Result<()> {
+    parcel.write_int32(VAL_PARCELABLE);
+    let length_at = parcel.data_size();
+    parcel.write_int32(0);
+    let start = parcel.data_size();
+    parcel.write_string16(class)?;
+    body(parcel)?;
+    let end = parcel.data_size();
+    let length = i32::try_from(end - start).map_err(|_| {
+        bad_reply(
+            "takeScreenshot",
+            format!("a {class} payload of {} bytes does not fit an int", end - start),
+        )
+    })?;
+    parcel.set_data_position(length_at);
+    parcel.write_int32(length);
+    parcel.set_data_position(end);
+    Ok(())
+}
+
 /// Write the failure `Bundle` of `sendScreenshotFailure`.
 pub fn write_failure_bundle(parcel: &mut Parcel, status: i32) -> Result<()> {
-    let entries = [(KEY_SCREENSHOT_STATUS, VAL_INTEGER)];
-    let _ = entries;
     let start = parcel.data_size();
-    parcel.write_int32(0);
+    // `BaseBundle.writeToParcelInner` starts with its `-1` placeholder and
+    // back-patches the payload length after the entries.
+    parcel.write_int32(-1);
     parcel.write_int32(BUNDLE_MAGIC);
     let payload_start = parcel.data_size();
     parcel.write_int32(1);
     parcel.write_string16(KEY_SCREENSHOT_STATUS)?;
     parcel.write_int32(VAL_INTEGER);
     parcel.write_int32(status);
+    backpatch_bundle_length(parcel, start, payload_start)
+}
+
+/// Back-patch `BaseBundle.writeToParcelInner`'s length word: the payload only
+/// (the `ArrayMap` entries after the magic), exactly the count
+/// `readFromParcelInner` advances by.
+fn backpatch_bundle_length(parcel: &mut Parcel, start: usize, payload_start: usize) -> Result<()> {
     let end = parcel.data_size();
+    let length = i32::try_from(end - payload_start).map_err(|_| {
+        bad_reply(
+            "takeScreenshot",
+            format!(
+                "a bundle payload of {} bytes does not fit an int",
+                end - payload_start
+            ),
+        )
+    })?;
     parcel.set_data_position(start);
-    parcel.write_int32(i32::try_from(end - payload_start).unwrap_or(0));
+    parcel.write_int32(length);
     parcel.set_data_position(end);
     Ok(())
 }
@@ -600,38 +660,48 @@ pub fn write_success_bundle(
     frame: &ScreenshotFrame,
     capture_time_ms: i64,
 ) -> Result<()> {
-    let entries: [(&str, i32); 4] = [
-        (KEY_SCREENSHOT_STATUS, VAL_INTEGER),
-        (KEY_SCREENSHOT_HARDWAREBUFFER, VAL_PARCELABLE),
-        (KEY_SCREENSHOT_COLORSPACE, VAL_PARCELABLE),
-        (KEY_SCREENSHOT_TIMESTAMP, VAL_LONG),
+    let keys = [
+        KEY_SCREENSHOT_STATUS,
+        KEY_SCREENSHOT_HARDWAREBUFFER,
+        KEY_SCREENSHOT_COLORSPACE,
+        KEY_SCREENSHOT_TIMESTAMP,
     ];
-    let mut ordered: Vec<(&str, i32)> = entries.to_vec();
-    ordered.sort_by_key(|(key, _)| java_string_hash(key));
+    let mut ordered = keys.to_vec();
+    ordered.sort_by_key(|key| java_string_hash(key));
     let start = parcel.data_size();
-    parcel.write_int32(0);
+    parcel.write_int32(-1);
     parcel.write_int32(BUNDLE_MAGIC);
     let payload_start = parcel.data_size();
-    parcel.write_int32(i32::try_from(ordered.len()).unwrap_or(0));
-    for (key, tag) in ordered {
+    parcel.write_int32(i32::try_from(ordered.len()).map_err(|_| {
+        bad_reply(
+            "takeScreenshot",
+            "the screenshot bundle has more entries than an int can carry",
+        )
+    })?);
+    for key in ordered {
         parcel.write_string16(key)?;
-        parcel.write_int32(tag);
         match key {
-            KEY_SCREENSHOT_STATUS => parcel.write_int32(TAKE_SCREENSHOT_SUCCESS),
+            KEY_SCREENSHOT_STATUS => {
+                parcel.write_int32(VAL_INTEGER);
+                parcel.write_int32(TAKE_SCREENSHOT_SUCCESS);
+            }
             KEY_SCREENSHOT_HARDWAREBUFFER => {
-                // `Parcel.writeValue`'s VAL_PARCELABLE branch is
-                // `writeParcelable(v, 0)`: the class name then the payload
-                // (`android.os.Parcel`, `readParcelableInternal`).
-                parcel.write_string16("android.hardware.HardwareBuffer")?;
-                write_screenshot_buffer(parcel, frame)?;
+                write_parcelable_value(parcel, "android.hardware.HardwareBuffer", |parcel| {
+                    write_screenshot_buffer(parcel, frame)
+                })?;
             }
             KEY_SCREENSHOT_COLORSPACE => {
-                parcel.write_string16("android.graphics.ParcelableColorSpace")?;
-                // `ParcelableColorSpace.writeToParcel`: the `ColorSpace.getId()`
-                // for a named space, and nothing else.
-                parcel.write_int32(COLOR_SPACE_SRGB);
+                write_parcelable_value(parcel, "android.graphics.ParcelableColorSpace", |parcel| {
+                    // `ParcelableColorSpace.writeToParcel`: the `ColorSpace
+                    // .getId()` for a named space, and nothing else.
+                    parcel.write_int32(COLOR_SPACE_SRGB);
+                    Ok(())
+                })?;
             }
-            KEY_SCREENSHOT_TIMESTAMP => parcel.write_int64(capture_time_ms),
+            KEY_SCREENSHOT_TIMESTAMP => {
+                parcel.write_int32(VAL_LONG);
+                parcel.write_int64(capture_time_ms);
+            }
             _ => {
                 return Err(bad_reply(
                     "takeScreenshot",
@@ -640,9 +710,5 @@ pub fn write_success_bundle(
             }
         }
     }
-    let end = parcel.data_size();
-    parcel.set_data_position(start);
-    parcel.write_int32(i32::try_from(end - payload_start).unwrap_or(0));
-    parcel.set_data_position(end);
-    Ok(())
+    backpatch_bundle_length(parcel, start, payload_start)
 }

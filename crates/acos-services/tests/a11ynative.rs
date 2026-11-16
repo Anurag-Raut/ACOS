@@ -18,6 +18,7 @@ use acos_services::a11y_native::{
     self, GRAPHIC_BUFFER_MAGIC, PIXEL_FORMAT_RGBA_8888, SCREENSHOT_USAGE, TAKE_SCREENSHOT_SUCCESS,
 };
 use acos_services::misc::A11yState;
+use acos_services::value::Value;
 
 // ---------------------------------------------------------------------------
 // dispatchGesture: a captured parcel from a live ART run
@@ -194,11 +195,47 @@ fn frame() -> a11y_native::ScreenshotFrame {
 }
 
 /// Read the `[length][magic][count]` header of a `Bundle` body.
+///
+/// The magic is the framework's own `BaseBundle.BUNDLE_MAGIC`; comparing with
+/// [`acos_services::parcelable::BUNDLE_MAGIC`] (instead of a literal) is what
+/// keeps this test from blessing a wrong constant: the guest reads the magic
+/// word as the payload length and refuses a value that is not a multiple of 4.
 fn bundle_header(parcel: &mut Parcel) -> i32 {
     let _length = parcel.read_int32().expect("length");
     let magic = parcel.read_int32().expect("magic");
-    assert_eq!(magic as u32, 0x4e44_4c42, "BUNDLE_MAGIC");
+    assert_eq!(
+        magic as u32,
+        acos_services::parcelable::BUNDLE_MAGIC,
+        "BUNDLE_MAGIC"
+    );
     parcel.read_int32().expect("count")
+}
+
+/// The failure `Bundle` must decode with the framework reader ACOS already
+/// models (`BaseBundle.readFromParcelInner`: length, magic, `ArrayMap` size).
+///
+/// This is the regression test for the screenshot delivery bug: with the magic
+/// written as `0x4e44_4c42` the reader takes that word as the length, answers
+/// `not aligned by 4`, and the app's `TakeScreenshotCallback` never runs.
+#[test]
+fn the_failure_bundle_decodes_with_the_framework_bundle_reader() {
+    let mut parcel = Parcel::new();
+    a11y_native::write_failure_bundle(&mut parcel, 6).expect("writes");
+    parcel.set_data_position(0);
+    let bundle = acos_services::parcelable::read_bundle(&mut parcel)
+        .expect("the framework's own Bundle reader accepts the payload")
+        .expect("a non-null Bundle");
+    assert_eq!(bundle.len(), 1, "one entry: screenshot_status");
+    assert_eq!(
+        bundle.get("screenshot_status").and_then(Value::as_int),
+        Some(6),
+        "ERROR_TAKE_SCREENSHOT_SECURE_WINDOW"
+    );
+    assert_eq!(
+        parcel.remaining(),
+        0,
+        "the reader consumed the whole Bundle"
+    );
 }
 
 #[test]
@@ -211,7 +248,11 @@ fn the_failure_bundle_carries_the_error_code_the_callback_reads() {
         parcel.read_string16().expect("key").as_deref(),
         Some("screenshot_status")
     );
-    assert_eq!(parcel.read_int32().expect("tag"), 0, "VAL_INTEGER");
+    assert_eq!(
+        parcel.read_int32().expect("tag"),
+        acos_services::parcelable::val::INTEGER,
+        "VAL_INTEGER is 1 in the image's Parcel.getValueType"
+    );
     assert_eq!(parcel.read_int32().expect("status"), 6);
 }
 
@@ -234,18 +275,29 @@ fn the_success_bundle_carries_a_flattened_graphic_buffer_over_a_memfd() {
         let tag = parcel.read_int32().expect("tag");
         match key.as_str() {
             "screenshot_status" => {
-                assert_eq!(tag, 0, "VAL_INTEGER");
+                assert_eq!(tag, acos_services::parcelable::val::INTEGER, "VAL_INTEGER");
                 assert_eq!(
                     parcel.read_int32().expect("status"),
                     TAKE_SCREENSHOT_SUCCESS
                 );
             }
             "screenshot_timestamp" => {
-                assert_eq!(tag, 1, "VAL_LONG");
+                assert_eq!(tag, acos_services::parcelable::val::LONG, "VAL_LONG");
                 assert_eq!(parcel.read_int64().expect("timestamp"), 12_345);
             }
             "screenshot_colorSpace" => {
-                assert_eq!(tag, 2, "VAL_PARCELABLE");
+                assert_eq!(
+                    tag,
+                    acos_services::parcelable::val::PARCELABLE,
+                    "VAL_PARCELABLE"
+                );
+                // `Parcel.isLengthPrefixed(VAL_PARCELABLE)` is true, so the
+                // framework reads a value length before the class name.
+                let length = parcel.read_int32().expect("value length");
+                assert!(
+                    length > 0 && length % 4 == 0,
+                    "a length-prefixed value is 4-byte aligned, got {length}"
+                );
                 assert_eq!(
                     parcel.read_string16().expect("class").as_deref(),
                     Some("android.graphics.ParcelableColorSpace")
@@ -253,7 +305,12 @@ fn the_success_bundle_carries_a_flattened_graphic_buffer_over_a_memfd() {
                 assert_eq!(parcel.read_int32().expect("ColorSpace id"), 1, "SRGB");
             }
             "screenshot_hardwareBuffer" => {
-                assert_eq!(tag, 2, "VAL_PARCELABLE");
+                assert_eq!(
+                    tag,
+                    acos_services::parcelable::val::PARCELABLE,
+                    "VAL_PARCELABLE"
+                );
+                let _length = parcel.read_int32().expect("value length");
                 assert_eq!(
                     parcel.read_string16().expect("class").as_deref(),
                     Some("android.hardware.HardwareBuffer")

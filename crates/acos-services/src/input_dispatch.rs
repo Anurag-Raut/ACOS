@@ -351,7 +351,13 @@ impl InputDispatch {
             let Some(publisher) = self.registry.publisher_mut(token) else {
                 return Err(ChannelError::Io("input channel vanished".into()));
             };
-            match publisher.publish_motion(event) {
+            // A stroke is many events: each one carries its own `eventId`, like
+            // the dispatcher's own allocation (`inject_tap` does the same), so
+            // the guest's `InputEventReceiver` never sees two `FINISHED` acks
+            // for one id.
+            let mut event = event.clone();
+            event.event_id = publisher.allocate_event_id();
+            match publisher.publish_motion(&event) {
                 Ok(dispatch) => {
                     self.events.push(InputEvent::Published {
                         token,

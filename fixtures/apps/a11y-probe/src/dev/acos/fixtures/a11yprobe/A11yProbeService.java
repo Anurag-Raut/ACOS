@@ -105,6 +105,14 @@ public class A11yProbeService extends AccessibilityService {
     private void probe() {
         Log.i(TAG, "probe_start pid=" + Process.myPid()
                 + " tid=" + Thread.currentThread().getId());
+        // MODA11YNATIVE2: the display facts the gesture path is sampled
+        // against. `AccessibilityService.calculateGestureSampleTimeMs` divides
+        // 1000 by `Display.getRefreshRate()`, and a gesture is sampled into
+        // one `GestureStep` per sample — so a `0 Hz` display collapses a swipe
+        // to its press/release key points and no `MOVE` ever reaches the app.
+        // That is a display-fidelity fact, not a probe detail, so it is logged
+        // and asserted before anything uses the gesture stream.
+        logDisplay();
 
         List<AccessibilityWindowInfo> windows = null;
         int attempts = 0;
@@ -465,6 +473,39 @@ public class A11yProbeService extends AccessibilityService {
             added.await(5, java.util.concurrent.TimeUnit.SECONDS);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Log the display facts `dispatchGesture` is sampled against.
+     *
+     * <p>`AccessibilityService.calculateGestureSampleTimeMs` is
+     * `(int)(1000 / Display.getRefreshRate())` for a `targetSdk > Q` app, and
+     * `MotionEventGenerator` emits one `GestureStep` per sample between a
+     * stroke's key points. A display that reports `0 Hz` therefore turns a
+     * 200 ms swipe into two steps (press, release) and **no** `MOVE` ever
+     * reaches the app — a real device reports 60/90/120, never 0. The values
+     * are logged because they are the difference between a scrolling list and
+     * a stationary one, and the scenario asserts them.
+     */
+    private void logDisplay() {
+        try {
+            android.hardware.display.DisplayManager dm =
+                    (android.hardware.display.DisplayManager) getSystemService(DISPLAY_SERVICE);
+            android.view.Display display =
+                    dm == null ? null : dm.getDisplay(android.view.Display.DEFAULT_DISPLAY);
+            if (display == null) {
+                Log.i(TAG, "display null");
+                return;
+            }
+            android.view.Display.Mode mode = display.getMode();
+            Log.i(TAG, "display id=" + display.getDisplayId()
+                    + " refresh_rate=" + display.getRefreshRate()
+                    + " mode_id=" + (mode == null ? -1 : mode.getModeId())
+                    + " mode_rate=" + (mode == null ? 0f : mode.getRefreshRate())
+                    + " modes=" + display.getSupportedModes().length);
+        } catch (Throwable failure) {
+            Log.i(TAG, "display error=" + failure);
         }
     }
 

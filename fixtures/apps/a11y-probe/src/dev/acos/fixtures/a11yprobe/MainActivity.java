@@ -91,6 +91,20 @@ public class MainActivity extends Activity {
         findViewById(R.id.swatch).setBackgroundColor(Color.rgb(0x33, 0x66, 0xCC));
 
         Button target = (Button) findViewById(R.id.click_target);
+        // MODA11YNATIVE2: which API reports which label. `getText()` is the
+        // ORIGINAL string, and that is what `AccessibilityNodeInfo.getText()`
+        // exposes (`TextView.getTextForAccessibility()` returns `getText()`).
+        // The label the user *sees* is the one `TextView` draws, i.e. the text
+        // after its transformation method — framework-res sets
+        // `config_buttonTextAllCaps=true`, so a Button's `AllCapsTransformation
+        // Method` upper-cases it. Both values are logged (and the scenario
+        // asserts both, each with the case its API really has) so a future
+        // "the button says CLICK TARGET" claim has to name the API it means.
+        CharSequence rawText = target.getText();
+        CharSequence drawnText = target.getTransformationMethod() == null
+                ? rawText
+                : target.getTransformationMethod().getTransformation(rawText, target);
+        Log.i(TAG, "button_text a11y=" + rawText + " drawn=" + drawnText);
         target.setOnClickListener(v -> {
             clicks++;
             Log.i(TAG, "click_target_pressed count=" + clicks);
