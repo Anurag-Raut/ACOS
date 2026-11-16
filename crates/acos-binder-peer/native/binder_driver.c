@@ -112,17 +112,18 @@ static int g_dbg = -1;
 // so a dropped callback always leaves a record an agent can read back with
 // `acos_logs`; resolve the liblog symbol lazily so a host build of this file
 // (the driver unit test) works without liblog.
-static void warn_log(const char* fmt, ...) {
-    va_list ap;
-    va_start(ap, fmt);
-    dprintf(2, "E3G[warn]: ");
-    vdprintf(2, fmt, ap);
-    dprintf(2, "\n");
-    va_end(ap);
-
-    typedef int (*log_print_fn)(int, const char*, const char*, ...);
-    static log_print_fn log_print;
-    if (log_print == NULL) {
+static void logd_print(int prio, const char* fmt, va_list ap) {
+    // `__android_log_vprint`, never `__android_log_print(prio, tag, fmt, ap)`:
+    // the latter is variadic, so passing a `va_list` as its single vararg
+    // consumes the *va_list pointer* as the first `%` argument and every later
+    // argument out of whatever happens to be in the next register. The driver
+    // used to do exactly that, and the logd copy of every warning with
+    // arguments was garbage (`transaction buffer exhausted (139818998707856/
+    // 139831030787232 used, -198541192 blocks)`) while the stderr copy was
+    // correct. Evidence read back with `acos_logs` must be the real values.
+    typedef int (*log_vprint_fn)(int, const char*, const char*, va_list);
+    static log_vprint_fn log_vprint;
+    if (log_vprint == NULL) {
         // Not cached when missing: liblog may only be loaded later (the driver
         // is LD_PRELOADed before libbinder pulls in liblog), and libbinder's
         // dependencies are not in the global symbol group, so `RTLD_DEFAULT`
@@ -133,20 +134,53 @@ static void warn_log(const char* fmt, ...) {
             if (log_so == NULL) log_so = dlopen("liblog.so", RTLD_NOW | RTLD_GLOBAL);
         }
         if (log_so != NULL)
-            log_print = (log_print_fn)dlsym(log_so, "__android_log_print");
-        if (log_print == NULL)
-            log_print = (log_print_fn)dlsym(RTLD_DEFAULT, "__android_log_print");
+            log_vprint = (log_vprint_fn)dlsym(log_so, "__android_log_vprint");
+        if (log_vprint == NULL)
+            log_vprint = (log_vprint_fn)dlsym(RTLD_DEFAULT, "__android_log_vprint");
     }
-    if (log_print != NULL) {
-        va_start(ap, fmt);
-        log_print(5 /* ANDROID_LOG_WARN */, "acos-binder", fmt, ap);
-        va_end(ap);
-    }
+    if (log_vprint != NULL) log_vprint(prio, "acos-binder", fmt, ap);
+}
+
+static void warn_log(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    dprintf(2, "E3G[warn]: ");
+    vdprintf(2, fmt, ap);
+    dprintf(2, "\n");
+    va_end(ap);
+
+    va_start(ap, fmt);
+    logd_print(5 /* ANDROID_LOG_WARN */, fmt, ap);
+    va_end(ap);
+}
+
+// Reference-model trace. The driver's *only* window into libbinder's half of the
+// node-ref handshake is what libbinder acks (BC_INCREFS_DONE/BC_ACQUIRE_DONE)
+// and what it answers (the F_REP to a delivery), and the guest's stderr is not
+// captured for a live session. So the trace goes to logd and is switched on
+// with E3G_DEBUG (which the launcher already forwards), never on by default.
+static void trace_log(const char* fmt, ...) {
+    static int on = -1;
+    if (on < 0) on = getenv("E3G_DEBUG") != NULL;
+    if (!on) return;
+    va_list ap;
+    va_start(ap, fmt);
+    dprintf(2, "E3G: ");
+    vdprintf(2, fmt, ap);
+    dprintf(2, "\n");
+    va_end(ap);
+    va_start(ap, fmt);
+    logd_print(4 /* ANDROID_LOG_DEBUG-connected: INFO */, fmt, ap);
+    va_end(ap);
 }
 
 #define WARN(...)                        \
     do {                                 \
         warn_log(__VA_ARGS__);           \
+    } while (0)
+#define TRACE(...)                       \
+    do {                                 \
+        trace_log(__VA_ARGS__);          \
     } while (0)
 
 // Crash reporter (defined next to the JNI bridge, below): the sandbox has no
@@ -412,8 +446,9 @@ static void node_ref_cmds(uint64_t weakref, uint64_t cookie) {
     cmd = BR_ACQUIRE;
     pend_append(&cmd, 4);
     pend_append(&pc, sizeof(pc));
-    DBG("node refs: BR_INCREFS+BR_ACQUIRE weakref=%llx cookie=%llx",
-        (unsigned long long)weakref, (unsigned long long)cookie);
+    TRACE("tid=%d node refs: BR_INCREFS+BR_ACQUIRE weakref=%llx cookie=%llx",
+          (int)syscall(__NR_gettid), (unsigned long long)weakref,
+          (unsigned long long)cookie);
 }
 
 // ----------------------------------------------------------- (2) object table
@@ -465,8 +500,9 @@ static uint32_t node_wire_for(uint64_t binder, uint64_t cookie) {
     n->wire = g.next_wire++;
     uint32_t wire = n->wire;
     pthread_mutex_unlock(&g_obj_mu);
-    DBG("node: local binder=%llx cookie=%llx -> wire=%u", (unsigned long long)binder,
-        (unsigned long long)cookie, wire);
+    TRACE("tid=%d node: local binder=%llx cookie=%llx -> wire=%u (nodes=%d)",
+          (int)syscall(__NR_gettid), (unsigned long long)binder, (unsigned long long)cookie, wire,
+          g.n_nodes);
     // Root the node before anybody can deliver to it (see node_ref_cmds).
     node_ref_cmds(binder, cookie);
     return wire;
@@ -623,23 +659,38 @@ static int xform_objects(uint8_t* data, size_t dsize, uint8_t* offs, size_t osiz
 
 // ------------------------------------------------- (3) transaction-buffer heap
 //
+// This is the driver's half of the transaction buffer space: the memfd that
+// stands in for `/dev/binder` is `BINDER_VM_SIZE` bytes, exactly the process's
+// binder mapping, and libbinder hands the pointers `mm_alloc` returns straight
+// to the receiver (`BR_TRANSACTION`/`BR_REPLY` -> `Parcel::ipcSetDataReference`).
+//
 // One heap, many threads: the caller's reply path (`build_reply`, and the copy
 // `e3g_write_read` makes of an F_RSP) runs on whatever thread transacted, while
-// `deliver_incoming` runs on a looper thread.  Every mutation of the bump
-// pointer and of the block table is under `g_slab_mu`; without it two threads
-// read the same `g_bump`, get the *same* offset, and the second writer
-// overwrites a parcel libbinder is still decoding (the `parcel underflow` /
-// stalled `transactNative` seen once a session has enough traffic to keep both
-// paths busy).
+// `deliver_incoming` runs on a looper thread.  Every mutation of the block table
+// is under `g_slab_mu`; without it two threads read the same bump pointer, get
+// the *same* offset, and the second writer overwrites a parcel libbinder is
+// still decoding (the `parcel underflow` / stalled `transactNative` seen once a
+// session has enough traffic to keep both paths busy).
+//
+// Space is *reclaimed*: `BC_FREE_BUFFER` is the receiver's release of the
+// buffer (`IPCThreadState::freeBuffer`, run from the received Parcel's
+// destructor), so from that point the bytes are free, exactly as in the
+// kernel's `binder_alloc_free_buf`.  Two revisions of this file got that wrong
+// in opposite directions: E3G's original bump allocator reused nothing (a
+// session that registers 100 listeners exhausted the 1 MB map and the driver
+// then dropped every later transaction and reply), and the intermediate fix
+// allocated monotonically on purpose (safe, but still never reclaimed, so the
+// same wall arrived after ~3000 transactions).  Allocation is first-fit over
+// freed blocks, split on use and coalesced on free, with the high-water mark as
+// the last resort.
 struct blk { size_t off, size; int used; };
 static struct blk* g_blk;
 static int g_nblk, g_blk_cap;
 static size_t g_bump;
 
-// Grow the block table to hold `want` entries.  Blocks are only bookkeeping
-// (allocation is monotonic, see `mm_alloc`), so a full table never blocks an
-// allocation; it only means a free can no longer be matched.  The cap keeps the
-// table proportional to the 1 MB mapping (8-byte minimum block).
+// Grow the block table to hold `want` entries.  A full table means a free can no
+// longer be matched (leaking that block); it never blocks an allocation.  The
+// cap keeps the table proportional to the 1 MB mapping (8-byte minimum block).
 static int blk_reserve_locked(int want) {
     if (want <= g_blk_cap) return 1;
     int cap = g_blk_cap ? g_blk_cap * 2 : 256;
@@ -653,39 +704,74 @@ static int blk_reserve_locked(int want) {
     return 1;
 }
 
-static void* mm_alloc(size_t n) {
-    n = (n + 7) & ~(size_t)7;
-    // Monotonic allocation: the kernel may reuse a freed transaction buffer,
-    // but a userspace driver cannot prove libbinder has dropped every reference
-    // to the old contents at the moment BC_FREE_BUFFER arrives.  The mapping is
-    // 1 MB and a delivered transaction is a few hundred bytes, so never reusing
-    // a block is both safe and cheap (E3G's race came from premature reuse).
-    pthread_mutex_lock(&g_slab_mu);
-    if (g_bump + n > g.map_size) {
-        pthread_mutex_unlock(&g_slab_mu);
-        WARN("transaction buffer exhausted (%zu/%zu used, %d blocks) - this transaction is "
-             "dropped", g_bump, g.map_size, g_nblk);
-        return NULL;
-    }
-    size_t off = g_bump;
-    g_bump += n;
-    if (blk_reserve_locked(g_nblk + 1)) {
-        g_blk[g_nblk].off = off;
-        g_blk[g_nblk].size = n;
-        g_blk[g_nblk].used = 1;
-        g_nblk++;
-    } else if (g_nblk < g_blk_cap) {
-        // cannot happen (reserve either grows or fails), kept explicit
-        WARN("transaction block table full (%d entries); frees of older buffers will be "
-             "unmatched", g_blk_cap);
-    } else {
+// Insert an entry at index `at` (the table is kept sorted by offset).
+static void blk_insert_locked(int at, size_t off, size_t size, int used) {
+    if (!blk_reserve_locked(g_nblk + 1)) {
         static int warned;
         if (!warned) {
             warned = 1;
             WARN("transaction block table full (%d entries); frees of older buffers will be "
                  "unmatched", g_blk_cap);
         }
+        return;
     }
+    memmove(&g_blk[at + 1], &g_blk[at], sizeof(g_blk[0]) * (size_t)(g_nblk - at));
+    g_blk[at].off = off;
+    g_blk[at].size = size;
+    g_blk[at].used = used;
+    g_nblk++;
+}
+
+// Index of the block starting at `off`, or -1.
+static int blk_index_locked(size_t off) {
+    int lo = 0, hi = g_nblk - 1;
+    while (lo <= hi) {
+        int mid = (lo + hi) / 2;
+        if (g_blk[mid].off == off) return mid;
+        if (g_blk[mid].off < off) lo = mid + 1;
+        else hi = mid - 1;
+    }
+    return -1;
+}
+
+static size_t mm_in_use_locked(void) {
+    size_t used = 0;
+    for (int i = 0; i < g_nblk; i++)
+        if (g_blk[i].used) used += g_blk[i].size;
+    return used;
+}
+
+static void* mm_alloc(size_t n) {
+    n = (n + 7) & ~(size_t)7;
+    if (n == 0) n = 8;
+    pthread_mutex_lock(&g_slab_mu);
+    // First fit: a freed buffer is reused by the next transaction that fits
+    // (`binder_alloc_new_buf_locked` walks its free list the same way).
+    for (int i = 0; i < g_nblk; i++) {
+        if (g_blk[i].used || g_blk[i].size < n) continue;
+        size_t off = g_blk[i].off;
+        if (g_blk[i].size == n) {
+            g_blk[i].used = 1;
+        } else {
+            size_t rest = g_blk[i].size - n;
+            g_blk[i].size = n;
+            g_blk[i].used = 1;
+            blk_insert_locked(i + 1, off + n, rest, 0);
+        }
+        pthread_mutex_unlock(&g_slab_mu);
+        return g.map + off;
+    }
+    if (g_bump + n > g.map_size) {
+        size_t in_use = mm_in_use_locked();
+        pthread_mutex_unlock(&g_slab_mu);
+        WARN("transaction buffer exhausted (need %zu, high-water %zu/%zu, in use %zu, %d blocks) "
+             "- this transaction is dropped",
+             n, g_bump, g.map_size, in_use, g_nblk);
+        return NULL;
+    }
+    size_t off = g_bump;
+    g_bump += n;
+    blk_insert_locked(g_nblk, off, n, 1);
     pthread_mutex_unlock(&g_slab_mu);
     return g.map + off;
 }
@@ -694,19 +780,27 @@ static void mm_free(void* p) {
     if (p == NULL) return;
     size_t off = (size_t)((uint8_t*)p - g.map);
     pthread_mutex_lock(&g_slab_mu);
-    for (int i = 0; i < g_nblk; i++) {
-        if (g_blk[i].off == off && g_blk[i].used) {
-            // Nothing is ever re-allocated (see `mm_alloc`), so the block is
-            // only marked free: its bytes stay untouched and it is never handed
-            // out again.  Ranges are not coalesced because there is no free-list
-            // to coalesce for.
-            g_blk[i].used = 0;
-            pthread_mutex_unlock(&g_slab_mu);
-            return;
-        }
+    int i = blk_index_locked(off);
+    if (i < 0 || !g_blk[i].used) {
+        pthread_mutex_unlock(&g_slab_mu);
+        DBG("free of unknown buffer %p", p);
+        return;
+    }
+    g_blk[i].used = 0;
+    // Coalesce with the next block, then with the previous one: the table stays
+    // sorted, non-overlapping and fully covering the high-water mark, so a long
+    // session has a handful of entries, not one per transaction.
+    if (i + 1 < g_nblk && !g_blk[i + 1].used) {
+        g_blk[i].size += g_blk[i + 1].size;
+        memmove(&g_blk[i + 1], &g_blk[i + 2], sizeof(g_blk[0]) * (size_t)(g_nblk - i - 2));
+        g_nblk--;
+    }
+    if (i > 0 && !g_blk[i - 1].used) {
+        g_blk[i - 1].size += g_blk[i].size;
+        memmove(&g_blk[i], &g_blk[i + 1], sizeof(g_blk[0]) * (size_t)(g_nblk - i - 1));
+        g_nblk--;
     }
     pthread_mutex_unlock(&g_slab_mu);
-    DBG("free of unknown buffer %p", p);
 }
 
 // -------------------------------------------------------------- socket frames
@@ -1008,6 +1102,9 @@ static int emit_transaction(const struct binder_transaction_data* tr, int is_rep
     DBG("%s seq=%u code=%u flags=0x%x target=%llu size=%zu/%zu fds=%d",
         is_reply ? "REPLY" : "REQ", seq, tr->code, tr->flags, (unsigned long long)target, dsize,
         osize, nfds);
+    if (is_reply)
+        TRACE("tid=%d REPLY seq=%u flags=0x%x size=%llu/%llu", (int)syscall(__NR_gettid), seq,
+              tr->flags, (unsigned long long)dsize, (unsigned long long)osize);
     return rc;
 }
 
@@ -1049,8 +1146,20 @@ static int deliver_incoming(void) {
     xform_objects(q->data, dsize, offs, osize, 1, fds, &nfds);
     void* buf = mm_alloc(dsize + 8 + osize + 8);
     if (buf == NULL) {
+        uint32_t seq = q->seq;
         free(q->data);
         free(q);
+        pthread_mutex_lock(&g.mu);
+        // The kernel answers a transaction it cannot find a buffer for with
+        // BR_FAILED_REPLY on the sender. Here the sender is the host, and the
+        // driver has no reply slot of its own, so answer the F_TXN instead of
+        // dropping it: a delivery the driver could not even copy is evidence,
+        // never a silently lost callback. -12 = ENOMEM.
+        pthread_mutex_unlock(&g.mu);
+        WARN("no transaction buffer for incoming seq=%u (%zu+%zu bytes): answering NO_MEMORY",
+             seq, dsize, osize);
+        uint32_t status = (uint32_t)-12;
+        send_frame(F_REP, seq, status, TF_STATUS_CODE, 0, &status, sizeof(status), NULL, 0, NULL, 0);
         pthread_mutex_lock(&g.mu);
         return -1;
     }
@@ -1081,6 +1190,9 @@ static int deliver_incoming(void) {
     T.have_reply_to = 1;
     DBG("BR_TRANSACTION seq=%u code=%u flags=0x%x node=%llx/%llx size=%zu/%zu", q->seq, q->code,
         q->flags, (unsigned long long)local.binder, (unsigned long long)local.cookie, dsize, osize);
+    TRACE("tid=%d deliver seq=%u wire=%u code=%u weakref=%llx cookie=%llx",
+          (int)syscall(__NR_gettid), q->seq, (uint32_t)q->target, q->code,
+          (unsigned long long)local.binder, (unsigned long long)local.cookie);
     free(q->data);
     free(q);
     pthread_mutex_lock(&g.mu);
@@ -1326,7 +1438,16 @@ static void handle_commands(const uint8_t* wbuf, size_t wsize) {
             case BC_INCREFS_DONE:
             case BC_ACQUIRE_DONE: {
                 if (pos + 16 > wsize) return;
+                struct binder_ptr_cookie pc;
+                memcpy(&pc, wbuf + pos, sizeof(pc));
                 pos += 16;
+                // libbinder's acknowledgement of BR_INCREFS/BR_ACQUIRE is the
+                // only proof that the object behind a node was actually
+                // incWeak'ed/incStrong'ed. The kernel uses it to clear
+                // `pending_*_ref` and to decide whether the node is rooted.
+                TRACE("tid=%d node %s weakref=%llx cookie=%llx", (int)syscall(__NR_gettid),
+                      cmd == BC_ACQUIRE_DONE ? "ACQUIRE_DONE" : "INCREFS_DONE",
+                      (unsigned long long)pc.ptr, (unsigned long long)pc.cookie);
                 break;
             }
             case BC_ATTEMPT_ACQUIRE: {
@@ -1453,15 +1574,18 @@ static int e3g_write_read(struct binder_write_read* bwr) {
         T.reply_seq = -1;
         // BR_TRANSACTION_COMPLETE was already handed out in the previous ioctl
         // (or is still pending); make sure it precedes BR_REPLY.
-        pend_cmd(BR_TRANSACTION_COMPLETE);
+            pend_cmd(BR_TRANSACTION_COMPLETE);
         if (done.status != 0 || done.data == NULL) {
             uint32_t cmd = BR_FAILED_REPLY;
             pend_append(&cmd, 4);
-        } else {
-            build_reply(&done);
-            free(done.data);
-            free(done.offs);
+        } else if (build_reply(&done) != 0) {
+            // No buffer for the reply: the caller must not be left waiting for
+            // a BR_REPLY that can never come (that is a wedged `transact`).
+            uint32_t cmd = BR_FAILED_REPLY;
+            pend_append(&cmd, 4);
         }
+        free(done.data);
+        free(done.offs);
         flush_pend(bwr);
         return 0;
     }

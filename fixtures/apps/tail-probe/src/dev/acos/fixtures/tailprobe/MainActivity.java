@@ -11,8 +11,10 @@ import android.content.IntentFilter;
 import android.hardware.biometrics.BiometricManager;
 import android.hardware.biometrics.BiometricPrompt;
 import android.os.Bundle;
+import android.os.Looper;
 import android.os.CancellationSignal;
 import android.provider.Telephony;
+import android.util.Log;
 import android.telephony.PhoneStateListener;
 import android.telephony.SmsManager;
 import android.telephony.SmsMessage;
@@ -42,12 +44,16 @@ import java.util.Set;
  * a specific line after it drives a control op.
  */
 public final class MainActivity extends Activity {
+    private static final String LOG_TAG = "tailprobe";
     private LinearLayout root;
     private TextView status;
     private TextView title;
     private TelephonyManager telephony;
     private BluetoothAdapter adapter;
     private int callStateLines;
+    private int listenerCount;
+    private int callRingingLines;
+    private final java.util.List<PhoneStateListener> listeners = new java.util.ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -94,7 +100,22 @@ public final class MainActivity extends Activity {
     }
 
     private void log(String line) {
-        status.append(line + "\n");
+        // Thread-safe evidence channel first: `android.util.Log` is a logd write
+        // and can be read back with `acos_logs`, while the `TextView` below is
+        // only safe to touch from the UI thread. Binder callbacks
+        // (`PhoneStateListener`, receivers, `IAccessibilityManagerClient`) run
+        // on whichever binder thread received the transaction, so appending
+        // directly from them makes two concurrent callbacks race on the
+        // TextView's `Editable` and silently drop lines -- which looks exactly
+        // like a callback the framework lost. Real apps marshal, so this one
+        // does too (and keeps a logd copy for the harness).
+        Log.i(LOG_TAG, line);
+        Runnable append = () -> status.append(line + "\n");
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            append.run();
+        } else {
+            status.post(append);
+        }
     }
 
     // ------------------------------------------------------------ telephony
@@ -153,6 +174,18 @@ public final class MainActivity extends Activity {
         });
         appendToRoot(stop);
 
+        Button report = new Button(this);
+        report.setText("Report callbacks");
+        report.setTag("report-callbacks");
+        // The counter the callback itself increments, reported from the UI
+        // thread: a harness can then ask the app "how many callbacks did your
+        // Java code actually run" instead of inferring it from a log line or a
+        // TextView append (both of which a non-UI thread can lose).
+        report.setOnClickListener(view -> log("CALLTOTAL state_lines=" + callStateLines
+                + " ringing=" + callRingingLines + " listeners=" + listenerCount
+                + " held=" + listeners.size()));
+        appendToRoot(report);
+
         Button send = new Button(this);
         send.setText("Send SMS");
         send.setTag("send-sms");
@@ -197,15 +230,26 @@ public final class MainActivity extends Activity {
         if (telephony == null) {
             return;
         }
+        final int id = ++listenerCount;
         PhoneStateListener listener = new PhoneStateListener() {
             @Override
             public void onCallStateChanged(int state, String phoneNumber) {
                 callStateLines++;
+                if (state == TelephonyManager.CALL_STATE_RINGING) {
+                    callRingingLines++;
+                }
                 log("CALL state=" + callName(state)
-                        + " number=" + (phoneNumber == null ? "null" : phoneNumber));
+                        + " number=" + (phoneNumber == null ? "null" : phoneNumber)
+                        + " listener=" + id);
             }
         };
         callListener = listener;
+        // Keep every listener reachable from Java, as a real app that stores
+        // its listeners does. A listener the app drops while it stays
+        // registered is a *different* case: see
+        // results/handoff/BINDERREF/README.md (the Java object behind a rooted
+        // node is collected, and the callback then never runs).
+        listeners.add(listener);
         try {
             telephony.listen(listener, PhoneStateListener.LISTEN_CALL_STATE);
         } catch (Throwable missing) {

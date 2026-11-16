@@ -697,6 +697,63 @@ int main(void) {
     free_all_txn_buffers();
     seen_flush(0);
 
+    // 9. `BC_FREE_BUFFER` returns the buffer to the allocator: a freed block is
+    //    handed to the next transaction that fits it (the kernel's
+    //    `binder_alloc_free_buf` + free-list reuse), and it is never handed out
+    //    while it is still live.
+    {
+        void* a = mm_alloc(4096);
+        void* b = mm_alloc(4096);
+        void* c = mm_alloc(4096);
+        int distinct = a && b && c && a != b && b != c && a != c;
+        mm_free(b);
+        // First fit over the freed list: with `a` and `c` live, the only block
+        // that can serve a 4096-byte request is `b`'s.
+        void* again = mm_alloc(4096);
+        int reused = again == b;
+        mm_free(a);
+        mm_free(c);
+        mm_free(again);
+        snprintf(detail, sizeof(detail), "a=%p b=%p c=%p again=%p", a, b, c, again);
+        check(distinct && reused, "a freed transaction buffer is reused by the next transaction",
+              detail);
+    }
+
+    // 10. a long session does not run out of transaction-buffer space: the 1 MB
+    //     map is a *cache*, not a log. Before this change the bump pointer only
+    //     moved forward, so a session that registered 100 callbacks exhausted
+    //     the map after ~3000 transactions and the driver then dropped every
+    //     later transaction *and* reply (measured: `transaction buffer exhausted`).
+    {
+        size_t high_water = 0;
+        int failed = 0;
+        pthread_mutex_lock(&g_slab_mu);
+        high_water = g_bump;
+        pthread_mutex_unlock(&g_slab_mu);
+        size_t start = high_water;
+        for (int i = 0; i < 4000; i++) {
+            // One registration-shaped round: a delivered transaction buffer and
+            // the reply buffer, both freed by their receiver.
+            void* delivery = mm_alloc(1024);
+            void* reply = mm_alloc(256);
+            if (delivery == NULL || reply == NULL) {
+                failed++;
+                if (delivery) mm_free(delivery);
+                if (reply) mm_free(reply);
+                break;
+            }
+            mm_free(delivery);
+            mm_free(reply);
+        }
+        pthread_mutex_lock(&g_slab_mu);
+        high_water = g_bump;
+        pthread_mutex_unlock(&g_slab_mu);
+        snprintf(detail, sizeof(detail), "failed=%d high-water %zu -> %zu of %zu", failed, start,
+                 high_water, g.map_size);
+        check(failed == 0 && high_water <= start + 8192,
+              "4000 transaction rounds reuse the 1 MB transaction-buffer map", detail);
+    }
+
     // ---- teardown ----------------------------------------------------------
     g_looper_stop = 1;
     shutdown(g_peer.fd, SHUT_RDWR);
