@@ -8,6 +8,7 @@ import android.view.Gravity;
 import android.view.ViewGroup;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -33,7 +34,42 @@ public class MainActivity extends Activity {
             + "<div id=out style='font:28px sans-serif'>not tapped</div></body></html>";
 
     private TextView status;
+    private ProbeWebView webView;
     private final StringBuilder log = new StringBuilder();
+
+    /**
+     * WV5a: a WebView the probe can observe after layout. `onSizeChanged` is the
+     * framework's own "the view now has its real size" callback, so the
+     * navigation is issued from there: the engine view is created at measure
+     * (`view.create`) and resized at layout (`view.setViewport`) *before*
+     * `view.loadUrl`, exactly the order a real app produces.
+     */
+    private final class ProbeWebView extends WebView {
+        private boolean loaded;
+
+        ProbeWebView(android.content.Context context) {
+            super(context);
+        }
+
+        @Override
+        protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+            super.onSizeChanged(w, h, oldw, oldh);
+            if (loaded || w <= 0 || h <= 0) {
+                return;
+            }
+            loaded = true;
+            append("laid out " + w + "x" + h);
+            try {
+                // A `data:` URL goes through `view.loadUrl` (`WIRE.md` §4.2) and
+                // needs no network: Chromium never network-fetches `data:` (§4.3).
+                loadUrl("data:text/html;charset=utf-8,"
+                        + java.net.URLEncoder.encode(PAGE, "UTF-8"));
+                append("loadUrl issued");
+            } catch (Throwable t) {
+                append("loadUrl FAILED: " + t);
+            }
+        }
+    }
 
     private static final class Bridge {
         private final MainActivity activity;
@@ -101,10 +137,11 @@ public class MainActivity extends Activity {
         }
 
         try {
-            WebView wv = new WebView(this);
+            ProbeWebView wv = new ProbeWebView(this);
             append("WebView created: " + wv);
             WebSettings settings = wv.getSettings();
             settings.setJavaScriptEnabled(true);
+            append("settings ok: jsEnabled=" + settings.getJavaScriptEnabled());
             wv.addJavascriptInterface(new Bridge(this), "acosBridge");
             wv.setWebViewClient(new WebViewClient() {
                 @Override
@@ -119,9 +156,19 @@ public class MainActivity extends Activity {
                             });
                 }
             });
-            wv.loadDataWithBaseURL("https://acos.invalid/probe", PAGE, "text/html", "UTF-8", null);
+            wv.setWebChromeClient(new WebChromeClient());
+            append("clients set");
+            // WV5a: attach and lay the view out *before* the navigation, so the
+            // engine view is created and resized with the View's real geometry
+            // (`view.create` at measure, `view.setViewport` at layout) before
+            // `view.loadUrl` is issued — the same order a real page sees, and the
+            // one the session listener asserts. The load happens from
+            // `onSizeChanged`, i.e. from the fixture's own layout callback, not
+            // from a guessed delay.
+            this.webView = wv;
             wv.setId(R.id.webview);
             root.addView(wv, new LinearLayout.LayoutParams(900, 700));
+            append("attached (layout pending)");
         } catch (Throwable t) {
             StringBuilder where = new StringBuilder();
             StackTraceElement[] st = t.getStackTrace();

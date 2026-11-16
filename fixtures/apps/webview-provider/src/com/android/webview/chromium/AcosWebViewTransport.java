@@ -113,7 +113,7 @@ public final class AcosWebViewTransport {
         private final DataInputStream in;
         private final DataOutputStream out;
         private final Object writeLock = new Object();
-        private final Map<String, BlockingQueue<Frame>> pending = new HashMap<>();
+        private final Map<String, Pending> pending = new HashMap<>();
         private final AtomicInteger nextId = new AtomicInteger();
         private final CountDownLatch ready = new CountDownLatch(1);
         /** The transport's own error, once the socket is gone (`WIRE.md` §6). */
@@ -145,6 +145,28 @@ public final class AcosWebViewTransport {
             return result == null ? new JSONObject() : result;
         }
 
+        /** One in-flight request: its op and the frame the caller waits for. */
+        private static final class Pending {
+            final String op;
+            final BlockingQueue<Frame> frames = new LinkedBlockingQueue<>(1);
+            private JSONObject held;
+
+            Pending(String op) {
+                this.op = op;
+            }
+
+            /** Hold a `render` response until its BLOB arrives (`WIRE.md` §1). */
+            synchronized void hold(JSONObject json) {
+                held = json;
+            }
+
+            synchronized JSONObject release() {
+                JSONObject json = held;
+                held = null;
+                return json;
+            }
+        }
+
         @Override
         public String sessionName() {
             return session;
@@ -163,9 +185,9 @@ public final class AcosWebViewTransport {
         @Override
         public Frame call(String op, JSONObject params) throws IOException {
             String id = "g" + nextId.incrementAndGet();
-            BlockingQueue<Frame> queue = new LinkedBlockingQueue<>(1);
+            Pending slot = new Pending(op);
             synchronized (pending) {
-                pending.put(id, queue);
+                pending.put(id, slot);
             }
             try {
                 JSONObject request = new JSONObject();
@@ -181,7 +203,7 @@ public final class AcosWebViewTransport {
                     }
                 }
                 writeFrame(KIND_JSON, request.toString().getBytes(StandardCharsets.UTF_8));
-                Frame frame = queue.poll(30, TimeUnit.SECONDS);
+                Frame frame = slot.frames.poll(30, TimeUnit.SECONDS);
                 if (frame == null) {
                     throw new TransportException("TIMEOUT", op + " answered nothing in 30 s");
                 }
@@ -273,8 +295,8 @@ public final class AcosWebViewTransport {
             } finally {
                 ready.countDown();
                 synchronized (pending) {
-                    for (BlockingQueue<Frame> queue : pending.values()) {
-                        queue.offer(new Frame(new JSONObject(), null));
+                    for (Pending slot : pending.values()) {
+                        slot.frames.offer(new Frame(new JSONObject(), null));
                     }
                 }
             }
@@ -317,26 +339,44 @@ public final class AcosWebViewTransport {
                 return;
             }
             String id = json.optString("id", "");
-            BlockingQueue<Frame> queue;
+            Pending slot;
             synchronized (pending) {
-                queue = pending.get(id);
+                slot = pending.get(id);
             }
-            if (queue != null) {
-                queue.offer(frame);
+            if (slot == null) {
+                return;
             }
+            // `render` is the one op with two frames (`WIRE.md` §1, §6): the
+            // JSON response is followed by its BLOB on the same stream, so the
+            // response is only complete once the BLOB has arrived. Offering the
+            // JSON alone would hand the caller a frame-less render.
+            if ("render".equals(slot.op) && json.optBoolean("ok", false)) {
+                slot.hold(json);
+                return;
+            }
+            slot.frames.offer(frame);
         }
 
         private void dispatchBlob(byte[] blob) {
-            // The BLOB of a `render` completes the most recent request's frame.
+            // The BLOB of a `render` completes the response held for it.
+            Pending slot;
             synchronized (pending) {
-                for (BlockingQueue<Frame> queue : pending.values()) {
-                    Frame f = queue.peek();
-                    if (f != null && f.blob == null) {
-                        queue.offer(new Frame(f.json, blob));
-                        return;
+                slot = null;
+                for (Pending candidate : pending.values()) {
+                    if ("render".equals(candidate.op)) {
+                        slot = candidate;
+                        break;
                     }
                 }
             }
+            if (slot == null) {
+                return;
+            }
+            JSONObject held = slot.release();
+            if (held == null) {
+                return;
+            }
+            slot.frames.offer(new Frame(held, blob));
         }
     }
 }

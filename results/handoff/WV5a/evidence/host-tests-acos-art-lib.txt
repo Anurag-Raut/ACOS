@@ -1,0 +1,3 @@
+warning: unused variable: `started`
+     Running unittests src/lib.rs (.cache/wv5a-target/debug/deps/acos_art-bb2b7147c9568241)
+test result: ok. 159 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 10.91s

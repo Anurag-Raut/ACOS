@@ -1,0 +1,30 @@
+listener: bound /home/Qui/.t3/worktrees/acos/t3-08af35f8-8ec80e789e397697/.cache/wv5a-run/wv/webview.sock
+listener: guest connected
+guest->host [1] {"client": "acos-webview/0.4.0", "id": "g1", "op": "hello", "proto": 1}
+host->guest {"id": "g1", "ok": true, "result": {"engine": {"product": "acos-wv5a-test-listener", "protocolVersion": "1.3", "revision": "none", "userAgent": "acos-wv5a-test-listener/0", "version": "0"}, "limits": {"maxFrameBytes": 67108864, "maxViews": 8}, "proto": 1, "session": "wv5a-test-listener"}}
+guest->host [2] {"id": "g2", "methods": ["report"], "name": "acosBridge", "op": "view.addJavascriptInterface", "view": 1}
+host->guest {"id": "g2", "ok": true, "result": {}}
+guest->host [3] {"density": 2.625, "height": 700, "id": "g3", "op": "view.create", "view": 1, "width": 900}
+listener: create view=1 900x700 density=2.625
+host->guest {"id": "g3", "ok": true, "result": {"density": 2.625, "height": 700, "view": 1, "width": 900}}
+guest->host [4] {"density": 2.625, "height": 700, "id": "g4", "op": "view.setViewport", "view": 1, "width": 900}
+listener: resize view=1 900x700 density=2.625
+host->guest {"id": "g4", "ok": true, "result": {"density": 2.625, "height": 700, "view": 1, "width": 900}}
+guest->host [5] {"id": "g5", "op": "view.loadUrl", "url": "data:text/html;charset=utf-8,%3C%21doctype+html%3E%3Chtml%3E%3Cbody+style%3D%27font%3A32px+sans-serif%27%3E%3Ch1+id%3Dh%3Eacos+webview%3C%2Fh1%3E%3Cbutton+id%3Db+style%3D%27font%3A32px+sans-serif%27+onclick%3D%22document.getElementById%28%27out%27%29.textContent%3D%27tapped%27%3Bwindow.acosBridge.report%28%27tapped%27%29%22%3ETap+me%3C%2Fbutton%3E%3Cdiv+id%3Dout+style%3D%27font%3A28px+sans-serif%27%3Enot+tapped%3C%2Fdiv%3E%3C%2Fbody%3E%3C%2Fhtml%3E", "view": 1}
+listener: load view=1 url=data:text/html;charset=utf-8,%3C%21doctype+html%3E%3Chtml%3E%3Cbody+style%3D%27f
+host->guest {"id": "g5", "ok": true, "result": {"loadMs": 0, "url": "data:text/html;charset=utf-8,%3C%21doctype+html%3E%3Chtml%3E%3Cbody+style%3D%27font%3A32px+sans-serif%27%3E%3Ch1+id%3Dh%3Eacos+webview%3C%2Fh1%3E%3Cbutton+id%3Db+style%3D%27font%3A32px+sans-serif%27+onclick%3D%22document.getElementById%28%27out%27%29.textContent%3D%27tapped%27%3Bwindow.acosBridge.report%28%27tapped%27%29%22%3ETap+me%3C%2Fbutton%3E%3Cdiv+id%3Dout+style%3D%27font%3A28px+sans-serif%27%3Enot+tapped%3C%2Fdiv%3E%3C%2Fbody%3E%3C%2Fhtml%3E", "view": 1}}
+guest->host [6] {"density": 2.625, "height": 614, "id": "g6", "op": "view.setViewport", "view": 1, "width": 900}
+listener: resize view=1 900x614 density=2.625
+host->guest {"id": "g6", "ok": true, "result": {"density": 2.625, "height": 614, "view": 1, "width": 900}}
+guest->host [7] {"density": 2.625, "height": 700, "id": "g7", "op": "view.setViewport", "view": 1, "width": 900}
+listener: resize view=1 900x700 density=2.625
+host->guest {"id": "g7", "ok": true, "result": {"density": 2.625, "height": 700, "view": 1, "width": 900}}
+guest->host [8] {"focused": false, "id": "g8", "op": "input.setFocus", "view": 1}
+host->guest {"id": "g8", "ok": true, "result": {}}
+guest->host [9] {"focused": true, "id": "g9", "op": "input.setFocus", "view": 1}
+host->guest {"id": "g9", "ok": true, "result": {}}
+guest->host [10] {"format": "png", "id": "g10", "op": "render", "view": 1}
+host->guest {"id": "g10", "ok": true, "result": {"bytes": 82, "damage": {"h": 16, "w": 16, "x": 0, "y": 0}, "density": 1.0, "engineMs": 0, "format": "png", "hasDamage": true, "height": 16, "seq": 1, "view": 1, "width": 16}}
+host->guest BLOB view=1 seq=1 format=0 16x16 bytes=82 (kind 2)
+listener: guest closed
+verdict: pass (ordered ['hello', 'view.create', 'view.setViewport', 'view.loadUrl'] (all requests: ['hello', 'view.addJavascriptInterface', 'view.create', 'view.setViewport', 'view.loadUrl', 'view.setViewport', 'view.setViewport', 'input.setFocus', 'input.setFocus', 'render']); geometry 900x700)
