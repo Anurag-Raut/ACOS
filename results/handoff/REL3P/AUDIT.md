@@ -20,6 +20,9 @@ Two holes in that oracle let this class of defect through:
 2. The oracle only scanned `dex/framework`. Specs whose class lives in another boot
    classpath dex (`framework-connectivity`: `android.net.*`) were skipped as
    "class not found" and stayed `Verification::Full` without ever being checked.
+   **Closed in REL3P2**: `Scanner::write_to_parcel_boot` scans every
+   boot-classpath DEX directory of the image and inlines the writer's private
+   helpers; see `results/handoff/REL3P2/AUDIT.md`.
 
 Both are fixed: the kinds are distinct ops now (`StringArray` = `writeStringArray`,
 new `String8Array` = `writeString8Array`, `StringList` = `writeStringList` only), and
@@ -173,6 +176,12 @@ mismatch was `attributionTags` (1 per class), now `String8Array`:
 | `android.net.Uri`, `ComponentName`, `Bundle`, `ParcelFileDescriptor`, `PersistableBundle`, `MemoryIntArray`, `ProfilerInfo`, `CompatibilityInfo`, `ClientTransaction`, `AutofillId/Value`, `OverlayProperties`, `HostUsiVersion`, `KeyCharacterMap`, `SpellChecker*`, `RunningAppProcessInfo`, `AndroidFuture`, `SharedMemory`, `AssistStructure/Content`, `ContentValues`, `ImeTracker$Token`, `UserHandle`, `AutofillOptions`, `ContentCaptureOptions` | Curated | see `parcelable-audit.txt` | small ACOS-owned values; several have no Java `writeToParcel` at all |
 
 ## 5. Mismatches found and **not** fixed (honest gap)
+
+**Both rows below are fixed in REL3P2** (specs rewritten from the image's
+`writeToParcel`, values unchanged, `Verification::Full` at 20/20 and 32/32; real
+framework round-trip and an ART fixture read both replies). This section is kept
+as the honest record of what REL3P found; the current state is
+`results/handoff/REL3P2/AUDIT.md` §1–§2.
 
 | class | ACOS spec | image `writeToParcel` | consequence |
 |---|---|---|---|
