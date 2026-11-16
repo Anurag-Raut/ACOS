@@ -164,8 +164,7 @@ and **without** it: green both ways.
 
 | check | result | evidence |
 |---|---|---|
-| `cargo test -p acos-services` | **PASS** — 59 suites, 478 tests, 0 failed | `results/handoff/MODLOC3/services-tests.log` (`location_module` 9/9 incl. the new probe, `module_kit` 16/16) |
-| `cargo test -p acos-binder-peer` | **PASS** — 18 + 3 | this branch (`peer` suite) |
+| `cargo test -p acos-services -p acos-binder-peer` (with the private `ACOS_RUNTIME_DIR`) | **PASS** — 63 suites, 499 tests, 0 failed | `results/handoff/MODLOC3/services-tests.log` (`location_module` 9/9 incl. the new probe, `module_kit` 16/16, `peer` 18) |
 | `cargo test -p acos-mcp` **with** a deep `ACOS_RUNTIME_DIR` (80 chars) | **PASS** — 141 tests | §4 |
 | `cargo test -p acos-mcp` **without** `ACOS_RUNTIME_DIR` | **PASS** — 141 tests | §4 |
 | `cargo check -p acos-services --all-targets` | **PASS** (only pre-existing warnings) | — |
