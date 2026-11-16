@@ -78,8 +78,7 @@ impl A11yServiceConfig {
     /// interactive windows.
     #[must_use]
     pub const fn can_retrieve_windows(&self) -> bool {
-        self.can_retrieve_window_content()
-            && self.flags & FLAG_RETRIEVE_INTERACTIVE_WINDOWS != 0
+        self.can_retrieve_window_content() && self.flags & FLAG_RETRIEVE_INTERACTIVE_WINDOWS != 0
     }
 
     /// `AccessibilitySecurityPolicy.canPerformGestures`.
@@ -117,9 +116,9 @@ impl A11yServiceConfig {
                 "@{resource_id:#010x} does not resolve to a resource file"
             ))
         })?;
-        let bytes = apk.entry_bytes(&path).ok_or_else(|| {
-            ServiceError::Internal(format!("the APK has no entry {path:?}"))
-        })?;
+        let bytes = apk
+            .entry_bytes(&path)
+            .ok_or_else(|| ServiceError::Internal(format!("the APK has no entry {path:?}")))?;
         let document = acos_apk::axml::parse(&bytes)
             .map_err(|e| ServiceError::Internal(format!("{path}: binary XML: {e}")))?;
         let mut config = Self::from_document(&document)?;

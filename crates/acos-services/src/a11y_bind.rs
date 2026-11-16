@@ -67,7 +67,10 @@ fn rejected(detail: impl Into<String>) -> ServiceError {
 /// Indices are [`crate::parcelable`]'s `AccessibilityServiceInfo` spec order:
 /// 0 `eventTypes`, 2 `feedbackType`, 3 `notificationTimeout`, 6 `flags`,
 /// 11 `mCapabilities`.
-fn apply_service_config(info: &mut crate::value::Parcelable, config: crate::a11y_config::A11yServiceConfig) {
+fn apply_service_config(
+    info: &mut crate::value::Parcelable,
+    config: crate::a11y_config::A11yServiceConfig,
+) {
     let crate::value::Parcelable::Ordered { values, .. } = info else {
         return;
     };

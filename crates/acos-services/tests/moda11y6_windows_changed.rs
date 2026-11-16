@@ -66,23 +66,20 @@ fn a11y_state(host: &mut ServiceHost) -> Arc<Mutex<A11yState>> {
 /// Bind `client` as the enabled service (the state `publishService` +
 /// `IAccessibilityServiceClient.init` leave behind).
 fn bind_service(state: &Arc<Mutex<A11yState>>, client: u64) {
-    state
-        .lock()
-        .expect("a11y state")
-        .bind_service(
-            &A11yPendingBind {
-                component: format!("{PACKAGE}/.A11yProbeService"),
-                package: PACKAGE.to_string(),
-                class: format!("{PACKAGE}.A11yProbeService"),
-                token: 0x1A11_0000_0000_0001,
-                seq: 0,
-                info: Parcelable::Null,
-            },
-            client,
-            1,
-            0,
-            0,
-        );
+    state.lock().expect("a11y state").bind_service(
+        &A11yPendingBind {
+            component: format!("{PACKAGE}/.A11yProbeService"),
+            package: PACKAGE.to_string(),
+            class: format!("{PACKAGE}.A11yProbeService"),
+            token: 0x1A11_0000_0000_0001,
+            seq: 0,
+            info: Parcelable::Null,
+        },
+        client,
+        1,
+        0,
+        0,
+    );
 }
 
 fn transact(host: &mut ServiceHost, binder: BinderId, code: u32, data: &mut Parcel) -> Parcel {
@@ -190,7 +187,8 @@ fn accessibility_events(deliveries: &[acos_services::host::PendingDelivery]) -> 
         let connection_id = data.read_int32().expect("record connectionId");
         let _boolean_properties = data.read_int32().expect("booleanProperties");
         for field in 0..12 {
-            data.read_int32().unwrap_or_else(|_| panic!("record int {field}"));
+            data.read_int32()
+                .unwrap_or_else(|_| panic!("record int {field}"));
         }
         // className / contentDescription / beforeText: three null
         // CharSequences, then `writeParcelable(null)` (a null String16).
@@ -237,7 +235,12 @@ fn a_window_add_and_remove_deliver_type_windows_changed_to_the_bound_service() {
     let session = open_session(&mut host);
     let window = BinderId(0x6001);
 
-    let mut reply = transact(&mut host, session, ADD_TO_DISPLAY_AS_USER, &mut add_request(window));
+    let mut reply = transact(
+        &mut host,
+        session,
+        ADD_TO_DISPLAY_AS_USER,
+        &mut add_request(window),
+    );
     assert_eq!(reply.read_int32().expect("exception"), 0);
     let events = accessibility_events(&host.take_deliveries());
     assert_eq!(
@@ -251,7 +254,10 @@ fn a_window_add_and_remove_deliver_type_windows_changed_to_the_bound_service() {
     );
     let added = &events[0];
     assert_eq!(added.target, BinderId(client), "the bound service's client");
-    assert_eq!(added.code, 2, "onAccessibilityEvent is the second oneway call");
+    assert_eq!(
+        added.code, 2,
+        "onAccessibilityEvent is the second oneway call"
+    );
     assert_eq!(added.method, "onAccessibilityEvent");
     assert_eq!(added.sealed, 1, "AMS seals every delivered event");
     assert_eq!(added.event_type, TYPE_WINDOWS_CHANGED);
@@ -343,10 +349,7 @@ fn a_stalled_window_change_sink_does_not_block_the_window_snapshot() {
         .recv_timeout(Duration::from_secs(5))
         .expect("the sink was reached");
     let started = Instant::now();
-    let windows = snapshot_state
-        .lock()
-        .expect("a11y state")
-        .window_snapshot();
+    let windows = snapshot_state.lock().expect("a11y state").window_snapshot();
     let waited = started.elapsed();
     assert!(
         waited < Duration::from_millis(500),

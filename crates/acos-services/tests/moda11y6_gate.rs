@@ -100,7 +100,10 @@ fn the_probe_service_declares_window_content_and_interactive_windows() {
         config.capabilities & CAPABILITY_CAN_TAKE_SCREENSHOT,
         CAPABILITY_CAN_TAKE_SCREENSHOT
     );
-    assert_ne!(config.event_types, 0, "android:accessibilityEventTypes parsed");
+    assert_ne!(
+        config.event_types, 0,
+        "android:accessibilityEventTypes parsed"
+    );
     assert_eq!(config.notification_timeout, 100);
 }
 
@@ -111,10 +114,16 @@ fn the_bare_service_declares_no_window_content_capability() {
         !config.can_retrieve_window_content(),
         "android:canRetrieveWindowContent=false"
     );
-    assert!(!config.can_retrieve_windows(), "and therefore no window list");
+    assert!(
+        !config.can_retrieve_windows(),
+        "and therefore no window list"
+    );
     assert!(!config.can_perform_gestures());
     assert!(!config.can_take_screenshot());
-    assert_eq!(config.capabilities & CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT, 0);
+    assert_eq!(
+        config.capabilities & CAPABILITY_CAN_RETRIEVE_WINDOW_CONTENT,
+        0
+    );
 }
 
 #[test]
@@ -183,11 +192,7 @@ fn host_with_bound(config: A11yServiceConfig) -> ServiceHost {
 fn connection_node(host: &mut ServiceHost) -> BinderId {
     let state = a11y_state(host);
     let state = state.lock().expect("a11y state");
-    let connection = state
-        .bound_service
-        .as_ref()
-        .expect("bound")
-        .connection;
+    let connection = state.bound_service.as_ref().expect("bound").connection;
     drop(state);
     if connection == 0 {
         host.accessibility_connection_node()
