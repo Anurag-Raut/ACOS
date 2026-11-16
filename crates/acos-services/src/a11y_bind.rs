@@ -589,6 +589,78 @@ impl A11yConnectionNode {
         Ok(())
     }
 
+
+    /// Relay one `performAccessibilityAction` request to the window's
+    /// `IAccessibilityInteractionConnection` (code 6).
+    ///
+    /// AOSP answers the service with whether the request went out; the real
+    /// outcome arrives on the same callback (`setPerformAccessibilityActionResult`),
+    /// which is dispatched inside the guest because both binders are local
+    /// there.
+    fn relay_action(
+        &mut self,
+        data: &mut Parcel,
+        reply: &mut Parcel,
+        state: &mut A11yState,
+    ) -> Result<()> {
+        // int windowId, long nodeId, int action, Bundle arguments,
+        // int interactionId, callback, long threadId.
+        let requested = data.read_int32()?;
+        let node_id = data.read_int64()?;
+        let action = data.read_int32()?;
+        let present = data.read_int32()?;
+        let bundle = (present != 0).then(|| (data.data_position(), data.remaining()));
+        let interaction_id = data.read_int32()?;
+        let callback = data
+            .read_strong_binder()?
+            .map(|b| b.0)
+            .ok_or_else(|| ServiceError::BadRequest {
+                interface: SERVICE_CONNECTION.into(),
+                method: "performAccessibilityAction".into(),
+                detail: "missing IAccessibilityInteractionConnectionCallback".into(),
+            })?;
+        let thread_id = data.read_int64()?;
+        let windows = state.window_snapshot();
+        let resolved = state
+            .resolve_window(&windows, requested)
+            .and_then(|index| windows.get(index).cloned())
+            .and_then(|window| window.connection.map(|connection| (window, connection)));
+        let Some((window, connection)) = resolved else {
+            // AOSP returns `false` when the window or its connection is gone.
+            crate::exception::write_no_exception(reply);
+            reply.write_int32(0);
+            return Ok(());
+        };
+        let interaction = Interaction {
+            code: 6,
+            node_id,
+            needle: None,
+            action,
+            interaction_id,
+            callback,
+            flags: 0,
+            thread_id,
+            bundle,
+        };
+        let request = interaction.request(Some(data))?;
+        self.deliveries.push(PendingDelivery {
+            target: BinderId(connection),
+            interface: INTERACTION_CONNECTION.to_string(),
+            code: 6,
+            method: "performAccessibilityAction".into(),
+            data: request,
+        });
+        state.record_interaction(crate::misc::A11yInteraction {
+            code: 8,
+            window: window.id,
+            interaction_id,
+            window_binder: window.window,
+        });
+        crate::exception::write_no_exception(reply);
+        reply.write_int32(1);
+        Ok(())
+    }
+
 }
 
 impl ServiceObject for A11yConnectionNode {
@@ -705,6 +777,9 @@ impl ServiceObject for A11yConnectionNode {
             | "findAccessibilityNodeInfosByViewId" => {
                 self.relay_find(code, data, reply, &mut state)?;
             }
+            "performAccessibilityAction" => {
+                self.relay_action(data, reply, &mut state)?;
+            }
             "getWindows" => {
                 let windows = state.window_snapshot();
                 let connection_id = state
@@ -752,12 +827,13 @@ impl ServiceObject for A11yConnectionNode {
 
 /// `IAccessibilityServiceConnection` transaction codes (AIDL declaration
 /// order), for the methods this node answers.
-const CONNECTION_METHODS: [(u32, &str); 11] = [
+const CONNECTION_METHODS: [(u32, &str); 12] = [
     (1, "setServiceInfo"),
     (2, "setAttributionTag"),
     (3, "findAccessibilityNodeInfoByAccessibilityId"),
     (4, "findAccessibilityNodeInfosByText"),
     (5, "findAccessibilityNodeInfosByViewId"),
+    (8, "performAccessibilityAction"),
     (9, "getWindow"),
     (10, "getWindows"),
     (11, "getServiceInfo"),

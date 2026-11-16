@@ -370,3 +370,48 @@ fn a_direct_state_without_a_window_source_reports_no_windows() {
 /// reads and the assertion above relies on the host wiring it.
 #[allow(dead_code)]
 fn _window_source_is_a_wms_state(_: &Arc<Mutex<WmsState>>) {}
+
+#[test]
+fn a_perform_action_request_is_relayed_with_the_action_payload() {
+    let mut host = ServiceHost::standard();
+    let state = a11y_state(&mut host);
+    add_window(&state, 0x1000, acos_wm::layers::TYPE_APPLICATION);
+    let window_id = add_connection(&mut host, 0x1000, java(0x51));
+    let _ = host.take_deliveries();
+
+    // `performAccessibilityAction(windowId, nodeId, ACTION_CLICK=16,
+    // arguments=null, interactionId=11, callback, threadId=5)`.
+    let callback = java(0x61);
+    let mut reply = service_transact(&mut host, 8, |data| {
+        data.write_int32(window_id);
+        data.write_int64(0x42);
+        data.write_int32(16);
+        data.write_int32(0); // null Bundle
+        data.write_int32(11);
+        data.write_strong_binder(BinderId(callback));
+        data.write_int64(5);
+    });
+    reply.set_data_position(0);
+    assert_eq!(reply.read_int32().unwrap(), 0, "no exception");
+    assert_eq!(reply.read_int32().unwrap(), 1, "the request went out");
+
+    let deliveries = host.take_deliveries();
+    assert_eq!(deliveries.len(), 1);
+    assert_eq!(deliveries[0].code, 6);
+    assert_eq!(deliveries[0].target, BinderId(java(0x51)));
+    let mut data = deliveries[0].data.clone();
+    data.set_data_position(0);
+    data.enforce_interface(INTERACTION).unwrap();
+    assert_eq!(data.read_int64().unwrap(), 0x42, "node id");
+    assert_eq!(data.read_int32().unwrap(), 16, "action id");
+    assert_eq!(data.read_int32().unwrap(), 0, "null Bundle");
+    assert_eq!(data.read_int32().unwrap(), 11, "interactionId");
+    assert_eq!(
+        data.read_strong_binder().unwrap().map(|b| b.0),
+        Some(callback)
+    );
+    assert_eq!(data.read_int32().unwrap(), 0, "flags");
+    assert_eq!(data.read_int32().unwrap(), 0, "interrogating pid");
+    assert_eq!(data.read_int64().unwrap(), 5, "interrogating tid");
+    assert_eq!(state.lock().unwrap().interactions[0].code, 8);
+}
