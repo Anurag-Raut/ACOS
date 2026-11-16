@@ -2,9 +2,15 @@ package dev.acos.fixtures.a11yprobe;
 
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.graphics.PixelFormat;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Process;
 import android.os.SystemClock;
 import android.util.Log;
+import android.view.Gravity;
+import android.view.WindowManager;
+import android.widget.TextView;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
@@ -124,6 +130,67 @@ public class A11yProbeService extends AccessibilityService {
             }
         }
         Log.i(TAG, "probe_done");
+
+        // MODA11Y5 step 4: the same service adds a TYPE_ACCESSIBILITY_OVERLAY
+        // window through the WindowManager the framework gave it. AOSP fills
+        // the LayoutParams token from the token `IAccessibilityServiceClient
+        // .init(connectionId, windowToken)` handed the service
+        // (AccessibilityService.java:2660-2670, 2803-2812), and the WMS accepts
+        // an accessibility overlay only on that token
+        // (WindowManagerService.java:1630-1640, sanitizeWindowType 9914-9928).
+        // MODA11Y5: the overlay add itself is the assertion the guest can make
+        // here. A second `getWindows()` from this session deadlocks (the
+        // window-session thread holds the window-manager state while the
+        // overlay's own `relayout`/`finishDrawing` is in flight, and the
+        // accessibility `getWindows` handler wants the same lock), so the
+        // overlay's presence, type and kind are asserted from the host's own
+        // window stack (`assert_windows` in scenarios/a11y-probe.yaml), not
+        // from a guest re-query. See results/handoff/MODA11Y5/README.md.
+        addOverlay();
+        Log.i(TAG, "overlay_probe_done");
+    }
+
+    /**
+     * Add one small {@code TYPE_ACCESSIBILITY_OVERLAY} view on the service's
+     * overlay window token.
+     *
+     * <p>The add runs on the main thread: {@code WindowManagerImpl.addView}
+     * creates a {@code ViewRootImpl} in the calling thread, which needs a
+     * {@code Looper}, and the probe itself runs on a worker thread.
+     */
+    private void addOverlay() {
+        final A11yProbeService service = this;
+        final java.util.concurrent.CountDownLatch added =
+                new java.util.concurrent.CountDownLatch(1);
+        new Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                WindowManager wm = (WindowManager) service.getSystemService(WINDOW_SERVICE);
+                TextView view = new TextView(service);
+                view.setText("a11y overlay");
+                view.setBackgroundColor(0x80FF0000);
+                WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                        240, 120,
+                        WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                        PixelFormat.TRANSLUCENT);
+                params.gravity = Gravity.TOP | Gravity.START;
+                params.x = 40;
+                params.y = 240;
+                wm.addView(view, params);
+                Log.i(TAG, "overlay_added type=" + params.type
+                        + " token=" + (params.token == null ? "null" : "set"));
+            } catch (Throwable failure) {
+                Log.i(TAG, "overlay_added false reason=" + failure);
+            } finally {
+                added.countDown();
+            }
+        });
+        try {
+            added.await(5, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     /** `class=… text=… view_id=… clickable=…` for one node. */

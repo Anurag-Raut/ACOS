@@ -327,6 +327,37 @@ impl A11yState {
         self.enabled_services.clear();
         self.enabled = false;
         self.connections.clear();
+        // A bound service keeps no overlay authority once the module is turned
+        // off: AOSP removes the accessibility window token with the service.
+        if let Some(token) = self.bound_service.as_ref().map(|bound| bound.window_token) {
+            self.release_overlay_token(token);
+        }
+        self.bound_service = None;
+    }
+
+    /// `IWindowManager.addWindowToken(token, TYPE_ACCESSIBILITY_OVERLAY)`:
+    /// record the overlay token the a11y manager created for a bound service,
+    /// so the WMS accepts only that service's `TYPE_ACCESSIBILITY_OVERLAY`
+    /// windows (`WindowManagerService.java:1630-1640, 9914-9928`).
+    pub fn register_overlay_token(&mut self, token: u64) {
+        if let Some(windows) = &self.windows {
+            windows
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .wm
+                .add_overlay_token(acos_parcel::binder::BinderId(token));
+        }
+    }
+
+    /// `IWindowManager.removeWindowToken`: the service is gone.
+    pub fn release_overlay_token(&mut self, token: u64) {
+        if let Some(windows) = &self.windows {
+            windows
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .wm
+                .remove_overlay_token(acos_parcel::binder::BinderId(token));
+        }
     }
 
     /// The `setState` flag word: bit 0 enabled, bit 1 touch exploration.
@@ -516,11 +547,15 @@ impl A11yState {
                     .to_string(),
             });
         };
+        // Keys go to the focused window (`InputDispatcher::dispatchKeyLocked`
+        // → `getFocusedWindowHandle`), never to "the newest window": a
+        // `FLAG_NOT_FOCUSABLE` accessibility overlay added after the activity
+        // would otherwise swallow Back.
         input
-            .newest_token()
+            .focused_token()
             .ok_or_else(|| ServiceError::ModuleRejected {
                 module: "accessibility",
-                detail: "performGlobalAction(BACK): no live window input channel yet".to_string(),
+                detail: "performGlobalAction(BACK): no focused window input channel yet".to_string(),
             })
     }
 
@@ -818,7 +853,11 @@ pub fn service_info_value(component: &str) -> Option<Value> {
             Value::Str(None),                    // tileServiceName
             Value::Int(0),                       // introResId
             Value::Int(0),                       // motionEventSources
-            Value::Int(0),                       // observedMotionEventSources
+            // No `mObservedMotionEventSources`: the image's framework
+            // `AccessibilityServiceInfo.writeToParcel`/`initFromParcel` stop at
+            // `mMotionEventSources` (see the spec in `parcelable.rs`), so a
+            // trailing int here would be 4 stray bytes the guest's reader
+            // leaves in the parcel.
         ],
     )))
 }

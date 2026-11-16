@@ -554,6 +554,18 @@ impl InputHost {
         default_token(&lock(&self.state))
     }
 
+    /// The token of the window input focus is on.
+    ///
+    /// Keys go to the **focused** window (`InputDispatcher::dispatchKeyLocked`
+    /// only dispatches a key to `getFocusedWindowHandle`), not to the most
+    /// recently added one: a `FLAG_NOT_FOCUSABLE` accessibility overlay added
+    /// after the activity must not receive Back. `None` when no window holds
+    /// focus, which for a key is a refusal, not a guess.
+    #[must_use]
+    pub fn focused_token(&self) -> Option<BinderId> {
+        lock(&self.state).focused()
+    }
+
     /// Publish one tap on the newest live window and collect the guest's
     /// `FINISHED` replies for a bounded window.
     ///

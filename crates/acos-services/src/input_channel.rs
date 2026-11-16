@@ -177,13 +177,27 @@ pub const KEYCODE_BACK: i32 = 4;
 /// `KeyEvent.FLAG_TRACKING` (`0x200`, the same value as the wire format's
 /// `AKEY_EVENT_FLAG_TRACKING`).
 ///
-/// `InputDispatcher::dispatchKeyLocked` sets it on the **up** event of a key
-/// press it tracked, and the framework depends on it: `Activity.onKeyUp`
-/// finishes only when `event.isTracking()`
-/// (`.cache/aosp/base/core/java/android/app/Activity.java:4117-4136`), and
-/// `ViewRootImpl`/`View` drop an untracked Back. A host that publishes the
-/// down and up itself has to set the same flag, or Back reaches the app and
-/// does nothing.
+/// The flag is **not** a host-side delivery detail: nothing here sets it. It is
+/// decided inside the app process, by the framework's own
+/// `KeyEvent.DispatcherState`:
+///
+/// * on the down, `KeyEvent.dispatch(down, state, target)` calls
+///   `receiver.onKeyDown`; when that returns `true` and the handler set
+///   `FLAG_START_TRACKING`, `state.startTracking(event, target)` records the
+///   key code (`.cache/aosp/base/core/java/android/view/KeyEvent.java:2960-2975`);
+/// * `Activity.onKeyDown(KEYCODE_BACK)` is that handler: it calls
+///   `event.startTracking()` and returns `true`
+///   (`.../android/app/Activity.java:4018-4028`);
+/// * on the up, `KeyEvent.dispatch` runs `state.handleUpEvent(event)` *before*
+///   `receiver.onKeyUp`, and that sets `FLAG_TRACKING` when the down was tracked
+///   (`KeyEvent.java:3088-3100`).
+///
+/// So `Activity.onKeyUp`'s `event.isTracking()` test
+/// (`Activity.java:4117-4136`) is satisfied by a plain up event with no flags,
+/// as long as down and up reach the same `DispatcherState` (same window; note
+/// `ViewRootImpl.handleWindowFocusChanged` resets it at
+/// `ViewRootImpl.java:4359`). This constant documents the value for readers and
+/// tests; nothing in this crate puts it on the wire.
 pub const KEY_FLAG_TRACKING: i32 = 0x200;
 /// `KeyEvent.KEYCODE_ENTER`.
 pub const KEYCODE_ENTER: i32 = 66;
@@ -1265,16 +1279,18 @@ impl InputPublisher {
             down_time_ns,
         );
         let up_id = self.alloc_event_id();
-        let mut up = KeyEvent::new(
+        let up = KeyEvent::new(
             up_id,
             KEY_ACTION_UP,
             key_code,
             down_time_ns,
             down_time_ns + hold_ns.max(0),
         );
-        // `InputDispatcher` marks the up event of a tracked press: the app's
-        // `Activity.onKeyUp` requires `isTracking()` before it handles Back.
-        up.flags |= KEY_FLAG_TRACKING;
+        // No `FLAG_TRACKING` on the wire (see [`KEY_FLAG_TRACKING`]): the app's
+        // own `KeyEvent.DispatcherState` sets it on the up because
+        // `Activity.onKeyDown` tracked the down, exactly as on a phone. The down
+        // must therefore be a first press (`repeat_count == 0`, no flags) so
+        // `KeyEvent.dispatch` starts tracking it.
         Ok(Gesture {
             dispatches: vec![self.publish_key(&down)?, self.publish_key(&up)?],
         })
@@ -1336,9 +1352,8 @@ impl InputPublisher {
         up.event_id = self.alloc_event_id();
         up.action = KEY_ACTION_UP;
         up.event_time = down_time + DEFAULT_TAP_HOLD_NANOS;
-        // Same dispatcher rule as `key_at`: the up of a tracked press carries
-        // `FLAG_TRACKING`.
-        up.flags |= KEY_FLAG_TRACKING;
+        // Same rule as `key_at`: no `FLAG_TRACKING` on the wire — the app's own
+        // `KeyEvent.DispatcherState` sets it once it has tracked the down.
         Ok(Gesture {
             dispatches: vec![self.publish_key(&down)?, self.publish_key(&up)?],
         })

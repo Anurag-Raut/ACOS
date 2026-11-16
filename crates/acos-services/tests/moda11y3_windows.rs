@@ -35,6 +35,10 @@ fn a11y_state(host: &mut ServiceHost) -> Arc<Mutex<A11yState>> {
 }
 
 /// Add a window to the session's LAYER1 stack.
+/// The overlay window token `IAccessibilityServiceClient.init` hands a bound
+/// service (MODA11Y5).
+const OVERLAY_TOKEN: u64 = 0x0A11_0000_0000_7001;
+
 fn add_window(state: &Arc<Mutex<A11yState>>, window: u64, type_: i32) {
     let wms = state
         .lock()
@@ -44,12 +48,20 @@ fn add_window(state: &Arc<Mutex<A11yState>>, window: u64, type_: i32) {
         .expect("the host wires the LAYER1 window stack");
     let mut wms = wms.lock().unwrap();
     let session = wms.session;
-    let params = acos_wm::codec::LayoutParams {
+    let mut params = acos_wm::codec::LayoutParams {
         type_,
         width: 400,
         height: 400,
         ..acos_wm::codec::LayoutParams::application(PACKAGE, "Probe")
     };
+    // AOSP accepts a `TYPE_ACCESSIBILITY_OVERLAY` window only on the
+    // accessibility manager's own overlay window token
+    // (`WindowManagerService.java:1630-1640`, `sanitizeWindowType`
+    // 9914-9928), so the fixture carries the token the bind hands the service.
+    if type_ == acos_wm::layers::TYPE_ACCESSIBILITY_OVERLAY {
+        wms.wm.add_overlay_token(BinderId(OVERLAY_TOKEN));
+        params.token = Some(BinderId(OVERLAY_TOKEN));
+    }
     wms.wm
         .add_to_display_as_user(session, BinderId(window), params, 0)
         .expect("window add");

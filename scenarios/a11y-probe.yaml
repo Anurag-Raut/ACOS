@@ -68,14 +68,39 @@ steps:
   - assert_text:
       selector: {id: status}
       text: {contains: "a11y_click=1"}
+  # MODA11Y5 step 4: the bound service adds a TYPE_ACCESSIBILITY_OVERLAY window
+  # through the WindowManager the framework gave it. The WMS accepts the add
+  # only on the overlay window token `IAccessibilityServiceClient.init` handed
+  # the service (AOSP WindowManagerService.java:1630-1640 / sanitizeWindowType
+  # 9914-9928), so this step fails if the host lets any window claim the
+  # accessibility overlay layer. The overlay's presence and type are asserted
+  # from the host's window stack below (the guest cannot re-query: a second
+  # `getWindows()` from this session blocks on the window-manager state the
+  # overlay's own traversal holds — see results/handoff/MODA11Y5/README.md).
+  - assert_log:
+      tag: AcosA11yProbe
+      patterns:
+        - "overlay_added type=2032 token=set"
+        - "overlay_probe_done"
+  # The observe tree (the host's own layer policy, not the guest's claim): the
+  # overlay is a real window in the LAYER1 stack, tagged with its kind.
+  - assert_windows:
+      order: [application, accessibility_overlay]
+      types: [TYPE_BASE_APPLICATION, TYPE_ACCESSIBILITY_OVERLAY]
+      focus: application
+      focus_type: TYPE_BASE_APPLICATION
   # MODA11Y4 step 3: performGlobalAction(GLOBAL_ACTION_BACK) from the bound
   # service. The module routes it to the session's Back path — a real
   # KEYCODE_BACK down/up pair on the focused window's InputChannel, the same
   # publish the control plane's `back` uses — so the app's own window decides.
-  # The up event carries FLAG_TRACKING, which is what `Activity.onKeyUp`
-  # requires before it handles Back; without it the key arrives and nothing
-  # happens. "Dialog first, then activity" is the same rule: the key goes to the
-  # focused window, so a dialog dismisses before the activity sees it.
+  # MODA11Y5: the published pair is a plain, untracked press. `FLAG_TRACKING` is
+  # not on the wire — the app sets it itself: `Activity.onKeyDown(BACK)` calls
+  # `event.startTracking()` and `KeyEvent.dispatch`'s up branch runs
+  # `DispatcherState.handleUpEvent` before `onKeyUp`, so `key_up tracking=true`
+  # below is the app's own dispatcher state, not the host's claim (and
+  # `key_down repeat=0` is what lets it start tracking). "Dialog first, then
+  # activity" is the same rule: the key goes to the focused window, so a dialog
+  # dismisses before the activity sees it.
   #
   # What is asserted: the app's own key handlers ran and its Back handler ran
   # (back_pressed). NOT asserted: the activity's destroy transaction after
@@ -92,6 +117,6 @@ steps:
       patterns:
         - "back_requested"
         - "global_action back=true"
-        - "key_down code=4"
+        - "key_down code=4 tracking=false repeat=0 flags=0"
         - "key_up code=4 tracking=true"
         - "back_pressed"

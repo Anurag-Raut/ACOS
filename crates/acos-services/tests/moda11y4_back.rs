@@ -9,10 +9,15 @@
 //! * the caller gets AOSP's boolean (`true` = the action was dispatched) and
 //!   the key really is on the channel (a `false`/refusal is never turned into a
 //!   `true`);
-//! * the up event carries `KeyEvent.FLAG_TRACKING`, because
-//!   `Activity.onKeyUp` handles Back only when `event.isTracking()`
-//!   (`.cache/aosp/base/core/java/android/app/Activity.java:4117-4136`). Without
-//!   the flag the key arrives and nothing happens.
+//! * the pair is a plain, untracked press on the wire: `KeyEvent.FLAG_TRACKING`
+//!   is *not* set by the publisher. The app process sets it itself —
+//!   `Activity.onKeyDown(BACK)` calls `event.startTracking()`, and
+//!   `KeyEvent.dispatch`'s up branch runs `DispatcherState.handleUpEvent`
+//!   before `onKeyUp`, which is what `Activity.onKeyUp`'s `isTracking()` test
+//!   reads (`.cache/aosp/base/core/java/android/view/KeyEvent.java:2960-3100`,
+//!   `.../android/app/Activity.java:4018-4136`). Sending the flag would hide a
+//!   down the app never tracked; the down must be a first press
+//!   (`repeat_count == 0`, no flags) so tracking can start.
 //!
 //! Every call goes through `ServiceHost::transact`, like the guest's binder.
 
@@ -84,7 +89,7 @@ fn service_transact_result(
 }
 
 #[test]
-fn back_is_a_real_key_on_the_focused_window_with_the_tracking_flag() {
+fn back_is_a_real_key_on_the_focused_window_without_a_tracking_flag() {
     const WINDOW: BinderId = BinderId(0x9001);
     let mut host = ServiceHost::standard();
     let input = a11y_state(&mut host)
@@ -123,13 +128,88 @@ fn back_is_a_real_key_on_the_focused_window_with_the_tracking_flag() {
     assert_eq!(keys.len(), 2, "a down/up pair was published");
     assert_eq!(keys[0].action, KEY_ACTION_DOWN);
     assert_eq!(keys[0].key_code, KEYCODE_BACK);
-    assert_eq!(keys[0].flags, 0, "the down is not the tracked event");
+    assert_eq!(
+        keys[0].flags, 0,
+        "the down is a first press with no flags: FLAG_START_TRACKING is set by \
+         Activity.onKeyDown in the app, not by the dispatcher"
+    );
+    assert_eq!(
+        keys[0].repeat_count, 0,
+        "KeyEvent.dispatch only starts tracking when repeatCount == 0"
+    );
     assert_eq!(keys[1].action, KEY_ACTION_UP);
     assert_eq!(keys[1].key_code, KEYCODE_BACK);
-    assert!(
-        keys[1].flags & KEY_FLAG_TRACKING != 0,
-        "the up must carry KeyEvent.FLAG_TRACKING, or Activity.onKeyUp ignores Back"
+    assert_eq!(
+        keys[1].flags & KEY_FLAG_TRACKING,
+        0,
+        "the publisher must not pre-set FLAG_TRACKING: the app's own \
+         KeyEvent.DispatcherState sets it on the up of a tracked down"
     );
+    assert_eq!(
+        keys[0].down_time, keys[1].down_time,
+        "down and up of one press share downTime (KeyEvent.getDownTime())"
+    );
+}
+
+/// MODA11Y5: the key goes to the window with input **focus**, not to the most
+/// recently added window. A `FLAG_NOT_FOCUSABLE` `TYPE_ACCESSIBILITY_OVERLAY`
+/// window added after the activity must not swallow Back — AOSP's
+/// `InputDispatcher::dispatchKeyLocked` only ever dispatches a key to
+/// `getFocusedWindowHandle`. Before the fix the module used the newest token,
+/// so an overlay added by the service took every Back silently.
+#[test]
+fn back_goes_to_the_focused_window_not_the_newest_one() {
+    const ACTIVITY: BinderId = BinderId(0x9101);
+    const OVERLAY: BinderId = BinderId(0x9102);
+    let mut host = ServiceHost::standard();
+    let input = a11y_state(&mut host)
+        .lock()
+        .unwrap()
+        .input
+        .clone()
+        .expect("the host wires the session's input channels");
+    let (activity_fd, overlay_fd) = {
+        let mut dispatch = input.state().lock().unwrap();
+        dispatch.register_window(ACTIVITY, "activity").expect("register");
+        dispatch.register_window(OVERLAY, "a11y overlay").expect("register");
+        // The WMS layer stack: the activity keeps focus, the overlay is
+        // FLAG_NOT_FOCUSABLE (`layer_stack().focus_target()`).
+        dispatch.set_focus(Some(ACTIVITY)).expect("focus");
+        (
+            dispatch.duplicate_client_fd(ACTIVITY).expect("activity fd"),
+            dispatch.duplicate_client_fd(OVERLAY).expect("overlay fd"),
+        )
+    };
+    let mut activity = LoopbackConsumer::new(activity_fd);
+    let mut overlay = LoopbackConsumer::new(overlay_fd);
+
+    let mut reply = service_transact(&mut host, 12, |data| data.write_int32(1));
+    reply.set_data_position(0);
+    assert_eq!(reply.read_int32().unwrap(), 0, "no exception");
+    assert_eq!(reply.read_int32().unwrap(), 1, "the action was dispatched");
+
+    let mut keys = Vec::new();
+    while let Some(message) = activity.recv().expect("recv") {
+        if let InputMessage::Key { event, .. } = message {
+            keys.push(event);
+            if keys.len() == 2 {
+                break;
+            }
+        }
+    }
+    assert_eq!(keys.len(), 2, "the focused window receives the pair");
+    assert_eq!(keys[0].key_code, KEYCODE_BACK);
+    assert_eq!(keys[1].key_code, KEYCODE_BACK);
+
+    // The overlay's channel carries no key at all: a non-focusable window never
+    // sees Back.
+    let mut overlay_keys = 0;
+    while let Some(message) = overlay.recv().expect("recv") {
+        if let InputMessage::Key { .. } = message {
+            overlay_keys += 1;
+        }
+    }
+    assert_eq!(overlay_keys, 0, "the overlay must not receive the key");
 }
 
 #[test]
@@ -140,7 +220,7 @@ fn back_without_a_live_window_is_a_structured_refusal() {
     let error = service_transact_result(&mut host, 12, |data| data.write_int32(1))
         .expect_err("BACK without a live window must be refused");
     assert!(
-        format!("{error}").contains("no live window input channel"),
+        format!("{error}").contains("no focused window input channel"),
         "the refusal names the cause: {error}"
     );
 }

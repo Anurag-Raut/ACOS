@@ -71,7 +71,12 @@ public class MainActivity extends Activity {
 
     @Override
     public boolean onKeyDown(int keyCode, android.view.KeyEvent event) {
-        Log.i(TAG, "key_down code=" + keyCode + " tracking=" + event.isTracking());
+        // MODA11Y5: `repeatCount`/`flags` are what `KeyEvent.dispatch` needs to
+        // start tracking the press (`repeatCount == 0`, `FLAG_START_TRACKING`
+        // set by this very handler); `tracking` must be false on a down.
+        Log.i(TAG, "key_down code=" + keyCode + " tracking=" + event.isTracking()
+                + " repeat=" + event.getRepeatCount()
+                + " flags=" + event.getFlags());
         return super.onKeyDown(keyCode, event);
     }
 

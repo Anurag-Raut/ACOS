@@ -918,6 +918,10 @@ pub fn on_publish_service(
         window_token.0,
     );
     state.pending_bind = None;
+    // The overlay window token the service just received in `init` is the one
+    // authority for `TYPE_ACCESSIBILITY_OVERLAY` windows: WMS accepts the add
+    // only with it (`WindowManagerService.java:1630-1640`).
+    state.register_overlay_token(window_token.0);
     Ok(Some(init_delivery(
         service,
         connection_binder,
