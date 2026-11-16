@@ -59,14 +59,15 @@ steps:
       module: system.notifications
       op: list
       expect:
-        package: dev.acos.fixtures.notifpermprobe
-        notifications_enabled: false
-        posted: []
-        dropped:
-          - id: 7
-            reason: >-
-              android.permission.POST_NOTIFICATIONS is not granted (targetSdk 34);
-              NotificationManagerService drops the notification
+        ok: true
+        value:
+          notifications_enabled: false
+          posted: []
+          dropped:
+            - id: 7
+              reason: >-
+                android.permission.POST_NOTIFICATIONS is not granted (targetSdk 34);
+                NotificationManagerService drops the notification
 
   # A tap on a notification the gate dropped is a structured `MODULE_REJECTED`
   # (never a fake success); a scenario step cannot expect a step-level error

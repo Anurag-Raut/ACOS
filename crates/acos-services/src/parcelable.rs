@@ -3347,9 +3347,20 @@ fn read_value_length(parcel: &mut Parcel, tag: i32) -> Result<(usize, usize)> {
     }
     let declared = declared as usize;
     let start = parcel.data_position();
-    if declared > parcel.remaining() {
+    // The body may be shorter than its declared length: an imported parcel has
+    // had the 4-byte stability record stripped after each flat object, and the
+    // framework's length prefix counts them (see `check_value_length`). Bound
+    // the prefix by what the rest of the parcel plus those records can hold, so
+    // a hostile length still cannot make the reader skip ahead.
+    let strippable = parcel
+        .objects()
+        .iter()
+        .filter(|&&offset| offset >= start)
+        .count()
+        * 4;
+    if declared > parcel.remaining() + strippable {
         return Err(bad(format!(
-            "VAL_{tag} body length {declared} exceeds the {} bytes left in the parcel",
+            "VAL_{tag} body length {declared} exceeds the {} bytes left in the parcel (+{strippable} stripped binder records)",
             parcel.remaining()
         )));
     }

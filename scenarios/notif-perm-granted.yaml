@@ -72,23 +72,27 @@ steps:
   - service_ctl:
       module: system.notifications
       op: list
+      # The control reply carries the module's own answer under `value`
+      # (ADR-0029 item 4 control path: `{ok, cmd, id, op, value, modules[]}`).
       expect:
-        package: dev.acos.fixtures.notifpermprobe
-        notifications_enabled: true
-        channels:
-          - id: probe
-            name: Probe
-            importance: 3
-        posted:
-          - id: 7
-            tag: probe-notification
-            channel: probe
-            title: Probe title
-            text: Probe text
-            actions:
-              - index: 0
-                title: Open
-        dropped: []
+        ok: true
+        op: list
+        value:
+          notifications_enabled: true
+          channels:
+            - id: probe
+              name: Probe
+              importance: 3
+          posted:
+            - id: 7
+              tag: probe-notification
+              channel: probe
+              title: Probe title
+              text: Probe text
+              actions:
+                - index: 0
+                  title: Open
+          dropped: []
 
   # 3. Tap: the content PendingIntent is fired by the system (a real
   #    PendingIntent record; `start_result` 0 = ActivityManager.START_SUCCESS).
@@ -97,10 +101,11 @@ steps:
       op: tap
       args: {id: 7}
       expect:
-        fired:
-          id: 7
-          action: null
-          result: {start_result: 0}
+        value:
+          fired:
+            id: 7
+            action: null
+            result: {start_result: 0}
 
   # 4. The action PendingIntent fires the same way (index 0).
   - service_ctl:
@@ -108,10 +113,11 @@ steps:
       op: action
       args: {id: 7, index: 0}
       expect:
-        fired:
-          id: 7
-          action: 0
-          result: {start_result: 0}
+        value:
+          fired:
+            id: 7
+            action: 0
+            result: {start_result: 0}
 
   # 5. Dismiss removes the record; the list is empty again.
   - service_ctl:
@@ -119,9 +125,11 @@ steps:
       op: dismiss
       args: {id: 7}
       expect:
-        remaining: 0
+        value:
+          remaining: 0
   - service_ctl:
       module: system.notifications
       op: list
       expect:
-        posted: []
+        value:
+          posted: []

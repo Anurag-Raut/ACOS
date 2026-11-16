@@ -749,3 +749,165 @@ fn notification_all_pending_intents_array_set_round_trips() {
     assert_eq!(decoded, with_set, "the ArraySet did not round-trip");
     parcel.enforce_no_data_avail().expect("no trailing bytes");
 }
+
+// ---------------------------------------------------------------------------
+// MODNOTIF5: two codec bugs a real `Notification.Builder` notification exposed
+// (the Java differential built its own parcel, so writer and reader shared the
+// transcription and both were wrong in the same way).
+// ---------------------------------------------------------------------------
+
+/// `android.media.AudioAttributes.writeToParcel` branches on `FLATTEN_TAGS`
+/// (`base/media/java/android/media/AudioAttributes.java:1349-1368`) and writes
+/// the bundle only after a `VALID_BUNDLE` sentinel.
+///
+/// The bytes below are the exact wire form a real `Notification.Builder`
+/// notification carried (captured from the ART run with `ACOS_PARCEL_DUMP`):
+/// usage 5 (USAGE_NOTIFICATION), contentType 4, source -1, flags 0x800,
+/// parcel flags 0 (tags as `String[]`), no tags, and a **null** bundle
+/// (`ATTR_PARCEL_IS_NULL_BUNDLE = -1977`, no body). The old fixed field list
+/// read a `String` and a `Bundle` here, consuming 8 bytes too many and
+/// desynchronising every later notification field.
+#[test]
+fn audio_attributes_reads_the_image_wire_form() {
+    let mut parcel = acos_parcel::Parcel::new();
+    parcel.write_int32(5); // usage
+    parcel.write_int32(4); // contentType
+    parcel.write_int32(-1); // source
+    parcel.write_int32(0x800); // flags
+    parcel.write_int32(0); // parcel flags: FLATTEN_TAGS clear
+    parcel.write_string16_array(Some(&[])); // tags
+    parcel.write_int32(-1977); // ATTR_PARCEL_IS_NULL_BUNDLE: no body
+    let wire_len = parcel.data_size();
+    parcel.set_data_position(0);
+
+    let payload =
+        acos_services::parcelable::read_payload("android.media.AudioAttributes", &mut parcel)
+            .expect("the image's AudioAttributes wire form decodes");
+    assert_eq!(
+        parcel.data_position(),
+        wire_len,
+        "the codec consumes exactly the fields the writer wrote"
+    );
+    let fields = payload.fields().expect("ordered parcelable");
+    assert_eq!(fields[0], Value::Int(5), "usage first (USAGE_NOTIFICATION)");
+    assert_eq!(fields[1], Value::Int(4), "contentType");
+    assert_eq!(fields[2], Value::Int(-1), "source");
+    assert_eq!(fields[3], Value::Int(0x800), "flags");
+    assert_eq!(fields[4], Value::Int(0), "parcel flags");
+    assert_eq!(fields[5], Value::StringArray(Some(Vec::new())), "tags");
+    assert_eq!(
+        fields[6],
+        Value::Cond {
+            present: false,
+            values: Vec::new()
+        },
+        "a null bundle is the sentinel, not a field"
+    );
+
+    // Round trip: the writer emits the same bytes.
+    let mut again = acos_parcel::Parcel::new();
+    acos_services::parcelable::write_payload(&mut again, &payload).expect("re-encode");
+    let mut original = acos_parcel::Parcel::new();
+    original.write_int32(5);
+    original.write_int32(4);
+    original.write_int32(-1);
+    original.write_int32(0x800);
+    original.write_int32(0);
+    original.write_string16_array(Some(&[]));
+    original.write_int32(-1977);
+    assert_eq!(
+        again.marshall(),
+        original.marshall(),
+        "read -> write is byte-identical for the image's form"
+    );
+}
+
+/// A **flattened** tag list (the other branch) still round-trips.
+#[test]
+fn audio_attributes_reads_the_flattened_tag_form() {
+    let mut parcel = acos_parcel::Parcel::new();
+    parcel.write_int32(5);
+    parcel.write_int32(0);
+    parcel.write_int32(-1);
+    parcel.write_int32(0);
+    parcel.write_int32(1); // FLATTEN_TAGS
+    parcel.write_string16("a;b");
+    parcel.write_int32(1980); // ATTR_PARCEL_IS_VALID_BUNDLE
+    parcel.write_int32(0); // empty bundle: the "special case" length
+    let wire_len = parcel.data_size();
+    parcel.set_data_position(0);
+
+    let payload =
+        acos_services::parcelable::read_payload("android.media.AudioAttributes", &mut parcel)
+            .expect("flattened form decodes");
+    assert_eq!(parcel.data_position(), wire_len);
+    let fields = payload.fields().expect("ordered");
+    assert_eq!(fields[5], Value::Str(Some("a;b".into())));
+    assert!(matches!(fields[6], Value::Cond { present: true, .. }));
+}
+
+/// `Parcel.writeValue`'s length prefix counts the libbinder stability record the
+/// guest writes after every flat object, but `peer::import_parcel` strips those
+/// records. A body with one binder therefore arrives 4 bytes shorter than its
+/// declared length; the reader accepts exactly that difference (per recorded
+/// object) and nothing else.
+///
+/// This is the failure a real notification hit on its trailing
+/// `allPendingIntents` ArraySet: "body consumed 80 bytes but declared 84".
+#[test]
+fn a_value_length_prefix_counts_the_stripped_stability_records() {
+    use acos_parcel::Parcel;
+
+    // The body the framework writes: class name `writeValue` + the payload
+    // (`PendingIntent.writeToParcel` = one strong binder).
+    let class = "android.app.PendingIntent";
+    let mut body = Parcel::new();
+    body.write_string16(class);
+    let object_offset = body.data_size();
+    body.write_strong_binder(acos_parcel::BinderId(31));
+    body.write_int32(0); // the stability record libbinder appends
+    let body = body.marshall();
+
+    // The guest's wire form: VAL_PARCELABLE + its length prefix + body.
+    let mut wire = Parcel::new();
+    wire.write_int32(4); // VAL_PARCELABLE
+    wire.write_int32(body.len() as i32);
+    wire.write_raw_bytes(&body);
+    let wire = wire.marshall();
+    let declared_at = 4usize;
+    let body_start = 8usize;
+
+    // The import: drop the 4 bytes after the flat object, keep its new offset.
+    let mut imported_bytes = Vec::with_capacity(wire.len() - 4);
+    imported_bytes.extend_from_slice(&wire[..body_start + object_offset + 24]);
+    imported_bytes.extend_from_slice(&wire[body_start + object_offset + 28..]);
+    let mut imported = Parcel::new();
+    imported.unmarshall(&imported_bytes);
+    imported.register_object(body_start + object_offset);
+    imported.set_data_position(0);
+
+    let value = acos_services::parcelable::read_dynamic(&mut imported)
+        .expect("the declared length counts the stripped stability record");
+    assert!(
+        matches!(value, acos_services::value::DynamicValue::Parcelable(_)),
+        "substantive: {value:?}"
+    );
+    assert_eq!(
+        imported.data_position(),
+        imported_bytes.len(),
+        "the stability record is gone from the imported parcel"
+    );
+
+    // Anything else is still refused: a declared length two records too long is
+    // a desync, not a wire-form difference.
+    let mut forged = imported_bytes.clone();
+    forged[declared_at..declared_at + 4].copy_from_slice(&((body.len() + 4) as i32).to_le_bytes());
+    let mut forged_parcel = Parcel::new();
+    forged_parcel.unmarshall(&forged);
+    forged_parcel.register_object(body_start + object_offset);
+    forged_parcel.set_data_position(0);
+    assert!(
+        acos_services::parcelable::read_dynamic(&mut forged_parcel).is_err(),
+        "a length that is not explained by a stripped record is refused"
+    );
+}
