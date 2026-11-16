@@ -1,0 +1,15 @@
+{
+ "rep": 1,
+ "started_utc": "2026-11-16T03:23:42Z",
+ "groups": {
+  "a": {
+   "name": "a",
+   "phases": [
+    "latency"
+   ],
+   "wall_s": 30,
+   "queue_wait_s": null,
+   "rc": 1
+  }
+ }
+}

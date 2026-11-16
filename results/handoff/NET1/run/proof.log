@@ -1,0 +1,22 @@
+== NET1 transport proof 2026-11-16T04:39:58Z
+bin=/home/Qui/.t3/worktrees/acos/t3-d312b5b7-aef96a8dcf782e71/.cache/net1-target/release/acos-netd pasta=/home/Qui/.t3/worktrees/acos/t3-d312b5b7-aef96a8dcf782e71/.cache/net1/passt-src/pasta
+pasta_sha256=314c37e878bd6ffe43200735800d5efd4859d81d46b0450358a103c36c0edf60 (spike record 314c37e878bd6ffe43200735800d5efd4859d81d46b0450358a103c36c0edf60)
+host_listener=127.0.0.1:18080 lan_listener=192.168.31.2:18081
+check=relay_up result=PASS wall_ms=32 pasta_pid=971473 fabric_pid=971470
+pasta_version=2026_10_02.cba3570 expected=2026_10_02.cba3570
+relay_pss_kb=20359 (pasta + fabric)
+check=http_200_n1 result=PASS sessions=1 http_200=1/1 attach_ms_last=17.1
+check=http_200_n20 result=PASS sessions=20 http_200=20/20 attach_ms_last=43.4
+check=offline_isolation result=PASS iso1_failed=1 iso1_200=22 iso2_200=43
+median fetch ms (post-shaping window): iso1 125 -> 82 ; iso2 96 -> 1301 (400 ms netem on iso2)
+check=latency_isolation result=PASS iso2 median 96ms -> 1301ms, iso1 125ms -> 82ms
+check=host_loopback_blocked result=PASS got=000FAIL
+check=lan_blocked result=PASS got=000FAIL
+check=fail_closed result=PASS status.up=False down_reason=pasta killed (held down) spawn.error=network-unavailable
+check=restart_recovery result=PASS relay up again, HTTP 200 after restart
+after 50 cycles: sessions=0 () relay_veths=0 session_rules=0
+check=cycle_leak result=PASS 50 attach/detach: sessions=0 relay_veths=0 ACOS-SESS rules=0
+PSS N=1 {"pasta_kb": 16676, "fabric_kb": 639, "total_kb": 17315}
+PSS N=5 {"pasta_kb": 16676, "fabric_kb": 639, "total_kb": 17315}
+PSS N=20 {"pasta_kb": 16676, "fabric_kb": 654, "total_kb": 17330}
+== done: 10 PASS / 0 FAIL

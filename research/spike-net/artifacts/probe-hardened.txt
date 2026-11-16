@@ -1,0 +1,13 @@
+# SPIKE-NET probe, hardened pasta (spike flags), 2026-11-16T02:20:28Z
+# cmd: pasta -f -q --config-net -a 169.254.2.15/24 -g 169.254.2.1 --no-map-gw --map-host-loopback none -T none -U none --no-splice -D 1.1.1.1 -- sh -c '<LAN guard>; probe 104.20.23.154 443 18080'
+# host: python3 -m http.server 18080 --bind 127.0.0.1 (throwaway, host loopback)
+Couldn't get any nameserver address
+== SPIKE-NET probe ==
+public tcp:
+  connect 104.20.23.154:443 -> OK
+host loopback tcp (must fail):
+  connect 127.0.0.1:18080 -> Connection refused
+lan gateway tcp (must fail):
+  connect 192.168.31.1:80 -> Connection timed out
+  udp dns 1.1.1.1:53 -> OK (n=61)
+RESULT internet=reachable host_loopback=blocked lan=blocked dns=ok

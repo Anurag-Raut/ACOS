@@ -1,0 +1,11 @@
+package=dev.acos.fixtures.netcheck
+activity=dev.acos.fixtures.netcheck.MainActivity
+lifecycle=onCreate,onStart,onResume
+resumed=true
+called=true
+stopped=false
+window=com.android.internal.policy.PhoneWindow@6210b29
+timeout_ms=12000
+first_traversal=traversed=true source=onDraw skip=none
+draw_skip=none
+resume_ready=first-traversal

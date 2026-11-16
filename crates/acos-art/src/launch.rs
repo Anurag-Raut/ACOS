@@ -687,6 +687,13 @@ pub(crate) fn launch_session(
     // the APK under test). Both are 0700 and owned by this uid.
     let view_dir = ShortSocketDir::new_named("view").map_err(Error::Io)?;
     let logd = Logd::start(&sockets.0).map_err(Error::Io)?;
+    // SPIKE-NET (gated): `sockets.0` is what the sandbox binds at `/dev/socket`
+    // (below), so the netd resolver proxy must be served *here*. With a session
+    // directory (ZPROD) this is exactly `<plan>/<tag>/sock`, the directory the
+    // zygote child mounts; without one it is this run's short socket dir.
+    // Serving any other directory leaves `/dev/socket/dnsproxyd` invisible to
+    // the app and `getaddrinfo` answers `EAI_NODATA` (measured).
+    let _dns = crate::spike_net::serve_dnsproxyd_if_enabled(&sockets.0).map_err(Error::Io)?;
     crate::stage("props-logd");
 
     // --- peer (in-process, real ServiceHost) -------------------------------
@@ -1092,6 +1099,15 @@ pub(crate) fn launch_session(
         sb.with_image(Some(image.dir.clone()));
     }
     sb.run_root(run.path());
+    // NET3/NET4: the relay session is named after the session id the engine
+    // published (`ACOS_ART_SESSION_ID`) — for an `acos serve` session and for a
+    // one-shot `verify` run alike — so the live session API's `acos_net` controls
+    // address the session by the id its own client holds.
+    if let Ok(id) = std::env::var(crate::spike_net::SESSION_ID_ENV) {
+        if !id.is_empty() {
+            sb.net_session(Some(&id));
+        }
+    }
     // Z4: a foreign-guest session does not spawn ART itself, so the guest
     // seccomp/Landlock guard is applied per forked child (the child loads the
     // same `libacos_seccomp_guest.so` after its bind mounts, exactly AOSP's

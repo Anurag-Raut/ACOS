@@ -340,6 +340,9 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
     // libraries resolve against it.
     sb.ro_bind(&root.sysroot.join("shim/libacoshw.so"), "/data/libacoshw.so");
     sb.rw_bind(run.dir("socket"), "/dev/socket");
+    // SPIKE-NET (gated): `render-app` binds its own run socket dir at
+    // `/dev/socket`, so a guest that resolves a name needs the responder here.
+    let _dns = crate::spike_net::serve_dnsproxyd_if_enabled(&run.dir("socket"))?;
     sb.env(
         "LD_PRELOAD",
         "/data/shim/libartshim.so:/data/app/libacosart.so:/data/libacoshw.so",

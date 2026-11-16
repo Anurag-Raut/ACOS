@@ -530,6 +530,11 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     let mut session_insets: Option<&'static str> = None;
     // H13b: the boot image the guest booted and whether its cache hit.
     let mut session_boot_image: Option<serde_json::Value> = None;
+    // NET4: the id this run's session is addressed by. The relay session is
+    // `acos-<id>`, so a run's network is reachable by `acos_net` like a serve
+    // session's — the id is published in the engine report instead of dying with
+    // the process.
+    let mut session_id: Option<String> = None;
     let backend: EngineBackend = match engine {
         // The default route is forwarded verbatim: engine selection does not
         // change Rust VM behaviour.
@@ -569,9 +574,15 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                 animations,
                 &insets_owned,
                 Some(zygote),
+                // NET4: one-shot runs are named by an id too (the engine
+                // generates `verify-<pid>`): the relay session is `acos-<id>`,
+                // so this run's network is addressable exactly like a serve
+                // session's, and the id is reported in `engine.json`.
+                None,
                 &validated_services,
             ) {
                 Ok(session) => {
+                    session_id = Some(session.session_id().to_string());
                     session_boot_ms = Some(session.session_start_ms());
                     session_animations = Some(session.animations());
                     session_insets = Some(session.insets());
@@ -630,6 +641,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         session_insets,
         session_boot_image,
         &session_modules,
+        session_id.clone(),
     );
     finish_run(&envelope, &args, &artifacts, Some(trust))
 }
@@ -649,6 +661,7 @@ pub(crate) fn annotate(
     session_insets: Option<&'static str>,
     session_boot_image: Option<serde_json::Value>,
     session_modules: &[serde_json::Value],
+    session_id: Option<String>,
 ) {
     let engine = engine.unwrap_or(Engine::RustVm);
     // ARTGC: the engine writes `art-frames/live-session.json` and
@@ -717,6 +730,8 @@ pub(crate) fn annotate(
         "evidence": evidence,
         "timing": timing,
         "session_exit": session_exit_summary,
+        // NET4: the addressable id (`acos_net` resolves `acos-<id>`).
+        "session_id": session_id,
         "commands": caps.map(|caps| serde_json::json!({
             "supported": caps.names(),
             "missing": caps.missing(),

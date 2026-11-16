@@ -43,6 +43,8 @@ pub mod live_view;
 pub mod logd;
 pub mod props;
 pub mod seccomp;
+/// SPIKE-NET (ADR-0030 gate): pasta networking, gated on `ACOS_SPIKE_NET=1`.
+pub mod spike_net;
 pub mod watchdog;
 
 use std::ffi::OsString;
@@ -1244,6 +1246,9 @@ pub struct Sandbox<'a> {
     /// Host-side build step: keep today's fully-writable `<data>` (regenerating
     /// `linkerconfig`, `derive_classpath`, `dex2oat` boot image). Never an APK run.
     staging: bool,
+    /// NET2: the session id this run belongs to. The relay arm names its net
+    /// session after it, so the live session API addresses the same session.
+    net_session: Option<String>,
 }
 
 /// The guest's `ANDROID_ROOT`.
@@ -1298,7 +1303,15 @@ impl<'a> Sandbox<'a> {
             run_root: None,
             seccomp_guest: false,
             staging: false,
+            net_session: None,
         }
+    }
+
+    /// NET2: name the relay session after the caller's session id, so
+    /// `offline`/`delay`/`hostport` on that id reach the guest's netns.
+    pub fn net_session(&mut self, id: Option<&str>) -> &mut Self {
+        self.net_session = id.map(str::to_string);
+        self
     }
 
     /// Make this run install the guest-side seccomp-bpf filter before ART runs.
@@ -1378,8 +1391,10 @@ impl<'a> Sandbox<'a> {
         let mut a: Vec<OsString> = Vec::new();
         // Namespaces, env clearing and pid-1 supervision first: bwrap applies
         // options in order, so these must precede every mount and `--setenv`.
-        for f in SANDBOX_FLAGS {
-            a.push((*f).into());
+        // SPIKE-NET: with the spike on, `--unshare-net` is dropped because the
+        // network namespace is the one pasta created (see `spike_net`).
+        for f in spike_net::sandbox_flags() {
+            a.push(f.into());
         }
         // Runs get an application uid (see `guest_uid`); host-side staging
         // steps and the argv-shape tests keep the caller's uid.
@@ -1613,6 +1628,35 @@ impl<'a> Sandbox<'a> {
         }
         if std::env::var_os("ACOS_ART_DEBUG_ARGV").is_some() {
             eprintln!("bwrap {}", a.iter().map(|x| x.to_string_lossy().to_string()).collect::<Vec<_>>().join(" "));
+        }
+        if spike_net::enabled() {
+            match spike_net::arm() {
+                // SPIKE-NET (base arm): run bwrap *inside* the netns pasta
+                // configured for it.
+                Ok(acos_netd::client::Arm::Base) => return Ok(spike_net::wrap(&a)),
+                // NET2 (relay arm): the guest runs in the session netns the relay
+                // supervisor creates and joins to the shared relay. Host-side
+                // build steps (`staging`) stay out of the relay: they need no
+                // network, and every attach costs a netns + veth.
+                Ok(acos_netd::client::Arm::Relay) => {
+                    if self.active_run_root().is_some() {
+                        // NET4: a relay session is *named by the session id* and
+                        // nothing else. A session without one could not be
+                        // addressed by `acos_net`, so this fails closed instead of
+                        // inventing a name no client can use.
+                        let Some(id) = self.net_session.as_deref() else {
+                            return Err(Error::Layout(format!(
+                                "the relay arm needs a session id: set {} (the engine \
+                                 publishes the id it addresses the session by; a relay \
+                                 session without one is unreachable by `acos_net`)",
+                                spike_net::SESSION_ID_ENV
+                            )));
+                        };
+                        return Ok(spike_net::relay_wrap(&a, id));
+                    }
+                }
+                Err(e) => return Err(Error::Layout(format!("{e}"))),
+            }
         }
         b.args(a);
         Ok(b)

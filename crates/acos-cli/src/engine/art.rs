@@ -202,6 +202,12 @@ pub struct ArtSession {
     /// Guest boot time: `acos-art` spawn to its ready line. Charged to the
     /// session, not to the `launch` step (the executor's clock starts later).
     session_start_ms: u64,
+    /// NET4: the id this session is addressed by — the `acos serve` session id,
+    /// or the run's own id for a one-shot `verify`. It is published to the
+    /// launcher (`ACOS_ART_SESSION_ID`) and names the relay session
+    /// (`acos-<id>`), the same rule `acos_net` resolves, so **every** session's
+    /// network is reachable, including a one-shot run's.
+    session_id: String,
     /// Guest-side input settle window the engine asked for (seconds).
     frame_wait_secs: u64,
     /// Engine settle budget after a refused input frame.
@@ -1496,7 +1502,7 @@ impl ArtSession {
         animations: &str,
         insets: &str,
     ) -> Result<ArtSession, BackendError> {
-        Self::start_inner(apk, artifacts, animations, insets, None, &[])
+        Self::start_inner(apk, artifacts, animations, insets, None, None, &[])
     }
 
     /// ZPROD3: start a session that must run on a persistent zygote child
@@ -1517,20 +1523,28 @@ impl ArtSession {
         animations: &str,
         insets: &str,
         zygote: Option<Arc<ZygoteHost>>,
+        session_id: Option<&str>,
     ) -> Result<ArtSession, BackendError> {
-        Self::start_with_session(apk, artifacts, animations, insets, zygote, &[])
+        Self::start_with_session(apk, artifacts, animations, insets, zygote, session_id, &[])
     }
 
     /// ADR-0029 item 4: [`Self::start_with_zygote`] plus the `services:` specs
     /// the session attaches at launch. The specs are forwarded to `acos-art` in
     /// its environment and echoed in the launch reply from the ready line, so a
     /// reply reports what was attached, never what was requested.
+    ///
+    /// NET3/NET5: `session_id` is the addressable id of the session (the serve
+    /// daemon's own id, or `verify-<pid>` for a one-shot run): the module's
+    /// relay session is `acos-<id>`, the same rule `acos_net` resolves, so a
+    /// client can address the network of the session it holds.
+    #[allow(clippy::too_many_arguments)]
     pub fn start_with_session(
         apk: &Path,
         artifacts: &Path,
         animations: &str,
         insets: &str,
         zygote: Option<Arc<ZygoteHost>>,
+        session_id: Option<&str>,
         services: &[serde_json::Value],
     ) -> Result<ArtSession, BackendError> {
         let start = zygote.map(|host| ZygoteStart {
@@ -1538,7 +1552,7 @@ impl ArtSession {
             host,
             reuse_tag: None,
         });
-        Self::start_inner(apk, artifacts, animations, insets, start, services)
+        Self::start_inner(apk, artifacts, animations, insets, start, session_id, services)
     }
 
     fn start_inner(
@@ -1547,8 +1561,17 @@ impl ArtSession {
         animations: &str,
         insets: &str,
         zygote: Option<ZygoteStart>,
+        session_id: Option<&str>,
         services: &[serde_json::Value],
     ) -> Result<ArtSession, BackendError> {
+        // NET4: every session has an id. `acos serve` supplies its own (the id
+        // a client addresses); a one-shot run gets one from this process, which
+        // is what makes its network addressable at all (`art-<pid>` was a name
+        // no client could ever hold).
+        let session_id = match session_id {
+            Some(id) if !id.is_empty() => id.to_string(),
+            _ => format!("verify-{}", std::process::id()),
+        };
         let insets: &'static str = match acos_services::wms::parse_insets_mode(insets) {
             Some(acos_services::wms::InsetsMode::Carve) => "carve",
             Some(acos_services::wms::InsetsMode::Report) => "report",
@@ -1657,6 +1680,10 @@ impl ArtSession {
             // the read-only view-tree probe the `tree`/`tap` replies carry.
             .env("ACOSLAUNCH_INTERACTIVE", "1")
             .env("ACOSLAUNCH_LIVE_PROBE", "1")
+            // The relay session is named `acos-<id>` from this id (`acos_net`
+            // resolves the same rule). Always set: a one-shot run publishes its
+            // own id, so no session's network is unreachable by construction.
+            .env(acos_art::spike_net::SESSION_ID_ENV, &session_id)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -1782,11 +1809,22 @@ impl ArtSession {
             std::thread::spawn(move || {
                 let mut reader = BufReader::new(stderr);
                 let mut line = String::new();
+                // NET3 left a hole here: `acos-art` writes its `stage()` markers to
+                // stderr and this drain swallowed them, so the documented
+                // `ACOS_ART_STAGE_TIMING=1` stage table never appeared in a
+                // `verify`/`launch` transcript (the NET3 report concluded "none
+                // fire on this path"). Forward the markers to this process's
+                // stderr when the caller asked for them; the tail keeps every
+                // line either way.
+                let forward_stages = std::env::var_os("ACOS_ART_STAGE_TIMING").is_some();
                 loop {
                     line.clear();
                     match reader.read_line(&mut line) {
                         Ok(0) | Err(_) => break,
                         Ok(_) => {
+                            if forward_stages && line.contains(": stage ") {
+                                eprint!("{line}");
+                            }
                             let mut tail = tail.lock().unwrap_or_else(|e| e.into_inner());
                             tail.extend(line.bytes());
                             while tail.len() > 8192 {
@@ -1929,6 +1967,7 @@ impl ArtSession {
             input_offset: (0, 0),
             window_offsets: HashMap::new(),
             session_start_ms: 0,
+            session_id,
             frame_wait_secs,
             settle_budget,
             settle_polls,
@@ -2074,6 +2113,13 @@ impl ArtSession {
     /// step clock starts, so no step could be charged with it.
     pub const fn session_start_ms(&self) -> u64 {
         self.session_start_ms
+    }
+
+    /// NET4: the id this session is addressed by (the `acos serve` id, or the
+    /// one-shot run's own id). The relay session is `acos-<id>`, which is what
+    /// `acos_net` resolves, so a client can control this session's network.
+    pub fn session_id(&self) -> &str {
+        &self.session_id
     }
 
     /// The guest's own pid: the process group `acos-art` started for it
@@ -5203,6 +5249,9 @@ impl SessionBackend for ArtSession {
                 self.animations,
                 self.insets(),
                 zygote_start.clone(),
+                // A relaunch is the same session: it keeps the id (and therefore
+                // the relay session name) the client already holds.
+                Some(&self.session_id),
                 &self.services,
             ) {
                 Ok(session) => {

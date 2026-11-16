@@ -1,0 +1,5 @@
+s1 pass=0 steps=9 error: TIMEOUT: capture: strict settle timed out (probe-floor); the step is a non-pass because the screen was still changing when the deadline elapsed
+s2 pass=0 steps=9 error: TIMEOUT: capture: strict settle timed out (probe-floor); the step is a non-pass because the screen was still changing when the deadline elapsed
+s3 pass=1 steps=10 
+s4 pass=0 steps=2 error: TIMEOUT: observe: strict settle timed out (probe-floor); the step is a non-pass because the screen was still changing when the deadline elapsed
+s5 pass=1 steps=10 

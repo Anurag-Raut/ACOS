@@ -1,0 +1,42 @@
+{
+  "assertions": [],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 10,
+  "error": {
+    "class": "harness",
+    "code": "GUEST_EXITED",
+    "details": {
+      "art_code": "GUEST_EXITED",
+      "backend": "acos-art-session",
+      "context": "capture",
+      "reply": {
+        "animations": "on",
+        "cmd": "tree",
+        "code": "GUEST_EXITED",
+        "error": "the guest ended while binding the tree (status exit status: 1)",
+        "ok": false
+      },
+      "session_exit_path": "results/handoff/NET2/run/n5b/2/art-frames/session-exit.json"
+    },
+    "hint": "The guest process ended before the requested stage. Read error.details.session_exit for guest_exit, guest_signal, stage and the guest's own ACOSLAUNCH crash line: exit 126/signal 31 with a guard ERR is a host isolation condition; a guest SIGSEGV/abort or a fatal ART log is an app crash. Do not retry unchanged until the cause is named.",
+    "message": "acos-art: GUEST_EXITED: the guest ended while binding the tree (status exit status: 1)",
+    "retryable": false
+  },
+  "evidence": [
+    {
+      "kind": "step",
+      "path": "steps/08-capture.json"
+    }
+  ],
+  "index": 8,
+  "provenance": {
+    "frame": "host-observed"
+  },
+  "status": "error",
+  "step": "capture",
+  "trust": "trusted"
+}

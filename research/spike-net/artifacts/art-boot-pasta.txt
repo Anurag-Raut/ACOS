@@ -1,0 +1,13 @@
+# SPIKE-NET: full ART session boot inside the pasta netns (flag ON)
+# cmd: ACOS_SPIKE_NET=1 ACOS_SPIKE_NET_PASTA=<wt>/.cache/spike-net/bin/pasta acos launch fixtures/build/apps/hello-views.apk
+# (via tools/art-runtime/run-exclusive.sh --task SPIKE-NET + tools/guarded.sh --mem 6G --time 240)
+launch: reached first_frame (classes=2764, wall=5172ms)
+  package: dev.acos.fixtures.helloviews
+  [         ok] apk_parsed
+  [         ok] process_booted
+  [         ok] bind_application
+  [         ok] application_on_create
+  [         ok] client_transaction
+  [         ok] activity_on_create
+  [         ok] on_resume
+  [         ok] first_frame

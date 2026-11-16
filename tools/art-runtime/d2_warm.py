@@ -131,6 +131,49 @@ def comm_of(pid):
         return "?"
 
 
+def _record_daemon(pid):
+    """SERVELEAK2/F2: append `<pid> <starttime>` to `ACOS_BENCH_PIDFILE`.
+
+    `acos-bench.sh` exports the pidfile per run and its reaper signals only the
+    pids recorded here, after re-verifying `ACOS_BENCH_RUN_ID` in
+    `/proc/<pid>/environ` and the start time (a recycled pid fails). Without the
+    file (a bare `d2_warm` run) recording is a no-op, not an error.
+    """
+    path = os.environ.get("ACOS_BENCH_PIDFILE")
+    if not path:
+        return
+    try:
+        stat = Path("/proc/%d/stat" % int(pid)).read_text()
+        # Field 22 (starttime); the comm field can hold spaces, so split after
+        # the last ')'.
+        starttime = stat.rsplit(") ", 1)[1].split()[19]
+    except (OSError, IndexError):
+        return
+    try:
+        with open(path, "a") as f:
+            f.write("%d %s\n" % (int(pid), starttime))
+    except OSError:
+        pass
+
+
+def _environ_has(pid, needle):
+    """Does process `pid` carry exactly the `KEY=VALUE` entry `needle`?
+
+    The Python twin of `bench_environ_has` in `tools/bench/reap-daemons.sh`:
+    process ownership is a run id in the process's own environment, never a
+    command-line or scratch-path match (two runs share both). A caller that
+    cannot read the environment (another user's process, a race on exit) is not
+    ours.
+    """
+    try:
+        env = Path("/proc/%d/environ" % int(pid)).read_bytes()
+    except OSError:
+        return False
+    wanted = needle.encode() if isinstance(needle, str) else needle
+    return wanted in env.split(b"\0")
+
+
+
 def ppid_map():
     """parent -> [child pid] (for descendant walks)."""
     out = {}

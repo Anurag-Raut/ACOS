@@ -1,0 +1,141 @@
+# SPIKE-NET step 4: bionic resolver -> dnsproxyd wire format
+# source: android.googlesource.com/platform/bionic refs/tags/android-14.0.0_r1
+#         libc/dns/net/getaddrinfo.c (excerpt, android_getaddrinfo_proxy)
+
+android_getaddrinfo_proxy(
+    const char *hostname, const char *servname,
+    const struct addrinfo *hints, struct addrinfo **res, unsigned netid)
+{
+	int success = 0;
+
+	// Clear this at start, as we use its non-NULLness later (in the
+	// error path) to decide if we have to free up any memory we
+	// allocated in the process (before failing).
+	*res = NULL;
+
+	// Bogus things we can't serialize.  Don't use the proxy.  These will fail - let them.
+	if ((hostname != NULL &&
+	     strcspn(hostname, " \n\r\t^'\"") != strlen(hostname)) ||
+	    (servname != NULL &&
+	     strcspn(servname, " \n\r\t^'\"") != strlen(servname))) {
+		return EAI_NODATA;
+	}
+
+	FILE* proxy = fdopen(__netdClientDispatch.dnsOpenProxy(), "r+");
+	if (proxy == NULL) {
+		return EAI_SYSTEM;
+	}
+	netid = __netdClientDispatch.netIdForResolv(netid);
+
+	// Send the request.
+	if (fprintf(proxy, "getaddrinfo %s %s %d %d %d %d %u",
+		    hostname == NULL ? "^" : hostname,
+		    servname == NULL ? "^" : servname,
+		    hints == NULL ? -1 : hints->ai_flags,
+		    hints == NULL ? -1 : hints->ai_family,
+		    hints == NULL ? -1 : hints->ai_socktype,
+		    hints == NULL ? -1 : hints->ai_protocol,
+		    netid) < 0) {
+		goto exit;
+	}
+	// literal NULL byte at end, required by FrameworkListener
+	if (fputc(0, proxy) == EOF ||
+	    fflush(proxy) != 0) {
+		goto exit;
+	}
+
+	char buf[4];
+	// read result code for gethostbyaddr
+	if (fread(buf, 1, sizeof(buf), proxy) != sizeof(buf)) {
+		goto exit;
+	}
+
+	int result_code = (int)strtol(buf, NULL, 10);
+	// verify the code itself
+	if (result_code != DnsProxyQueryResult) {
+		fread(buf, 1, sizeof(buf), proxy);
+		goto exit;
+	}
+
+	struct addrinfo* ai = NULL;
+	struct addrinfo** nextres = res;
+	while (1) {
+		int32_t have_more;
+		if (!readBE32(proxy, &have_more)) {
+			break;
+		}
+		if (have_more == 0) {
+			success = 1;
+			break;
+…
+			break;
+		}
+
+		ai = calloc(1, sizeof(struct addrinfo) + sizeof(struct sockaddr_storage));
+		if (ai == NULL) {
+			break;
+		}
+		ai->ai_addr = (struct sockaddr*)(ai + 1);
+
+		// struct addrinfo {
+		//	int	ai_flags;	/* AI_PASSIVE, AI_CANONNAME, AI_NUMERICHOST */
+		//	int	ai_family;	/* PF_xxx */
+		//	int	ai_socktype;	/* SOCK_xxx */
+		//	int	ai_protocol;	/* 0 or IPPROTO_xxx for IPv4 and IPv6 */
+		//	socklen_t ai_addrlen;	/* length of ai_addr */
+		//	char	*ai_canonname;	/* canonical name for hostname */
+		//	struct	sockaddr *ai_addr;	/* binary address */
+		//	struct	addrinfo *ai_next;	/* next structure in linked list */
+		// };
+
+		// Read the struct piece by piece because we might be a 32-bit process
+		// talking to a 64-bit netd.
+		int32_t addr_len;
+		bool success =
+				readBE32(proxy, &ai->ai_flags) &&
+				readBE32(proxy, &ai->ai_family) &&
+				readBE32(proxy, &ai->ai_socktype) &&
+				readBE32(proxy, &ai->ai_protocol) &&
+				readBE32(proxy, &addr_len);
+		if (!success) {
+			break;
+		}
+
+		// Set ai_addrlen and read the ai_addr data.
+		ai->ai_addrlen = addr_len;
+		if (addr_len != 0) {
+			if ((size_t) addr_len > sizeof(struct sockaddr_storage)) {
+				// Bogus; too big.
+				break;
+			}
+			if (fread(ai->ai_addr, addr_len, 1, proxy) != 1) {
+				break;
+			}
+		}
+
+		// The string for ai_cannonname.
+		int32_t name_len;
+		if (!readBE32(proxy, &name_len)) {
+			break;
+		}
+		if (name_len != 0) {
+			ai->ai_canonname = (char*) malloc(name_len);
+			if (fread(ai->ai_canonname, name_len, 1, proxy) != 1) {
+				break;
+			}
+			if (ai->ai_canonname[name_len - 1] != '\0') {
+				// The proxy should be returning this
+				// NULL-terminated.
+				break;
+			}
+		}
+
+		*nextres = ai;
+		nextres = &ai->ai_next;
+		ai = NULL;
+	}
+
+	if (ai != NULL) {
+		// Clean up partially-built addrinfo that we never ended up
+		// attaching to the response.
+		freeaddrinfo(ai);

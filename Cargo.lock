@@ -39,6 +39,7 @@ name = "acos-art"
 version = "0.2.2"
 dependencies = [
  "acos-binder-peer",
+ "acos-netd",
  "acos-parcel",
  "acos-render",
  "acos-sandbox",
@@ -74,6 +75,7 @@ dependencies = [
  "acos-jni",
  "acos-mcp",
  "acos-native-loader",
+ "acos-netd",
  "acos-protocol",
  "acos-render",
  "acos-runtime",
@@ -145,6 +147,7 @@ name = "acos-mcp"
 version = "0.2.2"
 dependencies = [
  "acos-jni",
+ "acos-netd",
  "acos-protocol",
  "acos-runtime",
  "acos-sandbox",
@@ -169,6 +172,17 @@ dependencies = [
  "serde_json",
  "thiserror",
  "zip",
+]
+
+[[package]]
+name = "acos-netd"
+version = "0.2.2"
+dependencies = [
+ "acos-services",
+ "libc",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
