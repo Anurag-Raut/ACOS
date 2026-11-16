@@ -20,6 +20,8 @@ use acos_protocol::{
 };
 use serde_json::{json, Value};
 
+use acos_protocol::reply::{self, TreeShapeOptions};
+
 use crate::backend::{Backend, CallContext, Capabilities};
 use crate::descriptors::{
     command_from_tool, negotiate, supports_structured_content, CAPABILITIES_TOOL,
@@ -347,11 +349,11 @@ impl<B: Backend> Server<B> {
             Ok(permit) => permit,
             Err(GateError::Cancelled) => {
                 let envelope = cancelled_envelope(name);
-                return tool_result(id, &envelope, &self.negotiated_version(), &self.config);
+                return tool_result(id, &envelope, &self.negotiated_version(), &self.config, &args);
             }
             Err(GateError::Timeout) => {
                 let envelope = busy_envelope(name, self.config.max_concurrency);
-                return tool_result(id, &envelope, &self.negotiated_version(), &self.config);
+                return tool_result(id, &envelope, &self.negotiated_version(), &self.config, &args);
             }
         };
 
@@ -392,7 +394,7 @@ impl<B: Backend> Server<B> {
             }
         };
         drop(permit);
-        tool_result(id, &envelope, &self.negotiated_version(), &self.config)
+        tool_result(id, &envelope, &self.negotiated_version(), &self.config, &args)
     }
 
     fn call_context(&self, token: &CancelToken, args: &Value) -> CallContext {
@@ -623,18 +625,77 @@ fn busy_envelope(tool: &str, limit: usize) -> Envelope {
     )
 }
 
+/// Compact a tree-bearing result and write the full tree to a per-session file.
+fn shape_reply_tree(mut value: Value, config: &ServerConfig, args: &Value) -> Value {
+    let full = args.get("full").and_then(Value::as_bool).unwrap_or(false)
+        || args
+            .get("full_tree")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+    let cursor = args.get("cursor").and_then(Value::as_u64).unwrap_or(0) as usize;
+    let session = value
+        .get("session_id")
+        .and_then(Value::as_str)
+        .or_else(|| {
+            value
+                .pointer("/result/session_id")
+                .and_then(Value::as_str)
+        })
+        .unwrap_or("session");
+    let safe: String = session
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    let dir = config
+        .artifacts_dir
+        .join("sessions")
+        .join(if safe.is_empty() { "session".to_string() } else { safe });
+    let opts = TreeShapeOptions {
+        cursor,
+        page_size: reply::DEFAULT_PAGE_SIZE,
+        full,
+        artifacts_dir: Some(dir),
+        session: Some(session.to_string()),
+    };
+    reply::shape_result_tree(&mut value, None, &opts);
+    value
+}
+
 fn tool_result(
     id: &Value,
     envelope: &Envelope,
     protocol_version: &str,
     config: &ServerConfig,
+    args: &Value,
 ) -> Value {
     let envelope_json = serde_json::to_value(envelope).unwrap_or(Value::Null);
+    // REL3C: one reply rule for every tool. A tree is compacted (visible
+    // text/content_desc nodes, in reading order, paged with `cursor`) and the
+    // full tree is written under the per-session artifacts directory; the
+    // daemon already does this for live ART sessions, and this is the same rule
+    // for the in-process/native/RN/Flutter routes. `full: true` keeps the old
+    // inline tree when it fits the hard cap.
+    let envelope_json = shape_reply_tree(envelope_json, config, args);
     // F11: an agent pays for every byte of a reply and reads only the head and
     // the tail of a stack. Cap long strings here, once, for every tool, so the
     // CLI's own `--json` output and the artifacts on disk stay complete while
     // the MCP reply stays small.
-    let (envelope_json, bounds) = crate::bound::bound_value(&envelope_json, config.max_text_bytes);
+    let (mut envelope_json, bounds) =
+        crate::bound::bound_value(&envelope_json, config.max_text_bytes);
+    // The hard cap is a whole-reply rule, not a per-string one: a tree made of
+    // 500 small strings passed the string bound and still overflowed an agent's
+    // context window. `ACOS_MCP_MAX_TEXT=0` remains the documented "no bound at
+    // all" escape hatch (the raw CLI behaviour).
+    // `acos_help` is the one request whose purpose is the text: its guide is
+    // exempt from both bounds (the existing F11 rule), and a cap cannot turn a
+    // deliberate `topic: "all"` into a pointer object.
+    let help_text = envelope_json.pointer("/result/guide").is_some()
+        || envelope_json.pointer("/result/markdown").is_some();
+    let reduced = if config.max_text_bytes == 0 || help_text {
+        0
+    } else {
+        reply::enforce_cap(&mut envelope_json, reply::MAX_REPLY_BYTES)
+    };
     let text = serde_json::to_string(&envelope_json).unwrap_or_default();
     let mut content = vec![json!({"type": "text", "text": text})];
     append_evidence_content(&mut content, envelope, config, protocol_version);
@@ -651,10 +712,18 @@ fn tool_result(
         "content": content,
         "isError": !envelope.status().is_pass(),
     });
-    if !bounds.is_empty() {
+    if !bounds.is_empty() || reduced > 0 {
         // Say that the reply was bounded, and how: a silent truncation would
         // read as the real text.
-        result["_meta"] = json!({"acos_mcp": {"reply_bounded": bounds.to_json()}});
+        let mut meta = json!({"reply_bounded": bounds.to_json()});
+        if reduced > 0 {
+            meta["reply_capped"] = json!({
+                "cap_bytes": reply::MAX_REPLY_BYTES,
+                "removed_bytes": reduced,
+                "note": "the full evidence is named by tree_path/artifacts_dir in the result",
+            });
+        }
+        result["_meta"] = json!({"acos_mcp": meta});
     }
     if supports_structured_content(protocol_version) {
         result["structuredContent"] = envelope_json;
@@ -1145,7 +1214,7 @@ mod tests {
                 "display_origin": [0, 128],
             },
         }));
-        let modern = tool_result(&json!(11), &envelope, "2025-06-18", &config);
+        let modern = tool_result(&json!(11), &envelope, "2025-06-18", &config, &json!({}));
         let content = modern["result"]["content"].as_array().unwrap();
         assert!(
             content
@@ -1175,7 +1244,7 @@ mod tests {
             Metrics::wall_ms(1),
         )
         .with_value_result(json!({"node_count": 9}));
-        let plain = tool_result(&json!(12), &plain, "2025-06-18", &config);
+        let plain = tool_result(&json!(12), &plain, "2025-06-18", &config, &json!({}));
         assert_eq!(plain["result"]["content"].as_array().unwrap().len(), 1);
         // A path that does not exist is never inlined or linked.
         let missing = Envelope::pass(
@@ -1185,7 +1254,7 @@ mod tests {
             Metrics::wall_ms(1),
         )
         .with_value_result(json!({"screenshot": {"path": dir.join("nope.png").display().to_string()}}));
-        let missing = tool_result(&json!(13), &missing, "2025-06-18", &config);
+        let missing = tool_result(&json!(13), &missing, "2025-06-18", &config, &json!({}));
         assert_eq!(missing["result"]["content"].as_array().unwrap().len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1214,7 +1283,7 @@ mod tests {
             ..Evidence::default()
         });
 
-        let modern = tool_result(&json!(7), &envelope, "2025-06-18", &config);
+        let modern = tool_result(&json!(7), &envelope, "2025-06-18", &config, &json!({}));
         let content = modern["result"]["content"].as_array().unwrap();
         assert!(content
             .iter()
@@ -1239,7 +1308,7 @@ mod tests {
             && c["text"].as_str().unwrap().contains("lossless file:")));
         assert!(modern.pointer("/result/structuredContent").is_some());
 
-        let legacy = tool_result(&json!(8), &envelope, "2025-03-26", &config);
+        let legacy = tool_result(&json!(8), &envelope, "2025-03-26", &config, &json!({}));
         assert!(legacy.pointer("/result/structuredContent").is_none());
         assert!(legacy["result"]["content"]
             .as_array()
@@ -1259,7 +1328,7 @@ mod tests {
             screenshot: Some("../etc/passwd".to_string()),
             ..Evidence::default()
         });
-        let guarded = tool_result(&json!(9), &escape, "2025-03-26", &config);
+        let guarded = tool_result(&json!(9), &escape, "2025-03-26", &config, &json!({}));
         assert_eq!(guarded["result"]["content"].as_array().unwrap().len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
     }

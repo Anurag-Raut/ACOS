@@ -39,6 +39,7 @@ use acos_protocol::{
     Backend as ProtocolBackend, Envelope, ErrorCode, Fidelity, LogLevel, Metrics, ProtocolError,
     Selector,
 };
+use acos_protocol::reply::{self, TreeShapeOptions};
 use acos_verify::BackendError;
 use serde_json::{json, Value};
 
@@ -718,6 +719,7 @@ impl ServeEngine {
                             false,
                             None,
                             verb_started,
+                            args,
                         ),
                         Err(error) => art_error(request_id, Some(id), held.trust, &error),
                     };
@@ -809,6 +811,7 @@ impl ServeEngine {
                     true,
                     replaced_guest,
                     verb_started,
+                    args,
                 )
             }
             Err(error) => {
@@ -999,9 +1002,9 @@ impl ServeEngine {
             "acos_text" => type_text(&mut session, args),
             "acos_key" => key(&mut session, args),
             "acos_assert" => assert(&mut session, args, trust),
-            "acos_logs" => logs(&mut session, args),
+            "acos_logs" => logs(&mut session, &held.artifacts, args),
             "acos_status" => Ok(status_value(&session)),
-            "acos_reset" => reset(&mut session, args),
+            "acos_reset" => reset(&mut session, &held.artifacts, args),
             "acos_swipe" => Err(BackendError::unsupported(
                 "input.swipe",
                 "the ART session engine has no swipe command (tap/key/type_text only)",
@@ -1024,7 +1027,7 @@ impl ServeEngine {
                 let mut result = result;
                 result["session_id"] = json!(id);
                 if matches!(tool, "acos_tap" | "acos_text" | "acos_key" | "acos_action") {
-                    if let Err(error) = attach_observation(&mut session, &mut result, args) {
+                    if let Err(error) = attach_observation(&mut session, &held.artifacts, &mut result, args) {
                         return art_error(request_id, Some(id), trust, &error);
                     }
                 }
@@ -1384,8 +1387,10 @@ fn launch_reply(
     fresh_guest: bool,
     replaced_guest: Option<Value>,
     started: std::time::Instant,
+    args: &Value,
 ) -> Envelope {
-    let (max_nodes, node_count, truncated, tree_value) = tree_json(tree, 2000);
+    let (tree_value, max_nodes, node_count, truncated, tree_path, next_cursor) =
+        shaped_tree(&held.artifacts, tree, 2000, args);
     // SERVELEAK2/F3: this launch now owns the id. A client that launched the
     // session earlier keeps its old token and can see that its guest was
     // replaced (see `SessionBackend::shutdown`).
@@ -1404,6 +1409,8 @@ fn launch_reply(
         "tree_max_nodes": max_nodes,
         "tree_node_count": node_count,
         "tree_truncated": truncated,
+        "tree_path": tree_path,
+        "tree_next_cursor": next_cursor,
         "events": [],
         // FB5: `ms` is the time from launch start to when this rung's evidence
         // was **observed** — not a guess. `acos-art`'s ready line proves
@@ -1926,7 +1933,8 @@ fn observe_tree(
     let tree = session
         .tree_with_settle_pixels(settle, !matches!(screenshot, ScreenshotRequest::None))?;
     let t_tree = m5_now_us();
-    let (max_nodes, node_count, truncated, tree_value) = tree_json(&tree, max_nodes);
+    let (tree_value, max_nodes, node_count, truncated, tree_path, next_cursor) =
+        shaped_tree(artifacts, &tree, max_nodes, args);
     let t_end = m5_now_us();
     if p3_enabled() {
         p3_trace(
@@ -1953,6 +1961,8 @@ fn observe_tree(
         "max_nodes": max_nodes,
         "node_count": node_count,
         "tree": tree_value,
+        "tree_path": tree_path,
+        "tree_next_cursor": next_cursor,
         "settle": session.last_tree_settle().cloned(),
     });
     // FB2: the screenshot is of *this* bound frame, and its `display_origin`
@@ -1988,14 +1998,24 @@ fn observe(
                 "meaningful": true,
             },
         });
-        if want_tree {
-            let (_, node_count, truncated, tree_value) = tree_json(&tree, 2000);
+        if want_tree || want_text {
+            let (tree_value, max_nodes, node_count, truncated, tree_path, next_cursor) =
+                shaped_tree(artifacts, &tree, 2000, args);
             result["tree"] = tree_value;
             result["truncated"] = json!(truncated);
             result["node_count"] = json!(node_count);
-        }
-        if want_text {
-            result["text"] = json!(flat_text(&tree));
+            result["tree_max_nodes"] = json!(max_nodes);
+            result["tree_path"] = json!(tree_path);
+            result["tree_next_cursor"] = json!(next_cursor);
+            if want_text {
+                let (_, _, _, full_tree) = tree_json(&tree, 2000);
+                let cursor = args.get("cursor").and_then(Value::as_u64).unwrap_or(0) as usize;
+                let (text, total, text_next) =
+                    reply::compact_text(&full_tree, cursor, reply::DEFAULT_PAGE_SIZE);
+                result["text"] = json!(text);
+                result["text_node_count"] = json!(total);
+                result["text_next_cursor"] = json!(text_next);
+            }
         }
         result["settle"] = session.last_tree_settle().cloned().unwrap_or(Value::Null);
         // FB2: `screenshot` used to be silently ignored on the tree path (the
@@ -2560,9 +2580,19 @@ fn regex_lite_matches(pattern: &str, text: &str) -> Result<bool, String> {
 /// Nothing is lost: the guest buffer is untouched (and `logs/logcat.txt` in a
 /// verify run is still the full log), `"all": true` or `min_priority: "V"`
 /// returns every record, and an explicit `tag` narrows further.
-fn logs(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+fn logs(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Value, BackendError> {
     let records = session.logs_since(0)?;
     let crash = session.last_crash();
+    // The default view is small, but the guest's full buffer is still evidence:
+    // write it before filtering so `log_path` always names the whole run.
+    let log_path = acos_verify::artifacts::write_logcat(artifacts, &records)
+        .ok()
+        .map(|()| {
+            std::fs::canonicalize(artifacts.join(acos_protocol::artifacts::logcat_file_name()))
+                .unwrap_or_else(|_| artifacts.join(acos_protocol::artifacts::logcat_file_name()))
+                .display()
+                .to_string()
+        });
     let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
     let requested = args.get("min_priority");
     let explicit_priority = match requested {
@@ -2667,6 +2697,7 @@ fn logs(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
             },
         },
         "logs": lines,
+        "log_path": log_path,
         "crash": crash.map(|crash| json!({
             "exception": crash.exception,
             "message": crash.message,
@@ -2757,7 +2788,7 @@ fn status_value(session: &ArtSession) -> Value {
     status
 }
 
-fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+fn reset(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Value, BackendError> {
     // P9: reset consumes the same settle vocabulary as launch. `strict` is the
     // default and unchanged (150 ms quiet window + capture); `fast` binds the
     // relaunched guest's first traversal from a fresh probe sample, with no
@@ -2774,7 +2805,8 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
     // P9: the reset reply carries the relaunched app's bound tree, so "reset ->
     // first correct screen" is one round trip (the tree was already bound by
     // reset; serializing it costs ~1 ms). Same shape as the launch reply.
-    let (max_nodes, node_count, truncated, tree_value) = tree_json(&tree, 2000);
+    let (tree_value, max_nodes, node_count, truncated, tree_path, next_cursor) =
+        shaped_tree(artifacts, &tree, 2000, args);
     let mut reply = json!({
         "state_reset": true,
         "data_cleared": true,
@@ -2788,6 +2820,8 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
         "tree_max_nodes": max_nodes,
         "tree_node_count": node_count,
         "tree_truncated": truncated,
+        "tree_path": tree_path,
+        "tree_next_cursor": next_cursor,
         "settle": session.last_tree_settle().cloned().unwrap_or(Value::Null),
         "note": "the guest process was stopped and the same APK relaunched with empty app-data",
     });
@@ -2822,6 +2856,7 @@ fn reset(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
 /// extra traversal. The frame reference itself is added by `label_frame`.
 fn attach_observation(
     session: &mut ArtSession,
+    artifacts: &Path,
     result: &mut Value,
     args: &Value,
 ) -> Result<(), BackendError> {
@@ -2856,12 +2891,15 @@ fn attach_observation(
         .and_then(Value::as_u64)
         .unwrap_or(2000) as usize;
     let tree = session.ensure_bound_tree()?;
-    let (max_nodes, node_count, truncated, tree_value) = tree_json(&tree, max_nodes);
+    let (tree_value, max_nodes, node_count, truncated, tree_path, next_cursor) =
+        shaped_tree(artifacts, &tree, max_nodes, args);
     if let Some(object) = result.as_object_mut() {
         object.insert("tree".into(), tree_value);
         object.insert("tree_max_nodes".into(), json!(max_nodes));
         object.insert("tree_node_count".into(), json!(node_count));
         object.insert("tree_truncated".into(), json!(truncated));
+        object.insert("tree_path".into(), json!(tree_path));
+        object.insert("tree_next_cursor".into(), json!(next_cursor));
         object.insert(
             "observe".into(),
             json!({"tree": true, "png": false, "round_trip": "same-acos-art-reply"}),
@@ -3165,6 +3203,48 @@ fn resolve_assert_node(
 
 /// Serialize a live tree for the agent-facing `acos_observe_tree` result.
 ///
+/// REL3C: one reply rule for every tree-bearing verb.
+///
+/// The full tree (up to `max_nodes`) is written to the session's
+/// `artifacts/tree/<frame_seq>.json`; the inline value is the compact
+/// visible-text page unless the caller explicitly asked for the full tree.
+/// Returns `(tree_value, max_nodes, node_count, truncated, tree_path,
+/// next_cursor)`.
+fn shaped_tree(
+    artifacts: &Path,
+    tree: &UiTree,
+    max_nodes: usize,
+    args: &Value,
+) -> (Value, usize, usize, bool, Option<String>, Option<usize>) {
+    let (max_nodes, _sampled, truncated, full_value) = tree_json(tree, max_nodes);
+    let full = args.get("full").and_then(Value::as_bool).unwrap_or(false)
+        || args
+            .get("full_tree")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        || args
+            .get("tree")
+            .and_then(Value::as_str)
+            .is_some_and(|mode| mode.eq_ignore_ascii_case("full"));
+    let cursor = args.get("cursor").and_then(Value::as_u64).unwrap_or(0) as usize;
+    let opts = TreeShapeOptions {
+        cursor,
+        page_size: reply::DEFAULT_PAGE_SIZE,
+        full,
+        artifacts_dir: Some(artifacts.to_path_buf()),
+        session: None,
+    };
+    let shaped = reply::shape_tree(&full_value, Some(tree.frame.frame_seq), &opts);
+    (
+        shaped.view,
+        max_nodes,
+        shaped.total,
+        truncated,
+        shaped.tree_path,
+        shaped.next_cursor,
+    )
+}
+
 /// `max_nodes` is a hard host-side cap: the walk stops at the cap and the reply
 /// says `truncated: true`, so absence is never claimed from an incomplete tree.
 fn tree_json(tree: &UiTree, max_nodes: usize) -> (usize, usize, bool, Value) {
@@ -3705,6 +3785,41 @@ mod tests {
             "dev.acos.fixtures.counter",
             nodes,
         )
+    }
+
+    /// REL3C: the launch/observe default is the compact screen, and the full
+    /// tree is on disk under the session's artifacts directory.
+    #[test]
+    fn shaped_tree_defaults_to_the_compact_screen_and_writes_the_full_tree() {
+        let mut nodes = Vec::new();
+        for i in 0..80 {
+            let mut node = node(
+                &format!("row{i}"),
+                &format!("settings row {i}"),
+                Vec::new(),
+            );
+            node.bounds = Bounds::new(0, i * 40, 1080, i * 40 + 36);
+            node.visible = true;
+            nodes.push(node);
+        }
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/acos-serve-reply-tests")
+            .join(format!("{}-{}", std::process::id(), 1));
+        let (view, _, count, truncated, path, next) =
+            shaped_tree(&dir, &tree(nodes), 2000, &json!({}));
+        assert_eq!(count, 80);
+        assert!(!truncated);
+        assert_eq!(view["compact"], true);
+        assert_eq!(view["nodes"].as_array().unwrap().len(), 40);
+        assert_eq!(view["next_cursor"], 40);
+        let path = path.expect("full tree path");
+        let written: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(written["nodes"].as_array().unwrap().len(), 80);
+        // The explicit `full` argument restores the old inline tree when it
+        // fits the reply cap.
+        let (full, _, _, _, _, _) = shaped_tree(&dir, &tree(vec![node("row0", "settings row 0", Vec::new())]), 2000, &json!({"full": true}));
+        assert!(full.get("compact").is_none(), "full mode must not compact");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// FB1: the live channel's selector precedence, field by field.

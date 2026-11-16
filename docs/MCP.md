@@ -157,7 +157,7 @@ Server limits (all optional):
 | `ACOS_MCP_MAX_OUTPUT_BYTES` | `16777216` | maximum captured bytes per child stream |
 | `ACOS_MCP_MAX_IMAGE_BYTES` | `524288` | maximum bytes of the image inlined as MCP image content (a preview that would exceed it is downscaled further, then dropped to a link) |
 | `ACOS_MCP_PREVIEW_MAX_SIDE` | `1280` | long edge in pixels of an inlined image preview |
-| `ACOS_MCP_MAX_TEXT` | `4000` | maximum bytes for one string in a tool reply. A longer string (an error message carrying a 200-frame java tail and a 400-line native tail) is head/tail-capped with a marker naming its original size and the artifact path, and an identical repeat is replaced by a back-reference, so the full text appears once. `0` disables the bound (the raw CLI behaviour). The guide text (`acos_help`) is exempt |
+| `ACOS_MCP_MAX_TEXT` | `4000` | maximum bytes for one string in a tool reply. A longer string (an error message carrying a 200-frame java tail and a 400-line native tail) is head/tail-capped with a marker naming its original size and the artifact path, and an identical repeat is replaced by a back-reference, so the full text appears once. The **whole reply** is also capped at 20 KiB (`acos_protocol::reply::MAX_REPLY_BYTES`, see §1c); a tree is compacted/paged, and the full evidence is named by a path. `0` disables both bounds (the raw CLI behaviour). The guide text (`acos_help`) is exempt |
 | `ACOS_MCP_SESSION_TTL_MS` | `600000` | idle session TTL in **milliseconds**; the FB5 fallback when `ACOS_SESSION_IDLE_TTL_S` is unset |
 | `ACOS_SESSION_IDLE_TTL_S` | `600` | FB5: idle TTL in **seconds** for the sessions this MCP server launched (any later call renews it). `0` disables. `acos_launch {idle_ttl_s}` overrides it per session |
 | `ACOS_MCP_SHUTDOWN_GRACE_MS` | `2000` | how long in-flight calls may finish after stdin closes |
@@ -415,7 +415,9 @@ alongside `capabilities.tools`; both are supported on `2025-03-26` and
 
 The server-local tools are served in-process (they never shell out):
 `acos_launch` boots an APK into a session that persists across calls and returns
-the stage ladder; `acos_observe_tree`/`acos_tap`/`acos_key`/`acos_text`/`acos_swipe`/`acos_logs`/`acos_status`
+the stage ladder plus the **compact screen** by default (counts and visible texts;
+`{"full": true}` returns the previous inline tree, and `tree_path` always names
+the full tree file); `acos_observe_tree`/`acos_tap`/`acos_key`/`acos_text`/`acos_swipe`/`acos_logs`/`acos_status`
 drive it; and `acos_doctor` runs the `acos doctor --json` host preflight (Android
 SDK/build-tools, `android.jar`, JDK, workspace helper, debug keystore,
 boot-classpath cache, host memory) and returns each failing check's `fix`.
@@ -423,13 +425,46 @@ boot-classpath cache, host memory) and returns each failing check's `fix`.
 `acos_logs` returns an **agent-relevant default view**: records at priority `W`
 and above plus anything that names the app's own package, with `filter` naming
 the defaults that were applied. The guest buffer is untouched —
-`logs/logcat.txt` in a verify run is still the full log — and `{"all": true}`
-(or `min_priority: "V"`) returns every record.
+`logs/logcat.txt` in a verify run is still the full log — and `"log_path"` in a
+live session reply names that complete file. `{"all": true}` (or
+`min_priority: "V"`) returns every record, subject to the 20 KiB reply cap.
 
 The three **meta** tools (`acos_help`, `acos_capabilities`, `acos_doctor`)
 report `fidelity: "n/a"`: they say nothing about the app under test, so
 `static-analysis` would imply the reply came from the APK. `n/a` never satisfies
 a fidelity requirement and is never a pass.
+
+### Reply size: the compact screen, paging, and tree files
+
+Every MCP tool and the CLI's `--json` output obey one rule (REL3C). A
+tree-bearing reply is **not** a dump of the hierarchy:
+
+* the default `tree` is the **compact screen**: every visible node with a
+  non-empty `text` or `content_desc`, in document (reading) order, carrying its
+  tree `id`, Android `resource_id`, `class`, `bounds`, `text`/`content_desc`,
+  `clickable`, `window` and `package`. Structural wrappers (a `DecorView`, a
+  `FrameLayout` with no words) carry no answer and are omitted;
+* the compact list is **paged**, never head/tail-cut. The first page carries
+  `next_cursor` (also `tree_next_cursor`); pass `{"cursor": N}` to read the next
+  page. A middle-of-screen row is on page 3, not lost in the middle;
+* the **full tree** is always written to the session's
+  `tree/<frame_seq>.json`, and the reply names the absolute `tree_path`
+  (live sessions get a per-session artifacts directory; verify runs keep
+  `tree/<frame_seq>.json` in `--artifacts`). Read that file when you need the
+  hierarchy, ids of non-text nodes, or bounds of an invisible node;
+* `acos_launch` defaults to the compact summary/visible texts; `{"full": true}`
+  (or `{"full_tree": true}`) returns the old inline tree when it fits. The full
+  tree is still the file above. `acos_observe_tree`, `acos_observe` and
+  `acos_reset` take the same arguments;
+* the hard reply cap is **20 KiB** (`acos_protocol::reply::MAX_REPLY_BYTES`). If
+  even a requested full tree or a long log list does not fit, the reply keeps
+  the compact/paged view and the path, and `_meta.acos_mcp.reply_capped` says
+  how many bytes were removed. A reply never silently exceeds the cap.
+
+`acos_logs` uses the same principle: the default view is small (`W` + the app's
+package), while `log_path` names the complete `logs/logcat.txt` in the session
+artifacts. `{"all": true}` returns the whole in-memory view (subject to the
+20 KiB cap and `logs_truncated`), not a different file.
 
 ### Getting a screenshot through the observe verbs
 

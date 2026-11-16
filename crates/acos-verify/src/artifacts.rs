@@ -102,8 +102,30 @@ pub fn write_step(dir: &Path, step: &StepResult) -> Result<(), VerifyError> {
 }
 
 /// Write one `tree/<seq>.json`.
+///
+/// REL3C: `tree/<seq>.json` is evidence for every step on that frame, so a
+/// later step's smaller/degenerate sample must not replace a richer tree that
+/// is already on disk. The feedback case was `tree/193.json` holding one
+/// `DecorView` node after a failed tap, which made the artifact undebuggable.
+/// A richer tree wins; an equal or larger one replaces the file normally.
 pub fn write_tree(dir: &Path, seq: u64, tree: &acos_protocol::UiTree) -> Result<(), VerifyError> {
-    write_json(dir, &tree_file_name(seq), tree)
+    let relative = tree_file_name(seq);
+    let path = dir.join(&relative);
+    if let Ok(bytes) = std::fs::read(&path) {
+        if let Ok(existing) = serde_json::from_slice::<acos_protocol::UiTree>(&bytes) {
+            if node_count(&existing) > node_count(tree) {
+                return Ok(());
+            }
+        }
+    }
+    write_json(dir, &relative, tree)
+}
+
+fn node_count(tree: &acos_protocol::UiTree) -> usize {
+    fn count(node: &acos_protocol::UiNode) -> usize {
+        1 + node.children.iter().map(count).sum::<usize>()
+    }
+    tree.nodes.iter().map(count).sum()
 }
 
 /// Write one `frames/<seq>.png`.
@@ -234,6 +256,58 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    /// REL3C: a later step on the same frame must not replace a rich tree
+    /// artifact with a one-node skeleton (the feedback case:
+    /// `tree/193.json` = `nodes: [DecorView]`, truncated).
+    #[test]
+    fn a_richer_tree_artifact_is_not_overwritten_by_a_skeleton() {
+        let dir = test_dir("tree-rich");
+        prepare(&dir).unwrap();
+        let frame = acos_protocol::FrameMeta::new(
+            193,
+            String::new(),
+            "",
+            1080,
+            2400,
+            420,
+            "",
+            true,
+        );
+        let mut root = acos_protocol::UiNode::new(
+            "n1",
+            "android.widget.FrameLayout",
+            acos_protocol::Bounds::new(0, 0, 1080, 2400),
+        );
+        root.children = vec![
+            acos_protocol::UiNode::new(
+                "n2",
+                "android.widget.TextView",
+                acos_protocol::Bounds::new(0, 100, 500, 150),
+            )
+            .with_text("the middle of the screen"),
+        ];
+        let rich = acos_protocol::UiTree::new(frame.clone(), "dev.acos.fixture", vec![root]);
+        write_tree(&dir, 193, &rich).unwrap();
+        let skeleton = acos_protocol::UiTree::new(
+            frame,
+            "dev.acos.fixture",
+            vec![acos_protocol::UiNode::new(
+                "n1",
+                "com.android.internal.policy.DecorView",
+                acos_protocol::Bounds::new(0, 0, 1080, 2400),
+            )],
+        );
+        write_tree(&dir, 193, &skeleton).unwrap();
+        let written: acos_protocol::UiTree =
+            serde_json::from_slice(&std::fs::read(dir.join("tree/193.json")).unwrap()).unwrap();
+        assert_eq!(node_count(&written), 2);
+        assert!(written
+            .all_nodes()
+            .iter()
+            .any(|node| node.text == "the middle of the screen"));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

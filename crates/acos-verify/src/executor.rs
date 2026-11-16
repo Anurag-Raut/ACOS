@@ -422,7 +422,21 @@ pub fn run_scenario(
         if let Some(observation) = &exec.observation {
             let seq = observation.frame.frame_seq;
             step_result.frame_seq = Some(seq);
-            artifacts::write_tree(&options.artifacts_dir, seq, &observation.tree)?;
+            // REL3C: a failed step whose bound tree is a one-node skeleton (the
+            // feedback case: `tree/<seq>.json` = [DecorView], truncated) cannot
+            // be debugged. Refresh once for *evidence only*; the assertion still
+            // judges the frame it actually bound, so settle semantics do not
+            // change. The richer artifact also survives `write_tree`'s
+            // no-smaller-overwrite rule.
+            let mut evidence_tree = observation.tree.clone();
+            if step_result.status != Status::Pass && tree_node_count(&evidence_tree) <= 1 {
+                if let Ok(refreshed) = backend.refresh() {
+                    if tree_node_count(&refreshed.tree) > tree_node_count(&evidence_tree) {
+                        evidence_tree = refreshed.tree;
+                    }
+                }
+            }
+            artifacts::write_tree(&options.artifacts_dir, seq, &evidence_tree)?;
             step_result
                 .evidence
                 .push(ArtifactRef::new("tree", acos_protocol::tree_file_name(seq)));
@@ -1722,6 +1736,14 @@ fn expect_change_failure(
     // Keep the observation: the failing step's tree/frame are still evidence.
     failure.observation = observation.cloned();
     Some(failure)
+}
+
+/// Total nodes in a tree (roots + descendants).
+fn tree_node_count(tree: &acos_protocol::UiTree) -> usize {
+    fn count(node: &acos_protocol::UiNode) -> usize {
+        1 + node.children.iter().map(count).sum::<usize>()
+    }
+    tree.nodes.iter().map(count).sum()
 }
 
 /// Steps that evaluate the bound frame itself (UI-tree assertions, a non-fresh

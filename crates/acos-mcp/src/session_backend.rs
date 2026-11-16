@@ -196,6 +196,11 @@ pub struct SessionBackend {
     stopping: AtomicBool,
     /// Source of [`OwnedSession::seq`].
     next_seq: AtomicU64,
+    /// REL3C: root for per-session artifacts (full trees and full logs). The
+    /// live ART daemon has its own per-session directory; this one is for the
+    /// legacy in-process/native/RN/Flutter routes so every live session can
+    /// name a file instead of inlining one.
+    artifacts_root: PathBuf,
 }
 
 impl std::fmt::Debug for SessionBackend {
@@ -228,7 +233,16 @@ impl SessionBackend {
             expired: Mutex::new(HashMap::new()),
             stopping: AtomicBool::new(false),
             next_seq: AtomicU64::new(1),
+            artifacts_root: default_artifacts_root(),
         }
+    }
+
+    /// Override the per-session artifacts root (tests and a caller-provided
+    /// `ACOS_ARTIFACTS_DIR`).
+    #[must_use]
+    pub fn with_artifacts_root(mut self, root: PathBuf) -> Self {
+        self.artifacts_root = root;
+        self
     }
 
     /// Wrap an already-probed CLI backend.
@@ -249,6 +263,7 @@ impl SessionBackend {
             expired: Mutex::new(HashMap::new()),
             stopping: AtomicBool::new(false),
             next_seq: AtomicU64::new(1),
+            artifacts_root: default_artifacts_root(),
         }
     }
 
@@ -2414,13 +2429,49 @@ impl SessionBackend {
         self.with_session(&id, |session| match session.logs() {
             Ok(lines) => {
                 let status = session.status().ok();
-                let min_priority = args
+                let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
+                let requested = args
                     .get("min_priority")
                     .and_then(Value::as_str)
                     .and_then(acos_runtime::session::parse_log_priority);
+                let tag = args.get("tag").and_then(Value::as_str);
+                // FB6/REL3C: default view = priority >= W plus anything that
+                // names the app's own package. The old default was the whole
+                // 235-line SoLoader buffer, which buried the app's words.
+                let package = status
+                    .as_ref()
+                    .and_then(|s| s.package.clone())
+                    .unwrap_or_default();
+                let default_view = !all && requested.is_none() && tag.is_none();
+                let min_priority = if all { None } else { requested.or(Some(5)) };
+                let mut kept = lines.clone();
+                if default_view && !package.is_empty() {
+                    kept.retain(|line| {
+                        line.priority >= 5
+                            || line.tag.contains(&package)
+                            || line.message.contains(&package)
+                    });
+                }
+                let total_lines = lines.len();
+                let filtered = total_lines - kept.len();
+                // The full buffer is evidence: write it to the session's own
+                // artifacts directory and name it. The reply is the small view.
+                let log_path = {
+                    let dir = artifact_tree_dir(&self.artifacts_root, &id).join("logs");
+                    let _ = std::fs::create_dir_all(&dir);
+                    let path = dir.join("logcat.txt");
+                    let mut text = String::from("--------- beginning of main\n");
+                    for line in &lines {
+                        text.push_str(&line.line);
+                        text.push('\n');
+                    }
+                    std::fs::write(&path, text)
+                        .ok()
+                        .map(|()| std::fs::canonicalize(&path).unwrap_or(path).display().to_string())
+                };
                 let records: Vec<Value> = acos_runtime::session::summarize_logs(
-                    &lines,
-                    args.get("tag").and_then(Value::as_str),
+                    &kept,
+                    tag,
                     min_priority,
                 )
                 .into_iter()
@@ -2460,10 +2511,17 @@ impl SessionBackend {
                     "session_id": id,
                     "launched": status.as_ref().map(|s| s.launched).unwrap_or(false),
                     "stage_reached": stage_reached,
-                    "total": lines.len(),
+                    "total": total_lines,
                     "count": records.len(),
                     "collapsed": collapsed,
                     "logs": records,
+                    "log_path": log_path,
+                    "filter": {
+                        "min_priority": if all { "V" } else if min_priority == Some(5) { "W" } else { "explicit" },
+                        "package": if default_view { json!(package) } else { Value::Null },
+                        "default_view": default_view,
+                        "dropped": filtered,
+                    },
                     "note": if records.is_empty() {
                         "empty is valid only if the app reached onCreate; check stage_reached (and `acos_launch`) before concluding anything"
                     } else {
@@ -2705,6 +2763,32 @@ fn launch_token(envelope: &Envelope) -> String {
 /// The default idle TTL for this process (FB5): `ACOS_SESSION_IDLE_TTL_S`, else
 /// [`DEFAULT_IDLE_TTL_S`]. A malformed value is ignored (the default applies)
 /// rather than silently disabling the reaper; `0` is the explicit opt-out.
+/// Where a live session's full tree/log files go when no artifacts root was
+/// configured. Never `/tmp`: an agent's evidence must survive the process.
+fn default_artifacts_root() -> PathBuf {
+    std::env::var_os("ACOS_ARTIFACTS_DIR")
+        .map(PathBuf::from)
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".acos-mcp-artifacts")
+}
+
+fn safe_session_dir(id: &str) -> String {
+    let safe: String = id
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect();
+    if safe.is_empty() {
+        "session".to_string()
+    } else {
+        safe
+    }
+}
+
+fn artifact_tree_dir(root: &std::path::Path, id: &str) -> PathBuf {
+    root.join("sessions").join(safe_session_dir(id))
+}
+
 fn default_idle_ttl_s() -> u64 {
     if let Some(value) = std::env::var(IDLE_TTL_ENV)
         .ok()
