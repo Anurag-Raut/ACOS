@@ -965,6 +965,7 @@ impl ServeEngine {
             // command; an `at-launch` module is refused by the launcher with
             // the launch call in the message.
             "acos_services" => service_control(&mut session, args),
+            "acos_service_ctl" => service_ctl(&mut session, args),
             "acos_reset" => reset(&mut session, args),
             "acos_swipe" => Err(BackendError::unsupported(
                 "input.swipe",
@@ -2733,22 +2734,61 @@ fn status_value(session: &ArtSession) -> Value {
     status
 }
 
+/// ADR-0029 item 4: `acos_service_ctl {module, op, args?}` on a live session.
+///
+/// This is the **only** agent spelling of a module control op; it becomes the
+/// one engine request `{op: "ctl", id, ctl_op, args}` (the module's own op name
+/// travels as `ctl_op` so it cannot collide with the `acos_services` action
+/// word). The module's answer is the peer's own value, never a fabricated
+/// success.
+fn service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let (Some(module), Some(ctl_op)) = (
+        args.get("module").and_then(Value::as_str),
+        args.get("op").and_then(Value::as_str),
+    ) else {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: "acos_service_ctl needs a string `module` and a string `op`".into(),
+        });
+    };
+    let mut request = json!({
+        "op": "ctl",
+        "id": module,
+        "ctl_op": ctl_op,
+    });
+    if let Some(module_args) = args.get("args") {
+        request["args"] = module_args.clone();
+    }
+    let mut reply = session.service_op(request)?;
+    reply["session_id"] = json!(args
+        .pointer("/base/session_id")
+        .or_else(|| args.get("session_id"))
+        .and_then(Value::as_str)
+        .unwrap_or(""));
+    Ok(reply)
+}
+
 /// ADR-0029 item 4: `acos_services {op, id?, profile?, config?}`.
 ///
 /// `op` is closed (`list`, `status`, `attach`, `detach`); an unknown op, a
 /// missing id for attach/detach and a bad profile are `InvalidArgument`, never a
 /// silent no-op. The launcher performs the mutation and reports the attached
-/// set it actually has.
+/// set it actually has. A module's own control op is **not** spelled here: it is
+/// `acos_service_ctl {module, op, args}`, which both routes turn into the one
+/// engine request `{op: "ctl", id, ctl_op, args}`.
 fn service_control(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let op = args.get("op").and_then(Value::as_str).unwrap_or("");
-    if !matches!(op, "list" | "status" | "attach" | "detach" | "ctl") {
+    if !matches!(op, "list" | "status" | "attach" | "detach") {
         return Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
-            detail: format!("unknown op {op:?}; use list, status, attach, detach or ctl"),
+            detail: format!(
+                "unknown op {op:?}; use list, status, attach or detach (a module control op is \
+                 `acos_service_ctl {{module, op, args}}`)"
+            ),
         });
     }
     let mut request = json!({"op": op});
-    if matches!(op, "attach" | "detach" | "ctl") {
+    if matches!(op, "attach" | "detach") {
         let Some(id) = args.get("id").and_then(Value::as_str) else {
             return Err(BackendError::Failed {
                 code: ErrorCode::InvalidArgument,
@@ -2764,18 +2804,6 @@ fn service_control(session: &mut ArtSession, args: &Value) -> Result<Value, Back
         if let Some(config) = args.get("config") {
             request["config"] = config.clone();
         }
-    }
-    if op == "ctl" {
-        // `acos_services {op: "ctl", id, ctl_op, args}` is the MCP spelling of
-        // `acos_service_ctl`: it drives a module's scripted state mid-session.
-        let Some(ctl_op) = args.get("ctl_op").and_then(Value::as_str) else {
-            return Err(BackendError::Failed {
-                code: ErrorCode::InvalidArgument,
-                detail: "ctl needs a string `ctl_op` (the module's control op)".to_string(),
-            });
-        };
-        request["ctl_op"] = json!(ctl_op);
-        request["args"] = args.get("args").cloned().unwrap_or(json!({}));
     }
     let mut reply = session.service_op(request)?;
     reply["session_id"] = json!(args

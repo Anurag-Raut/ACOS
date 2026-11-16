@@ -1378,6 +1378,17 @@ impl PmsService {
         Self { state, wiring }
     }
 
+    /// Publish (or withdraw) one `hasSystemFeature` answer.
+    ///
+    /// A service module that makes a system feature real turns it on at attach
+    /// and off at detach, so `hasSystemFeature` cannot disagree with the
+    /// attached module set.
+    pub fn set_system_feature(&mut self, name: &str, enabled: bool) -> crate::error::Result<()> {
+        let mut state = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.features.set(name, enabled);
+        Ok(())
+    }
+
     /// Replace the installed package with the APK being launched.
     ///
     /// `ServiceHost::standard()` seeds the PMS with the `hello-views` fixture;

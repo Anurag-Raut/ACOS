@@ -181,6 +181,14 @@ pub static SPECS: &[ParcelableSpec] = &[
         verification: Verification::Curated,
     },
     ParcelableSpec {
+        // `BluetoothDevice.writeToParcel` (API 34): `writeString(mAddress)` then
+        // `writeInt(mAddressType)`. The bonded-device list and the
+        // `ACTION_FOUND` extra both carry this payload.
+        class: "android.bluetooth.BluetoothDevice",
+        fields: &[FieldOp::Str8, FieldOp::Int],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
         class: "android.content.pm.PackageItemInfo",
         fields: &[
             FieldOp::Str8,         // name
@@ -1681,12 +1689,18 @@ pub static SPECS: &[ParcelableSpec] = &[
         // against the image's `UserHandle(Parcel)`.
         verification: Verification::Curated,
     },
-    // `AccessibilityServiceInfo.writeToParcel` (API 34,
-    // `core/java/android/accessibilityservice/AccessibilityServiceInfo.java:1370-1394`):
-    // every field is a scalar except the two `writeParcelable` objects
-    // (`ComponentName`, nullable `ResolveInfo`) and the optional package names.
-    // The accessibility module answers `getInstalledAccessibilityServiceList`
-    // with this shape; the framework's `CREATOR` reads it back field by field.
+    // `AccessibilityServiceInfo.writeToParcel`, read off the *image's* own
+    // framework dex (`.cache/boot/android-34/dex/framework/classes.dex`,
+    // method `writeToParcel(Parcel;I)V`): 22 `Parcel.write*` calls, ending with
+    // `mMotionEventSources` and `return-void`.
+    //
+    // The AOSP tag in `.cache/aosp` (`android-14.0.0_r75`,
+    // `AccessibilityServiceInfo.java:1392-1393`) writes one more int,
+    // `mObservedMotionEventSources`, at the end. The image's framework does not:
+    // its `writeToParcel` and its `initFromParcel` both stop after
+    // `mMotionEventSources`, so a parcel that carries a 23rd int leaves 4 stray
+    // bytes for the reader. The image dex is authoritative for the wire format
+    // (ADR-0031), so the spec (and the module's encoder) stop at 22.
     ParcelableSpec {
         class: "android.accessibilityservice.AccessibilityServiceInfo",
         fields: &[
@@ -1712,7 +1726,21 @@ pub static SPECS: &[ParcelableSpec] = &[
             FieldOp::Str16,                                   // mTileServiceName
             FieldOp::Int,                                     // mIntroResId
             FieldOp::Int,                                     // mMotionEventSources
-            FieldOp::Int,                                     // mObservedMotionEventSources
+        ],
+        verification: Verification::Full,
+    },
+    // `android.view.accessibility.AccessibilityWindowAttributes.writeToParcel`
+    // (API 34), read off the image dex (`classes.dex`, 2 calls): the window
+    // title as a `CharSequence` (span marker + nullable string) and the
+    // `LocaleList` as a parcelable. The WMS->a11y
+    // `IAccessibilityManager.setAccessibilityWindowAttributes` oneway
+    // (`acos-aidl` table code 31) carries this type as its
+    // `writeTypedObject` argument.
+    ParcelableSpec {
+        class: "android.view.accessibility.AccessibilityWindowAttributes",
+        fields: &[
+            FieldOp::CharSequence,              // mWindowTitle
+            FieldOp::Named("android.os.LocaleList"), // mLocales
         ],
         verification: Verification::Full,
     },
@@ -2470,6 +2498,10 @@ pub mod val {
     pub const IBINDER: i32 = 15;
     /// `VAL_PARCELABLE`.
     pub const PARCELABLE: i32 = 4;
+    /// `VAL_OBJECTARRAY` (`Parcel.writeArray(Object[])`).
+    pub const OBJECTARRAY: i32 = 17;
+    /// `VAL_LIST` (`Parcel.writeList`).
+    pub const LIST: i32 = 11;
 }
 
 /// Read a `writeBundle` payload.
@@ -2988,6 +3020,12 @@ fn dynamic_to_value(v: crate::value::DynamicValue) -> Value {
         D::IntArray(a) => Value::IntArray(a),
         D::LongArray(a) => Value::LongArray(a),
         D::StringArray(a) => Value::StringArray(a),
+        D::ObjectArray(items) => Value::ObjectArray(
+            items.map(|items| items.into_iter().map(dynamic_to_value).collect()),
+        ),
+        D::List(items) => Value::List(
+            items.map(|items| items.into_iter().map(dynamic_to_value).collect()),
+        ),
         D::Binder(b) => Value::Binder(b),
         D::Map(m) => Value::Map(Some(m)),
         D::Parcelable(p) => Value::Parcelable(p),
@@ -3010,6 +3048,16 @@ fn value_to_dynamic(v: &Value) -> Result<crate::value::DynamicValue> {
         Value::IntArray(a) => D::IntArray(a.clone()),
         Value::LongArray(a) => D::LongArray(a.clone()),
         Value::StringArray(a) => D::StringArray(a.clone()),
+        Value::ObjectArray(items) => D::ObjectArray(
+            items.as_ref().map(|items| {
+                items.iter().map(value_to_dynamic).collect::<Result<Vec<_>>>()
+            }).transpose()?,
+        ),
+        Value::List(items) => D::List(
+            items.as_ref().map(|items| {
+                items.iter().map(value_to_dynamic).collect::<Result<Vec<_>>>()
+            }).transpose()?,
+        ),
         Value::Binder(b) => D::Binder(*b),
         Value::Parcelable(p) | Value::TypedObject(p) | Value::NamedParcelable(p) => {
             D::Parcelable(p.clone())
@@ -3102,7 +3150,53 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
         val::BYTE => D::Byte(parcel.read_byte()?),
         val::BYTEARRAY => D::ByteArray(parcel.read_byte_array()?),
         val::INTARRAY => D::IntArray(parcel.read_int32_array()?),
-        val::STRINGARRAY => D::StringArray(parcel.read_string16_array()?),
+        val::STRINGARRAY => {
+            D::StringArray(parcel.read_string16_array()?)
+        }
+        // `VAL_LIST` is length-prefixed too (`isLengthPrefixed`, Parcel.java
+        // 4914-4924): the length word precedes `writeList`'s size + element
+        // `writeValue` payloads. The Bluetooth bonded-device result is one.
+        val::LIST => {
+            let (declared, start) = read_value_length(parcel, val::LIST)?;
+            let size = parcel.read_int32()?;
+            if size < 0 {
+                return Err(ServiceError::BadRequest {
+                    interface: "bundle".into(),
+                    method: "readValue".into(),
+                    detail: format!("VAL_LIST count {size} is negative"),
+                });
+            }
+            let cap = (size as usize).min(parcel.remaining() / 4);
+            let mut items = Vec::with_capacity(cap);
+            for _ in 0..size {
+                items.push(read_dynamic(parcel)?);
+            }
+            check_value_length(parcel, declared, start, val::LIST)?;
+            D::List(Some(items))
+        }
+        // `VAL_OBJECTARRAY` is length-prefixed (`Parcel.isLengthPrefixed`,
+        // Parcel.java:4908-4926; writer `writeArray` at 2670, reader at 4820).
+        // It is how the SMS_RECEIVED broadcast carries its `Object[]` of
+        // `byte[]` PDUs, so the module path must model it exactly.
+        val::OBJECTARRAY => {
+            let (declared, start) = read_value_length(parcel, val::OBJECTARRAY)?;
+            let size = parcel.read_int32()?;
+            if size < 0 {
+                return Err(ServiceError::BadRequest {
+                    interface: "bundle".into(),
+                    method: "readValue".into(),
+                    detail: format!("VAL_OBJECTARRAY count {size} is negative"),
+                });
+            }
+            // Guest-controlled count: each element is at least one 4-byte tag.
+            let cap = (size as usize).min(parcel.remaining() / 4);
+            let mut items = Vec::with_capacity(cap);
+            for _ in 0..size {
+                items.push(read_dynamic(parcel)?);
+            }
+            check_value_length(parcel, declared, start, val::OBJECTARRAY)?;
+            D::ObjectArray(Some(items))
+        }
         val::IBINDER => D::Binder(parcel.read_strong_binder()?),
         val::PARCELABLE => {
             // `VAL_PARCELABLE` is length-prefixed (`isLengthPrefixed`,
@@ -3230,6 +3324,39 @@ pub fn write_dynamic(parcel: &mut Parcel, value: &crate::value::DynamicValue) ->
             let _ = a;
             return Err(bad("VAL_LONGARRAY is not modelled"));
         }
+        D::List(items) => match items {
+            // `writeValue(null)` is `VAL_NULL`; `writeList` is only reached for a
+            // non-null List.
+            None => parcel.write_int32(val::NULL),
+            Some(items) => {
+                write_value_length_prefixed(parcel, val::LIST, |parcel| {
+                    parcel.write_int32(
+                        i32::try_from(items.len()).map_err(|_| bad("list too large"))?,
+                    );
+                    for item in items {
+                        write_dynamic(parcel, item)?;
+                    }
+                    Ok(())
+                })?;
+            }
+        },
+        D::ObjectArray(items) => match items {
+            // `writeValue(null)` is `VAL_NULL`; `writeArray` is never reached
+            // for a null array (Parcel.java:2560 checks `value instanceof
+            // Object[]` after the null branch).
+            None => parcel.write_int32(val::NULL),
+            Some(items) => {
+                write_value_length_prefixed(parcel, val::OBJECTARRAY, |parcel| {
+                    parcel.write_int32(
+                        i32::try_from(items.len()).map_err(|_| bad("object array too large"))?,
+                    );
+                    for item in items {
+                        write_dynamic(parcel, item)?;
+                    }
+                    Ok(())
+                })?;
+            }
+        },
         D::Parcelable(p) => {
             // `VAL_PARCELABLE` is length-prefixed (`isLengthPrefixed`,
             // Parcel.java:4908-4926) and the count covers the class name plus
@@ -3529,8 +3656,10 @@ fn field_matches(field: FieldOp, call: &str) -> bool {
         FieldOp::Str16 => call == "writeString" || call == "writeString16",
         // The scanner records `TextUtils.writeToParcel` as a single
         // `writeString` op, so a `CharSequence` field matches that one call
-        // even though the wire form is `int + writeString8`.
-        FieldOp::CharSequence => call == "writeString",
+        // even though the wire form is `int + writeString8`. A direct
+        // `Parcel.writeCharSequence` call (AccessibilityWindowAttributes) is
+        // the same wire form and shows up under its own name.
+        FieldOp::CharSequence => call == "writeString" || call == "writeCharSequence",
         FieldOp::Str8 => call == "writeString8",
         FieldOp::StringArray => call == "writeString8Array" || call == "writeStringArray",
         // `Parcel.writeStringList` is a distinct call in a DEX scan, but the

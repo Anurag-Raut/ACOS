@@ -1191,6 +1191,21 @@ impl Parcel {
         self.data.extend_from_slice(bytes);
     }
 
+    /// Record `offset` as an object-table entry of an **imported** parcel.
+    ///
+    /// [`Parcel::unmarshall`] copies bytes only, because a parcel that came from
+    /// the binder driver keeps its object table out of band (the driver's
+    /// `offsets` array, not part of `data`). The importer
+    /// (`acos_binder_peer::import_parcel`) walks those offsets, rewrites each
+    /// `flat_binder_object` into the in-process form and registers its position
+    /// here, so [`Parcel::objects`] answers what the sender wrote. Without it
+    /// every incoming request looks object-free, and a handler that must find a
+    /// client binder in the request — an `ISynchronousResultReceiver`, an
+    /// `IIntentReceiver` — never sees it.
+    pub fn register_object(&mut self, offset: usize) {
+        self.objects.push(offset);
+    }
+
     /// `nativeFreeBuffer` / `Parcel.recycle`: drop data, objects and fds.
     pub fn recycle(&mut self) {
         self.reset();

@@ -124,6 +124,8 @@ fn manifest_ref() -> &'static ModuleManifest {
             name: sensors::SERVICE_NAME,
             descriptor: sensors::SENSOR_SERVER_DESCRIPTOR,
         }],
+        process_initializers: &[],
+        features: &[],
         providers: &[],
         broadcasts: &[],
         windows: &[],
@@ -389,7 +391,7 @@ impl Module for SensorsModule {
         Ok(())
     }
 
-    fn control(&mut self, op: &str, args: &Value) -> Result<Value> {
+    fn control(&mut self, _host: &mut ServiceHost, op: &str, args: &Value) -> Result<Value> {
         let hub = self.hub()?;
         match op {
             "status" => Ok(hub

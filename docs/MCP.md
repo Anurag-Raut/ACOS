@@ -349,6 +349,7 @@ the `docs_tool_table_matches_descriptors` test fails if the docs drift from the
 server.
 
 <!-- ACOS_TOOLS_BEGIN -->
+
 | tool | kind | command | fidelity | required args |
 |---|---|---|---|---|
 | `acos_inspect` | protocol | `inspect` | `static-analysis` | `apk`, `base` |
@@ -376,6 +377,8 @@ server.
 | `acos_status` | server | - | `native-runtime` | - |
 | `acos_doctor` | server | - | `n/a` | - |
 | `acos_services` | server | - | `native-runtime` | `op` |
+| `acos_service_ctl` | server | - | `native-runtime` | `module`, `op` |
+
 <!-- ACOS_TOOLS_END -->
 
 Regenerate the block with `cargo run -p acos-mcp --example gen-tools-docs`.

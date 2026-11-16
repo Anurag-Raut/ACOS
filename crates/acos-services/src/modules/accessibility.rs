@@ -78,6 +78,8 @@ fn manifest_ref() -> &'static ModuleManifest {
             name: "accessibility",
             descriptor: "android.view.accessibility.IAccessibilityManager",
         }],
+        features: &[],
+        process_initializers: &[],
         providers: &[],
         broadcasts: &[],
         windows: &["TYPE_ACCESSIBILITY_OVERLAY"],
@@ -210,7 +212,7 @@ impl Module for AccessibilityModule {
         Ok(())
     }
 
-    fn control(&mut self, op: &str, args: &Value) -> Result<Value> {
+    fn control(&mut self, _host: &mut ServiceHost, op: &str, args: &Value) -> Result<Value> {
         let Some(state) = &self.state else {
             return Err(ServiceError::ModuleRejected {
                 module: MODULE_ID,

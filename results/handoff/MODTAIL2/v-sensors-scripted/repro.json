@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "fixtures/build/apps/sensor-probe.apk",
+  "apk_sha256": "9bd89a707a52ca8b840ced074661425bc95e4b2aef20d432bbf5c08d73580e1e",
+  "scenario_path": "scenarios/sensors-scripted.yaml",
+  "scenario_sha256": "c21f87b1c9b7cd98f8a6673cc470a4787123e77d9cad84693878842e33be2ef6",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

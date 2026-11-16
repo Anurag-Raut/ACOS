@@ -363,6 +363,19 @@ impl Peer {
                         frame.data.len(),
                         text
                     );
+                    // A `system -> app` delivery the app's `onTransact` rejected
+                    // (a non-empty reply body is a binder exception parcel) is
+                    // evidence, not a log line: record it next to the
+                    // unsupported-transaction records so a verdict can see that
+                    // the callback never ran.
+                    let record = serde_json::json!({
+                        "kind": "REVERSE_DELIVERY_EXCEPTION",
+                        "seq": frame.seq,
+                        "bytes": frame.data.len(),
+                        "text": text,
+                    })
+                    .to_string();
+                    self.log_line(&record);
                 }
             }
             other => {
@@ -703,6 +716,12 @@ impl Peer {
         self.log_unsupported(&record);
     }
 
+    fn log_line(&mut self, line: &str) {
+        if let Some(log) = self.log.as_mut() {
+            let _ = writeln!(log, "{line}");
+        }
+    }
+
     fn log_unsupported(&mut self, record: &UnsupportedRecord) {
         // Keep the *first* records (they are the diagnosis of what the launch
         // needed), bound the in-memory copy and the JSONL file, and count what
@@ -889,7 +908,11 @@ impl Peer {
         seq
     }
 
-    fn take_delivery_frames(&mut self) -> Vec<Frame> {
+    /// The `system -> app` frames queued by anything that ran on the host (a
+    /// binder transaction, or a module's live `control` op). Public so the
+    /// launcher can flush them after a control request, which is not followed
+    /// by a binder transaction of its own.
+    pub fn take_delivery_frames(&mut self) -> Vec<Frame> {
         let mut pending = std::mem::take(&mut self.local_deliveries);
         pending.extend(self.host.take_deliveries());
         // Defence in depth: even the frames produced in one turn are bounded, so a
@@ -904,6 +927,17 @@ impl Peer {
                  (cap {MAX_PENDING_DELIVERIES} per turn)"
             );
             pending.truncate(MAX_PENDING_DELIVERIES);
+        }
+        if std::env::var_os("ACOS_SERVICE_CTL_LOG").is_some() && !pending.is_empty() {
+            let path = std::env::var("ACOS_SERVICE_CTL_LOG").unwrap_or_default();
+            if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+                let _ = writeln!(
+                    file,
+                    "deliveries={} targets={:?}",
+                    pending.len(),
+                    pending.iter().map(|d| (d.interface.clone(), d.code, d.target.0)).collect::<Vec<_>>()
+                );
+            }
         }
         let mut out = Vec::new();
         for d in pending {
@@ -982,6 +1016,7 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
     // rebase the object offsets. Without this every binder reads as null and
     // the following argument is misaligned.
     let mut out = Vec::with_capacity(frame.data.len());
+    let mut object_offsets: Vec<usize> = Vec::new();
     let mut cursor = 0usize;
     let mut fds = frame.fds.iter().copied();
     for off in frame.object_offsets() {
@@ -1017,6 +1052,12 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
         let mut obj = [0u8; 24];
         obj.copy_from_slice(&frame.data[off..off + 24]);
         obj[8..16].copy_from_slice(&new_id.to_le_bytes());
+        // The object table travels out of band in the frame, so the imported
+        // parcel must be told where each rewritten object landed: a handler that
+        // looks for a client binder in the request (`result_receiver` in the
+        // bluetooth module) walks `Parcel::objects()`. Before this the imported
+        // parcel answered zero objects for every guest request.
+        object_offsets.push(out.len());
         out.extend_from_slice(&obj);
         let mut next = off + 24;
         let binder = matches!(
@@ -1034,6 +1075,9 @@ fn import_parcel_raw(frame: &Frame) -> Parcel {
     out.extend_from_slice(&frame.data[cursor..]);
     let mut parcel = Parcel::new();
     parcel.unmarshall(&out);
+    for offset in object_offsets {
+        parcel.register_object(offset);
+    }
     parcel.set_data_position(0);
     // The guest's libbinder wrote this parcel: a null binder carries the 4-byte
     // stability record but no object-table entry (L1 §3.6).

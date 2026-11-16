@@ -153,12 +153,14 @@ pub struct Step {
     /// debuggable/source-owned builds; never for arbitrary third-party APKs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call_activity_method: Option<CallActivityMethodStep>,
-    /// ADR-0029 item 4: one service-module operation in the middle of a run
-    /// (`attach`/`detach` a module, or a module control op such as
-    /// `sensors.set_value`).
+    /// ADR-0029 item 4: one service-module operation in the middle of a run.
     ///
-    /// This is the scenario spelling of `acos_services`/`acos_service_ctl`, so a
-    /// scripted module can be driven between assertions instead of only at
+    /// `op` is either the module-lifecycle word (`attach`/`detach`, with an
+    /// optional `profile`/`config`) or a module's own control op
+    /// (`sensors.set_value`, `net.telephony.sms`, `hw.bluetooth.scan`, ...) with
+    /// `args`. This is the scenario spelling of the agent API
+    /// (`acos_services` for attach/detach, `acos_service_ctl` for a control op),
+    /// so a scripted module can be driven between assertions instead of only at
     /// launch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service_ctl: Option<ServiceCtlStep>,
@@ -711,27 +713,18 @@ pub struct TimeSetup {
     pub timezone: Option<String>,
 }
 
-/// `call_activity_method` (optional; debug/source-owned builds only).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct CallActivityMethodStep {
-    /// Activity component (defaults to the launched activity).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub activity: Option<String>,
-    /// Method name.
-    pub method: String,
-    /// JSON arguments.
-    #[serde(default)]
-    pub args: Vec<Value>,
-}
-
 /// `service_ctl`: one service-module operation between assertions (ADR-0029
 /// item 4).
 ///
 /// `op` is `attach` (with `profile`/`config`), `detach`, or one of the module's
-/// own control ops (`sensors.set_value`, `sensors.play`, ...). The step is the
-/// scenario spelling of `acos_services`/`acos_service_ctl`, so a scripted module
+/// own control ops (`sensors.set_value`, `net.telephony.sms`, `hw.bluetooth.scan`,
+/// ...). The step is the one scenario spelling of the agent API —
+/// `acos_services {op: attach|detach}` for the lifecycle words and
+/// `acos_service_ctl {module, op, args}` for a control op — so a scripted module
 /// can be driven mid-run: set a sensor value, assert the view, play a shake,
-/// detach and assert the honest empty answer.
+/// detach and assert the honest empty answer. A control op reaches only a module
+/// that is attached in this run; a step naming a detached module is a structured
+/// step failure (never a silent no-op).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ServiceCtlStep {
@@ -748,6 +741,19 @@ pub struct ServiceCtlStep {
     /// Control-op arguments (`{sensor: "accelerometer", values: [0,0,9.81]}`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub args: Option<Value>,
+}
+
+/// `call_activity_method` (optional; debug/source-owned builds only).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CallActivityMethodStep {
+    /// Activity component (defaults to the launched activity).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity: Option<String>,
+    /// Method name.
+    pub method: String,
+    /// JSON arguments.
+    #[serde(default)]
+    pub args: Vec<Value>,
 }
 
 
@@ -1559,6 +1565,29 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                 if let Some(args) = &ctl.args {
                     if !args.is_object() && !args.is_null() {
                         v.push(format!("{path}.args"), "args must be an object");
+                    }
+                }
+                // A control op drives a module that is attached in *this* run:
+                // the scenario's `services:` block attaches it at launch, or an
+                // earlier `service_ctl {op: attach}` step does. A step that can
+                // only ever be refused is a scenario error, not a runtime one —
+                // but the step that *does* the attaching is never one.
+                if ctl.op != "attach" && !ctl.module.trim().is_empty() {
+                    let attached_at_launch =
+                        scenario.services.iter().any(|service| service.id == ctl.module);
+                    let attached_earlier = scenario.steps[..index].iter().any(|step| {
+                        step.service_ctl.as_ref().is_some_and(|earlier| {
+                            earlier.op == "attach" && earlier.module == ctl.module
+                        })
+                    });
+                    if !attached_at_launch && !attached_earlier {
+                        v.push(
+                            &path,
+                            format!(
+                                "module {:?} is not attached by this scenario (no `services:` entry and no earlier `service_ctl: {{op: attach}}`); a control step can only drive an attached module",
+                                ctl.module
+                            ),
+                        );
                     }
                 }
             }

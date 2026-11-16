@@ -116,8 +116,18 @@ build_apk() {
         --auto-add-overlay
 
     echo "build-apps: [$name] compiling java"
+    # The ACOS guest sources are a *runtime* classpath: `dev.acos.art.*` (the
+    # session's LaunchMain providers, e.g. `SoftwareKeyStore`) is compiled into
+    # the boot dex at launch, never shipped in the APK. A fixture that calls one
+    # (keystore-probe) therefore needs them on the javac sourcepath, exactly as
+    # `tools/keystore-k5b/run.sh` compiles them beside the probe. `-implicit:none`
+    # type-checks against those sources without emitting classes, so the APK's
+    # dex never carries a second copy of a class the guest dex already owns.
+    # Kept generic so the next guest-harness fixture does not rediscover this.
     # shellcheck disable=SC2046
-    javac --release 11 -encoding UTF-8 -cp "$android_jar" -d "$work/classes" \
+    javac --release 11 -encoding UTF-8 -cp "$android_jar" \
+        -sourcepath "$ROOT/crates/acos-art/guest/java" -implicit:none \
+        -d "$work/classes" \
         $(find "$app_dir/src" "$work/gen" -name '*.java')
 
     echo "build-apps: [$name] dexing"
@@ -222,6 +232,11 @@ done
 # AccessibilityManager state (enabled + installed/enabled lists) and sends a
 # real event through IAccessibilityManager.sendAccessibilityEvent.
 build_apk a11y-probe
+
+# tail-probe is the long-tail module fixture (ADR-0029): one tab per module
+# (telephony, biometric, bluetooth, vibrator) printing what the framework's own
+# clients answered. Built at targetSdk 34 like the module scenario corpus.
+build_apk tail-probe
 
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from
