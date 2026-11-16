@@ -1,0 +1,4278 @@
+{
+  "acos": "/home/Qui/.t3/worktrees/acos/t3-cd1a8223-01c1b27f83e7703e/.cache/arms/v022/acos",
+  "binary_sha256": "50537b60cd2c4bf28e1e1ff63b9ebf4b35aad6a66f5393c9a408a67ddb0da7ad",
+  "bundle_wall_s": 200.942,
+  "checks": {
+    "failed_by_code": {},
+    "failed_steps": 0,
+    "m4_fast": 40,
+    "m4_strict": 20,
+    "m5_good": 20,
+    "m7_fast_good": 20,
+    "m7_strict_good": 20,
+    "m8_counter_expected_count": "62",
+    "m8_counter_final_count": "62",
+    "m8_form_error_text": "Name is required",
+    "mode_wall_s": {
+      "m4-fast": 13.31,
+      "m4-strict": 7.637,
+      "m6-fast": 51.452,
+      "m6-strict": 27.519,
+      "m8-counter-fast": 2.005,
+      "m8-counter-strict": 19.813,
+      "m8-form-fast": 46.813,
+      "m8-form-strict": 24.413
+    },
+    "reference_md5": "7218b3ae7e51e4035c89fd96646d72d7",
+    "reps": {
+      "fast": 40,
+      "other": 20
+    },
+    "teardown_lifecycles": [
+      "lifecycle"
+    ],
+    "teardown_verified": 64
+  },
+  "env": {
+    "ACOS_STRICT_SETTLE": "default",
+    "animations": "on"
+  },
+  "errors": [],
+  "failures": {
+    "failed_by_code": {},
+    "failed_steps": 0,
+    "rows": []
+  },
+  "host_after": {
+    "loadavg1": 6.6,
+    "loadavg15": 6.54,
+    "loadavg5": 5.82,
+    "mem_available_gib": 44.78,
+    "mem_available_mib": 45850.6,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-82287ccb-3a5c5b00dcfc246d && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && tools/",
+        "comm": "bash",
+        "pid": 1923607
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task REL3H -- tools/guarded.sh --mem 10G --time 900 -- env CARGO_TARGET_DIR=/home/Qui/.t3/worktrees/acos/t3-82287ccb-3",
+        "comm": "bash",
+        "pid": 1923608
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-07333150-812d7bd1cf66f09d && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && tools/",
+        "comm": "bash",
+        "pid": 2063390
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task MPROC4 -- tools/guarded.sh --mem 10G --time 500 -- env ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-",
+        "comm": "bash",
+        "pid": 2063391
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 10G --time 500 -- env ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts ACOS_ART_DATA=/home/Qui/.t3/worktrees/acos/",
+        "comm": "bash",
+        "pid": 2063422
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 500 env ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts ACOS_ART_DATA=/home/Qui/.t3/worktrees/acos/t3-07333150-812d7bd1",
+        "comm": "timeout",
+        "pid": 2063431
+      },
+      {
+        "cmd": "python3 tools/mproc4-two-process-drive.py /home/Qui/.t3/worktrees/acos/t3-07333150-812d7bd1cf66f09d/.cache/mproc4-target/debug/acos-art fixtures/build/apps/proc",
+        "comm": "python3",
+        "pid": 2063432
+      },
+      {
+        "cmd": "/home/Qui/.t3/worktrees/acos/t3-07333150-812d7bd1cf66f09d/.cache/mproc4-target/debug/acos-art launch --apk fixtures/build/apps/proc-a.apk --extra-apk fixtures/b",
+        "comm": "acos-art",
+        "pid": 2063433
+      }
+    ],
+    "runnable": "7/2339",
+    "used_mib": 16058.2,
+    "used_pct": 25.94,
+    "utc": "2026-11-16T06:44:35+00:00"
+  },
+  "host_before": {
+    "loadavg1": 6.6,
+    "loadavg15": 6.54,
+    "loadavg5": 5.82,
+    "mem_available_gib": 44.79,
+    "mem_available_mib": 45864.5,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-82287ccb-3a5c5b00dcfc246d && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && tools/",
+        "comm": "bash",
+        "pid": 1923607
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task REL3H -- tools/guarded.sh --mem 10G --time 900 -- env CARGO_TARGET_DIR=/home/Qui/.t3/worktrees/acos/t3-82287ccb-3",
+        "comm": "bash",
+        "pid": 1923608
+      },
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-07333150-812d7bd1cf66f09d && export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts && tools/",
+        "comm": "bash",
+        "pid": 2063390
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task MPROC4 -- tools/guarded.sh --mem 10G --time 500 -- env ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-",
+        "comm": "bash",
+        "pid": 2063391
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 10G --time 500 -- env ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts ACOS_ART_DATA=/home/Qui/.t3/worktrees/acos/",
+        "comm": "bash",
+        "pid": 2063422
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 500 env ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts ACOS_ART_DATA=/home/Qui/.t3/worktrees/acos/t3-07333150-812d7bd1",
+        "comm": "timeout",
+        "pid": 2063431
+      },
+      {
+        "cmd": "python3 tools/mproc4-two-process-drive.py /home/Qui/.t3/worktrees/acos/t3-07333150-812d7bd1cf66f09d/.cache/mproc4-target/debug/acos-art fixtures/build/apps/proc",
+        "comm": "python3",
+        "pid": 2063432
+      },
+      {
+        "cmd": "/home/Qui/.t3/worktrees/acos/t3-07333150-812d7bd1cf66f09d/.cache/mproc4-target/debug/acos-art launch --apk fixtures/build/apps/proc-a.apk --extra-apk fixtures/b",
+        "comm": "acos-art",
+        "pid": 2063433
+      }
+    ],
+    "runnable": "5/2339",
+    "used_mib": 16044.2,
+    "used_pct": 25.92,
+    "utc": "2026-11-16T06:44:35+00:00"
+  },
+  "ok": true,
+  "phase": "latency",
+  "samples": {
+    "cpu_active_tap_strict_pct": {
+      "bad": 0,
+      "extra": [
+        {
+          "cpu_pct": 43.608,
+          "cpu_s": 8.64,
+          "pids": 5,
+          "seconds": 19.813,
+          "wake_pids": 5,
+          "wakeups": 3149,
+          "wakeups_per_s": 158.937
+        }
+      ],
+      "median": 43.608,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 43.608,
+        "mean": 43.608,
+        "median": 43.608,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 43.608,
+        "n": 1,
+        "p5": 43.608,
+        "p50": 43.608,
+        "p95": 43.608,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "% of one core",
+      "values": [
+        43.608
+      ]
+    },
+    "m4_launch_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        }
+      ],
+      "median": 166.774,
+      "n": 40,
+      "ok": 40,
+      "stats": {
+        "ci95_high": 167.878,
+        "ci95_low": 158.7288375,
+        "cv": 0.05262907225274744,
+        "max": 182.083,
+        "mean": 162.64167500000002,
+        "median": 166.774,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 150.324,
+        "n": 40,
+        "p5": 151.31895,
+        "p50": 166.774,
+        "p95": 170.1539,
+        "resamples": 2000,
+        "spread": 0.11293696859222656,
+        "spread_pct": 11.293696859222656,
+        "stdev": 8.559680464882868
+      },
+      "unit": "ms",
+      "values": [
+        160.326,
+        152.653,
+        151.792,
+        151.479,
+        166.976,
+        168.083,
+        164.535,
+        164.851,
+        166.761,
+        182.083,
+        166.787,
+        167.971,
+        167.257,
+        151.68,
+        168.073,
+        167.283,
+        180.26,
+        151.147,
+        168.021,
+        151.328,
+        153.237,
+        153.104,
+        152.766,
+        168.204,
+        168.968,
+        151.789,
+        152.907,
+        167.785,
+        169.327,
+        153.251,
+        169.193,
+        164.224,
+        168.457,
+        168.084,
+        169.622,
+        167.457,
+        166.557,
+        150.324,
+        169.022,
+        152.043
+      ]
+    },
+    "m4_launch_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        }
+      ],
+      "median": 302.58849999999995,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 303.507,
+        "ci95_low": 302.2895,
+        "cv": 0.013156318094939334,
+        "max": 304.563,
+        "mean": 301.7628,
+        "median": 302.58849999999995,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 287.304,
+        "n": 20,
+        "p5": 294.68454999999994,
+        "p50": 302.58849999999995,
+        "p95": 304.5288,
+        "resamples": 2000,
+        "spread": 0.03253345715385762,
+        "spread_pct": 3.253345715385762,
+        "stdev": 3.97008738601956
+      },
+      "unit": "ms",
+      "values": [
+        295.073,
+        301.291,
+        302.467,
+        303.481,
+        300.605,
+        302.157,
+        304.488,
+        303.01,
+        302.435,
+        303.533,
+        302.503,
+        303.828,
+        302.674,
+        303.971,
+        302.968,
+        287.304,
+        302.422,
+        304.527,
+        304.563,
+        301.956
+      ]
+    },
+    "m5_screenshot_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        }
+      ],
+      "median": 11.3,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 11.4515,
+        "ci95_low": 11.218,
+        "cv": 0.027550945341133535,
+        "max": 12.039,
+        "mean": 11.35055,
+        "median": 11.3,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 10.719,
+        "n": 20,
+        "p5": 10.789299999999999,
+        "p50": 11.3,
+        "p95": 11.79485,
+        "resamples": 2000,
+        "spread": 0.08898672566371692,
+        "spread_pct": 8.898672566371692,
+        "stdev": 0.31271838264180324
+      },
+      "unit": "ms",
+      "values": [
+        11.782,
+        11.298,
+        11.191,
+        11.588,
+        12.039,
+        11.302,
+        11.434,
+        11.278,
+        11.166,
+        11.174,
+        11.156,
+        11.245,
+        10.793,
+        10.719,
+        11.285,
+        11.378,
+        11.752,
+        11.655,
+        11.469,
+        11.307
+      ]
+    },
+    "m6_reset_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        }
+      ],
+      "median": 194.88150000000002,
+      "n": 40,
+      "ok": 40,
+      "stats": {
+        "ci95_high": 196.591,
+        "ci95_low": 190.51600000000002,
+        "cv": 0.0983528308325762,
+        "max": 265.938,
+        "mean": 196.08595,
+        "median": 194.88150000000002,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 171.874,
+        "n": 40,
+        "p5": 178.47275000000002,
+        "p50": 194.88150000000002,
+        "p95": 229.4512499999999,
+        "resamples": 2000,
+        "spread": 0.2615871696389851,
+        "spread_pct": 26.15871696389851,
+        "stdev": 19.285608268994995
+      },
+      "unit": "ms",
+      "values": [
+        171.874,
+        196.843,
+        265.938,
+        193.551,
+        209.29,
+        208.918,
+        197.977,
+        179.544,
+        197.912,
+        179.594,
+        190.613,
+        194.948,
+        195.276,
+        179.816,
+        179.621,
+        189.954,
+        179.781,
+        178.82,
+        190.669,
+        194.815,
+        178.475,
+        178.807,
+        190.684,
+        194.347,
+        197.568,
+        196.461,
+        188.428,
+        178.43,
+        227.818,
+        260.483,
+        197.235,
+        199.008,
+        180.711,
+        196.464,
+        190.419,
+        211.307,
+        195.59,
+        212.293,
+        196.718,
+        196.438
+      ]
+    },
+    "m6_reset_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        }
+      ],
+      "median": 343.3905,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 345.163,
+        "ci95_low": 330.43061250000005,
+        "cv": 0.039154521644595125,
+        "max": 360.537,
+        "mean": 339.54200000000003,
+        "median": 343.3905,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 319.665,
+        "n": 20,
+        "p5": 320.36420000000004,
+        "p50": 343.3905,
+        "p95": 360.47999999999996,
+        "resamples": 2000,
+        "spread": 0.11682268437828049,
+        "spread_pct": 11.682268437828048,
+        "stdev": 13.29460458824912
+      },
+      "unit": "ms",
+      "values": [
+        337.109,
+        345.553,
+        327.979,
+        330.765,
+        320.401,
+        330.719,
+        330.153,
+        319.665,
+        323.332,
+        322.483,
+        353.152,
+        344.641,
+        343.513,
+        360.477,
+        343.268,
+        357.805,
+        350.739,
+        343.776,
+        360.537,
+        344.773
+      ]
+    },
+    "m7_tree_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        }
+      ],
+      "median": 0.629,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 0.74,
+        "ci95_low": 0.5714999999999999,
+        "cv": 0.1885176220854815,
+        "max": 0.861,
+        "mean": 0.6529,
+        "median": 0.629,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.45,
+        "n": 20,
+        "p5": 0.47374999999999995,
+        "p50": 0.629,
+        "p95": 0.8210999999999999,
+        "resamples": 2000,
+        "spread": 0.5522257551669316,
+        "spread_pct": 55.22257551669316,
+        "stdev": 0.12308315545961088
+      },
+      "unit": "ms",
+      "values": [
+        0.568,
+        0.727,
+        0.819,
+        0.661,
+        0.861,
+        0.502,
+        0.475,
+        0.629,
+        0.528,
+        0.783,
+        0.572,
+        0.571,
+        0.698,
+        0.601,
+        0.629,
+        0.622,
+        0.806,
+        0.45,
+        0.753,
+        0.803
+      ]
+    },
+    "m7_tree_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        }
+      ],
+      "median": 41.407,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 41.4835,
+        "ci95_low": 41.299,
+        "cv": 0.004014769604816728,
+        "max": 41.705,
+        "mean": 41.40985,
+        "median": 41.407,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 41.163,
+        "n": 20,
+        "p5": 41.198150000000005,
+        "p50": 41.407,
+        "p95": 41.6765,
+        "resamples": 2000,
+        "spread": 0.011552394522665054,
+        "spread_pct": 1.1552394522665055,
+        "stdev": 0.16625100712001994
+      },
+      "unit": "ms",
+      "values": [
+        41.205,
+        41.456,
+        41.49,
+        41.299,
+        41.675,
+        41.368,
+        41.669,
+        41.349,
+        41.446,
+        41.2,
+        41.553,
+        41.477,
+        41.533,
+        41.477,
+        41.705,
+        41.321,
+        41.202,
+        41.368,
+        41.241,
+        41.163
+      ]
+    },
+    "m8_tap_counter_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 0,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 14,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 13,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 26,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 25,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 25,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 24,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 23,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 22,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 21,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 21,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 21,
+          "frame_ms": 51,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 22,
+          "frame_ms": 36,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 50,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 4,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 17,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 31,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 31,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 30,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 29,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 29,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 28,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 27,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 27,
+          "frame_ms": 36,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 25,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 25,
+          "frame_ms": 36,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 24,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 23,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 22,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 21,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 50,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 21,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 51,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 4,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 17,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 32,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 32,
+          "frame_ms": 36,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 31,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 31,
+          "frame_ms": 36,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 31,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        }
+      ],
+      "median": 50.561,
+      "n": 40,
+      "ok": 40,
+      "stats": {
+        "ci95_high": 50.75,
+        "ci95_low": 50.442,
+        "cv": 0.20359480205586747,
+        "max": 66.116,
+        "mean": 48.734825,
+        "median": 50.561,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 19.47,
+        "n": 40,
+        "p5": 34.127849999999995,
+        "p50": 50.561,
+        "p95": 65.76895,
+        "resamples": 2000,
+        "spread": 0.6258005181859537,
+        "spread_pct": 62.58005181859537,
+        "stdev": 9.922157049102342
+      },
+      "unit": "ms",
+      "values": [
+        35.724,
+        35.257,
+        35.679,
+        51.209,
+        49.979,
+        50.489,
+        51.072,
+        50.918,
+        50.697,
+        50.195,
+        50.237,
+        65.996,
+        51.205,
+        65.715,
+        20.274,
+        35.646,
+        50.444,
+        50.694,
+        50.469,
+        50.261,
+        50.647,
+        50.895,
+        50.503,
+        51.282,
+        50.481,
+        50.322,
+        50.74,
+        50.76,
+        51.037,
+        50.967,
+        66.116,
+        50.895,
+        65.757,
+        19.47,
+        34.857,
+        50.628,
+        50.453,
+        50.364,
+        50.44,
+        50.619
+      ]
+    },
+    "m8_tap_counter_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 67,
+          "frame_ms": 944,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 57,
+          "frame_ms": 946,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 67,
+          "frame_ms": 932,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 68,
+          "frame_ms": 930,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 57,
+          "frame_ms": 917,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 57,
+          "frame_ms": 922,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 56,
+          "frame_ms": 918,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 57,
+          "frame_ms": 920,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 57,
+          "frame_ms": 926,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 68,
+          "frame_ms": 940,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 58,
+          "frame_ms": 939,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 931,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 65,
+          "frame_ms": 934,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 915,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 933,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 934,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 910,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 65,
+          "frame_ms": 919,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 75,
+          "frame_ms": 946,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 936,
+          "pixels_changed": true,
+          "settled": true
+        }
+      ],
+      "median": 944.394,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 948.726,
+        "ci95_low": 934.2305,
+        "cv": 0.011737359789184902,
+        "max": 961.232,
+        "mean": 942.7319,
+        "median": 944.394,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 922.254,
+        "n": 20,
+        "p5": 926.9071,
+        "p50": 944.394,
+        "p95": 958.5007499999999,
+        "resamples": 2000,
+        "spread": 0.033453886831131825,
+        "spread_pct": 3.3453886831131827,
+        "stdev": 11.065183495041882
+      },
+      "unit": "ms",
+      "values": [
+        958.275,
+        961.232,
+        947.18,
+        944.82,
+        932.001,
+        934.159,
+        931.775,
+        934.302,
+        940.452,
+        953.932,
+        950.738,
+        942.528,
+        945.903,
+        927.152,
+        943.968,
+        945.346,
+        922.254,
+        929.992,
+        958.357,
+        950.272
+      ]
+    },
+    "m8_tap_form_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 21,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 21,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 14,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 21,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 6,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 28,
+          "frame_ms": 37,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 30,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 32,
+          "frame_ms": 36,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 7,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 29,
+          "frame_ms": 37,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 27,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 26,
+          "frame_ms": 35,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 21,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 14,
+          "frame_ms": 21,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        }
+      ],
+      "median": 32.8125,
+      "n": 40,
+      "ok": 40,
+      "stats": {
+        "ci95_high": 33.187,
+        "ci95_low": 32.652,
+        "cv": 0.23469760417648872,
+        "max": 60.5,
+        "mean": 36.564825,
+        "median": 32.8125,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 31.555,
+        "n": 40,
+        "p5": 32.05485,
+        "p50": 32.8125,
+        "p95": 57.94005,
+        "resamples": 2000,
+        "spread": 0.7888822857142856,
+        "spread_pct": 78.88822857142857,
+        "stdev": 8.581676824632579
+      },
+      "unit": "ms",
+      "values": [
+        32.313,
+        32.398,
+        32.671,
+        32.683,
+        32.82,
+        32.494,
+        32.226,
+        32.589,
+        32.058,
+        31.995,
+        32.507,
+        32.329,
+        32.219,
+        33.187,
+        31.555,
+        60.5,
+        57.889,
+        54.602,
+        54.711,
+        58.91,
+        36.004,
+        32.642,
+        33.116,
+        32.691,
+        33.031,
+        33.087,
+        32.706,
+        32.925,
+        32.469,
+        32.805,
+        33.433,
+        32.662,
+        32.848,
+        51.383,
+        32.367,
+        37.681,
+        37.004,
+        33.424,
+        34.114,
+        33.545
+      ]
+    },
+    "m8_tap_form_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 917,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 57,
+          "frame_ms": 923,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 906,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 928,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 907,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 908,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 908,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 909,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 908,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 909,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 917,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 917,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 906,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 905,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 918,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 907,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 907,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 907,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 908,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 918,
+          "pixels_changed": true,
+          "settled": true
+        }
+      ],
+      "median": 920.5915,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 930.428,
+        "ci95_low": 920.0235,
+        "cv": 0.007545345415085621,
+        "max": 940.847,
+        "mean": 924.82605,
+        "median": 920.5915,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 918.576,
+        "n": 20,
+        "p5": 918.9085,
+        "p50": 920.5915,
+        "p95": 935.0292,
+        "resamples": 2000,
+        "spread": 0.017511241413808342,
+        "spread_pct": 1.7511241413808343,
+        "stdev": 6.978131996119246
+      },
+      "unit": "ms",
+      "values": [
+        932.955,
+        934.723,
+        918.576,
+        940.847,
+        920.13,
+        919.487,
+        920.078,
+        921.52,
+        919.924,
+        921.539,
+        930.497,
+        932.272,
+        918.926,
+        920.664,
+        933.95,
+        920.075,
+        919.508,
+        919.972,
+        920.519,
+        930.359
+      ]
+    },
+    "tap_ack_ms": {
+      "bad": 0,
+      "median": 5.0,
+      "n": 120,
+      "ok": 120,
+      "stats": {
+        "ci95_high": 5.0,
+        "ci95_low": 5.0,
+        "cv": 0.04048494658636025,
+        "max": 7.0,
+        "mean": 5.025,
+        "median": 5.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 5.0,
+        "n": 120,
+        "p5": 5.0,
+        "p50": 5.0,
+        "p95": 5.0,
+        "resamples": 2000,
+        "spread": 0.0,
+        "spread_pct": 0.0,
+        "stdev": 0.20343685659646027
+      },
+      "unit": "ms",
+      "values": [
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        6.0,
+        5.0,
+        5.0,
+        7.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0
+      ]
+    },
+    "teardown_ms": {
+      "bad": 0,
+      "median": 21.0,
+      "n": 64,
+      "ok": 64,
+      "stats": {
+        "ci95_high": 22.0,
+        "ci95_low": 21.0,
+        "cv": 0.08853492098988408,
+        "max": 31.0,
+        "mean": 21.71875,
+        "median": 21.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 19.0,
+        "n": 64,
+        "p5": 20.0,
+        "p50": 21.0,
+        "p95": 25.0,
+        "resamples": 2000,
+        "spread": 0.23809523809523808,
+        "spread_pct": 23.809523809523807,
+        "stdev": 1.9228678152490448
+      },
+      "unit": "ms",
+      "values": [
+        22.0,
+        20.0,
+        21.0,
+        24.0,
+        23.0,
+        20.0,
+        22.0,
+        21.0,
+        20.0,
+        22.0,
+        21.0,
+        21.0,
+        21.0,
+        21.0,
+        21.0,
+        21.0,
+        21.0,
+        19.0,
+        22.0,
+        20.0,
+        21.0,
+        21.0,
+        21.0,
+        23.0,
+        21.0,
+        25.0,
+        24.0,
+        22.0,
+        25.0,
+        22.0,
+        22.0,
+        22.0,
+        21.0,
+        21.0,
+        22.0,
+        26.0,
+        22.0,
+        21.0,
+        22.0,
+        20.0,
+        20.0,
+        20.0,
+        21.0,
+        20.0,
+        21.0,
+        20.0,
+        21.0,
+        20.0,
+        20.0,
+        22.0,
+        23.0,
+        21.0,
+        22.0,
+        20.0,
+        21.0,
+        23.0,
+        22.0,
+        20.0,
+        21.0,
+        21.0,
+        23.0,
+        23.0,
+        31.0,
+        27.0
+      ]
+    },
+    "teardown_wall_ms": {
+      "bad": 0,
+      "median": 22.009,
+      "n": 64,
+      "ok": 64,
+      "stats": {
+        "ci95_high": 22.253,
+        "ci95_low": 21.76125,
+        "cv": 0.08292927482471417,
+        "max": 31.821,
+        "mean": 22.441390625,
+        "median": 22.009,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 19.854,
+        "n": 64,
+        "p5": 20.8623,
+        "p50": 22.009,
+        "p95": 25.362599999999997,
+        "resamples": 2000,
+        "spread": 0.20447544186469152,
+        "spread_pct": 20.447544186469152,
+        "stdev": 1.861048250589389
+      },
+      "unit": "ms",
+      "values": [
+        23.055,
+        21.011,
+        21.347,
+        24.488,
+        23.133,
+        20.94,
+        22.113,
+        22.1,
+        20.965,
+        22.234,
+        21.543,
+        21.82,
+        21.405,
+        21.915,
+        21.41,
+        21.35,
+        21.609,
+        19.854,
+        22.312,
+        20.973,
+        21.21,
+        22.001,
+        21.933,
+        23.667,
+        22.099,
+        25.365,
+        24.664,
+        22.996,
+        25.349,
+        23.088,
+        22.748,
+        22.792,
+        21.978,
+        21.78,
+        22.988,
+        26.438,
+        22.332,
+        22.192,
+        22.253,
+        20.673,
+        20.881,
+        20.859,
+        21.272,
+        20.954,
+        22.051,
+        21.152,
+        21.295,
+        20.988,
+        20.412,
+        22.633,
+        24.15,
+        21.855,
+        22.451,
+        20.923,
+        22.017,
+        23.697,
+        23.165,
+        21.143,
+        21.48,
+        21.966,
+        23.751,
+        23.886,
+        31.821,
+        27.324
+      ]
+    }
+  },
+  "schema": "acos-bench-phase/2",
+  "survivors": [],
+  "teardowns": [
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 23.055
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 21.011
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.347
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 24,
+      "verified": true,
+      "wall_ms": 24.488
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 23.133
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 20.94
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.113
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 22.1
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 20.965
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.234
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.543
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.82
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.405
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.915
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.41
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.35
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.609
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 19,
+      "verified": true,
+      "wall_ms": 19.854
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.312
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 20.973
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.21
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 22.001
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.933
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 23.667
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 22.099
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 25,
+      "verified": true,
+      "wall_ms": 25.365
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 24,
+      "verified": true,
+      "wall_ms": 24.664
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.996
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 25,
+      "verified": true,
+      "wall_ms": 25.349
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 23.088
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.748
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.792
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.978
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.78
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.988
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 26,
+      "verified": true,
+      "wall_ms": 26.438
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.332
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 22.192
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.253
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 20.673
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 20.881
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 20.859
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.272
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 20.954
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 22.051
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 21.152
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.295
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 20.988
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 20.412
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.633
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 24.15
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.855
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.451
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 20.923
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 22.017
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 23.697
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 23.165
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 21.143
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.48
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.966
+    },
+    {
+      "code": null,
+      "label": "m6-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 23.751
+    },
+    {
+      "code": null,
+      "label": "m6-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 23.886
+    },
+    {
+      "code": null,
+      "label": "m8-counter",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 31,
+      "verified": true,
+      "wall_ms": 31.821
+    },
+    {
+      "code": null,
+      "label": "m8-form",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 27,
+      "verified": true,
+      "wall_ms": 27.324
+    }
+  ],
+  "utc": "2026-11-16T06:44:35+00:00"
+}
