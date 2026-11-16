@@ -32,9 +32,16 @@
 //   5. a transaction to a node nobody ever exported must NOT be dropped
 //      silently: the host gets a DEAD_OBJECT reply so a callback the framework
 //      lost is reported, not swallowed.
-//   6. after the host releases its reference (F_REL) the node is gone: a later
-//      transaction to it is answered DEAD_OBJECT, and the guest saw BR_RELEASE +
-//      BR_DECREFS for it (the kernel's own node teardown).
+//   6. several objects registered for one event, each must receive its callback
+//      *at the object that is registered now*: the `JavaBBinder` behind a Java
+//      `Binder` is re-created by `JavaBBinderHolder::get` (it only keeps a weak
+//      pointer), and a re-export of the same cookie with a new weakref must
+//      refresh the node and root the new object, keeping the wire handle.
+//   7. the transaction-buffer heap is shared by every thread (the caller's
+//      reply path and the looper's delivery path) and must never hand the same
+//      memory to two live transactions.
+//   8. a session with many registrations (more listeners than one page of the
+//      node table) still reaches every one of them.
 //
 // Every check prints `ok N - name` or `not ok N - name: detail`; the last line
 // is `RESULT failures=<n>`.
@@ -181,7 +188,7 @@ struct seen {
 };
 
 static pthread_mutex_t g_seen_mu = PTHREAD_MUTEX_INITIALIZER;
-static struct seen g_seen[256];
+static struct seen g_seen[1024];
 static int g_nseen;
 static volatile int g_looper_stop;
 static int g_binder_fd;
@@ -204,6 +211,16 @@ static int seen_count(uint32_t cmd) {
     pthread_mutex_lock(&g_seen_mu);
     for (int i = 0; i < g_nseen; i++)
         if (g_seen[i].cmd == cmd) n++;
+    pthread_mutex_unlock(&g_seen_mu);
+    return n;
+}
+
+/// Copy the recorded commands of one kind (oldest first) out of `g_seen`.
+static int seen_copy(uint32_t cmd, struct seen* out, int max) {
+    int n = 0;
+    pthread_mutex_lock(&g_seen_mu);
+    for (int i = 0; i < g_nseen && n < max; i++)
+        if (g_seen[i].cmd == cmd) out[n++] = g_seen[i];
     pthread_mutex_unlock(&g_seen_mu);
     return n;
 }
@@ -247,7 +264,9 @@ static void free_all_txn_buffers(void) {
 // IPCThreadState::executeCommand does, minus libbinder's own bookkeeping.
 static int guest_read(int fd) {
     uint8_t read_buf[512];
-    uint8_t write_buf[64];
+    // libbinder's own write buffer here holds `BC_REPLY` (4 + 64 bytes) plus the
+    // `BC_FREE_BUFFER` of the transaction it just handled (4 + 8).
+    uint8_t write_buf[128];
     struct binder_write_read bwr;
     memset(&bwr, 0, sizeof(bwr));
     bwr.read_size = sizeof(read_buf);
@@ -297,7 +316,10 @@ static int guest_read(int fd) {
                 pos += sizeof(tr);
                 seen_add(BR_TRANSACTION, (uint64_t)tr.target.ptr, (uint64_t)tr.cookie, tr.code,
                          (uint8_t*)(uintptr_t)tr.data.ptr.buffer);
-                // A sync delivery must be answered, like BBinder::transact does.
+                // A sync delivery must be answered, like BBinder::transact does,
+                // and the received transaction buffer is freed right after (the
+                // kernel ties it to the receiving thread, so this is the looper
+                // thread's own buffer).
                 if ((tr.flags & TF_ONE_WAY) == 0 && wpos + 4 + sizeof(tr) <= sizeof(write_buf)) {
                     uint32_t rcmd = BC_REPLY;
                     struct binder_transaction_data reply_tr;
@@ -305,6 +327,13 @@ static int guest_read(int fd) {
                     memcpy(write_buf + wpos, &rcmd, 4);
                     memcpy(write_buf + wpos + 4, &reply_tr, sizeof(reply_tr));
                     wpos += 4 + sizeof(reply_tr);
+                    uint32_t fcmd = BC_FREE_BUFFER;
+                    uint64_t fptr = (uint64_t)tr.data.ptr.buffer;
+                    if (wpos + 12 <= sizeof(write_buf)) {
+                        memcpy(write_buf + wpos, &fcmd, 4);
+                        memcpy(write_buf + wpos + 4, &fptr, 8);
+                        wpos += 12;
+                    }
                 }
                 break;
             }
@@ -344,6 +373,18 @@ static void* looper_main(void* arg) {
     ioctl(fd, BINDER_WRITE_READ, &bwr);
     while (!g_looper_stop) guest_read(fd);
     return NULL;
+}
+
+// Read until the reply to the transaction just written has arrived, which is
+// what `IPCThreadState::waitForResponse` does: it keeps reading (with no writes
+// of its own) until the driver hands it `BR_REPLY`.  Without this the caller's
+// reply slot is never released, which is a *harness* artefact, not a driver one.
+static void guest_wait_reply(int fd) {
+    int before = seen_count(BR_REPLY) + seen_count(BR_FAILED_REPLY);
+    for (int i = 0; i < 4; i++) {
+        if (seen_count(BR_REPLY) + seen_count(BR_FAILED_REPLY) > before) return;
+        guest_read(fd);
+    }
 }
 
 // One outgoing transaction from the guest, carrying one BINDER object, exactly
@@ -387,6 +428,7 @@ static int guest_transact_with_binder(int fd, uint64_t weakref, uint64_t cookie,
     if (ioctl(fd, BINDER_WRITE_READ, &bwr) != 0) return -1;
     // Read the reply/complete + the node's rooting commands.
     guest_read(fd);
+    guest_wait_reply(fd);
     if (out_wire) {
         // The wire handle the peer saw: the driver's node wire for this cookie.
         struct node* n = NULL;
@@ -421,6 +463,37 @@ static int wait_for_txns(int want, int timeout_ms) {
         msleep(10);
     }
     return seen_count(BR_TRANSACTION);
+}
+
+// ------------------------------------------------- concurrent heap pressure --
+// The transaction-buffer heap (`mm_alloc`/`mm_free`) is shared by every thread:
+// the caller's reply path (`build_reply`) allocates while the looper thread's
+// delivery path (`deliver_incoming`) allocates. Two live transaction buffers
+// must never be the same memory, because the second writer would corrupt the
+// first parcel while libbinder is still decoding it.
+#define ALLOC_THREADS 16
+#define ALLOC_PER_THREAD 2000
+#define ALLOC_SIZE 16
+
+struct alloc_rec {
+    size_t off;
+};
+
+static struct alloc_rec g_allocs[ALLOC_THREADS][ALLOC_PER_THREAD];
+
+static void* alloc_main(void* arg) {
+    struct alloc_rec* rec = arg;
+    for (int i = 0; i < ALLOC_PER_THREAD; i++) {
+        void* p = mm_alloc(ALLOC_SIZE);
+        rec[i].off = p == NULL ? (size_t)-1 : (size_t)((uint8_t*)p - g.map);
+    }
+    return NULL;
+}
+
+static int alloc_off_cmp(const void* a, const void* b) {
+    const struct alloc_rec* x = a;
+    const struct alloc_rec* y = b;
+    return (x->off > y->off) - (x->off < y->off);
 }
 
 int main(void) {
@@ -524,6 +597,105 @@ int main(void) {
     }
     snprintf(detail, sizeof(detail), "dead_object replies=%u", g_peer.dead_replies);
     check(dead_reply, "a transaction to an unknown node answers a DEAD_OBJECT reply", detail);
+
+    // 6. several distinct objects registered for one event, each receives its
+    //    callback at the object that is registered *now*. A Java `Binder`'s
+    //    `JavaBBinder` is re-created by `JavaBBinderHolder::get` (it keeps only a
+    //    weak pointer), so a re-registration exports a new weakref under the
+    //    same cookie: the node must keep its wire handle, refresh the object it
+    //    delivers to, and root the new object.
+    enum { REGS = 8 };
+    static int wref_a[REGS], wref_b[REGS], bbinder[REGS];
+    uint32_t wires[REGS], wires_again[REGS];
+    for (int i = 0; i < REGS; i++)
+        guest_transact_with_binder(fd, (uint64_t)(uintptr_t)&wref_a[i],
+                                   (uint64_t)(uintptr_t)&bbinder[i], &wires[i]);
+    seen_flush(0);
+    int stable = 0, rooted = 0;
+    for (int i = 0; i < REGS; i++) {
+        guest_transact_with_binder(fd, (uint64_t)(uintptr_t)&wref_b[i],
+                                   (uint64_t)(uintptr_t)&bbinder[i], &wires_again[i]);
+        struct seen inc[8], acq[8];
+        int ninc = seen_copy(BR_INCREFS, inc, 8);
+        int nacq = seen_copy(BR_ACQUIRE, acq, 8);
+        if (wires_again[i] != 0 && wires_again[i] == wires[i]) stable++;
+        if (ninc == 1 && nacq == 1 &&
+            inc[0].ptr == (uint64_t)(uintptr_t)&wref_b[i] &&
+            acq[0].cookie == (uint64_t)(uintptr_t)&bbinder[i])
+            rooted++;
+        seen_flush(0);
+    }
+    snprintf(detail, sizeof(detail), "stable wires=%d of %d, re-rooted=%d of %d", stable,
+             REGS, rooted, REGS);
+    check(stable == REGS && rooted == REGS,
+          "a re-exported node keeps its wire handle and roots the new object", detail);
+
+    for (int i = 0; i < REGS; i++) peer_txn(wires[i], 200 + (uint32_t)i, 30 + (uint32_t)i);
+    got = wait_for_txns(REGS, 5000);
+    struct seen tx[64];
+    int ntx = seen_copy(BR_TRANSACTION, tx, 64);
+    int addressed = 0;
+    for (int i = 0; i < REGS; i++) {
+        for (int j = 0; j < ntx; j++) {
+            if (tx[j].code != 200 + (uint32_t)i) continue;
+            if (tx[j].ptr == (uint64_t)(uintptr_t)&wref_b[i] &&
+                tx[j].cookie == (uint64_t)(uintptr_t)&bbinder[i])
+                addressed++;
+            break;
+        }
+    }
+    snprintf(detail, sizeof(detail), "delivered=%d, addressed at the registered object=%d of %d",
+             got, addressed, REGS);
+    check(got == REGS && addressed == REGS,
+          "every object registered for one event receives its callback", detail);
+    free_all_txn_buffers();
+    seen_flush(0);
+
+    // 7. the shared transaction-buffer heap never hands one live transaction's
+    //    memory to another, even when every thread allocates at once.
+    {
+        pthread_t th[ALLOC_THREADS];
+        for (int i = 0; i < ALLOC_THREADS; i++)
+            pthread_create(&th[i], NULL, alloc_main, g_allocs[i]);
+        for (int i = 0; i < ALLOC_THREADS; i++) pthread_join(th[i], NULL);
+        static struct alloc_rec all[ALLOC_THREADS * ALLOC_PER_THREAD];
+        for (int i = 0; i < ALLOC_THREADS; i++)
+            memcpy(&all[i * ALLOC_PER_THREAD], g_allocs[i], sizeof(all[0]) * ALLOC_PER_THREAD);
+        qsort(all, ALLOC_THREADS * ALLOC_PER_THREAD, sizeof(all[0]), alloc_off_cmp);
+        int failed = 0, overlaps = 0;
+        for (int i = 0; i < ALLOC_THREADS * ALLOC_PER_THREAD; i++) {
+            if (all[i].off == (size_t)-1) failed++;
+            if (i > 0 && all[i].off != (size_t)-1 && all[i - 1].off != (size_t)-1 &&
+                all[i].off < all[i - 1].off + ALLOC_SIZE)
+                overlaps++;
+        }
+        snprintf(detail, sizeof(detail), "allocations=%d failed=%d overlapping=%d",
+                 ALLOC_THREADS * ALLOC_PER_THREAD, failed, overlaps);
+        check(failed == 0 && overlaps == 0,
+              "two concurrent transaction buffers are never the same memory", detail);
+    }
+
+    // 8. a session with more registrations than one page of the node table still
+    //    reaches every registered object (the acceptance runs register 100+).
+    enum { MANY = 96 };
+    static int many_wref[MANY], many_bb[MANY];
+    uint32_t many_wire[MANY];
+    int exported = 0;
+    for (int i = 0; i < MANY; i++) {
+        guest_transact_with_binder(fd, (uint64_t)(uintptr_t)&many_wref[i],
+                                   (uint64_t)(uintptr_t)&many_bb[i], &many_wire[i]);
+        if (many_wire[i] != 0) exported++;
+    }
+    seen_flush(0);
+    for (int i = 0; i < MANY; i++)
+        if (many_wire[i] != 0) peer_txn(many_wire[i], 300 + (uint32_t)i, 100 + (uint32_t)i);
+    got = wait_for_txns(MANY, 10000);
+    snprintf(detail, sizeof(detail), "exported=%d of %d, delivered=%d (queued %u)", exported, MANY,
+             got, g_peer.txns_sent);
+    check(exported == MANY && got == MANY,
+          "every one of many registered objects still receives its callback", detail);
+    free_all_txn_buffers();
+    seen_flush(0);
 
     // ---- teardown ----------------------------------------------------------
     g_looper_stop = 1;

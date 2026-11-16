@@ -88,8 +88,13 @@
 #define E3G_MAX_FRAME (256 * 1024)
 #define E3G_MAX_FD 16
 #define E3G_MAX_SLOT 32
-#define E3G_MAX_NODE 64
-#define E3G_MAX_HANDLE 64
+// A session registers one local node per callback object (the tail-probe
+// acceptance registers 100+ PhoneStateListeners, each a new Java `Binder`), and
+// nodes are only ever released by the host (the reference model lives in the
+// peer, not here), so this table is the session-long one. It is a plain table
+// in this driver's own memory, not part of the wire contract.
+#define E3G_MAX_NODE 1024
+#define E3G_MAX_HANDLE 512
 
 static int g_dbg = -1;
 #define DBG(...)                                     \
@@ -327,6 +332,23 @@ struct drv {
 
 static struct drv g;
 
+// State every guest thread can touch at once, kept apart from `g.mu` (which is
+// only the transport queues and reply slots):
+//
+//   * the node/handle tables -- any thread can export a local object or resolve
+//     a peer node, and the looper thread resolves a node while the caller's
+//     thread exports one;
+//   * the transaction-buffer heap -- the caller's reply path (`build_reply`) and
+//     the looper's delivery path (`deliver_incoming`) allocate at the same time,
+//     and an unsynchronised bump pointer hands both the *same* memory (one
+//     transaction's parcel overwrites the other while libbinder decodes it);
+//   * the reply-side fd sets.
+//
+// No path takes `g.mu` while holding one of these, so there is no lock order to
+// get wrong: they are always taken and released inside one function.
+static pthread_mutex_t g_obj_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t g_slab_mu = PTHREAD_MUTEX_INITIALIZER;
+
 struct tstate {
     int is_looper;
     int reply_seq;         // seq we are waiting a reply for (-1 none)
@@ -401,59 +423,108 @@ static uint32_t node_wire_for(uint64_t binder, uint64_t cookie) {
     // between two writes of the same Java object (E3G saw this too); keying on
     // both produced two nodes with the same cookie, and an incoming
     // transaction could then target a stale weakref.
+    pthread_mutex_lock(&g_obj_mu);
     for (int i = 0; i < g.n_nodes; i++)
         if (g.nodes[i].cookie == cookie) {
-            // The node is rooted (BR_INCREFS/BR_ACQUIRE, see node_ref_cmds), so
-            // the same BBinder must always report the same weakref.  A mismatch
-            // means the object died and was replaced while our node still
-            // points at the old one: delivering to it would be a use-after-free.
-            if (g.nodes[i].binder != binder)
-                WARN("node wire=%u cookie=%llx: weakref changed %llx -> %llx "
-                     "(object replaced under a live node?)",
-                     g.nodes[i].wire, (unsigned long long)cookie,
-                     (unsigned long long)g.nodes[i].binder, (unsigned long long)binder);
-            return g.nodes[i].wire;
+            // The object behind this cookie was re-created.  A Java `Binder`
+            // only keeps a *weak* pointer to its `JavaBBinder`, and
+            // `JavaBBinderHolder::get` allocates a new one whenever that pointer
+            // no longer promotes (`android_util_Binder.cpp`); the new
+            // `JavaBBinder` also has a new `RefBase::weakref_impl`, so the
+            // node's cached `binder`/`cookie` now name a dead object.
+            //
+            // Delivering to them is a silent lost callback: libbinder runs
+            // `((RefBase::weakref_type*)tr.target.ptr)->attemptIncStrong(this)`
+            // and drops the transaction when that fails
+            // (`IPCThreadState.cpp`), so the host queues a delivery the app never
+            // sees.  The wire handle must stay (the remote side holds a
+            // reference to *it*), so re-point the node at the object that is
+            // registered now and root it exactly like a first export.
+            if (g.nodes[i].binder != binder) {
+                struct node* n = &g.nodes[i];
+                WARN("node wire=%u cookie=%llx: object replaced, refreshing weakref "
+                     "%llx -> %llx and re-rooting",
+                     n->wire, (unsigned long long)cookie,
+                     (unsigned long long)n->binder, (unsigned long long)binder);
+                n->binder = binder;
+                n->cookie = cookie;
+                node_ref_cmds(binder, cookie);
+            }
+            uint32_t wire = g.nodes[i].wire;
+            pthread_mutex_unlock(&g_obj_mu);
+            return wire;
         }
     if (g.n_nodes >= E3G_MAX_NODE) {
-        WARN("node table full");
+        pthread_mutex_unlock(&g_obj_mu);
+        WARN("node table full (%d nodes)", E3G_MAX_NODE);
         return 0;
     }
     struct node* n = &g.nodes[g.n_nodes++];
     n->binder = binder;
     n->cookie = cookie;
     n->wire = g.next_wire++;
+    uint32_t wire = n->wire;
+    pthread_mutex_unlock(&g_obj_mu);
     DBG("node: local binder=%llx cookie=%llx -> wire=%u", (unsigned long long)binder,
-        (unsigned long long)cookie, n->wire);
+        (unsigned long long)cookie, wire);
     // Root the node before anybody can deliver to it (see node_ref_cmds).
     node_ref_cmds(binder, cookie);
-    return n->wire;
+    return wire;
 }
 
-static struct node* node_by_wire(uint32_t wire) {
+// Resolve a wire handle to the object it names *now*.  A copy, not a pointer:
+// another thread can refresh the node (see `node_wire_for`) between the lookup
+// and the delivery, and a delivery must use the object that is current when it
+// is built.
+static int node_for_wire(uint32_t wire, struct node* out) {
+    int found = 0;
+    pthread_mutex_lock(&g_obj_mu);
     for (int i = 0; i < g.n_nodes; i++)
-        if (g.nodes[i].wire == wire) return &g.nodes[i];
-    return NULL;
+        if (g.nodes[i].wire == wire) {
+            *out = g.nodes[i];
+            found = 1;
+            break;
+        }
+    pthread_mutex_unlock(&g_obj_mu);
+    return found;
 }
 
 static uint32_t handle_for_peer_node(uint64_t peer_node) {
+    pthread_mutex_lock(&g_obj_mu);
+    uint32_t found = 0;
     for (int i = 0; i < g.n_handles; i++)
-        if (g.handles[i].peer_node == peer_node) return g.handles[i].h;
-    if (g.n_handles >= E3G_MAX_HANDLE) {
-        WARN("handle table full");
-        return 0;
+        if (g.handles[i].peer_node == peer_node) {
+            found = g.handles[i].h;
+            break;
+        }
+    if (found == 0) {
+        if (g.n_handles >= E3G_MAX_HANDLE) {
+            pthread_mutex_unlock(&g_obj_mu);
+            WARN("handle table full (%d handles)", E3G_MAX_HANDLE);
+            return 0;
+        }
+        struct handle* h = &g.handles[g.n_handles++];
+        h->h = g.next_handle++;
+        h->peer_node = peer_node;
+        found = h->h;
     }
-    struct handle* h = &g.handles[g.n_handles++];
-    h->h = g.next_handle++;
-    h->peer_node = peer_node;
-    DBG("handle: peer node=%llx -> handle=%u", (unsigned long long)peer_node, h->h);
-    return h->h;
+    pthread_mutex_unlock(&g_obj_mu);
+    DBG("handle: peer node=%llx -> handle=%u", (unsigned long long)peer_node, found);
+    return found;
 }
 
 static uint64_t peer_node_for_handle(uint32_t h) {
+    uint64_t peer = 0;
+    pthread_mutex_lock(&g_obj_mu);
     for (int i = 0; i < g.n_handles; i++)
-        if (g.handles[i].h == h) return g.handles[i].peer_node;
-    return 0;
+        if (g.handles[i].h == h) {
+            peer = g.handles[i].peer_node;
+            break;
+        }
+    pthread_mutex_unlock(&g_obj_mu);
+    return peer;
 }
+
 
 // Rewrite the flat objects of a parcel in place.
 //   dir 0: ours -> peer   (BINDER->HANDLE(wire), HANDLE->BINDER(peer node))
@@ -516,15 +587,15 @@ static int xform_objects(uint8_t* data, size_t dsize, uint8_t* offs, size_t osiz
                     o->binder = peer;
                     o->cookie = peer;
                 } else {
-                    struct node* n = node_by_wire(o->handle);
-                    if (n == NULL) {
+                    struct node local;
+                    if (!node_for_wire(o->handle, &local)) {
                         WARN("incoming handle %u is not a local node", o->handle);
                         break;
                     }
                     o->hdr.type = (o->hdr.type == BINDER_TYPE_HANDLE) ? BINDER_TYPE_BINDER
                                                                      : BINDER_TYPE_WEAK_BINDER;
-                    o->binder = n->binder;
-                    o->cookie = n->cookie;
+                    o->binder = local.binder;
+                    o->cookie = local.cookie;
                 }
                 break;
             }
@@ -551,15 +622,35 @@ static int xform_objects(uint8_t* data, size_t dsize, uint8_t* offs, size_t osiz
 }
 
 // ------------------------------------------------- (3) transaction-buffer heap
+//
+// One heap, many threads: the caller's reply path (`build_reply`, and the copy
+// `e3g_write_read` makes of an F_RSP) runs on whatever thread transacted, while
+// `deliver_incoming` runs on a looper thread.  Every mutation of the bump
+// pointer and of the block table is under `g_slab_mu`; without it two threads
+// read the same `g_bump`, get the *same* offset, and the second writer
+// overwrites a parcel libbinder is still decoding (the `parcel underflow` /
+// stalled `transactNative` seen once a session has enough traffic to keep both
+// paths busy).
 struct blk { size_t off, size; int used; };
-static struct blk g_blk[512];
-static int g_nblk;
+static struct blk* g_blk;
+static int g_nblk, g_blk_cap;
 static size_t g_bump;
 
-static int blk_cmp(const void* a, const void* b) {
-    const struct blk* x = a;
-    const struct blk* y = b;
-    return (x->off > y->off) - (x->off < y->off);
+// Grow the block table to hold `want` entries.  Blocks are only bookkeeping
+// (allocation is monotonic, see `mm_alloc`), so a full table never blocks an
+// allocation; it only means a free can no longer be matched.  The cap keeps the
+// table proportional to the 1 MB mapping (8-byte minimum block).
+static int blk_reserve_locked(int want) {
+    if (want <= g_blk_cap) return 1;
+    int cap = g_blk_cap ? g_blk_cap * 2 : 256;
+    while (cap < want) cap *= 2;
+    if (cap > 262144) cap = 262144;
+    if (cap < want) return 0;
+    struct blk* p = realloc(g_blk, sizeof(*p) * (size_t)cap);
+    if (p == NULL) return 0;
+    g_blk = p;
+    g_blk_cap = cap;
+    return 1;
 }
 
 static void* mm_alloc(size_t n) {
@@ -569,44 +660,52 @@ static void* mm_alloc(size_t n) {
     // to the old contents at the moment BC_FREE_BUFFER arrives.  The mapping is
     // 1 MB and a delivered transaction is a few hundred bytes, so never reusing
     // a block is both safe and cheap (E3G's race came from premature reuse).
+    pthread_mutex_lock(&g_slab_mu);
     if (g_bump + n > g.map_size) {
+        pthread_mutex_unlock(&g_slab_mu);
         WARN("transaction buffer exhausted (%zu/%zu used, %d blocks) - this transaction is "
              "dropped", g_bump, g.map_size, g_nblk);
         return NULL;
     }
     size_t off = g_bump;
     g_bump += n;
-    if (g_nblk < 512) {
+    if (blk_reserve_locked(g_nblk + 1)) {
         g_blk[g_nblk].off = off;
         g_blk[g_nblk].size = n;
         g_blk[g_nblk].used = 1;
         g_nblk++;
+    } else if (g_nblk < g_blk_cap) {
+        // cannot happen (reserve either grows or fails), kept explicit
+        WARN("transaction block table full (%d entries); frees of older buffers will be "
+             "unmatched", g_blk_cap);
+    } else {
+        static int warned;
+        if (!warned) {
+            warned = 1;
+            WARN("transaction block table full (%d entries); frees of older buffers will be "
+                 "unmatched", g_blk_cap);
+        }
     }
+    pthread_mutex_unlock(&g_slab_mu);
     return g.map + off;
 }
 
 static void mm_free(void* p) {
     if (p == NULL) return;
     size_t off = (size_t)((uint8_t*)p - g.map);
+    pthread_mutex_lock(&g_slab_mu);
     for (int i = 0; i < g_nblk; i++) {
         if (g_blk[i].off == off && g_blk[i].used) {
+            // Nothing is ever re-allocated (see `mm_alloc`), so the block is
+            // only marked free: its bytes stay untouched and it is never handed
+            // out again.  Ranges are not coalesced because there is no free-list
+            // to coalesce for.
             g_blk[i].used = 0;
-            // coalesce with neighbours
-            qsort(g_blk, (size_t)g_nblk, sizeof(g_blk[0]), blk_cmp);
-            for (int j = 0; j + 1 < g_nblk;) {
-                if (!g_blk[j].used && !g_blk[j + 1].used &&
-                    g_blk[j].off + g_blk[j].size == g_blk[j + 1].off) {
-                    g_blk[j].size += g_blk[j + 1].size;
-                    memmove(&g_blk[j + 1], &g_blk[j + 2],
-                            sizeof(g_blk[0]) * (size_t)(g_nblk - j - 2));
-                    g_nblk--;
-                } else {
-                    j++;
-                }
-            }
+            pthread_mutex_unlock(&g_slab_mu);
             return;
         }
     }
+    pthread_mutex_unlock(&g_slab_mu);
     DBG("free of unknown buffer %p", p);
 }
 
@@ -919,8 +1018,8 @@ static int deliver_incoming(void) {
     g.in_head = q->next;
     if (!g.in_head) g.in_tail = NULL;
     if (!g.in_head) pthread_cond_broadcast(&g.cv_txn);
-    struct node* n = node_by_wire((uint32_t)q->target);
-    if (n == NULL) {
+    struct node local;
+    if (!node_for_wire((uint32_t)q->target, &local)) {
         // The node is gone (never exported, or released by the remote side).
         // The kernel answers such a transaction with BR_DEAD_REPLY on the
         // sender; a userspace driver must do the same, because a silently
@@ -960,8 +1059,8 @@ static int deliver_incoming(void) {
     if (osize) memcpy(obuf, offs, osize);
     struct binder_transaction_data tr;
     memset(&tr, 0, sizeof(tr));
-    tr.target.ptr = n->binder;
-    tr.cookie = n->cookie;
+    tr.target.ptr = local.binder;
+    tr.cookie = local.cookie;
     tr.code = q->code;
     tr.flags = q->flags;
     tr.sender_pid = 0;
@@ -981,7 +1080,7 @@ static int deliver_incoming(void) {
     T.reply_to_seq = q->seq;
     T.have_reply_to = 1;
     DBG("BR_TRANSACTION seq=%u code=%u flags=0x%x node=%llx/%llx size=%zu/%zu", q->seq, q->code,
-        q->flags, (unsigned long long)n->binder, (unsigned long long)n->cookie, dsize, osize);
+        q->flags, (unsigned long long)local.binder, (unsigned long long)local.cookie, dsize, osize);
     free(q->data);
     free(q);
     pthread_mutex_lock(&g.mu);
@@ -1006,28 +1105,33 @@ static struct fdset g_fdsets[E3G_MAX_FDSETS];
 static void remember_fds(void* buf, const int* fds, int n) {
     if (n <= 0 || buf == NULL) return;
     if (n > E3G_MAX_FD) n = E3G_MAX_FD;
+    pthread_mutex_lock(&g_slab_mu);
     for (int i = 0; i < E3G_MAX_FDSETS; i++) {
         if (g_fdsets[i].buf == NULL) {
             g_fdsets[i].buf = buf;
             memcpy(g_fdsets[i].fds, fds, sizeof(int) * (size_t)n);
             g_fdsets[i].n = n;
+            pthread_mutex_unlock(&g_slab_mu);
             return;
         }
     }
+    pthread_mutex_unlock(&g_slab_mu);
     WARN("reply fd table full, closing %d descriptors early", n);
     for (int i = 0; i < n; i++) close(fds[i]);
 }
 
 static void release_fds(void* buf) {
     if (buf == NULL) return;
+    pthread_mutex_lock(&g_slab_mu);
     for (int i = 0; i < E3G_MAX_FDSETS; i++) {
         if (g_fdsets[i].buf == buf) {
             for (int j = 0; j < g_fdsets[i].n; j++) close(g_fdsets[i].fds[j]);
             g_fdsets[i].buf = NULL;
             g_fdsets[i].n = 0;
-            return;
+            break;
         }
     }
+    pthread_mutex_unlock(&g_slab_mu);
 }
 
 static int build_reply(struct slot* s) {

@@ -10,8 +10,12 @@
 //!
 //! The checks (see the C file for the full list) are behaviours, not internals:
 //! a node exported by the guest can be reached after the parcel that exposed it
-//! is freed, many callbacks in one turn all arrive, and a transaction to a node
-//! that is gone answers `DEAD_OBJECT` instead of being dropped silently.
+//! is freed, many callbacks in one turn all arrive, a transaction to a node that
+//! is gone answers `DEAD_OBJECT` instead of being dropped silently, a node whose
+//! object was re-created (a Java `Binder` only keeps a *weak* pointer to its
+//! `JavaBBinder`) follows the object that is registered now, the shared
+//! transaction-buffer heap never hands one live transaction's memory to another,
+//! and a session with many registered callbacks reaches every one of them.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -85,8 +89,8 @@ fn driver_delivers_callbacks_and_answers_dead_nodes() {
     // Guard against a harness that reports success without running its checks.
     let checks = stdout.lines().filter(|line| line.starts_with("ok ")).count();
     assert!(
-        checks >= 8,
-        "driver test ran {checks} checks, expected at least 8:\n{stdout}"
+        checks >= 12,
+        "driver test ran {checks} checks, expected at least 12:\n{stdout}"
     );
     assert!(
         stdout.lines().any(|line| line == "RESULT failures=0"),
