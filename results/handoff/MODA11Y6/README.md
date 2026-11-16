@@ -268,6 +268,42 @@ crates/acos-services/tests/moda11y3_windows.rs (updated)
   is why they must.
 ```
 
+### Post-merge re-run (branch `modules` @ `46831a9e`)
+
+`git merge modules` brought MODLOC2/MODLOC3 (deadline-driven peer idle turn,
+location module, short runtime dir in tests). The re-run after the merge still
+passes **13/13** (`results/handoff/MODA11Y6/final/a11y-verdict.json`), with the
+same three lines:
+
+```
+I AcosA11yProbe: service_connected id=dev.acos.fixtures.a11yprobe/.A11yProbeService capabilities=161
+I AcosA11yProbe: windows2 count=2 attempts=2
+I AcosA11yProbe: window2[0] id=2 type=4 layer=1 active=false focused=false
+```
+
+### Remaining (smallest next action first)
+
+1. **Step 3, `dispatchGesture`**: accept
+   `IAccessibilityServiceConnection.dispatchGesture(1)` (code 14), refuse with
+   `ModuleRejected` unless `service_config.can_perform_gestures()`, and publish
+   the stroke list as real `MotionEvent`s through `A11yState::input` (the same
+   `InputHost::tap_window`/`inject_*` a scenario tap uses, one DOWN/MOVE…/UP per
+   stroke), then answer the completion through
+   `IAccessibilityServiceClient.onPerformGestureResult(sequence, completed)`.
+2. **Step 3, `takeScreenshot`**: `AccessibilityService.takeScreenshot` →
+   `AccessibilityManagerService.takeScreenshot` (+ `takeScreenshotOfWindow`);
+   the frame comes from the session's compositor state
+   (`SurfaceState`/C1 store in `registry::install`), a `FLAG_SECURE` window is
+   refused the way AOSP refuses it, and the reply is a `ScreenshotResult`
+   parcel around the `HardwareBuffer`.
+3. **Step 4, the Gaten bubble**: run `scenarios/gaten-home.yaml` (same APK path,
+   `.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk`) with
+   `services: [{id: accessibility, profile: real, config: {enable:
+   ["com.gaten.app/com.gaten.app.GatenAccessibilityService"]}}]` and assert the
+   bubble window (`TYPE_ACCESSIBILITY_OVERLAY`) in `assert_windows`. Needs steps
+   1–3 for the full feedback flow (drag/idle/remove); the *window* itself only
+   needs the bind + overlay token that already ships.
+
 ## 3–4. Gestures, screenshots, the Gaten bubble
 
 Not started. The session's time went to step 1 (the "deadlock" turned out to be
