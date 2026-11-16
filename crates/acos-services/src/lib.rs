@@ -57,6 +57,7 @@ pub mod display_events;
 pub mod error;
 pub mod exception;
 pub mod extras;
+pub mod fill_in; // PIFILLIN: `Intent.fillIn`, the one implementation (AOSP rules)
 pub mod host;
 pub mod ime;
 pub mod ime_wire;

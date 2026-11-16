@@ -242,6 +242,40 @@ fn a_location_module_detach_releases_the_listeners_it_rooted() {
     assert!(host.take_released_binders().contains(&listener));
 }
 
+#[test]
+fn a_location_pending_intent_registration_references_its_sender() {
+    let mut host = ServiceHost::standard();
+    let _registry = registry_with(&mut host, "location", Profile::Scripted);
+    // The framework's `PendingIntent` is a host node (`IIntentSender`), which is
+    // what the app hands back to `registerLocationPendingIntent`.
+    let sender = host
+        .binder_registry()
+        .register_local("android.content.IIntentSender");
+
+    let mut data = Parcel::new();
+    data.write_interface_token(LOCATION).expect("token");
+    data.write_string16("gps").expect("provider");
+    write_location_request(&mut data, "gps");
+    data.write_int32(1); // the PendingIntent is present
+    data.write_strong_binder(sender);
+    data.write_string16("dev.acos.fixtures.locationprobe")
+        .expect("package");
+    data.write_string16_opt(None).expect("tag");
+    let _ = call(&mut host, "location", 5, &mut data);
+    assert_eq!(
+        host.held_refs(sender),
+        1,
+        "the PendingIntent form is a registration on its sender, like the listener form"
+    );
+
+    let mut data = Parcel::new();
+    data.write_interface_token(LOCATION).expect("token");
+    data.write_int32(1);
+    data.write_strong_binder(sender);
+    let _ = call(&mut host, "location", 6, &mut data);
+    assert_eq!(host.held_refs(sender), 0, "unregister releases the sender");
+}
+
 // ---------------------------------------------------------------------------
 // IIntentReceiver (broadcast receivers) — decoded IActivityManager
 // ---------------------------------------------------------------------------
