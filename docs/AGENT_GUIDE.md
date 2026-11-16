@@ -32,9 +32,10 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
 1. `acos_doctor` — host preflight; fix every failing check's `fix:` first.
 2. `acos_inspect {"apk": ...}` — static: package, launcher, SDK, DEX/native.
 3. `acos_launch {"apk": ...}` — boot it (**absolute** paths only), read
-   `reached_stage`; the first non-ok rung carries the blocker. Idle sessions
-   expire after 600 s (`idle_ttl_s`; see `workflow`).
-4. `acos_observe_tree` — nodes with `id`/`text`/`bounds`; act on those.
+   `reached_stage`; the first non-ok rung carries the blocker. The launch reply
+   is compact (`tree_path` = full tree). Idle sessions expire after 600 s.
+4. `acos_observe_tree` — visible text/desc nodes with `id`/`bounds`/`clickable`;
+   long lists page with `cursor`.
 5. `acos_tap` / `acos_text` / `acos_key` / `acos_swipe` — then re-observe.
 6. `acos_logs` — the app's own words; `launched`/`stage_reached` included.
 7. `acos_verify {"apk","scenario"}` — the verdict and its artifacts are the
@@ -189,8 +190,9 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
    app actually reached `onCreate`. The **default view is `min_priority: "W"`
    plus the app's own package** (records at warning or above, plus anything that
    names the app), which keeps SoLoader/framework noise out of the reply. The
-   full buffer stays on disk (`logs/logcat.txt` in a verify run), `"all": true`
-   or `min_priority: "V"` returns all of it, and `tag` narrows further.
+   full buffer stays in `logs/logcat.txt` (a live reply names `log_path`),
+   `"all": true` or `min_priority: "V"` returns all of it, and `tag` narrows
+   further.
 7. **Prove the flow.** `acos_verify {"apk": ..., "scenario": ...}` (or
    `acos verify <scenario.yaml> --artifacts out/<name>`) runs a YAML scenario and
    writes `verdict.json`, per-step JSON and the frames. The tool runs **real

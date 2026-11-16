@@ -324,6 +324,16 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              framework native the engine does not implement yet, naming `details.api`).",
             with_base(json!({
                 "apk": {"type": "string", "description": "Path to the .apk, under ACOS_ALLOWED_ROOTS."},
+                "full": {
+                    "type": "boolean",
+                    "description": "Include the full tree inline instead of the compact screen (default false). \
+                                    The full tree is always written to `tree_path`; a full tree that would \
+                                    exceed the reply cap is replaced by the compact view and the path."
+                },
+                "cursor": {
+                    "type": "integer", "minimum": 0,
+                    "description": "Compact-screen page cursor from a previous reply's `tree_next_cursor`."
+                },
                 "timeout_ms": {"type": "integer", "minimum": 1, "description": "Wall-clock ceiling for the launch (defaults to the server call budget)."},
                 "settle": {
                     "type": "string", "enum": ["fast", "strict", "content"],
@@ -386,13 +396,25 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
         ),
         "acos_observe_tree" => (
             "Walk the live framework View hierarchy of the held session (WindowManagerGlobal -> \
-             ViewRootImpl -> ViewGroup) and return the structured node tree (class, bounds, text, \
-             resource_id, clickable/enabled/focused/scrollable, children). Call it after \
+             ViewRootImpl -> ViewGroup) and return a COMPACT screen by default: the visible \
+             text/content_desc nodes in reading order with bounds, clickable flag and ids, paged \
+             with `cursor` (never head/tail-cut). The full tree is always written to `tree_path`; \
+             `full:true` returns it inline when it fits the reply cap. Call it after \
              `acos_launch`, before any selector-based tap. Before the app adds a window it returns \
              `UNSUPPORTED_BACKEND` with `details.reason=not_ready` and `details.stage_reached`, \
              never an empty tree. Common errors: UNSUPPORTED_BACKEND (not_ready), TIMEOUT.",
             with_base(json!({
                 "max_nodes": {"type": "integer", "minimum": 1, "description": "Truncate the walk after this many nodes."},
+                "full": {
+                    "type": "boolean",
+                    "description": "Include the full tree inline instead of the compact screen (default false). \
+                                    The full tree is always written to `tree_path`; a full tree that would \
+                                    exceed the reply cap is replaced by the compact view and the path."
+                },
+                "cursor": {
+                    "type": "integer", "minimum": 0,
+                    "description": "Compact-screen page cursor from a previous reply's `tree_next_cursor`."
+                },
                 "settle": {
                     "type": "string", "enum": ["fast", "strict", "content"],
                     "description": "`strict` (default) is the event-settled rule and assertion evidence. \

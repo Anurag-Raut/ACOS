@@ -921,10 +921,7 @@ fn new_request_id() -> String {
 }
 
 fn print_json<T: serde::Serialize>(value: &T) {
-    match serde_json::to_string_pretty(value) {
-        Ok(text) => println!("{text}"),
-        Err(error) => eprintln!("error: failed to serialize JSON envelope: {error}"),
-    }
+    crate::print_json(value);
 }
 
 /// Resolve the APK the same way `verify` does: `--apk` wins, otherwise the

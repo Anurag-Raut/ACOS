@@ -145,9 +145,18 @@ pub struct ObserveArgs {
     #[arg(long)]
     pub tree: bool,
 
-    /// Request the flat text rendering.
+    /// Request the compact visible-text rendering.
     #[arg(long)]
     pub text: bool,
+
+    /// Return the full tree inline instead of the compact screen (the full
+    /// tree is always written to `tree_path`).
+    #[arg(long)]
+    pub full: bool,
+
+    /// Compact-screen page cursor (`tree_next_cursor` from a previous reply).
+    #[arg(long, default_value_t = 0)]
+    pub cursor: usize,
 
     /// Explicitly request the frame (the default `observe` result). Mutually
     /// exclusive with `--tree`/`--text`; accepted so `observe --frame` works.
@@ -190,6 +199,8 @@ pub fn observe(args: ObserveArgs) -> ExitCode {
             "base": daemon_base(&args.session),
             "tree": args.tree,
             "text": args.text,
+            "full": args.full,
+            "cursor": args.cursor,
             "png": screenshot.is_some(),
             "screenshot": screenshot.as_ref().map(|p| p.display().to_string()),
         });
@@ -222,6 +233,8 @@ pub fn observe(args: ObserveArgs) -> ExitCode {
                     "windows": tree.windows,
                     "truncated": tree.truncated,
                     "tree": crate::observe_tree::tree_to_json(&tree),
+                    "full_tree": args.full,
+                    "cursor": args.cursor,
                 });
                 if args.text {
                     result["text"] = json!(crate::observe_tree::tree_text(&tree));
@@ -822,9 +835,15 @@ pub struct SessionObserveArgs {
     /// Request the structured UI tree.
     #[arg(long)]
     pub tree: bool,
-    /// Request the flat text rendering.
+    /// Request the compact visible-text rendering.
     #[arg(long)]
     pub text: bool,
+    /// Return the full tree inline instead of the compact screen.
+    #[arg(long)]
+    pub full: bool,
+    /// Compact-screen page cursor.
+    #[arg(long, default_value_t = 0)]
+    pub cursor: usize,
     /// Explicitly request the frame (the default result).
     #[arg(long)]
     pub frame: bool,
@@ -989,6 +1008,8 @@ fn session_observe(args: SessionObserveArgs) -> ExitCode {
         "base": daemon_base(&args.session),
         "tree": args.tree,
         "text": args.text,
+        "full": args.full,
+        "cursor": args.cursor,
         "png": args.screenshot.is_some(),
         "screenshot": args.screenshot.as_ref().map(|p| p.display().to_string()),
         "settle_timeout_ms": args.settle_timeout_ms,
@@ -1002,6 +1023,8 @@ fn session_observe(args: SessionObserveArgs) -> ExitCode {
         screenshot: args.screenshot,
         tree: args.tree,
         text: args.text,
+        full: args.full,
+        cursor: args.cursor,
         frame: args.frame,
         timeout: 120,
         json: args.json,
