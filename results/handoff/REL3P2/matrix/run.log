@@ -1,0 +1,14 @@
+run-matrix: host gate ok (loadavg1 2.76, MemAvailable 47.6 GiB)
+run-matrix: [1] scenarios/v2-art-counter.yaml rep 1/1
+run-matrix: [1] verdict=pass class=- wall=3541 ms cg_peak=20.19 MiB
+run-matrix: [2] scenarios/negative/counter-wrong-count.yaml rep 1/1
+run-matrix: [2] verdict=fail class=assertion wall=422 ms cg_peak=18.67 MiB
+run-matrix: summary {"classes": {"assertion": 1, "pass": 1}, "errors": 0, "failed": 1, "false_fail": 0, "false_pass": 0, "gates": {"false_pass_zero": true, "harness_timeout_within_2pct": true, "negative_all_correct": true, "unclassified_zero": true}, "harness_or_timeout": 0, "negative_correct": 1, "negative_runs": 1, "passed": 1, "total_runs": 2, "unclassified": 0, "verdict_eligible": true}
+run-matrix: rows results/handoff/REL3P2/matrix/matrix.json
+run-matrix: tsv  results/handoff/REL3P2/matrix/matrix.tsv
+run-matrix: verdict_eligible=True profile=release engine=art
+
+| run | scenario | variant | expected | verdict | false_pass | error class | wall ms | cg peak MiB | GiB-min | PSS MiB |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 01-v2-art-counter-r1 | v2-art-counter.yaml | good | pass | pass | False | - | 3541 | 20.19 | 0.00072 | 28.26 |
+| 02-negative-counter-wrong-count-r1 | counter-wrong-count.yaml | negative | fail | fail | False | assertion | 422 | 18.67 | 4.6e-05 | 26.82 |

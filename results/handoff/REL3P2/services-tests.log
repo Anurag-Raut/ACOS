@@ -1,0 +1,41 @@
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:656:7
+    |
+656 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-services` (lib) generated 1 warning
+   Compiling acos-services v0.2.2 (/home/Qui/.t3/worktrees/acos/t3-f47ca457-2272ba1e60af2cde/crates/acos-services)
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.59s
+     Running tests/net1_connectivity.rs (.cache/rel3p2-target/release/deps/net1_connectivity-58a322be59e4261a)
+
+running 11 tests
+test net_capabilities_and_link_properties_round_trip_through_their_specs ... ok
+test state_counters_record_each_registration_and_release ... ok
+test pending_intent_registrations_stay_a_structured_refusal ... ok
+test listen_for_network_is_a_listen_request ... ok
+test register_default_network_callback_sends_null_capabilities ... ok
+test a_request_without_a_messenger_queues_no_callbacks ... ok
+test the_same_network_request_is_echoed_in_every_callback_message ... ok
+test network_queries_describe_the_emulated_default_network ... ok
+test request_network_answers_a_network_request_and_queues_the_aosp_callbacks ... ok
+test release_network_request_drops_the_registration_and_unknown_ids_fail ... ok
+test the_connectivity_specs_match_the_boot_images_write_to_parcel ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/parcelable.rs (.cache/rel3p2-target/release/deps/parcelable-1dccc9e5fc7c079a)
+
+running 7 tests
+test application_info_split_arrays_are_string8 ... ok
+test package_info_reply_reads_back_in_the_framework_order ... ok
+test task_description_reads_the_api34_conditional_layout ... ok
+test typed_array_elements_round_trip_with_their_presence_marker ... ok
+test every_spec_round_trips_through_a_parcel ... ok
+test parcel_exception_constants_match_the_framework ... ok
+test codec_field_orders_match_the_framework_dex ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.06s
+

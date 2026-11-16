@@ -14,14 +14,26 @@ fn dex_dir() -> std::path::PathBuf {
 
 #[test]
 fn codec_field_orders_match_the_framework_dex() {
-    let dir = dex_dir();
+    // EVERY boot-classpath DEX directory, not one: a single `dex/framework`
+    // scan skipped `android.net.*` (framework-connectivity) and every apex jar
+    // as "class not found", which is how the wrong NetworkCapabilities and
+    // LinkProperties field lists stayed `Verification::Full` unverified.
+    let dirs = parcelable::boot_classpath_dex_dirs().expect("boot DEX cache (run from the repo root)");
+    assert!(
+        dirs.len() > 10,
+        "the oracle must cover every boot-classpath jar, saw {} dirs",
+        dirs.len()
+    );
     let mut checked = 0usize;
     let mut full = 0usize;
+    let mut missing = Vec::new();
     let mut failures = Vec::new();
     for spec in parcelable::SPECS {
-        let Ok(scanned) = parcelable::Scanner::write_to_parcel(&dir, spec.class) else {
+        let Ok(scanned) = parcelable::Scanner::write_to_parcel_in(&dirs, spec.class) else {
             // Some curated ACOS-owned values have no Java `writeToParcel` on the
-            // boot classpath; that is expected.
+            // boot classpath; that is expected, and every codec that *does*
+            // have one is verified.
+            missing.push(spec.class);
             continue;
         };
         let result = parcelable::verify(spec, &scanned);
@@ -58,7 +70,11 @@ fn codec_field_orders_match_the_framework_dex() {
             real_len
         );
     }
-    println!("verified {checked} specs against the boot DEX ({full} full)");
+    println!(
+        "verified {checked} specs against {} boot DEX dirs ({full} full); no writeToParcel for {}",
+        dirs.len(),
+        missing.len()
+    );
     assert!(checked >= 10, "expected to verify at least 10 codecs");
     assert!(failures.is_empty(), "codec drift:\n{}", failures.join("\n"));
 }
@@ -535,4 +551,255 @@ fn sample_for(class: &str) -> Option<Parcelable> {
         ),
         _ => return None,
     })
+}
+
+/// REL3P regression: a `getPackageInfo(pkg, GET_SIGNATURES|GET_META_DATA|
+/// GET_PERMISSIONS = 0x100024c0)` reply must stay in sync with the framework's
+/// own reader.
+///
+/// `PackageInfo.writeToParcel` writes `splitNames` and `requestedPermissions`
+/// with `writeString8Array` (image `classes.dex` `Landroid/content/pm/
+/// PackageInfo;->writeToParcel` at `0x000b` and `0x0072`; tag
+/// `PackageInfo.java:585,608`), i.e. each element is `int32 len` in UTF-8
+/// **bytes** + bytes + NUL. Before REL3P the codec wrote the String16 form, so
+/// every field after a non-empty `requestedPermissions` was read out of the
+/// middle of the string payload: the framework read a `Signature[]` length of
+/// 7 209 071 and threw `OutOfMemoryError: Failed to allocate a 7676737936 byte
+/// allocation at Parcel.createString8Array`.
+///
+/// This walks the bytes in `PackageInfo.readFromParcel` order using the same
+/// primitives the framework uses (`readString8`, `createString8Array`,
+/// `readIntArray`, `readTypedArray`), so a wrong array encoding shows up as a
+/// desynchronised field instead of a symmetric ACOS-internal round trip.
+#[test]
+fn package_info_reply_reads_back_in_the_framework_order() {
+    use acos_services::pms::{AppInfo, PackageInfo};
+
+    let package = "dev.acos.fixtures.pmsprobe";
+    let info = PackageInfo {
+        package_name: package.into(),
+        version_code: 7,
+        version_name: "1.0".into(),
+        application: AppInfo::hello_views_fallback(std::path::Path::new("probe.apk")),
+        activities: Vec::new(),
+        requested_permissions: vec![
+            "android.permission.INTERNET".into(),
+            "android.permission.VIBRATE".into(),
+        ],
+        first_install_time: 1,
+        last_update_time: 2,
+        signatures: vec![vec![0x30, 0x82, 0x01, 0x0a, 0xde, 0xad]],
+    };
+    let value = info.to_parcelable_with_flags(0x1000_24c0);
+
+    let mut parcel = acos_parcel::Parcel::new();
+    parcelable::write_payload(&mut parcel, &value).expect("write PackageInfo");
+    parcel.set_data_position(0);
+
+    // Parcel.readString8(packageName)
+    assert_eq!(parcel.read_string8().unwrap().as_deref(), Some(package));
+    // Parcel.createString8Array(splitNames)
+    assert_eq!(parcel.read_string8_array().unwrap(), None, "splitNames");
+    // readInt(versionCode), readInt(versionCodeMajor)
+    assert_eq!(parcel.read_int32().unwrap(), 7);
+    assert_eq!(parcel.read_int32().unwrap(), 0);
+    // readString8(versionName), readInt(baseRevisionCode), readIntArray(splitRevisionCodes)
+    assert_eq!(parcel.read_string8().unwrap().as_deref(), Some("1.0"));
+    assert_eq!(parcel.read_int32().unwrap(), 0);
+    assert_eq!(parcel.read_int32_array().unwrap(), None);
+    // readString8(sharedUserId), readInt(sharedUserLabel)
+    assert_eq!(parcel.read_string8().unwrap(), None);
+    assert_eq!(parcel.read_int32().unwrap(), 0);
+    // applicationInfo presence marker + the nested ApplicationInfo payload
+    assert_eq!(parcel.read_int32().unwrap(), 1);
+    parcelable::read_payload("android.content.pm.ApplicationInfo", &mut parcel)
+        .expect("nested ApplicationInfo");
+    // readLong(firstInstallTime), readLong(lastUpdateTime), readIntArray(gids)
+    assert_eq!(parcel.read_int64().unwrap(), 1);
+    assert_eq!(parcel.read_int64().unwrap(), 2);
+    assert_eq!(parcel.read_int32_array().unwrap(), None);
+    // 6 absent typed arrays: activities, receivers, services, providers,
+    // instrumentation, permissions (a null typed array is a single -1 count).
+    for field in [
+        "activities",
+        "receivers",
+        "services",
+        "providers",
+        "instrumentation",
+        "permissions",
+    ] {
+        assert_eq!(parcel.read_int32().unwrap(), -1, "{field} count");
+    }
+    // createString8Array(requestedPermissions) — the REL3P defect: a String16
+    // encoding desynchronises here and the next int is string payload bytes.
+    assert_eq!(
+        parcel.read_string8_array().unwrap(),
+        Some(vec![
+            Some("android.permission.INTERNET".to_owned()),
+            Some("android.permission.VIBRATE".to_owned()),
+        ]),
+        "requestedPermissions must be a String8 array"
+    );
+    // readIntArray(requestedPermissionsFlags) — a desynchronised reader sees the
+    // UTF-16 payload here instead of the `-1` null marker.
+    assert_eq!(
+        parcel.read_int32_array().unwrap(),
+        None,
+        "requestedPermissionsFlags must follow requestedPermissions exactly"
+    );
+    // readTypedArray(signatures): count 1, presence 1, then `Signature`'s
+    // single `writeByteArray`.
+    assert_eq!(parcel.read_int32().unwrap(), 1, "signatures count");
+    assert_eq!(parcel.read_int32().unwrap(), 1, "signature present");
+    assert_eq!(
+        parcel.read_byte_array().unwrap(),
+        Some(vec![0x30, 0x82, 0x01, 0x0a, 0xde, 0xad])
+    );
+    // The four remaining typed arrays (configPreferences, reqFeatures,
+    // featureGroups, attributions) are absent.
+    for field in ["configPreferences", "reqFeatures", "featureGroups", "attributions"] {
+        assert_eq!(parcel.read_int32().unwrap(), -1, "{field} count");
+    }
+    // ...and the scalar tail is still aligned: installLocation is 0.
+    assert_eq!(parcel.read_int32().unwrap(), 0, "installLocation");
+}
+
+/// REL3P: `ApplicationInfo`'s split/resource arrays are `String8` arrays too
+/// (image `classes.dex` `Landroid/content/pm/ApplicationInfo;->writeToParcel`
+/// `0x0076`-`0x00bc`). The `sharedLibraryFiles` array precedes the
+/// `SharedLibraryInfo` typed list, so a wrong encoding there desynchronises the
+/// `dataDir` that follows it.
+#[test]
+fn application_info_split_arrays_are_string8() {
+    let mut app = acos_services::pms::AppInfo::hello_views_fallback(std::path::Path::new(
+        "/data/app/dev.acos.fixtures.helloviews/base.apk",
+    ));
+    app.split_names = vec!["config.xxhdpi".into()];
+    app.resource_dirs = vec!["/data/app/split_config.xxhdpi.apk".into()];
+    app.shared_library_files = vec!["/system/framework/android.test.runner.jar".into()];
+    let value = app.to_parcelable_with_flags(0);
+    let mut parcel = acos_parcel::Parcel::new();
+    parcelable::write_payload(&mut parcel, &value).expect("write ApplicationInfo");
+    parcel.set_data_position(0);
+
+    // maybeWriteSquashed marker, then the PackageItemInfo prefix.
+    assert_eq!(parcel.read_int32().unwrap(), 0);
+    let _name = parcel.read_string8().unwrap();
+    let _pkg = parcel.read_string8().unwrap();
+    let _banner = parcel.read_int32().unwrap();
+    // TextUtils.writeToParcel(label): kind marker + String8.
+    assert_eq!(parcel.read_int32().unwrap(), 1);
+    let _label = parcel.read_string8().unwrap();
+    let _icon = parcel.read_int32().unwrap();
+    let _label_res = parcel.read_int32().unwrap();
+    let _meta = parcel.read_int32_array().unwrap_or(None); // Bundle null marker
+    let _show_user = parcel.read_int32().unwrap();
+    let _show_badge = parcel.read_int32().unwrap();
+    for _ in 0..4 {
+        let _ = parcel.read_string8().unwrap(); // taskAffinity, permission, processName, className
+    }
+    for _ in 0..7 {
+        let _ = parcel.read_int32().unwrap(); // theme, flags, privateFlags{,Ext}, 3 width dp
+    }
+    // storageUuid: an int presence marker, then 2 longs when present.
+    if parcel.read_int32().unwrap() != 0 {
+        let _ = parcel.read_int64().unwrap();
+        let _ = parcel.read_int64().unwrap();
+    }
+    for _ in 0..4 {
+        let _ = parcel.read_string8().unwrap(); // scanSourceDir, scanPublicSourceDir, sourceDir, publicSourceDir
+    }
+    assert_eq!(
+        parcel.read_string8_array().unwrap(),
+        Some(vec![Some("config.xxhdpi".to_owned())]),
+        "splitNames must be a String8 array"
+    );
+    assert_eq!(parcel.read_string8_array().unwrap(), None, "splitSourceDirs");
+    assert_eq!(
+        parcel.read_string8_array().unwrap(),
+        None,
+        "splitPublicSourceDirs"
+    );
+    // splitDependencies: null SparseArray.
+    assert_eq!(parcel.read_int32().unwrap(), -1);
+    for _ in 0..3 {
+        let _ = parcel.read_string8().unwrap(); // nativeLibraryDir, secondaryNativeLibraryDir, nativeLibraryRootDir
+    }
+    let _ = parcel.read_int32().unwrap(); // nativeLibraryRootRequiresIsa
+    let _ = parcel.read_string8().unwrap(); // primaryCpuAbi
+    let _ = parcel.read_string8().unwrap(); // secondaryCpuAbi
+    assert_eq!(
+        parcel.read_string8_array().unwrap(),
+        Some(vec![Some("/data/app/split_config.xxhdpi.apk".to_owned())]),
+        "resourceDirs must be a String8 array"
+    );
+    assert_eq!(parcel.read_string8_array().unwrap(), None, "overlayPaths");
+    let _ = parcel.read_string8().unwrap(); // seInfo
+    let _ = parcel.read_string8().unwrap(); // seInfoUser
+    assert_eq!(
+        parcel.read_string8_array().unwrap(),
+        Some(vec![Some(
+            "/system/framework/android.test.runner.jar".to_owned()
+        )]),
+        "sharedLibraryFiles must be a String8 array"
+    );
+    // sharedLibraryInfos is a null typed list, then dataDir is a String8.
+    assert_eq!(parcel.read_int32().unwrap(), -1);
+    assert_eq!(
+        parcel.read_string8().unwrap().as_deref(),
+        Some("/data/user/0/dev.acos.fixtures.helloviews"),
+        "dataDir must follow sharedLibraryInfos exactly"
+    );
+}
+
+/// REL3P: a `writeTypedArray` payload round-trips through the codec's own
+/// reader, including the per-element `writeTypedObject` presence marker.
+///
+/// `Parcel.writeTypedArray` writes `int count` then, per element,
+/// `writeTypedObject`: `int 1` + payload. The writer emitted that marker but
+/// the reader skipped it, so the first element's marker was read as the next
+/// element's payload and everything after it desynchronised. Nothing caught it
+/// because every typed array in the PMS replies was empty (`-1`) until
+/// `PackageInfo.signatures` started carrying the APK's certificate.
+#[test]
+fn typed_array_elements_round_trip_with_their_presence_marker() {
+    use acos_services::pms::{AppInfo, PackageInfo};
+
+    let info = PackageInfo {
+        package_name: "dev.acos.fixtures.pmsprobe".into(),
+        version_code: 1,
+        version_name: "1.0".into(),
+        application: AppInfo::hello_views_fallback(std::path::Path::new("probe.apk")),
+        activities: Vec::new(),
+        requested_permissions: vec!["android.permission.INTERNET".into()],
+        first_install_time: 0,
+        last_update_time: 0,
+        signatures: vec![vec![0x30, 0x82, 0x01, 0x0a]],
+    };
+    let value = info.to_parcelable_with_flags(0x1000_24c0);
+    let mut parcel = acos_parcel::Parcel::new();
+    parcelable::write_payload(&mut parcel, &value).expect("write PackageInfo");
+    parcel.set_data_position(0);
+    let decoded = parcelable::read_payload("android.content.pm.PackageInfo", &mut parcel)
+        .expect("read PackageInfo");
+    parcel
+        .enforce_no_data_avail()
+        .expect("the reader must consume the whole payload");
+    // The `Signature[]` field (index 21 in `PackageInfo.writeToParcel` order).
+    let signatures = decoded.field(21).expect("signatures field");
+    assert_eq!(
+        signatures,
+        &Value::List(Some(vec![Value::Parcelable(Parcelable::ordered(
+            "android.content.pm.Signature",
+            vec![Value::ByteArray(Some(vec![0x30, 0x82, 0x01, 0x0a]))],
+        ))])),
+        "typed array element lost its payload"
+    );
+    assert_eq!(
+        decoded.field(19),
+        Some(&Value::StringArray(Some(vec![Some(
+            "android.permission.INTERNET".to_owned()
+        )]))),
+        "requestedPermissions did not survive the round trip"
+    );
 }
