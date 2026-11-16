@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Touch probe</string>
+    <string name="label">touch me</string>
+    <string name="status_idle">idle</string>
+    <string name="touched">touched</string>
+    <string name="touched_delayed">touched-delayed</string>
+    <string name="long_pressed">long-pressed</string>
+    <string name="flung">flung</string>
+    <string name="inc">Increment</string>
+    <string name="initial">0</string>
+</resources>

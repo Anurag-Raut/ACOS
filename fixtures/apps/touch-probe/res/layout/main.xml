@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TOUCHDISP fixture: does a touch reach a **non-clickable** view's
+  `OnTouchListener` (and its `onTouchEvent`) through the real view chain?
+
+  Nothing in this layout is clickable except the `inc` Button, so a tap on
+  `label` (a plain TextView) or on `probe` (a plain custom View) is a press the
+  framework must still *dispatch* to the view under the point. `probe` carries
+  an `OnTouchListener` that returns false and posts a `setText` 100 ms later;
+  `probe` also runs a `GestureDetector` (long-press / fling) in `onTouchEvent`.
+  Both write to the non-clickable `status` TextView, so a state change that
+  arrives *after* the gesture was acknowledged is observable in the tree.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/status_idle"
+        android:textSize="18sp" />
+
+    <TextView
+        android:id="@+id/label"
+        android:layout_width="match_parent"
+        android:layout_height="120dp"
+        android:gravity="center"
+        android:text="@string/label"
+        android:textSize="18sp" />
+
+    <dev.acos.fixtures.touchprobe.ProbeView
+        android:id="@+id/probe"
+        android:layout_width="match_parent"
+        android:layout_height="160dp" />
+
+    <dev.acos.fixtures.touchprobe.GestureProbeView
+        android:id="@+id/gesture"
+        android:layout_width="match_parent"
+        android:layout_height="160dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <Button
+            android:id="@+id/inc"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/inc" />
+
+        <TextView
+            android:id="@+id/count"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:text="@string/initial" />
+    </LinearLayout>
+</LinearLayout>

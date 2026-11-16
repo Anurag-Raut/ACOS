@@ -4939,6 +4939,70 @@ nothing in this change is on the tap path).
 - **Conclusion / next:** the BENCHFIX regression is closed. v0.3.0's remaining gate work is the
   other tracks, not this reply path.
 
+## TOUCHDISP — does a touch reach a non-clickable view's `OnTouchListener` on the real ART guest?
+
+**Question.** REL3H2 measured that a tap on a non-clickable view with an
+`OnTouchListener` is acked `finishInputEvent(handled) = false` within 5 ms and
+that the listener "never runs" (no log, no posted `setText`), and concluded the
+guest hit-tests *clickable* nodes instead of running a real
+`ViewGroup.dispatchTouchEvent` chain. That would be an emulation-fidelity gap, so
+this track instrumented the app from the inside to find where the path diverges.
+
+**Result (negative, and it corrects the record).** The guest runs the real chain.
+`fixtures/apps/touch-probe` (a non-clickable custom `ProbeView`, a `GestureDetector`
+view, and a listener on the root `LinearLayout`) logs at
+`Activity.dispatchTouchEvent`, `View.dispatchTouchEvent`, the listener and
+`View.onTouchEvent`. A tap on the non-clickable `probe` produces, in order:
+`activity.dispatchTouchEvent DOWN x=540 y=960 src=0x1002` →
+`probe.dispatchTouchEvent DOWN x=498 y=210 raw=540,960 src=0x1002 toolType=1
+enabled=true clickable=false` → `probe.onTouch DOWN` → `probe.onTouchEvent DOWN` →
+`root.onTouch DOWN x=540 y=685`. Coordinates are window-local and per-view
+transformed, the source is `SOURCE_TOUCHSCREEN`, and the ancestors' fallback runs.
+
+**The UP is the whole story.** It reaches `Activity.dispatchTouchEvent` and stops:
+AOSP `ViewGroup.dispatchTouchEvent` (`ViewGroup.java:2665`) sets
+`intercepted = true` when `mFirstTouchTarget == null` and the action is not an
+initial down — *"There are no touch targets and this action is not an initial down
+so this view group continues to intercept touches."* A DOWN that nobody consumed
+never creates a `TouchTarget`, so the descendants are not offered the UP (or any
+MOVE). A listener that returns false and posts its side effect from `ACTION_UP`
+therefore never runs it: that is exactly REL3H2's "no listener log, no posted
+`setText`, `count` stayed 0", measured on a real Android rule, not an ACOS gap.
+
+**What it unblocks.** The posted-side-effect fixture is back, posting from the
+DOWN — the only shape an app can write for a tap it does not consume — with an
+ART proof of REL3H2 finding 1: `scenarios/touchdisp-posted-side-effect.yaml` taps
+`probe` with `expect_change: true`; the window acks both events
+`handled=false` (`ack_ms: 5`), the listener's 100 ms `postDelayed(setText)` draws,
+and the step binds `settle.bound: strict-event`, `first_change_ms: 127`,
+`pixels_changed: true`, tree `status = "touched-delayed"` — the **change**, never
+the pre-state. The negative twin still fails honestly
+(`rel3h-unhandled-input-expect-change.yaml`: `bound: unhandled-input`,
+`pixels_changed: false`, `expect_change` fails). A `GestureDetector` on a
+non-clickable view (`scenarios/touchdisp-gesture.yaml`, a 700 ms held press)
+publishes 44 events, acks all 44, fires `onLongPress` and writes
+`status = long-pressed`. ART tests:
+`crates/acos-cli/tests/touchdisp_dispatch.rs` (3, `--ignored`).
+
+**Also rechecked while there.** A tap on the same fixture's clickable `Button`
+still acks `handled: true` and increments; `rel3h-unhandled-input`,
+`rel3h2-expect-handled-false`, `counter` (24 steps) and `hello-views` (typing, 27
+steps) all pass with `--engine art`; `cargo test -p acos-art -p acos-verify
+-p acos-cli` is 657 passed / 0 failed.
+
+**Residual limit (unchanged, documented).** The unhandled shortcut and the normal
+strict rule both bind the newest draw, and the probe reports pending main-Looper
+work only when the next message is due inside its horizon. An app that posts a
+side effect later than the window *and* draws something in between can still be
+reported as settled before that side effect lands. With a pure 100 ms
+`postDelayed` no sample is taken in between, so the change is captured; widening
+the horizon would make every tap on a screen with periodic housekeeping wait for
+it (owner decision).
+
+**Conclusion / next.** No dispatch-path change: the ART touch path is faithful and
+the REL3H2 "emulation gap" was a fixture that waited for an event Android does not
+deliver. Evidence in `results/handoff/TOUCHDISP/`.
+
 ## REL3H2 — can a fixture produce "unhandled ack, but the screen changes a moment later"?
 
 **Question.** MEDIUM review finding #1 says REL3H's unhandled-input shortcut could

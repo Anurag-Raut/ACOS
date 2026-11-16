@@ -1,0 +1,53 @@
+# TOUCHDISP: "unhandled ack, and the screen changes a moment later".
+#
+# REL3H2 finding 1: the unhandled-input settle shortcut could bind a probe
+# sample taken after the publish but *before* the UI thread ran the handler (or
+# before the handler's posted side effect ran and drew) - a false "nothing
+# happened" that then described a state the app had already left.
+#
+# The fixture is the shape that measurement could not reach before: a
+# non-clickable custom View (`probe`) whose OnTouchListener returns false and
+# **posts** a setText 100 ms out. The window therefore answers
+# `finishInputEvent(handled) = false` for the gesture, and the text change -
+# `idle` -> `touched-delayed` - is drawn well after that ack.
+#
+# What this scenario pins:
+#   * `expect_change: true` on the tap must PASS on the captured change (the text
+#     node and the pixels really do change), so the step did not settle on the
+#     pre-state; the step's settle must not be `unhandled_input`;
+#   * the following assert reads the posted text.
+#
+# A step that settled on the pre-state fails here with
+# `ASSERTION_FAILED`/`expect_change` on `pixels_changed: false`, which is the
+# honest failure this scenario replaces.
+version: 1
+name: touchdisp-posted-side-effect
+description: >-
+  A tap on a non-clickable view whose listener posts a setText 100 ms out is
+  acknowledged handled=false; the settle must capture the posted change instead
+  of binding the pre-state.
+app: fixtures/build/apps/touch-probe.apk
+engine: art
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+animations: off
+expectation: pass
+steps:
+  - launch:
+      activity: dev.acos.fixtures.touchprobe/.MainActivity
+  - tap:
+      selector: {id: probe}
+      expect_change: true
+  - assert_text:
+      selector: {id: status}
+      text: {exact: touched-delayed}
+  # The control: a really clickable Button still goes through the normal path.
+  - tap:
+      selector: {id: inc}
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "1"}
