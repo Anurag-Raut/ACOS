@@ -71,7 +71,10 @@ steps:
         - "type=1 layer=0 active=true focused=true"
         - "root class=android.widget.FrameLayout"
         - "by_view_id count=1"
-        - "node class=android.widget.Button text=Click target.*clickable=true"
+        # MODA11YNATIVE: the label's case is the theme's (`textAllCaps` on the
+        # default Button style), not this app's; the identity, the label and
+        # clickability are what the by-view-id query and the click assert.
+        - "node class=android.widget.Button text=(?i)click target view_id=null clickable=true"
         - "click handled=true"
   - assert_text:
       selector: {id: status}
@@ -130,6 +133,37 @@ steps:
   # (back_pressed). NOT asserted: the activity's destroy transaction after
   # finish() — the host's activity manager does not deliver it yet (see
   # results/handoff/MODA11Y4/README.md, "What is not proven").
+  # MODA11YNATIVE step 1: `dispatchGesture`. The framework's own
+  # `AccessibilityService.dispatchGesture` sampled the strokes into
+  # `MotionEvent`s (`GestureDescription$MotionEventGenerator`) and the module
+  # published them on the session's input channel, so the app's own listeners
+  # ran: the `gesture_target` button's OnClickListener counted a tap, and the
+  # `ScrollView` the service swiped actually scrolled. `onPerformGestureResult`
+  # (code 11) is what the framework's `GestureResultCallback` receives.
+  - assert_log:
+      tag: AcosA11yProbe
+      ordered: false
+      patterns:
+        - "gesture_sent kind=tap accepted=true"
+        - "gesture_result kind=tap completed=true"
+        - "gesture_target_pressed count=1"
+        - "gesture_sent kind=swipe accepted=true"
+        - "gesture_result kind=swipe completed=true"
+        - "list_scrolled y=\\d+"
+  # MODA11YNATIVE step 2: `takeScreenshot`. The success payload really is the
+  # composited frame (1080x2400 RGBA_8888 over a memfd, imported by the guest's
+  # own gralloc/GraphicBuffer path), and the three reachable failure codes come
+  # back through the framework's `TakeScreenshotCallback.onFailure`.
+  - assert_log:
+      tag: AcosA11yProbe
+      ordered: false
+      patterns:
+        - "screenshot_result kind=capture status=0 width=1080 height=2400 format=1"
+        - "screenshot_result kind=interval status=3"
+        - "screenshot_result kind=display status=4"
+        - "screenshot_result kind=secure status=6"
+        - "screenshot_bitmap width=1080 height=2400"
+        - "screenshot_pixel .* color=#FF3366CC"
   - tap:
       selector: {id: a11y_back}
   - assert_log:

@@ -3502,6 +3502,15 @@ public final class LaunchMain {
                 // android.hardware.SystemSensorManager.nativeClassInit()`
                 // (Gaten, w25-gaten-launch).
                 "register_android_hardware_SensorManager",
+                // MODA11YNATIVE: an accessibility service's `takeScreenshot`
+                // result is a `HardwareBuffer` the app reads with
+                // `nReadHardwareBufferFromParcel`/the `nGet*` getters and uses
+                // with `Bitmap.wrapHardwareBuffer`. The image's libandroid_runtime
+                // exports the registration (and libui's `GraphicBuffer`
+                // unflatten goes through the ACOS gralloc shim, which owns the
+                // memfd), so the guest runs the REAL implementation — no
+                // substitute native.
+                "register_android_hardware_HardwareBuffer",
                 "register_com_android_internal_util_VirtualRefBasePtr",
         };
         String[] graphics = {"register_android_graphics_classes"};

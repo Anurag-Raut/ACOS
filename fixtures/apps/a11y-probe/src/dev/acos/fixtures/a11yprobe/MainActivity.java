@@ -7,7 +7,11 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
+import android.graphics.Color;
+import android.view.View;
 import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import java.util.List;
@@ -30,8 +34,13 @@ public class MainActivity extends Activity {
     private static final String TAG = "AcosA11yProbe";
     private AccessibilityManager manager;
     private TextView status;
+    private ScrollView list;
     private int sent;
     private int clicks;
+    /** MODA11YNATIVE: taps the service delivered as a real gesture stroke. */
+    private int gestureTaps;
+    /** MODA11YNATIVE: the list's scroll offset after the service's swipe. */
+    private int swipeY;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,6 +61,34 @@ public class MainActivity extends Activity {
             Log.i(TAG, "event_sent type=" + event.getEventType() + " count=" + sent);
             updateStatus();
         });
+
+        // MODA11YNATIVE: the gesture tap target. The service taps it with a
+        // real `dispatchGesture` stroke, so this counter is the app's own proof
+        // that the injected DOWN/UP pair reached the normal touch path.
+        Button gestureTarget = (Button) findViewById(R.id.gesture_target);
+        gestureTarget.setOnClickListener(v -> {
+            gestureTaps++;
+            Log.i(TAG, "gesture_target_pressed count=" + gestureTaps);
+            updateStatus();
+        });
+
+        list = (ScrollView) findViewById(R.id.gesture_list);
+        LinearLayout rows = (LinearLayout) findViewById(R.id.gesture_rows);
+        for (int i = 0; i < 40; i++) {
+            TextView row = new TextView(this);
+            row.setText("row " + i);
+            row.setTextSize(18);
+            rows.addView(row);
+        }
+        // The list's own scroll callback is the app's view of the service's
+        // swipe: `dispatchGesture` publishes real MOVE events, so
+        // `ScrollView.onScrollChanged` runs.
+        list.setOnScrollChangeListener((v, x, y, oldX, oldY) -> {
+            swipeY = y;
+            Log.i(TAG, "list_scrolled y=" + y);
+        });
+
+        findViewById(R.id.swatch).setBackgroundColor(Color.rgb(0x33, 0x66, 0xCC));
 
         Button target = (Button) findViewById(R.id.click_target);
         target.setOnClickListener(v -> {
@@ -128,7 +165,9 @@ public class MainActivity extends Activity {
                 + " installed=" + (installed == null ? -1 : installed.size())
                 + " enabled_list=" + enabledCount
                 + " sent=" + sent + first
-                + " a11y_click=" + clicks;
+                + " a11y_click=" + clicks
+                + " gesture_taps=" + gestureTaps
+                + " swipe_y=" + swipeY;
         status.setText(text);
         Log.i(TAG, "status " + text);
     }

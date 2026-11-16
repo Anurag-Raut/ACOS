@@ -206,6 +206,47 @@ pub struct A11yState {
     /// every later query from the cache and never sees a window added after
     /// its first query. Bounded like `events`.
     pub windows_changed: Vec<A11yWindowChange>,
+    /// The compositor-client (C1) state: the newest composited frame and the
+    /// `FLAG_SECURE` answer `takeScreenshot` needs.
+    ///
+    /// AOSP's `takeScreenshot` captures the display
+    /// (`DisplayManagerInternal.userScreenshot`) and fails with
+    /// `ERROR_TAKE_SCREENSHOT_SECURE_WINDOW` when a secure window is showing.
+    /// ACOS's composited frame is C1's, so the module reads exactly that.
+    /// `None` in a bare host (unit tests): a screenshot then answers
+    /// `ERROR_TAKE_SCREENSHOT_INVALID_DISPLAY`, never pixels it does not have.
+    pub compositor: Option<Arc<Mutex<crate::surface_client::SurfaceState>>>,
+    /// `mRequestTakeScreenshotTimestampMs`: the last `takeScreenshot` request,
+    /// for `ACCESSIBILITY_TAKE_SCREENSHOT_REQUEST_INTERVAL_TIMES_MS`.
+    pub last_screenshot_ms: Option<i64>,
+    /// Gesture sequences the module published, and their outcome (bounded).
+    pub gestures: Vec<A11yGestureRecord>,
+    /// Screenshot requests and their status (bounded).
+    pub screenshots: Vec<A11yScreenshotRecord>,
+}
+
+/// One `dispatchGesture` request, as the module served it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct A11yGestureRecord {
+    /// `AccessibilityService.mSequence`.
+    pub sequence: i32,
+    /// How many `MotionEvent`s the `ParceledListSlice` carried.
+    pub events: usize,
+    /// `true` when every event was published on the session input channel.
+    pub delivered: bool,
+    /// Why delivery failed (only when `delivered` is false).
+    pub reason: Option<String>,
+}
+
+/// One `takeScreenshot` request, as the module served it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct A11yScreenshotRecord {
+    /// The requested display id.
+    pub display_id: i32,
+    /// `AccessibilityService.TAKE_SCREENSHOT_SUCCESS` or one `ERROR_*` code
+    /// (`-1` for the capability refusal, which AOSP throws instead of sending
+    /// a status).
+    pub status: i32,
 }
 
 /// One pending `TYPE_WINDOWS_CHANGED` event, as the window manager produced it.
@@ -247,6 +288,10 @@ impl A11yState {
             interactions: Vec::new(),
             service_config: None,
             windows_changed: Vec::new(),
+            compositor: None,
+            last_screenshot_ms: None,
+            gestures: Vec::new(),
+            screenshots: Vec::new(),
         }
     }
 
@@ -425,6 +470,75 @@ impl A11yState {
             .is_some_and(|config| config.can_retrieve_windows())
     }
 
+    /// `AccessibilitySecurityPolicy.canTakeScreenshotLocked`: the service
+    /// declared `canTakeScreenshot`.
+    #[must_use]
+    pub fn can_take_screenshot(&self) -> bool {
+        self.service_config
+            .is_some_and(|config| config.can_take_screenshot())
+    }
+
+    /// `AccessibilitySecurityPolicy.canPerformGestures`: the service declared
+    /// `canPerformGestures`.
+    #[must_use]
+    pub fn can_perform_gestures(&self) -> bool {
+        self.service_config
+            .is_some_and(|config| config.can_perform_gestures())
+    }
+
+    /// `SystemClock.uptimeMillis()`-shaped now, for the screenshot rate limit.
+    #[must_use]
+    pub fn uptime_ms() -> i64 {
+        crate::input_channel::monotonic_nanos() / 1_000_000
+    }
+
+    /// The token a gesture is published on.
+    ///
+    /// AOSP's `MotionEventInjector` injects into the display, and the display
+    /// dispatch picks the window under the touch point. ACOS publishes per
+    /// window channel, and the window a touch belongs to is the one holding
+    /// input focus (an accessibility overlay is `FLAG_NOT_FOCUSABLE`), so that
+    /// is the target — the same choice [`Self::back_token`] makes for keys.
+    pub fn gesture_token(&self) -> Result<acos_parcel::BinderId> {
+        let Some(input) = self.input.as_ref() else {
+            return Err(ServiceError::ModuleRejected {
+                module: "accessibility",
+                detail: "dispatchGesture needs the session's input channels; this host has \
+                         none (a bare host or the rust VM)"
+                    .to_string(),
+            });
+        };
+        input
+            .focused_token()
+            .ok_or_else(|| ServiceError::ModuleRejected {
+                module: "accessibility",
+                detail: "dispatchGesture: no focused window input channel yet".to_string(),
+            })
+    }
+
+    /// Publish a decoded gesture on the session's input channel.
+    ///
+    /// The events are the guest's own samples (the framework's
+    /// `GestureDescription$MotionEventGenerator` produced them), so their
+    /// `eventTime`s are published unchanged and the stroke keeps its timing.
+    pub fn publish_gesture(
+        &self,
+        token: acos_parcel::BinderId,
+        events: &[crate::input_channel::MotionEvent],
+    ) -> std::result::Result<(), String> {
+        let Some(input) = self.input.as_ref() else {
+            return Err("no session input channels".to_string());
+        };
+        let mut dispatch = input
+            .state()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        dispatch
+            .inject_motion_series(token, events)
+            .map(|_gesture| ())
+            .map_err(|error| error.to_string())
+    }
+
     /// Record one event (bounded).
     pub fn record_event(&mut self, event_type: i32, event_time: i64) {
         if self.events.len() >= MAX_EVENTS {
@@ -448,7 +562,8 @@ impl A11yState {
         if self.windows_changed.len() >= MAX_EVENTS {
             self.windows_changed.remove(0);
         }
-        self.windows_changed.push(A11yWindowChange { window, changes });
+        self.windows_changed
+            .push(A11yWindowChange { window, changes });
     }
 
     /// Take the queued window changes (the caller builds the events).
@@ -531,6 +646,18 @@ impl A11yState {
                 "can_perform_gestures": config.can_perform_gestures(),
                 "can_take_screenshot": config.can_take_screenshot(),
             })),
+            // MODA11YNATIVE: the two Android 12+ service APIs this module
+            // serves, with the outcome of every call.
+            "gestures": self.gestures.iter().map(|g| serde_json::json!({
+                "sequence": g.sequence,
+                "events": g.events,
+                "delivered": g.delivered,
+                "reason": g.reason,
+            })).collect::<Vec<_>>(),
+            "screenshots": self.screenshots.iter().map(|s| serde_json::json!({
+                "display_id": s.display_id,
+                "status": s.status,
+            })).collect::<Vec<_>>(),
             "unsupported": self.unsupported,
         })
     }
@@ -634,7 +761,8 @@ impl A11yState {
             .focused_token()
             .ok_or_else(|| ServiceError::ModuleRejected {
                 module: "accessibility",
-                detail: "performGlobalAction(BACK): no focused window input channel yet".to_string(),
+                detail: "performGlobalAction(BACK): no focused window input channel yet"
+                    .to_string(),
             })
     }
 
@@ -763,9 +891,7 @@ impl A11yState {
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         pms.services
             .iter()
-            .filter(|service| {
-                service.permission == "android.permission.BIND_ACCESSIBILITY_SERVICE"
-            })
+            .filter(|service| service.permission == "android.permission.BIND_ACCESSIBILITY_SERVICE")
             .map(|service| {
                 let package = service.package_name.clone();
                 let class = service
@@ -850,9 +976,7 @@ pub fn a11y_window_type(type_: i32) -> i32 {
     if type_ == TYPE_ACCESSIBILITY_OVERLAY {
         return 4;
     }
-    if type_ == TYPE_MAGNIFICATION_OVERLAY
-        || type_ == TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY
-    {
+    if type_ == TYPE_MAGNIFICATION_OVERLAY || type_ == TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY {
         return 6;
     }
     match WindowKind::of(type_) {
@@ -932,11 +1056,11 @@ pub fn service_info_value(component: &str) -> Option<Value> {
             Value::Str(None),                    // tileServiceName
             Value::Int(0),                       // introResId
             Value::Int(0),                       // motionEventSources
-            // No `mObservedMotionEventSources`: the image's framework
-            // `AccessibilityServiceInfo.writeToParcel`/`initFromParcel` stop at
-            // `mMotionEventSources` (see the spec in `parcelable.rs`), so a
-            // trailing int here would be 4 stray bytes the guest's reader
-            // leaves in the parcel.
+                                                 // No `mObservedMotionEventSources`: the image's framework
+                                                 // `AccessibilityServiceInfo.writeToParcel`/`initFromParcel` stop at
+                                                 // `mMotionEventSources` (see the spec in `parcelable.rs`), so a
+                                                 // trailing int here would be 4 stray bytes the guest's reader
+                                                 // leaves in the parcel.
         ],
     )))
 }
@@ -2020,7 +2144,6 @@ pub use crate::sensors::{
     SENSOR_GET_DYNAMIC_SENSOR_LIST, SENSOR_GET_SENSOR_LIST, SENSOR_NOARG_INT,
     SENSOR_SERVER_DESCRIPTOR,
 };
-
 
 /// A convenience `Bundle` for evidence.
 #[must_use]

@@ -363,6 +363,10 @@ pub fn install_with_handles_and_insets(
         a11y_state.windows = Some(Arc::clone(&wms_state));
         // MODA11Y4: the same input channels the session's Back uses.
         a11y_state.input = Some(a11y_input);
+        // MODA11YNATIVE: `takeScreenshot` captures the composited frame and
+        // answers the `FLAG_SECURE` question from the same C1 state the
+        // session's captures read.
+        a11y_state.compositor = Some(Arc::clone(&compositor));
     }
     host.set_accessibility_state(Arc::clone(&a11y));
     let input = Arc::new(Mutex::new(crate::misc::InputState::new()));
