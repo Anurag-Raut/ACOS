@@ -8,20 +8,20 @@ warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
 
 warning: `acos-services` (lib) generated 1 warning
    Compiling acos-services v0.2.2 (/home/Qui/.t3/worktrees/acos/t3-f47ca457-2272ba1e60af2cde/crates/acos-services)
-    Finished `release` profile [optimized + debuginfo] target(s) in 0.57s
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.59s
      Running tests/net1_connectivity.rs (.cache/rel3p2-target/release/deps/net1_connectivity-58a322be59e4261a)
 
 running 11 tests
 test net_capabilities_and_link_properties_round_trip_through_their_specs ... ok
 test state_counters_record_each_registration_and_release ... ok
-test listen_for_network_is_a_listen_request ... ok
 test pending_intent_registrations_stay_a_structured_refusal ... ok
-test request_network_answers_a_network_request_and_queues_the_aosp_callbacks ... ok
+test listen_for_network_is_a_listen_request ... ok
 test register_default_network_callback_sends_null_capabilities ... ok
 test a_request_without_a_messenger_queues_no_callbacks ... ok
-test network_queries_describe_the_emulated_default_network ... ok
-test release_network_request_drops_the_registration_and_unknown_ids_fail ... ok
 test the_same_network_request_is_echoed_in_every_callback_message ... ok
+test network_queries_describe_the_emulated_default_network ... ok
+test request_network_answers_a_network_request_and_queues_the_aosp_callbacks ... ok
+test release_network_request_drops_the_registration_and_unknown_ids_fail ... ok
 test the_connectivity_specs_match_the_boot_images_write_to_parcel ... ok
 
 test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
@@ -30,95 +30,12 @@ test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 running 7 tests
 test application_info_split_arrays_are_string8 ... ok
-test typed_array_elements_round_trip_with_their_presence_marker ... ok
-test task_description_reads_the_api34_conditional_layout ... ok
 test package_info_reply_reads_back_in_the_framework_order ... ok
+test task_description_reads_the_api34_conditional_layout ... ok
+test typed_array_elements_round_trip_with_their_presence_marker ... ok
 test every_spec_round_trips_through_a_parcel ... ok
 test parcel_exception_constants_match_the_framework ... ok
-android.graphics.Rect                                        Full       4/4   real=4  
-android.graphics.Point                                       Full       2/2   real=2  
-android.content.ComponentName                                Curated    0/2   real=1  
-android.content.pm.PackageItemInfo                           Full       9/9   real=9  
-android.content.pm.ApplicationInfo                           Full      84/80  real=84 
-android.content.pm.ComponentInfo                             Full      17/17  real=17 
-android.content.pm.ActivityInfo                              Full      45/44  real=45 
-android.content.pm.PackageInfo                               Full      43/41  real=43 
-android.content.pm.Signature                                 Full       1/1   real=1  
-android.content.pm.ProviderInfo                              Full      28/28  real=28 
-android.content.pm.ServiceInfo                               Full      20/20  real=20 
-android.content.pm.InstrumentationInfo                       Full      26/26  real=26 
-android.content.pm.PermissionInfo                            Full      17/17  real=17 
-android.content.pm.ResolveInfo                               Full      20/18  real=20 
-android.content.pm.FeatureInfo                               Full       4/4   real=4  
-android.app.ContentProviderHolder                            Full       5/5   real=5  
-android.view.DisplayInfo                                     Prefix    24/50  real=52 
-android.view.Display$Mode                                    Full       6/6   real=6  
-android.view.DisplayShape                                    Full       8/8   real=8  
-android.view.SurfaceControl$RefreshRateRange                 Full       2/2   real=2  
-android.graphics.Insets                                      Full       4/4   real=4  
-android.os.LocaleList                                        Full       1/1   real=1  
-android.app.WindowConfiguration                              Full       9/9   real=9  
-android.content.res.Configuration                            Full      27/27  real=27 
-android.app.ActivityManager$TaskDescription                  Curated    3/13  real=31 
-android.window.SizeConfigurationBuckets                      Full       5/5   real=5  
-android.view.autofill.AutofillId                             Curated    2/2   real=4  
-android.view.autofill.AutofillValue                          Curated    1/2   real=1  
-android.view.InputDevice                                     Prefix    21/21  real=28 
-android.hardware.input.HostUsiVersion                        Curated    2/2   real=2  
-android.hardware.OverlayProperties                           Curated    0/2   real=2  
-android.os.ParcelFileDescriptor                              Curated    2/2   real=3  
-android.util.MemoryIntArray                                  Curated    1/1   real=1  
-android.view.textservice.SpellCheckerInfo                    Curated    0/1   real=5  
-android.view.textservice.SpellCheckerSubtype                 Curated    2/2   real=5  
-android.app.ActivityManager$RunningAppProcessInfo            Curated    0/2   real=16 
-android.app.servertransaction.ClientTransaction              Full       5/5   real=5  
-android.content.AttributionSource                            Curated    0/8   real=1  
-android.content.AttributionSourceState                       Curated    8/8   real=9  
-android.net.Uri                                              Curated    1/2   real=1  
-com.android.internal.infra.AndroidFuture                     Curated    0/1   real=3  
-android.content.pm.ProviderInfoList                          Full       1/1   real=1  
-android.app.ProfilerInfo                                     Full       9/8   real=9  
-android.content.res.CompatibilityInfo                        Full       4/4   real=4  
-android.content.AutofillOptions                              Curated    1/1   real=8  
-android.content.ContentCaptureOptions                        Curated    0/1   real=8  
-android.os.SharedMemory                                      Curated    0/1   real=1  
-android.app.assist.AssistStructure                           Curated    1/1   real=4  
-android.app.assist.AssistContent                             Curated    1/1   real=11 
-android.content.ContentValues                                Curated    0/1   real=2  
-android.view.inputmethod.ImeTracker$Token                    Curated    0/2   real=2  
-android.app.ResultInfo                                       Full       5/4   real=5  
-android.app.servertransaction.LaunchActivityItem             Full      21/21  real=21 
-android.app.servertransaction.ResumeActivityItem             Full       4/4   real=4  
-android.app.servertransaction.ActivityRelaunchItem           Full       5/5   real=5  
-android.window.ClientWindowFrames                            Full       6/6   real=6  
-android.util.MergedConfiguration                             Full       3/3   real=3  
-android.graphics.Insets                                      Full       4/4   real=4  
-android.view.InsetsSource                                    Full       8/7   real=8  
-android.view.InsetsSourceControl                             Full       7/7   real=7  
-android.view.InsetsSourceControl$Array                       Full       1/1   real=1  
-android.view.InsetsState                                     Full       8/7   real=8  
-android.view.RoundedCorners                                  Full       2/1   real=2  
-android.view.PrivacyIndicatorBounds                          Full       2/2   real=2  
-android.view.DisplayShape                                    Full       8/8   real=8  
-android.view.DisplayCutout$ParcelableWrapper                 Full       1/1   real=1  
-android.os.PatternMatcher                                    Full       3/3   real=3  
-android.content.IntentFilter$AuthorityEntry                  Full       4/4   real=4  
-android.content.IntentFilter                                 Full      25/16  real=25 
-android.app.ActivityManager$MemoryInfo                       Full       9/9   real=9  
-android.content.pm.InstallSourceInfo                         Prefix     6/6   real=6  
-android.net.Network                                          Full       1/1   real=1  
-android.os.Messenger                                         Full       1/1   real=1  
-android.net.NetworkCapabilities                              Full      20/19  real=20 
-android.net.NetworkRequest                                   Full       4/4   real=4  
-android.net.LinkProperties                                   Full      32/18  real=32 
-android.net.NetworkInfo                                      Full      11/11  real=11 
-android.app.NotificationChannel                              Prefix    32/26  real=32 
-android.app.NotificationChannelGroup                         Prefix    10/6   real=10 
-android.os.storage.StorageVolume                             Full      15/14  real=15 
-android.os.UserHandle                                        Curated    0/1   real=1  
-android.media.AudioAttributes                                Prefix     5/9   real=10 
-verified 82 specs against 83 boot DEX dirs (53 full); no writeToParcel for 7
 test codec_field_orders_match_the_framework_dex ... ok
 
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.46s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.06s
 

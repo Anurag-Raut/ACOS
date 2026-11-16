@@ -45,9 +45,9 @@
     "mode": "live",
     "session_exit": {
       "abi": null,
-      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=58MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p533355-i566579.scope)",
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=57MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p575468-i572465.scope)",
       "code": null,
-      "disk_free_bytes": 175480537088,
+      "disk_free_bytes": 176414863360,
       "guest_crash": null,
       "guest_exit": 0,
       "guest_signal": null,
@@ -60,18 +60,16 @@
       "stage": "teardown-evidence"
     },
     "timing": {
-      "attributed_ms": 222,
+      "attributed_ms": 221,
       "boot_image": {
         "base": "0x70000000",
-        "cache": "built",
+        "cache": "hit",
         "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-6a74b41f1b38c381",
         "input_hash": "6a74b41f1b38c381",
-        "mode": "shared-fixed",
-        "prep_ms": 3804,
-        "reason": "no usable manifest at /home/Qui/.cache/acos/art/boot-images/fixed-6a74b41f1b38c381/manifest.json: No such file or directory (os error 2)"
+        "mode": "shared-fixed"
       },
       "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
-      "session_start_ms": 5616,
+      "session_start_ms": 143,
       "steps": [
         {
           "index": 0,
@@ -101,7 +99,7 @@
           "index": 4,
           "status": "pass",
           "step": "wait_for",
-          "wall_ms": 55
+          "wall_ms": 54
         },
         {
           "index": 5,
@@ -124,12 +122,12 @@
       ],
       "unattributed_ms": 2,
       "unit": "ms",
-      "verdict_wall_ms": 224
+      "verdict_wall_ms": 223
     },
     "trust": "trusted",
     "unsupported_steps": []
   },
   "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
-  "request_id": "req_8213e_18e86930c08dafa7",
+  "request_id": "req_8c7e1_18e869b3e44a604a",
   "verdict_status": "pass"
 }

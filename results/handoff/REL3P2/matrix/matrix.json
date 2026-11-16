@@ -11,48 +11,48 @@
     "binaries": [
       {
         "exists": true,
-        "mtime_utc": "2026-11-16T03:33:03+00:00",
+        "mtime_utc": "2026-11-16T03:44:25+00:00",
         "not_eligible_reason": null,
         "path": "/home/Qui/.t3/worktrees/acos/t3-f47ca457-2272ba1e60af2cde/.cache/rel3p2-target/release/acos",
         "profile": "release",
         "profile_source": "path heuristic (release)",
-        "sha256": "60273a0fec4e71a2b4b7239e1e6b64adbf4d7c46642b02295441e11a072a090e",
-        "sha256_16": "60273a0fec4e71a2",
-        "size_bytes": 189289656,
+        "sha256": "c71487947a530d5966cf607b0bc12bb419001c0734bcd6c527ac9dc4716b78b1",
+        "sha256_16": "c71487947a530d59",
+        "size_bytes": 189291392,
         "verdict_eligible": true
       },
       {
         "exists": true,
-        "mtime_utc": "2026-11-16T03:32:19+00:00",
+        "mtime_utc": "2026-11-16T03:44:21+00:00",
         "not_eligible_reason": null,
         "path": "/home/Qui/.t3/worktrees/acos/t3-f47ca457-2272ba1e60af2cde/.cache/rel3p2-target/release/acos-art",
         "profile": "release",
         "profile_source": "path heuristic (release)",
-        "sha256": "e575b96f71be4f80a3a288cc149d62bc4bec08718efae0a49ac48a4b9bce85a9",
-        "sha256_16": "e575b96f71be4f80",
-        "size_bytes": 88291616,
+        "sha256": "a5ed87f4dab6f4c15e7bcead940dae22d9152bf5e3b4839cf5ee2cf8c7194d38",
+        "sha256_16": "a5ed87f4dab6f4c1",
+        "size_bytes": 88293352,
         "verdict_eligible": true
       }
     ],
     "engine": "art",
     "engine_flag": true,
     "git_dirty": true,
-    "git_dirty_files": 3,
-    "git_head": "662bd3592ea91cb36386bfeff222a5353a3d566e",
-    "git_head_subject": "REL3P2: point the REL3P audit at the closed oracle/network rows",
-    "git_status_porcelain_sha256": "a2bd849c3ae3a6e2a9a9a5b72379e01c641aac15c139bf032ce5f3f94aee1079",
+    "git_dirty_files": 26,
+    "git_head": "a414488fdce5545883a9cb7a73bca428651b65b5",
+    "git_head_subject": "REL3P2: crate tests, ART fixture, matrix and harness regression evidence",
+    "git_status_porcelain_sha256": "46f7442a0acf0c4114bb03e53149510ef22b663db45ac9513555aee80492fefd",
     "host": {
-      "loadavg1": 2.71,
-      "loadavg15": 5.88,
-      "loadavg5": 4.02,
-      "mem_available_gib": 48.62,
-      "mem_available_mib": 49788.8,
+      "loadavg1": 2.54,
+      "loadavg15": 5.55,
+      "loadavg5": 3.79,
+      "mem_available_gib": 47.72,
+      "mem_available_mib": 48868.8,
       "mem_total_gib": 60.46,
       "mem_total_mib": 61908.7,
       "nproc": 32,
-      "runnable": "1/1960",
-      "used_mib": 12119.9,
-      "used_pct": 19.58
+      "runnable": "3/1997",
+      "used_mib": 13039.9,
+      "used_pct": 21.06
     },
     "host_gate": {
       "art_lock_checked": false,
@@ -62,15 +62,15 @@
         "loadavg1_max": 4.0,
         "min_avail_gib": 30.0
       },
-      "loadavg1": 2.71,
-      "loadavg15": 5.88,
-      "loadavg5": 4.02,
-      "mem_available_gib": 48.63,
-      "mem_available_mib": 49796.4,
+      "loadavg1": 2.54,
+      "loadavg15": 5.55,
+      "loadavg5": 3.79,
+      "mem_available_gib": 47.73,
+      "mem_available_mib": 48871.3,
       "mem_total_gib": 60.46,
       "ok": true,
       "reasons": [],
-      "utc": "2026-11-16T03:43:31+00:00"
+      "utc": "2026-11-16T03:45:48+00:00"
     },
     "method": "BENCHMARKS.md section 11 (benchlib.py)",
     "not_verdict_eligible_reason": null,
@@ -79,7 +79,7 @@
     "sample_ms": 100,
     "schema": "acos-bench-provenance/1",
     "settle_s": 0,
-    "utc": "2026-11-16T03:43:31+00:00",
+    "utc": "2026-11-16T03:45:48+00:00",
     "verdict_eligible": true
   },
   "runs": [
@@ -87,27 +87,27 @@
       "apk_sha256": "8170835e70f2d8d5c4a9ec6498e2571ab2bc8571e4681ccbcb1a4bd394100c39",
       "art_engine_flag": true,
       "artifacts": ".cache/rel3p2/matrix-artifacts/01-v2-art-counter-r1",
-      "dirty_hash": "a2bd849c3ae3a6e2a9a9a5b72379e01c641aac15c139bf032ce5f3f94aee1079",
+      "dirty_hash": "46f7442a0acf0c4114bb03e53149510ef22b663db45ac9513555aee80492fefd",
       "engine": "art",
       "error": null,
       "expected": "pass",
       "false_fail": false,
       "false_pass": false,
-      "first_frame_ms": 210.0,
+      "first_frame_ms": 213.0,
       "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
-      "git": "662bd3592ea91cb36386bfeff222a5353a3d566e",
-      "guest_wall_ms": 3219,
+      "git": "a414488fdce5545883a9cb7a73bca428651b65b5",
+      "guest_wall_ms": 3232,
       "host": {
         "contaminated": false,
-        "loadavg1": 2.51,
+        "loadavg1": 2.76,
         "loadavg5": null,
-        "mem_available_end_mib": 49898.2,
-        "mem_available_mib": 49947.1
+        "mem_available_end_mib": 48883.9,
+        "mem_available_mib": 48739.0
       },
       "mem": {
         "anon_shmem_settled_mib": null,
-        "cgroup_gib_min": 0.000664,
-        "cgroup_peak_mib": 21.07,
+        "cgroup_gib_min": 0.00072,
+        "cgroup_peak_mib": 20.19,
         "cgroup_source": "unit-scope",
         "legacy_comparison": {
           "acos": {
@@ -138,7 +138,7 @@
         },
         "metric_type": "CGROUP_ANON_SHMEM",
         "peak_type": "CGROUP_MEMORY_CURRENT",
-        "pss_mib": 29.32,
+        "pss_mib": 28.26,
         "pss_type": "PSS",
         "sample_count": 35,
         "settle_s": null
@@ -154,12 +154,12 @@
       "steps": [
         {
           "kind": "launch",
-          "ms": 156,
+          "ms": 158,
           "status": "pass"
         },
         {
           "kind": "wait_for",
-          "ms": 54,
+          "ms": 55,
           "status": "pass"
         },
         {
@@ -174,7 +174,7 @@
         },
         {
           "kind": "tap",
-          "ms": 991,
+          "ms": 977,
           "status": "pass"
         },
         {
@@ -184,22 +184,22 @@
         },
         {
           "kind": "capture",
-          "ms": 52,
+          "ms": 56,
           "status": "pass"
         },
         {
           "kind": "tap",
-          "ms": 990,
+          "ms": 983,
           "status": "pass"
         },
         {
           "kind": "assert_text",
-          "ms": 1,
+          "ms": 0,
           "status": "pass"
         },
         {
           "kind": "tap",
-          "ms": 971,
+          "ms": 998,
           "status": "pass"
         },
         {
@@ -208,17 +208,17 @@
           "status": "pass"
         }
       ],
-      "utc": "2026-11-16T03:43:31+00:00",
+      "utc": "2026-11-16T03:45:48+00:00",
       "variant": "good",
       "verdict": "pass",
       "verdict_eligible": true,
-      "wall_ms": 3539.8
+      "wall_ms": 3541.1
     },
     {
       "apk_sha256": "8170835e70f2d8d5c4a9ec6498e2571ab2bc8571e4681ccbcb1a4bd394100c39",
       "art_engine_flag": true,
       "artifacts": ".cache/rel3p2/matrix-artifacts/02-negative-counter-wrong-count-r1",
-      "dirty_hash": "a2bd849c3ae3a6e2a9a9a5b72379e01c641aac15c139bf032ce5f3f94aee1079",
+      "dirty_hash": "46f7442a0acf0c4114bb03e53149510ef22b663db45ac9513555aee80492fefd",
       "engine": "art",
       "error": {
         "class": "assertion",
@@ -231,21 +231,21 @@
       "expected": "fail",
       "false_fail": false,
       "false_pass": false,
-      "first_frame_ms": 207.0,
+      "first_frame_ms": 215.0,
       "first_frame_ms_source": "cumulative step duration_ms through the first step with frame_seq",
-      "git": "662bd3592ea91cb36386bfeff222a5353a3d566e",
-      "guest_wall_ms": 208,
+      "git": "a414488fdce5545883a9cb7a73bca428651b65b5",
+      "guest_wall_ms": 216,
       "host": {
         "contaminated": false,
-        "loadavg1": 2.71,
+        "loadavg1": 2.76,
         "loadavg5": null,
-        "mem_available_end_mib": 49796.4,
-        "mem_available_mib": 49898.3
+        "mem_available_end_mib": 48873.1,
+        "mem_available_mib": 48882.8
       },
       "mem": {
         "anon_shmem_settled_mib": null,
-        "cgroup_gib_min": 3.6e-05,
-        "cgroup_peak_mib": 15.82,
+        "cgroup_gib_min": 4.6e-05,
+        "cgroup_peak_mib": 18.67,
         "cgroup_source": "unit-scope",
         "legacy_comparison": {
           "acos": {
@@ -276,7 +276,7 @@
         },
         "metric_type": "CGROUP_ANON_SHMEM",
         "peak_type": "CGROUP_MEMORY_CURRENT",
-        "pss_mib": 26.83,
+        "pss_mib": 26.82,
         "pss_type": "PSS",
         "sample_count": 4,
         "settle_s": null
@@ -292,12 +292,12 @@
       "steps": [
         {
           "kind": "launch",
-          "ms": 154,
+          "ms": 158,
           "status": "pass"
         },
         {
           "kind": "wait_for",
-          "ms": 53,
+          "ms": 57,
           "status": "pass"
         },
         {
@@ -306,11 +306,11 @@
           "status": "fail"
         }
       ],
-      "utc": "2026-11-16T03:43:31+00:00",
+      "utc": "2026-11-16T03:45:48+00:00",
       "variant": "negative",
       "verdict": "fail",
       "verdict_eligible": true,
-      "wall_ms": 422.1
+      "wall_ms": 422.4
     }
   ],
   "schema": "acos-bench-matrix/1",
@@ -337,5 +337,5 @@
     "unclassified": 0,
     "verdict_eligible": true
   },
-  "utc": "2026-11-16T03:43:31+00:00"
+  "utc": "2026-11-16T03:45:48+00:00"
 }

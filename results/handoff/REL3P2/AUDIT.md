@@ -158,5 +158,20 @@ Regression test: `tools/tests/test-run-matrix-ownership.py` extracts the driver
 the script actually embeds and runs it against a stub `acos` that enforces the
 same ownership rule (non-empty `--artifacts` → `INVALID_ARGUMENT`). Before the
 fix: both rows `verdict=error, class=harness`; after: both rows `pass` and
-`stdout.json` beside the evidence. Real run evidence:
-`results/handoff/REL3P2/matrix/`.
+`stdout.json` beside the evidence.
+
+Real run (`tools/run-matrix.sh --scenario scenarios/v2-art-counter.yaml
+--scenario scenarios/negative/counter-wrong-count.yaml --engine art --profile
+release --no-build`, release binaries built from this HEAD):
+
+```
+| run                            | variant  | expected | verdict | false_pass | error class |
+| 01-v2-art-counter-r1           | good     | pass     | pass    | False      | -           |
+| 02-negative-counter-wrong-count-r1 | negative | fail  | fail    | False      | assertion   |
+summary: errors 0, false_pass 0, unclassified 0, harness_or_timeout 0
+```
+
+Evidence: `results/handoff/REL3P2/matrix/matrix.json` / `.tsv` / `run.log`, the
+per-row envelopes in `matrix/rows/`; each row's verify directory was created by
+`acos verify` itself (its `run.json`/`verdict.json` are there) and the
+harness's `stdout.json`/`stderr.txt` were moved in after the run.

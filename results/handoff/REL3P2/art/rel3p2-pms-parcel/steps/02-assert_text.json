@@ -61,7 +61,7 @@
     "probe_seq": 4,
     "settled": true,
     "strict_rule": "event",
-    "tree_age_ms": 40
+    "tree_age_ms": 39
   },
   "status": "pass",
   "step": "assert_text",

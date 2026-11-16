@@ -9,6 +9,6 @@
     "recovery_ms": 0,
     "recovery_polls": 0
   },
-  "session_start_ms": 5616,
-  "shutdown_ms": 21
+  "session_start_ms": 143,
+  "shutdown_ms": 20
 }

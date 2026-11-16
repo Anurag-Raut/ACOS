@@ -1,5 +1,5 @@
 {
-  "request_id": "req_8b7a9_18e869a4bc14ad6f",
+  "request_id": "req_8d504_18e869c49b6b3604",
   "ok": true,
   "status": "pass",
   "backend": "acos-native",
@@ -72,7 +72,7 @@
         "tree": "guest-asserted"
       },
       "fidelity": "art-reference",
-      "finished_at": "2026-11-16T03:43:31.188Z",
+      "finished_at": "2026-11-16T03:45:48.065Z",
       "insets": "report",
       "isolation": "process",
       "mode": "live",
@@ -98,15 +98,15 @@
         "scenario_path": "scenarios/v2-art-counter.yaml",
         "scenario_sha256": "cc270776f42796f8a64d9acd4bf507f86b478f34c59dacfba203f2c1e515e2b0"
       },
-      "request_id": "req_8b7a9_18e869a4bc14ad6f",
+      "request_id": "req_8d504_18e869c49b6b3604",
       "resources": {
         "events": 250,
         "frames_captured": 11,
         "memory_mib": 13,
-        "peak_rss_bytes": 14667776,
+        "peak_rss_bytes": 14241792,
         "sessions": 1,
         "steps": 11,
-        "wall_ms": 3219
+        "wall_ms": 3232
       },
       "scenario": {
         "name": "v2-art-counter",
@@ -116,9 +116,9 @@
       "schema_version": 1,
       "session_exit": {
         "abi": null,
-        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=67MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p571316-i531099.scope)",
+        "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=72MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p578831-i543441.scope)",
         "code": null,
-        "disk_free_bytes": 181792563200,
+        "disk_free_bytes": 176045453312,
         "guest_crash": null,
         "guest_exit": 0,
         "guest_signal": null,
@@ -131,12 +131,12 @@
         "stage": "teardown-evidence"
       },
       "session_id": "s_art_counter",
-      "started_at": "2026-11-16T03:43:27.969Z",
+      "started_at": "2026-11-16T03:45:44.833Z",
       "status": "pass",
       "steps": [
         {
           "assertions": [],
-          "duration_ms": 156,
+          "duration_ms": 158,
           "evidence": [
             {
               "kind": "step",
@@ -155,7 +155,7 @@
         },
         {
           "assertions": [],
-          "duration_ms": 54,
+          "duration_ms": 55,
           "evidence": [
             {
               "kind": "tree",
@@ -330,7 +330,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 991,
+          "duration_ms": 977,
           "evidence": [
             {
               "kind": "tree",
@@ -356,8 +356,8 @@
           "settle": {
             "ack_ms": 5,
             "bound": "strict-event",
-            "first_change_ms": 55,
-            "frame_ms": 939,
+            "first_change_ms": 58,
+            "frame_ms": 922,
             "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
             "mode": "strict",
             "pixels_changed": true,
@@ -422,8 +422,8 @@
           "settle": {
             "ack_ms": 5,
             "bound": "strict-event",
-            "first_change_ms": 55,
-            "frame_ms": 939,
+            "first_change_ms": 58,
+            "frame_ms": 922,
             "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
             "mode": "strict",
             "pixels_changed": true,
@@ -436,7 +436,7 @@
         },
         {
           "assertions": [],
-          "duration_ms": 52,
+          "duration_ms": 56,
           "evidence": [
             {
               "kind": "tree",
@@ -465,10 +465,10 @@
             "bound": "strict-event",
             "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
             "mode": "strict",
-            "probe_seq": 45,
+            "probe_seq": 44,
             "settled": true,
             "strict_rule": "event",
-            "tree_age_ms": 39
+            "tree_age_ms": 40
           },
           "status": "pass",
           "step": "capture"
@@ -490,7 +490,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 990,
+          "duration_ms": 983,
           "evidence": [
             {
               "kind": "tree",
@@ -516,8 +516,8 @@
           "settle": {
             "ack_ms": 5,
             "bound": "strict-event",
-            "first_change_ms": 65,
-            "frame_ms": 938,
+            "first_change_ms": 57,
+            "frame_ms": 930,
             "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
             "mode": "strict",
             "pixels_changed": true,
@@ -559,7 +559,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 1,
+          "duration_ms": 0,
           "evidence": [
             {
               "kind": "tree",
@@ -582,8 +582,8 @@
           "settle": {
             "ack_ms": 5,
             "bound": "strict-event",
-            "first_change_ms": 65,
-            "frame_ms": 938,
+            "first_change_ms": 57,
+            "frame_ms": 930,
             "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
             "mode": "strict",
             "pixels_changed": true,
@@ -611,7 +611,7 @@
               "passed": true
             }
           ],
-          "duration_ms": 971,
+          "duration_ms": 998,
           "evidence": [
             {
               "kind": "tree",
@@ -637,8 +637,8 @@
           "settle": {
             "ack_ms": 5,
             "bound": "strict-event",
-            "first_change_ms": 54,
-            "frame_ms": 919,
+            "first_change_ms": 55,
+            "frame_ms": 943,
             "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
             "mode": "strict",
             "pixels_changed": true,
@@ -703,8 +703,8 @@
           "settle": {
             "ack_ms": 5,
             "bound": "strict-event",
-            "first_change_ms": 54,
-            "frame_ms": 919,
+            "first_change_ms": 55,
+            "frame_ms": 943,
             "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
             "mode": "strict",
             "pixels_changed": true,
@@ -723,8 +723,8 @@
     "verdict_path": ".cache/rel3p2/matrix-artifacts/01-v2-art-counter-r1/verdict.json"
   },
   "metrics": {
-    "wall_ms": 3219,
-    "peak_rss_bytes": 14667776
+    "wall_ms": 3232,
+    "peak_rss_bytes": 14241792
   },
   "evidence": {
     "events": "events.jsonl",

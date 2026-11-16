@@ -39,24 +39,22 @@
       "activity": "dev.acos.fixtures.pmsparcel.MainActivity",
       "boot_image": {
         "base": "0x70000000",
-        "cache": "built",
+        "cache": "hit",
         "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-6a74b41f1b38c381",
         "input_hash": "6a74b41f1b38c381",
-        "mode": "shared-fixed",
-        "prep_ms": 3804,
-        "reason": "no usable manifest at /home/Qui/.cache/acos/art/boot-images/fixed-6a74b41f1b38c381/manifest.json: No such file or directory (os error 2)"
+        "mode": "shared-fixed"
       },
       "buffer_generation": 1,
       "capture_source": "acos-c1-buffer",
       "cmd": "ready",
       "density": 420,
-      "guest_process_group": 533355,
+      "guest_process_group": 575468,
       "height": 2400,
       "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
       "ok": true,
       "package": "dev.acos.fixtures.pmsparcel",
       "probe_seq": 1,
-      "stream_socket": "/run/user/1000/acos-view-532800-1/view.sock",
+      "stream_socket": "/run/user/1000/acos-view-575459-1/view.sock",
       "width": 1080
     },
     {
