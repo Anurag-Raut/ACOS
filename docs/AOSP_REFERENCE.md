@@ -5,7 +5,7 @@ Use them to understand behaviour and wire formats BEFORE guessing or disassembli
 
 | Dir | Contents | Use for |
 |---|---|---|
-| `native/` | libs/binder (IPCThreadState, ProcessState, Parcel, BpBinder, ndk), include/binder, libs/ui, libs/gui | Binder driver protocol (BC_*/BR_*), node refcounting, flat_binder_object, stability |
+| `native/` | libs/binder (IPCThreadState, ProcessState, Parcel, BpBinder, ndk), include/binder, libs/ui, libs/gui, **libs/sensor** (ISensorServer, ISensorEventConnection, Sensor, SensorEventQueue, SensorManager), **services/sensorservice** | Binder driver protocol (BC_*/BR_*), node refcounting, flat_binder_object, stability; the native sensor service's wire (`Sensor::flatten`, `BitTube` event packets, `enableDisable`/`setEventRate`/`flush`) |
 | `base/` | core/jni (AndroidRuntime.cpp, android_os_*, registration order), libs/hwui (+ jni/), libs/androidfw, core/java/android/os, com/android/internal/os | libandroid_runtime registration, graphics JNI, AssetManager/overlays, zygote/RuntimeInit |
 | `base/services/core/java/com/android/server/policy/` | WindowManagerPolicy.java, PhoneWindowManager.java and the rest of the policy package | the **window layer table**: `getWindowLayerFromTypeLw()` (WindowManagerPolicy.java:525-630) and `getSubWindowLayerFromTypeLw()` (:650-671), transcribed into `crates/acos-wm/src/layers.rs` |
 | `base/services/core/java/com/android/server/wm/` | WindowManagerService, DisplayArea, WindowState, … | how the WMS consumes the policy layers (`DisplayArea` above/below `APPLICATION_LAYER`), `canAddInternalSystemWindow` |
@@ -17,7 +17,9 @@ Use them to understand behaviour and wire formats BEFORE guessing or disassembli
 `base/` also carries the client paths the tombstone table cites:
 `core/java/android/{app,content,net,os,view,webkit}`, `media/java/android/media`
 (+ `session/`), `nfc/java/android/nfc`, `telephony/java/android/telephony`,
-`hardware/java/android/hardware`.
+`hardware/java/android/hardware` (which carries `Sensor.java`,
+`SensorEvent.java`, `SensorManager.java` and `SystemSensorManager.java` — the
+client half of the native sensor stack the `sensors` module serves).
 
 Sparse checkouts: add more paths with `git -C <dir> sparse-checkout add <path>` (blobs are fetched on demand, partial clone). Cone mode only accepts directories; a single file path needs `--skip-checks` (which is what `tools/fetch-aosp-reference.sh` uses for `MediaRouter.java`).
 

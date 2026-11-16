@@ -11,7 +11,11 @@ clone(){ n=$1; url=$2; shift 2; [ -d "$n" ] && return 0
 # out of huge surrounding directories.
 add(){ n=$1; shift; [ -d "$n" ] || return 0; git -C "$n" sparse-checkout add --skip-checks "$@"; }
 B=https://android.googlesource.com/platform
-clone native $B/frameworks/native libs/binder libs/binder/ndk include/binder libs/ui libs/gui
+# `libs/sensor` + `services/sensorservice` are the native sensor service the
+# `sensors` module serves (ISensorServer/ISensorEventConnection wire, the
+# `Sensor::flatten` layout and the `ASensorEvent` packet the BitTube carries).
+clone native $B/frameworks/native libs/binder libs/binder/ndk include/binder libs/ui libs/gui \
+  libs/sensor services/sensorservice
 clone base $B/frameworks/base core/jni libs/hwui libs/androidfw core/java/android/os core/java/com/android/internal/os \
   services/core/java/com/android/server/policy \
   services/core/java/com/android/server/wm
@@ -26,9 +30,12 @@ add base core/java/android/app core/java/android/content core/java/android/net \
   core/java/android/os core/java/android/view core/java/android/webkit \
   core/java/android/media/session media/java/android/media/MediaRouter.java \
   core/java/android/bluetooth core/java/android/nfc nfc/java/android/nfc \
+  telephony/java/android/telephony hardware/java/android/hardware \
+  core/java/android/hardware
 # LAYER1: the real getWindowLayerFromTypeLw table (WindowManagerPolicy) for an existing cache.
 add base services/core/java/com/android/server/policy services/core/java/com/android/server/wm
-  telephony/java/android/telephony hardware/java/android/hardware
+# MODSENS: the native sensor service for an existing cache.
+add native libs/sensor services/sensorservice
 clone connectivity $B/packages/modules/Connectivity framework/src/android/net
 clone wifi $B/packages/modules/Wifi framework/java/android/net/wifi
 clone bluetooth $B/packages/modules/Bluetooth framework/java/android/bluetooth

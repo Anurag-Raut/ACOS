@@ -59,6 +59,7 @@ impl CoreModule {
                 crate::registry::NAMES
                     .iter()
                     .filter(|(name, _)| !crate::registry::AUX_BACKED_NAMES.contains(name))
+                    .filter(|(name, _)| !FILLED_BY_MODULE.contains(name))
                     .map(|(name, descriptor)| ServiceProvide {
                         name,
                         descriptor,
@@ -96,6 +97,18 @@ impl CoreModule {
 /// `core` accepts no control ops: it is the implementation, and a control that
 /// changed AMS/PMS behaviour behind the agent's back would be a fake session.
 const CONTROLS: [ControlOp; 0] = [];
+
+/// Service names `core` **publishes** but does not claim in its manifest, because
+/// the behaviour behind them belongs to a module.
+///
+/// * `sensorservice` — `core` registers the node with no feed (the stock answer
+///   of a device without sensors) for two reasons: a `null` name costs
+///   `SystemSensorManager.nativeCreate` two 5 s libbinder retry loops (W26 §1),
+///   and an app resolves the `ISensorServer` proxy once and keeps it, so a hot
+///   attach must reuse the same binder. The `sensors` module installs a feed into
+///   that node and owns the name in the registry/capabilities, which is why it is
+///   filtered out of this manifest (the registry refuses two owners).
+pub const FILLED_BY_MODULE: &[&str] = &["sensorservice"];
 
 impl Default for CoreModule {
     fn default() -> Self {

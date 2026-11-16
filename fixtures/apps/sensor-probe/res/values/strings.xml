@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sensor probe</string>
+    <string name="scanning">sensors: scanning</string>
+    <string name="no_values">-</string>
+    <string name="shake_zero">shake: 0</string>
+    <string name="rescan">Rescan</string>
+    <string name="accel_live">accel live</string>
+    <string name="light_live">light live</string>
+</resources>

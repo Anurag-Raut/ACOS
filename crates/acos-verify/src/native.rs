@@ -465,6 +465,7 @@ impl Backend for NativeBackend {
             reset: true,
             environment: false,
             crash_reports: true,
+            services: false,
         }
     }
 
