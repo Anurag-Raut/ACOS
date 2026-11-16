@@ -52,31 +52,62 @@ pub struct PmsDescription {
 
 thread_local! {
     static LAST_DESCRIPTION: RefCell<Option<PmsDescription>> = const { RefCell::new(None) };
-    static LAST_ACTIVITY: RefCell<Option<ActivityInfo>> = const { RefCell::new(None) };
-    static LAST_PROVIDER: RefCell<Option<ProviderInfo>> = const { RefCell::new(None) };
-    static LAST_PROVIDER_LIST: RefCell<Vec<ProviderInfo>> = const { RefCell::new(Vec::new()) };
+    static LAST_ACTIVITY: RefCell<Option<(AppInfo, ActivityInfo)>> = const { RefCell::new(None) };
+    static LAST_PROVIDER: RefCell<Option<(AppInfo, ProviderInfo)>> = const { RefCell::new(None) };
+    static LAST_PROVIDER_LIST: RefCell<Vec<(AppInfo, ProviderInfo)>> = const { RefCell::new(Vec::new()) };
+    static LAST_INTENT_ACTIVITIES: RefCell<Vec<ResolvedActivity>> = const { RefCell::new(Vec::new()) };
+}
+
+/// One activity a `queryIntentActivities`/`resolveIntent` call matched, with
+/// the package it belongs to.
+///
+/// A session installs more than one package, so the materialiser cannot use
+/// "the" installed application: each match carries its own `AppInfo` (uid,
+/// `sourceDir`) and the declared filters the `ResolveInfo.filter` is built
+/// from.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedActivity {
+    /// The application record of the package that declares the activity.
+    pub app: AppInfo,
+    /// The activity record.
+    pub activity: ActivityInfo,
+    /// The declared component (`ams::DeclaredComponent`): the intent filters.
+    pub declared: crate::ams::DeclaredComponent,
 }
 
 /// Record the provider a `resolveContentProvider` call resolved (or `None`).
-pub fn cache_provider_info(provider: Option<ProviderInfo>) {
+pub fn cache_provider_info(provider: Option<(AppInfo, ProviderInfo)>) {
     LAST_PROVIDER.with(|slot| *slot.borrow_mut() = provider);
 }
 
-/// The provider recorded by the last `resolveContentProvider` call.
+/// The provider recorded by the last `resolveContentProvider` call, with its
+/// owning package's application record.
 #[must_use]
-pub fn cached_provider_info() -> Option<ProviderInfo> {
+pub fn cached_provider_info() -> Option<(AppInfo, ProviderInfo)> {
     LAST_PROVIDER.with(|slot| slot.borrow().clone())
 }
 
 /// Record the providers a `queryContentProviders` call returned.
-pub fn cache_provider_list(providers: Vec<ProviderInfo>) {
+pub fn cache_provider_list(providers: Vec<(AppInfo, ProviderInfo)>) {
     LAST_PROVIDER_LIST.with(|slot| *slot.borrow_mut() = providers);
 }
 
 /// The providers recorded by the last `queryContentProviders` call.
 #[must_use]
-pub fn cached_provider_list() -> Vec<ProviderInfo> {
+pub fn cached_provider_list() -> Vec<(AppInfo, ProviderInfo)> {
     LAST_PROVIDER_LIST.with(|slot| slot.borrow().clone())
+}
+
+/// Record the activities the last `queryIntentActivities`/`resolveIntent`
+/// call matched.
+pub fn cache_intent_activities(activities: Vec<ResolvedActivity>) {
+    LAST_INTENT_ACTIVITIES.with(|slot| *slot.borrow_mut() = activities);
+}
+
+/// The activities recorded by the last intent query.
+#[must_use]
+pub fn cached_intent_activities() -> Vec<ResolvedActivity> {
+    LAST_INTENT_ACTIVITIES.with(|slot| slot.borrow().clone())
 }
 
 /// Record the description a handler just served.
@@ -90,14 +121,15 @@ pub fn cached_description() -> Option<PmsDescription> {
     LAST_DESCRIPTION.with(|slot| slot.borrow().clone())
 }
 
-/// Record the activity a `getActivityInfo` call resolved (or `None`).
-pub fn cache_activity_info(activity: Option<ActivityInfo>) {
+/// Record the activity a `getActivityInfo` call resolved (or `None`), with the
+/// application record of the package that declares it.
+pub fn cache_activity_info(activity: Option<(AppInfo, ActivityInfo)>) {
     LAST_ACTIVITY.with(|slot| *slot.borrow_mut() = activity);
 }
 
 /// The activity recorded by the last `getActivityInfo` call.
 #[must_use]
-pub fn cached_activity_info() -> Option<ActivityInfo> {
+pub fn cached_activity_info() -> Option<(AppInfo, ActivityInfo)> {
     LAST_ACTIVITY.with(|slot| slot.borrow().clone())
 }
 
@@ -1028,100 +1060,44 @@ pub(crate) fn labels_from_manifest(manifest: &acos_apk::manifest::Manifest) -> M
     }
 }
 
-/// The mini-PMS state.
-#[derive(Debug)]
-pub struct PmsState {
-    /// The single installed package.
+/// One installed package: everything PMS knows about it.
+///
+/// A session installs the app under test (`primary`) plus any extra APK given
+/// at launch, and the packages baked into the image. AOSP gives every package
+/// its own uid (`PackageManagerService` allocates one per package unless a
+/// shared `android:sharedUserId` says otherwise), so the uid lives on the
+/// record.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InstalledPackage {
+    /// The application record (`ApplicationInfo` source).
     pub app: AppInfo,
-    /// The package record.
+    /// The package record (activities, version, ...).
     pub package: PackageInfo,
-    /// Feature answers.
-    pub features: FeatureTable,
-    /// Granted permissions (manifest + install `-g`).
-    pub granted_permissions: Vec<String>,
     /// Declared content providers (`<provider>` + `android:authorities`).
     pub providers: Vec<ProviderInfo>,
     /// Declared services (`<service>`).
     pub services: Vec<ServiceInfo>,
-    /// uid -> package.
-    pub uid_packages: Vec<(i32, String)>,
-    /// dex-load notifications (oneway, recorded) as
-    /// `(package, loaderIsa, classLoaderContextMap size)`.
-    pub dex_loads: Vec<(String, String, usize)>,
-    /// `setComponentEnabledSetting` overrides, keyed by
-    /// `(package, class)` → `COMPONENT_ENABLED_STATE_*` (W32).
-    ///
-    /// The manifest's own `android:enabled` is **not** in here: on a device it
-    /// is `ActivityInfo.enabled`/`ServiceInfo.enabled`, not a component
-    /// *setting*, and `PackageManager.getComponentEnabledSetting` reports
-    /// `COMPONENT_ENABLED_STATE_DEFAULT` (0) until an app calls the setter.
-    pub component_settings: Vec<((String, String), i32)>,
+    /// Granted permissions (manifest + install `-g`).
+    pub granted_permissions: Vec<String>,
     /// installer package (null = side-loaded).
     pub installer_package: Option<String>,
     /// `sourceDir` the state was built from.
     pub apk_path: PathBuf,
+    /// The reduced manifest (`ams::PackageRecord`): the intent filters the
+    /// package declared. `queryIntentActivities`/`resolveIntent` match against
+    /// this table, the same one ATMS resolves `startActivity` with.
+    pub manifest: crate::ams::PackageRecord,
 }
 
-impl PmsState {
-    /// An empty state (no package installed).
-    #[must_use]
-    pub fn new() -> Self {
-        let apk = crate::workspace_path("fixtures/build/apps/hello-views.apk")
-            .unwrap_or_else(|| PathBuf::from("fixtures/build/apps/hello-views.apk"));
-        let app = AppInfo::hello_views_fallback(&apk);
-        let package = PackageInfo {
-            package_name: app.package_name.clone(),
-            version_code: 1,
-            version_name: "1.0".into(),
-            application: app.clone(),
-            activities: vec![ActivityInfo {
-                name: app.class_name.clone(),
-                package_name: app.package_name.clone(),
-                launch_mode: 0,
-                flags: 0,
-                theme: 0,
-                exported: true,
-                parent_activity_name: String::new(),
-                meta_data: Vec::new(),
-            }],
-            requested_permissions: Vec::new(),
-            first_install_time: 0,
-            last_update_time: 0,
-            signatures: Vec::new(),
-        };
-        Self {
-            uid_packages: vec![(app.uid, app.package_name.clone())],
-            app,
-            package,
-            features: FeatureTable::default(),
-            granted_permissions: vec!["android.permission.INTERNET".into()],
-            providers: Vec::new(),
-            services: Vec::new(),
-            dex_loads: Vec::new(),
-            component_settings: Vec::new(),
-            installer_package: None,
-            apk_path: apk,
-        }
-    }
-
-    /// Build from an APK on disk.
-    pub fn from_apk(path: impl AsRef<Path>) -> Result<Self> {
-        let path = path.as_ref();
-        // PERF-REL3c: the shared open, so a launch already holding it does not read
-        // the file again.
-        let apk = crate::apk_facts::open_shared(path)
-            .map_err(|e| ServiceError::Internal(format!("open {}: {e}", path.display())))?;
-        Self::from_opened(path, &apk)
-    }
-
-    /// [`PmsState::from_apk`] for an APK that is already open (`apk` is the open of
-    /// `path`). PERF-REL3c: a launch reads its source APK once.
-    pub fn from_opened(path: impl AsRef<Path>, apk: &acos_apk::Apk) -> Result<Self> {
+impl InstalledPackage {
+    /// Build one package record from an APK that is already open. `uid` is the
+    /// package's own uid (`PackageManagerService` allocates one per package).
+    pub fn from_opened(path: impl AsRef<Path>, apk: &acos_apk::Apk, uid: i32) -> Result<Self> {
         let path = path.as_ref();
         let manifest = apk
             .manifest()
             .map_err(|e| ServiceError::Internal(format!("manifest: {e}")))?;
-        let app = AppInfo::from_manifest(&manifest, path, FIXTURE_UID);
+        let app = AppInfo::from_manifest(&manifest, path, uid);
         let activities = manifest
             .activities
             .iter()
@@ -1205,23 +1181,20 @@ impl PmsState {
             signatures: apk.signing_certificates.clone(),
         };
         Ok(Self {
-            uid_packages: vec![(app.uid, app.package_name.clone())],
             app,
             package,
-            features: FeatureTable::default(),
-            granted_permissions: requested_permissions,
             providers,
             services,
-            dex_loads: Vec::new(),
-            component_settings: Vec::new(),
+            granted_permissions: requested_permissions,
             installer_package: None,
             apk_path: path.to_path_buf(),
+            manifest: crate::ams::PackageRecord::from_manifest(&manifest, uid),
         })
     }
 
-    /// Publish `guest` as the installed APK's `sourceDir`/`publicSourceDir`.
+    /// Publish `guest` as this package's `sourceDir`/`publicSourceDir`.
     ///
-    /// The state is built from the host file (`from_apk` reads it), but every
+    /// The record is built from the host file, but every
     /// `ApplicationInfo`/`PackageInfo` reply must name the path the caller can
     /// open. Both copies of the record (`app` and `package.application`) are
     /// updated: the parcelable hierarchy nests the second one in every
@@ -1232,6 +1205,229 @@ impl PmsState {
             app.public_source_dir = guest.to_string();
         }
     }
+}
+
+/// The installed-package table of one session.
+#[derive(Debug, Clone)]
+pub struct PmsState {
+    /// Every installed package; `primary` is the app under test.
+    pub packages: Vec<InstalledPackage>,
+    /// Index of the package under test. A `None`/`""` package lookup resolves
+    /// here (the framework asks `getApplicationInfo(null)` for the calling
+    /// process's own package).
+    pub primary: usize,
+    /// Feature answers.
+    pub features: FeatureTable,
+    /// uid -> package.
+    pub uid_packages: Vec<(i32, String)>,
+    /// dex-load notifications (oneway, recorded) as
+    /// `(package, loaderIsa, classLoaderContextMap size)`.
+    pub dex_loads: Vec<(String, String, usize)>,
+    /// `setComponentEnabledSetting` overrides, keyed by
+    /// `(package, class)` → `COMPONENT_ENABLED_STATE_*` (W32).
+    ///
+    /// The manifest's own `android:enabled` is **not** in here: on a device it
+    /// is `ActivityInfo.enabled`/`ServiceInfo.enabled`, not a component
+    /// *setting*, and `PackageManager.getComponentEnabledSetting` reports
+    /// `COMPONENT_ENABLED_STATE_DEFAULT` (0) until an app calls the setter.
+    pub component_settings: Vec<((String, String), i32)>,
+}
+
+impl PmsState {
+    /// An empty state (no package installed).
+    #[must_use]
+    pub fn new() -> Self {
+        let apk = crate::workspace_path("fixtures/build/apps/hello-views.apk")
+            .unwrap_or_else(|| PathBuf::from("fixtures/build/apps/hello-views.apk"));
+        let app = AppInfo::hello_views_fallback(&apk);
+        let package = PackageInfo {
+            package_name: app.package_name.clone(),
+            version_code: 1,
+            version_name: "1.0".into(),
+            application: app.clone(),
+            activities: vec![ActivityInfo {
+                name: app.class_name.clone(),
+                package_name: app.package_name.clone(),
+                launch_mode: 0,
+                flags: 0,
+                theme: 0,
+                exported: true,
+                parent_activity_name: String::new(),
+                meta_data: Vec::new(),
+            }],
+            requested_permissions: Vec::new(),
+            first_install_time: 0,
+            last_update_time: 0,
+            signatures: Vec::new(),
+        };
+        let manifest = crate::ams::PackageRecord {
+            package: app.package_name.clone(),
+            uid: app.uid,
+            activities: vec![crate::ams::DeclaredComponent {
+                package: app.package_name.clone(),
+                class: app.class_name.clone(),
+                exported: true,
+                launch_mode: 0,
+                filters: Vec::new(),
+            }],
+            ..crate::ams::PackageRecord::default()
+        };
+        let uid_packages = vec![(app.uid, app.package_name.clone())];
+        Self {
+            packages: vec![InstalledPackage {
+                app,
+                package,
+                providers: Vec::new(),
+                services: Vec::new(),
+                granted_permissions: vec!["android.permission.INTERNET".into()],
+                installer_package: None,
+                apk_path: apk,
+                manifest,
+            }],
+            primary: 0,
+            features: FeatureTable::default(),
+            uid_packages,
+            dex_loads: Vec::new(),
+            component_settings: Vec::new(),
+        }
+    }
+
+    /// Build from an APK on disk.
+    pub fn from_apk(path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref();
+        // PERF-REL3c: the shared open, so a launch already holding it does not read
+        // the file again.
+        let apk = crate::apk_facts::open_shared(path)
+            .map_err(|e| ServiceError::Internal(format!("open {}: {e}", path.display())))?;
+        Self::from_opened(path, &apk)
+    }
+
+    /// [`PmsState::from_apk`] for an APK that is already open (`apk` is the open of
+    /// `path`). PERF-REL3c: a launch reads its source APK once.
+    pub fn from_opened(path: impl AsRef<Path>, apk: &acos_apk::Apk) -> Result<Self> {
+        let record = InstalledPackage::from_opened(path, apk, FIXTURE_UID)?;
+        let uid_packages = vec![(record.app.uid, record.app.package_name.clone())];
+        Ok(Self {
+            packages: vec![record],
+            primary: 0,
+            features: FeatureTable::default(),
+            uid_packages,
+            dex_loads: Vec::new(),
+            component_settings: Vec::new(),
+        })
+    }
+
+    /// Install an extra package into this session: an APK given at launch, or a
+    /// package baked into the image. It gets the next free uid (AOSP allocates
+    /// one uid per package) and is reachable by every package query.
+    ///
+    /// Installing the same package name twice is a structured error: the
+    /// framework's own `PackageManager` replaces on reinstall, but a session
+    /// install is explicit and a silent replace would hide a caller bug.
+    pub fn install_extra(
+        &mut self,
+        path: impl AsRef<Path>,
+        guest_source_dir: Option<&str>,
+    ) -> Result<()> {
+        let path = path.as_ref();
+        let apk = crate::apk_facts::open_shared(path)
+            .map_err(|e| ServiceError::Internal(format!("open {}: {e}", path.display())))?;
+        let mut record = InstalledPackage::from_opened(path, &apk, self.next_uid())?;
+        if let Some(guest) = guest_source_dir {
+            record.set_guest_apk_path(guest);
+        }
+        if self
+            .packages
+            .iter()
+            .any(|p| p.package.package_name == record.package.package_name)
+        {
+            return Err(ServiceError::BadRequest {
+                interface: "android.content.pm.IPackageManager".into(),
+                method: "installPackage".into(),
+                detail: format!(
+                    "package {} is already installed in this session",
+                    record.package.package_name
+                ),
+            });
+        }
+        self.uid_packages
+            .push((record.app.uid, record.app.package_name.clone()));
+        self.packages.push(record);
+        Ok(())
+    }
+
+    /// The next free uid for a new package.
+    fn next_uid(&self) -> i32 {
+        let mut uid = FIXTURE_UID;
+        while self.uid_packages.iter().any(|(u, _)| *u == uid) {
+            uid += 1;
+        }
+        uid
+    }
+
+    /// The package under test.
+    #[must_use]
+    pub fn primary(&self) -> &InstalledPackage {
+        &self.packages[self.primary]
+    }
+
+    /// The package under test, mutably.
+    pub fn primary_mut(&mut self) -> &mut InstalledPackage {
+        &mut self.packages[self.primary]
+    }
+
+    /// The installed application of the package under test.
+    #[must_use]
+    pub fn app(&self) -> &AppInfo {
+        &self.primary().app
+    }
+
+    /// The package record of the package under test.
+    #[must_use]
+    pub fn package(&self) -> &PackageInfo {
+        &self.primary().package
+    }
+
+    /// The declared providers of the package under test.
+    #[must_use]
+    pub fn providers(&self) -> &[ProviderInfo] {
+        &self.primary().providers
+    }
+
+    /// The installed record for `package`. `None`/`""` is the package under
+    /// test; an unknown name is `None` (the wire contract answers a null
+    /// `ApplicationInfo`/`PackageInfo` and the client raises
+    /// `NameNotFoundException`).
+    #[must_use]
+    pub fn lookup(&self, package: Option<&str>) -> Option<&InstalledPackage> {
+        match package {
+            None | Some("") => self.packages.get(self.primary),
+            Some(name) => self
+                .packages
+                .iter()
+                .find(|r| r.package.package_name == name),
+        }
+    }
+
+    /// The installed record and provider declaring `authority`, if any.
+    #[must_use]
+    pub fn provider_for_authority(
+        &self,
+        authority: &str,
+    ) -> Option<(&InstalledPackage, &ProviderInfo)> {
+        self.packages.iter().find_map(|record| {
+            record
+                .providers
+                .iter()
+                .find(|p| p.authority == authority)
+                .map(|p| (record, p))
+        })
+    }
+
+    /// Publish `guest` as the installed APK's `sourceDir`/`publicSourceDir`.
+    pub fn set_guest_apk_path(&mut self, guest: &str) {
+        self.primary_mut().set_guest_apk_path(guest);
+    }
 
     /// Locate and load the fixture APK, falling back to the baked-in values.
     #[must_use]
@@ -1241,25 +1437,21 @@ impl PmsState {
         Self::from_apk(&path).unwrap_or_else(|_| Self::new())
     }
 
-    /// `PackageManager.checkPermission` policy.
+    /// `PackageManager.checkPermission` for the package under test.
     #[must_use]
     pub fn check_permission(&self, permission: &str) -> i32 {
         const GRANTED: i32 = 0;
         const DENIED: i32 = -1;
-        if self.granted_permissions.iter().any(|p| p == permission) {
+        if self
+            .primary()
+            .granted_permissions
+            .iter()
+            .any(|p| p == permission)
+        {
             GRANTED
         } else {
             DENIED
         }
-    }
-
-    /// The declared provider matching `authority`, if any.
-    #[must_use]
-    pub fn provider_for_authority(&self, authority: &str) -> Option<ProviderInfo> {
-        self.providers
-            .iter()
-            .find(|p| p.authority == authority)
-            .cloned()
     }
 
     /// Package name for a uid.
@@ -1412,15 +1604,21 @@ impl PmsService {
         Ok(())
     }
 
-    fn lookup<'a>(state: &'a PmsState, package: Option<&str>) -> Result<&'a PackageInfo> {
-        match package {
-            Some(p) if p == state.package.package_name => Ok(&state.package),
-            Some("") => Ok(&state.package),
-            Some(p) => Err(ServiceError::UnknownService {
-                name: p.to_string(),
-            }),
-            None => Ok(&state.package),
-        }
+    /// The installed record for `package`. `None`/`""` is the package under
+    /// test; an unknown name is the wire's null reply (the client raises
+    /// `NameNotFoundException` itself, K3b), so it is not a service error.
+    fn lookup<'a>(state: &'a PmsState, package: Option<&str>) -> Result<&'a InstalledPackage> {
+        state.lookup(package).ok_or_else(|| ServiceError::UnknownService {
+            name: package.unwrap_or_default().to_string(),
+        })
+    }
+
+    /// Record the resolved package for the materialiser.
+    fn cache(record: &InstalledPackage) {
+        cache_description(PmsDescription {
+            app: record.app.clone(),
+            package: record.package.clone(),
+        });
     }
 }
 
@@ -1443,10 +1641,10 @@ impl ServiceObject for PmsService {
             });
         }
         let mut state = self.state.lock().unwrap();
-        cache_description(PmsDescription {
-            app: state.app.clone(),
-            package: state.package.clone(),
-        });
+        // The materialiser reads the package of the *resolved* record; this
+        // seeds it with the package under test and every branch that resolves
+        // a package overwrites it before the reply is materialised.
+        Self::cache(state.primary());
         let reply = match method.name.as_str() {
             // K3b: an unknown package is **not** an error on the wire. The
             // image's `IPackageManager` replies with a null `ApplicationInfo`/
@@ -1464,9 +1662,10 @@ impl ServiceObject for PmsService {
                 let package = args.first().and_then(Value::as_str);
                 let flags = flags_arg(args, 1);
                 let info = match Self::lookup(&state, package) {
-                    Ok(p) => {
-                        trace_query("getApplicationInfo", package.unwrap_or(""), flags, p.application.meta_data.len());
-                        p.application.to_parcelable_with_flags(flags)
+                    Ok(record) => {
+                        trace_query("getApplicationInfo", package.unwrap_or(""), flags, record.app.meta_data.len());
+                        Self::cache(record);
+                        record.app.to_parcelable_with_flags(flags)
                     }
                     Err(ServiceError::UnknownService { .. }) => Parcelable::Null,
                     Err(e) => return Err(e),
@@ -1477,7 +1676,10 @@ impl ServiceObject for PmsService {
                 let package = args.first().and_then(Value::as_str);
                 let flags = flags_arg(args, 1);
                 let info = match Self::lookup(&state, package) {
-                    Ok(p) => p.to_parcelable_with_flags(flags),
+                    Ok(record) => {
+                        Self::cache(record);
+                        record.package.to_parcelable_with_flags(flags)
+                    }
                     Err(ServiceError::UnknownService { .. }) => Parcelable::Null,
                     Err(e) => return Err(e),
                 };
@@ -1486,50 +1688,59 @@ impl ServiceObject for PmsService {
             "getActivityInfo" => {
                 let component = args.first().and_then(Value::as_parcelable);
                 // `ComponentName.writeToParcel` writes `mPackage` then `mClass`.
-                let name = component
-                    .and_then(|p| p.field(1))
-                    .and_then(Value::as_str)
-                    .unwrap_or_default();
-                let activity = state
-                    .package
-                    .activities
-                    .iter()
-                    .find(|a| a.name == name)
-                    .cloned();
-                cache_activity_info(activity.clone());
+                let (component_package, name) = component_parts(component);
+                let record = state.lookup(Some(&component_package));
+                let activity = record.and_then(|r| {
+                    r.package
+                        .activities
+                        .iter()
+                        .find(|a| a.name == name)
+                        .cloned()
+                });
+                cache_activity_info(activity.clone().map(|a| {
+                    (
+                        record.map_or_else(|| state.primary().app.clone(), |r| r.app.clone()),
+                        a,
+                    )
+                }));
                 let flags = flags_arg(args, 1);
-                vec![match activity {
-                    Some(a) => Value::TypedObject(a.to_parcelable_with_flags(&state.app, flags)),
-                    None => Value::TypedObject(Parcelable::Null),
+                vec![match (activity, record) {
+                    (Some(a), Some(r)) => {
+                        Self::cache(r);
+                        Value::TypedObject(a.to_parcelable_with_flags(&r.app, flags))
+                    }
+                    _ => Value::TypedObject(Parcelable::Null),
                 }]
             }
             "getServiceInfo" => {
                 // `getServiceInfo(ComponentName, long flags, int userId)`.
                 let component = args.first().and_then(Value::as_parcelable);
-                let name = component
-                    .and_then(|p| p.field(1))
-                    .and_then(Value::as_str)
-                    .unwrap_or_default();
-                let service = state.services.iter().find(|s| s.name == name).cloned();
+                let (component_package, name) = component_parts(component);
+                let record = state.lookup(Some(&component_package));
+                let service = record.and_then(|r| r.services.iter().find(|s| s.name == name).cloned());
                 let flags = flags_arg(args, 1);
-                vec![match service {
-                    Some(s) => Value::TypedObject(s.to_parcelable_with_flags(&state.app, flags)),
-                    None => Value::TypedObject(Parcelable::Null),
+                vec![match (service, record) {
+                    (Some(s), Some(r)) => {
+                        Self::cache(r);
+                        Value::TypedObject(s.to_parcelable_with_flags(&r.app, flags))
+                    }
+                    _ => Value::TypedObject(Parcelable::Null),
                 }]
             }
             "getProviderInfo" => {
                 // `getProviderInfo(ComponentName, long flags, int userId)`.
                 let component = args.first().and_then(Value::as_parcelable);
-                let name = component
-                    .and_then(|p| p.field(1))
-                    .and_then(Value::as_str)
-                    .unwrap_or_default();
-                let provider = state.providers.iter().find(|p| p.name == name).cloned();
+                let (component_package, name) = component_parts(component);
+                let record = state.lookup(Some(&component_package));
+                let provider = record.and_then(|r| r.providers.iter().find(|p| p.name == name).cloned());
                 let flags = flags_arg(args, 1);
-                trace_query("getProviderInfo", name, flags, provider.as_ref().map_or(0, |p| p.meta_data.len()));
-                vec![match provider {
-                    Some(p) => Value::TypedObject(p.to_parcelable_with_flags(&state.app, flags)),
-                    None => Value::TypedObject(Parcelable::Null),
+                trace_query("getProviderInfo", &name, flags, provider.as_ref().map_or(0, |p| p.meta_data.len()));
+                vec![match (provider, record) {
+                    (Some(p), Some(r)) => {
+                        Self::cache(r);
+                        Value::TypedObject(p.to_parcelable_with_flags(&r.app, flags))
+                    }
+                    _ => Value::TypedObject(Parcelable::Null),
                 }]
             }
             "getPackagesForUid" => {
@@ -1542,7 +1753,7 @@ impl ServiceObject for PmsService {
             "getPackageUid" => {
                 let package = args.first().and_then(Value::as_str);
                 match Self::lookup(&state, package) {
-                    Ok(p) => vec![Value::Int(p.application.uid)],
+                    Ok(record) => vec![Value::Int(record.app.uid)],
                     Err(_) => vec![Value::Int(-1)],
                 }
             }
@@ -1593,8 +1804,23 @@ impl ServiceObject for PmsService {
                 Vec::new()
             }
             "checkPermission" => {
+                // `checkPermission(String permName, String pkgName, int userId)`.
+                // The answer is the *named* package's grant, not the package
+                // under test's.
                 let permission = args.first().and_then(Value::as_str).unwrap_or_default();
-                vec![Value::Int(state.check_permission(permission))]
+                let package = args.get(1).and_then(Value::as_str);
+                let granted = state.lookup(package).map_or(-1, |record| {
+                    if record
+                        .granted_permissions
+                        .iter()
+                        .any(|p| p == permission)
+                    {
+                        0
+                    } else {
+                        -1
+                    }
+                });
+                vec![Value::Int(granted)]
             }
             // `acos-apk` does not parse `<instrumentation>` yet, so there is no
             // manifest-backed `InstrumentationInfo` to serve. A structured
@@ -1609,9 +1835,7 @@ impl ServiceObject for PmsService {
             "getInstallerPackageName" => {
                 let package = args.first().and_then(Value::as_str);
                 match Self::lookup(&state, package) {
-                    Ok(p) if p.package_name == state.app.package_name => {
-                        vec![Value::Str(state.installer_package.clone())]
-                    }
+                    Ok(record) => vec![Value::Str(record.installer_package.clone())],
                     _ => vec![Value::Str(None)],
                 }
             }
@@ -1665,16 +1889,19 @@ impl ServiceObject for PmsService {
                 // the metadata `Bundle` on the same flag.
                 let authority = args.first().and_then(Value::as_str).unwrap_or_default();
                 let flags = flags_arg(args, 1);
-                let provider = state.provider_for_authority(authority);
+                let found = state.provider_for_authority(authority);
                 trace_query(
                     "resolveContentProvider",
                     authority,
                     flags,
-                    provider.as_ref().map_or(0, |p| p.meta_data.len()),
+                    found.as_ref().map_or(0, |(_, p)| p.meta_data.len()),
                 );
-                cache_provider_info(provider.clone());
-                vec![match provider {
-                    Some(p) => Value::TypedObject(p.to_parcelable_with_flags(&state.app, flags)),
+                cache_provider_info(found.map(|(r, p)| (r.app.clone(), p.clone())));
+                vec![match found {
+                    Some((r, p)) => {
+                        Self::cache(r);
+                        Value::TypedObject(p.to_parcelable_with_flags(&r.app, flags))
+                    }
                     None => Value::TypedObject(Parcelable::Null),
                 }]
             }
@@ -1682,12 +1909,61 @@ impl ServiceObject for PmsService {
                 // `queryContentProviders(String processName, int uid, long flags,
                 // String metadataKey)`. The reply is a `ParceledListSlice`; the
                 // real list is materialised by `pms_java` from the cache.
-                cache_provider_list(state.providers.clone());
+                cache_provider_list(
+                    state
+                        .packages
+                        .iter()
+                        .flat_map(|r| {
+                            r.providers
+                                .iter()
+                                .map(move |p| (r.app.clone(), p.clone()))
+                        })
+                        .collect(),
+                );
                 vec![Value::TypedObject(Parcelable::Null)]
             }
             "resolveIntent" | "queryIntentActivities" => {
-                // The launcher `ResolveInfo` is materialised by `pms_java` from
-                // the cached description, so the generic reply is a placeholder.
+                // `resolveIntent(Intent, String resolvedType, long flags, int
+                // userId)` / `queryIntentActivities(Intent, String, long, int)`.
+                // A session installs more than one package, so the intent is
+                // matched against every package's declared filters (`ManifestDb`
+                // is the same table ATMS resolves `startActivity` with) and the
+                // matches are materialised by `pms_java`.
+                let intent = args
+                    .first()
+                    .and_then(Value::as_parcelable)
+                    .map(crate::ams::IntentFacts::from_parcelable)
+                    .unwrap_or_default();
+                let db = crate::ams::ManifestDb {
+                    packages: state
+                        .packages
+                        .iter()
+                        .map(|r| r.manifest.clone())
+                        .collect(),
+                };
+                let mut resolved: Vec<ResolvedActivity> = Vec::new();
+                for declared in db.matching_activities(&intent) {
+                    let Some(record) = state.lookup(Some(&declared.package)) else {
+                        continue;
+                    };
+                    let Some(activity) = record
+                        .package
+                        .activities
+                        .iter()
+                        .find(|a| a.name == declared.class)
+                        .cloned()
+                    else {
+                        continue;
+                    };
+                    resolved.push(ResolvedActivity {
+                        app: record.app.clone(),
+                        activity,
+                        declared,
+                    });
+                }
+                cache_intent_activities(resolved);
+                // The generic reply is a placeholder: `pms_java` writes the real
+                // `ResolveInfo`/`ParceledListSlice<ResolveInfo>`.
                 vec![Value::TypedObject(Parcelable::Null)]
             }
             // A service `ResolveInfo` uses the component marker `2` and a
@@ -1848,11 +2124,11 @@ mod tests {
     fn resolve_content_provider_answers_the_declared_authority() {
         let mut state = PmsState::new();
         assert!(state.provider_for_authority("dev.acos.fixtures.svcprovider").is_none());
-        state.providers.push(sample_provider());
+        state.primary_mut().providers.push(sample_provider());
         let found = state
             .provider_for_authority("dev.acos.fixtures.svcprovider")
             .expect("declared authority resolves");
-        assert_eq!(found.name, sample_provider().name);
+        assert_eq!(found.1.name, sample_provider().name);
         assert!(state.provider_for_authority("dev.acos.fixtures.absent").is_none());
     }
 
@@ -1867,10 +2143,12 @@ mod tests {
         let state = PmsState::from_apk(&path).expect("from_apk");
         let provider = state
             .provider_for_authority("dev.acos.fixtures.svcprovider")
-            .expect("fixture authority declared in the manifest");
+            .expect("fixture authority declared in the manifest")
+            .1;
         assert_eq!(provider.name, "dev.acos.fixtures.svcprovider.EchoProvider");
         assert!(!provider.exported, "the fixture provider is not exported");
         let service = state
+            .primary()
             .services
             .iter()
             .find(|s| s.name == "dev.acos.fixtures.svcprovider.EchoService")

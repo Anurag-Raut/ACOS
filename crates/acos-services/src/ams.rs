@@ -481,6 +481,34 @@ impl ManifestDb {
         self.resolve_component(intent, ComponentKind::Service)
     }
 
+    /// Every declared activity matching `intent`, across every installed
+    /// package. Unlike [`ManifestDb::resolve_activity`] this does not pick one
+    /// and does not fail on zero or many: `IPackageManager.queryIntentActivities`
+    /// returns the full list (empty is a legitimate "no match").
+    #[must_use]
+    pub fn matching_activities(&self, intent: &IntentFacts) -> Vec<DeclaredComponent> {
+        if let Some((package, class)) = &intent.component {
+            return self
+                .component_by_class(package, class, ComponentKind::Activity)
+                .into_iter()
+                .collect();
+        }
+        let mut out = Vec::new();
+        for package in &self.packages {
+            if let Some(filter_pkg) = &intent.package {
+                if filter_pkg != &package.package {
+                    continue;
+                }
+            }
+            for component in &package.activities {
+                if self.component_matches(component, intent) {
+                    out.push(component.clone());
+                }
+            }
+        }
+        out
+    }
+
     /// All manifest receivers matching `intent`.
     #[must_use]
     pub fn resolve_receivers(&self, intent: &IntentFacts) -> Vec<DeclaredComponent> {

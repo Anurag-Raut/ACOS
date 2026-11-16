@@ -51,7 +51,7 @@ fn unknown_package_is_a_null_package_info_not_an_exception() {
 #[test]
 fn the_known_package_still_answers() {
     let mut pms = pms();
-    let own = PmsState::hello_views().package.package_name;
+    let own = PmsState::hello_views().package().package_name.clone();
     let reply = pms
         .call(
             "android.content.pm.IPackageManager",
@@ -79,9 +79,9 @@ fn publish_content_providers_decodes_the_typed_list() {
     let state = PmsState::hello_views();
     let provider = ProviderInfo {
         name: "androidx.startup.InitializationProvider".into(),
-        package_name: state.package.package_name.clone(),
+        package_name: state.package().package_name.clone(),
         authority: "dev.acos.fixtures.hello_views.androidx-startup".into(),
-        process_name: state.package.package_name.clone(),
+        process_name: state.package().package_name.clone(),
         read_permission: String::new(),
         write_permission: String::new(),
         exported: false,
@@ -92,7 +92,7 @@ fn publish_content_providers_decodes_the_typed_list() {
     let holder = Parcelable::ordered(
         "android.app.ContentProviderHolder",
         vec![
-            Value::Parcelable(provider.to_parcelable(&state.app)),
+            Value::Parcelable(provider.to_parcelable(state.app())),
             Value::Binder(None), // provider (IContentProvider): null in this test
             Value::Binder(None), // connection
             Value::Int(1),       // noReleaseNeeded

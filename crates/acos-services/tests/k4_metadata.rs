@@ -81,13 +81,15 @@ fn expected_bundle() -> Bundle {
 
 fn state_with_meta_data() -> PmsState {
     let mut state = PmsState::new();
-    state.app.meta_data = manifest_meta_data();
-    state.package.application.meta_data = manifest_meta_data();
-    state.providers.push(ProviderInfo {
+    state.primary_mut().app.meta_data = manifest_meta_data();
+    state.primary_mut().package.application.meta_data = manifest_meta_data();
+    let package_name = state.app().package_name.clone();
+    let process_name = state.app().process_name.clone();
+    state.primary_mut().providers.push(ProviderInfo {
         name: "androidx.startup.InitializationProvider".into(),
-        package_name: state.app.package_name.clone(),
+        package_name,
         authority: "dev.acos.fixtures.helloviews.androidx-startup".into(),
-        process_name: state.app.process_name.clone(),
+        process_name,
         read_permission: String::new(),
         write_permission: String::new(),
         exported: false,
@@ -248,7 +250,7 @@ fn provider_meta_data_follows_get_meta_data_on_every_provider_reply() {
 #[test]
 fn a_component_without_meta_data_replies_null_even_with_the_flag() {
     let mut state = state_with_meta_data();
-    state.providers[0].meta_data.clear();
+    state.primary_mut().providers[0].meta_data.clear();
     let mut pms = pms(state);
     let reply = pms
         .call(
@@ -275,8 +277,8 @@ fn a_component_without_meta_data_replies_null_even_with_the_flag() {
 #[test]
 fn provider_meta_data_survives_the_parcel_round_trip() {
     let state = state_with_meta_data();
-    let provider = state.providers[0].clone();
-    let encoded = provider.to_parcelable_with_flags(&state.app, GET_META_DATA);
+    let provider = state.primary().providers[0].clone();
+    let encoded = provider.to_parcelable_with_flags(state.app(), GET_META_DATA);
     let decoded = round_trip(&encoded);
     // The decoded `Bundle` is in `ArrayMap` (hash) order, which is what the
     // writer emits, so a second encode/read cycle is a fixed point.
@@ -322,8 +324,8 @@ fn from_apk_carries_the_manifest_meta_data() {
     }
     let state = PmsState::from_apk(&path).expect("from_apk");
     // The fixture declares no `<meta-data>`; the model must not invent any.
-    assert!(state.app.meta_data.is_empty());
-    assert!(state.providers.iter().all(|p| p.meta_data.is_empty()));
+    assert!(state.app().meta_data.is_empty());
+    assert!(state.primary().providers.iter().all(|p| p.meta_data.is_empty()));
 }
 
 fn pms_own_package() -> String {
