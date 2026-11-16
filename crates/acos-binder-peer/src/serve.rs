@@ -52,7 +52,14 @@ pub struct ServeOutcome {
     pub closed: usize,
     /// Death notifications written to a holder whose node's owner died.
     pub deaths: u64,
+    /// MPROC4 step 3b: spawn requests handed to the launcher (a component of a
+    /// package with no process resolved).
+    pub spawns_requested: u64,
 }
+
+/// Where a spawn request goes: the launcher owns the processes, so the peer
+/// hands the request over instead of starting anything itself.
+pub type SpawnSink<'a> = &'a mut dyn FnMut(acos_services::ams::ProcessSpawnRequest);
 
 /// Serve driver connections on `listener` until `stop` is set or every
 /// connection is gone and the session is stopping.
@@ -60,6 +67,19 @@ pub struct ServeOutcome {
 /// `ACOS_PEER_DEBUG=1` traces every frame in and out, exactly like the
 /// per-connection loop did.
 pub fn serve(peer: &mut Peer, listener: RawFd, stop: &AtomicBool) -> io::Result<ServeOutcome> {
+    serve_with_spawns(peer, listener, stop, None)
+}
+
+/// [`serve`] with a sink the launcher provides for spawn requests (MPROC4 step
+/// 3b). Without a sink the requests stay in the activity manager state: a
+/// session that cannot start processes says so in its reply instead of
+/// pretending the component was launched.
+pub fn serve_with_spawns(
+    peer: &mut Peer,
+    listener: RawFd,
+    stop: &AtomicBool,
+    mut spawns: Option<SpawnSink<'_>>,
+) -> io::Result<ServeOutcome> {
     let dbg = std::env::var_os("ACOS_PEER_DEBUG").is_some();
     unsafe {
         let flags = libc::fcntl(listener, libc::F_GETFL);
@@ -226,6 +246,19 @@ pub fn serve(peer: &mut Peer, listener: RawFd, stop: &AtomicBool) -> io::Result<
                 }
             };
             let outs = peer.handle_tagged(tag, frame);
+            // MPROC4 step 3b: a resolution to a package with no process is a
+            // spawn request. The launcher decides (it owns the processes and
+            // their tags), so nothing is started from here.
+            if let Some(sink) = spawns.as_mut() {
+                for request in peer.take_spawn_requests() {
+                    outcome.spawns_requested += 1;
+                    eprintln!(
+                        "acos-binder-peer: process {tag}: {} needs a process for {} ({})",
+                        request.package, request.component, request.reason
+                    );
+                    sink(request);
+                }
+            }
             if dbg {
                 eprintln!("peer-trace: process {tag}: handle -> {} frames", outs.len());
             }

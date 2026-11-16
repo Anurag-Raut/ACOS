@@ -829,6 +829,23 @@ pub struct PendingBind {
     pub binder: u64,
 }
 
+/// A process the launcher must start (MPROC4 step 3b).
+///
+/// On a device `ActivityManagerService.startProcessLocked` asks the zygote for a
+/// new process as soon as a component resolves to a package that has none. ACOS
+/// has no system process, so the resolution path records the request here and
+/// the launcher (which owns the processes) drains it and spawns the guest.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProcessSpawnRequest {
+    /// Package that needs a process (`ApplicationInfo.packageName`).
+    pub package: String,
+    /// The component that triggered it (`package/class`, class may be empty).
+    pub component: String,
+    /// Why the process is needed: `startActivity`, `startService`,
+    /// `bindService`, `getContentProvider`.
+    pub reason: String,
+}
+
 /// A broadcast the runtime must deliver to an `IIntentReceiver`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PendingReceiver {
@@ -875,7 +892,15 @@ pub struct AmsState {
     /// (set by the standard registry); `None` in a bare state machine, where an
     /// unresolvable intent stays the structured `START_NOT_FOUND`.
     pub intents: Option<std::sync::Arc<std::sync::Mutex<crate::intents::IntentState>>>,
+    /// MPROC4 step 3b: components that resolved to a package the service layer
+    /// cannot run by itself. The launcher drains them and spawns the guest; a
+    /// request names only what was resolved, never a pid, a tag or a command
+    /// line (those belong to the launcher).
+    pub spawn_requests: Vec<ProcessSpawnRequest>,
 }
+
+/// Ceiling on queued spawn requests (a bounded queue, never unbounded growth).
+pub const MAX_SPAWN_REQUESTS: usize = 64;
 
 impl AmsState {
     /// New empty state.
@@ -1009,6 +1034,10 @@ impl AmsState {
             reused: false,
         });
         self.task_mut(task_id).activities.push(token);
+        // MPROC4 step 3b: the activity lives in `component.package`'s process.
+        // Record the need here; the launcher decides whether that process
+        // already exists (it owns the processes and their tags).
+        self.request_process(&component.package, &component.class, "startActivity");
         self.pending_launches.push(PendingLaunch {
             token,
             package: component.package.clone(),
@@ -1077,6 +1106,8 @@ impl AmsState {
     /// `startService`: resolve and start the service. Returns the component.
     pub fn start_service(&mut self, intent: &IntentFacts) -> Result<(String, String)> {
         let component = self.manifests.resolve_service(intent)?;
+        // MPROC4 step 3b: the service's code runs in its package's process.
+        self.request_process(&component.package, &component.class, "startService");
         let key = format!("{}/{}", component.package, component.class);
         self.services
             .entry(key)
@@ -1114,6 +1145,8 @@ impl AmsState {
         _flags: i64,
     ) -> Result<u64> {
         let component = self.manifests.resolve_service(intent)?;
+        // MPROC4 step 3b: a bound service's code runs in its package's process.
+        self.request_process(&component.package, &component.class, "bindService");
         let key = format!("{}/{}", component.package, component.class);
         self.services
             .entry(key)
@@ -1136,6 +1169,42 @@ impl AmsState {
             binder,
         });
         Ok(binder)
+    }
+
+    /// Record that `package` needs a process (MPROC4 step 3b).
+    ///
+    /// One entry per `(package, component, reason)`: a resolution storm from one
+    /// guest must not turn into a spawn storm. The launcher dedups again against
+    /// its live processes (it is the authority on what is already running).
+    pub fn request_process(&mut self, package: &str, class: &str, reason: &str) {
+        if package.is_empty() {
+            return;
+        }
+        let component = if class.is_empty() {
+            package.to_string()
+        } else {
+            format!("{package}/{class}")
+        };
+        if self
+            .spawn_requests
+            .iter()
+            .any(|r| r.component == component && r.reason == reason)
+        {
+            return;
+        }
+        if self.spawn_requests.len() >= MAX_SPAWN_REQUESTS {
+            return;
+        }
+        self.spawn_requests.push(ProcessSpawnRequest {
+            package: package.to_string(),
+            component,
+            reason: reason.to_string(),
+        });
+    }
+
+    /// Drain the queued spawn requests (the launcher's side of step 3b).
+    pub fn take_spawn_requests(&mut self) -> Vec<ProcessSpawnRequest> {
+        std::mem::take(&mut self.spawn_requests)
     }
 
     /// `unbindService`: drop one connection. Returns whether one was released.

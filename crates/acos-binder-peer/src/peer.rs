@@ -607,10 +607,60 @@ impl Peer {
                     name.to_string()
                 };
                 eprintln!("acos-binder-peer: process tag {tag} connected ({name})");
-                *slot = Some(ProcessConn::new(tag, name));
+                *slot = Some(ProcessConn::new(tag, name.clone()));
+                // MPROC4 step 3b: a process exists from the moment its guest
+                // connects, exactly where `ActivityManagerService
+                // .startProcessLocked` creates the record on a device. The
+                // activity manager's `ProcessRecord` is per tag, so the attach
+                // and the process list name the right package.
+                self.record_process_started(tag, &name);
                 Ok(())
             }
         }
+    }
+
+    /// MPROC4 step 3b: tell the activity manager that process `tag` exists.
+    ///
+    /// The peer owns the handshake (the first thing a guest does) and the
+    /// activity manager owns the `ProcessRecord`; the package name comes from the
+    /// guest's own `ACOS_PROCESS_NAME`, so nothing is invented here.
+    fn record_process_started(&mut self, tag: u32, package: &str) {
+        let Ok(object) = self.host.ensure("android.app.IActivityTaskManager") else {
+            return;
+        };
+        if let Some(atms) = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+        {
+            atms.note_process_started(tag, package);
+        }
+    }
+
+    /// MPROC4 step 3b: drain the spawn requests the activity manager recorded
+    /// while handling frames (`startActivity`, `startService`, `bindService` to a
+    /// package with no process).
+    pub fn take_spawn_requests(&mut self) -> Vec<acos_services::ams::ProcessSpawnRequest> {
+        let Ok(object) = self.host.ensure("android.app.IActivityTaskManager") else {
+            return Vec::new();
+        };
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+            .map(acos_services::atms::AtmsService::take_spawn_requests)
+            .unwrap_or_default()
+    }
+
+    /// MPROC4 step 3b: the activity manager's process list
+    /// (`tag`, package, uid, pid, `IApplicationThread`, attached).
+    pub fn process_list(&mut self) -> Vec<(u32, String, i32, i32, Option<u64>, bool)> {
+        let Ok(object) = self.host.ensure("android.app.IActivityTaskManager") else {
+            return Vec::new();
+        };
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+            .map(|atms| atms.process_list())
+            .unwrap_or_default()
     }
 
     /// Mark a process's connection closed and drop what it owned: its Java

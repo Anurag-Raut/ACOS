@@ -223,6 +223,9 @@ done
 # and builds that package's Context/resources. It needs no second APK at build
 # time; the session installs `counter.apk` with `--extra-apk`.
 build_apk multi-package-probe
+# MPROC4: the two-process pair (proc-a starts/binds components of proc-b).
+build_apk proc-a
+build_apk proc-b
 
 # intent-probe (MPROC1 step 2) drives the two intents a device routes to another
 # app: an implicit ACTION_SEND text share (`startActivity`) and an

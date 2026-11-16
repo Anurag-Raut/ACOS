@@ -2642,6 +2642,21 @@ public final class LaunchMain {
                                     return result;
                                 }
                                 android.content.ComponentName target = intent.getComponent();
+                                if (target != null
+                                        && !sPkg.equals(target.getPackageName())) {
+                                    // MPROC4 step 3b: the component lives in **another
+                                    // installed package**, i.e. in another process. The
+                                    // host has already recorded the launch (and the need
+                                    // for that package's process); this process must not
+                                    // instantiate another package's class. The process
+                                    // that owns the component launches it (AMS starts it
+                                    // and delivers the transaction there).
+                                    System.out.println("ACOSLAUNCH MARK start-activity-remote"
+                                            + " package=" + esc(target.getPackageName())
+                                            + " class=" + esc(target.getClassName()));
+                                    System.out.flush();
+                                    return result;
+                                }
                                 if (target == null) {
                                     // MPROC1: the host accepted the intent without
                                     // an installed target, i.e. the session's

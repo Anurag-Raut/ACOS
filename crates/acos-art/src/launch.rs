@@ -219,6 +219,13 @@ pub struct LaunchResult {
     /// launch reply only carries the field when extras were asked for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extra_packages: Option<Vec<serde_json::Value>>,
+    /// MPROC4 step 3b: the session's app processes. The activity manager's own
+    /// records (one per process tag: `tag`, `package`, `uid`, `pid`,
+    /// `app_thread`, `attached`) plus the launcher's spawn evidence (which
+    /// component resolved, why, which pid answered). Absent when the session
+    /// never had more than the primary process.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub processes: Option<serde_json::Value>,
     /// H13b: `{mode, cache: hit|built|fallback|external|none, reason}` — which
     /// boot image this launch used and whether the shared-image cache hit, so a
     /// caller (and a benchmark row) can tell a warm serve from a cold one.
@@ -510,8 +517,513 @@ struct ExtraApk {
     uid: Option<i32>,
 }
 
-/// The per-session half of [`launch`].
+/// MPROC4 step 3b: one secondary app process this session can start.
 ///
+/// Built from the session's own recipe (`launch_session`): the extra APK is
+/// already staged in this run's tree and installed into the package manager, so
+/// a second guest is the **same** sandbox recipe with its own run root, its own
+/// tag and its own launch argv. Nothing is re-downloaded, re-installed or
+/// re-invented.
+#[derive(Debug, Clone)]
+struct SecondarySpec {
+    /// Process tag (`ACOS_PROCESS_TAG`); `0` is the primary process.
+    tag: u32,
+    /// Package this process runs.
+    package: String,
+    /// Host path of the staged APK (this run's private copy).
+    staged: PathBuf,
+    /// Guest path the APK is bound at (`/data/app/<name>`).
+    guest_apk: String,
+    /// Host root of the package's extracted native libraries.
+    lib_root: PathBuf,
+    /// Guest directory the library root is bound at.
+    guest_lib_root: String,
+    /// Guest `ApplicationInfo.nativeLibraryDir`.
+    guest_lib_dir: String,
+    /// `ApplicationInfo.uid` the package manager assigned.
+    uid: Option<i32>,
+    /// The activity this process launches (the requested component, else the
+    /// APK's launcher activity).
+    activity: String,
+    /// Declared `<application android:name>` (empty = the framework default).
+    app_class: String,
+    /// Declared `<application android:theme>`.
+    theme: i32,
+    /// Manifest-derived `ApplicationInfo.flags` (`-1` = none).
+    app_flags: i64,
+    /// The `<activity android:configChanges>` bitmask.
+    config_changes: u32,
+    /// `ApplicationInfo.labelRes` / literal for the application.
+    app_label: (u32, String),
+    /// `ActivityInfo.labelRes` / literal for the launched activity.
+    activity_label: (u32, String),
+    /// The launcher alias's `targetActivity` (empty for a plain activity).
+    activity_target: String,
+    /// The process's own `out` directory (host path), copied into the session's
+    /// evidence at the end.
+    out_dir: PathBuf,
+    /// The process's own run root (host path).
+    run_root: PathBuf,
+}
+
+/// A running secondary process.
+struct SecondaryGuest {    spec: SecondarySpec,
+    child: std::process::Child,
+    cgroup: crate::cgroup::RunCgroup,
+    pid: i32,
+    /// Guest stderr tail (a dead process's reason is evidence).
+    stderr: Arc<std::sync::Mutex<TailBuffer>>,
+    /// `bwrap` argv, so the reply can state exactly how the process was started.
+    argv: Vec<String>,
+}
+
+/// Everything a secondary guest needs from the session that is not in its
+/// [`SecondarySpec`]: the shared, read-only sandbox inputs and the shared
+/// sockets.
+#[derive(Debug, Clone)]
+struct SecondaryShared {
+    root: ArtRoot,
+    /// Boot image directory (bound at `/data/img`), when the session has one.
+    image: Option<PathBuf>,
+    substrate: PathBuf,
+    art_shim: PathBuf,
+    driver: PathBuf,
+    /// The session's extracted native-library root (`/data/app-lib`).
+    native_lib_root: PathBuf,
+    /// Session socket directory (bound at `/dev/socket`; both guests share it,
+    /// so both write to the same logd).
+    sockets: PathBuf,
+    /// The peer socket file (bound at `/data/acos-launch.sock`); every guest
+    /// connects to the **same** peer.
+    sock: PathBuf,
+    /// Static-RRO idmaps (guest paths, `,`-separated; empty = none).
+    overlays: String,
+    /// Resume budget forwarded to the guest (W27).
+    resume_ms: u64,
+    /// Display geometry the guest boots at.
+    geometry: [(String, u32); 5],
+    /// `ACOSLAUNCH_SCREEN_LAYOUT` (W47).
+    screen_layout: u32,
+    /// `ACOS_ANIMATIONS` (P12).
+    animations: &'static str,
+    /// Run this guest's live probe (interactive sessions only).
+    live_probe: bool,
+}
+
+impl SecondaryShared {
+    /// The guest argv after `-cp <dex> <class>`: exactly what `LaunchMain.main`
+    /// reads for the primary process, for this package.
+    fn guest_args(&self, spec: &SecondarySpec) -> Vec<String> {
+        vec![
+            spec.guest_apk.clone(),
+            spec.package.clone(),
+            "/data/out/launch".to_string(),
+            "activity-resumed".to_string(),
+            spec.activity.clone(),
+            spec.app_class.clone(),
+            spec.theme.to_string(),
+            self.overlays.clone(),
+            spec.app_label.0.to_string(),
+            spec.app_label.1.clone(),
+            spec.activity_label.0.to_string(),
+            spec.activity_label.1.clone(),
+            spec.activity_target.clone(),
+            spec.app_flags.to_string(),
+            "manifest".to_string(),
+        ]
+    }
+
+    /// Build one secondary guest's bwrap command + dalvik argv.
+    fn command(&self, spec: &SecondarySpec, app_meta: &str, providers: &str) -> Result<std::process::Command> {
+        let mut sb = self.root.sandbox();
+        if let Some(image) = &self.image {
+            sb.with_image(Some(image.clone()));
+        }
+        sb.run_root(&spec.run_root);
+        sb.seccomp_guest(true);
+        sb.with_shim(false);
+        sb.ro_bind(&self.art_shim, "/data/shim/libartshim.so");
+        sb.ro_bind(&self.native_lib_root, acos_services::native_libs::GUEST_NATIVE_LIB_ROOT);
+        sb.ro_bind(&self.substrate, "/data/app/libacosart.so");
+        sb.ro_bind(&spec.staged, &spec.guest_apk);
+        sb.ro_bind(&spec.lib_root, &spec.guest_lib_root);
+        sb.ro_bind(
+            &self.root.sysroot.join("shim/libacoshw.so"),
+            "/data/libacoshw.so",
+        );
+        sb.ro_bind(&self.driver, "/data/lib/libacos_binder_driver.so");
+        sb.ro_bind(&self.root.data.join("seccomp"), "/data/seccomp");
+        // The **same** sockets directory as the primary (both guests write to
+        // the session's logd) and the **same** peer socket file.
+        sb.rw_bind(&self.sockets, "/dev/socket");
+        sb.rw_bind(&self.sock, "/data/acos-launch.sock");
+        sb.env(
+            "LD_PRELOAD",
+            "/data/shim/libartshim.so:/data/app/libacosart.so:/data/libacoshw.so:/data/lib/libacos_binder_driver.so",
+        );
+        sb.env("ACOSART_LOAD", "libandroid_runtime.so");
+        sb.env("E3G_SOCK", "/data/acos-launch.sock");
+        // MPROC2/MPROC4: this process names itself in the driver's handshake, so
+        // the peer puts its tag on every binder it imports and can address a
+        // delivery to it (and only to it).
+        sb.env("ACOS_PROCESS_TAG", &spec.tag.to_string());
+        sb.env("ACOS_PROCESS_NAME", &spec.package);
+        sb.env("ACOSLAUNCH_RESUME_MS", &self.resume_ms.to_string());
+        for (var, value) in &self.geometry {
+            sb.env(var, &value.to_string());
+        }
+        sb.env("ACOSLAUNCH_SCREEN_LAYOUT", &self.screen_layout.to_string());
+        sb.env("ACOSLAUNCH_CONFIG_CHANGES", &spec.config_changes.to_string());
+        sb.env("ACOS_ANIMATIONS", self.animations);
+        if !app_meta.is_empty() {
+            sb.env("ACOSLAUNCH_APP_META", app_meta);
+        }
+        if !providers.is_empty() {
+            sb.env("ACOSLAUNCH_PROVIDERS", providers);
+        }
+        if self.live_probe {
+            sb.env("ACOSLAUNCH_LIVE_PROBE", "1");
+        }
+        let mut argv: Vec<String> = Vec::new();
+        if self.image.is_some() {
+            argv.push("-Ximage:/data/img/boot.art".into());
+            argv.push("-Xnorelocate".into());
+        }
+        argv.push("-cp".into());
+        argv.push("/data/app/launch-guest/classes.dex".into());
+        argv.push(GUEST_CLASS.into());
+        argv.extend(self.guest_args(spec));
+        sb.command("/system/apex/com.android.art/bin/dalvikvm64", &argv)
+    }
+}
+
+/// Start one secondary guest (MPROC4 step 3b).
+///
+/// The process is scoped like the primary (`cgroup` scope, its own process
+/// group, `PDEATHSIG`), its own `out`/`app-data`/`dalvik-cache` live in its own
+/// run root, and its stdout/stderr are drained so nothing can block it.
+fn spawn_secondary(
+    shared: &SecondaryShared,
+    spec: &SecondarySpec,
+    app_meta: &str,
+    providers: &str,
+    probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+    compositor: Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>,
+    stderr_sink: Arc<std::sync::Mutex<TailBuffer>>,
+) -> Result<SecondaryGuest> {
+    for sub in ["out", "out/launch", "app-data", "dalvik-cache", "misc", "tmp"] {
+        fs::create_dir_all(spec.run_root.join(sub))?;
+    }
+    fs::create_dir_all(spec.run_root.join("app-data").join(&spec.package))?;
+    let mut cmd = shared.command(spec, app_meta, providers)?;
+    let argv = format!("{cmd:?}");
+    let scope_info = std::fs::canonicalize(&spec.run_root)
+        .unwrap_or_else(|_| spec.run_root.clone())
+        .join("cgroup");
+    let (mut child, cgroup) = crate::cgroup::spawn_scoped(
+        crate::cgroup::MemoryLimits::from_env()?,
+        scope_info,
+        &cmd,
+        |c| {
+            unsafe {
+                c.pre_exec(move || {
+                    libc::prctl(
+                        libc::PR_SET_PDEATHSIG,
+                        libc::SIGKILL as libc::c_ulong,
+                        0,
+                        0,
+                        0,
+                    );
+                    let core = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+                    libc::setrlimit(libc::RLIMIT_CORE, &core);
+                    let nofile = libc::rlimit { rlim_cur: 4096, rlim_max: 4096 };
+                    libc::setrlimit(libc::RLIMIT_NOFILE, &nofile);
+                    crate::watchdog::relax_child_limits();
+                    crate::watchdog::apply_init_rlimit_nice();
+                    Ok(())
+                });
+            }
+            c.process_group(0);
+            c.stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+        },
+    )?;
+    let pid = child.id() as i32;
+    // Both streams are drained for the process's whole life: a guest that
+    // prints must never block on a full pipe, and its probe lines
+    // (`ACOSPROBE`) feed the same tree the session serves.
+    let cap = stream_cap_from_env();
+    if let Some(out) = child.stdout.take() {
+        // The second process's own probe lines feed the session's tree, so a
+        // `tree` reply describes the window that is actually on top.
+        let probe = Arc::clone(probe_state);
+        let comp = compositor;
+        let log = spec.out_dir.join("stdout.log");
+        std::thread::spawn(move || {
+            let _ = drain_tee_lines(out, cap, &log, probe, Some(comp));
+        });
+    }
+    if let Some(err) = child.stderr.take() {
+        let sink = Arc::clone(&stderr_sink);
+        let log = spec.out_dir.join("stderr.log");
+        std::thread::spawn(move || {
+            let buf = drain_tee(err, cap, &log);
+            if let Ok(mut sink) = sink.lock() {
+                *sink = buf;
+            }
+        });
+    }
+    eprintln!(
+        "acos-art: launch: started secondary process tag={} package={} activity={} pid={pid}",
+        spec.tag, spec.package, spec.activity
+    );
+    Ok(SecondaryGuest {
+        spec: spec.clone(),
+        child,
+        cgroup,
+        pid,
+        stderr: stderr_sink,
+        argv: vec![argv],
+    })
+}
+
+/// The session's secondary processes (MPROC4 step 3b).
+///
+/// One place that owns every process the launcher started lazily: it decides
+/// whether a package already runs (the launcher is the authority on tags and
+/// pids), starts the guest the first time a component of that package needs one,
+/// and kills every one of them when the session ends.
+struct SecondaryPool {
+    specs: Vec<SecondarySpec>,
+    shared: SecondaryShared,
+    guests: std::collections::BTreeMap<u32, SecondaryGuest>,
+    /// Spawn requests received (`package`, `component`, `reason`, `tag`,
+    /// `pid`, `started`) — evidence a reply reports.
+    records: Vec<serde_json::Value>,
+    /// Requests refused because the package has no installed secondary spec.
+    uninstalled: Vec<serde_json::Value>,
+    /// Spawns that failed (`package`, `error`), never a silent drop.
+    failures: Vec<serde_json::Value>,
+    started: Instant,
+}
+
+impl SecondaryPool {
+    fn new(specs: Vec<SecondarySpec>, shared: SecondaryShared) -> Self {
+        Self {
+            specs,
+            shared,
+            guests: std::collections::BTreeMap::new(),
+            records: Vec::new(),
+            uninstalled: Vec::new(),
+            failures: Vec::new(),
+            started: Instant::now(),
+        }
+    }
+
+    /// The tag a package already runs under, if any.
+    fn running_tag(&self, package: &str) -> Option<u32> {
+        self.guests
+            .iter()
+            .find(|(_, g)| g.spec.package == package)
+            .map(|(tag, _)| *tag)
+    }
+
+    /// Handle one spawn request. Idempotent: a package that is already running
+    /// gets no second process (the request is the *need*, not the spawn).
+    fn spawn(
+        &mut self,
+        request: &acos_services::ams::ProcessSpawnRequest,
+        probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+        compositor: Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>,
+    ) {
+        if let Some(tag) = self.running_tag(&request.package) {
+            self.records.push(serde_json::json!({
+                "package": request.package,
+                "component": request.component,
+                "reason": request.reason,
+                "tag": tag,
+                "spawned": false,
+                "note": "process already running",
+            }));
+            return;
+        }
+        let spec = self.specs.iter().find(|s| s.package == request.package).cloned();
+        let Some(mut spec) = spec else {
+            // A component of a package this session never installed cannot be
+            // run: say so (the resolution path recorded the need; the launcher
+            // is the one that cannot satisfy it).
+            self.uninstalled.push(serde_json::json!({
+                "package": request.package,
+                "component": request.component,
+                "reason": request.reason,
+                "error": "no such package was installed in this session",
+            }));
+            eprintln!(
+                "acos-art: launch: {} needs a process for {} but no such package is installed ",
+                request.package, request.component
+            );
+            return;
+        };
+        // The requested activity is what the process launches: on a device the
+        // process starts empty and AMS schedules the launch transaction; here
+        // the guest marshals its own launch transaction for the activity the
+        // request named, so a spawn is always for a real component.
+        if let Some(class) = request.component.split_once('/').map(|(_, class)| class) {
+            if !class.is_empty() {
+                let fqcn = if class.starts_with('.') {
+                    format!("{}{}", spec.package, class)
+                } else {
+                    class.to_string()
+                };
+                spec.activity = fqcn;
+            }
+        }
+        // Per-process `ProviderInfoList` + application `<meta-data>`, from this
+        // package's own manifest (the same two facts the primary receives).
+        let (app_meta, providers) = acos_services::pms::PmsState::from_apk(&spec.staged)
+            .map(|state| {
+                let app_meta = meta_spec(&state.app().meta_data);
+                let providers = provider_spec_of(&state);
+                (app_meta, providers)
+            })
+            .unwrap_or_default();
+        let stderr = Arc::new(std::sync::Mutex::new(TailBuffer::with_cap(1 << 16)));
+        match spawn_secondary(
+            &self.shared,
+            &spec,
+            &app_meta,
+            &providers,
+            probe_state,
+            compositor,
+            Arc::clone(&stderr),
+        ) {
+            Ok(guest) => {
+                let pid = guest.pid;
+                self.records.push(serde_json::json!({
+                    "package": spec.package,
+                    "component": request.component,
+                    "reason": request.reason,
+                    "tag": spec.tag,
+                    "pid": pid,
+                    "activity": spec.activity,
+                    "spawned": true,
+                    "since_ms": self.started.elapsed().as_millis() as u64,
+                }));
+                self.guests.insert(spec.tag, guest);
+            }
+            Err(e) => {
+                eprintln!(
+                    "acos-art: launch: spawning process {} ({}) failed: {e}",
+                    spec.tag, spec.package
+                );
+                self.failures.push(serde_json::json!({
+                    "package": spec.package,
+                    "tag": spec.tag,
+                    "error": e.to_string(),
+                }));
+            }
+        }
+    }
+
+    /// Reap a process that ended by itself and record why (a secondary guest
+    /// that crashed must be visible, never mistaken for a running one).
+    fn reap(&mut self) -> Vec<serde_json::Value> {
+        let mut exited = Vec::new();
+        for (tag, guest) in &mut self.guests {
+            match guest.child.try_wait() {
+                Ok(Some(status)) => {
+                    let stderr = guest
+                        .stderr
+                        .lock()
+                        .map(|b| b.to_text())
+                        .unwrap_or_default();
+                    let record = serde_json::json!({
+                        "tag": tag,
+                        "package": guest.spec.package,
+                        "pid": guest.pid,
+                        "status": status.to_string(),
+                        "stderr_tail": tail(&stderr, 800),
+                    });
+                    eprintln!(
+                        "acos-art: launch: secondary process tag={tag} ({}) exited: {status}",
+                        guest.spec.package
+                    );
+                    exited.push(record);
+                }
+                _ => {}
+            }
+        }
+        exited
+    }
+
+    /// The `processes` control module's body.
+    fn to_json(&mut self) -> serde_json::Value {
+        let guests: Vec<serde_json::Value> = self
+            .guests
+            .iter_mut()
+            .map(|(tag, guest)| {
+                serde_json::json!({
+                    "tag": tag,
+                    "package": guest.spec.package,
+                    "pid": guest.pid,
+                    "activity": guest.spec.activity,
+                    "alive": matches!(guest.child.try_wait(), Ok(None)),
+                })
+            })
+            .collect();
+        serde_json::json!({
+            "processes": guests,
+            "requests": self.records,
+            "uninstalled": self.uninstalled,
+            "failures": self.failures,
+        })
+    }
+
+    /// Kill every secondary process (session end). The scope kill is what makes
+    /// this bounded: the guest's whole group goes, never one pid.
+    fn shutdown(&mut self) {
+        for (tag, mut guest) in std::mem::take(&mut self.guests) {
+            guest.cgroup.kill();
+            let _ = guest.child.kill();
+            let _ = guest.child.wait();
+            eprintln!("acos-art: launch: secondary process tag={tag} stopped (session end)");
+        }
+    }
+}
+
+/// The `ProviderInfoList` a bind request carries for one package (K3c), from
+/// that package's own parsed manifest.
+fn provider_spec_of(state: &acos_services::pms::PmsState) -> String {
+    let mut seen: Vec<(&str, Vec<&str>)> = Vec::new();
+    for p in state.providers() {
+        if p.process_name != state.app().process_name {
+            continue;
+        }
+        match seen.iter_mut().find(|(class, _)| *class == p.name) {
+            Some((_, authorities)) => authorities.push(&p.authority),
+            None => seen.push((&p.name, vec![&p.authority])),
+        }
+    }
+    seen.iter()
+        .map(|(class, authorities)| {
+            let declared = state.providers().iter().find(|p| p.name == *class);
+            let read = declared.map_or("", |p| p.read_permission.as_str());
+            let exported = declared.is_some_and(|p| p.exported);
+            let grant_uri = declared.is_some_and(|p| p.grant_uri_permissions);
+            let meta = declared.map_or_else(String::new, |p| meta_spec(&p.meta_data));
+            format!(
+                "{class}|{}|{read}|{}|{}|{meta}",
+                authorities.join(";"),
+                u8::from(exported),
+                u8::from(grant_uri)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The per-session half of [`launch`].///
 /// `prebuilt` is `Some` only in a child of the ZM2 host template: the child
 /// installs its own APK into its private CoW copy of that empty service graph.
 pub(crate) fn launch_session(
@@ -950,6 +1462,11 @@ pub(crate) fn launch_session(
     };
     let (peer_host, live) = live_handles;
     let interactive = std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some();
+    // MPROC4 step 3b: the peer thread owns the `ServiceHost`, so it is the one
+    // that learns a component needs a process it cannot start itself. The
+    // launcher (this thread) owns the processes, so the request crosses over as
+    // a plain message and nothing is started from the peer thread.
+    let (spawn_tx, spawn_rx) = mpsc::channel::<acos_services::ams::ProcessSpawnRequest>();
     crate::stage("peer-setup");
     let peer_thread = std::thread::spawn(move || {
         let summary = (|| -> std::io::Result<PeerSummary> {
@@ -962,7 +1479,15 @@ pub(crate) fn launch_session(
             // connections (one per app process) from this one peer/ServiceHost.
             // The listener now stays open for the whole session, because the
             // launcher spawns secondary processes lazily through it.
-            let served = acos_binder_peer::serve::serve(&mut peer, listener, &peer_stop);
+            let mut sink = |request: acos_services::ams::ProcessSpawnRequest| {
+                let _ = spawn_tx.send(request);
+            };
+            let served = acos_binder_peer::serve::serve_with_spawns(
+                &mut peer,
+                listener,
+                &peer_stop,
+                Some(&mut sink),
+            );
             unsafe {
                 libc::close(listener);
             }
@@ -980,6 +1505,21 @@ pub(crate) fn launch_session(
                 outcome.unroutable
             );
             let summary = PeerSummary {
+                processes: peer
+                    .process_list()
+                    .into_iter()
+                    .map(|(tag, package, uid, pid, app_thread, attached)| {
+                        serde_json::json!({
+                            "tag": tag,
+                            "package": package,
+                            "uid": uid,
+                            "pid": pid,
+                            "app_thread": app_thread,
+                            "attached": attached,
+                        })
+                    })
+                    .collect(),
+                spawn_requests: outcome.spawns_requested,
                 calls: peer
                     .service_calls()
                     .iter()
@@ -1209,6 +1749,99 @@ pub(crate) fn launch_session(
             &package,
             &guest_args,
         )?;
+    }
+    // MPROC4 step 3b: one `SecondarySpec` per installed extra package. These
+    // are the *same* session inputs the primary got (this run's staged APK, the
+    // same package manager facts), so a secondary process is a second guest of
+    // this session, not a second launch.
+    let mut secondary_specs: Vec<SecondarySpec> = Vec::new();
+    for (index, extra) in extras.iter().enumerate() {
+        let tag = (index as u32) + 1;
+        let facts = acos_services::pms::PmsState::from_apk(&extra.staged).ok();
+        let launcher = apk_launcher_activity(&extra.staged).ok();
+        let labels = acos_services::pms::manifest_labels(&extra.staged).ok();
+        let run_root = run.path().join("secondary").join(format!("tag-{tag}"));
+        let out_dir = out.join(format!("process-{tag}"));
+        let _ = fs::create_dir_all(&out_dir);
+        secondary_specs.push(SecondarySpec {
+            tag,
+            package: extra.package.clone(),
+            staged: extra.staged.clone(),
+            guest_apk: extra.guest_path.clone(),
+            lib_root: extra.lib_root.clone(),
+            guest_lib_root: extra.guest_lib_root.clone(),
+            guest_lib_dir: extra.guest_lib_dir.clone(),
+            uid: extra.uid,
+            activity: launcher
+                .as_ref()
+                .map(|l| l.component.clone())
+                .unwrap_or_default(),
+            app_class: facts
+                .as_ref()
+                .map(|state| state.app().class_name.clone())
+                .filter(|name| !name.is_empty())
+                .unwrap_or_default(),
+            theme: facts.as_ref().map_or(0, |state| state.app().theme),
+            app_flags: facts
+                .as_ref()
+                .map(|state| ((state.app().flags & !(1 << 29)) | (1 << 23)) as i64)
+                .unwrap_or(-1),
+            config_changes: launcher.as_ref().map_or(0, |l| l.config_changes.max(0) as u32),
+            app_label: labels
+                .as_ref()
+                .map(|l| {
+                    (
+                        l.application.res.max(0) as u32,
+                        l.application.literal.clone().unwrap_or_default(),
+                    )
+                })
+                .unwrap_or((0, String::new())),
+            activity_label: launcher
+                .as_ref()
+                .map(|l| {
+                    (
+                        l.label.res.max(0) as u32,
+                        l.label.literal.clone().unwrap_or_default(),
+                    )
+                })
+                .unwrap_or((0, String::new())),
+            activity_target: launcher
+                .as_ref()
+                .and_then(|l| l.target.clone())
+                .unwrap_or_default(),
+            out_dir,
+            run_root,
+        });
+    }
+    let secondary_shared = SecondaryShared {
+        root: root.clone(),
+        image: boot_image.as_ref().map(|image| image.dir.clone()),
+        substrate: shims.substrate.clone(),
+        art_shim: shims.art_shim.clone(),
+        driver: shims.driver.clone(),
+        native_lib_root: native_lib_root.clone(),
+        sockets: sockets.0.clone(),
+        sock: sock.clone(),
+        overlays: overlays.guest_arg(),
+        resume_ms,
+        geometry: [
+            ("ACOSLAUNCH_WIDTH".to_string(), opts.width),
+            ("ACOSLAUNCH_PANEL_HEIGHT".to_string(), opts.panel_height),
+            ("ACOSLAUNCH_DENSITY".to_string(), opts.density_dpi),
+            ("ACOSLAUNCH_STATUS_INSET".to_string(), opts.status_inset),
+            ("ACOSLAUNCH_NAV_INSET".to_string(), opts.nav_inset),
+        ],
+        screen_layout: acos_services::wms::REFERENCE_SCREEN_LAYOUT.max(0) as u32,
+        animations: opts.animations.as_str(),
+        live_probe: interactive,
+    };
+    let mut secondary_pool = SecondaryPool::new(secondary_specs, secondary_shared);
+    if !interactive && !secondary_pool.specs.is_empty() {
+        eprintln!(
+            "acos-art: launch: {} secondary package(s) installed; a non-interactive session has \
+             no spawn loop, so no secondary process can be started in it",
+            secondary_pool.specs.len()
+        );
     }
     crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();
@@ -1779,6 +2412,9 @@ pub(crate) fn launch_session(
             // VIEW1a: where the live-view stream socket is bound (VIEW1c: its
             // own host-only directory, never mounted into the guest).
             &view_dir.0,
+            // MPROC4 step 3b: the session's secondary processes.
+            &mut secondary_pool,
+            spawn_rx,
         );
         match dead {
             Ok(end) => {
@@ -1826,6 +2462,9 @@ pub(crate) fn launch_session(
     // inside its scope. Both actions are idempotent and happen before any
     // capture/join, which is what bounds teardown after a guest death.
     stop.store(true, Ordering::Release);
+    // MPROC4 step 3b: a secondary process never outlives the session (its whole
+    // cgroup scope goes, exactly like the primary's).
+    secondary_pool.shutdown();
     cgroup.sample();
     if status.is_some() {
         cgroup.kill();
@@ -2102,6 +2741,22 @@ pub(crate) fn launch_session(
                 })
                 .collect(),
         ),
+        processes: {
+            // MPROC4 step 3b: the activity manager's per-tag `ProcessRecord`s
+            // and the launcher's spawn table. A single-process session keeps the
+            // field absent (nothing to report, nothing invented).
+            let mut launcher = secondary_pool.to_json();
+            launcher["requests"] = secondary_pool.records.clone().into();
+            let processes = serde_json::json!({
+                "activity_manager": summary.processes,
+                "launcher": launcher,
+            });
+            let multi = summary.processes.len() > 1
+                || !secondary_pool.records.is_empty()
+                || !secondary_pool.failures.is_empty()
+                || !secondary_pool.uninstalled.is_empty();
+            multi.then_some(processes)
+        },
     };
     eprintln!(
         "acos-art: launch wall={wall_ms}ms until={} application_created={} activity_resumed={} \
@@ -2825,6 +3480,7 @@ fn abi_gate_result(
         logs: Vec::new(),
         heap: Some(crate::props::effective_heap_json()),
         extra_packages: None,
+        processes: None,
         notes: vec![format!(
             "UNSUPPORTED_ABI: the APK ships native code only for [{}], and this engine is \
              {host_abi}-only; no guest was started (AOSP PackageManager refuses the same \
@@ -2873,6 +3529,7 @@ fn disk_full_result(opts: &LaunchOpts, package: &str, free: u64, min: u64) -> La
         logs: Vec::new(),
         heap: Some(crate::props::effective_heap_json()),
         extra_packages: None,
+        processes: None,
         notes: vec![format!(
             "HOST_DISK_FULL: {free} bytes free on the scratch filesystem, below \
              ACOS_ART_MIN_DISK_MB={} MiB; refusing to start a guest whose frames cannot be \
@@ -3571,16 +4228,39 @@ fn session_ctl(
     request: &serde_json::Value,
     intents: &Arc<std::sync::Mutex<acos_services::intents::IntentState>>,
     staging: &Path,
+    secondary: &mut SecondaryPool,
 ) -> serde_json::Value {
     let module = request.get("module").and_then(|v| v.as_str()).unwrap_or("");
     let op = request.get("op").and_then(|v| v.as_str()).unwrap_or("");
+    // MPROC4 step 3b: the launcher's own view of the session's processes (tags,
+    // pids, packages, the spawn requests it served). The activity manager's
+    // `ProcessRecord` list is reported by the launch result.
+    if module == "processes" {
+        if op != "list" {
+            return serde_json::json!({
+                "ok": false, "cmd": "ctl", "module": module, "op": op,
+                "code": "BAD_REQUEST",
+                "error": format!("processes control op {op:?} does not exist (ops: list)"),
+            });
+        }
+        for record in secondary.reap() {
+            secondary.records.push(record);
+        }
+        let mut body = secondary.to_json();
+        body["ok"] = serde_json::json!(true);
+        body["cmd"] = serde_json::json!("ctl");
+        body["module"] = serde_json::json!(module);
+        body["op"] = serde_json::json!(op);
+        return body;
+    }
     if module != "intents" {
         return serde_json::json!({
             "ok": false, "cmd": "ctl", "code": "UNSUPPORTED_ANDROID_API",
             "module": module, "op": op,
             "error": format!(
-                "no session service `{module}` is attached; the only control module this \
-                 build serves is `intents` (the intent capture target)"
+                "no session service `{module}` is attached; the control modules this build \
+                 serves are `intents` (the intent capture target) and `processes` \
+                 (the launcher's process table)"
             ),
         });
     }
@@ -4679,6 +5359,10 @@ enum ServeEvent {
     Line(Option<String>),
     /// The guest process has exited (it is still waitable: `WNOWAIT`).
     ChildExited,
+    /// MPROC4 step 3b: the peer resolved a component of a package that needs a
+    /// process. The launcher owns the processes, so the request is handled on
+    /// this thread like any other session event.
+    Spawn(acos_services::ams::ProcessSpawnRequest),
 }
 
 /// VIEW1a: the live-view frame source.
@@ -4780,6 +5464,10 @@ fn interactive_serve(
     // bind-mounted into the guest, unlike the session's `/dev/socket`
     // directory); the live-view stream socket `view.sock` is bound there.
     sockets: &Path,
+    // MPROC4 step 3b: the session's secondary processes, and the spawn requests
+    // the peer thread hands over.
+    secondary: &mut SecondaryPool,
+    spawn_rx: mpsc::Receiver<acos_services::ams::ProcessSpawnRequest>,
 ) -> std::io::Result<SessionEnd> {
     let mut evidence: Vec<serde_json::Value> = Vec::new();
     let mut captures = 0u64;
@@ -5028,6 +5716,19 @@ fn interactive_serve(
             }
         }
     });
+    // MPROC4 step 3b: spawn requests arrive on their own channel; forwarding
+    // them into the session's event channel keeps one event loop (no second
+    // poll path, no ordering question between a spawn and the next command).
+    {
+        let spawn_ctx = ctx.clone();
+        std::thread::spawn(move || {
+            while let Ok(request) = spawn_rx.recv() {
+                if spawn_ctx.send(ServeEvent::Spawn(request)).is_err() {
+                    return;
+                }
+            }
+        });
+    }
     // H4: child exit is a blocking kernel event, not a 100 ms poll. `WNOWAIT`
     // leaves the child reapable, so the existing `child.try_wait()`/`wait()`
     // paths still own the status and no error is retried twice.
@@ -5062,7 +5763,20 @@ fn interactive_serve(
     let mut last_capture_fnv: Option<u64> = None;
     loop {
         let deadline_left = session_deadline.saturating_duration_since(Instant::now());
+        // A secondary guest that ended by itself is evidence, not a running
+        // process: reap it before the next event is served.
+        for record in secondary.reap() {
+            evidence.push(record);
+        }
         let line = match crx.recv_timeout(deadline_left) {
+            Ok(ServeEvent::Spawn(request)) => {
+                secondary.spawn(
+                    &request,
+                    probe_state,
+                    Arc::clone(&live.compositor),
+                );
+                continue;
+            }
             Ok(ServeEvent::Line(line)) => line,
             Ok(ServeEvent::ChildExited) => {
                 if let Some(d) = dog {
@@ -6072,7 +6786,7 @@ fn interactive_serve(
             // "clear"|"result"}`. It never fabricates a handler: a capture says
             // `handled_by:"captured"`.
             "ctl" => {
-                let reply = session_ctl(&request, &live.intents, &staging);
+                let reply = session_ctl(&request, &live.intents, &staging, secondary);
                 protocol_write(&reply);
                 evidence.push(reply);
             }
@@ -6644,6 +7358,11 @@ fn meta_spec(entries: &[acos_services::pms::MetaDataEntry]) -> String {
 
 #[derive(Default)]
 struct PeerSummary {
+    /// MPROC4 step 3b: the activity manager's process list at the end of the
+    /// session (`tag`, package, uid, pid, app thread, attached).
+    processes: Vec<serde_json::Value>,
+    /// Spawn requests the peer handed to the launcher.
+    spawn_requests: u64,
     calls: Vec<ServiceCall>,
     unsupported: Vec<UnsupportedCall>,
     bind_bytes: Option<usize>,

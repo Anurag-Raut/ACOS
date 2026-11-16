@@ -270,6 +270,9 @@ pub struct LifecycleEvent {
 /// The process record.
 #[derive(Debug, Clone)]
 pub struct ProcessRecord {
+    /// MPROC4 step 3b: the app process's tag (`0` = the launched/primary
+    /// process). One record per tag; a tag is what names a process here.
+    pub tag: u32,
     /// Synthetic pid (the reference app pid is not stable across runs).
     pub pid: i32,
     /// uid.
@@ -362,8 +365,8 @@ pub struct ReceiverRegistration {
 /// The mini-ATMS state machine.
 #[derive(Debug)]
 pub struct AtmsState {
-    /// Process record.
-    pub process: Option<ProcessRecord>,
+    /// Process records, one per app process tag (MPROC4 step 3b).
+    pub processes: Vec<ProcessRecord>,
     /// Activity records (V1: one).
     pub activities: Vec<ActivityRecord>,
     /// Typed event stream.
@@ -399,7 +402,7 @@ impl AtmsState {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            process: None,
+            processes: Vec::new(),
             activities: Vec::new(),
             events: Vec::new(),
             protocol_events: Vec::new(),
@@ -492,12 +495,90 @@ impl AtmsState {
         removed
     }
 
-    /// Record an attach and emit `process_started`.
+    /// Record an attach and emit `process_started` (primary process).
     pub fn attach_application(&mut self, app_thread: u64, seq: i64, package: &str) {
-        self.process = Some(ProcessRecord {
+        self.attach_application_for(0, app_thread, seq, package);
+    }
+
+    /// The record of process `tag`, if it has one.
+    #[must_use]
+    pub fn process(&self, tag: u32) -> Option<&ProcessRecord> {
+        self.processes.iter().find(|p| p.tag == tag)
+    }
+
+    /// The mutable record of process `tag`.
+    pub fn process_mut(&mut self, tag: u32) -> Option<&mut ProcessRecord> {
+        self.processes.iter_mut().find(|p| p.tag == tag)
+    }
+
+    /// MPROC4 step 3b: a process exists because its guest connected with `tag`.
+    ///
+    /// `ActivityManagerService.startProcessLocked` creates the record when the
+    /// zygote forks; the peer's handshake names the tag and the package, so this
+    /// is the same event at the same point (before any attach). A record that
+    /// already exists keeps its pid/uid (a re-attach is not a new process).
+    pub fn process_started(&mut self, tag: u32, package: &str, uid: i32) {
+        if self.process(tag).is_some() {
+            return;
+        }
+        self.processes.push(ProcessRecord {
+            tag,
+            pid: 4242,
+            uid,
+            package_name: package.to_string(),
+            app_thread: None,
+            attach_seq: 0,
+            attached: false,
+            render_thread_tid: None,
+        });
+        self.emit(LifecycleState::ProcessStarted, None);
+    }
+
+    /// The process list a reply/verdict reports: one entry per process, in tag
+    /// order (`tag`, package, uid, pid, `IApplicationThread` binder, attached).
+    #[must_use]
+    pub fn process_list(&self) -> Vec<(u32, String, i32, i32, Option<u64>, bool)> {
+        let mut out: Vec<_> = self
+            .processes
+            .iter()
+            .map(|p| {
+                (
+                    p.tag,
+                    p.package_name.clone(),
+                    p.uid,
+                    p.pid,
+                    p.app_thread,
+                    p.attached,
+                )
+            })
+            .collect();
+        out.sort_by_key(|p| p.0);
+        out
+    }
+
+    /// Record an attach for process `tag` and emit `process_started`.
+    pub fn attach_application_for(&mut self, tag: u32, app_thread: u64, seq: i64, package: &str) {
+        let package = if package.is_empty() {
+            self.process(tag)
+                .map(|p| p.package_name.clone())
+                .unwrap_or_default()
+        } else {
+            package.to_string()
+        };
+        if let Some(process) = self.processes.iter_mut().find(|p| p.tag == tag) {
+            process.app_thread = Some(app_thread);
+            process.attach_seq = seq;
+            if !package.is_empty() {
+                process.package_name = package;
+            }
+            self.emit(LifecycleState::ProcessStarted, None);
+            return;
+        }
+        self.processes.push(ProcessRecord {
+            tag,
             pid: 4242,
             uid: crate::pms::FIXTURE_UID,
-            package_name: package.to_string(),
+            package_name: package,
             app_thread: Some(app_thread),
             attach_seq: seq,
             attached: false,
@@ -506,14 +587,29 @@ impl AtmsState {
         self.emit(LifecycleState::ProcessStarted, None);
     }
 
-    /// `finishAttachApplication`: build and queue `bindApplication`, then the
-    /// launch transaction.
+    /// `finishAttachApplication` (primary process).
     pub fn finish_attach_application(&mut self, seq: i64) -> Result<BindApplicationData> {
+        self.finish_attach_application_for(0, seq)
+    }
+
+    /// `finishAttachApplication` for process `tag`.
+    ///
+    /// The primary process (tag 0) keeps the historical behaviour: the host
+    /// synthesises the `bindApplication` + launch transaction it always did. A
+    /// secondary process marshals its **own** `bindApplication` and
+    /// `ClientTransaction` in the guest (the guest is this session's app side)
+    /// and pushes them to the peer, so nothing is synthesised for it here — the
+    /// peer delivers exactly what that process marshalled.
+    pub fn finish_attach_application_for(
+        &mut self,
+        tag: u32,
+        seq: i64,
+    ) -> Result<BindApplicationData> {
         let data = {
-            let Some(process) = self.process.as_mut() else {
+            let Some(process) = self.processes.iter_mut().find(|p| p.tag == tag) else {
                 return Err(ServiceError::IllegalState {
                     component: "atms",
-                    detail: "finishAttachApplication before attachApplication".into(),
+                    detail: format!("finishAttachApplication for unknown process tag {tag}"),
                 });
             };
             if process.attach_seq != seq {
@@ -538,6 +634,9 @@ impl AtmsState {
             }
         };
         self.emit(LifecycleState::AppCreated, None);
+        if tag != 0 {
+            return Ok(data);
+        }
         // Real Android schedules the launch transaction after the bind. ACOS
         // synthesises the same two-item transaction so the first
         // `activityResumed`/`activityIdle` callbacks have a live record.
@@ -708,7 +807,7 @@ impl AtmsState {
         if token == 0 {
             return false;
         }
-        if !self.process.as_ref().is_some_and(|p| p.attached) {
+        if !self.processes.iter().any(|p| p.attached) {
             return false;
         }
         if self.activities.iter().any(|a| a.token == token) {
@@ -967,13 +1066,48 @@ impl AtmsService {
             .unwrap_or_default()
     }
 
+    /// MPROC4 step 3b: record that process `tag` exists (its guest connected).
+    ///
+    /// The uid is the uid already recorded for that package, else `0` (never a
+    /// guessed uid).
+    pub fn note_process_started(&mut self, tag: u32, package: &str) {
+        let Ok(mut state) = self.state.lock() else {
+            return;
+        };
+        let uid = state
+            .processes
+            .iter()
+            .find(|p| p.package_name == package)
+            .map(|p| p.uid)
+            .unwrap_or(0);
+        state.process_started(tag, package, uid);
+    }
+
+    /// MPROC4 step 3b: the processes this session has (one `ProcessRecord` per
+    /// app process tag), as `(tag, package, uid, pid, app_thread, attached)`.
+    #[must_use]
+    pub fn process_list(&self) -> Vec<(u32, String, i32, i32, Option<u64>, bool)> {
+        self.state
+            .lock()
+            .map(|state| state.process_list())
+            .unwrap_or_default()
+    }
+
+    /// MPROC4 step 3b: drain the spawn requests the resolution paths recorded
+    /// (`startActivity`/`startService`/`bindService`). The launcher owns the
+    /// processes, so it is the one that turns a request into a guest.
+    pub fn take_spawn_requests(&mut self) -> Vec<crate::ams::ProcessSpawnRequest> {
+        self.state
+            .lock()
+            .map(|mut state| state.ams.take_spawn_requests())
+            .unwrap_or_default()
+    }
+
     /// The attached process record, if any: `(app thread binder id, attach
     /// seq, package)` (T-43 restore re-seed).
-    #[must_use]
-    pub fn attached_process(&self) -> Option<(u64, i64, String)> {
+    #[must_use]    pub fn attached_process(&self) -> Option<(u64, i64, String)> {
         self.state.lock().ok().and_then(|s| {
-            s.process
-                .as_ref()
+            s.process(0)
                 .map(|p| (p.app_thread.unwrap_or(0), p.attach_seq, p.package_name.clone()))
         })
     }
@@ -1053,11 +1187,12 @@ impl ServiceObject for AtmsService {
             (AtmsInterface::ActivityManager, "attachApplication") => {
                 let app_thread = args.first().and_then(Value::as_binder).map(|b| b.0);
                 let seq = args.get(1).and_then(Value::as_long).unwrap_or(0);
-                state.attach_application(
-                    app_thread.unwrap_or(0),
-                    seq,
-                    "dev.acos.fixtures.helloviews",
-                );
+                // MPROC4 step 3b: the `IApplicationThread` binder carries its
+                // owning process tag in the peer's binder id, so the attach lands
+                // on the right `ProcessRecord`. The package is the one the
+                // process was started for (never a fabricated name).
+                let tag = process_tag_of(app_thread.unwrap_or(0));
+                state.attach_application_for(tag, app_thread.unwrap_or(0), seq, "");
                 vec![]
             }
             (AtmsInterface::ActivityManager, "handleApplicationWtf") => {
@@ -1140,8 +1275,20 @@ impl ServiceObject for AtmsService {
             }
             (AtmsInterface::ActivityManager, "finishAttachApplication") => {
                 let seq = args.first().and_then(Value::as_long).unwrap_or(0);
-                let data = state.finish_attach_application(seq)?;
-                state.queue_bind_application(&data);
+                // The calling process is the one that just attached: the app
+                // thread it named is recorded, and the last attach that is not
+                // yet finished is that process (MPROC4 step 3b).
+                let tag = state
+                    .processes
+                    .iter()
+                    .filter(|p| !p.attached)
+                    .max_by_key(|p| p.attach_seq)
+                    .map(|p| p.tag)
+                    .unwrap_or(0);
+                let data = state.finish_attach_application_for(tag, seq)?;
+                if tag == 0 {
+                    state.queue_bind_application(&data);
+                }
                 vec![]
             }
             (AtmsInterface::ActivityManager, "getContentProvider") => {
@@ -1211,7 +1358,9 @@ impl ServiceObject for AtmsService {
             }
             (AtmsInterface::ActivityManager, "setRenderThread") => {
                 let tid = args.first().and_then(Value::as_int);
-                if let Some(process) = state.process.as_mut() {
+                // MPROC4: the render thread belongs to the calling process.
+                let tag = process_tag_of(args.first().and_then(Value::as_binder).map(|b| b.0).unwrap_or(0));
+                if let Some(process) = state.processes.iter_mut().find(|p| p.tag == tag) {
                     process.render_thread_tid = tid;
                 }
                 vec![]
@@ -1330,28 +1479,31 @@ impl ServiceObject for AtmsService {
         };
 
         // Encode any queued `IApplicationThread` transaction deliveries.
-        if let Some(process) = state.process.as_ref() {
-            if let Some(app_thread) = process.app_thread {
-                let pending = std::mem::take(&mut state.pending_app_thread_calls);
-                for (name, values) in pending {
-                    if let Some(info) = acos_aidl::lookup_by_name("android.app.IApplicationThread", &name) {
-                        let Ok(data) = crate::codec::build_request(
-                            "android.app.IApplicationThread",
-                            info,
-                            &values,
-                        ) else {
-                            // The full `AppBindData` parcelables are a documented
-                            // V1 gap; never fail the attach handshake because of it.
-                            continue;
-                        };
-                        deliveries.push(PendingDelivery {
-                            target: acos_parcel::BinderId(app_thread),
-                            interface: "android.app.IApplicationThread".into(),
-                            code: info.code,
-                            method: name,
-                            data,
-                        });
-                    }
+        if let Some(app_thread) = state
+            .processes
+            .iter()
+            .find(|p| p.attached)
+            .and_then(|p| p.app_thread)
+        {
+            let pending = std::mem::take(&mut state.pending_app_thread_calls);
+            for (name, values) in pending {
+                if let Some(info) = acos_aidl::lookup_by_name("android.app.IApplicationThread", &name) {
+                    let Ok(data) = crate::codec::build_request(
+                        "android.app.IApplicationThread",
+                        info,
+                        &values,
+                    ) else {
+                        // The full `AppBindData` parcelables are a documented
+                        // V1 gap; never fail the attach handshake because of it.
+                        continue;
+                    };
+                    deliveries.push(PendingDelivery {
+                        target: acos_parcel::BinderId(app_thread),
+                        interface: "android.app.IApplicationThread".into(),
+                        code: info.code,
+                        method: name,
+                        data,
+                    });
                 }
             }
         }
@@ -1371,6 +1523,16 @@ impl ServiceObject for AtmsService {
 
 fn binder_u64(v: Option<&Value>) -> u64 {
     v.and_then(Value::as_binder).map(|b| b.0).unwrap_or(0)
+}
+
+/// The app process tag a peer binder id names (MPROC4 step 3b).
+///
+/// `acos-binder-peer` writes a process tag into bits 34..40 of every binder id it
+/// imports from a guest (`PROC_SHIFT`/`PROC_MASK`); a host binder has none of
+/// those bits set, so it names the primary process (tag 0).
+#[must_use]
+pub fn process_tag_of(binder: u64) -> u32 {
+    ((binder >> 34) & 0x3f) as u32
 }
 
 /// One-line description of a decoded `ParcelableCrashInfo` for the guest log.
