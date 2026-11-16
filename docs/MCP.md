@@ -358,7 +358,7 @@ separates the two:
 
 ```json
 "handled": false,
-"handled_evidence": {"source": "finishInputEvent", "published": 2, "acked": 2,
+"handled_evidence": {"source": "guest", "published": 2, "acked": 2,
                      "unhandled": [11, 12]},
 "target": {
   "selector": {"text": "Floating button"},
