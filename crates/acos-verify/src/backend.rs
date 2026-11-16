@@ -713,6 +713,17 @@ pub trait Backend {
     /// Static APK identity. Required by every backend.
     fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError>;
 
+    /// REL3E: the most recent action's delivery evidence (`handled`, acks and
+    /// the resolved target), when this backend records one.
+    ///
+    /// The executor keeps it even when the step failed: a tap the app never
+    /// consumed produces no new frame and times out its settle, and the agent
+    /// still has to be told *that nothing consumed it*. `None` means the backend
+    /// has no delivery record, and the step says `handled: null`, never `false`.
+    fn last_input_delivery(&self) -> Option<InputDelivery> {
+        None
+    }
+
     /// Launch the app and return the first observation.
     fn launch(&mut self, _request: &LaunchRequest) -> Result<LaunchOutcome, BackendError> {
         Err(BackendError::unsupported(

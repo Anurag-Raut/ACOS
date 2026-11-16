@@ -700,6 +700,200 @@ fn hit_path<'a>(node: &'a UiNode, x: i32, y: i32, out: &mut Vec<&'a UiNode>) -> 
     true
 }
 
+/// One node as an input reply describes it: identity, its accessible name, its
+/// geometry and the input flags an agent has to reason about.
+///
+/// `withhold_text` is the password rule: a focused password node's own text is
+/// the secret the field holds, so it is reported as `null`, never echoed.
+#[must_use]
+pub fn node_input_json(node: &UiNode, withhold_text: bool) -> serde_json::Value {
+    serde_json::json!({
+        "id": node.id,
+        "class": node.class,
+        "resource_id": node.resource_id,
+        "content_desc": node.content_desc,
+        "text": if withhold_text { serde_json::Value::Null } else { serde_json::json!(node.text) },
+        "bounds": node.bounds.to_string(),
+        "visible_bounds": node.visible_bounds.map(|b| b.to_string()),
+        "clickable": node.clickable,
+        "scrollable": node.scrollable,
+        "enabled": node.enabled,
+        "focused": node.focused,
+        "password": node.password,
+        "window": node.window,
+    })
+}
+
+/// The `target` block of a tap reply (REL3E).
+///
+/// It answers the two questions `state_changed: false` left open: **what the
+/// selector resolved to** (`selector`, `node`) and **what the injected point
+/// actually hit** (`point`, `hit`). `hit` is the tree-geometry answer computed
+/// from the same tree the tap resolved against; whether the app consumed the
+/// press is `handled` in the reply, which comes from the guest's
+/// `finishInputEvent(handled)` and never from this geometry.
+#[must_use]
+pub fn tap_target_json(
+    selector: Option<&serde_json::Value>,
+    node: Option<&UiNode>,
+    tree: Option<&UiTree>,
+    x: i32,
+    y: i32,
+) -> serde_json::Value {
+    let mut target = serde_json::Map::new();
+    if let Some(selector) = selector {
+        target.insert("selector".into(), selector.clone());
+    }
+    if let Some(node) = node {
+        target.insert("node".into(), node_input_json(node, false));
+    }
+    target.insert("point".into(), serde_json::json!({"x": x, "y": y}));
+    let mut hit_json = serde_json::Map::new();
+    hit_json.insert("method".into(), serde_json::json!("tree-geometry"));
+    match tree.map(|tree| tree.tap_hit(x, y)) {
+        Some(hit) => {
+            hit_json.insert(
+                "node".into(),
+                hit.node().map_or(serde_json::Value::Null, |node| {
+                    node_input_json(node, false)
+                }),
+            );
+            hit_json.insert(
+                "clickable".into(),
+                serde_json::json!(hit.node().is_some_and(|node| node.clickable)),
+            );
+            hit_json.insert(
+                "consumer".into(),
+                hit.consumer.map_or(serde_json::Value::Null, |node| {
+                    node_input_json(node, false)
+                }),
+            );
+            hit_json.insert(
+                "suggest".into(),
+                hit.suggestion.map_or(serde_json::Value::Null, |node| {
+                    node_input_json(node, false)
+                }),
+            );
+        }
+        None => {
+            // No tree: the point was never hit-tested. Say so rather than
+            // pretending nothing is there.
+            hit_json.insert("node".into(), serde_json::Value::Null);
+            hit_json.insert("clickable".into(), serde_json::Value::Null);
+            hit_json.insert("consumer".into(), serde_json::Value::Null);
+            hit_json.insert("suggest".into(), serde_json::Value::Null);
+            hit_json.insert(
+                "note".into(),
+                serde_json::json!("no bound tree to hit-test against"),
+            );
+        }
+    }
+    target.insert("hit".into(), serde_json::Value::Object(hit_json));
+    serde_json::Value::Object(target)
+}
+
+/// The `name` an agent would use for a node: its text, else its content
+/// description (the platform's accessible name), for a one-line hint.
+fn hint_node_name(node: &serde_json::Value) -> String {
+    for field in ["text", "content_desc"] {
+        if let Some(value) = node.get(field).and_then(serde_json::Value::as_str) {
+            if !value.trim().is_empty() {
+                return format!("{value:?}");
+            }
+        }
+    }
+    String::from("(no name)")
+}
+
+/// REL3E: the one-line reason a reply is not enough on its own.
+///
+/// It only ever explains the framework fact (`handled`) together with the
+/// hit-test in `target`; it never invents a reason the evidence does not show.
+/// `None` means the action needs no explanation (the app consumed it and the
+/// screen changed).
+#[must_use]
+pub fn handling_hint(
+    target: Option<&serde_json::Value>,
+    handled: Option<bool>,
+    state_changed: bool,
+) -> Option<String> {
+    let hit = target.and_then(|target| target.get("hit"));
+    let consumer = hit
+        .and_then(|hit| hit.get("consumer"))
+        .filter(|value| !value.is_null());
+    let suggest = hit
+        .and_then(|hit| hit.get("suggest"))
+        .filter(|value| !value.is_null());
+    let hit_node = hit
+        .and_then(|hit| hit.get("node"))
+        .filter(|value| !value.is_null());
+    match handled {
+        None => Some(
+            "the guest did not ack every event of this action (see handled_evidence.published \
+             vs acked), so whether the app consumed it is unknown; nothing here claims it was \
+             handled or that nothing happened"
+                .to_string(),
+        ),
+        Some(false) => {
+            if let Some(consumer) = consumer {
+                return Some(format!(
+                    "the app's window did NOT consume this input even though the point is on the \
+                     clickable {} {} at {} (its own `finishInputEvent(handled)` answered false): \
+                     the control is disabled or a parent intercepted the press, so no state change \
+                     is expected",
+                    consumer["class"].as_str().unwrap_or("view"),
+                    hint_node_name(consumer),
+                    consumer["bounds"].as_str().unwrap_or("?"),
+                ));
+            }
+            let Some(hit_node) = hit_node else {
+                return Some(
+                    "nothing at this point consumed the input and the tree has no node there \
+                     (the app's window answered `finishInputEvent(handled) = false`); nothing \
+                     changed because nothing was tappable"
+                        .to_string(),
+                );
+            };
+            let mut hint = format!(
+                "nothing tappable there: the node at this point is {} {} at {}, which is not \
+                 clickable and neither is any ancestor, and the app's window answered \
+                 `finishInputEvent(handled) = false` (no handler consumed the input)",
+                hit_node["class"].as_str().unwrap_or("view"),
+                hint_node_name(hit_node),
+                hit_node["bounds"].as_str().unwrap_or("?"),
+            );
+            if let Some(suggest) = suggest {
+                let (cx, cy) = suggest
+                    .get("bounds")
+                    .and_then(serde_json::Value::as_str)
+                    .and_then(|bounds| bounds.parse::<Bounds>().ok())
+                    .map(|bounds| bounds.center())
+                    .unwrap_or((0, 0));
+                hint.push_str(&format!(
+                    "; tap the nearest clickable {} {} at {} (centre {cx},{cy}) instead",
+                    suggest["class"].as_str().unwrap_or("view"),
+                    hint_node_name(suggest),
+                    suggest["bounds"].as_str().unwrap_or("?"),
+                ));
+            } else {
+                hint.push_str(
+                    "; this screen shows no clickable node, so scroll or open the control that \
+                     owns the state first",
+                );
+            }
+            Some(hint)
+        }
+        Some(true) if !state_changed => Some(
+            "the app's window consumed the input (`finishInputEvent(handled) = true`) but the \
+             settled frame shows no change: the handler may be asynchronous, or the control \
+             already had that state. Assert on the state you expect instead of expecting a \
+             change"
+                .to_string(),
+        ),
+        Some(true) => None,
+    }
+}
+
 /// A snapshot of the UI tree for one frame.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct UiTree {

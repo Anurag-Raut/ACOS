@@ -90,6 +90,11 @@ struct StepExec {
     /// SE2: the settle record the step bound its frame with, when the backend
     /// reported one (a `launch` carries it in its detail).
     settle: Option<serde_json::Value>,
+    /// REL3E: the action's own delivery record (`handled`, acks, target), kept
+    /// even when the step failed. A tap the app never consumed usually produces
+    /// no new frame and times out its settle; the agent still needs to be told
+    /// *that nothing consumed it*, so the delivery travels with the failure.
+    delivery: Option<crate::backend::InputDelivery>,
 }
 
 impl StepExec {
@@ -102,6 +107,7 @@ impl StepExec {
             produced_frame: None,
             session: None,
             settle: None,
+            delivery: None,
         }
     }
 
@@ -124,6 +130,7 @@ impl StepExec {
             produced_frame: None,
             session: None,
             settle: None,
+            delivery: None,
         }
     }
 
@@ -143,6 +150,7 @@ impl StepExec {
             produced_frame: None,
             session: None,
             settle: None,
+            delivery: None,
         }
     }
 
@@ -173,6 +181,7 @@ impl StepExec {
             produced_frame: None,
             session: None,
             settle: None,
+            delivery: None,
         }
     }
 
@@ -188,6 +197,7 @@ impl StepExec {
             produced_frame: None,
             session: None,
             settle: None,
+            delivery: None,
         }
     }
 
@@ -200,6 +210,7 @@ impl StepExec {
             produced_frame: None,
             session: None,
             settle: None,
+            delivery: None,
         }
     }
 }
@@ -416,7 +427,7 @@ pub fn run_scenario(
         // the injected point resolved to, plus whether a change was required -
         // `"auto"` for a tap, whose own state-change rule runs on every step even
         // when the scenario never asked for it.
-        step_result.input = step_input(step, exec.observation.as_ref());
+        step_result.input = step_input(step, exec.delivery.as_ref());
 
         // Write evidence and declare it.
         let step_artifact = acos_protocol::step_file_name(index, step.kind());
@@ -1420,10 +1431,19 @@ fn input_step(
             } else {
                 StepExec::pass()
             };
+            exec.delivery = observation.input.clone();
             exec.observation = Some(observation);
             exec
         }
-        Err(error) => StepExec::backend_error(&error, backend.id(), action.kind()),
+        Err(error) => {
+            // REL3E: a failed/timed-out settle still has the delivery evidence.
+            // A tap nothing consumed produces no new frame and *will* time out;
+            // the step must still say `handled: false` and name what it hit, or
+            // the agent is back to guessing from `state_changed`.
+            let mut exec = StepExec::backend_error(&error, backend.id(), action.kind());
+            exec.delivery = backend.last_input_delivery();
+            exec
+        }
     }
 }
 
@@ -1523,6 +1543,7 @@ fn observation_binding_error(backend: &str, observation: &SessionObservation) ->
         produced_frame: None,
         session: None,
         settle: None,
+        delivery: None,
     })
 }
 
@@ -1565,6 +1586,7 @@ fn meaningful_error(observation: &SessionObservation) -> Option<StepExec> {
         produced_frame: None,
         session: None,
         settle: None,
+        delivery: None,
     })
 }
 
@@ -1600,7 +1622,10 @@ fn expect_change_requested(step: &Step) -> bool {
 /// the hit-test at the injected point, and `expect_change` is `"auto"` for a tap
 /// (whose `state_change` assertion is the step's own, not the scenario's) or the
 /// scenario's explicit flag for `type`/`key`/`back`.
-fn step_input(step: &Step, observation: Option<&SessionObservation>) -> Option<serde_json::Value> {
+fn step_input(
+    step: &Step,
+    delivery: Option<&crate::backend::InputDelivery>,
+) -> Option<serde_json::Value> {
     let expect_change = match step.as_step() {
         // A tap's state-change rule runs on every step, so an unflagged tap says
         // `"auto"` - never a silent `false` that hides the rule.
@@ -1616,7 +1641,7 @@ fn step_input(step: &Step, observation: Option<&SessionObservation>) -> Option<s
         Some(StepRef::Back(back)) => serde_json::json!(back.expect_change),
         _ => return None,
     };
-    let Some(delivery) = observation.and_then(|observation| observation.input.as_ref()) else {
+    let Some(delivery) = delivery else {
         return Some(serde_json::json!({
             "handled": serde_json::Value::Null,
             "handled_evidence": {"source": "none", "published": 0, "acked": 0},
@@ -1630,7 +1655,8 @@ fn step_input(step: &Step, observation: Option<&SessionObservation>) -> Option<s
         .filter(|ack| !ack.handled)
         .map(|ack| ack.seq)
         .collect();
-    Some(serde_json::json!({
+    let target = delivery.target.clone();
+    let mut input = serde_json::json!({
         "handled": delivery.handled,
         "handled_evidence": {
             "source": if delivery.published > 0 { "finishInputEvent" } else { "none" },
@@ -1638,9 +1664,16 @@ fn step_input(step: &Step, observation: Option<&SessionObservation>) -> Option<s
             "acked": delivery.acks.len(),
             "unhandled": unhandled,
         },
-        "target": delivery.target.clone().unwrap_or(serde_json::Value::Null),
+        "target": target.clone().unwrap_or(serde_json::Value::Null),
         "expect_change": expect_change,
-    }))
+    });
+    // The same one-line explanation an MCP reply carries, from the same facts.
+    if let Some(hint) =
+        acos_protocol::ui::handling_hint(target.as_ref(), delivery.handled, delivery.visual_change)
+    {
+        input["handled_hint"] = serde_json::json!(hint);
+    }
+    Some(input)
 }
 
 /// The artifact reference for one observation's frame, when it was captured.
@@ -2320,6 +2353,7 @@ fn no_fresh_frame_failure(
         produced_frame: None,
         session: None,
         settle: None,
+        delivery: None,
     }
 }
 
@@ -2766,6 +2800,7 @@ fn static_launch_assertion(
                 produced_frame: None,
                 session: None,
                 settle: None,
+                delivery: None,
             });
         }
     } else if launch.intent_action.is_none() && manifest.launcher_activity.is_none() {
@@ -2786,6 +2821,7 @@ fn static_launch_assertion(
             produced_frame: None,
             session: None,
             settle: None,
+            delivery: None,
         });
     }
     None
@@ -3169,7 +3205,8 @@ mod region_tests {
             })),
             settle: None,
         });
-        let input = step_input(step, Some(&current)).expect("a tap step always has input evidence");
+        let input =
+            step_input(step, current.input.as_ref()).expect("a tap step always has input evidence");
         assert_eq!(input["handled"], serde_json::json!(false));
         assert_eq!(input["expect_change"], serde_json::json!("auto"));
         assert_eq!(input["handled_evidence"]["source"], serde_json::json!("finishInputEvent"));
@@ -3201,13 +3238,13 @@ mod region_tests {
              expect_change: true\n"
         ))
         .expect("a flagged tap scenario");
-        let input = step_input(flagged.steps.first().expect("the tap step"), Some(&current))
+        let input = step_input(flagged.steps.first().expect("the tap step"), current.input.as_ref())
             .expect("input evidence");
         assert_eq!(input["expect_change"], serde_json::json!(true));
 
         // No delivery at all is "unknown", never "not handled".
         current.input = None;
-        let input = step_input(step, Some(&current)).expect("input evidence");
+        let input = step_input(step, current.input.as_ref()).expect("input evidence");
         assert_eq!(input["handled"], serde_json::Value::Null);
         assert_eq!(input["handled_evidence"]["source"], serde_json::json!("none"));
     }

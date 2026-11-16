@@ -4631,6 +4631,14 @@ impl SessionBackend for ArtSession {
         Engine::Art
     }
 
+    fn bound_tree(&self) -> Option<UiTree> {
+        ArtSession::bound_tree(self)
+    }
+
+    fn attach_input_target(&mut self, target: serde_json::Value) {
+        ArtSession::attach_input_target(self, target);
+    }
+
     fn mode(&self) -> Mode {
         // This engine launches a real Activity; `render-app` (offline preview)
         // is a different command and never reaches this adapter.

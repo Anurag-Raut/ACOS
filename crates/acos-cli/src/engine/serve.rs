@@ -2009,7 +2009,7 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
         session.tap_in_window(&target.window, x, y)?;
         // REL3E: the hit-test uses the tree the selector resolved against, i.e.
         // the same geometry `tap_point` came from; no extra traversal.
-        let target = tap_target(Some(&describe), Some(&target), Some(&tree), x, y);
+        let target = acos_protocol::ui::tap_target_json(Some(&describe), Some(&target), Some(&tree), x, y);
         input_result(session, "tap", target)
     } else {
         let (Some(x), Some(y)) = (
@@ -2028,7 +2028,7 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
         session.set_settle_mode(settle);
         session.begin_input();
         session.tap(x as i32, y as i32)?;
-        let target = tap_target(None, None, tree.as_ref(), x as i32, y as i32);
+        let target = acos_protocol::ui::tap_target_json(None, None, tree.as_ref(), x as i32, y as i32);
         input_result(session, "tap", target)
     };
     check_expect_change(args, session, &result)?;
@@ -2222,167 +2222,7 @@ fn echo_decision(tree: &UiTree, forced: bool) -> EchoDecision<'_> {
 /// A password node's own text is withheld too: it is the secret the field holds,
 /// not the agent's typing.
 fn node_summary(node: &UiNode, withhold_text: bool) -> Value {
-    json!({
-        "id": node.id,
-        "class": node.class,
-        "resource_id": node.resource_id,
-        "content_desc": node.content_desc,
-        "text": if withhold_text { Value::Null } else { json!(node.text) },
-        "bounds": node.bounds.to_string(),
-        "visible_bounds": node.visible_bounds.map(|b| b.to_string()),
-        "clickable": node.clickable,
-        "scrollable": node.scrollable,
-        "enabled": node.enabled,
-        "focused": node.focused,
-        "password": node.password,
-        "window": node.window,
-    })
-}
-
-/// REL3E: the `target` block of a tap reply.
-///
-/// It answers the two questions a `state_changed: false` left open: **what the
-/// selector resolved to** and **what the injected point actually hit**. `hit` is
-/// the tree-geometry answer, computed from the same tree the tap resolved
-/// against; whether the app consumed the press is `handled` in the reply, which
-/// comes from the guest's `finishInputEvent(handled)` and never from this
-/// geometry.
-fn tap_target(
-    selector: Option<&Value>,
-    node: Option<&UiNode>,
-    tree: Option<&UiTree>,
-    x: i32,
-    y: i32,
-) -> Value {
-    let mut target = serde_json::Map::new();
-    if let Some(selector) = selector {
-        target.insert("selector".into(), selector.clone());
-    }
-    if let Some(node) = node {
-        target.insert("node".into(), node_summary(node, false));
-    }
-    target.insert("point".into(), json!({"x": x, "y": y}));
-    let hit = tree.map(|tree| tree.tap_hit(x, y));
-    let mut hit_json = serde_json::Map::new();
-    hit_json.insert("method".into(), json!("tree-geometry"));
-    match &hit {
-        Some(hit) => {
-            hit_json.insert(
-                "node".into(),
-                hit.node().map_or(Value::Null, |node| node_summary(node, false)),
-            );
-            hit_json.insert("clickable".into(), json!(hit.node().is_some_and(|n| n.clickable)));
-            hit_json.insert(
-                "consumer".into(),
-                hit.consumer.map_or(Value::Null, |node| node_summary(node, false)),
-            );
-            hit_json.insert(
-                "suggest".into(),
-                hit.suggestion
-                    .map_or(Value::Null, |node| node_summary(node, false)),
-            );
-        }
-        None => {
-            // No tree: the point was never hit-tested. Say so rather than
-            // pretending nothing is there.
-            hit_json.insert("node".into(), Value::Null);
-            hit_json.insert("clickable".into(), Value::Null);
-            hit_json.insert("consumer".into(), Value::Null);
-            hit_json.insert("suggest".into(), Value::Null);
-            hit_json.insert("note".into(), json!("no bound tree to hit-test against"));
-        }
-    }
-    target.insert("hit".into(), Value::Object(hit_json));
-    Value::Object(target)
-}
-
-/// The `name` an agent would use for a node: its text, else its content
-/// description (the platform's accessible name), trimmed for a one-line hint.
-fn node_name(node: &Value) -> String {
-    for field in ["text", "content_desc"] {
-        if let Some(value) = node.get(field).and_then(Value::as_str) {
-            if !value.trim().is_empty() {
-                return format!("{value:?}");
-            }
-        }
-    }
-    String::from("(no name)")
-}
-
-/// REL3E: the one-line reason a reply is not enough on its own.
-///
-/// It only ever explains the framework fact (`handled`) together with the
-/// hit-test result; it never invents a reason the evidence does not show.
-fn handling_hint(target: Option<&Value>, handled: Option<bool>, state_changed: bool) -> Option<String> {
-    let hit = target.and_then(|target| target.get("hit"));
-    let consumer = hit.and_then(|hit| hit.get("consumer")).filter(|v| !v.is_null());
-    let suggest = hit.and_then(|hit| hit.get("suggest")).filter(|v| !v.is_null());
-    let hit_node = hit.and_then(|hit| hit.get("node")).filter(|v| !v.is_null());
-    match handled {
-        None => Some(
-            "the guest did not ack every event of this action (see handled_evidence.published \
-             vs acked), so whether the app consumed it is unknown; nothing here claims it was \
-             handled or that nothing happened"
-                .to_string(),
-        ),
-        Some(false) => {
-            if let Some(consumer) = consumer {
-                return Some(format!(
-                    "the app's window did NOT consume this input even though the point is on the \
-                     clickable {} {} at {} (its own `finishInputEvent(handled)` answered false): \
-                     the control is disabled or a parent intercepted the press, so no state change \
-                     is expected",
-                    consumer["class"].as_str().unwrap_or("view"),
-                    node_name(consumer),
-                    consumer["bounds"].as_str().unwrap_or("?"),
-                ));
-            }
-            let Some(hit_node) = hit_node else {
-                return Some(
-                    "nothing at this point consumed the input and the tree has no node there \
-                     (the app's window answered `finishInputEvent(handled) = false`); nothing \
-                     changed because nothing was tappable"
-                        .to_string(),
-                );
-            };
-            let mut hint = format!(
-                "nothing tappable there: the node at this point is {} {} at {}, which is not \
-                 clickable and neither is any ancestor, and the app's window answered \
-                 `finishInputEvent(handled) = false` (no handler consumed the input)",
-                hit_node["class"].as_str().unwrap_or("view"),
-                node_name(hit_node),
-                hit_node["bounds"].as_str().unwrap_or("?"),
-            );
-            if let Some(suggest) = suggest {
-                let (cx, cy) = suggest
-                    .get("bounds")
-                    .and_then(Value::as_str)
-                    .and_then(|bounds| bounds.parse::<acos_protocol::ui::Bounds>().ok())
-                    .map(|bounds| bounds.center())
-                    .unwrap_or((0, 0));
-                hint.push_str(&format!(
-                    "; tap the nearest clickable {} {} at {} (centre {cx},{cy}) instead",
-                    suggest["class"].as_str().unwrap_or("view"),
-                    node_name(suggest),
-                    suggest["bounds"].as_str().unwrap_or("?"),
-                ));
-            } else {
-                hint.push_str(
-                    "; this screen shows no clickable node, so scroll or open the control that \
-                     owns the state first",
-                );
-            }
-            Some(hint)
-        }
-        Some(true) if !state_changed => Some(
-            "the app's window consumed the input (`finishInputEvent(handled) = true`) but the \
-             settled frame shows no change: the handler may be asynchronous, or the control \
-             already had that state. Assert on the state you expect instead of expecting a \
-             change"
-                .to_string(),
-        ),
-        Some(true) => None,
-    }
+    acos_protocol::ui::node_input_json(node, withhold_text)
 }
 
 /// `mask: true` on `acos_text`: the caller knows the field is a secret even when
@@ -3103,7 +2943,7 @@ fn input_result(session: &mut ArtSession, kind: &str, target: Value) -> Value {
     // agent reads one object: what was resolved, what the point hit, what the
     // framework did with it.
     if let Some(object) = result.as_object_mut() {
-        let hint = handling_hint(object.get("target"), handled, state_changed);
+        let hint = acos_protocol::ui::handling_hint(object.get("target"), handled, state_changed);
         if let Some(hint) = hint {
             object.insert("handled_hint".into(), json!(hint));
         }
@@ -4105,7 +3945,7 @@ mod tests {
         row.children = vec![label, switch];
         let screen = tree(vec![row]);
 
-        let target = tap_target(
+        let target = acos_protocol::ui::tap_target_json(
             Some(&json!({"text": "Floating button"})),
             None,
             Some(&screen),
@@ -4123,7 +3963,7 @@ mod tests {
         assert_eq!(target["hit"]["suggest"]["resource_id"], json!("toggle"));
         assert_eq!(target["hit"]["suggest"]["clickable"], json!(true));
 
-        let hint = handling_hint(Some(&target), Some(false), false).expect("a hint");
+        let hint = acos_protocol::ui::handling_hint(Some(&target), Some(false), false).expect("a hint");
         assert!(hint.contains("nothing tappable there"), "{hint}");
         assert!(hint.contains("Floating button"), "{hint}");
         assert!(hint.contains("android.widget.Switch"), "{hint}");
@@ -4140,13 +3980,13 @@ mod tests {
             .with_text("Increment");
         button.clickable = true;
         let screen = tree(vec![button]);
-        let target = tap_target(None, None, Some(&screen), 50, 30);
+        let target = acos_protocol::ui::tap_target_json(None, None, Some(&screen), 50, 30);
         assert_eq!(target["hit"]["node"]["resource_id"], json!("inc"));
         assert_eq!(target["hit"]["clickable"], json!(true));
         assert_eq!(target["hit"]["consumer"]["resource_id"], json!("inc"));
         assert_eq!(target["hit"]["suggest"], Value::Null);
-        assert_eq!(handling_hint(Some(&target), Some(true), true), None);
-        let hint = handling_hint(Some(&target), Some(true), false).expect("a hint");
+        assert_eq!(acos_protocol::ui::handling_hint(Some(&target), Some(true), true), None);
+        let hint = acos_protocol::ui::handling_hint(Some(&target), Some(true), false).expect("a hint");
         assert!(hint.contains("consumed the input"), "{hint}");
         assert!(hint.contains("no change"), "{hint}");
     }
@@ -4155,22 +3995,22 @@ mod tests {
     /// node and no tree is described as such.
     #[test]
     fn rel3e_unknown_handling_is_reported_as_unknown() {
-        let hint = handling_hint(None, None, false).expect("a hint");
+        let hint = acos_protocol::ui::handling_hint(None, None, false).expect("a hint");
         assert!(hint.contains("unknown"), "{hint}");
         assert!(!hint.contains("did NOT consume"), "{hint}");
 
         let empty = tree(vec![UiNode::new("n0", "android.view.View", Bounds::new(0, 0, 10, 10))]);
-        let target = tap_target(None, None, Some(&empty), 5, 5);
+        let target = acos_protocol::ui::tap_target_json(None, None, Some(&empty), 5, 5);
         assert_eq!(target["hit"]["node"]["class"], json!("android.view.View"));
-        let hint = handling_hint(Some(&target), Some(false), false).expect("a hint");
+        let hint = acos_protocol::ui::handling_hint(Some(&target), Some(false), false).expect("a hint");
         assert!(hint.contains("nothing tappable there"), "{hint}");
         assert!(hint.contains("no clickable node"), "{hint}");
 
-        let no_tree = tap_target(None, None, None, 5, 5);
+        let no_tree = acos_protocol::ui::tap_target_json(None, None, None, 5, 5);
         assert_eq!(no_tree["hit"]["node"], Value::Null);
         assert_eq!(no_tree["hit"]["clickable"], Value::Null);
         assert!(no_tree["hit"]["note"].as_str().unwrap().contains("no bound tree"));
-        let hint = handling_hint(Some(&no_tree), Some(false), false).expect("a hint");
+        let hint = acos_protocol::ui::handling_hint(Some(&no_tree), Some(false), false).expect("a hint");
         assert!(hint.contains("no node there"), "{hint}");
     }
 
@@ -4184,7 +4024,7 @@ mod tests {
         button.clickable = true;
         button.focused = true;
         button.enabled = false;
-        let target = tap_target(Some(&json!({"id": "inc"})), Some(&button), None, 50, 30);
+        let target = acos_protocol::ui::tap_target_json(Some(&json!({"id": "inc"})), Some(&button), None, 50, 30);
         let node = &target["node"];
         assert_eq!(node["id"], json!("n1"));
         assert_eq!(node["class"], json!("android.widget.Button"));

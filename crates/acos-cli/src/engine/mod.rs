@@ -378,6 +378,17 @@ pub trait SessionBackend {
         None
     }
 
+    /// REL3E: the bound tree of the most recent traversal, **without** issuing a
+    /// traversal of its own (a hit-test must not cost a guest round trip).
+    fn bound_tree(&self) -> Option<acos_protocol::ui::UiTree> {
+        None
+    }
+
+    /// REL3E: attach the action's resolved-target/hit-test block to its delivery
+    /// record, so a scenario step publishes the same `input.target` an MCP reply
+    /// carries.
+    fn attach_input_target(&mut self, _target: serde_json::Value) {}
+
     /// P12b: per-request settle deadline (`settle_timeout_ms`). A session
     /// engine with a settle rule applies it to the next observation; the
     /// default has no settle rule and ignores it.
@@ -855,6 +866,13 @@ impl Backend for EngineBackend {
         }
     }
 
+    fn last_input_delivery(&self) -> Option<acos_verify::backend::InputDelivery> {
+        match self {
+            EngineBackend::Native(backend) => backend.last_input_delivery(),
+            EngineBackend::Session { session, .. } => session.last_input_delivery(),
+        }
+    }
+
     fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError> {
         match self {
             EngineBackend::Native(backend) => backend.manifest(apk),
@@ -974,6 +992,11 @@ impl Backend for EngineBackend {
                     Text(String),
                     Point(String, i32, i32),
                 }
+                // REL3E: the tap's target/hit-test block, built from the tree the
+                // point was resolved against and attached to the action's own
+                // delivery so a verify step publishes the same evidence an MCP
+                // reply carries (`input.target`).
+                let mut tap_target: Option<serde_json::Value> = None;
                 match action {
                     InputAction::Tap { selector, x, y } => {
                         if !caps.tap {
@@ -1008,6 +1031,41 @@ impl Backend for EngineBackend {
                         };
                         // The action starts here; `previous` is the frame before it.
                         let previous = self.current_frame_seq();
+                        let selector_json = selector
+                            .as_ref()
+                            .map(|selector| serde_json::json!({"selector": selector.human()}));
+                        tap_target = match (&target, &*self) {
+                            (_, EngineBackend::Session { session, .. }) => {
+                                let tree = session.bound_tree();
+                                match &target {
+                                    Target::Text(text) => {
+                                        let node = tree.as_ref().and_then(|tree| {
+                                            tree.find_input_target(&Selector::by_text(text)).cloned()
+                                        });
+                                        node.map(|node| {
+                                            let (cx, cy) = node.tap_point();
+                                            acos_protocol::ui::tap_target_json(
+                                                selector_json.as_ref(),
+                                                Some(&node),
+                                                tree.as_ref(),
+                                                cx,
+                                                cy,
+                                            )
+                                        })
+                                    }
+                                    Target::Point(_window, x, y) => {
+                                        Some(acos_protocol::ui::tap_target_json(
+                                            selector_json.as_ref(),
+                                            None,
+                                            tree.as_ref(),
+                                            *x,
+                                            *y,
+                                        ))
+                                    }
+                                }
+                            }
+                            (_, EngineBackend::Native(_)) => None,
+                        };
                         match target {
                             Target::Text(text) => self.tap_node(&text)?,
                             Target::Point(window, x, y) => {
@@ -1015,6 +1073,11 @@ impl Backend for EngineBackend {
                                     session.tap_in_window(&window, x, y)?;
                                 }
                             }
+                        }
+                        if let (Some(target), EngineBackend::Session { session, .. }) =
+                            (tap_target, &mut *self)
+                        {
+                            session.attach_input_target(target);
                         }
                         self.action_result(previous, action.kind())
                     }
