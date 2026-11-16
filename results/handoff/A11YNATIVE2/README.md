@@ -8,8 +8,8 @@ probe was re-run on the merged tree — that run is the evidence below.
 ## Status
 
 **DONE for the four briefed items.** `scenarios/a11y-probe.yaml` **passes on ART
-end to end (15/15 steps)**, on the merged tree, and `cargo test -p acos-services
--p acos-wm` is green. One item is closed **with a wall** (`takeScreenshot`'s
+end to end (15/15 steps)**, on the merged tree **at branch HEAD `d233c135`**, and
+`cargo test -p acos-services -p acos-wm` is green. One item is closed **with a wall** (`takeScreenshot`'s
 app-side *pixel* read, §4): everything the framework can hand an app is asserted
 in the guest, and the missing piece is a GPU, not a wire format.
 
@@ -20,13 +20,15 @@ in the guest, and the missing piece is a GPU, not a wire format.
 | 3. text case (`getText` vs drawn label) | **DONE** — both APIs are correct and identical here; exact-case assertions restored |
 | 4. merge `modules`, re-run | **DONE** — merged (`bcc5f8db`), probe passes on the merged tree |
 
-Evidence: `results/handoff/A11YNATIVE2/merged-tree-run/` (the post-merge ART run)
-and `results/handoff/A11YNATIVE2/host-trace.log` (the host's `ACOS_TRACE_FILE`
-of the same run).
+Evidence: `results/handoff/A11YNATIVE2/head-run/` — the ART run on the exact
+branch HEAD (`d233c135`, after `modules` @ `bcc5f8db` was merged), using the
+**shared** sysroot (no private shim needed by the probe any more) — and
+`results/handoff/A11YNATIVE2/host-trace.log`, the host's `ACOS_TRACE_FILE` of
+the same run.
 
 ```
-merged-tree-run/verdict.json      "status": "pass", 15 steps, fidelity art-reference
-merged-tree-run/logs/logcat.txt
+head-run/verdict.json      "status": "pass", 15 steps, fidelity art-reference
+head-run/logs/logcat.txt
   I AcosA11yProbe: display id=0 refresh_rate=60.000004 mode_id=1 mode_rate=60.000004 modes=1
   I AcosA11yProbe: button_text a11y=Click target drawn=Click target
   I AcosA11yProbe: swatch bounds=[277,867][802,1077]
@@ -43,7 +45,7 @@ host-trace.log
   ACOSA11Y dispatchGesture seq=2 t=200 action=1 at=(540.0,1591.0)
 ```
 
-`merged-tree-run/art-frames/unsupported.jsonl` holds **no**
+`head-run/art-frames/unsupported.jsonl` holds **no**
 `REVERSE_DELIVERY_EXCEPTION` any more (the pre-fix runs recorded
 `-Bundle length is not aligned by 4: …` on every `sendResult`).
 
@@ -275,7 +277,11 @@ and BINDERREF2's `refs` registry. Every ART run went through
 `tools/art-runtime/run-exclusive.sh --task A11YNATIVE2` with `tools/guarded.sh
 --mem 16G`, private `ACOS_RUNTIME_DIR=$PWD/.cache/a11ynative2-run`,
 `ACOS_SESSION_SOCKET`, `ACOS_VIEW_TEST_DIR=$PWD/.cache/lv`,
-`ACOS_TRACE_FILE`, and a **private sysroot** (`cp -al` hardlink copy at
-`.cache/a11ynative2-sysroot`) so the new gralloc shim could be built without
-touching the shared `.cache/art/sysroot`. `~/Projects/gaten` was never touched;
+`ACOS_TRACE_FILE`. The **recorded run uses the shared sysroot**; while
+developing the gralloc-shim fix a private `cp -al` hardlink copy
+(`.cache/a11ynative2-sysroot`) was used so the shared `.cache/art/sysroot` was
+never modified — the shim source is committed and
+`tools/art-sysroot.sh` (hash-stamped on `gralloc_shim.c`) picks it up on its
+next run, which is why the probe does not depend on it: it no longer calls
+`Bitmap.wrapHardwareBuffer` at all (§4). `~/Projects/gaten` was never touched;
 disk peaked at 76 % (stop line 86 %), host RAM stayed under 40 % of 60 GiB.

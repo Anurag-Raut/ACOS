@@ -44,11 +44,11 @@
         "input_hash": "ff39b037f1d6b9ff",
         "mode": "shared-fixed"
       },
-      "buffer_generation": 1,
+      "buffer_generation": 2,
       "capture_source": "acos-c1-buffer",
       "cmd": "ready",
       "density": 420,
-      "guest_process_group": 3567475,
+      "guest_process_group": 3733866,
       "height": 2400,
       "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
       "modules": [
@@ -267,15 +267,15 @@
       "ok": true,
       "package": "dev.acos.fixtures.a11yprobe",
       "probe_seq": 1,
-      "stream_socket": "/run/user/1000/acos-view-3567466-1/view.sock",
+      "stream_socket": "/run/user/1000/acos-view-3733857-1/view.sock",
       "width": 1080
     },
     {
       "cmd": "logs",
       "dropped": 0,
-      "kept": 89,
+      "kept": 98,
       "ok": true,
-      "total": 89
+      "total": 98
     },
     {
       "buffer_generation": 55,
@@ -318,7 +318,7 @@
       ],
       "ok": true,
       "png_pruned": true,
-      "probe_seq": 75,
+      "probe_seq": 73,
       "x": 540.0,
       "y": 1140.0
     },
@@ -404,7 +404,7 @@
       "frame_seq": 4,
       "ok": true,
       "pixels": false,
-      "probe_seq": 76
+      "probe_seq": 74
     },
     {
       "buffer_generation": 160,
@@ -417,7 +417,7 @@
       ],
       "ok": true,
       "png": ".cache/a11ynative2-run/artifacts/art-frames/live-frames/acos-c1-layer6-frame-1-g160-c5.png",
-      "probe_seq": 112,
+      "probe_seq": 109,
       "x": 539.0,
       "y": 1518.0
     },

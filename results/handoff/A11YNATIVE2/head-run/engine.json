@@ -392,9 +392,9 @@
     ],
     "session_exit": {
       "abi": null,
-      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=77MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3567475-i3629429.scope)",
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=85MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3733866-i3780997.scope)",
       "code": null,
-      "disk_free_bytes": 264323481600,
+      "disk_free_bytes": 263356243968,
       "guest_crash": null,
       "guest_exit": 0,
       "guest_signal": null,
@@ -406,9 +406,9 @@
       "retryable": false,
       "stage": "teardown-evidence"
     },
-    "session_id": "verify-3567464",
+    "session_id": "verify-3733855",
     "timing": {
-      "attributed_ms": 3002,
+      "attributed_ms": 2925,
       "boot_image": {
         "base": "0x70000000",
         "cache": "hit",
@@ -417,25 +417,25 @@
         "mode": "shared-fixed"
       },
       "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
-      "session_start_ms": 149,
+      "session_start_ms": 156,
       "steps": [
         {
           "index": 0,
           "status": "pass",
           "step": "launch",
-          "wall_ms": 933
+          "wall_ms": 939
         },
         {
           "index": 1,
           "status": "pass",
           "step": "assert_text",
-          "wall_ms": 1
+          "wall_ms": 0
         },
         {
           "index": 2,
           "status": "pass",
           "step": "tap",
-          "wall_ms": 1067
+          "wall_ms": 1006
         },
         {
           "index": 3,
@@ -453,7 +453,7 @@
           "index": 5,
           "status": "pass",
           "step": "assert_log",
-          "wall_ms": 0
+          "wall_ms": 1
         },
         {
           "index": 6,
@@ -483,7 +483,7 @@
           "index": 10,
           "status": "pass",
           "step": "assert_windows",
-          "wall_ms": 0
+          "wall_ms": 1
         },
         {
           "index": 11,
@@ -501,7 +501,7 @@
           "index": 13,
           "status": "pass",
           "step": "tap",
-          "wall_ms": 1000
+          "wall_ms": 977
         },
         {
           "index": 14,
@@ -512,12 +512,12 @@
       ],
       "unattributed_ms": 4,
       "unit": "ms",
-      "verdict_wall_ms": 3006
+      "verdict_wall_ms": 2929
     },
     "trust": "trusted",
     "unsupported_steps": []
   },
   "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
-  "request_id": "req_366f68_18e87dc2d095e623",
+  "request_id": "req_38f95f_18e87e0d50a5161d",
   "verdict_status": "pass"
 }

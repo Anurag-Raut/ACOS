@@ -3,7 +3,7 @@
   "app": {
     "package": "dev.acos.fixtures.a11yprobe",
     "path": "fixtures/build/apps/a11y-probe.apk",
-    "sha256": "36605ce5ced8ce50c78de59a32ac1f1aa70527232c7bb8a2aa90068a04dd18b5"
+    "sha256": "c876eb9b18971512db7cd42be7b50fcb139f5313ff2402b3e26176175c51e2f4"
   },
   "backend": "acos-native",
   "certification": "certified-with-limits",
@@ -37,7 +37,7 @@
     "tree": "guest-asserted"
   },
   "fidelity": "art-reference",
-  "finished_at": "2026-11-16T09:52:10.342Z",
+  "finished_at": "2026-11-16T09:57:30.247Z",
   "insets": "report",
   "isolation": "process",
   "mode": "live",
@@ -414,7 +414,7 @@
   "reproducer": {
     "acos_version": "0.2.2",
     "apk_path": "fixtures/build/apps/a11y-probe.apk",
-    "apk_sha256": "36605ce5ced8ce50c78de59a32ac1f1aa70527232c7bb8a2aa90068a04dd18b5",
+    "apk_sha256": "c876eb9b18971512db7cd42be7b50fcb139f5313ff2402b3e26176175c51e2f4",
     "backend": "acos-native",
     "display": {
       "density_dpi": 420,
@@ -428,15 +428,15 @@
     "scenario_path": "scenarios/a11y-probe.yaml",
     "scenario_sha256": "f6ed31bfbb745c615b7f9f4f40452a01bc0d996e9c0ea95d541bc5c613783e90"
   },
-  "request_id": "req_366f68_18e87dc2d095e623",
+  "request_id": "req_38f95f_18e87e0d50a5161d",
   "resources": {
     "events": 292,
     "frames_captured": 7,
     "memory_mib": 17,
-    "peak_rss_bytes": 18014208,
+    "peak_rss_bytes": 18051072,
     "sessions": 1,
     "steps": 15,
-    "wall_ms": 3006
+    "wall_ms": 2929
   },
   "scenario": {
     "name": "a11y-probe",
@@ -446,9 +446,9 @@
   "schema_version": 1,
   "session_exit": {
     "abi": null,
-    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=77MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3567475-i3629429.scope)",
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=85MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3733866-i3780997.scope)",
     "code": null,
-    "disk_free_bytes": 264323481600,
+    "disk_free_bytes": 263356243968,
     "guest_crash": null,
     "guest_exit": 0,
     "guest_signal": null,
@@ -461,12 +461,12 @@
     "stage": "teardown-evidence"
   },
   "session_id": "s_art_a11y-probe",
-  "started_at": "2026-11-16T09:52:07.336Z",
+  "started_at": "2026-11-16T09:57:27.318Z",
   "status": "pass",
   "steps": [
     {
       "assertions": [],
-      "duration_ms": 933,
+      "duration_ms": 939,
       "evidence": [
         {
           "kind": "step",
@@ -514,7 +514,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 1,
+      "duration_ms": 0,
       "evidence": [
         {
           "kind": "tree",
@@ -541,7 +541,7 @@
         "probe_seq": 37,
         "settled": true,
         "strict_rule": "event",
-        "tree_age_ms": 31
+        "tree_age_ms": 35
       },
       "status": "pass",
       "step": "assert_text"
@@ -563,7 +563,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 1067,
+      "duration_ms": 1006,
       "evidence": [
         {
           "kind": "tree",
@@ -589,8 +589,8 @@
       "settle": {
         "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 58,
-        "frame_ms": 1010,
+        "first_change_ms": 119,
+        "frame_ms": 949,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
         "pixels_changed": true,
@@ -655,8 +655,8 @@
       "settle": {
         "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 58,
-        "frame_ms": 1010,
+        "first_change_ms": 119,
+        "frame_ms": 949,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
         "pixels_changed": true,
@@ -731,7 +731,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 0,
+      "duration_ms": 1,
       "evidence": [
         {
           "kind": "log",
@@ -855,8 +855,8 @@
       "settle": {
         "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 58,
-        "frame_ms": 1010,
+        "first_change_ms": 119,
+        "frame_ms": 949,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
         "pixels_changed": true,
@@ -982,7 +982,7 @@
                   2400
                 ],
                 "focus": true,
-                "id": "e69d6ce",
+                "id": "947444b",
                 "kind": "application",
                 "label": "main",
                 "touchable": true,
@@ -997,7 +997,7 @@
                   488
                 ],
                 "focus": false,
-                "id": "17d1f48",
+                "id": "a6ce8a5",
                 "kind": "accessibility_overlay",
                 "label": "window-2032#1",
                 "touchable": false,
@@ -1024,7 +1024,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 0,
+      "duration_ms": 1,
       "evidence": [
         {
           "kind": "tree",
@@ -1045,8 +1045,8 @@
       "settle": {
         "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 58,
-        "frame_ms": 1010,
+        "first_change_ms": 119,
+        "frame_ms": 949,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
         "pixels_changed": true,
@@ -1113,9 +1113,9 @@
           "actual": {
             "matched_lines": 5,
             "sample": [
-              "AcosA11yProbe: screenshot_result kind=capture status=0 width=1080 height=2400 format=1 usage=257 color_space=sRGB IEC61966-2.1 (Linear) timestamp=29715854",
-              "AcosA11yProbe: screenshot_pixel unavailable=hardware_bitmap_needs_egl",
               "AcosA11yProbe: screenshot_result kind=interval status=3",
+              "AcosA11yProbe: screenshot_result kind=capture status=0 width=1080 height=2400 format=1 usage=257 color_space=sRGB IEC61966-2.1 (Linear) timestamp=30035821",
+              "AcosA11yProbe: screenshot_pixel unavailable=hardware_bitmap_needs_egl",
               "AcosA11yProbe: screenshot_result kind=display status=4",
               "AcosA11yProbe: screenshot_result kind=secure status=6"
             ]
@@ -1174,7 +1174,7 @@
           "passed": true
         }
       ],
-      "duration_ms": 1000,
+      "duration_ms": 977,
       "evidence": [
         {
           "kind": "tree",
@@ -1200,8 +1200,8 @@
       "settle": {
         "ack_ms": 5,
         "bound": "strict-event",
-        "first_change_ms": 68,
-        "frame_ms": 943,
+        "first_change_ms": 58,
+        "frame_ms": 920,
         "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
         "mode": "strict",
         "pixels_changed": true,
