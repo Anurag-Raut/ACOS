@@ -1,0 +1,14 @@
+# FLAKEWIN launch-loop cohorts (results/handoff/FLAKEWIN)
+
+driver=art; apps=counter.apk + hello-views.apk in blocks of five; every launch
+is a fresh ART guest relaunch (the reset path the flake lives in).
+
+cohort                 conc launches     ok failed  driver
+before-loop-c1-800        1      800    800      0  pre-fix allocator (racy txn_heap.c)
+before-loop-c4-3000       4     3000   3000      0  pre-fix allocator (racy txn_heap.c)
+inject-6                  1        6      6      0  pre-fix allocator + 2 ms widened alloc window
+loop-c1-160               1      160    160      0  fixed (first cohort, owner-review build)
+loop-c1-800               1      800    800      0  fixed
+loop-c4-800               4      800    800      0  fixed
+final-loop-c4-400         4      400    400      0  fixed (final committed tree)
+smoke4                    1       12     12      0  fixed smoke
