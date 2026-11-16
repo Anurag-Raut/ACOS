@@ -11,7 +11,9 @@
 //! ```
 //!
 //! Layers, top to bottom:
-//! * [`server`] — the session socket, request dispatch, per-view event pumps;
+//! * [`gate`] — the per-session lazy listener that hands the first guest
+//!   connection to the shared broker (one engine per host, nothing before);
+//! * [`server`] — the session socket(s), request dispatch, per-view event pumps;
 //! * [`view`] — one target: navigation, JS, frames, input, interception;
 //! * [`ax`] — the accessibility tree in display coordinates;
 //! * [`broker`] — the engine supervisor (lazy start, crash restart, idle stop);
@@ -26,6 +28,7 @@ pub mod broker;
 pub mod cdp;
 pub mod engine;
 pub mod error;
+pub mod gate;
 pub mod sandbox;
 pub mod server;
 pub mod view;
@@ -35,7 +38,8 @@ pub use broker::{Broker, BrokerConfig, EngineVersion, Session};
 pub use cdp::{CdpClient, CdpError};
 pub use engine::{EngineCache, ENGINE_URL, ENGINE_VERSION, ENGINE_ZIP_SHA256};
 pub use error::{Error, Result};
-pub use server::{serve, ServerConfig, ServerHandle};
+pub use gate::{BrokerSource, Gate, GateConfig, GateStats};
+pub use server::{serve, serve_shared, ServerConfig, ServerHandle, SharedConfig};
 pub use view::{View, Viewport};
 pub use wire::{Blob, ErrorBody, Frame, WireError, PROTO};
 

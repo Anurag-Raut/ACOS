@@ -11,7 +11,7 @@
 //!   fail, and the count is reported in `engineStatus.unanswered`.
 
 use std::collections::HashMap;
-use std::io::{BufReader, BufWriter};
+use std::io::{BufReader, BufWriter, Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
@@ -57,6 +57,23 @@ impl ServerHandle {
         &self.broker
     }
 
+    /// Block until the server has stopped. The watcher's idle exit sets the
+    /// flag; this call never signals the broker itself, so a daemon's main loop
+    /// is "serve until something stops us".
+    pub fn wait(&self) {
+        while !self.stopped() {
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    }
+
+    /// Whether every server thread has finished.
+    fn stopped(&self) -> bool {
+        self.threads
+            .lock()
+            .map(|t| t.iter().all(|h| h.is_finished()))
+            .unwrap_or(true)
+    }
+
     pub fn stop(&self) {
         self.stop.store(true, Ordering::SeqCst);
         // Nudge accept(): a connect makes it loop once more and see the flag.
@@ -77,20 +94,105 @@ impl Drop for ServerHandle {
     }
 }
 
+/// File name of the per-session socket inside the session directory
+/// (`WIRE.md` §0: the guest connects to `/run/acos/webview.sock`).
+pub const SESSION_SOCKET_FILE: &str = "webview.sock";
+
+/// How a server names the sessions that arrive on its listener.
+#[derive(Debug, Clone)]
+enum AcceptMode {
+    /// One fixed session: the per-session socket `serve()` binds.
+    Single(String),
+    /// Many sessions on one host-wide socket (the shared daemon): each
+    /// connection announces its session with one attach line first.
+    Attached,
+}
+
+/// Shared-daemon options (`acos-webview --shared`, WV5b).
+#[derive(Debug, Clone, Default)]
+pub struct SharedConfig {
+    /// Exit the daemon once no session has been attached for this long. The
+    /// engine idle-stops on `BrokerConfig::idle_shutdown`; this is the process
+    /// going away too, so the *next* WebView starts a fresh daemon.
+    pub idle_exit: Option<Duration>,
+}
+
 /// Serve one session socket.
 pub fn serve(broker: Arc<Broker>, cfg: &ServerConfig) -> Result<ServerHandle> {
-    let path = cfg.socket_path.clone();
+    let listener = bind_socket(&cfg.socket_path)?;
+    Ok(start_server(
+        broker,
+        cfg.socket_path.clone(),
+        listener,
+        AcceptMode::Single(cfg.session_id.clone()),
+        SharedConfig::default(),
+    ))
+}
+
+/// Serve the **host-wide** socket: one connection per session, each with its own
+/// browser context (ADR-0031 item 3, one engine per host). This is what
+/// `acos-webview --shared` runs; per-session gates attach to it.
+pub fn serve_shared(
+    broker: Arc<Broker>,
+    socket: &Path,
+    shared: SharedConfig,
+) -> Result<ServerHandle> {
+    let listener = bind_socket(socket)?;
+    Ok(start_server(
+        broker,
+        socket.to_path_buf(),
+        listener,
+        AcceptMode::Attached,
+        shared,
+    ))
+}
+
+/// Bind a server socket **without stealing a live endpoint**.
+///
+/// A stale node (a broker that died without cleaning up) is removed and
+/// re-bound; a node somebody is still listening on is an error the caller
+/// reports. Blindly unlinking first would let a second daemon take over the
+/// endpoint of a running one, splitting sessions across two engines — measured
+/// in the WV5b two-session test before this was written.
+fn bind_socket(path: &Path) -> Result<UnixListener> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|e| Error::proto("INTERNAL", format!("socket dir {}: {e}", parent.display())))?;
     }
-    let _ = std::fs::remove_file(&path);
-    let listener = UnixListener::bind(&path)
-        .map_err(|e| Error::proto("INTERNAL", format!("bind {}: {e}", path.display())))?;
+    let listener = match UnixListener::bind(path) {
+        Ok(l) => l,
+        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+            if UnixStream::connect(path).is_ok() {
+                return Err(Error::proto(
+                    "ADDR_IN_USE",
+                    format!("another broker is listening on {}", path.display()),
+                ));
+            }
+            // Nobody answers: the node is stale.
+            let _ = std::fs::remove_file(path);
+            UnixListener::bind(path)
+                .map_err(|e| Error::proto("INTERNAL", format!("bind {}: {e}", path.display())))?
+        }
+        Err(e) => {
+            return Err(Error::proto(
+                "INTERNAL",
+                format!("bind {}: {e}", path.display()),
+            ))
+        }
+    };
     use std::os::unix::fs::PermissionsExt;
-    let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
     listener.set_nonblocking(true).ok();
+    Ok(listener)
+}
 
+fn start_server(
+    broker: Arc<Broker>,
+    socket: PathBuf,
+    listener: UnixListener,
+    mode: AcceptMode,
+    shared: SharedConfig,
+) -> ServerHandle {
     let stop = Arc::new(AtomicBool::new(false));
     let conns: Arc<Mutex<Vec<Arc<Conn>>>> = Arc::new(Mutex::new(Vec::new()));
     let mut threads = Vec::new();
@@ -100,100 +202,173 @@ pub fn serve(broker: Arc<Broker>, cfg: &ServerConfig) -> Result<ServerHandle> {
         let stop = Arc::clone(&stop);
         let conns = Arc::clone(&conns);
         let broker = Arc::clone(&broker);
-        let session_id = cfg.session_id.clone();
-        threads.push(
-            std::thread::Builder::new()
-                .name("wv-accept".into())
-                .spawn(move || {
-                    while !stop.load(Ordering::SeqCst) {
-                        match listener.accept() {
-                            Ok((stream, _)) => {
-                                let mut live = conns.lock().expect("conns");
-                                live.retain(|c| !c.closed());
-                                if !live.is_empty() {
-                                    // One connection per session socket.
-                                    let mut s = stream;
-                                    let body = err_response(
-                                        "g?",
-                                        &ErrorBody::new(
-                                            crate::wire::code::ALREADY_CONNECTED,
-                                            "a guest connection is already attached to this session socket",
-                                        ),
-                                    );
-                                    if let Ok(bytes) = crate::wire::encode_json(&body) {
-                                        let _ = write_frame(&mut s, &bytes);
-                                    }
-                                    continue;
+        let mode = mode.clone();
+        if let Ok(h) = std::thread::Builder::new()
+            .name("wv-accept".into())
+            .spawn(move || {
+                while !stop.load(Ordering::SeqCst) {
+                    match listener.accept() {
+                        Ok((mut stream, _)) => {
+                            let mut live = conns.lock().expect("conns");
+                            live.retain(|c| !c.closed());
+                            // One connection per **session** socket. The shared
+                            // broker is one socket for the whole host, so its
+                            // connections are one per session and all allowed;
+                            // a per-session socket takes exactly one.
+                            let single = matches!(mode, AcceptMode::Single(_));
+                            if single && !live.is_empty() {
+                                // One connection per session socket.
+                                let body = err_response(
+                                    "g?",
+                                    &ErrorBody::new(
+                                        crate::wire::code::ALREADY_CONNECTED,
+                                        "a guest connection is already attached to this session socket",
+                                    ),
+                                );
+                                if let Ok(bytes) = crate::wire::encode_json(&body) {
+                                    let _ = write_frame(&mut stream, &bytes);
                                 }
-                                let conn = Arc::new(Conn::new(
-                                    stream,
-                                    Arc::clone(&broker),
-                                    session_id.clone(),
-                                ));
-                                live.push(Arc::clone(&conn));
-                                drop(live);
-                                let c = Arc::clone(&conn);
-                                std::thread::Builder::new()
-                                    .name("wv-conn".into())
-                                    .spawn(move || c.run())
-                                    .ok();
+                                continue;
                             }
-                            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                                std::thread::sleep(Duration::from_millis(50));
-                            }
-                            Err(_) => std::thread::sleep(Duration::from_millis(50)),
+                            let Some(session_id) = session_for(&mut stream, &mode) else {
+                                continue;
+                            };
+                            let conn = Arc::new(Conn::new(
+                                stream,
+                                Arc::clone(&broker),
+                                session_id,
+                            ));
+                            live.push(Arc::clone(&conn));
+                            drop(live);
+                            let c = Arc::clone(&conn);
+                            std::thread::Builder::new()
+                                .name("wv-conn".into())
+                                .spawn(move || c.run())
+                                .ok();
                         }
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            std::thread::sleep(Duration::from_millis(50));
+                        }
+                        Err(_) => std::thread::sleep(Duration::from_millis(50)),
                     }
-                })
-                .map_err(|e| Error::proto("INTERNAL", e.to_string()))?,
-        );
+                }
+            })
+        {
+            threads.push(h);
+        }
     }
 
-    // Watcher: engine health, idle shutdown, and the events the guest must see.
+    // Watcher: engine health, idle shutdown, the events the guest must see, and
+    // (shared mode) the daemon's own idle exit.
     {
         let stop = Arc::clone(&stop);
         let conns = Arc::clone(&conns);
         let broker = Arc::clone(&broker);
-        threads.push(
-            std::thread::Builder::new()
-                .name("wv-watch".into())
-                .spawn(move || {
-                    let mut last_restarts = broker.restarts();
-                    while !stop.load(Ordering::SeqCst) {
-                        std::thread::sleep(Duration::from_millis(250));
-                        match broker.tick() {
-                            crate::broker::Tick::Restarted { .. } => {
-                                let _ = broker.restart_now();
-                            }
-                            crate::broker::Tick::IdleShutdown => {
-                                for c in conns.lock().expect("conns").iter() {
-                                    c.send_event(
-                                        "session.closing",
-                                        json!({"reason": "idle", "idleShutdownMs": broker.config().idle_shutdown.as_millis() as u64}),
-                                    );
-                                }
-                            }
-                            crate::broker::Tick::Nothing => {}
+        let socket = socket.clone();
+        if let Ok(h) = std::thread::Builder::new()
+            .name("wv-watch".into())
+            .spawn(move || {
+                let mut last_restarts = broker.restarts();
+                let mut idle_since = Instant::now();
+                while !stop.load(Ordering::SeqCst) {
+                    std::thread::sleep(Duration::from_millis(250));
+                    match broker.tick() {
+                        crate::broker::Tick::Restarted { .. } => {
+                            let _ = broker.restart_now();
                         }
-                        let now = broker.restarts();
-                        if now != last_restarts {
-                            last_restarts = now;
+                        crate::broker::Tick::IdleShutdown => {
                             for c in conns.lock().expect("conns").iter() {
-                                c.on_engine_restart();
+                                c.send_event(
+                                    "session.closing",
+                                    json!({"reason": "idle", "idleShutdownMs": broker.config().idle_shutdown.as_millis() as u64}),
+                                );
                             }
+                        }
+                        crate::broker::Tick::Nothing => {}
+                    }
+                    let now = broker.restarts();
+                    if now != last_restarts {
+                        last_restarts = now;
+                        for c in conns.lock().expect("conns").iter() {
+                            c.on_engine_restart();
                         }
                     }
-                })
-                .map_err(|e| Error::proto("INTERNAL", e.to_string()))?,
-        );
+                    let no_session = {
+                        let live = conns.lock().expect("conns");
+                        live.iter().all(|c| c.closed())
+                    };
+                    if !no_session {
+                        idle_since = Instant::now();
+                    }
+                    if let Some(limit) = shared.idle_exit {
+                        if no_session && idle_since.elapsed() >= limit {
+                            // No session has been attached for `limit`: stop the
+                            // engine and go away, so the next WebView starts a
+                            // fresh daemon instead of an idle resident process.
+                            eprintln!(
+                                "acos-webview: no session for {}s, exiting ({})",
+                                limit.as_secs(),
+                                socket.display()
+                            );
+                            stop.store(true, Ordering::SeqCst);
+                        }
+                    }
+                }
+            })
+        {
+            threads.push(h);
+        }
     }
 
-    Ok(ServerHandle {
-        socket: path,
+    ServerHandle {
+        socket,
         stop,
         threads: Mutex::new(threads),
         broker,
-    })
+    }
+}
+
+/// The session id for a freshly accepted connection, answering the attach line
+/// in shared mode. `None` means the peer did not identify itself and the
+/// connection is dropped (it never became a session).
+fn session_for(stream: &mut UnixStream, mode: &AcceptMode) -> Option<String> {
+    match mode {
+        AcceptMode::Single(id) => Some(id.clone()),
+        AcceptMode::Attached => {
+            let line = read_line(stream, Duration::from_secs(5))?;
+            let v: Value = serde_json::from_slice(&line).ok()?;
+            if v["attach"].as_u64() != Some(crate::gate::ATTACH_PROTO as u64) {
+                let _ = stream.write_all(
+                    b"{\"ok\":false,\"error\":\"attach version unsupported\"}\n",
+                );
+                return None;
+            }
+            let sid = v["session"].as_str().unwrap_or("").to_string();
+            let sid = if sid.is_empty() { "session".to_string() } else { sid };
+            stream.write_all(b"{\"ok\":true}\n").ok()?;
+            stream.flush().ok()?;
+            stream.set_read_timeout(None).ok()?;
+            Some(sid)
+        }
+    }
+}
+
+/// One `\n`-terminated line, read byte-wise so no guest frame is ever swallowed
+/// by a buffered reader (the attach line is the only thing read outside the
+/// framing).
+fn read_line(stream: &mut UnixStream, timeout: Duration) -> Option<Vec<u8>> {
+    stream.set_read_timeout(Some(timeout)).ok()?;
+    let mut buf = Vec::new();
+    let mut byte = [0u8; 1];
+    while buf.len() < 4096 {
+        match stream.read(&mut byte) {
+            Ok(1) if byte[0] == b'\n' => return Some(buf),
+            Ok(1) => buf.push(byte[0]),
+            Ok(_) => {}
+            Err(_) => return None,
+        }
+    }
+    None
 }
 
 /// One guest connection.

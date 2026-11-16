@@ -61,9 +61,20 @@ pub const GUEST_DIR: &str = "/run/acos";
 /// entries 1:1.
 pub const SOCKET_FILE_NAME: &str = "webview.sock";
 
-/// The default host subdirectory of the run root (see the module note on
-/// `sun_path` length: 2 bytes where `webview` would need 7).
+/// The default host subdirectory of the run root only when an owner pinned
+/// nothing and there is no runtime dir at all (tests). Production sessions use
+/// [`runtime_root`] instead (WV5b decision: the socket must be short and it must
+/// outlive one run, because the broker is per host).
 pub const SOCKET_SUBDIR: &str = "wv";
+
+/// Subdirectory of `$XDG_RUNTIME_DIR` holding every host-side WebView path:
+/// `<runtime>/acos-wv/<session-id>/webview.sock` and the shared broker's
+/// `<runtime>/acos-wv/broker.sock`. 33 bytes in the common case, well under
+/// `sun_path`'s 108, and it disappears with the user's runtime dir.
+pub const RUNTIME_SUBDIR: &str = "acos-wv";
+
+/// The host-wide broker endpoint override (the shared daemon).
+pub const BROKER_SOCKET_ENV: &str = "ACOS_WEBVIEW_BROKER_SOCKET";
 
 /// A session owner (the daemon, or a test) pins the host directory with this
 /// variable so the broker and the guest mount agree. It must be absolute and
@@ -101,13 +112,105 @@ pub fn host_dir(run_root: &Path) -> Result<PathBuf, Error> {
             }
             path
         }
-        None => run_root.join(SOCKET_SUBDIR),
+        None => default_session_dir(run_root),
     };
     fs::create_dir_all(&dir)?;
     // The session socket is a way out of the guest: its directory is private to
     // this session's owner, never traversable by another uid.
     fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?;
     Ok(dir)
+}
+
+/// The runtime dir every host-side WebView path lives in:
+/// `$XDG_RUNTIME_DIR/acos-wv`, else `/tmp/acos-wv-<uid>` (the brief's fallback
+/// when the session has no runtime dir at all).
+pub fn runtime_root() -> PathBuf {
+    match std::env::var_os("XDG_RUNTIME_DIR").filter(|v| !v.is_empty()) {
+        Some(dir) => PathBuf::from(dir).join(RUNTIME_SUBDIR),
+        None => PathBuf::from(format!("/tmp/acos-wv-{}", user_id())),
+    }
+}
+
+/// The per-session directory a launch creates and a gate owns:
+/// `<runtime>/acos-wv/<short session id>`. The id is the run directory's own
+/// short name (`<pid>-<n>`), never a full path — `sun_path` is 108 bytes.
+pub fn default_session_dir(run_root: &Path) -> PathBuf {
+    let id = run_root
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| format!("s{}", std::process::id()));
+    runtime_root().join(id)
+}
+
+/// The shared broker's endpoint for a session directory: the parent of a
+/// per-session directory (`<runtime>/acos-wv/broker.sock`), so two sessions of
+/// the same runtime share one broker. `$ACOS_WEBVIEW_BROKER_SOCKET` wins.
+pub fn broker_socket(session_dir: &Path) -> PathBuf {
+    if let Some(raw) = std::env::var_os(BROKER_SOCKET_ENV) {
+        if !raw.is_empty() {
+            return PathBuf::from(raw);
+        }
+    }
+    match session_dir.parent() {
+        Some(parent) => parent.join("broker.sock"),
+        None => runtime_root().join("broker.sock"),
+    }
+}
+
+fn user_id() -> u32 {
+    // SAFETY: `getuid` is a pure query.
+    unsafe { libc::getuid() }
+}
+
+/// Start this session's lazy WebView gate (WV5b), or `Ok(None)` when it is
+/// disabled.
+///
+/// **Nothing is started here but a listener thread**: the shared broker (and
+/// therefore Chromium) only exists after the guest connects to the socket, which
+/// the provider does when — and only when — it creates a `WebView`. A session
+/// that never touches WebView pays for a socket node and a sleeping thread.
+///
+/// `$ACOS_WEBVIEW_GATE=0` disables the gate entirely (the measurement's control
+/// arm; with it off a WebView fails exactly as it did before this module).
+pub fn start_gate(session_dir: &Path, run_root: &Path) -> Result<Option<acos_webview::Gate>, Error> {
+    if matches!(
+        std::env::var("ACOS_WEBVIEW_GATE").as_deref(),
+        Ok("0") | Ok("off") | Ok("false")
+    ) {
+        return Ok(None);
+    }
+    let session_id = session_dir
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| format!("s{}", std::process::id()));
+    let broker_socket = broker_socket(session_dir);
+    let broker = acos_webview::BrokerSource::from_env(
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(Path::to_path_buf))
+            .as_deref(),
+    );
+    let gate = acos_webview::Gate::start(acos_webview::GateConfig {
+        session_dir: session_dir.to_path_buf(),
+        session_id,
+        broker_socket,
+        broker,
+        engine_cache: None,
+        idle_shutdown: None,
+        log: Some(
+            session_dir
+                .parent()
+                .unwrap_or(session_dir)
+                .join("broker.log"),
+        ),
+        spawn_wait: acos_webview::gate::SPAWN_WAIT,
+    })
+    .map_err(|e| Error::Layout(format!("WebView gate at {}: {e}", session_dir.display())))?;
+    // The run root is only used to keep the note honest in tests; the gate
+    // itself owns the session directory.
+    let _ = run_root;
+    Ok(Some(gate))
 }
 
 /// The host path of the session socket inside `dir` — the file
@@ -193,21 +296,51 @@ mod tests {
         assert!(!is_guest_socket_path("/data/local/tmp/webview.sock"));
     }
 
-    /// Default mapping: inside the per-session run tree, private, and created
-    /// even though the broker does not exist yet.
+    /// Default mapping (WV5b): a **short** per-session directory under the
+    /// runtime dir, not inside the (deep) run tree — `sun_path` is 108 bytes
+    /// and the broker endpoint is the runtime dir, one per host.
     #[test]
-    fn default_host_dir_is_the_runs_own_webview_directory() {
+    fn default_host_dir_is_the_short_runtime_session_directory() {
         let run = scratch("default");
         with_env_dir(None, || {
             let dir = host_dir(&run).expect("host dir");
-            assert_eq!(dir, run.join(SOCKET_SUBDIR));
+            assert_eq!(dir, default_session_dir(&run));
+            assert_eq!(
+                dir.parent(),
+                Some(runtime_root().as_path()),
+                "the session dir is a child of the host runtime dir"
+            );
             assert!(dir.is_dir(), "the mount source must exist");
             let mode = fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
             assert_eq!(mode, 0o700, "session socket dir must stay private");
-            assert_eq!(host_socket_path(&dir), run.join("wv/webview.sock"));
+            assert_eq!(host_socket_path(&dir), dir.join(SOCKET_FILE_NAME));
             check_sun_path(&dir).expect("the default mapping must fit sun_path");
+            // One broker per host: two sessions of the same runtime dir name the
+            // same endpoint, which is a sibling of both session directories.
+            let other = default_session_dir(Path::new("/somewhere/20842-2"));
+            assert_eq!(broker_socket(&dir), broker_socket(&other));
+            assert_eq!(broker_socket(&dir), runtime_root().join("broker.sock"));
         });
         let _ = fs::remove_dir_all(&run);
+    }
+
+    /// The whole host path budget of the default mapping, asserted on the real
+    /// runtime dir: `<runtime>/acos-wv/<id>/webview.sock` + a `broker.sock`
+    /// sibling both fit `sun_path` with room to spare.
+    #[test]
+    fn default_paths_fit_the_sockaddr_un_budget() {
+        let dir = default_session_dir(Path::new("/tmp/art/runs/4242-1"));
+        let socket = host_socket_path(&dir);
+        let bytes = socket.as_os_str().as_encoded_bytes().len();
+        assert!(
+            bytes <= SUN_PATH_MAX,
+            "default session socket {} is {bytes} bytes",
+            socket.display()
+        );
+        let broker = broker_socket(&dir);
+        let bbytes = broker.as_os_str().as_encoded_bytes().len();
+        assert!(bbytes <= SUN_PATH_MAX, "broker endpoint is {bbytes} bytes");
+        assert_eq!(dir.file_name().unwrap(), "4242-1");
     }
 
     /// A session owner can pin the directory (the broker and the mount then

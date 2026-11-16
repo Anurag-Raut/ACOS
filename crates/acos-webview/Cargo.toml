@@ -10,6 +10,10 @@ description = "Host side of the ACOS WebView engine (ADR-0031): the pinned chrom
 name = "acos_webview"
 path = "src/lib.rs"
 
+[[bin]]
+name = "acos-webview"
+path = "src/main.rs"
+
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }

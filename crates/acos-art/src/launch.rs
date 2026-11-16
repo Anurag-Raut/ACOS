@@ -552,6 +552,14 @@ pub(crate) fn launch_session(
     // WebView.
     let webview_socket_dir = crate::webview_socket::host_dir(run.path())?;
     crate::webview_socket::check_sun_path(&webview_socket_dir)?;
+    // WV5b: serve this session's socket **lazily**. `start_gate` binds
+    // `<dir>/webview.sock` and starts one sleeping accept thread; the shared
+    // broker (and Chromium itself) exists only after the guest connects, which
+    // the provider does when it creates a WebView. A session without a WebView
+    // pays a socket node and a thread — measured, not assumed
+    // (`results/handoff/WV5b/REPORT.md` §3).
+    let webview_gate = crate::webview_socket::start_gate(&webview_socket_dir, run.path())?;
+    let webview_broker_socket = crate::webview_socket::broker_socket(&webview_socket_dir);
     crate::stage("run-dir");
 
     // H17: the APK is an input every guest maps (ART mmaps the dex/resources), so
@@ -2072,16 +2080,30 @@ pub(crate) fn launch_session(
             summary.resource_limits
         ));
     }
-    // WV4: publish where this session's WebView socket lives on the host. The
-    // guest side is fixed (`/run/acos/webview.sock`, WIRE.md §0); the host side
-    // is the session's own directory, so the broker (or a test listener) knows
-    // exactly which file the guest will connect to.
-    unsupported_notes.push(format!(
-        "webview socket: {} -> guest {} (host transport; no listener means the guest's \
-         connect fails with the real ENOENT)",
-        crate::webview_socket::host_socket_path(&webview_socket_dir).display(),
-        crate::webview_socket::GUEST_SOCKET_PATH
-    ));
+    // WV4/WV5b: publish where this session's WebView socket lives on the host,
+    // and whether the lazy gate is listening on it. The guest side is fixed
+    // (`/run/acos/webview.sock`, WIRE.md §0). With the gate up, the client's
+    // connect succeeds and the *first* connect wakes the shared broker
+    // (`acos-webview --shared`, one per host); with `ACOS_WEBVIEW_GATE=0` there
+    // is no listener and the connect fails with the kernel's real ENOENT.
+    match &webview_gate {
+        Some(_) => unsupported_notes.push(format!(
+            "webview socket: {} -> guest {} (lazy gate listening; first connect starts the \
+             shared broker at {})",
+            crate::webview_socket::host_socket_path(&webview_socket_dir).display(),
+            crate::webview_socket::GUEST_SOCKET_PATH,
+            webview_broker_socket.display()
+        )),
+        None => unsupported_notes.push(format!(
+            "webview socket: {} -> guest {} (gate disabled by ACOS_WEBVIEW_GATE; no listener \
+             means the guest's connect fails with the real ENOENT)",
+            crate::webview_socket::host_socket_path(&webview_socket_dir).display(),
+            crate::webview_socket::GUEST_SOCKET_PATH
+        )),
+    }
+    // The gate (its listener thread and the session directory) is dropped after
+    // `result` is built and before the run dir is removed.
+    let webview_gate = webview_gate;
     let mut result = LaunchResult {
         outcome,
         code,

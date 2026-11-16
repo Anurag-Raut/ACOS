@@ -2287,7 +2287,9 @@ mod tests {
             .map(|a| a.to_string_lossy().to_string())
             .collect();
 
-        let dir = run.path().join(crate::webview_socket::SOCKET_SUBDIR);
+        // WV5b: the default mapping is the short runtime directory, not
+        // `<run>/wv` (see `webview_socket::default_session_dir`).
+        let dir = crate::webview_socket::host_dir(run.path()).expect("webview dir");
         assert!(
             has_pair(
                 &argv,
