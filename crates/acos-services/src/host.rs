@@ -202,6 +202,21 @@ pub struct ServiceHost {
     /// a text toast from `NotificationManagerService` in the system process;
     /// ACOS has one process, so the runtime renders the recorded request.
     notification: Option<std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>>,
+    /// The accessibility module's state, when a session installed it. The
+    /// dispatcher needs it for the two system -> app steps that are not an
+    /// `IAccessibilityManager` call: capturing the app thread from
+    /// `attachApplication` and answering `IActivityManager.publishService`
+    /// (MODA11Y2).
+    /// Held **weakly**: the accessibility state's lifetime must end with the
+    /// registration that owns it (ADR-0029 detach), and a strong handle here
+    /// would keep the settings provider's generation memfd alive after detach
+    /// (the conformance kit's `detach-restores` baseline).
+    a11y: Option<std::sync::Weak<std::sync::Mutex<crate::misc::A11yState>>>,
+    /// The `IAccessibilityServiceConnection` node handed to a bound service.
+    a11y_connection: Option<BinderId>,
+    /// The display's accessibility-overlay window token (`init`'s third
+    /// argument; `getOverlayWindowToken` answers it).
+    a11y_window_token: Option<BinderId>,
 }
 
 impl core::fmt::Debug for ServiceHost {
@@ -240,6 +255,9 @@ impl ServiceHost {
             seq: AtomicU64::new(1),
             constructions: 0,
             notification: None,
+            a11y: None,
+            a11y_connection: None,
+            a11y_window_token: None,
         }
     }
 
@@ -512,6 +530,56 @@ impl ServiceHost {
         state: std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>,
     ) {
         self.notification = Some(state);
+    }
+
+    /// Install the accessibility state the dispatcher hooks into (called by
+    /// [`crate::registry::install`]).
+    pub fn set_accessibility_state(
+        &mut self,
+        state: std::sync::Arc<std::sync::Mutex<crate::misc::A11yState>>,
+    ) {
+        self.a11y = Some(std::sync::Arc::downgrade(&state));
+    }
+
+    /// The accessibility state, when the session installed it.
+    #[must_use]
+    pub fn accessibility_state(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<crate::misc::A11yState>>> {
+        self.a11y.as_ref().and_then(std::sync::Weak::upgrade)
+    }
+
+    /// The `IAccessibilityServiceConnection` node a bound service receives.
+    ///
+    /// Registered once, lazily: the node is a dynamic (`raw_transact`-style)
+    /// object, and `IAccessibilityServiceConnection` has no `acos-aidl` table
+    /// (the service-side accessibility AIDL is not in the decoded set), so it
+    /// answers through [`ServiceObject::call`] with the method names it knows
+    /// and a structured refusal otherwise.
+    pub fn accessibility_connection_node(&mut self) -> BinderId {
+        if let Some(binder) = self.a11y_connection {
+            return binder;
+        }
+        let Some(state) = self.a11y.as_ref().and_then(std::sync::Weak::upgrade) else {
+            return BinderId(0);
+        };
+        let binder = self.register_dynamic(
+            crate::a11y_bind::SERVICE_CONNECTION,
+            Box::new(crate::a11y_bind::A11yConnectionNode::new(state)),
+        );
+        self.a11y_connection = Some(binder);
+        binder
+    }
+
+    /// The display's accessibility-overlay window token (`init`'s third
+    /// argument). One per session, like one display.
+    pub fn accessibility_window_token(&mut self) -> BinderId {
+        if let Some(binder) = self.a11y_window_token {
+            return binder;
+        }
+        let binder = self.register_aux("dev.acos.a11y.OverlayWindowToken");
+        self.a11y_window_token = Some(binder);
+        binder
     }
 
     /// The `INotificationManager` state, when the standard set is installed.
@@ -905,6 +973,41 @@ impl ServiceHost {
         // Advance past the interface token now that dispatch is chosen.
         data.enforce_interface(&descriptor)?;
 
+        // MODA11Y2: `publishService` is the reply to a **system-initiated**
+        // bind. The answer is the accessibility module's (it owns the bind
+        // token and the service's connection), not the activity service's, so
+        // it is answered here before the decoded dispatch. Every other
+        // `IActivityManager` call keeps going to `AtmsService`.
+        if descriptor == "android.app.IActivityManager"
+            && method.name == "publishService"
+            && self.a11y.is_some()
+        {
+            let args = codec::read_args(data, &method.args, &descriptor, &method.name)?;
+            let connection = self.accessibility_connection_node();
+            let window_token = self.accessibility_window_token();
+            let a11y = self.a11y.as_ref().and_then(std::sync::Weak::upgrade).expect("checked above");
+            let mut state = a11y
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let delivery =
+                crate::a11y_bind::on_publish_service(&mut state, connection, window_token, &args)?;
+            drop(state);
+            if let Some(delivery) = delivery {
+                self.deliveries.push(delivery);
+            }
+            if !oneway {
+                reply.reset();
+                write_no_exception(reply);
+                codec::write_reply(reply, &method.reply, &[], &descriptor, &method.name)?;
+            }
+            return Ok(CallInfo {
+                interface: descriptor,
+                method: method.name.clone(),
+                args: "<publishService>".into(),
+                reply: "<accessibility bind>".into(),
+            });
+        }
+
         // `IContentProvider.query` is the one decoded reply the generic codec
         // cannot express: `ContentProviderNative` writes a hand-rolled
         // `BulkCursorDescriptor` + `CursorWindow`, and the proxy writes the
@@ -959,6 +1062,31 @@ impl ServiceHost {
         let mut call = object.call(&descriptor, method, &args)?;
         self.deliveries.append(&mut call.deliveries);
 
+        // MODA11Y2: two system services are wired here rather than inside a
+        // `ServiceObject`, because the state they need is cross-service:
+        //
+        // * `attachApplication` names the app's `IApplicationThread`, which is
+        //   the target of every `system -> app` delivery (the accessibility
+        //   bind has no target before it);
+        // * `publishService` is the reply to a system-initiated bind: the app
+        //   reports the binder its `Service.onBind` returned arm, and the
+        //   accessibility module answers with `IAccessibilityServiceClient.init`.
+        if let Some(a11y) = self.a11y.as_ref().and_then(std::sync::Weak::upgrade) {
+            if descriptor == "android.app.IActivityManager" {
+                match method.name.as_str() {
+                    "attachApplication" => {
+                        if let Some(thread) = args.first().and_then(crate::value::Value::as_binder)
+                        {
+                            a11y.lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                                .set_app_thread(thread.0);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         if oneway {
             return Ok(CallInfo {
                 interface: descriptor,
@@ -980,8 +1108,7 @@ impl ServiceHost {
         })
     }
 
-    fn ensure_for_binder(
-        &mut self,
+    fn ensure_for_binder(        &mut self,
         binder: BinderId,
         _descriptor: &str,
     ) -> Result<&mut dyn ServiceObject> {

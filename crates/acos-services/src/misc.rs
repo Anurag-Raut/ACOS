@@ -41,6 +41,46 @@ pub struct A11yConnection {
     pub package: String,
 }
 
+/// One system-initiated bind waiting for the app's `publishService` reply.
+#[derive(Debug, Clone, PartialEq)]
+pub struct A11yPendingBind {
+    /// `package/.Class` as enabled in the secure settings.
+    pub component: String,
+    /// Package of the enabled service.
+    pub package: String,
+    /// Fully-qualified service class.
+    pub class: String,
+    /// The bind token that must come back in `publishService`.
+    pub token: u64,
+    /// `bindSeq` reported to the app (AOSP's monotonic per-bind sequence).
+    pub seq: i64,
+    /// The `ServiceInfo` parcel the bind was created with.
+    pub info: crate::value::Parcelable,
+}
+
+/// One bound `AccessibilityService` (`onServiceConnected` ran).
+#[derive(Debug, Clone, PartialEq)]
+pub struct A11yBoundService {
+    /// `package/.Class`.
+    pub component: String,
+    /// Package of the bound service.
+    pub package: String,
+    /// Fully-qualified class.
+    pub class: String,
+    /// The app-side `IAccessibilityServiceClient` binder (`onBind`'s reply).
+    pub binder: u64,
+    /// `IAccessibilityServiceConnection` connection id handed to the service.
+    pub connection_id: i32,
+    /// The system-side connection node the service received.
+    pub connection: u64,
+    /// The window token passed to `init`.
+    pub window_token: u64,
+    /// The info the service last set through `setServiceInfo`, if any.
+    pub service_info: Option<crate::value::Value>,
+    /// The `AccessibilityServiceInfo` the bind was made with.
+    pub bind_info: crate::value::Parcelable,
+}
+
 /// `IAccessibilityManager` state.
 ///
 /// ADR-0029's `accessibility` module owns the enabled/disabled state that the
@@ -67,6 +107,21 @@ pub struct A11yState {
     pub connections: Vec<A11yConnection>,
     /// Set when a call arrived that this module cannot answer honestly.
     pub unsupported: Vec<String>,
+    /// The package manager, so the installed service list is read from the
+    /// **installed** APK (after attach) and not from the launch config.
+    pub pms: Option<Arc<Mutex<crate::pms::PmsState>>>,
+    /// The app process's `IApplicationThread`, captured from
+    /// `attachApplication`; the bind has no target before that.
+    pub app_thread: Option<u64>,
+    /// The bind that is in flight (deliveries queued, `publishService` not yet
+    /// received).
+    pub pending_bind: Option<A11yPendingBind>,
+    /// The bound service (`onServiceConnected` ran on the app side).
+    pub bound_service: Option<A11yBoundService>,
+    /// `bindSeq` counter for system-initiated binds.
+    pub next_bind_seq: i64,
+    /// `disableSelf()` was called by the service.
+    pub self_disabled: bool,
 }
 
 /// Keep the event log bounded; an always-on UI sends thousands of events.
@@ -85,6 +140,12 @@ impl A11yState {
             events: Vec::new(),
             connections: Vec::new(),
             unsupported: Vec::new(),
+            pms: None,
+            app_thread: None,
+            pending_bind: None,
+            bound_service: None,
+            next_bind_seq: 0,
+            self_disabled: false,
         }
     }
 
@@ -245,6 +306,7 @@ impl A11yState {
         serde_json::json!({
             "enabled": self.enabled,
             "enabled_services": self.enabled_services,
+            "installed_services": self.installed_services(),
             "clients": self.clients.len(),
             "connections": self.connections.iter().map(|c| serde_json::json!({
                 "window": format!("{:#x}", c.window),
@@ -255,8 +317,105 @@ impl A11yState {
             "event_types": self.event_counts().into_iter().map(|(t, n)| {
                 serde_json::json!({"type": t, "count": n})
             }).collect::<Vec<_>>(),
+            "service_bound": self.bound_service.is_some(),
+            "bound_service": self.bound_service.as_ref().map(|b| serde_json::json!({
+                "component": b.component,
+                "binder": format!("{:#x}", b.binder),
+                "connection_id": b.connection_id,
+                "connection": format!("{:#x}", b.connection),
+                "service_info_set": b.service_info.is_some(),
+            })),
+            "bind_pending": self.pending_bind.as_ref().map(|p| serde_json::json!({
+                "component": p.component,
+                "token": format!("{:#x}", p.token),
+                "seq": p.seq,
+            })),
+            "app_thread": self.app_thread.map(|t| format!("{t:#x}")),
+            "self_disabled": self.self_disabled,
             "unsupported": self.unsupported,
         })
+    }
+
+    /// The accessibility services the **installed package** declares.
+    ///
+    /// AOSP's `getInstalledAccessibilityServiceList` reads
+    /// `PackageManager.queryIntentServices(Intent(SERVICE_INTERFACE))` and keeps
+    /// the services guarded by `BIND_ACCESSIBILITY_SERVICE`; the module attach
+    /// happens before the APK is installed, so the list must be read lazily here
+    /// (ADR-0029 amendment) instead of being copied from the launch config.
+    #[must_use]
+    pub fn installed_services(&self) -> Vec<String> {
+        let Some(pms) = &self.pms else {
+            return Vec::new();
+        };
+        let pms = pms
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        pms.services
+            .iter()
+            .filter(|service| {
+                service.permission == "android.permission.BIND_ACCESSIBILITY_SERVICE"
+            })
+            .map(|service| {
+                let package = service.package_name.clone();
+                let class = service
+                    .name
+                    .strip_prefix(&format!("{package}."))
+                    .map(|short| format!(".{short}"))
+                    .unwrap_or_else(|| service.name.clone());
+                format!("{package}/{class}")
+            })
+            .collect()
+    }
+
+    /// Record the app process's `IApplicationThread` (`attachApplication`).
+    pub fn set_app_thread(&mut self, binder: u64) {
+        self.app_thread = Some(binder);
+    }
+
+    /// Record the `AccessibilityServiceInfo` the service set on connect.
+    pub fn set_service_info(&mut self, value: Option<crate::value::Value>) {
+        if let Some(bound) = self.bound_service.as_mut() {
+            bound.service_info = value;
+        } else {
+            self.unsupported
+                .push("setServiceInfo before the service was bound".into());
+        }
+    }
+
+    /// The info `getServiceInfo` answers: what the service set, else the info
+    /// the bind was made with.
+    #[must_use]
+    pub fn bound_info(&self) -> Option<crate::value::Value> {
+        let bound = self.bound_service.as_ref()?;
+        Some(
+            bound
+                .service_info
+                .clone()
+                .unwrap_or(crate::value::Value::Parcelable(bound.bind_info.clone())),
+        )
+    }
+
+    /// Record a completed `publishService` handshake.
+    pub fn bind_service(
+        &mut self,
+        pending: &A11yPendingBind,
+        binder: u64,
+        connection_id: i32,
+        connection: u64,
+        window_token: u64,
+    ) {
+        self.bound_service = Some(A11yBoundService {
+            component: pending.component.clone(),
+            package: pending.package.clone(),
+            class: pending.class.clone(),
+            binder,
+            connection_id,
+            connection,
+            window_token,
+            service_info: None,
+            bind_info: pending.info.clone(),
+        });
     }
 }
 
@@ -375,38 +534,59 @@ impl ServiceObject for A11yService {
                 // pre-module service did.
                 let state_flags = state.flags();
                 if let Some(client) = args.first().and_then(Value::as_binder) {
-                    state.clients.push(client.0);
+                    if !state.clients.contains(&client.0) {
+                        state.clients.push(client.0);
+                    }
                 }
                 let id = state.next_client_id;
                 state.next_client_id += 1;
                 let _ = id;
+                // The app's `AccessibilityManager` connects here on start-up:
+                // this is where AOSP's `AccessibilityManagerService` would
+                // have bound the enabled services (`bindServiceAsUser`), so the
+                // system -> app bind is planned from this call. A bind that
+                // cannot start yet (no `attachApplication` yet, or nothing
+                // installed) must not fail the app's `addClient`: it is
+                // recorded and retried on the next call.
+                let deliveries = match crate::a11y_bind::plan_bind(&mut state) {
+                    Ok(deliveries) => deliveries,
+                    Err(err) => {
+                        let reason = format!("bind not started: {err}");
+                        if !state.unsupported.contains(&reason) {
+                            state.unsupported.push(reason);
+                        }
+                        Vec::new()
+                    }
+                };
                 Ok(CallResult {
                     reply: vec![Value::Long(
                         (i64::from(state_flags) << 32) | i64::from(0x7fff_ffff),
                     )],
                     // The state is in the return value on this image; a
                     // delivery would be a second, unsolicited `setState`.
-                    deliveries: Vec::new(),
+                    deliveries,
                 })
             }
             "getInstalledAccessibilityServiceList" | "getEnabledAccessibilityServiceList" => {
-                // `getEnabled...` takes a feedback-type filter; a configured
-                // service declares `FEEDBACK_SPOKEN` and every answer includes
-                // it. `getInstalled...` lists the same set because the launch
-                // config is this session's installed-service source (the PMS
-                // install happens after module attach; see the module docs).
+                // `getInstalled...` reads the **package manager** (the installed
+                // APK's `<service android:permission="…BIND_ACCESSIBILITY_SERVICE">`
+                // records), exactly like AOSP's `queryIntentServices`; the
+                // launch config only decides what is *enabled*. `getEnabled...`
+                // adds the feedback-type filter AOSP applies.
                 let enabled =
                     matches!(method.name.as_str(), "getInstalledAccessibilityServiceList")
                         || state.enabled;
-                let items = if enabled {
-                    state
-                        .enabled_services
-                        .iter()
-                        .filter_map(|service| service_info_value(service))
-                        .collect()
-                } else {
-                    Vec::new()
-                };
+                let installed = state.installed_services();
+                let mut items = Vec::new();
+                if enabled {
+                    for service in &state.enabled_services {
+                        if installed.iter().any(|i| i == service) {
+                            if let Some(info) = service_info_value(service) {
+                                items.push(info);
+                            }
+                        }
+                    }
+                }
                 Ok(CallResult {
                     reply: vec![Value::List(Some(items))],
                     deliveries: Vec::new(),

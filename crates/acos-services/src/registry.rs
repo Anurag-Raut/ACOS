@@ -287,6 +287,15 @@ pub fn install_with_handles_and_insets(
     let a11y = Arc::new(Mutex::new(crate::misc::A11yState::with_settings(
         Arc::clone(&settings),
     )));
+    // MODA11Y2: the accessibility module reads the **installed** service list
+    // from the package manager (lazily, after the APK is installed) instead of
+    // trusting the launch config, and the dispatcher needs the state for the
+    // system -> app bind (`attachApplication` / `publishService`).
+    let pms_shared = Arc::new(Mutex::new(crate::pms::PmsState::hello_views()));
+    a11y.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .pms = Some(Arc::clone(&pms_shared));
+    host.set_accessibility_state(Arc::clone(&a11y));
     let input = Arc::new(Mutex::new(crate::misc::InputState::new()));
     let textservices = Arc::new(Mutex::new(crate::misc::TextServicesState::new()));
     let autofill = Arc::new(Mutex::new(crate::misc::AutofillState::new()));
@@ -334,9 +343,12 @@ pub fn install_with_handles_and_insets(
             )) as Box<dyn ServiceObject>
         },
     );
-    host.register("package", "android.content.pm.IPackageManager", move |w| {
-        let pms = Arc::new(Mutex::new(crate::pms::PmsState::hello_views()));
-        Box::new(crate::pms::PmsService::new(pms, w)) as Box<dyn ServiceObject>
+    host.register("package", "android.content.pm.IPackageManager", {
+        let pms_state = Arc::clone(&pms_shared);
+        move |w| {
+            let pms = Arc::clone(&pms_state);
+            Box::new(crate::pms::PmsService::new(pms, w)) as Box<dyn ServiceObject>
+        }
     });
     host.register(
         "display",

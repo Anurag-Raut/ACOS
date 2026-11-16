@@ -292,19 +292,26 @@ impl Module for AccessibilityModule {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             let mut details = state.to_json();
             if let Some(object) = details.as_object_mut() {
-                object.insert("service_bound".into(), Value::Bool(false));
                 object.insert(
                     "binding".into(),
-                    Value::String(
-                        "AOSP binds the service and calls IAccessibilityServiceClient.init; ACOS's ART path has no system-initiated bind yet, so onServiceConnected has not run"
-                            .into(),
-                    ),
+                    Value::String(if state.bound_service.is_some() {
+                        "bound: the app published its IAccessibilityServiceClient and the system delivered init(IAccessibilityServiceConnection, connectionId, windowToken), so onServiceConnected ran"
+                            .into()
+                    } else if state.pending_bind.is_some() {
+                        "bind in flight: scheduleCreateService + scheduleBindService were delivered; waiting for IActivityManager.publishService"
+                            .into()
+                    } else if !state.enabled {
+                        "accessibility is off, so no service is bound".into()
+                    } else {
+                        "no bind yet: it starts when the app's AccessibilityManager calls addClient and attachApplication named its IApplicationThread"
+                            .into()
+                    }),
                 );
             }
             report.details = Some(details);
             if self.profile.is_attached() {
                 report.reason = Some(
-                    "real: settings, client state, service lists, event and interaction records; the AccessibilityService is NOT bound yet (no system-initiated bind on the ART path), so onServiceConnected, takeScreenshot, dispatchGesture and performGlobalAction are unreachable"
+                    "real: settings, client state, service lists, event and interaction records, system-initiated bind (scheduleCreateService + scheduleBindService -> publishService -> IAccessibilityServiceClient.init); the interaction surface (getWindows, node queries, gestures, screenshot) is not implemented yet"
                         .into(),
                 );
             }
@@ -443,11 +450,28 @@ mod tests {
         let mut registry = ModuleRegistry::standard();
         registry.attach_session(&mut host, &[]).expect("core");
         let state = a11y_state(&mut host);
-        state
-            .lock()
-            .unwrap()
-            .enable_services(&["com.gaten/.GatenAccessibilityService".into()])
-            .unwrap();
+        {
+            let mut state = state.lock().unwrap();
+            state
+                .enable_services(&["com.gaten/.GatenAccessibilityService".into()])
+                .unwrap();
+            // The installed list is the package manager's answer (MODA11Y2),
+            // so the test installs the component in the in-process PMS.
+            let pms = state.pms.clone().expect("package manager wired");
+            let mut pms = pms.lock().unwrap();
+            pms.app.package_name = "com.gaten".into();
+            pms.package.package_name = "com.gaten".into();
+            pms.services.push(crate::pms::ServiceInfo {
+                name: "com.gaten.GatenAccessibilityService".into(),
+                package_name: "com.gaten".into(),
+                process_name: "com.gaten".into(),
+                permission: "android.permission.BIND_ACCESSIBILITY_SERVICE".into(),
+                exported: true,
+                flags: 0,
+                foreground_service_type: 0,
+                meta_data: Vec::new(),
+            });
+        }
         let method = acos_aidl::lookup("android.view.accessibility.IAccessibilityManager", 5)
             .expect("table row");
         let mut service = A11yService::new(state);
