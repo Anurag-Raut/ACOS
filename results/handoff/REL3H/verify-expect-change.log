@@ -1,0 +1,7 @@
+verify: fail (ok=false, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-82287ccb-3a5c5b00dcfc246d/scenarios/rel3h-unhandled-input-expect-change.yaml (sha 89835b69c14c), apk /home/Qui/.t3/worktrees/acos/t3-82287ccb-3a5c5b00dcfc246d/fixtures/build/apps/tap-targets.apk (sha 07be66f0b122), engine art, fidelity art-reference
+  error: ASSERTION_FAILED: tap: the settled frame is pixel-identical to the pre-action frame (`settle.pixels_changed:false`); the step proved no visual change
+  artifacts: results/handoff/REL3H/verify-expect-change
+  steps: 2
+verify: ASSERTION_FAILED (assertion): tap: the settled frame is pixel-identical to the pre-action frame (`settle.pixels_changed:false`); the step proved no visual change [class=assertion, retryable=false]

@@ -1,0 +1,108 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "pixel_evidence": false,
+        "settle": "content"
+      },
+      "diff": {
+        "actual": {
+          "pixel_evidence": false,
+          "settle": "content"
+        },
+        "detail": "content settle proves the tree's text/nodes/bounds/state stopped changing; it never proves the pixels stopped changing",
+        "expected": {
+          "pixel_evidence": true,
+          "settle": "strict"
+        },
+        "path": "frame.settle"
+      },
+      "expected": {
+        "pixel_evidence": true,
+        "settle": "strict"
+      },
+      "kind": "frame_binding",
+      "matched_node_ids": [],
+      "passed": false
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 0,
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "details": {
+      "diff": {
+        "actual": {
+          "pixel_evidence": false,
+          "settle": "content"
+        },
+        "detail": "content settle proves the tree's text/nodes/bounds/state stopped changing; it never proves the pixels stopped changing",
+        "expected": {
+          "pixel_evidence": true,
+          "settle": "strict"
+        },
+        "path": "frame.settle"
+      },
+      "pixel_evidence": false,
+      "reason": "content_settle_pixel",
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 342,
+        "frame_seq": 66,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 128,
+        "probe_seq_first": 110,
+        "probe_seq_floor": 107,
+        "settled": true,
+        "signature": "626ab4f94e752d00",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 19,
+        "window_ms": 300
+      },
+      "step_kind": "assert_region"
+    },
+    "hint": "A pixel/frame assertion needs a pixel-settled frame: use `settle: strict` (the default) and let the screen stop animating, or assert on the UI tree (assert_text/assert_visible/assert_state) which content settle may back.",
+    "message": "assert_region: the bound frame was settled by `settle: content` (UI tree content stable), which is not pixel evidence - the pixels may still be animating",
+    "retryable": false
+  },
+  "evidence": [
+    {
+      "kind": "step",
+      "path": "steps/04-assert_region.json"
+    }
+  ],
+  "index": 4,
+  "provenance": {
+    "frame": "host-observed"
+  },
+  "status": "fail",
+  "step": "assert_region",
+  "trust": "trusted"
+}
