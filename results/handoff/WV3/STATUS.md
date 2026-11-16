@@ -31,7 +31,7 @@ already right: the decoded shape is code 96, `[Str16]`, empty reply).
 | provider reaches the WIRE socket path | **PASS (attempt recorded)** | same lines: `AcosSessionSocket.open` → `LocalSocket.connect(/run/acos/webview.sock)` → wall 8 |
 | end-to-end page load + one frame | **FAIL (not possible in this tree)** | no broker in the repo: `git ls-tree -r wvb` = `results/handoff/WVB/WIRE.md` only, `crates/acos-webview` does not exist |
 | every wall recorded | **PASS** | `WALLS.md` |
-| tests | **PASS** | `cargo test -p acos-services --lib add_package_dependency` → 1 passed |
+| tests | **PASS** | `cargo test -p acos-services --lib` → 97 passed, 0 failed (`add_package_dependency` incl.) |
 
 ## 3. Commands
 
