@@ -1073,6 +1073,72 @@
         }
       ]
     },
+    "HandledEvidence": {
+      "description": "The delivery evidence behind [`StepInputResult::handled`].",
+      "properties": {
+        "acked": {
+          "description": "`FINISHED` acks the guest returned for them.",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "published": {
+          "description": "`InputMessage`s the host published for the gesture.",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "source": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/HandledSource"
+            }
+          ],
+          "description": "Which fact the `handled` verdict rests on."
+        },
+        "unhandled": {
+          "description": "Sequence numbers the guest answered `handled: false`.",
+          "items": {
+            "format": "uint64",
+            "minimum": 0.0,
+            "type": "integer"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "acked",
+        "published",
+        "source"
+      ],
+      "type": "object"
+    },
+    "HandledSource": {
+      "description": "Where an input step's `handled` answer came from (REL3I3).\n\nThe field exists because \"the app handled it\" has two honest proofs that are *not* interchangeable:\n\n* [`HandledSource::Guest`] — the app window's own `InputEventReceiver.finishInputEvent(handled)` bit, one per acknowledged `InputMessage`; * [`HandledSource::HostWindowRemoved`] — the host's own record that the window this input was delivered to was removed during the step, so its receiver was destroyed before it could finish the event. That is what AOSP sees when a dialog's Back dismisses the dialog: the press *did* act (the window it acted on is gone), but no ack can exist.",
+      "oneOf": [
+        {
+          "description": "A guest `finishInputEvent` ack.",
+          "enum": [
+            "guest"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The delivered window was removed within the step.",
+          "enum": [
+            "host_window_removed"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "No input was delivered, so there is nothing to have handled.",
+          "enum": [
+            "none"
+          ],
+          "type": "string"
+        }
+      ]
+    },
     "IsolationLevel": {
       "description": "How independent a session is from other sessions.\n\nThe levels are ordered from cheapest/weakest to strongest. A claim of data independence is only allowed at `sandbox` and above, and only when the engine actually implements the guarantees (see `docs/AGENT_API.md`).",
       "oneOf": [
@@ -1419,6 +1485,48 @@
       ],
       "type": "object"
     },
+    "StepInputResult": {
+      "description": "REL3E: the `input` block of a step result.\n\n`handled` is the app's own `finishInputEvent(handled)` answer, or the host's window-removal fact when the app could not answer; `handled_evidence` says which. `target` is the resolved node plus the hit-test at the injected point and `expect_change` is the rule the step asked for (`\"auto\"` for a `tap`).",
+      "properties": {
+        "expect_change": {
+          "description": "`true`/`false`, or `\"auto\"` for a tap (the step's own check)."
+        },
+        "handled": {
+          "description": "The consumer's verdict (`null` when the guest did not ack).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "handled_evidence": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/HandledEvidence"
+            }
+          ],
+          "description": "The facts the verdict rests on."
+        },
+        "handled_hint": {
+          "description": "One line explaining a `handled`/hit-test combination that is not self-evident (REL3E).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target": {
+          "description": "The resolved node plus the hit-test at the injected point."
+        },
+        "until": {
+          "description": "The `scroll_until`/`wait_for` search outcome, when the action searched."
+        }
+      },
+      "required": [
+        "expect_change",
+        "handled_evidence",
+        "target"
+      ],
+      "type": "object"
+    },
     "StepResult": {
       "description": "One step in a scenario run.",
       "properties": {
@@ -1478,7 +1586,15 @@
           "type": "integer"
         },
         "input": {
-          "description": "REL3E: the input step's own evidence. `handled` is the app window's `finishInputEvent(handled)` answer (`null` when the guest did not ack), `target` is what the selector resolved to plus the hit-test at the injected point, and `expect_change` says whether a change was required - `\"auto\"` for a `tap` (the step's own state-change check), `true`/`false` for the scenario's explicit flag. `None` for steps that inject no input."
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StepInputResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "REL3E: the input step's own evidence. `handled` is the app window's `finishInputEvent(handled)` answer (`null` when the guest did not ack), or the host's window-removal fact when the delivered window died before it could answer (`handled_evidence.source`). `target` is what the selector resolved to plus the hit-test at the injected point, and `expect_change` says whether a change was required - `\"auto\"` for a `tap` (the step's own state-change check), `true`/`false` for the scenario's explicit flag. `None` for steps that inject no input."
         },
         "name": {
           "description": "`capture` step name (the scenario's own label for this screenshot).\n\nWritten into the step JSON so \"the screenshot for X\" is answerable from the artifacts; the same name keys `verdict.json`'s `captures` map.",

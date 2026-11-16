@@ -42,6 +42,75 @@ pub struct PendingDelivery {
     pub data: Parcel,
 }
 
+/// The wakeup a `system -> app` delivery needs when it is queued **outside**
+/// the binder peer's turn.
+///
+/// A delivery produced while the peer is answering a transaction rides the
+/// reply: `Peer::handle` drains the queue at the end of its turn. A delivery
+/// produced by another thread (the launcher injecting a key that makes the
+/// in-process IME hide itself, a compositor callback) has no turn to ride, and
+/// the peer is blocked in `poll(2)` on its socket. `DeliveryWake` is that
+/// missing edge: the producer writes one byte, the peer's idle wait returns and
+/// it drains the queue.
+///
+/// This is a self-pipe, not a timer: an idle session with nothing queued never
+/// wakes (the 1 s receive timeout this replaces only noticed `stop`).
+#[derive(Debug)]
+pub struct DeliveryWake {
+    reader: std::os::unix::net::UnixStream,
+    writer: std::os::unix::net::UnixStream,
+}
+
+impl DeliveryWake {
+    /// Create the pair. The owner keeps it for the session's lifetime.
+    ///
+    /// A `SOCK_STREAM` socketpair is `CLOEXEC`-like (Rust creates it with
+    /// `SOCK_CLOEXEC`, so no fd leaks into the guest) and a non-blocking write
+    /// of one byte can never park a producer.
+    ///
+    /// # Errors
+    ///
+    /// `socketpair(2)`'s error, or the one from setting non-blocking mode.
+    pub fn new() -> std::io::Result<Self> {
+        use std::os::unix::net::UnixStream;
+        let (reader, writer) = UnixStream::pair()?;
+        reader.set_nonblocking(true)?;
+        writer.set_nonblocking(true)?;
+        Ok(Self { reader, writer })
+    }
+
+    /// The end the peer's idle wait polls.
+    #[must_use]
+    pub fn read_fd(&self) -> std::os::unix::io::RawFd {
+        use std::os::unix::io::AsRawFd as _;
+        self.reader.as_raw_fd()
+    }
+
+    /// Signal that a delivery is queued. Coalescing is intentional: one byte
+    /// means "drain the queue", and the drain empties it.
+    pub fn wake(&self) {
+        use std::io::Write as _;
+        let byte = 1u8;
+        // A failed write means the peer is gone; the delivery is then moot and
+        // this must never become a producer-side error.
+        let mut writer = &self.writer;
+        let _ = writer.write(&[byte]);
+    }
+
+    /// Consume every pending wakeup byte (the queue, not the count, is the
+    /// state).
+    pub fn drain(&self) {
+        use std::io::Read as _;
+        let mut buf = [0u8; 64];
+        let mut reader = &self.reader;
+        while let Ok(read) = reader.read(&mut buf) {
+            if read == 0 {
+                return;
+            }
+        }
+    }
+}
+
 /// The result of one service handler call.
 #[derive(Debug, Default)]
 pub struct CallResult {
@@ -190,6 +259,10 @@ pub struct ServiceHost {
     /// a text toast from `NotificationManagerService` in the system process;
     /// ACOS has one process, so the runtime renders the recorded request.
     notification: Option<std::sync::Arc<std::sync::Mutex<crate::declared::NotificationState>>>,
+    /// Where a producer signals that it queued a `system -> app` delivery with
+    /// no transaction to ride (see [`DeliveryWake`]). `None` keeps the host
+    /// synchronous-only: the VM transport never has an idle peer to wake.
+    delivery_wake: Option<Arc<DeliveryWake>>,
 }
 
 impl core::fmt::Debug for ServiceHost {
@@ -228,7 +301,23 @@ impl ServiceHost {
             seq: AtomicU64::new(1),
             constructions: 0,
             notification: None,
+            delivery_wake: None,
         }
+    }
+
+    /// Attach the session's delivery wakeup (ART transport).
+    ///
+    /// Services that queue deliveries from outside a transaction get the same
+    /// handle through the registry, so the queue and the wake can never
+    /// disagree about which session they belong to.
+    pub fn set_delivery_wake(&mut self, wake: Arc<DeliveryWake>) {
+        self.delivery_wake = Some(wake);
+    }
+
+    /// The session's delivery wakeup, when the transport has one.
+    #[must_use]
+    pub fn delivery_wake(&self) -> Option<Arc<DeliveryWake>> {
+        self.delivery_wake.clone()
     }
 
     /// Register a service name and descriptor.

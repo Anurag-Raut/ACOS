@@ -31,7 +31,9 @@
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
+use std::os::unix::io::RawFd;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use acos_parcel::binder::BINDER_TYPE_FD;
 use acos_parcel::{BinderId, BinderKind, FlatObject, Parcel};
@@ -887,11 +889,32 @@ impl Peer {
     /// The IME's show/hide is driven by a **key** on the input channel, not by
     /// a binder transaction, so its `IWindow` insets callbacks would otherwise
     /// wait for the next guest transaction — which is itself waiting on those
-    /// insets. The interactive server calls this on its idle timeout.
+    /// insets. The launcher calls this when the delivery wake fires (the
+    /// producer signalled [`acos_services::DeliveryWake`]) and on a timed
+    /// deadline; an idle session never calls it at all.
     pub fn flush_deliveries(&mut self) -> Vec<Frame> {
         let raw = self.host.drain_raw_deliveries_all();
         self.local_deliveries.extend(raw);
         self.take_delivery_frames()
+    }
+
+    /// The instant the earliest **queued** delivery is due.
+    ///
+    /// `None` means nothing is queued, so the peer may sleep until the guest
+    /// or the delivery wake speaks: an idle session has zero wakeups (the 1 s
+    /// receive timeout this replaces woke it once a second and still delivered
+    /// an out-of-turn delivery up to a second late). A queued delivery answers
+    /// `now`.
+    /// This branch has no timed module, so the only deadline is a delivery the
+    /// peer already holds; the `modules` branch extends the second half with
+    /// `ServiceHost::next_timed_deadline` (a scripted feed's due instant).
+    #[must_use]
+    pub fn next_timed_deadline(&self) -> Option<Instant> {
+        if self.local_deliveries.is_empty() {
+            None
+        } else {
+            Some(Instant::now())
+        }
     }
 
     fn take_delivery_frames(&mut self) -> Vec<Frame> {
@@ -1163,5 +1186,75 @@ pub fn host_binder_kind(id: BinderId) -> BinderKind {
         BinderKind::Proxy
     } else {
         BinderKind::Local
+    }
+}
+
+/// What an idle wait produced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdleWake {
+    /// The guest wrote something: read a frame.
+    Frame,
+    /// A queued delivery is due: call [`Peer::flush_deliveries`].
+    Deadline,
+    /// The launcher woke the peer: it is stopping the session, or a producer
+    /// queued a `system -> app` delivery that no transaction will carry
+    /// ([`acos_services::DeliveryWake`]). The queue is the state, the byte is
+    /// only the edge.
+    Wake,
+}
+
+/// Sleep until the guest has a frame to read (`fd`), the delivery deadline
+/// elapses, or the delivery/stop wake (`wake_fd`) fires.
+///
+/// `deadline` is the **remaining** time (see [`Peer::next_timed_deadline`]);
+/// `None` sleeps until a frame or a wake, i.e. forever when neither happens.
+/// That is the whole idle policy: no fixed poll interval, no receive timeout as
+/// the idle cadence, and therefore no wakeup a caller did not ask for.
+///
+/// # Errors
+///
+/// The `poll(2)` error, so a broken socket is reported instead of spun on.
+pub fn wait_for_idle(
+    fd: RawFd,
+    wake_fd: RawFd,
+    deadline: Option<Duration>,
+) -> std::io::Result<IdleWake> {
+    let timeout_ms: libc::c_int = match deadline {
+        None => -1,
+        Some(remaining) => {
+            let micros = remaining.as_micros().min(i64::MAX as u128) as i64;
+            // Round **up**: waking 1 ms early would tick before the deadline and
+            // then sleep again, which is exactly the poll the deadline replaces.
+            libc::c_int::try_from((micros + 999) / 1000).unwrap_or(libc::c_int::MAX)
+        }
+    };
+    let mut fds = [
+        libc::pollfd {
+            fd,
+            events: libc::POLLIN,
+            revents: 0,
+        },
+        libc::pollfd {
+            fd: wake_fd,
+            events: libc::POLLIN,
+            revents: 0,
+        },
+    ];
+    loop {
+        let ready = unsafe { libc::poll(fds.as_mut_ptr(), 2, timeout_ms) };
+        if ready < 0 {
+            let error = std::io::Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err(error);
+        }
+        if fds[1].revents != 0 {
+            return Ok(IdleWake::Wake);
+        }
+        if fds[0].revents != 0 {
+            return Ok(IdleWake::Frame);
+        }
+        return Ok(IdleWake::Deadline);
     }
 }

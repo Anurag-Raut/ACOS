@@ -1,22 +1,24 @@
-# Back-layer ordering with the soft input up (REL3I).
+# Back-layer ordering with the soft input up (REL3I3: passing).
 #
-# STATUS: expectation `fail` — this is the fail-before arm of the IME layer.
-# The dialog and Activity layers pass (see back-layers.yaml). REL3I2 closed the
-# first gap (the sender link): the bind result's channel now carries its own
-# token per pair (`InputChannel::openInputChannelPair` makes a fresh `BBinder`
-# per pair), so the framework's `areSameInputChannel` no longer keeps the stale
-# `mCurChannel` and the app's `ImeInputEventSender` really writes the Back into
-# the channel ACOS holds. The IME now consumes the press (host trace:
-# `back-down hid the soft input seq=1`, `wms set_ime_visible(false)`) and its
-# `FINISHED(handled=true)` is what the Activity's window acks.
+# This is the IME arm of the layer stack. The dialog and Activity layers run in
+# `scenarios/back-layers.yaml`; this scenario isolates the soft-input layer so
+# the IME chain can be read on its own:
 #
-# The remaining gap is one step later, the app-visible hide: the IME hide is
-# driven by a key on the input channel, so its `IWindow` insets callbacks have
-# no transaction to ride. The only drain that runs is the binder peer's idle
-# tick (a 1 s `SO_RCVTIMEO` stop check), so the app never receives the
-# `InsetsState` that says the IME is gone and keeps `ImeUp` (measured: the host
-# logs `wms set_ime_visible(false)`, the guest log only ever shows
-# `insets_ime visible=true`). See results/handoff/REL3I2/REPORT.md §3.
+#   * the show — `startInputOrWindowGainedFocus` answers a real session, a
+#     session id and a real `InputChannel` pair, whose token is fresh per pair
+#     (`InputChannel::openInputChannelPair` makes a new `BBinder` per pair, so
+#     the framework's `areSameInputChannel` replaces `mCurChannel` instead of
+#     keeping a stale one — REL3I2);
+#   * the press — the app's `ImeInputEventSender` writes the Back into that
+#     channel, the IME consumes it (`back-down hid the soft input seq=1`,
+#     `wms set_ime_visible(false)`) and answers `FINISHED(handled=true)`, so the
+#     Activity's window never sees the key and stays resumed;
+#   * the app-visible hide — the IME hide is driven by a key on the input
+#     channel, so its `IWindow` insets callbacks have no transaction to ride. The
+#     binder peer used to drain them only on its 1 s receive timeout; REL3I3's
+#     delivery wake (`DeliveryWake` + `wait_for_idle`) flushes them as soon as
+#     they are queued, so the app sees `insets_ime visible=false` (`ImeDown`) in
+#     the same step.
 #
 # Back-layer ordering: which layer consumes a Back press (REL3K2).
 #
@@ -53,7 +55,7 @@ capabilities:
   - lifecycle
   - ui.text
   - input
-expectation: fail
+expectation: pass
 budgets:
   memory_mib: 512
   wall_ms: 120000

@@ -143,6 +143,15 @@ pub struct WmsState {
     /// The real compositor layer behind each `acos-wm` window surface handle
     /// (W5). Populated on the first `relayout` of a window.
     pub surface_layers: std::collections::HashMap<u64, SurfaceLayerBinding>,
+    /// Where an IME show/hide signals that it queued the app-visible insets
+    /// callbacks (see [`crate::DeliveryWake`]).
+    ///
+    /// The IME hide is driven by a key on the input channel, so its `IWindow`
+    /// callbacks have no transaction to ride: without this edge the app only
+    /// learns the keyboard is gone on the binder peer's next turn — a second of
+    /// latency, or never when the peer is idle. `None` keeps the VM transport,
+    /// where the queue is drained by the caller.
+    wake: Option<Arc<crate::DeliveryWake>>,
 }
 
 impl Default for WmsState {
@@ -187,7 +196,16 @@ impl WmsState {
             frames_published: 0,
             input: crate::input::InputDispatcher::new(),
             surface_layers: std::collections::HashMap::new(),
+            wake: None,
         }
+    }
+
+    /// Tell the IME-insets producer where to wake the binder peer.
+    ///
+    /// The registry attaches it from [`crate::ServiceHost::delivery_wake`], so
+    /// the queue and the wake belong to the same session.
+    pub fn attach_delivery_wake(&mut self, wake: Arc<crate::DeliveryWake>) {
+        self.wake = Some(wake);
     }
 
     /// ROT3: rotate the display to `rotation` (0..3, a target rotation).
@@ -473,7 +491,23 @@ impl WmsState {
         let Some(window) = self.wm.focused_window().map(|w| w.id) else {
             return Ok(());
         };
-        self.wm.set_ime_visible(window, visible)
+        let before = self.wm.callbacks.len();
+        self.wm.set_ime_visible(window, visible)?;
+        // REL3I3: the IME hide is a key on the input channel, so these `IWindow`
+        // callbacks are queued with no transaction of their own and the binder
+        // peer is asleep in `poll(2)` on its socket. Wake it (same turn, same
+        // session) instead of waiting for the next guest frame. A call that
+        // queued nothing (the IME was already in that state) wakes nobody.
+        self.wake_queued_deliveries(before);
+        Ok(())
+    }
+
+    /// Wake the binder peer when this call queued app-visible deliveries.
+    fn wake_queued_deliveries(&self, queued_before: usize) {
+        let Some(wake) = &self.wake else { return };
+        if self.wm.callbacks.len() > queued_before {
+            wake.wake();
+        }
     }
 
     /// `IWindowSession.reportSystemGestureExclusionChanged` (oneway; recorded by
@@ -662,6 +696,12 @@ pub fn install_with_insets(
         Some(mode) => WmsState::new_with_insets(mode),
         None => WmsState::new(),
     }));
+    if let Some(wake) = host.delivery_wake() {
+        state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .attach_delivery_wake(wake);
+    }
     let factory_state = Arc::clone(&state);
     host.register(
         "window",

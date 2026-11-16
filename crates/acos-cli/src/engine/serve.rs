@@ -3275,7 +3275,7 @@ fn input_result(session: &mut ArtSession, kind: &str, target: Value) -> Value {
 /// REL3E: the delivery evidence behind `handled`, never a boolean on its own.
 fn handled_evidence(delivery: &Option<acos_verify::backend::InputDelivery>) -> Value {
     let Some(delivery) = delivery else {
-        return json!({"source": "none", "published": 0, "acked": 0});
+        return json!(acos_protocol::HandledEvidence::none());
     };
     let unhandled: Vec<u64> = delivery
         .acks
@@ -3283,12 +3283,17 @@ fn handled_evidence(delivery: &Option<acos_verify::backend::InputDelivery>) -> V
         .filter(|ack| !ack.handled)
         .map(|ack| ack.seq)
         .collect();
-    json!({
-        "source": "finishInputEvent",
-        "published": delivery.published,
-        "acked": delivery.acks.len(),
-        "unhandled": unhandled,
-    })
+    json!(acos_protocol::HandledEvidence::new(
+        acos_protocol::ui::handled_source(
+            delivery.published,
+            delivery.acks.len(),
+            !unhandled.is_empty(),
+            delivery.window_removed,
+        ),
+        delivery.published,
+        delivery.acks.len(),
+        unhandled,
+    ))
 }
 
 /// The action reply every backend has always produced. REL3E adds `handled` and

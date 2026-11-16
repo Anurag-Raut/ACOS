@@ -805,6 +805,52 @@ fn hint_node_name(node: &serde_json::Value) -> String {
     String::from("(no name)")
 }
 
+/// REL3I3: which fact an input action's `handled` verdict rests on.
+///
+/// The order matters. An explicit `handled:false` ack is the guest's own answer
+/// and wins. A complete set of acks is the guest's answer too. Only when the
+/// guest could not answer because the window it was delivered to was destroyed
+/// during the step does the host's removal fact stand in — and never for a
+/// *different* window's removal, which the caller checks by token.
+#[must_use]
+pub fn handled_source(
+    published: usize,
+    acked: usize,
+    any_unhandled: bool,
+    window_removed: bool,
+) -> crate::HandledSource {
+    use crate::HandledSource;
+    if published == 0 {
+        return HandledSource::None;
+    }
+    if any_unhandled || acked >= published {
+        return HandledSource::Guest;
+    }
+    if window_removed {
+        return HandledSource::HostWindowRemoved;
+    }
+    HandledSource::None
+}
+
+/// REL3I3: the `handled` verdict an input action can report.
+///
+/// The guest's own answer wins whenever it exists. When it cannot exist — the
+/// window the input was delivered to was destroyed before its
+/// `InputEventReceiver` could finish the event — the host's removal fact answers
+/// `true`: the press acted on that window, which is why the window is gone. No
+/// removal leaves the answer unknown (`None`), never a guess.
+#[must_use]
+pub fn handled_answer(
+    handled: Option<bool>,
+    published: usize,
+    window_removed: bool,
+) -> Option<bool> {
+    match handled {
+        None if window_removed && published > 0 => Some(true),
+        other => other,
+    }
+}
+
 /// REL3E: the one-line reason a reply is not enough on its own.
 ///
 /// It only ever explains the framework fact (`handled`) together with the

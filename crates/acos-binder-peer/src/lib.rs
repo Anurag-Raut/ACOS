@@ -27,8 +27,8 @@ pub mod peer;
 pub mod protocol;
 
 pub use peer::{
-    frame_from_parcel, host_binder_kind, import_parcel, java_wire, peer_node, Peer,
-    UnsupportedRecord, JAVA_TAG, NODE_TAG,
+    frame_from_parcel, host_binder_kind, import_parcel, java_wire, peer_node, wait_for_idle,
+    IdleWake, Peer, UnsupportedRecord, JAVA_TAG, NODE_TAG,
 };
 pub use protocol::{
     accept, close_frame_fds, listen, read_frame, write_frame, Frame, F_REP, F_REQ, F_RSP, F_TXN,

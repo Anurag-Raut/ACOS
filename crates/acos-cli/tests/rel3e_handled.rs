@@ -249,7 +249,7 @@ fn tap_on_a_label_is_reported_not_handled_and_names_the_switch() {
         "a tap on the label must report the app window's own handled=false: {label:#?}"
     );
     assert_eq!(result["state_changed"], json!(false));
-    assert_eq!(result["handled_evidence"]["source"], json!("finishInputEvent"));
+    assert_eq!(result["handled_evidence"]["source"], json!("guest"));
     assert_eq!(
         result["handled_evidence"]["published"],
         result["handled_evidence"]["acked"],
@@ -322,7 +322,7 @@ fn tap_on_a_label_is_reported_not_handled_and_names_the_switch() {
     assert_eq!(swipe["ok"], json!(true), "{swipe:#?}");
     assert_eq!(
         swipe["result"]["handled_evidence"]["source"],
-        json!("finishInputEvent"),
+        json!("guest"),
         "a swipe reports the window's own handled bit: {swipe:#?}"
     );
 

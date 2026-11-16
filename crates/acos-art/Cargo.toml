@@ -19,6 +19,9 @@ acos-sandbox = { path = "../acos-sandbox" }
 acos-binder-peer = { path = "../acos-binder-peer" }
 acos-render = { path = "../acos-render" }
 acos-services = { path = "../acos-services" }
+# REL3I3: `BinderId` names the input channel an action was delivered to (the
+# settle's window-removal witness is keyed by it).
+acos-parcel = { path = "../acos-parcel" }
 # VIEW1a: the live-view frame encoder (jpeg/png only, no default formats).
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 libc = "0.2"

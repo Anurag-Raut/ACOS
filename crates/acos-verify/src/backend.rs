@@ -407,6 +407,16 @@ pub struct InputDelivery {
     pub published: usize,
     /// Guest acknowledgments, in delivery order.
     pub acks: Vec<InputAck>,
+    /// REL3I3: the host's own fact that the window this input was delivered to
+    /// was removed during the step.
+    ///
+    /// A dialog's Back destroys the dialog window, and its
+    /// `InputEventReceiver` is disposed before it can call
+    /// `finishInputEvent(handled)`: no ack can exist for a window that is gone.
+    /// The removal is the consumer's proof (it acted *on that window*), and it is
+    /// only ever true for the **delivered** window — a different window's
+    /// removal is not evidence about this input.
+    pub window_removed: bool,
     /// REL3E: the action reply's `target` block, verbatim: the node the selector
     /// resolved to and the hit-test result at the injected point. `None` when the
     /// backend reports no target.
