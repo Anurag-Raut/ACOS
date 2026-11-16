@@ -1,0 +1,47 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "matched_lines": 1,
+        "sample": [
+          "AcosA11yProbe: service_connected id=dev.acos.fixtures.a11yprobe/.A11yProbeService eventTypes=0 flags=0"
+        ]
+      },
+      "expected": {
+        "min_matches": 1,
+        "ordered": true,
+        "patterns": [
+          "service_connected"
+        ],
+        "since_previous_step": false,
+        "tag": "AcosA11yProbe"
+      },
+      "kind": "log",
+      "matched_node_ids": [],
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 1,
+  "evidence": [
+    {
+      "kind": "log",
+      "path": "logs/logcat.txt"
+    },
+    {
+      "kind": "step",
+      "path": "steps/05-assert_log.json"
+    }
+  ],
+  "index": 5,
+  "provenance": {
+    "logs": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "assert_log",
+  "trust": "trusted"
+}

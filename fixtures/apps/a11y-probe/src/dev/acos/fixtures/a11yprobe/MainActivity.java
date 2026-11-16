@@ -20,12 +20,18 @@ import java.util.List;
  * with it attached, {@code isEnabled()} is true, the installed/enabled service
  * lists contain that component, and the event reaches
  * {@code IAccessibilityManager.sendAccessibilityEvent} (the module records it).
+ *
+ * <p>MODA11Y4: {@code click_target} is the node the probe's accessibility
+ * service clicks through {@code ACTION_CLICK}. The counter lives in this
+ * activity and is rendered into the {@code status} text, so the frame shows the
+ * click happened in the app.
  */
 public class MainActivity extends Activity {
     private static final String TAG = "AcosA11yProbe";
     private AccessibilityManager manager;
     private TextView status;
     private int sent;
+    private int clicks;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,6 +52,57 @@ public class MainActivity extends Activity {
             Log.i(TAG, "event_sent type=" + event.getEventType() + " count=" + sent);
             updateStatus();
         });
+
+        Button target = (Button) findViewById(R.id.click_target);
+        target.setOnClickListener(v -> {
+            clicks++;
+            Log.i(TAG, "click_target_pressed count=" + clicks);
+            updateStatus();
+        });
+
+        // MODA11Y4 step 3: the service's performGlobalAction(BACK) is a real
+        // Back key into this window, so this activity's own finish() runs.
+        Button back = (Button) findViewById(R.id.a11y_back);
+        back.setOnClickListener(v -> {
+            Log.i(TAG, "back_requested");
+            A11yProbeService.requestBack();
+        });
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, android.view.KeyEvent event) {
+        Log.i(TAG, "key_down code=" + keyCode + " tracking=" + event.isTracking());
+        return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, android.view.KeyEvent event) {
+        Log.i(TAG, "key_up code=" + keyCode + " tracking=" + event.isTracking());
+        return super.onKeyUp(keyCode, event);
+    }
+
+    @Override
+    public void onBackPressed() {
+        Log.i(TAG, "back_pressed");
+        super.onBackPressed();
+    }
+
+    @Override
+    protected void onPause() {
+        Log.i(TAG, "activity_paused");
+        super.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        Log.i(TAG, "activity_stopped");
+        super.onStop();
+    }
+
+    @Override
+    protected void onDestroy() {
+        Log.i(TAG, "activity_destroyed clicks=" + clicks);
+        super.onDestroy();
     }
 
     private void updateStatus() {
@@ -65,7 +122,8 @@ public class MainActivity extends Activity {
         String text = "a11y enabled=" + enabled
                 + " installed=" + (installed == null ? -1 : installed.size())
                 + " enabled_list=" + enabledCount
-                + " sent=" + sent + first;
+                + " sent=" + sent + first
+                + " a11y_click=" + clicks;
         status.setText(text);
         Log.i(TAG, "status " + text);
     }

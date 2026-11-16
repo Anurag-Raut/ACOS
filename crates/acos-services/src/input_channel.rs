@@ -171,6 +171,20 @@ pub const AXIS_TOUCH_MAJOR: i32 = 4;
 /// `AMOTION_EVENT_AXIS_TOUCH_MINOR`.
 pub const AXIS_TOUCH_MINOR: i32 = 5;
 
+/// `KeyEvent.KEYCODE_BACK` — what `performGlobalAction(GLOBAL_ACTION_BACK)`
+/// and a scenario `back` publish on the focused window's channel.
+pub const KEYCODE_BACK: i32 = 4;
+/// `KeyEvent.FLAG_TRACKING` (`0x200`, the same value as the wire format's
+/// `AKEY_EVENT_FLAG_TRACKING`).
+///
+/// `InputDispatcher::dispatchKeyLocked` sets it on the **up** event of a key
+/// press it tracked, and the framework depends on it: `Activity.onKeyUp`
+/// finishes only when `event.isTracking()`
+/// (`.cache/aosp/base/core/java/android/app/Activity.java:4117-4136`), and
+/// `ViewRootImpl`/`View` drop an untracked Back. A host that publishes the
+/// down and up itself has to set the same flag, or Back reaches the app and
+/// does nothing.
+pub const KEY_FLAG_TRACKING: i32 = 0x200;
 /// `KeyEvent.KEYCODE_ENTER`.
 pub const KEYCODE_ENTER: i32 = 66;
 /// `KeyEvent.KEYCODE_DEL` (backspace).
@@ -1251,13 +1265,16 @@ impl InputPublisher {
             down_time_ns,
         );
         let up_id = self.alloc_event_id();
-        let up = KeyEvent::new(
+        let mut up = KeyEvent::new(
             up_id,
             KEY_ACTION_UP,
             key_code,
             down_time_ns,
             down_time_ns + hold_ns.max(0),
         );
+        // `InputDispatcher` marks the up event of a tracked press: the app's
+        // `Activity.onKeyUp` requires `isTracking()` before it handles Back.
+        up.flags |= KEY_FLAG_TRACKING;
         Ok(Gesture {
             dispatches: vec![self.publish_key(&down)?, self.publish_key(&up)?],
         })
@@ -1319,6 +1336,9 @@ impl InputPublisher {
         up.event_id = self.alloc_event_id();
         up.action = KEY_ACTION_UP;
         up.event_time = down_time + DEFAULT_TAP_HOLD_NANOS;
+        // Same dispatcher rule as `key_at`: the up of a tracked press carries
+        // `FLAG_TRACKING`.
+        up.flags |= KEY_FLAG_TRACKING;
         Ok(Gesture {
             dispatches: vec![self.publish_key(&down)?, self.publish_key(&up)?],
         })

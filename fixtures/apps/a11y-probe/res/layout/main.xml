@@ -18,4 +18,16 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Send event" />
+
+    <Button
+        android:id="@+id/click_target"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Click target" />
+
+    <Button
+        android:id="@+id/a11y_back"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Back via service" />
 </LinearLayout>

@@ -252,6 +252,10 @@ pub fn install_with_handles_and_insets(
     let window_id = host.register_aux("android.view.IWindowId");
     let session_state = Arc::clone(&wms_state);
     let input_host = crate::window_session::input_dispatch::InputHost::from_env();
+    // MODA11Y4: `performGlobalAction(GLOBAL_ACTION_BACK)` goes through the same
+    // InputChannel as a scenario `back`, so keep a handle before the session
+    // service takes the original.
+    let a11y_input = input_host.clone();
     let live = LiveHandles {
         input: input_host.clone(),
         compositor: Arc::clone(&compositor),
@@ -300,6 +304,8 @@ pub fn install_with_handles_and_insets(
         // MODA11Y3: `getWindows`/`getWindow` answer from the LAYER1 window
         // stack, which is also what composition, the UI tree and input read.
         a11y_state.windows = Some(Arc::clone(&wms_state));
+        // MODA11Y4: the same input channels the session's Back uses.
+        a11y_state.input = Some(a11y_input);
     }
     host.set_accessibility_state(Arc::clone(&a11y));
     let input = Arc::new(Mutex::new(crate::misc::InputState::new()));

@@ -176,6 +176,14 @@ pub struct A11yState {
     /// host (unit tests construct that shape); the module then reports no
     /// windows instead of inventing them.
     pub windows: Option<Arc<Mutex<crate::wms::WmsState>>>,
+    /// The session's input channels.
+    ///
+    /// `performGlobalAction(GLOBAL_ACTION_BACK)` is routed through the same
+    /// path a scenario `back`/`acos key back` takes (a real `KEYCODE_BACK` on
+    /// the window's `InputChannel`), so the app's own `Window` decides — a
+    /// dialog dismisses first, then the activity finishes. `None` in a bare
+    /// host: the action is then a structured refusal, never a fake `true`.
+    pub input: Option<crate::window_session::input_dispatch::InputHost>,
     /// accessibility window id assigned to each `IWindow` binder.
     pub window_ids: Vec<(u64, i32)>,
     /// Next accessibility window id (1-based, never reused).
@@ -207,6 +215,7 @@ impl A11yState {
             next_bind_seq: 0,
             self_disabled: false,
             windows: None,
+            input: None,
             window_ids: Vec::new(),
             next_window_id: 1,
             interactions: Vec::new(),
@@ -489,6 +498,53 @@ impl A11yState {
             });
         }
         out
+    }
+
+    /// The window token a `performGlobalAction(GLOBAL_ACTION_BACK)` goes to.
+    ///
+    /// Same rule as the session's own Back (`InputHost::key`, the CLI's
+    /// `acos key back`): the most recently registered live window. For a dialog
+    /// that is the dialog window, which is what makes AOSP's "dialog first,
+    /// then the activity" fall out of the app's own key handling instead of a
+    /// host-side guess.
+    pub fn back_token(&self) -> Result<acos_parcel::BinderId> {
+        let Some(input) = self.input.as_ref() else {
+            return Err(ServiceError::ModuleRejected {
+                module: "accessibility",
+                detail: "performGlobalAction(BACK) needs the session's input channels; this host \
+                         has none (a bare host or the rust VM)"
+                    .to_string(),
+            });
+        };
+        input
+            .newest_token()
+            .ok_or_else(|| ServiceError::ModuleRejected {
+                module: "accessibility",
+                detail: "performGlobalAction(BACK): no live window input channel yet".to_string(),
+            })
+    }
+
+    /// Publish one real `KEYCODE_BACK` on that window's `InputChannel`.
+    ///
+    /// This is the session's Back path: the guest's `InputEventReceiver` reads
+    /// the key and the app's own `Window`/`ViewRootImpl` handles it (a dialog
+    /// dismisses, the activity finishes). The module reports only that the
+    /// action was dispatched; what the app does with it is the app's business.
+    pub fn publish_back(&self, token: acos_parcel::BinderId) -> Result<()> {
+        let Some(input) = self.input.as_ref() else {
+            return Ok(());
+        };
+        let mut dispatch = input
+            .state()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        dispatch
+            .inject_key(token, crate::input_channel::KEYCODE_BACK)
+            .map(|_gesture| ())
+            .map_err(|error| ServiceError::ModuleRejected {
+                module: "accessibility",
+                detail: format!("performGlobalAction(BACK) could not publish the key: {error}"),
+            })
     }
 
     /// The same list as [`Self::window_snapshot`] without assigning new ids

@@ -762,13 +762,34 @@ impl ServiceObject for A11yConnectionNode {
             }
             "performGlobalAction" => {
                 let action = data.read_int32()?;
+                // `AccessibilityService.GLOBAL_ACTION_BACK` is 1. AOSP dispatches
+                // it as a Back **key** into the focused window, so the app's own
+                // `Window` decides what it means: a dialog dismisses first, the
+                // activity finishes after. ACOS routes it through exactly that
+                // path — the session's `InputChannel` producer, the same one a
+                // scenario `back` / `acos key back` uses — instead of calling
+                // into the activity manager behind the app's back.
+                // HOME/RECENTS/NOTIFICATIONS stay structured refusals: they are
+                // system-UI actions and there is no system app to receive them.
+                if action == GLOBAL_ACTION_BACK {
+                    let token = state.back_token()?;
+                    // Publish first: a failure here must be a structured error,
+                    // not a `true` over a key that never left the host.
+                    state.publish_back(token)?;
+                    crate::exception::write_no_exception(reply);
+                    // The boolean AOSP answers: the action was dispatched. The
+                    // real outcome is the app's (it may consume Back without
+                    // visible change), never something the module invents.
+                    reply.write_int32(1);
+                    return Ok(true);
+                }
                 state.unsupported.push(format!("performGlobalAction({action})"));
                 return Err(ServiceError::ModuleRejected {
                     module: "accessibility",
                     detail: format!(
-                        "performGlobalAction({action}) is not reachable from a bound service yet: the 
-                         session's global actions are driven by the control plane (BACK) and need 
-                         system apps for HOME/RECENTS/NOTIFICATIONS"
+                        "performGlobalAction({action}) is not reachable from a bound service yet: 
+                         BACK is routed to the session's Back path; HOME/RECENTS/NOTIFICATIONS 
+                         are system-UI actions that need system apps"
                     ),
                 });
             }
@@ -841,6 +862,10 @@ const CONNECTION_METHODS: [(u32, &str); 12] = [
     (13, "getSystemActions"),
     (14, "disableSelf"),
 ];
+
+/// `AccessibilityService.GLOBAL_ACTION_BACK` (the only global action the
+/// module can route: a real Back key into the focused window).
+pub const GLOBAL_ACTION_BACK: i32 = 1;
 
 /// `IAccessibilityServiceClient.init`'s connection id: one per bound service.
 pub const FIRST_CONNECTION_ID: i32 = 1;

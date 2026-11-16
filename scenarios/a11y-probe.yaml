@@ -51,3 +51,47 @@ steps:
       tag: AcosA11yProbe
       patterns:
         - "service_connected"
+  # MODA11Y4 step 2: the bound service's own interaction surface. `getWindows()`
+  # answers from the LAYER1 stack (one application window, layer 0, active and
+  # focused), `getRootInActiveWindow()` is the app's active window root, a
+  # by-view-id query finds the real button, and ACTION_CLICK runs the app's own
+  # OnClickListener — the status text below proves the click landed in the app.
+  - assert_log:
+      tag: AcosA11yProbe
+      patterns:
+        - "windows count=1"
+        - "type=1 layer=0 active=true focused=true"
+        - "root class=android.widget.FrameLayout"
+        - "by_view_id count=1"
+        - "node class=android.widget.Button text=Click target.*clickable=true"
+        - "click handled=true"
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "a11y_click=1"}
+  # MODA11Y4 step 3: performGlobalAction(GLOBAL_ACTION_BACK) from the bound
+  # service. The module routes it to the session's Back path — a real
+  # KEYCODE_BACK down/up pair on the focused window's InputChannel, the same
+  # publish the control plane's `back` uses — so the app's own window decides.
+  # The up event carries FLAG_TRACKING, which is what `Activity.onKeyUp`
+  # requires before it handles Back; without it the key arrives and nothing
+  # happens. "Dialog first, then activity" is the same rule: the key goes to the
+  # focused window, so a dialog dismisses before the activity sees it.
+  #
+  # What is asserted: the app's own key handlers ran and its Back handler ran
+  # (back_pressed). NOT asserted: the activity's destroy transaction after
+  # finish() — the host's activity manager does not deliver it yet (see
+  # results/handoff/MODA11Y4/README.md, "What is not proven").
+  - tap:
+      selector: {id: a11y_back}
+  - assert_log:
+      tag: AcosA11yProbe
+      # The key is published before `performGlobalAction` returns, so the app's
+      # `key_down` may be logged before or after `global_action back=true`: the
+      # claim is that all of these happened, not their interleaving.
+      ordered: false
+      patterns:
+        - "back_requested"
+        - "global_action back=true"
+        - "key_down code=4"
+        - "key_up code=4 tracking=true"
+        - "back_pressed"
