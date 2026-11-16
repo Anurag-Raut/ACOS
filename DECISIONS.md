@@ -1162,3 +1162,11 @@ separate renderer process and a hwui GPU functor and would cost ~150–250 MiB p
 4. Spike gate (2 days): real HTTPS page, JS bridge round trip both ways, tap on web text, frame
    < 50 ms, ≤ 60 MiB per extra session. If it fails, fall back to the Android WebView APK and accept
    the per-session cost.
+
+**ADR-0030 amendment (2026-11-16, after SPIKE-NET).** pasta's defaults leak host loopback (measured:
+the guest reached a host 127.0.0.1 listener). pasta runs with `-T none -U none --no-splice
+--map-host-loopback none` and no port forwards except ones named explicitly. pasta has no destination
+ACL, so RFC1918, link-local and CGNAT ranges are dropped by netfilter rules installed in the session
+netns before the guest starts. That must be a real boundary: the guest has no capability over that
+netns (no CAP_NET_ADMIN, AF_NETLINK blocked by seccomp), and a test proves the guest cannot change
+the rules. Default stays `off` until the A/B gate (item 6) passes.
