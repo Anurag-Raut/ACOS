@@ -110,6 +110,17 @@ fn the_notifications_module_passes_the_conformance_kit() {
 }
 
 #[test]
+fn the_telephony_module_passes_the_conformance_kit() {
+    run_in_quiet_process("net.telephony");
+}
+
+#[test]
+fn the_bluetooth_and_biometric_modules_pass_the_conformance_kit() {
+    run_in_quiet_process("hw.bluetooth");
+    run_in_quiet_process("hw.biometric");
+}
+
+#[test]
 fn a_gap_name_answers_a_structured_tombstone_naming_the_module_and_the_attach_call() {
     let mut host = ServiceHost::new();
     let mut registry = ModuleRegistry::standard();
@@ -213,10 +224,27 @@ fn attaching_the_vibrator_serves_the_name_and_the_report_says_which_profile() {
     // The first word is the reply's exception header (`status_t`, 0 = none).
     assert_eq!(&reply[1..], [1, 0], "one vibrator with id 0");
 
-    // A void method is recorded, not faked into a hardware effect.
-    transact(&mut host, "vibrator_manager", 7).expect("vibrate answers");
+    // A void method is recorded, not faked into a hardware effect. The request
+    // has the image's `vibrate(int uid, int deviceId, String opPkg,
+    // CombinedVibration, VibrationAttributes, String reason, IBinder token)`
+    // shape, because the scripted profile records the pattern from it.
+    let binder = host.check_service("vibrator_manager").unwrap().unwrap();
+    let mut data = Parcel::new();
+    data.write_interface_token("android.os.IVibratorManagerService")
+        .expect("token");
+    data.write_int32(10123); // uid
+    data.write_int32(0); // deviceId
+    data.write_string16("dev.acos.fixtures.tailprobe").unwrap();
+    data.write_int32(1); // the CombinedVibration typed object is present
+    data.write_int32(1); // PARCEL_TOKEN_MONO
+    data.write_int64(250); // a OneShot-shaped payload
+    data.write_int32(128);
+    data.set_data_position(0);
+    let mut reply = Parcel::new();
+    host.transact(binder, 7, &mut data, &mut reply, 0)
+        .expect("vibrate answers");
     let calls = registry
-        .control("feedback.vibrator", "calls", &serde_json::Value::Null)
+        .control(&mut host, "feedback.vibrator", "calls", &serde_json::Value::Null)
         .expect("calls control op");
     assert_eq!(calls["vibrate_calls"], 1);
 

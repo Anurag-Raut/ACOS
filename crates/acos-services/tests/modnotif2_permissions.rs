@@ -169,6 +169,7 @@ fn both_check_permission_paths_read_the_one_store() {
 
     registry
         .control(
+            &mut host,
             "system.permissions",
             "grant",
             &serde_json::json!({"permission": CAMERA}),
@@ -199,6 +200,7 @@ fn both_check_permission_paths_read_the_one_store() {
     assert_eq!(rationale(&mut host), vec![Value::Bool(false)], "granted: no rationale");
     registry
         .control(
+            &mut host,
             "system.permissions",
             "deny",
             &serde_json::json!({"permission": CAMERA}),
@@ -211,6 +213,7 @@ fn both_check_permission_paths_read_the_one_store() {
     );
     registry
         .control(
+            &mut host,
             "system.permissions",
             "deny",
             &serde_json::json!({"permission": CAMERA, "never_ask_again": true}),
@@ -318,6 +321,7 @@ fn request_permissions_resolves_to_a_structured_permission_ui_unavailable() {
     // grant made by the request path.
     registry
         .control(
+            &mut host,
             "system.permissions",
             "grant",
             &serde_json::json!({"permission": CAMERA}),

@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "results/handoff/MODTAIL/../../../fixtures/build/apps/tail-probe.apk",
+  "apk_sha256": "81c6d0b2c6f994838c66c8c795129a8e48f37eaeed297eb8a4d7b1921a6ab56d",
+  "scenario_path": "results/handoff/MODTAIL/tail-bluetooth.yaml",
+  "scenario_sha256": "7c9aee0ee1e44f9bd0b932df6e202aa621ca135b54dba7968c0ba1ec35a36d7d",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

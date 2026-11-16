@@ -398,11 +398,12 @@ behaviour the session does not have. The scenario `services:` block needs
 `--engine art`; the Rust VM refuses it.
 
 **Driving a scripted module mid-run (`service_ctl`).** `service_ctl` is the
-scenario spelling of `acos_services {op: attach|detach|ctl}` (MCP, with
-`id` + `ctl_op` + `args` for `ctl`): it attaches/detaches a module or
+scenario spelling of `acos_services {op: attach|detach}` and
+`acos_service_ctl {module, op, args}` (MCP): it attaches/detaches a module or
 applies one of its control ops **between** steps, so a scripted feed can be
 changed while the app runs. The reply is the step's evidence (what the module
-actually applied), never a pass claim.
+actually applied), never a pass claim; `expect` (a JSON subset of that reply)
+is what turns the control op into an assertion.
 
 ```yaml
 services:

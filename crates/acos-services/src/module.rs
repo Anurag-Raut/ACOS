@@ -167,6 +167,52 @@ pub struct ControlOp {
     pub args: &'static str,
 }
 
+/// A framework initializer the **guest process** must run before any app code
+/// (`Application.onCreate`) when the module is attached.
+///
+/// A mainline module on a real device has its own process that installs the
+/// framework's service manager before an app can use it: the telephony module's
+/// process calls `TelephonyFrameworkInitializer.setTelephonyServiceManager`, the
+/// Bluetooth module's calls `BluetoothFrameworkInitializer.setBluetoothServiceManager`.
+/// ACOS has no such process, so the session runs the same call in the guest,
+/// once, before the app boots — but *only* when the module is attached, because
+/// a manager installed without its module would hand the app a binder nothing
+/// serves. The data lives in the manifest (never in a per-module environment
+/// variable) so a new module declares it the same way every other promise is
+/// declared, and the guest side is one generic reflective installer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProcessInitializer {
+    /// Framework class holding the initializer (`android.telephony.TelephonyFrameworkInitializer`).
+    pub class: &'static str,
+    /// Static setter on that class (`setTelephonyServiceManager`).
+    pub method: &'static str,
+    /// The manager class the setter takes; constructed with its no-argument
+    /// constructor (`android.os.TelephonyServiceManager`).
+    pub manager: &'static str,
+    /// The AOSP source that makes this necessary (file:line), quoted in the
+    /// report so a reviewer can check the claim instead of trusting it.
+    pub evidence: &'static str,
+}
+
+impl ProcessInitializer {
+    /// The `class#method#manager` wire form the launcher forwards to the guest.
+    #[must_use]
+    pub fn wire(&self) -> String {
+        format!("{}#{}#{}", self.class, self.method, self.manager)
+    }
+
+    /// The one-row description for the manifest/capability JSON.
+    #[must_use]
+    pub fn to_json(&self) -> Value {
+        json!({
+            "class": self.class,
+            "method": self.method,
+            "manager": self.manager,
+            "evidence": self.evidence,
+        })
+    }
+}
+
 /// Everything a module promises about itself (ADR-0029 item 1).
 ///
 /// A manifest is static data: one row in the registry, never per-session. The
@@ -191,6 +237,13 @@ pub struct ModuleManifest {
     /// core's registration, detaching it restores it. A module may not replace
     /// a name another non-core module owns.
     pub replaces: &'static [&'static str],
+    /// `PackageManager` system features the module makes available
+    /// (`android.hardware.telephony`). Attach turns them on, detach off, so
+    /// `hasSystemFeature` agrees with the attached set.
+    pub features: &'static [&'static str],
+    /// Framework initializers the guest process runs before `Application.onCreate`
+    /// (see [`ProcessInitializer`]); empty for a module that needs none.
+    pub process_initializers: &'static [ProcessInitializer],
     /// Content-provider authorities the module provides.
     pub providers: &'static [&'static str],
     /// Broadcasts the module starts or answers.
@@ -298,6 +351,37 @@ impl ModuleManifest {
                 self.id
             ));
         }
+        let mut seen_initializers: Vec<&str> = Vec::new();
+        for initializer in self.process_initializers {
+            if initializer.class.is_empty()
+                || initializer.method.is_empty()
+                || initializer.manager.is_empty()
+            {
+                return Err(format!(
+                    "module {:?}: process initializer {initializer:?} needs a class, a method and a manager class",
+                    self.id
+                ));
+            }
+            if !initializer.class.contains('.') || !initializer.manager.contains('.') {
+                return Err(format!(
+                    "module {:?}: process initializer {:?} needs fully qualified class names",
+                    self.id, initializer.class
+                ));
+            }
+            if initializer.evidence.is_empty() {
+                return Err(format!(
+                    "module {:?}: process initializer {:?} has no AOSP evidence",
+                    self.id, initializer.class
+                ));
+            }
+            if seen_initializers.contains(&initializer.class) {
+                return Err(format!(
+                    "module {:?}: process initializer {:?} is listed twice",
+                    self.id, initializer.class
+                ));
+            }
+            seen_initializers.push(initializer.class);
+        }
         let mut seen_ops: Vec<&str> = Vec::new();
         for op in self.controls {
             if op.name.is_empty() {
@@ -358,6 +442,7 @@ impl ModuleManifest {
             "attach": self.attach.as_str(),
             "profiles": self.profiles_with_off().iter().map(|p| p.as_str()).collect::<Vec<_>>(),
             "provides": {
+                "features": self.features,
                 "services": self.services.iter().map(|s| json!({
                     "name": s.name,
                     "descriptor": s.descriptor,
@@ -367,6 +452,11 @@ impl ModuleManifest {
                 "windows": self.windows,
                 "system_apps": self.system_apps,
             },
+            "process_initializers": self
+                .process_initializers
+                .iter()
+                .map(ProcessInitializer::to_json)
+                .collect::<Vec<_>>(),
             "requires": self.requires,
             "requires_host_tools": self.requires_host_tools,
             "budget": {
@@ -737,7 +827,13 @@ pub trait Module: Send {
     fn detach(&mut self, host: &mut ServiceHost) -> Result<()>;
 
     /// Drive scripted state (`acos_service_ctl`). Must refuse when detached.
-    fn control(&mut self, op: &str, args: &Value) -> Result<Value>;
+    ///
+    /// `host` is the session's service host: a control op that changes what the
+    /// app observes (an incoming SMS, a call-state event, an authentication
+    /// result) must be able to deliver it through the same path the framework
+    /// uses ([`ServiceHost::broadcast_intent`], [`ServiceHost::queue_delivery`]).
+    /// The peer thread flushes those deliveries after the control returns.
+    fn control(&mut self, host: &mut ServiceHost, op: &str, args: &Value) -> Result<Value>;
 
     /// The honest state (ADR-0029 item 5).
     fn report(&self) -> ModuleReport;
@@ -851,7 +947,10 @@ pub const TOMBSTONES: &[Tombstone] = &[
     },
     Tombstone {
         name: "dropbox",
-        descriptor: "android.os.IDropBoxManagerService",
+        // The image's DropBoxManager imports
+        // `com.android.internal.os.IDropBoxManagerService`; the AIDL token the
+        // client writes carries that package, so the tombstone must too.
+        descriptor: "com.android.internal.os.IDropBoxManagerService",
         module: "system.dropbox",
         reason: "no DropBox service",
         reaction: AospReaction::Tombstone,
@@ -1104,7 +1203,13 @@ impl ModuleRegistry {
             Box::new(crate::modules::notifications::NotificationsModule::new()),
             Box::new(crate::modules::sensors::SensorsModule::new()),
             Box::new(crate::modules::vibrator::VibratorModule::new()),
-        ] {
+            Box::new(crate::modules::telephony::TelephonyModule::new()),
+            Box::new(crate::modules::bluetooth::BluetoothModule::new()),
+            Box::new(crate::modules::biometric::BiometricModule::new()),
+        ]
+        .into_iter()
+        .chain(crate::modules::tail_stubs::modules())
+        {
             if let Err(error) = registry.add(module) {
                 panic!("standard module set is invalid: {error}");
             }
@@ -1287,6 +1392,17 @@ impl ModuleRegistry {
         let attach_result = self.entries[index].module.attach(host, profile, config);
         match attach_result {
             Ok(()) => {
+                let manifest = self.entries[index].module.manifest();
+                for feature in manifest.features {
+                    if let Err(error) = host.set_system_feature(feature, true) {
+                        // A feature the module promises but cannot publish would
+                        // make `hasSystemFeature` disagree with the attached
+                        // set; roll the attach back rather than lie.
+                        self.entries[index].module.detach(host)?;
+                        host.end_scope(scope);
+                        return Err(error);
+                    }
+                }
                 let id = self.entries[index].module.manifest().id;
                 self.entries[index].profile = profile;
                 self.entries[index].scope = Some(scope);
@@ -1319,7 +1435,25 @@ impl ModuleRegistry {
         if let Some(scope) = self.entries[index].scope.take() {
             host.end_scope(scope);
         }
+        // A feature another attached module still provides stays on; one this
+        // module alone published is turned off again.
+        let released: Vec<&'static str> = {
+            let mine = self.entries[index].module.manifest().features;
+            mine.iter()
+                .copied()
+                .filter(|feature| {
+                    !self.entries.iter().enumerate().any(|(i, entry)| {
+                        i != index
+                            && entry.profile.is_attached()
+                            && entry.module.manifest().features.contains(feature)
+                    })
+                })
+                .collect()
+        };
         self.entries[index].profile = Profile::Off;
+        for feature in released {
+            let _ = host.set_system_feature(feature, false);
+        }
         let id = self.entries[index].module.manifest().id;
         self.attached_order.retain(|attached| *attached != id);
         // The name is now unserved again: put its tombstone back, so a detached
@@ -1447,6 +1581,55 @@ impl ModuleRegistry {
             .find_map(|entry| entry.module.take_session_handles())
     }
 
+    /// Every `ServiceManager` name some module in this registry can provide,
+    /// attached or not.
+    ///
+    /// The session declares these on its host
+    /// ([`ServiceHost::declare_service_name`]) so `ServiceManager.isDeclared` and
+    /// `registerForNotifications` know that a name which is not registered *yet*
+    /// (the module is `off`) is nevertheless real — AOSP's VINTF declaration.
+    #[must_use]
+    pub fn provided_names(&self) -> Vec<&'static str> {
+        let mut names: Vec<&'static str> = Vec::new();
+        for entry in &self.entries {
+            for service in entry.module.manifest().services {
+                if !names.contains(&service.name) {
+                    names.push(service.name);
+                }
+            }
+        }
+        names.sort_unstable();
+        names
+    }
+
+    /// The framework initializers the **guest process** must run before the app
+    /// boots, for the modules attached to this session (ADR-0029 item 1).
+    ///
+    /// In registry (standard-set) order, so the guest's log line is stable, and
+    /// deduplicated by `class#method`: two modules may need the same initializer
+    /// and the guest must not install a manager twice (the framework setters
+    /// throw `IllegalStateException` on a second call). A detached module
+    /// contributes nothing, which is the whole point: the manager is present
+    /// exactly when something can serve it.
+    #[must_use]
+    pub fn process_initializers(&self) -> Vec<ProcessInitializer> {
+        let mut out: Vec<ProcessInitializer> = Vec::new();
+        for entry in &self.entries {
+            if !entry.profile.is_attached() {
+                continue;
+            }
+            for initializer in entry.module.manifest().process_initializers {
+                if !out
+                    .iter()
+                    .any(|seen| seen.class == initializer.class && seen.method == initializer.method)
+                {
+                    out.push(*initializer);
+                }
+            }
+        }
+        out
+    }
+
     /// The attached set as the `verdict.json` / launch-reply rows.
     ///
     /// One row per module the session *asked for* plus every module that is
@@ -1476,7 +1659,13 @@ impl ModuleRegistry {
     }
 
     /// Drive scripted state on an attached module.
-    pub fn control(&mut self, id: &str, op: &str, args: &Value) -> Result<Value> {
+    pub fn control(
+        &mut self,
+        host: &mut ServiceHost,
+        id: &str,
+        op: &str,
+        args: &Value,
+    ) -> Result<Value> {
         let index = self
             .entries
             .iter()
@@ -1497,7 +1686,7 @@ impl ModuleRegistry {
                 ),
             });
         }
-        self.entries[index].module.control(op, args)
+        self.entries[index].module.control(host, op, args)
     }
 
     /// Run `f` with the module object for `id` (tests and the launch reply).
@@ -1762,9 +1951,12 @@ impl SessionModules {
     /// An empty host and the standard module set (nothing attached yet).
     #[must_use]
     pub fn new() -> Self {
+        let registry = ModuleRegistry::standard();
+        let mut host = ServiceHost::new();
+        Self::declare_modules(&mut host, &registry);
         Self {
-            host: ServiceHost::new(),
-            registry: ModuleRegistry::standard(),
+            host,
+            registry,
             adopted_handles: None,
         }
     }
@@ -1772,9 +1964,12 @@ impl SessionModules {
     /// A session around a host that already exists (the zygote host template).
     #[must_use]
     pub fn with_host(host: ServiceHost) -> Self {
+        let registry = ModuleRegistry::standard();
+        let mut host = host;
+        Self::declare_modules(&mut host, &registry);
         Self {
             host,
-            registry: ModuleRegistry::standard(),
+            registry,
             adopted_handles: None,
         }
     }
@@ -1787,10 +1982,21 @@ impl SessionModules {
         registry
             .adopt_attached("core", Profile::Real)
             .expect("the standard registry contains core");
+        let mut host = host;
+        Self::declare_modules(&mut host, &registry);
         Self {
             host,
             registry,
             adopted_handles: Some(handles),
+        }
+    }
+
+    /// Declare every module's `ServiceManager` names on the host, so a name a
+    /// module owns is *declared* before the module is attached (ADR-0029 item 3:
+    /// the session knows the whole module set, an agent attaches a subset).
+    fn declare_modules(host: &mut ServiceHost, registry: &ModuleRegistry) {
+        for name in registry.provided_names() {
+            host.declare_service_name(name);
         }
     }
 
@@ -1826,7 +2032,7 @@ impl SessionModules {
 
     /// Drive scripted state.
     pub fn control(&mut self, id: &str, op: &str, args: &Value) -> Result<Value> {
-        self.registry.control(id, op, args)
+        self.registry.control(&mut self.host, id, op, args)
     }
 
     /// The registry (reports, verdict rows, status).
@@ -1841,6 +2047,12 @@ impl SessionModules {
         &self.host
     }
 
+    /// The host, mutably: attach/detach, `ServiceManager` lookups and the
+    /// `system -> app` deliveries they queue all run against it.
+    pub fn host_mut(&mut self) -> &mut ServiceHost {
+        &mut self.host
+    }
+
     /// Handles `core` published at attach (compositor/input).
     pub fn take_session_handles(&mut self) -> Option<crate::registry::LiveHandles> {
         self.adopted_handles
@@ -1852,6 +2064,13 @@ impl SessionModules {
     #[must_use]
     pub fn verdict_modules(&self) -> Vec<Value> {
         self.registry.verdict_modules()
+    }
+
+    /// The framework initializers this session's attached modules declare
+    /// (ADR-0029 item 1); the launcher forwards them to the guest process.
+    #[must_use]
+    pub fn process_initializers(&self) -> Vec<ProcessInitializer> {
+        self.registry.process_initializers()
     }
 
     /// The capability payload with this session's attached set.
@@ -2122,7 +2341,7 @@ pub mod conformance {
             }
         }
         if honest {
-            match registry.control(module_id, "no-such-op", &Value::Null) {
+            match registry.control(&mut host, module_id, "no-such-op", &Value::Null) {
                 Err(ServiceError::ModuleRejected { .. }) => {}
                 other => {
                     honest = false;
@@ -2180,7 +2399,7 @@ pub mod conformance {
                 .attach(&mut host, module_id, default_profile, &ModuleConfig::default())
                 .is_ok()
             {
-                match registry.control(module_id, "no-such-op", &Value::Null) {
+                match registry.control(&mut host, module_id, "no-such-op", &Value::Null) {
                     Err(ServiceError::ModuleRejected { .. }) => {}
                     other => {
                         negative = false;

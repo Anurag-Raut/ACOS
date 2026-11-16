@@ -99,6 +99,8 @@ fn manifest_ref() -> &'static ModuleManifest {
         summary: "runtime permissions: one shared store behind both checkPermission paths, flags, rationale, grant/deny/revoke (no dialog: the controller system app is not built yet)",
         services: SERVICES,
         replaces: &[SERVICE_NAME],
+        process_initializers: &[],
+        features: &[],
         providers: &[],
         broadcasts: &[],
         windows: &[],
@@ -374,7 +376,7 @@ impl Module for PermissionsModule {
         Ok(())
     }
 
-    fn control(&mut self, op: &str, args: &Value) -> Result<Value> {
+    fn control(&mut self, _host: &mut ServiceHost, op: &str, args: &Value) -> Result<Value> {
         let Some(store) = self.store.as_ref() else {
             return Err(ServiceError::ModuleRejected {
                 module: MODULE_ID,

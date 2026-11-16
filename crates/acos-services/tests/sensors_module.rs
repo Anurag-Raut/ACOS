@@ -492,6 +492,7 @@ fn a_scripted_value_arrives_over_the_real_event_channel_at_the_requested_rate() 
     assert_eq!(enable(&mut host, connection, 1, true, 20_000_000), 0);
     registry
         .control(
+            &mut host,
             "sensors",
             "set_value",
             &serde_json::json!({"sensor": "accelerometer", "values": [1.5, -2.0, 9.81]}),
@@ -515,7 +516,7 @@ fn a_scripted_value_arrives_over_the_real_event_channel_at_the_requested_rate() 
     );
 
     let status = registry
-        .control("sensors", "status", &serde_json::json!({}))
+        .control(&mut host, "sensors", "status", &serde_json::json!({}))
         .expect("status");
     assert_eq!(status["attached"], true);
     assert!(status["delivered"].as_u64().unwrap_or(0) >= 2);
@@ -535,7 +536,7 @@ fn an_on_change_sensor_reports_on_change_only() {
     let (receive, _send) = take_channel(&mut host, connection);
     // The light's handle is 4 in the default table.
     let handle = registry
-        .control("sensors", "status", &serde_json::json!({}))
+        .control(&mut host, "sensors", "status", &serde_json::json!({}))
         .expect("status")
         .pointer("/sensors")
         .and_then(|sensors| sensors.as_array())
@@ -562,6 +563,7 @@ fn an_on_change_sensor_reports_on_change_only() {
     // A change is delivered at once (the `set_value` path), not one period late.
     registry
         .control(
+            &mut host,
             "sensors",
             "set_value",
             &serde_json::json!({"sensor": "light", "values": [1234.0]}),
@@ -586,6 +588,7 @@ fn play_delivers_the_timeline_and_shake_alternates() {
 
     let reply = registry
         .control(
+            &mut host,
             "sensors",
             "play",
             &serde_json::json!({
@@ -611,7 +614,7 @@ fn play_delivers_the_timeline_and_shake_alternates() {
 
     // The `shake` helper is a 12-sample alternating accelerometer timeline.
     let reply = registry
-        .control("sensors", "shake", &serde_json::json!({"period_ms": 10, "count": 12}))
+        .control(&mut host, "sensors", "shake", &serde_json::json!({"period_ms": 10, "count": 12}))
         .expect("shake");
     assert_eq!(reply["scheduled"], 12);
     let mut signs = Vec::new();
@@ -661,7 +664,7 @@ fn flush_delivers_the_flush_complete_meta_event() {
     assert_eq!(values[1], 1.0, "meta_data.sensor is the handle");
 
     let events = registry
-        .control("sensors", "events", &serde_json::json!({"limit": 8}))
+        .control(&mut host, "sensors", "events", &serde_json::json!({"limit": 8}))
         .expect("events");
     assert!(
         events["events"]
@@ -760,7 +763,7 @@ fn detach_returns_the_honest_empty_sensor_list() {
     // The feed is gone, so a scripted op is refused (`ModuleRegistry::control`
     // refuses a detached module) and the report says `off` again.
     let error = registry
-        .control("sensors", "set_value", &serde_json::json!({"sensor": "accelerometer", "values": [0.0]}))
+        .control(&mut host, "sensors", "set_value", &serde_json::json!({"sensor": "accelerometer", "values": [0.0]}))
         .expect_err("a detached module has no feed");
     assert!(matches!(error, ServiceError::ModuleRejected { .. }), "{error}");
     let report = registry
@@ -832,7 +835,7 @@ fn stub_refuses_every_scripted_control() {
         .expect("attach stub");
     for op in ["set_value", "play", "shake", "tilt", "enable", "disable"] {
         let error = registry
-            .control("sensors", op, &serde_json::json!({"sensor": "accelerometer", "values": [1.0]}))
+            .control(&mut host, "sensors", op, &serde_json::json!({"sensor": "accelerometer", "values": [1.0]}))
             .expect_err("stub must refuse a scripted op");
         assert!(
             matches!(error, ServiceError::ModuleRejected { module: "sensors", .. }),
@@ -874,7 +877,7 @@ fn the_launch_config_selects_sensors_and_values() {
     assert_eq!(list[1].sensor_type, TYPE_LIGHT);
 
     let status = registry
-        .control("sensors", "status", &serde_json::json!({}))
+        .control(&mut host, "sensors", "status", &serde_json::json!({}))
         .expect("status");
     assert_eq!(status["sensors"][0]["values"][0], 3.0);
     assert_eq!(status["sensors"][1]["values"][0], 42.0);

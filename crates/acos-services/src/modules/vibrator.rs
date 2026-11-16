@@ -43,6 +43,31 @@ pub const DESCRIPTOR: &str = "android.os.IVibratorManagerService";
 /// The module id.
 pub const MODULE_ID: &str = "feedback.vibrator";
 
+/// One `vibrate(...)` call, as the scripted profile records it.
+///
+/// The `CombinedVibration` payload is recorded by length and FNV-1a hash of the
+/// request parcel, plus the `CombinedVibration` token (`1` mono, `2` stereo,
+/// `3` sequential, `0` unreadable). Decoding the whole nested
+/// `VibrationEffect`/`VibrationAttributes` parcel graph would mean
+/// re-implementing `android.os.vibrator`'s parcelables; a hash is enough to
+/// assert "a pattern arrived" and "these two patterns differ", and the report
+/// says that is what it is.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct VibratePattern {
+    /// `uid` argument.
+    pub uid: i32,
+    /// `deviceId` argument.
+    pub device_id: i32,
+    /// `opPkg` argument.
+    pub op_pkg: String,
+    /// `CombinedVibration` token (`1`/`2`/`3`), `0` when absent/unreadable.
+    pub token: i32,
+    /// Bytes after `opPkg` (the `CombinedVibration` typed object onward).
+    pub payload_len: usize,
+    /// FNV-1a hash of the whole request parcel (pattern identity).
+    pub hash: String,
+}
+
 /// What the app asked the vibrator to do.
 #[derive(Debug, Default)]
 pub struct VibratorState {
@@ -55,6 +80,8 @@ pub struct VibratorState {
     pub haptic_calls: u32,
     /// `isVibrating(...)` / `getVibratorIds()` calls.
     pub query_calls: u32,
+    /// Every `vibrate(...)` call's recorded pattern (bounded to the last 64).
+    pub patterns: Vec<VibratePattern>,
     /// Calls that were answered with a structured unsupported error.
     pub unsupported: Vec<String>,
 }
@@ -68,15 +95,27 @@ impl VibratorState {
             "cancel_calls": self.cancel_calls,
             "haptic_calls": self.haptic_calls,
             "query_calls": self.query_calls,
+            "patterns": self.patterns.iter().map(|pattern| json!({
+                "uid": pattern.uid,
+                "device_id": pattern.device_id,
+                "op_pkg": pattern.op_pkg,
+                "token": pattern.token,
+                "payload_len": pattern.payload_len,
+                "hash": pattern.hash,
+            })).collect::<Vec<_>>(),
             "unsupported": self.unsupported,
         })
     }
 }
 
-const CONTROL_OPS: [ControlOp; 2] = [
+const CONTROL_OPS: [ControlOp; 3] = [
     ControlOp {
         name: "calls",
-        args: "none — returns the recorded vibrate/cancel/haptic/query counts",
+        args: "none — returns the recorded vibrate/cancel/haptic/query counts and every recorded pattern (token, length, hash)",
+    },
+    ControlOp {
+        name: "patterns",
+        args: "none — the recorded `vibrate(...)` patterns only",
     },
     ControlOp {
         name: "reset",
@@ -95,6 +134,8 @@ fn manifest_ref() -> &'static ModuleManifest {
             descriptor: DESCRIPTOR,
         }],
         replaces: &[],
+        process_initializers: &[],
+        features: &[],
         providers: &[],
         broadcasts: &[],
         windows: &[],
@@ -134,6 +175,16 @@ impl VibratorModule {
     pub fn manifest_ref() -> &'static ModuleManifest {
         manifest_ref()
     }
+}
+
+/// FNV-1a over the request parcel: the pattern's identity for assertions.
+fn fnv1a(bytes: &[u8]) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in bytes {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
 }
 
 impl Default for VibratorModule {
@@ -178,7 +229,7 @@ impl ServiceObject for VibratorService {
         &mut self,
         interface: &str,
         code: u32,
-        _data: &mut acos_parcel::Parcel,
+        data: &mut acos_parcel::Parcel,
         reply: &mut acos_parcel::Parcel,
     ) -> Result<bool> {
         if interface != DESCRIPTOR {
@@ -215,9 +266,51 @@ impl ServiceObject for VibratorService {
                 reply.write_int32(0);
                 Ok(true)
             }
-            // void vibrate(...)
+            // void vibrate(int uid, int deviceId, String opPkg,
+            //              CombinedVibration vibration, VibrationAttributes
+            //              attributes, String reason, IBinder token)
             7 => {
-                self.state().vibrate_calls += 1;
+                let uid = data.read_int32().map_err(|error| ServiceError::BadRequest {
+                    interface: DESCRIPTOR.to_string(),
+                    method: "vibrate".to_string(),
+                    detail: error.to_string(),
+                })?;
+                let device_id = data.read_int32().map_err(|error| ServiceError::BadRequest {
+                    interface: DESCRIPTOR.to_string(),
+                    method: "vibrate".to_string(),
+                    detail: error.to_string(),
+                })?;
+                let op_pkg = data
+                    .read_string16()
+                    .map_err(|error| ServiceError::BadRequest {
+                        interface: DESCRIPTOR.to_string(),
+                        method: "vibrate".to_string(),
+                        detail: error.to_string(),
+                    })?
+                    .unwrap_or_default();
+                let payload_start = data.data_position();
+                // AIDL writes the `CombinedVibration` as a typed object: a
+                // presence word, then the parcelable body whose first word is the
+                // type token.
+                let presence = data.read_int32().unwrap_or(0);
+                let token = if presence != 0 { data.read_int32().unwrap_or(0) } else { 0 };
+                let payload_len = data.data_size().saturating_sub(payload_start);
+                let hash = fnv1a(&data.marshall());
+                {
+                    let mut state = self.state();
+                    state.vibrate_calls += 1;
+                    if state.patterns.len() >= 64 {
+                        state.patterns.remove(0);
+                    }
+                    state.patterns.push(VibratePattern {
+                        uid,
+                        device_id,
+                        op_pkg,
+                        token,
+                        payload_len,
+                        hash,
+                    });
+                }
                 write_no_exception(reply);
                 Ok(true)
             }
@@ -277,7 +370,7 @@ impl Module for VibratorModule {
         Ok(())
     }
 
-    fn control(&mut self, op: &str, _args: &Value) -> Result<Value> {
+    fn control(&mut self, _host: &mut ServiceHost, op: &str, _args: &Value) -> Result<Value> {
         let Some(state) = self.state.as_ref() else {
             return Err(ServiceError::ModuleRejected {
                 module: MODULE_ID,
@@ -289,6 +382,22 @@ impl Module for VibratorModule {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .to_json()),
+            "patterns" => Ok(json!({
+                "patterns": state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .patterns
+                    .iter()
+                    .map(|pattern| json!({
+                        "uid": pattern.uid,
+                        "device_id": pattern.device_id,
+                        "op_pkg": pattern.op_pkg,
+                        "token": pattern.token,
+                        "payload_len": pattern.payload_len,
+                        "hash": pattern.hash,
+                    }))
+                    .collect::<Vec<_>>(),
+            })),
             "reset" => {
                 let mut state = state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                 *state = VibratorState::default();
@@ -314,21 +423,16 @@ impl Module for VibratorModule {
         if self.profile.is_attached() {
             // Attached, but not real: say so in the report itself, so a verdict
             // that relied on it cannot pretend it was hardware.
-            let recorded = self
+            let (vibrate_calls, patterns) = self
                 .state
                 .as_ref()
                 .map(|state| {
-                    format!(
-                        "; recorded {}",
-                        state
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner)
-                            .to_json()
-                    )
+                    let state = state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    (state.vibrate_calls, state.patterns.len())
                 })
-                .unwrap_or_default();
+                .unwrap_or((0, 0));
             report.reason = Some(format!(
-                "{} profile: fixed answers, no vibration hardware{recorded}",
+                "{} profile: fixed answers, no vibration hardware; {vibrate_calls} vibrate call(s), {patterns} pattern(s) recorded as token/length/hash of the CombinedVibration parcel (the nested VibrationEffect parcelables are not decoded)",
                 self.profile
             ));
         }

@@ -42,7 +42,8 @@ pub enum Capability {
     Input,
     /// Reset task/app/data state.
     Reset,
-    /// set_network / set_permission / set_locale / set_density / set_theme / set_time.
+    /// set_network / set_permission / set_locale / set_density / set_theme /
+    /// set_time / service_ctl.
     Environment,
     /// Crash/ANR reports distinct from ordinary logs.
     CrashReports,

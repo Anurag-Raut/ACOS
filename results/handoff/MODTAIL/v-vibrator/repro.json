@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "results/handoff/MODTAIL/../../../fixtures/build/apps/tail-probe.apk",
+  "apk_sha256": "e44c9c36d8fd8cc7ecdb7f5d4f16fb0e7fdddd8a5a8b17fe5b35ea2f22ccddc6",
+  "scenario_path": "results/handoff/MODTAIL/tail-vibrator.yaml",
+  "scenario_sha256": "b0fda3d28b07944b8a193c8c911386efb3b7a823880dccba0f58bedf5926c7ee",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

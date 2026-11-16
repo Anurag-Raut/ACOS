@@ -1,0 +1,664 @@
+{
+  "capture_label": "screenshots are ACOS C1 buffer captures (compositor-client stored buffers), not device captures",
+  "capture_source": "acos-c1-buffer",
+  "heap": {
+    "bytes": {
+      "heapgrowthlimit": 201326592,
+      "heapmaxfree": 8388608,
+      "heapminfree": 524288,
+      "heapsize": 536870912,
+      "heapstartsize": 8388608
+    },
+    "heaptargetutilization": 0.75,
+    "mib": {
+      "heapgrowthlimit": 192.0,
+      "heapmaxfree": 8.0,
+      "heapminfree": 0.5,
+      "heapsize": 512.0,
+      "heapstartsize": 8.0
+    },
+    "overridden": [],
+    "prop": {
+      "dalvik.vm.heapgrowthlimit": "192m",
+      "dalvik.vm.heapmaxfree": "8m",
+      "dalvik.vm.heapminfree": "512k",
+      "dalvik.vm.heapsize": "512m",
+      "dalvik.vm.heapstartsize": "8m",
+      "dalvik.vm.heaptargetutilization": "0.75"
+    },
+    "source": "ACOS_ART_HEAP* overrides on the stock API-34 dalvik.vm.* table"
+  },
+  "protocol": "acos-art launch --interactive (ACOSLAUNCH_INTERACTIVE=1)",
+  "steps": [
+    {
+      "activity": "dev.acos.fixtures.tailprobe.MainActivity",
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "built",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-3fcf85cbb81f5769",
+        "input_hash": "3fcf85cbb81f5769",
+        "mode": "shared-fixed",
+        "prep_ms": 3588,
+        "reason": "no usable manifest at /home/Qui/.cache/acos/art/boot-images/fixed-3fcf85cbb81f5769/manifest.json: No such file or directory (os error 2)"
+      },
+      "buffer_generation": 1,
+      "capture_source": "acos-c1-buffer",
+      "cmd": "ready",
+      "density": 420,
+      "guest_process_group": 2072888,
+      "height": 2400,
+      "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
+      "modules": [
+        {
+          "attach": "at-launch",
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "sensors",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "feedback.vibrator",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "fidelity": "off",
+          "id": "net.telephony",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "scripted",
+          "id": "hw.bluetooth",
+          "profile": "scripted",
+          "reason": "scripted profile: scripted adapter state (off), 1 bonded device(s), classic discovery via ACTION_FOUND; no radio, no pairing, no BLE/GATT (`BluetoothLeScanner` answers UNSUPPORTED_ANDROID_API), no profiles",
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.biometric",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.usb",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.dropbox",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.nfc",
+          "profile": "off",
+          "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.wallpaper",
+          "profile": "off",
+          "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.print",
+          "profile": "off",
+          "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.search",
+          "profile": "off",
+          "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.usage",
+          "profile": "off",
+          "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.dpm",
+          "profile": "off",
+          "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.role",
+          "profile": "off",
+          "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "geo.country",
+          "profile": "off",
+          "reason": "off: a detected country is a location claim ACOS cannot back",
+          "state": "off"
+        }
+      ],
+      "ok": true,
+      "package": "dev.acos.fixtures.tailprobe",
+      "probe_seq": 1,
+      "stream_socket": "/run/user/1000/acos-view-2072550-1/view.sock",
+      "width": 1080
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 82,
+      "ok": true,
+      "total": 82
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 1,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c1.png",
+      "probe_seq": 6
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 82,
+      "ok": true,
+      "total": 82
+    },
+    {
+      "buffer_generation": 7,
+      "cmd": "tree",
+      "frame_number": 7,
+      "frame_seq": 2,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-7-g7-c2.png",
+      "probe_seq": 7
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 82,
+      "ok": true,
+      "total": 82
+    },
+    {
+      "buffer_generation": 41,
+      "cmd": "tap",
+      "frame_number": 41,
+      "frame_seq": 3,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-41-g41-c3.png",
+      "probe_seq": 40,
+      "x": 540.0,
+      "y": 685.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 116,
+      "ok": true,
+      "total": 116
+    },
+    {
+      "buffer_generation": 41,
+      "cmd": "tree",
+      "frame_number": 41,
+      "frame_seq": 4,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-41-g41-c4.png",
+      "probe_seq": 41
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 116,
+      "ok": true,
+      "total": 116
+    },
+    {
+      "attached": [
+        {
+          "id": "core",
+          "profile": "real"
+        },
+        {
+          "id": "hw.bluetooth",
+          "profile": "scripted"
+        }
+      ],
+      "cmd": "services",
+      "id": "hw.bluetooth",
+      "modules": [
+        {
+          "attach": "at-launch",
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "sensors",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "feedback.vibrator",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "fidelity": "off",
+          "id": "net.telephony",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "scripted",
+          "id": "hw.bluetooth",
+          "profile": "scripted",
+          "reason": "scripted profile: scripted adapter state (on), 1 bonded device(s), classic discovery via ACTION_FOUND; no radio, no pairing, no BLE/GATT (`BluetoothLeScanner` answers UNSUPPORTED_ANDROID_API), no profiles",
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.biometric",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.usb",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.dropbox",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "hw.nfc",
+          "profile": "off",
+          "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.wallpaper",
+          "profile": "off",
+          "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.print",
+          "profile": "off",
+          "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.search",
+          "profile": "off",
+          "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.usage",
+          "profile": "off",
+          "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.dpm",
+          "profile": "off",
+          "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "system.role",
+          "profile": "off",
+          "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "fidelity": "off",
+          "id": "geo.country",
+          "profile": "off",
+          "reason": "off: a detected country is a location claim ACOS cannot back",
+          "state": "off"
+        }
+      ],
+      "ok": true,
+      "op": "set",
+      "value": {
+        "broadcast_matched": 1,
+        "callbacks_delivered": 1,
+        "on": true,
+        "state": 12
+      }
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 118,
+      "ok": true,
+      "total": 118
+    },
+    {
+      "buffer_generation": 42,
+      "cmd": "tree",
+      "frame_number": 42,
+      "frame_seq": 5,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-42-g42-c5.png",
+      "probe_seq": 43
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 118,
+      "ok": true,
+      "total": 118
+    },
+    {
+      "buffer_generation": 78,
+      "cmd": "tap",
+      "frame_number": 78,
+      "frame_seq": 6,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-78-g78-c6.png",
+      "probe_seq": 75,
+      "x": 540.0,
+      "y": 685.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 153,
+      "ok": true,
+      "total": 153
+    },
+    {
+      "buffer_generation": 78,
+      "cmd": "tree",
+      "frame_number": 78,
+      "frame_seq": 7,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-78-g78-c7.png",
+      "probe_seq": 76
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 153,
+      "ok": true,
+      "total": 153
+    },
+    {
+      "buffer_generation": 78,
+      "cmd": "tree",
+      "frame_number": 78,
+      "frame_seq": 8,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-78-g78-c8.png",
+      "probe_seq": 77
+    },
+    {
+      "buffer_generation": 78,
+      "cmd": "tree",
+      "frame_number": 78,
+      "frame_seq": 9,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-78-g78-c9.png",
+      "probe_seq": 78
+    },
+    {
+      "buffer_generation": 78,
+      "cmd": "tree",
+      "frame_number": 78,
+      "frame_seq": 10,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-78-g78-c10.png",
+      "probe_seq": 79
+    },
+    {
+      "buffer_generation": 78,
+      "cmd": "tree",
+      "frame_number": 78,
+      "frame_seq": 11,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-78-g78-c11.png",
+      "probe_seq": 80
+    },
+    {
+      "buffer_generation": 78,
+      "cmd": "tree",
+      "frame_number": 78,
+      "frame_seq": 12,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-78-g78-c12.png",
+      "probe_seq": 81
+    },
+    {
+      "buffer_generation": 78,
+      "cmd": "tree",
+      "frame_number": 78,
+      "frame_seq": 13,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-78-g78-c13.png",
+      "probe_seq": 82
+    },
+    {
+      "buffer_generation": 78,
+      "cmd": "tree",
+      "frame_number": 78,
+      "frame_seq": 14,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-78-g78-c14.png",
+      "probe_seq": 83
+    },
+    {
+      "buffer_generation": 79,
+      "cmd": "tree",
+      "frame_number": 79,
+      "frame_seq": 15,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-79-g79-c15.png",
+      "probe_seq": 85
+    },
+    {
+      "buffer_generation": 79,
+      "cmd": "tree",
+      "frame_number": 79,
+      "frame_seq": 16,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-79-g79-c16.png",
+      "probe_seq": 86
+    },
+    {
+      "buffer_generation": 79,
+      "cmd": "tree",
+      "frame_number": 79,
+      "frame_seq": 17,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-79-g79-c17.png",
+      "probe_seq": 87
+    },
+    {
+      "buffer_generation": 79,
+      "cmd": "tree",
+      "frame_number": 79,
+      "frame_seq": 18,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-79-g79-c18.png",
+      "probe_seq": 88
+    },
+    {
+      "buffer_generation": 79,
+      "cmd": "tree",
+      "frame_number": 79,
+      "frame_seq": 19,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-79-g79-c19.png",
+      "probe_seq": 89
+    },
+    {
+      "buffer_generation": 79,
+      "cmd": "tree",
+      "frame_number": 79,
+      "frame_seq": 20,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-79-g79-c20.png",
+      "probe_seq": 90
+    },
+    {
+      "buffer_generation": 79,
+      "cmd": "tree",
+      "frame_number": 79,
+      "frame_seq": 21,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-79-g79-c21.png",
+      "probe_seq": 91
+    },
+    {
+      "buffer_generation": 79,
+      "cmd": "tree",
+      "frame_number": 79,
+      "frame_seq": 22,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-79-g79-c22.png",
+      "probe_seq": 92
+    },
+    {
+      "buffer_generation": 79,
+      "cmd": "tree",
+      "frame_number": 79,
+      "frame_seq": 23,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-79-g79-c23.png",
+      "probe_seq": 93
+    },
+    {
+      "buffer_generation": 79,
+      "cmd": "tree",
+      "frame_number": 79,
+      "frame_seq": 24,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-79-g79-c24.png",
+      "probe_seq": 94
+    },
+    {
+      "buffer_generation": 79,
+      "cmd": "tree",
+      "frame_number": 79,
+      "frame_seq": 25,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-79-g79-c25.png",
+      "probe_seq": 95
+    },
+    {
+      "buffer_generation": 79,
+      "cmd": "tree",
+      "frame_number": 79,
+      "frame_seq": 26,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-79-g79-c26.png",
+      "probe_seq": 96
+    },
+    {
+      "buffer_generation": 79,
+      "cmd": "tree",
+      "frame_number": 79,
+      "frame_seq": 27,
+      "ok": true,
+      "png": "results/handoff/MODTAIL2/v-bluetooth/art-frames/live-frames/acos-c1-layer3-frame-79-g79-c27.png",
+      "probe_seq": 97
+    },
+    {
+      "capture_source": "acos-c1-buffer",
+      "cmd": "close",
+      "frame_seq": 27,
+      "ok": true
+    }
+  ]
+}

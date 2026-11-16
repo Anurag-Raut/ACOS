@@ -738,6 +738,10 @@ pub(crate) fn launch_session(
     // every `acos_services` reply, so the agent sees what the session actually
     // attached (never what it asked for).
     let session_module_rows = session_modules.verdict_modules();
+    // ADR-0029 item 1: what those attached modules need this guest *process* to
+    // install before any app code runs (collected before the host moves to the
+    // peer thread, which owns the registry).
+    let session_process_initializers = session_modules.process_initializers();
     let live_handles = {
         // ZM2 prototype C: a host-template child starts from the template's
         // empty (fully installed) service graph, which is CoW-shared until the
@@ -1163,6 +1167,20 @@ pub(crate) fn launch_session(
     sb.env("ACOSART_LOAD", "libandroid_runtime.so");
     sb.env("E3G_SOCK", "/data/acos-launch.sock");
     sb.env("ACOSLAUNCH_RESUME_MS", &resume_ms.to_string());
+    // ADR-0029 item 1: the framework initializers the attached modules declare
+    // (`ModuleManifest::process_initializers`). On a device the mainline
+    // module's own process installs them before any app starts; ACOS has no such
+    // process, so the guest runs the same call once, before the app boots. The
+    // list is the attached set's own promise (never a guess, never a per-module
+    // switch here): `class#method#manager`, ';'-separated.
+    if !session_process_initializers.is_empty() {
+        let wire = session_process_initializers
+            .iter()
+            .map(acos_services::module::ProcessInitializer::wire)
+            .collect::<Vec<_>>()
+            .join(";");
+        sb.env("ACOSLAUNCH_INITIALIZERS", &wire);
+    }
     // Display geometry the guest boots at. Forwarded only when the caller set
     // it (`acos-art launch --width …`, or the engine's `ACOS_ART_*`), so the
     // default guest is unchanged and the reference-device baselines keep
@@ -6526,10 +6544,14 @@ fn service_request(
             }))
         }
         "ctl" => {
-            // `acos_service_ctl` / a scenario `service_ctl` step: a module's own
-            // control op (`sensors.set_value`, `sensors.play`, ...). The module
-            // registry refuses a detached module, so a control can never look
-            // applied when the module is off.
+            // `acos_service_ctl` (MCP) / a scenario `service_ctl` step: a
+            // module's own control op (`sensors.set_value`, `telephony.sms`, ...).
+            // The module gets the session's host ([`Module::control`]) so a
+            // control that changes what the app observes can deliver it through
+            // the same path the framework uses; the peer thread flushes those
+            // deliveries after the control returns. The registry refuses a
+            // detached module, so a control can never look applied when the
+            // module is off.
             let Some(id) = request.get("id").and_then(|v| v.as_str()) else {
                 return serde_json::json!({
                     "ok": false, "cmd": "services", "op": "ctl", "code": "BAD_REQUEST",
@@ -6546,11 +6568,11 @@ fn service_request(
                 .get("args")
                 .cloned()
                 .unwrap_or(serde_json::Value::Null);
-            modules.control(id, ctl_op, &args).map(|reply| {
+            modules.control(peer.host_mut(), id, ctl_op, &args).map(|value| {
                 serde_json::json!({
-                    "module": id,
-                    "ctl_op": ctl_op,
-                    "reply": reply,
+                    "id": id,
+                    "op": ctl_op,
+                    "value": value,
                     "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
                         "id": id,
                         "profile": profile.as_str(),
@@ -6601,7 +6623,34 @@ fn serve(
         // transaction is served.
         while let Some((id, request)) = control.take() {
             let reply = service_request(peer, modules, &request);
+            let debug_reply = reply.to_string();
             control.reply(id, reply);
+            // A live `ctl` op can queue `system -> app` deliveries (an SMS, a
+            // call-state event, an authentication result). No binder
+            // transaction follows to flush them, so do it here.
+            let flushed = peer.take_delivery_frames();
+            if let Ok(path) = std::env::var("ACOS_SERVICE_CTL_LOG") {
+                use std::io::Write as _;
+                if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+                    let _ = writeln!(
+                        file,
+                        "ctl reply={debug_reply} flushed={} targets={:?}",
+                        flushed.len(),
+                        flushed.iter().map(|f| (f.ty, f.code, f.target)).collect::<Vec<_>>()
+                    );
+                }
+            }
+            for out in flushed {
+                if let Err(e) = write_frame(fd, &out) {
+                    eprintln!(
+                        "peer-trace: write_frame FAILED after control op: {e} (ty={} seq={} code={} data={})",
+                        out.ty, out.seq, out.code, out.data.len()
+                    );
+                    close_frame_fds(&out);
+                    return Err(e);
+                }
+                close_frame_fds(&out);
+            }
         }
         let frame: Frame = match read_frame(fd) {
             Ok(f) => f,
@@ -7378,6 +7427,53 @@ mod skipped_traversal_tests {
         );
         assert!(error.contains("c1_generation=0"), "{error}");
         assert!(error.contains("c1_layers=1"), "{error}");
+    }
+
+    /// ADR-0029 item 1: the guest's process initializers come from the attached
+    /// modules' manifests, never from a per-module branch.
+    ///
+    /// Before this, the launcher keyed `ACOSLAUNCH_TELEPHONY` /
+    /// `ACOSLAUNCH_BLUETOOTH` off two module ids and the guest had one
+    /// hand-written installer per id, so a new module could not declare what its
+    /// process needs and two of them could not share a manager. The guard keeps a
+    /// later edit from reintroducing the switch.
+    #[test]
+    fn the_process_initializer_install_is_driven_by_the_manifest() {
+        let guest = include_str!("../guest/java/dev/acos/art/LaunchMain.java");
+        for forbidden in [
+            "ACOSLAUNCH_TELEPHONY",
+            "ACOSLAUNCH_BLUETOOTH",
+            "TelephonyFrameworkInitializer\"",
+            "BluetoothFrameworkInitializer\"",
+        ] {
+            assert!(
+                !guest.contains(forbidden),
+                "the guest must not name a module's initializer (`{forbidden}`); it reads \
+                 ACOSLAUNCH_INITIALIZERS (ModuleManifest::process_initializers)"
+            );
+        }
+        assert!(
+            guest.contains("ACOSLAUNCH_INITIALIZERS"),
+            "the guest must read the launcher's initializer list"
+        );
+        assert!(
+            guest.contains("process-initializer installed"),
+            "the guest must log what it installed, so a verdict can cite it"
+        );
+
+        let launcher = include_str!("launch.rs");
+        assert!(
+            launcher.contains("ACOSLAUNCH_INITIALIZERS")
+                && launcher.contains("session_process_initializers"),
+            "the launcher must forward the attached manifests' initializers"
+        );
+        // The launcher half is checked by what it forwards, not by what it must
+        // not contain: this test lives in the same file it would grep, so its
+        // own forbidden-word list would match itself.
+        assert!(
+            !launcher.contains("attached(\"net.telephony\")"),
+            "the launcher must not key an initializer off a module id"
+        );
     }
 
     /// The guest's ready path must stay main's: no forced traversal, no

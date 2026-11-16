@@ -36,6 +36,13 @@ add base core/java/android/app core/java/android/content core/java/android/net \
 add base services/core/java/com/android/server/policy services/core/java/com/android/server/wm
 # MODSENS: the native sensor service for an existing cache.
 add native libs/sensor services/sensorservice
+# MODTAIL2: the service-manager server and its AIDL, for
+# `ServiceHost`'s `registerForNotifications`/`unregisterForNotifications` and the
+# `waitForService` shim (`ServiceManagerShim`), plus the bluetooth module's own
+# AIDL (every `IBluetooth` method is `oneway … SynchronousResultReceiver`).
+add native cmds/servicemanager libs/binder/aidl/android/os libs/binder/include/binder
+add bluetooth android/app/aidl/android/bluetooth service/aidl/android/bluetooth
+add base core/java/android/os/ServiceManager.java core/java/android/os/IServiceManager.aidl
 clone connectivity $B/packages/modules/Connectivity framework/src/android/net
 clone wifi $B/packages/modules/Wifi framework/java/android/net/wifi
 clone bluetooth $B/packages/modules/Bluetooth framework/java/android/bluetooth

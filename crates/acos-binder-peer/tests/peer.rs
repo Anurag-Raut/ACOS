@@ -476,6 +476,42 @@ fn a_null_binder_consumes_its_stability_record_even_without_an_offset_entry() {
     assert_eq!(parcel.data_avail(), 0);
 }
 
+/// An imported request must expose its object table.
+///
+/// The frame carries the table out of band (`offsets`), so `Parcel::unmarshall`
+/// alone leaves the imported parcel object-free. A handler that has to find a
+/// client binder inside the request — the bluetooth module's
+/// `ISynchronousResultReceiver`, which every `IBluetooth` method in the image
+/// takes — walks `Parcel::objects()`, and with an empty table it answered "no
+/// receiver in the request" while the client waited out its 5 s timeout (observed
+/// in the `tail-bluetooth` ART run: two `code 1: no ISynchronousResultReceiver
+/// binder in the request (0 object(s), 104 byte(s))` records).
+#[test]
+fn an_imported_request_exposes_its_object_table() {
+    let mut data = Vec::new();
+    data.extend_from_slice(&7i32.to_le_bytes());
+    let object_at = data.len();
+    let mut object = [0u8; 24];
+    object[0..4].copy_from_slice(&acos_parcel::binder::BINDER_TYPE_HANDLE.to_le_bytes());
+    object[8..16].copy_from_slice(&0x21u64.to_le_bytes());
+    data.extend_from_slice(&object);
+    data.extend_from_slice(&0i32.to_le_bytes()); // Stability::UNDECLARED
+    data.extend_from_slice(&42i32.to_le_bytes());
+    let mut frame = Frame::plain(F_REQ, 1, 1, 0, NODE_TAG | 1, data);
+    frame.offs = (object_at as u64).to_le_bytes().to_vec();
+
+    let mut parcel = import_parcel(&frame);
+    assert_eq!(
+        parcel.objects(),
+        &[object_at],
+        "the importer must register the object-table entry it rewrote"
+    );
+    let mut probe = parcel.clone();
+    probe.set_data_position(parcel.objects()[0]);
+    let binder = probe.read_strong_binder().expect("binder").expect("handle");
+    assert_eq!(binder.0, JAVA_TAG | 0x21, "a handle imports as a Java binder");
+}
+
 /// The same round trip for both kinds of binder: the peer's wire writer must emit
 /// libbinder's shape (null binder unlisted, stability 0; real binder listed,
 /// stability SYSTEM) and the importer must consume exactly one of each.

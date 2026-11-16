@@ -329,6 +329,46 @@ public final class LaunchMain {
         int runtime = initAndroidRuntime(sPkg);
         if (runtime < 0) throw new IllegalStateException("initAndroidRuntime -> " + runtime);
         System.out.println("ACOSLAUNCH MARK android-runtime ready rc=" + runtime);
+        // ADR-0029 item 1: the framework initializers the attached modules need
+        // this *process* to run before any app code. On a device each mainline
+        // module's own process does this — the phone process installs
+        // `TelephonyServiceManager`, the Bluetooth module installs
+        // `BluetoothServiceManager` — and ACOS has no such process. The launcher
+        // forwards the attached modules' `ModuleManifest::process_initializers`
+        // as `class#method#manager` entries joined by ';'; the guest runs them
+        // here, exactly once, before the app boots. A session whose modules
+        // declare none forwards nothing, so the managers stay null and the
+        // framework takes its documented missing path. Adding a module never
+        // touches this code: it is one reflective loop over the manifest's data.
+        String initializers = System.getenv("ACOSLAUNCH_INITIALIZERS");
+        if (initializers != null && !initializers.isEmpty()) {
+            for (String entry : initializers.split(";")) {
+                if (entry.isEmpty()) continue;
+                String[] fields = entry.split("#");
+                if (fields.length != 3) {
+                    System.out.println("ACOSLAUNCH WARN process-initializer malformed " + entry);
+                    continue;
+                }
+                try {
+                    // Both classes are hidden framework API (not in the SDK jar
+                    // this guest source compiles against), so they are reached
+                    // by reflection, the same way AppMain reaches `ActivityThread`
+                    // and the platform font internals.
+                    Class<?> initializerClass = Class.forName(fields[0]);
+                    Class<?> managerClass = Class.forName(fields[2]);
+                    Object manager = managerClass.getConstructor().newInstance();
+                    java.lang.reflect.Method set =
+                            initializerClass.getDeclaredMethod(fields[1], managerClass);
+                    set.setAccessible(true);
+                    set.invoke(null, manager);
+                    System.out.println("ACOSLAUNCH MARK process-initializer installed "
+                            + fields[0] + "#" + fields[1]);
+                } catch (Throwable t) {
+                    System.out.println("ACOSLAUNCH WARN process-initializer " + entry + ": "
+                            + unwrap(t));
+                }
+            }
+        }
         // R3: the runtime is up, so libsigchain exists with ART's own fault
         // handlers already in the chain. Installing ours now appends it *after*
         // them: it runs only on a fault ART declined, prints the fault address,

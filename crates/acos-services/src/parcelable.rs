@@ -191,6 +191,14 @@ pub static SPECS: &[ParcelableSpec] = &[
         verification: Verification::Curated,
     },
     ParcelableSpec {
+        // `BluetoothDevice.writeToParcel` (API 34): `writeString(mAddress)` then
+        // `writeInt(mAddressType)`. The bonded-device list and the
+        // `ACTION_FOUND` extra both carry this payload.
+        class: "android.bluetooth.BluetoothDevice",
+        fields: &[FieldOp::Str8, FieldOp::Int],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
         class: "android.content.pm.PackageItemInfo",
         fields: &[
             FieldOp::Str8,  // name
@@ -2740,6 +2748,10 @@ pub mod val {
     pub const IBINDER: i32 = 15;
     /// `VAL_PARCELABLE`.
     pub const PARCELABLE: i32 = 4;
+    /// `VAL_OBJECTARRAY` (`Parcel.writeArray(Object[])`).
+    pub const OBJECTARRAY: i32 = 17;
+    /// `VAL_LIST` (`Parcel.writeList`).
+    pub const LIST: i32 = 11;
 }
 
 /// Read a `writeBundle` payload.
@@ -3262,6 +3274,12 @@ fn dynamic_to_value(v: crate::value::DynamicValue) -> Value {
         D::IntArray(a) => Value::IntArray(a),
         D::LongArray(a) => Value::LongArray(a),
         D::StringArray(a) => Value::StringArray(a),
+        D::ObjectArray(items) => Value::ObjectArray(
+            items.map(|items| items.into_iter().map(dynamic_to_value).collect()),
+        ),
+        D::List(items) => Value::List(
+            items.map(|items| items.into_iter().map(dynamic_to_value).collect()),
+        ),
         D::Binder(b) => Value::Binder(b),
         D::Map(m) => Value::Map(Some(m)),
         D::Parcelable(p) => Value::Parcelable(p),
@@ -3284,6 +3302,16 @@ fn value_to_dynamic(v: &Value) -> Result<crate::value::DynamicValue> {
         Value::IntArray(a) => D::IntArray(a.clone()),
         Value::LongArray(a) => D::LongArray(a.clone()),
         Value::StringArray(a) => D::StringArray(a.clone()),
+        Value::ObjectArray(items) => D::ObjectArray(
+            items.as_ref().map(|items| {
+                items.iter().map(value_to_dynamic).collect::<Result<Vec<_>>>()
+            }).transpose()?,
+        ),
+        Value::List(items) => D::List(
+            items.as_ref().map(|items| {
+                items.iter().map(value_to_dynamic).collect::<Result<Vec<_>>>()
+            }).transpose()?,
+        ),
         Value::Binder(b) => D::Binder(*b),
         Value::Parcelable(p) | Value::TypedObject(p) | Value::NamedParcelable(p) => {
             D::Parcelable(p.clone())
@@ -3394,6 +3422,50 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
         val::INTARRAY => D::IntArray(parcel.read_int32_array()?),
         val::STRINGARRAY => {
             D::StringArray(parcel.read_string16_array()?)
+        }
+        // `VAL_LIST` is length-prefixed too (`isLengthPrefixed`, Parcel.java
+        // 4914-4924): the length word precedes `writeList`'s size + element
+        // `writeValue` payloads. The Bluetooth bonded-device result is one.
+        val::LIST => {
+            let (declared, start) = read_value_length(parcel, val::LIST)?;
+            let size = parcel.read_int32()?;
+            if size < 0 {
+                return Err(ServiceError::BadRequest {
+                    interface: "bundle".into(),
+                    method: "readValue".into(),
+                    detail: format!("VAL_LIST count {size} is negative"),
+                });
+            }
+            let cap = (size as usize).min(parcel.remaining() / 4);
+            let mut items = Vec::with_capacity(cap);
+            for _ in 0..size {
+                items.push(read_dynamic(parcel)?);
+            }
+            check_value_length(parcel, declared, start, val::LIST)?;
+            D::List(Some(items))
+        }
+        // `VAL_OBJECTARRAY` is length-prefixed (`Parcel.isLengthPrefixed`,
+        // Parcel.java:4908-4926; writer `writeArray` at 2670, reader at 4820).
+        // It is how the SMS_RECEIVED broadcast carries its `Object[]` of
+        // `byte[]` PDUs, so the module path must model it exactly.
+        val::OBJECTARRAY => {
+            let (declared, start) = read_value_length(parcel, val::OBJECTARRAY)?;
+            let size = parcel.read_int32()?;
+            if size < 0 {
+                return Err(ServiceError::BadRequest {
+                    interface: "bundle".into(),
+                    method: "readValue".into(),
+                    detail: format!("VAL_OBJECTARRAY count {size} is negative"),
+                });
+            }
+            // Guest-controlled count: each element is at least one 4-byte tag.
+            let cap = (size as usize).min(parcel.remaining() / 4);
+            let mut items = Vec::with_capacity(cap);
+            for _ in 0..size {
+                items.push(read_dynamic(parcel)?);
+            }
+            check_value_length(parcel, declared, start, val::OBJECTARRAY)?;
+            D::ObjectArray(Some(items))
         }
         val::IBINDER => D::Binder(parcel.read_strong_binder()?),
         val::PARCELABLE => {
@@ -3526,6 +3598,39 @@ pub fn write_dynamic(parcel: &mut Parcel, value: &crate::value::DynamicValue) ->
             let _ = a;
             return Err(bad("VAL_LONGARRAY is not modelled"));
         }
+        D::List(items) => match items {
+            // `writeValue(null)` is `VAL_NULL`; `writeList` is only reached for a
+            // non-null List.
+            None => parcel.write_int32(val::NULL),
+            Some(items) => {
+                write_value_length_prefixed(parcel, val::LIST, |parcel| {
+                    parcel.write_int32(
+                        i32::try_from(items.len()).map_err(|_| bad("list too large"))?,
+                    );
+                    for item in items {
+                        write_dynamic(parcel, item)?;
+                    }
+                    Ok(())
+                })?;
+            }
+        },
+        D::ObjectArray(items) => match items {
+            // `writeValue(null)` is `VAL_NULL`; `writeArray` is never reached
+            // for a null array (Parcel.java:2560 checks `value instanceof
+            // Object[]` after the null branch).
+            None => parcel.write_int32(val::NULL),
+            Some(items) => {
+                write_value_length_prefixed(parcel, val::OBJECTARRAY, |parcel| {
+                    parcel.write_int32(
+                        i32::try_from(items.len()).map_err(|_| bad("object array too large"))?,
+                    );
+                    for item in items {
+                        write_dynamic(parcel, item)?;
+                    }
+                    Ok(())
+                })?;
+            }
+        },
         D::Parcelable(p) => {
             // `VAL_PARCELABLE` is length-prefixed (`isLengthPrefixed`,
             // Parcel.java:4908-4926) and the count covers the class name plus

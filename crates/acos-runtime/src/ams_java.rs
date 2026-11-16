@@ -853,6 +853,47 @@ pub fn materialize_intent(vm: &mut Vm, facts: &IntentFacts) -> JResult<Handle> {
                 )
                 .map_err(err)?;
             }
+            Extra::Bytes(bytes) => {
+                let values: Vec<JavaValue> =
+                    bytes.iter().map(|b| JavaValue::Byte(*b as i8)).collect();
+                let arr = vm.new_array("B", &values).map_err(err)?;
+                vm.call_method(
+                    intent,
+                    "putExtra",
+                    "(Ljava/lang/String;[B)Landroid/content/Intent;",
+                    &[JavaValue::Object(k), JavaValue::Object(arr)],
+                )
+                .map_err(err)?;
+            }
+            Extra::ByteArrays(pdus) => {
+                // `SMS_RECEIVED`'s `pdus` is an `Object[]` of `byte[]`, which
+                // `putExtra(String, Serializable)` stores as a
+                // `Parcel.VAL_OBJECTARRAY` (byte[][] is an Object[]).
+                let mut elements = Vec::with_capacity(pdus.len());
+                for pdu in pdus {
+                    let values: Vec<JavaValue> =
+                        pdu.iter().map(|b| JavaValue::Byte(*b as i8)).collect();
+                    elements.push(JavaValue::Object(
+                        vm.new_array("B", &values).map_err(err)?,
+                    ));
+                }
+                let array = vm.new_array("[B", &elements).map_err(err)?;
+                vm.call_method(
+                    intent,
+                    "putExtra",
+                    "(Ljava/lang/String;Ljava/io/Serializable;)Landroid/content/Intent;",
+                    &[JavaValue::Object(k), JavaValue::Object(array)],
+                )
+                .map_err(err)?;
+            }
+            Extra::Parcelable(_) => {
+                return Err(err(format!(
+                    "cannot re-materialise extra `{key}`: this value is a parcelable and the VM path has no class-loader construction for it"
+                )))
+            }
+            // MODNOTIF2/MODNOTIF5: the request direction carries a `String[]`
+            // (`EXTRA_REQUEST_PERMISSIONS_NAMES`), which this path does not
+            // materialise back into Java; the `Present` refusal covers both.
             Extra::Strings(_) | Extra::Present => {
                 return Err(err(format!(
                     "cannot re-materialise extra `{key}`: its type is not carried back into Java \

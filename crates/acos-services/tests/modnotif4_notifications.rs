@@ -190,6 +190,7 @@ fn a_real_notify_request_posts_through_the_module_and_the_gate_follows_the_permi
     // `IPermissionManager` and both `checkPermission` paths read).
     registry
         .control(
+            &mut host,
             "system.permissions",
             "grant",
             &serde_json::json!({"permission": "android.permission.POST_NOTIFICATIONS"}),
@@ -210,7 +211,7 @@ fn a_real_notify_request_posts_through_the_module_and_the_gate_follows_the_permi
     );
 
     let state = registry
-        .control("system.notifications", "list", &serde_json::json!({}))
+        .control(&mut host, "system.notifications", "list", &serde_json::json!({}))
         .expect("list");
     let posted = state["posted"].as_array().expect("posted[]");
     assert_eq!(posted.len(), 1, "one notification is posted: {state}");
@@ -236,6 +237,7 @@ fn a_real_notify_request_posts_through_the_module_and_the_gate_follows_the_permi
     // gate closed (AOSP drops silently, which is what an app can observe).
     registry
         .control(
+            &mut host,
             "system.permissions",
             "deny",
             &serde_json::json!({"permission": "android.permission.POST_NOTIFICATIONS"}),
@@ -253,7 +255,7 @@ fn a_real_notify_request_posts_through_the_module_and_the_gate_follows_the_permi
         "a dropped notification is not an exception to the app"
     );
     let state = registry
-        .control("system.notifications", "list", &serde_json::json!({}))
+        .control(&mut host, "system.notifications", "list", &serde_json::json!({}))
         .expect("list");
     assert_eq!(
         state["posted"].as_array().expect("posted").len(),
@@ -278,6 +280,7 @@ fn tap_and_dismiss_drive_the_posted_notification() {
     let (mut host, mut registry) = installed_session();
     registry
         .control(
+            &mut host,
             "system.permissions",
             "grant",
             &serde_json::json!({"permission": "android.permission.POST_NOTIFICATIONS"}),
@@ -296,6 +299,7 @@ fn tap_and_dismiss_drive_the_posted_notification() {
     // with a structured error — never reported as fired.
     let error = registry
         .control(
+            &mut host,
             "system.notifications",
             "tap",
             &serde_json::json!({"id": 7}),
@@ -310,6 +314,7 @@ fn tap_and_dismiss_drive_the_posted_notification() {
     // `dismiss` removes the record like a user swipe.
     let dismissed = registry
         .control(
+            &mut host,
             "system.notifications",
             "dismiss",
             &serde_json::json!({"id": 7}),
@@ -317,7 +322,7 @@ fn tap_and_dismiss_drive_the_posted_notification() {
         .expect("dismiss");
     assert_eq!(dismissed["remaining"], 0);
     let state = registry
-        .control("system.notifications", "list", &serde_json::json!({}))
+        .control(&mut host, "system.notifications", "list", &serde_json::json!({}))
         .expect("list");
     assert_eq!(state["posted"].as_array().expect("posted").len(), 0);
 }
@@ -338,6 +343,7 @@ fn attaching_the_module_takes_the_name_over_and_detach_restores_core() {
         .expect("the permissions module attaches");
     registry
         .control(
+            &mut host,
             "system.permissions",
             "grant",
             &serde_json::json!({"permission": "android.permission.POST_NOTIFICATIONS"}),

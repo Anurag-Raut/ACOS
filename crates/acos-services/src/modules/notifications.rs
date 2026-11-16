@@ -107,6 +107,8 @@ fn manifest_ref() -> &'static ModuleManifest {
         summary: "notification channels, posting with the POST_NOTIFICATIONS gate, taps/actions fired through the real PendingIntent sender, dismiss (no status-bar pixels: the shade is the system-UI track)",
         services: SERVICES,
         replaces: &[SERVICE_NAME],
+        process_initializers: &[],
+        features: &[],
         providers: &[],
         broadcasts: &[],
         windows: &[],
@@ -839,7 +841,7 @@ impl Module for NotificationsModule {
         Ok(())
     }
 
-    fn control(&mut self, op: &str, args: &Value) -> Result<Value> {
+    fn control(&mut self, _host: &mut ServiceHost, op: &str, args: &Value) -> Result<Value> {
         let Some(store) = self.store.as_ref() else {
             return Err(ServiceError::ModuleRejected {
                 module: MODULE_ID,
