@@ -1,0 +1,12 @@
+arm=relay rep=1 n=1 session_start_ms=5779 cache=built prep_ms=3847 key=ff39b037f1d6b9ff session_id=verify-2411229 wall_ms=6076
+arm=relay rep=1 pass=1/1 wall_ms=6076
+arm=relay rep=2 n=1 session_start_ms=266 cache=hit prep_ms=None key=ff39b037f1d6b9ff session_id=verify-2412105 wall_ms=580
+arm=relay rep=2 pass=1/1 wall_ms=580
+arm=relay rep=3 n=1 session_start_ms=366 cache=hit prep_ms=None key=ff39b037f1d6b9ff session_id=verify-2412237 wall_ms=586
+arm=relay rep=3 pass=0/1 wall_ms=586
+arm=off rep=1 n=1 session_start_ms=207 cache=hit prep_ms=None key=ff39b037f1d6b9ff session_id=verify-2412380 wall_ms=437
+arm=off rep=1 pass=0/1 wall_ms=437
+arm=off rep=2 n=1 session_start_ms=180 cache=hit prep_ms=None key=ff39b037f1d6b9ff session_id=verify-2412457 wall_ms=383
+arm=off rep=2 pass=0/1 wall_ms=383
+arm=off rep=3 n=1 session_start_ms=164 cache=hit prep_ms=None key=ff39b037f1d6b9ff session_id=verify-2412571 wall_ms=368
+arm=off rep=3 pass=0/1 wall_ms=368
