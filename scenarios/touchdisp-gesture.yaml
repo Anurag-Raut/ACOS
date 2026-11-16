@@ -1,0 +1,39 @@
+# TOUCHDISP: the gesture half of the same question.
+#
+# A `GestureDetector` on a **non-clickable** View (no click listener, not
+# clickable) is the other common shape that needs the real dispatch chain: the
+# detector is fed from `View.onTouchEvent`, which AOSP runs after the (absent)
+# touch listener, and the view must claim the DOWN to keep the stream.
+#
+# `gesture` holds a long press for ~700 ms with almost no movement (well inside
+# `ViewConfiguration.getScaledTouchSlop()`), so `onLongPress` fires while the
+# pointer is still down and writes the non-clickable `status` text. If the guest
+# only hit-tested clickable nodes - the REL3H2 reading - neither the DOWN nor the
+# MOVEs would reach the view tree and the text would stay `idle`.
+version: 1
+name: touchdisp-gesture
+description: >-
+  A long press on a non-clickable View running a GestureDetector reaches
+  View.onTouchEvent and changes state (idle -> long-pressed).
+app: fixtures/build/apps/touch-probe.apk
+engine: art
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+animations: off
+expectation: pass
+steps:
+  - launch:
+      activity: dev.acos.fixtures.touchprobe/.MainActivity
+  # `gesture` occupies [42,1115][1038,1535]; hold near its centre.
+  - swipe:
+      from: {x: 540, y: 1325}
+      to: {x: 546, y: 1327}
+      duration_ms: 700
+      expect_change: true
+  - assert_text:
+      selector: {id: status}
+      text: {exact: long-pressed}

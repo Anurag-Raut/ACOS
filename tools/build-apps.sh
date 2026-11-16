@@ -241,6 +241,13 @@ build_apk back-layers
 # changes state (handled = true). See fixtures/apps/tap-targets/res/layout/main.xml.
 build_apk tap-targets
 
+# touch-probe is the TOUCHDISP fixture: a non-clickable custom View whose
+# OnTouchListener returns false and posts a setText 100 ms later, a
+# GestureDetector on a non-clickable View, and a screen-filling root whose own
+# OnTouchListener proves the ViewGroup fallback path. See
+# fixtures/apps/touch-probe/res/layout/main.xml.
+build_apk touch-probe
+
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from
 # ACOS_ART_KEYPROBE_MODE (see results/compat/K5.md).
